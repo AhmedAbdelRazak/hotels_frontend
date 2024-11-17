@@ -6,6 +6,7 @@ import { Input, Select, Button as AntdButton, Upload, Form } from "antd";
 import socket from "../../socket";
 import EmojiPicker from "emoji-picker-react";
 import { SmileOutlined, UploadOutlined } from "@ant-design/icons";
+import HelperSideDrawer from "./HelperSideDrawer";
 
 const { Option } = Select;
 
@@ -20,6 +21,7 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 	const [displayName, setDisplayName] = useState(
 		chat.displayName1 || chat.supporterName || user.name.split(" ")[0]
 	);
+	const [drawerVisible, setDrawerVisible] = useState(false);
 
 	useEffect(() => {
 		let foundDisplayName = user.name.split(" ")[0];
@@ -73,7 +75,7 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 			socket.emit("sendMessage", messageData);
 			setNewMessage("");
 			socket.emit("stopTyping", { name: displayName, caseId: chat._id });
-			fetchChats(); // Update the parent component's chat list
+			fetchChats();
 		} catch (err) {
 			console.error("Error sending message", err);
 		}
@@ -84,8 +86,7 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 			await updateSupportCase(chat._id, { caseStatus: value }, token);
 			setCaseStatus(value);
 			if (value === "closed") {
-				console.log("Emitting closeCase for case:", chat._id);
-				socket.emit("closeCase", { caseId: chat._id }); // Use an object with caseId key
+				socket.emit("closeCase", { caseId: chat._id });
 			}
 		} catch (err) {
 			console.error("Error updating case status", err);
@@ -103,6 +104,14 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 
 	const handleDisplayNameChange = (e) => {
 		setDisplayName(e.target.value);
+	};
+
+	const showDrawer = () => {
+		setDrawerVisible(true);
+	};
+
+	const closeDrawer = () => {
+		setDrawerVisible(false);
 	};
 
 	useEffect(() => {
@@ -163,7 +172,24 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 					<Option value='closed'>Closed</Option>
 				</StatusSelect>
 			)}
-			{!isHistory && caseStatus === "open" && (
+
+			{chat &&
+				chat.openedBy === "client" &&
+				chat.conversation[0].inquiryAbout === "reserve_room" && (
+					<>
+						<div className='mx-auto text-center'>
+							<AntdButton type='primary' onClick={showDrawer}>
+								Reserve A Room
+							</AntdButton>
+						</div>
+						<HelperSideDrawer
+							chat={chat}
+							onClose={closeDrawer}
+							visible={drawerVisible}
+						/>
+					</>
+				)}
+			{caseStatus === "open" && (
 				<>
 					<Form layout='vertical'>
 						<Form.Item label='Custom Display Name'>
@@ -187,7 +213,7 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 				))}
 				{typingStatus && <TypingStatus>{typingStatus}</TypingStatus>}
 			</ChatMessages>
-			{!isHistory && caseStatus === "open" && (
+			{caseStatus === "open" && (
 				<ChatInputContainer>
 					<Input
 						placeholder='Type your message...'
