@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { Drawer, Form, Input, Button, Select, DatePicker, message } from "antd";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+	Drawer,
+	Form,
+	Input,
+	Button,
+	Select,
+	DatePicker,
+	message,
+	InputNumber,
+} from "antd";
 import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const HelperSideDrawer = ({ chat, onClose, visible }) => {
-	const [roomType, setRoomType] = useState("");
+	const [selectedRooms, setSelectedRooms] = useState([]);
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [checkInDate, setCheckInDate] = useState(null);
@@ -16,9 +25,8 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 	const [nationality, setNationality] = useState("");
 	const [phone, setPhone] = useState("");
 	const [generatedLink, setGeneratedLink] = useState("");
-	const [pricePerNight, setPricePerNight] = useState(0);
-	const [numberOfNights, setNumberOfNights] = useState(0);
 	const [totalAmount, setTotalAmount] = useState(0);
+	const [numberOfNights, setNumberOfNights] = useState(0);
 
 	useEffect(() => {
 		if (chat && chat.conversation.length > 0) {
@@ -32,59 +40,82 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 		}
 	}, [chat]);
 
-	const calculateTotalAmount = (pricingRate, startDate, endDate, basePrice) => {
-		const start = dayjs(startDate).startOf("day");
-		const end = dayjs(endDate).subtract(1, "day").startOf("day");
-		let currentDate = start;
-		let total = 0;
-		let nights = 0;
+	const calculateTotalAmount = useCallback(
+		(roomSelections, startDate, endDate) => {
+			const start = dayjs(startDate).startOf("day");
+			const end = dayjs(endDate).subtract(1, "day").startOf("day");
+			let currentDate = start;
+			let total = 0;
+			let nights = 0;
 
-		while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
-			const formattedDate = currentDate.format("YYYY-MM-DD");
-			const rateForDate = pricingRate.find(
-				(rate) =>
-					dayjs(rate.calendarDate).format("YYYY-MM-DD") === formattedDate
-			);
+			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
+				const formattedDate = currentDate.format("YYYY-MM-DD");
+				// eslint-disable-next-line
+				roomSelections.forEach(({ roomType, displayName, count }) => {
+					const selectedRoom = chat.hotelId.roomCountDetails.find(
+						(room) =>
+							room.roomType === roomType && room.displayName === displayName
+					);
+					if (selectedRoom) {
+						const rateForDate = selectedRoom.pricingRate.find(
+							(rate) =>
+								dayjs(rate.calendarDate).format("YYYY-MM-DD") === formattedDate
+						);
+						const dailyRate = rateForDate
+							? parseFloat(rateForDate.price)
+							: selectedRoom.price.basePrice;
+						total += dailyRate * count;
+					}
+				});
+				nights++;
+				currentDate = currentDate.add(1, "day");
+			}
 
-			total += rateForDate ? parseFloat(rateForDate.price) : basePrice;
-			nights++;
-			currentDate = currentDate.add(1, "day");
-		}
-
-		setNumberOfNights(nights);
-		setTotalAmount(total);
-	};
+			setNumberOfNights(nights);
+			setTotalAmount(total);
+		},
+		[chat.hotelId.roomCountDetails]
+	);
 
 	useEffect(() => {
-		if (checkInDate && checkOutDate && roomType) {
-			const selectedRoom = chat.hotelId.roomCountDetails.find(
-				(room) => room.roomType === roomType
-			);
-			if (selectedRoom) {
-				const basePrice = selectedRoom.price.basePrice;
-				calculateTotalAmount(
-					selectedRoom.pricingRate,
-					checkInDate,
-					checkOutDate,
-					basePrice
-				);
-			}
+		if (checkInDate && checkOutDate && selectedRooms.length > 0) {
+			calculateTotalAmount(selectedRooms, checkInDate, checkOutDate);
 		}
-	}, [checkInDate, checkOutDate, roomType, chat.hotelId.roomCountDetails]);
+	}, [checkInDate, checkOutDate, selectedRooms, calculateTotalAmount]);
 
-	const handleRoomTypeChange = (value) => {
-		setRoomType(value);
-		const selectedRoom = chat.hotelId.roomCountDetails.find(
-			(room) => room.roomType === value
-		);
-		if (selectedRoom) {
-			setPricePerNight(selectedRoom.price.basePrice);
+	const handleRoomSelectionChange = (value, index) => {
+		const [roomType, displayName, basePrice] = value.split("|");
+		const newSelection = [...selectedRooms];
+		newSelection[index] = {
+			...newSelection[index],
+			roomType,
+			displayName,
+			pricePerNight: parseFloat(basePrice),
+		};
+		setSelectedRooms(newSelection);
+	};
+
+	const handleRoomCountChange = (count, index) => {
+		const newSelection = [...selectedRooms];
+		newSelection[index].count = count;
+		setSelectedRooms(newSelection);
+		if (checkInDate && checkOutDate) {
+			calculateTotalAmount(newSelection, checkInDate, checkOutDate);
 		}
+	};
+
+	const addRoomSelection = () => {
+		setSelectedRooms([
+			...selectedRooms,
+			{ roomType: "", displayName: "", count: 1, pricePerNight: 0 },
+		]);
 	};
 
 	const handleGenerateLink = () => {
 		if (
-			!roomType ||
+			selectedRooms.some(
+				(room) => !room.roomType || !room.displayName || room.count < 1
+			) ||
 			!checkInDate ||
 			!checkOutDate ||
 			!name ||
@@ -95,21 +126,12 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			return;
 		}
 
-		const selectedRoom = chat.hotelId.roomCountDetails.find(
-			(room) => room.roomType === roomType
-		);
-		const displayName = selectedRoom ? selectedRoom.displayName : "N/A";
-		const hotelId = chat.hotelId._id;
-
 		const queryParams = new URLSearchParams({
-			roomType,
-			displayName,
-			hotelId,
+			hotelId: chat.hotelId._id,
 			name,
 			email,
 			checkInDate: checkInDate.format("YYYY-MM-DD"),
 			checkOutDate: checkOutDate.format("YYYY-MM-DD"),
-			pricePerNight,
 			numberOfNights,
 			totalAmount,
 			adults,
@@ -118,12 +140,28 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			phone,
 		});
 
+		selectedRooms.forEach((room, index) => {
+			queryParams.append(`roomType${index + 1}`, room.roomType);
+			queryParams.append(`displayName${index + 1}`, room.displayName);
+			queryParams.append(`roomCount${index + 1}`, room.count);
+			queryParams.append(`pricePerNight${index + 1}`, room.pricePerNight);
+		});
+
 		const bookingLink = `${
 			process.env.REACT_APP_MAIN_URL_JANNAT
 		}/generated-link?${queryParams.toString()}`;
 
 		setGeneratedLink(bookingLink);
 		message.success("Link generated successfully!");
+	};
+
+	const getAvailableRoomOptions = () => {
+		const selectedKeys = selectedRooms.map(
+			(room) => `${room.roomType}|${room.displayName}`
+		);
+		return chat.hotelId.roomCountDetails.filter(
+			(room) => !selectedKeys.includes(`${room.roomType}|${room.displayName}`)
+		);
 	};
 
 	return (
@@ -135,25 +173,43 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			width={500}
 		>
 			<Form layout='vertical'>
-				<Form.Item label='Room Type'>
-					<Select
-						value={roomType}
-						onChange={handleRoomTypeChange}
-						placeholder='Select Room Type'
-					>
-						{chat.hotelId &&
-						chat.hotelId.roomCountDetails &&
-						chat.hotelId.roomCountDetails.length > 0 ? (
-							chat.hotelId.roomCountDetails.map((room, index) => (
-								<Option key={index} value={room.roomType}>
-									{room.displayName}
-								</Option>
-							))
-						) : (
-							<Option disabled>No room details available</Option>
-						)}
-					</Select>
-				</Form.Item>
+				{selectedRooms.map((room, index) => (
+					<div key={index} style={{ marginBottom: 20 }}>
+						<Form.Item label={`Room Type ${index + 1}`}>
+							<Select
+								value={`${room.roomType}|${room.displayName}|${room.pricePerNight}`}
+								onChange={(value) => handleRoomSelectionChange(value, index)}
+								placeholder='Select Room Type'
+							>
+								{getAvailableRoomOptions().map((roomDetail, idx) => (
+									<Option
+										key={idx}
+										value={`${roomDetail.roomType}|${roomDetail.displayName}|${roomDetail.price.basePrice}`}
+									>
+										{roomDetail.displayName} ({roomDetail.roomType}) -{" "}
+										{roomDetail.price.basePrice} SAR/night
+									</Option>
+								))}
+							</Select>
+						</Form.Item>
+						<Form.Item label='Count'>
+							<InputNumber
+								min={1}
+								value={room.count}
+								onChange={(count) => handleRoomCountChange(count, index)}
+								placeholder='Enter count'
+							/>
+						</Form.Item>
+					</div>
+				))}
+
+				<Button
+					type='dashed'
+					onClick={addRoomSelection}
+					style={{ marginBottom: 20 }}
+				>
+					Add Another Room
+				</Button>
 
 				<Form.Item label='Name'>
 					<Input
@@ -236,16 +292,12 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 							</a>
 						</p>
 						<p>
-							<strong>Price per Night: </strong>
-							{pricePerNight} SAR
+							<strong>Total Amount: </strong>
+							{totalAmount} SAR
 						</p>
 						<p>
 							<strong>Number of Nights: </strong>
 							{numberOfNights}
-						</p>
-						<p>
-							<strong>Total Amount: </strong>
-							{totalAmount} SAR
 						</p>
 					</Form.Item>
 				)}

@@ -9,6 +9,7 @@ import ZAboutUsAdd from "./ZAboutUsAdd";
 import ZHotelsMainBanner from "./ZHotelsMainBanner";
 import { JanatWebsite, getJanatWebsiteRecord } from "../apiAdmin";
 import { toast } from "react-toastify";
+import ZTermsAndConditions from "./ZTermsAndConditions";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -20,50 +21,43 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [aboutUsBanner, setAboutUsBanner] = useState([]);
 	const [hotelPageBanner, setHotelPageBanner] = useState([]);
 	const [documentId, setDocumentId] = useState(undefined);
+	const [activeTab, setActiveTab] = useState("home"); // New state for tab selection
+	const [aboutUsEnglish, setAboutUsEnglish] = useState("");
+	const [aboutUsArabic, setAboutUsArabic] = useState("");
+	const [termsAndConditionArabic, setTermsAndConditionArabic] = useState("");
+	const [termsAndConditionEnglish, setTermsAndConditionEnglish] = useState("");
 
 	const gettingJanatWebsiteRecord = () => {
 		getJanatWebsiteRecord().then((data) => {
 			if (data && data.error) {
 				console.log(data.error, "data.error");
 			} else {
-				if (
-					data &&
-					data[0] &&
-					data[0].janatLogo &&
-					data[0].homeMainBanners &&
-					data[0].homeSecondBanner &&
-					data[0].contactUsBanner &&
-					data[0].aboutUsBanner &&
-					data[0].hotelPageBanner
-				)
-					setLogo({ images: data && data[0] && [data[0].janatLogo] });
-				if (
-					data &&
-					data[0] &&
-					data[0].homeMainBanners &&
-					data[0].homeMainBanners.length > 0
-				) {
+				if (data && data[0]) {
+					setLogo({ images: data[0].janatLogo ? [data[0].janatLogo] : [] });
 					setHomeMainBanners({
-						images: data && data[0] && data[0].homeMainBanners,
+						images: data[0].homeMainBanners || [],
 					});
-				}
-
-				setHomeSecondBanner({
-					images: data && data[0] && [data[0].homeSecondBanner],
-				});
-				setContactUsBanner({
-					images: data && data[0] && [data[0].contactUsBanner],
-				});
-				setAboutUsBanner({
-					images: data && data[0] && [data[0].aboutUsBanner],
-				});
-				if (data && data[0] && [data[0].hotelPageBanner]) {
+					setHomeSecondBanner({
+						images: data[0].homeSecondBanner ? [data[0].homeSecondBanner] : [],
+					});
+					setContactUsBanner({
+						images: data[0].contactUsBanner ? [data[0].contactUsBanner] : [],
+					});
+					setAboutUsBanner({
+						images: data[0].aboutUsBanner ? [data[0].aboutUsBanner] : [],
+					});
 					setHotelPageBanner({
-						images: data && data[0] && [data[0].hotelPageBanner],
+						images: data[0].hotelPageBanner ? [data[0].hotelPageBanner] : [],
 					});
-				}
 
-				setDocumentId(data && data[0] && data[0]._id);
+					// Initialize the 'About Us' and 'Terms and Conditions' fields
+					setAboutUsEnglish(data[0].aboutUsEnglish || "");
+					setAboutUsArabic(data[0].aboutUsArabic || "");
+					setTermsAndConditionEnglish(data[0].termsAndConditionEnglish || "");
+					setTermsAndConditionArabic(data[0].termsAndConditionArabic || "");
+
+					setDocumentId(data[0]._id);
+				}
 			}
 		});
 	};
@@ -92,6 +86,10 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 				aboutUsBanner && aboutUsBanner.images && aboutUsBanner.images[0],
 			hotelPageBanner:
 				hotelPageBanner && hotelPageBanner.images && hotelPageBanner.images[0],
+			aboutUsEnglish: aboutUsEnglish, // Include this field
+			aboutUsArabic: aboutUsArabic, // Include this field
+			termsAndConditionArabic: termsAndConditionArabic,
+			termsAndConditionEnglish: termsAndConditionEnglish,
 		};
 
 		JanatWebsite(documentId, myDocument).then((data) => {
@@ -102,6 +100,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			}
 		});
 	};
+
 	return (
 		<JanatWebsiteMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
@@ -122,39 +121,95 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 				<div className='otherContentWrapper'>
 					<div className='container-wrapper'>
 						<h3 className='mb-3'>Janat Booking Website Edit</h3>
-						<div>
-							<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
-						</div>
-						<div>
-							<ZHomePageBanners
-								addThumbnail={homeMainBanners}
-								setAddThumbnail={setHomeMainBanners}
-							/>
-						</div>
-						<div>
-							<ZHomePageBanner2
-								addThumbnail={homeSecondBanner}
-								setAddThumbnail={setHomeSecondBanner}
-							/>
-						</div>
-						<div>
-							<ZContactusBannerAdd
-								addThumbnail={contactUsBanner}
-								setAddThumbnail={setContactUsBanner}
-							/>
-						</div>
-						<div>
-							<ZAboutUsAdd
-								addThumbnail={aboutUsBanner}
-								setAddThumbnail={setAboutUsBanner}
-							/>
-						</div>
-						<div>
-							<ZHotelsMainBanner
-								addThumbnail={hotelPageBanner}
-								setAddThumbnail={setHotelPageBanner}
-							/>
-						</div>
+
+						{/* Tab Navigation */}
+						<TabNavigation>
+							<button
+								className={activeTab === "home" ? "active" : ""}
+								onClick={() => setActiveTab("home")}
+							>
+								Home Page
+							</button>
+							<button
+								className={activeTab === "about" ? "active" : ""}
+								onClick={() => setActiveTab("about")}
+							>
+								About Us
+							</button>
+							<button
+								className={activeTab === "contact" ? "active" : ""}
+								onClick={() => setActiveTab("contact")}
+							>
+								Contact Us
+							</button>
+
+							<button
+								className={activeTab === "termsandconditions" ? "active" : ""}
+								onClick={() => setActiveTab("termsandconditions")}
+							>
+								Terms & Condition
+							</button>
+						</TabNavigation>
+
+						{/* Conditional Rendering Based on Active Tab */}
+						{activeTab === "home" && (
+							<>
+								<div>
+									<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
+								</div>
+								<div>
+									<ZHomePageBanners
+										addThumbnail={homeMainBanners}
+										setAddThumbnail={setHomeMainBanners}
+									/>
+								</div>
+								<div>
+									<ZHomePageBanner2
+										addThumbnail={homeSecondBanner}
+										setAddThumbnail={setHomeSecondBanner}
+									/>
+								</div>
+								<div>
+									<ZHotelsMainBanner
+										addThumbnail={hotelPageBanner}
+										setAddThumbnail={setHotelPageBanner}
+									/>
+								</div>
+							</>
+						)}
+
+						{activeTab === "about" && (
+							<div>
+								<ZAboutUsAdd
+									addThumbnail={aboutUsBanner}
+									setAddThumbnail={setAboutUsBanner}
+									aboutUsArabic={aboutUsArabic}
+									setAboutUsArabic={setAboutUsArabic}
+									aboutUsEnglish={aboutUsEnglish}
+									setAboutUsEnglish={setAboutUsEnglish}
+								/>
+							</div>
+						)}
+
+						{activeTab === "contact" && (
+							<div>
+								<ZContactusBannerAdd
+									addThumbnail={contactUsBanner}
+									setAddThumbnail={setContactUsBanner}
+								/>
+							</div>
+						)}
+
+						{activeTab === "termsandconditions" && (
+							<div>
+								<ZTermsAndConditions
+									termsAndConditionEnglish={termsAndConditionEnglish}
+									termsAndConditionArabic={termsAndConditionArabic}
+									setTermsAndConditionEnglish={setTermsAndConditionEnglish}
+									setTermsAndConditionArabic={setTermsAndConditionArabic}
+								/>
+							</div>
+						)}
 
 						<div className='mt-4'>
 							<button className='btn btn-primary' onClick={submitDocument}>
@@ -172,7 +227,6 @@ export default JanatWebsiteMain;
 
 const JanatWebsiteMainWrapper = styled.div`
 	overflow-x: hidden;
-	/* background: #ededed; */
 	margin-top: 20px;
 	min-height: 715px;
 
@@ -198,5 +252,29 @@ const JanatWebsiteMainWrapper = styled.div`
 
 	@media (max-width: 1400px) {
 		background: white;
+	}
+`;
+
+const TabNavigation = styled.div`
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+
+	button {
+		padding: 10px 20px;
+		border: none;
+		background-color: #ddd;
+		cursor: pointer;
+		font-weight: bold;
+		border-radius: 5px;
+
+		&.active {
+			background-color: #006ad1;
+			color: white;
+		}
+
+		&:hover {
+			background-color: #bbb;
+		}
 	}
 `;

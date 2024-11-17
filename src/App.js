@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import "./App.css";
+import "react-quill/dist/quill.snow.css";
 import { Route, Switch, BrowserRouter } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
