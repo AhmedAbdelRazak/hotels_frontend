@@ -10,6 +10,7 @@ import ZHotelsMainBanner from "./ZHotelsMainBanner";
 import { JanatWebsite, getJanatWebsiteRecord } from "../apiAdmin";
 import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
+import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -26,6 +27,10 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [aboutUsArabic, setAboutUsArabic] = useState("");
 	const [termsAndConditionArabic, setTermsAndConditionArabic] = useState("");
 	const [termsAndConditionEnglish, setTermsAndConditionEnglish] = useState("");
+	const [termsAndConditionArabic_B2B, setTermsAndConditionArabic_B2B] =
+		useState("");
+	const [termsAndConditionEnglish_B2B, setTermsAndConditionEnglish_B2B] =
+		useState("");
 
 	const gettingJanatWebsiteRecord = () => {
 		getJanatWebsiteRecord().then((data) => {
@@ -55,6 +60,12 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 					setAboutUsArabic(data[0].aboutUsArabic || "");
 					setTermsAndConditionEnglish(data[0].termsAndConditionEnglish || "");
 					setTermsAndConditionArabic(data[0].termsAndConditionArabic || "");
+					setTermsAndConditionEnglish_B2B(
+						data[0].termsAndConditionEnglish_B2B || ""
+					);
+					setTermsAndConditionArabic_B2B(
+						data[0].termsAndConditionArabic_B2B || ""
+					);
 
 					setDocumentId(data[0]._id);
 				}
@@ -90,6 +101,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			aboutUsArabic: aboutUsArabic, // Include this field
 			termsAndConditionArabic: termsAndConditionArabic,
 			termsAndConditionEnglish: termsAndConditionEnglish,
+			termsAndConditionArabic_B2B: termsAndConditionArabic_B2B,
+			termsAndConditionEnglish_B2B: termsAndConditionEnglish_B2B,
 		};
 
 		JanatWebsite(documentId, myDocument).then((data) => {
@@ -147,7 +160,16 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 								className={activeTab === "termsandconditions" ? "active" : ""}
 								onClick={() => setActiveTab("termsandconditions")}
 							>
-								Terms & Condition
+								Terms & Condition For Guests
+							</button>
+
+							<button
+								className={
+									activeTab === "termsandconditions_B2B" ? "active" : ""
+								}
+								onClick={() => setActiveTab("termsandconditions_B2B")}
+							>
+								Terms & Condition For Hotels
 							</button>
 						</TabNavigation>
 
@@ -211,7 +233,22 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 							</div>
 						)}
 
-						<div className='mt-4'>
+						{activeTab === "termsandconditions_B2B" && (
+							<div>
+								<ZTermsAndConditionsB2B
+									termsAndConditionEnglish_B2B={termsAndConditionEnglish_B2B}
+									termsAndConditionArabic_B2B={termsAndConditionArabic_B2B}
+									setTermsAndConditionEnglish_B2B={
+										setTermsAndConditionEnglish_B2B
+									}
+									setTermsAndConditionArabic_B2B={
+										setTermsAndConditionArabic_B2B
+									}
+								/>
+							</div>
+						)}
+
+						<div className='' style={{ marginTop: "80px" }}>
 							<button className='btn btn-primary' onClick={submitDocument}>
 								Submit...
 							</button>

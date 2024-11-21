@@ -11,21 +11,21 @@ const toolbarOptions = [
 	["clean"],
 ];
 
-const ZTermsAndConditions = ({
-	termsAndConditionEnglish,
-	termsAndConditionArabic,
-	setTermsAndConditionEnglish,
-	setTermsAndConditionArabic,
+const ZTermsAndConditionsB2B = ({
+	termsAndConditionEnglish_B2B,
+	termsAndConditionArabic_B2B,
+	setTermsAndConditionEnglish_B2B,
+	setTermsAndConditionArabic_B2B,
 }) => {
 	return (
 		<ZTermsAndConditionsWrapper>
 			<div className='form-group'>
 				<label className='text-muted'>
-					Terms and Conditions For Guests (English)
+					Terms and Conditions For Hotels (English)
 				</label>
 				<ReactQuill
-					value={termsAndConditionEnglish}
-					onChange={setTermsAndConditionEnglish}
+					value={termsAndConditionEnglish_B2B}
+					onChange={setTermsAndConditionEnglish_B2B}
 					modules={{
 						toolbar: { container: toolbarOptions },
 						clipboard: { matchVisual: false },
@@ -34,13 +34,13 @@ const ZTermsAndConditions = ({
 				/>
 			</div>
 
-			<div className='form-group mt-5' dir='rtl'>
+			<div className='form-group mt-5'>
 				<label className='text-muted mt-5'>
-					Terms and Conditions For Guests (Arabic)
+					Terms and Conditions For Hotels (Arabic)
 				</label>
 				<ReactQuill
-					value={termsAndConditionArabic}
-					onChange={setTermsAndConditionArabic}
+					value={termsAndConditionArabic_B2B}
+					onChange={setTermsAndConditionArabic_B2B}
 					modules={{
 						toolbar: { container: toolbarOptions },
 						clipboard: { matchVisual: false },
@@ -53,7 +53,7 @@ const ZTermsAndConditions = ({
 	);
 };
 
-export default ZTermsAndConditions;
+export default ZTermsAndConditionsB2B;
 
 const ZTermsAndConditionsWrapper = styled.div`
 	min-height: 700px;
@@ -85,6 +85,7 @@ const ZTermsAndConditionsWrapper = styled.div`
 		color: #999;
 	}
 
+	/* Ensure Arabic text in the editor goes right-to-left */
 	.arabic-editor .ql-editor {
 		direction: rtl;
 		text-align: right;

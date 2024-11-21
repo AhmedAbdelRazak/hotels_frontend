@@ -125,11 +125,11 @@ const ZAboutUsAdd = ({
 								toolbar: { container: toolbarOptions },
 								clipboard: { matchVisual: false },
 							}}
-							style={{ height: "200px" }}
+							style={{ height: "400px" }}
 						/>
 					</StyledQuillWrapper>
 				</div>
-				<div className='form-group mt-4'>
+				<div className='form-group mt-5' dir='rtl'>
 					<label className='text-muted'>About Us Arabic</label>
 					<StyledQuillWrapper>
 						<ReactQuill
@@ -139,7 +139,8 @@ const ZAboutUsAdd = ({
 								toolbar: { container: toolbarOptions },
 								clipboard: { matchVisual: false },
 							}}
-							style={{ height: "200px" }}
+							style={{ height: "400px" }}
+							className='arabic-editor'
 						/>
 					</StyledQuillWrapper>
 				</div>
@@ -190,5 +191,10 @@ const StyledQuillWrapper = styled.div`
 
 	.ql-editor.ql-blank::before {
 		color: #999; /* Placeholder color */
+	}
+
+	.arabic-editor .ql-editor {
+		direction: rtl;
+		text-align: right;
 	}
 `;
