@@ -11,6 +11,7 @@ import { JanatWebsite, getJanatWebsiteRecord } from "../apiAdmin";
 import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
+import ZPrivacyPolicy from "./ZPrivacyPolicy";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -25,6 +26,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [activeTab, setActiveTab] = useState("home"); // New state for tab selection
 	const [aboutUsEnglish, setAboutUsEnglish] = useState("");
 	const [aboutUsArabic, setAboutUsArabic] = useState("");
+	const [privacyPolicy, setPrivacyPolicy] = useState("");
+	const [privacyPolicyArabic, setPrivacyPolicyArabic] = useState("");
 	const [termsAndConditionArabic, setTermsAndConditionArabic] = useState("");
 	const [termsAndConditionEnglish, setTermsAndConditionEnglish] = useState("");
 	const [termsAndConditionArabic_B2B, setTermsAndConditionArabic_B2B] =
@@ -60,6 +63,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 					setAboutUsArabic(data[0].aboutUsArabic || "");
 					setTermsAndConditionEnglish(data[0].termsAndConditionEnglish || "");
 					setTermsAndConditionArabic(data[0].termsAndConditionArabic || "");
+					setPrivacyPolicy(data[0].privacyPolicy || "");
+					setPrivacyPolicyArabic(data[0].privacyPolicyArabic || "");
 					setTermsAndConditionEnglish_B2B(
 						data[0].termsAndConditionEnglish_B2B || ""
 					);
@@ -103,6 +108,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			termsAndConditionEnglish: termsAndConditionEnglish,
 			termsAndConditionArabic_B2B: termsAndConditionArabic_B2B,
 			termsAndConditionEnglish_B2B: termsAndConditionEnglish_B2B,
+			privacyPolicy: privacyPolicy,
+			privacyPolicyArabic: privacyPolicyArabic,
 		};
 
 		JanatWebsite(documentId, myDocument).then((data) => {
@@ -170,6 +177,13 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 								onClick={() => setActiveTab("termsandconditions_B2B")}
 							>
 								Terms & Condition For Hotels
+							</button>
+
+							<button
+								className={activeTab === "privacyPolicy" ? "active" : ""}
+								onClick={() => setActiveTab("privacyPolicy")}
+							>
+								Privacy Policy
 							</button>
 						</TabNavigation>
 
@@ -244,6 +258,17 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 									setTermsAndConditionArabic_B2B={
 										setTermsAndConditionArabic_B2B
 									}
+								/>
+							</div>
+						)}
+
+						{activeTab === "privacyPolicy" && (
+							<div>
+								<ZPrivacyPolicy
+									privacyPolicy={privacyPolicy}
+									setPrivacyPolicy={setPrivacyPolicy}
+									privacyPolicyArabic={privacyPolicyArabic}
+									setPrivacyPolicyArabic={setPrivacyPolicyArabic}
 								/>
 							</div>
 						)}
