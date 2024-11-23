@@ -17,14 +17,35 @@ const ZHomePageBanners = ({ addThumbnail, setAddThumbnail }) => {
 
 		if (files) {
 			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+
+				// Validate file type
+				if (!file.type.startsWith("image/")) {
+					console.error("Only image files are allowed.");
+					continue;
+				}
+
+				// Dynamically determine file type and dimensions
+				const isJpegOrPng =
+					file.type === "image/jpeg" || file.type === "image/png";
+				const isWebp = file.type === "image/webp";
+
+				// Define resizing options dynamically based on format
+				const resizeFormat = isJpegOrPng || isWebp ? "jpeg" : "png";
+				const maxWidth = 1920; // Maximum width for resizing
+				const maxHeight = 997; // Maximum height for resizing
+				const quality = 100; // Image quality
+
+				// Use Resizer to resize the image
 				Resizer.imageFileResizer(
-					files[i],
-					1920,
-					997,
-					"jpeg",
-					100,
+					file,
+					maxWidth,
+					maxHeight,
+					resizeFormat,
+					quality,
 					0,
 					(uri) => {
+						// Upload resized image to the server
 						cloudinaryUpload1(user._id, token, { image: uri })
 							.then((data) => {
 								allUploadedFiles.push({
@@ -41,7 +62,7 @@ const ZHomePageBanners = ({ addThumbnail, setAddThumbnail }) => {
 								setAddThumbnail({ ...addThumbnail, images: allUploadedFiles });
 							})
 							.catch((err) => {
-								console.log("CLOUDINARY UPLOAD ERR", err);
+								console.error("CLOUDINARY UPLOAD ERROR", err);
 							});
 					},
 					"base64"

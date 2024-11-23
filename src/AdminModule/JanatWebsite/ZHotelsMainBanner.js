@@ -18,30 +18,46 @@ const ZHotelsMainBanner = ({ addThumbnail, setAddThumbnail }) => {
 	const { user, token } = isAuthenticated();
 
 	const fileUploadAndResizeThumbNail = (e) => {
-		// console.log(e.target.files);
-		let files = e.target.files;
-		let allUploadedFiles = addThumbnail;
+		let files = e.target.files; // Get the files from input
+		let allUploadedFiles = addThumbnail; // Current uploaded files array
+
 		if (files) {
 			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+
+				// Validate file type (support images only)
+				if (!file.type.startsWith("image/")) {
+					alert("Only image files are allowed!");
+					continue; // Skip non-image files
+				}
+
+				// Determine the image format dynamically
+				const fileType = file.type.split("/")[1].toUpperCase(); // e.g., "JPEG", "PNG", etc.
+				const resizeFormat = ["JPEG", "PNG", "WEBP"].includes(fileType)
+					? fileType
+					: "JPEG"; // Default to JPEG if format is unsupported
+
+				// Resize and upload the image
 				Resizer.imageFileResizer(
-					files[i],
-					720,
-					720,
-					"JPEG",
-					100,
-					0,
+					file,
+					720, // Resize width
+					720, // Resize height
+					resizeFormat, // Use the determined format
+					100, // Image quality
+					0, // Rotation (0 degrees)
 					(uri) => {
+						// Upload resized image to Cloudinary
 						cloudinaryUpload1(user._id, token, { image: uri })
 							.then((data) => {
+								// Add uploaded image data to the state
 								allUploadedFiles.push(data);
-
 								setAddThumbnail({ ...addThumbnail, images: allUploadedFiles });
 							})
 							.catch((err) => {
-								console.log("CLOUDINARY UPLOAD ERR", err);
+								console.error("CLOUDINARY UPLOAD ERROR", err);
 							});
 					},
-					"base64"
+					"base64" // Output format
 				);
 			}
 		}

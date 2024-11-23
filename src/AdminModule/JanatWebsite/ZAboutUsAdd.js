@@ -32,28 +32,44 @@ const ZAboutUsAdd = ({
 	const { user, token } = isAuthenticated();
 
 	const fileUploadAndResizeThumbNail = (e) => {
-		let files = e.target.files;
-		let allUploadedFiles = addThumbnail;
+		let files = e.target.files; // Capture files from the input
+		let allUploadedFiles = addThumbnail; // Existing uploaded files
+
 		if (files) {
 			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+
+				// Validate file type to ensure it's an image
+				if (!file.type.startsWith("image/")) {
+					alert("Only image files are allowed!");
+					continue; // Skip non-image files
+				}
+
+				// Dynamically determine the image format
+				const fileType = file.type.split("/")[1].toUpperCase(); // Extract format, e.g., "JPEG", "PNG"
+				const resizeFormat = ["JPEG", "PNG", "WEBP"].includes(fileType)
+					? fileType
+					: "JPEG"; // Default to JPEG for unsupported formats
+
+				// Resize and upload the image
 				Resizer.imageFileResizer(
-					files[i],
-					720,
-					720,
-					"JPEG",
-					100,
-					0,
+					file,
+					720, // Set max width
+					720, // Set max height
+					resizeFormat, // Resized format
+					100, // Image quality
+					0, // No rotation
 					(uri) => {
 						cloudinaryUpload1(user._id, token, { image: uri })
 							.then((data) => {
-								allUploadedFiles.push(data);
-								setAddThumbnail({ ...addThumbnail, images: allUploadedFiles });
+								allUploadedFiles.push(data); // Add new image to the list
+								setAddThumbnail({ ...addThumbnail, images: allUploadedFiles }); // Update state
 							})
 							.catch((err) => {
-								console.log("CLOUDINARY UPLOAD ERR", err);
+								console.error("CLOUDINARY UPLOAD ERROR", err); // Log errors
 							});
 					},
-					"base64"
+					"base64" // Output format
 				);
 			}
 		}
