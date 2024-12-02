@@ -186,7 +186,11 @@ const ActiveClientsSupportCases = () => {
 										position: "relative",
 									}}
 								>
-									{item.displayName1} - {item.hotelId && item.hotelId.hotelName}
+									{item.hotelId &&
+									item.hotelId._id !== "674cf8997e3780f1f838d458"
+										? item.hotelId.hotelName
+										: "Jannat Booking"}{" "}
+									- <strong>{item.displayName1}</strong>
 									{hasUnseenMessages && (
 										<Badge
 											count={

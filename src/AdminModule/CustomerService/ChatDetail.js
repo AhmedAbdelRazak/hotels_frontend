@@ -141,13 +141,22 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 			<h3 style={{ textTransform: "capitalize" }}>
 				{chat && chat.openedBy === "client" ? (
 					<span style={{ fontSize: "20px" }}>
-						Client ({chat.conversation[0].messageBy.customerName}) Needs Support{" "}
-						Regarding {chat.conversation[0].inquiryAbout} In Hotel{" "}
-						<span style={{ fontWeight: "bold" }}>
-							{chat &&
-								(chat.hotelId.hotelName ||
-									chat.conversation[0].messageBy.customerName)}
-						</span>{" "}
+						{chat.hotelId && chat.hotelId._id === "674cf8997e3780f1f838d458" ? (
+							<>
+								Client ({chat.conversation[0].messageBy.customerName}) Needs
+								Support From Jannat Booking
+							</>
+						) : (
+							<>
+								Client ({chat.conversation[0].messageBy.customerName}) Needs
+								Support Regarding {chat.conversation[0].inquiryAbout} In Hotel{" "}
+								<span style={{ fontWeight: "bold" }}>
+									{chat &&
+										(chat.hotelId.hotelName ||
+											chat.conversation[0].messageBy.customerName)}
+								</span>{" "}
+							</>
+						)}
 					</span>
 				) : (
 					<>
