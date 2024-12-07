@@ -296,6 +296,13 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 							{totalAmount} SAR
 						</p>
 						<p>
+							<strong>Total Amount After Taxes & Commission: </strong>
+							{Number(
+								totalAmount * process.env.REACT_APP_COMMISSIONRATE
+							).toFixed(2)}{" "}
+							SAR
+						</p>
+						<p>
 							<strong>Number of Nights: </strong>
 							{numberOfNights}
 						</p>
