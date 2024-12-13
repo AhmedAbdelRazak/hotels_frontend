@@ -14,6 +14,7 @@ import {
 } from "antd";
 import styled from "styled-components";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
+import { isAuthenticated } from "../../auth";
 
 const { Option } = Select;
 
@@ -42,6 +43,8 @@ const ZUpdateCase1 = ({
 	const [formPricedExtras] = Form.useForm();
 	const [formArabic] = Form.useForm();
 
+	const { user } = isAuthenticated();
+
 	// Prepopulate fields based on selectedRoomType
 	useEffect(() => {
 		window.scrollTo({ top: 90, behavior: "smooth" });
@@ -52,6 +55,7 @@ const ZUpdateCase1 = ({
 					existingRoomDetails.displayName_OtherLanguage || "",
 				roomCount: existingRoomDetails.count || 0,
 				basePrice: existingRoomDetails.price?.basePrice || 0,
+				defaultCost: existingRoomDetails.defaultCost || null,
 				description: existingRoomDetails.description || "",
 				description_OtherLanguage:
 					existingRoomDetails.description_OtherLanguage || "",
@@ -60,6 +64,7 @@ const ZUpdateCase1 = ({
 				extraAmenities: existingRoomDetails.extraAmenities || [],
 				activeRoom: existingRoomDetails.activeRoom || false,
 				commisionIncluded: existingRoomDetails.commisionIncluded || false,
+				roomCommission: existingRoomDetails.roomCommission || 10, // Default to 10 if not set
 				pricedExtras: existingRoomDetails.pricedExtras || [],
 			});
 
@@ -661,60 +666,195 @@ const ZUpdateCase1 = ({
 								}}
 							/>
 						</Form.Item>
-						<Form.Item
-							name='basePrice'
-							label={
-								chosenLanguage === "Arabic"
-									? "سعر الغرفة الأساسي"
-									: "Base Room Price"
-							}
-							rules={[
-								{ required: true, message: "Please input the base price" },
-							]}
-						>
-							<Input
-								type='number'
-								onChange={(e) => {
-									const selectedRoomId = form.getFieldValue("_id");
+						<div className='row'>
+							{/* Default Cost Input */}
+							<div className='col-md-6'>
+								<Form.Item
+									name='defaultCost'
+									label={
+										chosenLanguage === "Arabic"
+											? "التكلفة الجذرية"
+											: "Root Cost"
+									}
+									rules={[
+										{
+											required: true,
+											message:
+												chosenLanguage === "Arabic"
+													? "يرجى إدخال التكلفة الجذرية"
+													: "Please input the root cost",
+										},
+									]}
+								>
+									<Input
+										type='number'
+										onChange={(e) => {
+											const selectedRoomId = form.getFieldValue("_id");
 
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
+											setHotelDetails((prevDetails) => {
+												const updatedRoomCountDetails = Array.isArray(
+													prevDetails.roomCountDetails
+												)
+													? prevDetails.roomCountDetails
+													: [];
 
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room._id === selectedRoomId
-										);
+												const existingRoomIndex =
+													updatedRoomCountDetails.findIndex(
+														(room) => room._id === selectedRoomId
+													);
 
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].price = {
-												basePrice: parseFloat(e.target.value),
-											};
-										} else {
-											updatedRoomCountDetails.push({
-												_id: selectedRoomId,
-												price: { basePrice: parseFloat(e.target.value) },
+												if (existingRoomIndex > -1) {
+													updatedRoomCountDetails[
+														existingRoomIndex
+													].defaultCost = parseFloat(e.target.value);
+												} else {
+													updatedRoomCountDetails.push({
+														_id: selectedRoomId,
+														defaultCost: parseFloat(e.target.value),
+													});
+												}
+
+												return {
+													...prevDetails,
+													roomCountDetails: updatedRoomCountDetails,
+												};
 											});
-										}
+										}}
+									/>
+								</Form.Item>
+							</div>
 
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
-								}}
-							/>
-						</Form.Item>
+							{/* Base Price Input */}
+							<div className='col-md-6'>
+								<Form.Item
+									name='basePrice'
+									label={
+										chosenLanguage === "Arabic"
+											? "سعر الغرفة الأساسي"
+											: "Base Room Price"
+									}
+									rules={[
+										{
+											required: true,
+											message:
+												chosenLanguage === "Arabic"
+													? "يرجى إدخال سعر الغرفة الأساسي"
+													: "Please input the base room price",
+										},
+									]}
+								>
+									<Input
+										type='number'
+										onChange={(e) => {
+											const selectedRoomId = form.getFieldValue("_id");
+
+											setHotelDetails((prevDetails) => {
+												const updatedRoomCountDetails = Array.isArray(
+													prevDetails.roomCountDetails
+												)
+													? prevDetails.roomCountDetails
+													: [];
+
+												const existingRoomIndex =
+													updatedRoomCountDetails.findIndex(
+														(room) => room._id === selectedRoomId
+													);
+
+												if (existingRoomIndex > -1) {
+													updatedRoomCountDetails[existingRoomIndex].price = {
+														basePrice: parseFloat(e.target.value),
+													};
+												} else {
+													updatedRoomCountDetails.push({
+														_id: selectedRoomId,
+														price: { basePrice: parseFloat(e.target.value) },
+													});
+												}
+
+												return {
+													...prevDetails,
+													roomCountDetails: updatedRoomCountDetails,
+												};
+											});
+										}}
+									/>
+								</Form.Item>
+							</div>
+						</div>
 
 						<Form.Item className='mb-4'>
-							<Checkbox
-								onChange={(e) => handleCheckboxChange(e.target.checked)}
-								checked={form.getFieldValue("commisionIncluded")}
-							>
-								Include Commission
-							</Checkbox>
+							{user && user.role === 1000 ? (
+								<div className='row'>
+									{/* Include commission checkbox */}
+									<div className='col-md-2 my-auto'>
+										<Checkbox
+											onChange={(e) => handleCheckboxChange(e.target.checked)}
+											checked={form.getFieldValue("commisionIncluded")}
+										>
+											{chosenLanguage === "Arabic"
+												? "العمولة"
+												: "Include Commission"}
+										</Checkbox>
+									</div>
+
+									{/* Commission rate input field */}
+									<div className='col-md-6'>
+										<Form.Item
+											name='roomCommission'
+											label={
+												chosenLanguage === "Arabic"
+													? "معدل العمولة (%)"
+													: "Commission Rate (%)"
+											}
+											rules={[
+												{
+													required: true,
+													message:
+														chosenLanguage === "Arabic"
+															? "يرجى إدخال معدل العمولة (يجب أن يكون رقمًا)"
+															: "Please input the commission rate (should be a number)",
+												},
+											]}
+										>
+											<Input
+												type='number'
+												onChange={(e) => {
+													const selectedRoomId = form.getFieldValue("_id");
+
+													setHotelDetails((prevDetails) => {
+														const updatedRoomCountDetails = Array.isArray(
+															prevDetails.roomCountDetails
+														)
+															? prevDetails.roomCountDetails
+															: [];
+
+														const existingRoomIndex =
+															updatedRoomCountDetails.findIndex(
+																(room) => room._id === selectedRoomId
+															);
+
+														if (existingRoomIndex > -1) {
+															updatedRoomCountDetails[
+																existingRoomIndex
+															].roomCommission = parseFloat(e.target.value);
+														} else {
+															updatedRoomCountDetails.push({
+																_id: selectedRoomId,
+																roomCommission: parseFloat(e.target.value),
+															});
+														}
+
+														return {
+															...prevDetails,
+															roomCountDetails: updatedRoomCountDetails,
+														};
+													});
+												}}
+											/>
+										</Form.Item>
+									</div>
+								</div>
+							) : null}
 						</Form.Item>
 
 						<Form.Item

@@ -120,6 +120,17 @@ const EditHotelForm = ({
 				/>
 			</Form.Item>
 			<Form.Item
+				label='Commission (Only Numbers e.g. 10, 15, 20, etc...)'
+				name='commission'
+				rules={[{ required: true }]}
+			>
+				<Input
+					value={hotel.commission}
+					onChange={handleChange("commission")}
+					placeholder='Commission: Only Numbers'
+				/>
+			</Form.Item>
+			<Form.Item
 				label='Property Type'
 				name='propertyType'
 				rules={[{ required: true }]}
