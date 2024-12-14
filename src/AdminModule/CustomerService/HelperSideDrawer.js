@@ -15,7 +15,9 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const HelperSideDrawer = ({ chat, onClose, visible }) => {
-	const [selectedRooms, setSelectedRooms] = useState([]);
+	const [selectedRooms, setSelectedRooms] = useState([
+		{ roomType: "", displayName: "", count: 1, commissionRate: 0 },
+	]);
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [checkInDate, setCheckInDate] = useState(null);
@@ -26,6 +28,7 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 	const [phone, setPhone] = useState("");
 	const [generatedLink, setGeneratedLink] = useState("");
 	const [totalAmount, setTotalAmount] = useState(0);
+	const [totalCommission, setTotalCommission] = useState(0);
 	const [numberOfNights, setNumberOfNights] = useState(0);
 
 	useEffect(() => {
@@ -40,57 +43,82 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 		}
 	}, [chat]);
 
-	const calculateTotalAmount = useCallback(
+	const calculateTotalAmountAndCommission = useCallback(
 		(roomSelections, startDate, endDate) => {
 			const start = dayjs(startDate).startOf("day");
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
-			let currentDate = start;
-			let total = 0;
-			let nights = 0;
+			const nights = end.diff(start, "day") + 1;
 
-			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
-				const formattedDate = currentDate.format("YYYY-MM-DD");
-				// eslint-disable-next-line
-				roomSelections.forEach(({ roomType, displayName, count }) => {
+			const totals = roomSelections.reduce(
+				(acc, { roomType, displayName, count }) => {
 					const selectedRoom = chat.hotelId.roomCountDetails.find(
 						(room) =>
 							room.roomType === roomType && room.displayName === displayName
 					);
+
 					if (selectedRoom) {
-						const rateForDate = selectedRoom.pricingRate.find(
-							(rate) =>
-								dayjs(rate.calendarDate).format("YYYY-MM-DD") === formattedDate
-						);
-						const dailyRate = rateForDate
-							? parseFloat(rateForDate.price)
-							: selectedRoom.price.basePrice;
-						total += dailyRate * count;
+						const dailyRate = selectedRoom.price.basePrice || 0;
+						const defaultCost = selectedRoom.defaultCost || dailyRate;
+
+						const commissionRate =
+							selectedRoom.roomCommission ||
+							chat.hotelId.commission ||
+							parseFloat(process.env.REACT_APP_COMMISSIONRATE) ||
+							0.1;
+
+						const normalizedRate =
+							commissionRate > 1 ? commissionRate / 100 : commissionRate;
+
+						acc.total += dailyRate * count * nights;
+						acc.commissionTotal +=
+							defaultCost * normalizedRate * count * nights;
 					}
-				});
-				nights++;
-				currentDate = currentDate.add(1, "day");
-			}
+
+					return acc;
+				},
+				{ total: 0, commissionTotal: 0 }
+			);
 
 			setNumberOfNights(nights);
-			setTotalAmount(total);
+			setTotalAmount(totals.total.toFixed(2));
+			setTotalCommission(totals.commissionTotal.toFixed(2));
 		},
-		[chat.hotelId.roomCountDetails]
+		[chat.hotelId.roomCountDetails, chat.hotelId.commission]
 	);
 
 	useEffect(() => {
 		if (checkInDate && checkOutDate && selectedRooms.length > 0) {
-			calculateTotalAmount(selectedRooms, checkInDate, checkOutDate);
+			calculateTotalAmountAndCommission(
+				selectedRooms,
+				checkInDate,
+				checkOutDate
+			);
 		}
-	}, [checkInDate, checkOutDate, selectedRooms, calculateTotalAmount]);
+	}, [
+		checkInDate,
+		checkOutDate,
+		selectedRooms,
+		calculateTotalAmountAndCommission,
+	]);
 
 	const handleRoomSelectionChange = (value, index) => {
 		const [roomType, displayName, basePrice] = value.split("|");
+		const selectedRoom = chat.hotelId.roomCountDetails.find(
+			(room) => room.roomType === roomType && room.displayName === displayName
+		);
+		const commissionRate =
+			selectedRoom?.roomCommission ||
+			chat.hotelId.commission ||
+			parseFloat(process.env.REACT_APP_COMMISSIONRATE) ||
+			0.1;
+
 		const newSelection = [...selectedRooms];
 		newSelection[index] = {
 			...newSelection[index],
 			roomType,
 			displayName,
 			pricePerNight: parseFloat(basePrice),
+			commissionRate,
 		};
 		setSelectedRooms(newSelection);
 	};
@@ -100,15 +128,49 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 		newSelection[index].count = count;
 		setSelectedRooms(newSelection);
 		if (checkInDate && checkOutDate) {
-			calculateTotalAmount(newSelection, checkInDate, checkOutDate);
+			calculateTotalAmountAndCommission(
+				newSelection,
+				checkInDate,
+				checkOutDate
+			);
 		}
 	};
 
 	const addRoomSelection = () => {
 		setSelectedRooms([
 			...selectedRooms,
-			{ roomType: "", displayName: "", count: 1, pricePerNight: 0 },
+			{
+				roomType: "",
+				displayName: "",
+				count: 1,
+				pricePerNight: 0,
+				commissionRate: 0,
+			},
 		]);
+	};
+
+	const removeRoomSelection = (index) => {
+		const newSelection = [...selectedRooms];
+		newSelection.splice(index, 1);
+		setSelectedRooms(newSelection);
+	};
+
+	const clearAll = () => {
+		setSelectedRooms([
+			{ roomType: "", displayName: "", count: 1, commissionRate: 0 },
+		]);
+		setName("");
+		setEmail("");
+		setCheckInDate(null);
+		setCheckOutDate(null);
+		setAdults(1);
+		setChildren(0);
+		setNationality("");
+		setPhone("");
+		setGeneratedLink("");
+		setTotalAmount(0);
+		setTotalCommission(0);
+		setNumberOfNights(0);
 	};
 
 	const handleGenerateLink = () => {
@@ -134,6 +196,7 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			checkOutDate: checkOutDate.format("YYYY-MM-DD"),
 			numberOfNights,
 			totalAmount,
+			totalCommission,
 			adults,
 			children,
 			nationality,
@@ -145,6 +208,7 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			queryParams.append(`displayName${index + 1}`, room.displayName);
 			queryParams.append(`roomCount${index + 1}`, room.count);
 			queryParams.append(`pricePerNight${index + 1}`, room.pricePerNight);
+			queryParams.append(`commissionRate${index + 1}`, room.commissionRate);
 		});
 
 		const bookingLink = `${
@@ -173,11 +237,23 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			width={500}
 		>
 			<Form layout='vertical'>
+				<Button
+					type='primary'
+					danger
+					onClick={clearAll}
+					style={{ marginBottom: 20 }}
+				>
+					Clear All
+				</Button>
 				{selectedRooms.map((room, index) => (
 					<div key={index} style={{ marginBottom: 20 }}>
 						<Form.Item label={`Room Type ${index + 1}`}>
 							<Select
-								value={`${room.roomType}|${room.displayName}|${room.pricePerNight}`}
+								value={
+									room.roomType
+										? `${room.roomType}|${room.displayName}|${room.pricePerNight}`
+										: undefined
+								}
 								onChange={(value) => handleRoomSelectionChange(value, index)}
 								placeholder='Select Room Type'
 							>
@@ -197,20 +273,32 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 								min={1}
 								value={room.count}
 								onChange={(count) => handleRoomCountChange(count, index)}
-								placeholder='Enter count'
 							/>
 						</Form.Item>
+						{index > 0 && (
+							<Button
+								type='link'
+								danger
+								onClick={() => removeRoomSelection(index)}
+							>
+								Remove
+							</Button>
+						)}
 					</div>
 				))}
-
 				<Button
 					type='dashed'
 					onClick={addRoomSelection}
+					disabled={
+						selectedRooms[selectedRooms.length - 1]?.roomType === "" ||
+						selectedRooms[selectedRooms.length - 1]?.displayName === ""
+					}
 					style={{ marginBottom: 20 }}
 				>
 					Add Another Room
 				</Button>
 
+				{/* Other form fields */}
 				<Form.Item label='Name'>
 					<Input
 						value={name}
@@ -218,7 +306,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						placeholder='Full Name'
 					/>
 				</Form.Item>
-
 				<Form.Item label='Email'>
 					<Input
 						type='email'
@@ -227,7 +314,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						placeholder='Email'
 					/>
 				</Form.Item>
-
 				<Form.Item label='Check-in and Check-out Dates'>
 					<RangePicker
 						format='YYYY-MM-DD'
@@ -241,7 +327,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						}
 					/>
 				</Form.Item>
-
 				<Form.Item label='Number of Adults'>
 					<Input
 						type='number'
@@ -250,7 +335,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						onChange={(e) => setAdults(Number(e.target.value))}
 					/>
 				</Form.Item>
-
 				<Form.Item label='Number of Children'>
 					<Input
 						type='number'
@@ -259,7 +343,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						onChange={(e) => setChildren(Number(e.target.value))}
 					/>
 				</Form.Item>
-
 				<Form.Item label='Nationality'>
 					<Input
 						value={nationality}
@@ -267,7 +350,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						placeholder='Nationality'
 					/>
 				</Form.Item>
-
 				<Form.Item label='Phone Number'>
 					<Input
 						type='tel'
@@ -276,7 +358,6 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 						placeholder='Phone Number'
 					/>
 				</Form.Item>
-
 				<Form.Item>
 					<Button type='primary' onClick={handleGenerateLink}>
 						Generate Link
@@ -296,11 +377,12 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 							{totalAmount} SAR
 						</p>
 						<p>
+							<strong>Total Commission: </strong>
+							{totalCommission} SAR
+						</p>
+						<p>
 							<strong>Total Amount After Taxes & Commission: </strong>
-							{Number(
-								totalAmount * process.env.REACT_APP_COMMISSIONRATE
-							).toFixed(2)}{" "}
-							SAR
+							{(Number(totalAmount) + Number(totalCommission)).toFixed(2)} SAR
 						</p>
 						<p>
 							<strong>Number of Nights: </strong>
