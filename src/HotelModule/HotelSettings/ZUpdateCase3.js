@@ -395,7 +395,7 @@ const ZUpdateCase3 = ({
 								<div>
 									<label className='mt-3'>
 										{chosenLanguage === "Arabic"
-											? "السعر الأساسي:"
+											? "السعر الجذري:"
 											: "Root Price:"}
 									</label>
 									<Input
@@ -407,7 +407,7 @@ const ZUpdateCase3 = ({
 										}}
 										placeholder={
 											chosenLanguage === "Arabic"
-												? "السعر الأساسي"
+												? "السعر الجذري"
 												: "Root Price"
 										}
 										style={{
