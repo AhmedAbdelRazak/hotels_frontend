@@ -1047,7 +1047,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											: "Reserved Room Types"}
 										<div className='mx-1'>
 											{reservation.pickedRoomsType.map((room, index) => (
-												<div key={index}>{room.room_type}</div>
+												<div key={index}>
+													<div>{room.room_type}</div>
+													{room.displayName}
+												</div>
 											))}
 										</div>
 									</div>

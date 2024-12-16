@@ -8,6 +8,7 @@ import moment from "moment";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import ZCustomInput from "./ZCustomInput";
+import { isAuthenticated } from "../../auth";
 
 const ZUpdateCase3 = ({
 	hotelDetails,
@@ -26,11 +27,13 @@ const ZUpdateCase3 = ({
 	getRoomColor,
 	fromPage,
 	existingRoomDetails, // Pass the selected room's details
+	rootPrice,
+	setRootPrice,
 }) => {
 	const calendarRef = useRef(null);
 	const priceInputRef = useRef(null);
 	const [isBlocked, setIsBlocked] = useState(false);
-
+	const { user } = isAuthenticated();
 	// Helper function to truncate displayName to 10 characters followed by "..."
 	const truncateDisplayName = (name) => {
 		return name.length > 10 ? `${name.slice(0, 10)}...` : name;
@@ -41,9 +44,11 @@ const ZUpdateCase3 = ({
 		if (existingRoomDetails && existingRoomDetails.pricingRate) {
 			const prepopulatedEvents = existingRoomDetails.pricingRate.map(
 				(rate) => ({
-					title: `${
-						truncateDisplayName(existingRoomDetails.displayName) || "Room"
-					}: ${rate.price} SAR`,
+					title: `Price: ${rate.price} SAR${
+						rate.rootPrice && user?.role === 1000
+							? ` | Root: ${rate.rootPrice}`
+							: ""
+					}`,
 					start: rate.calendarDate,
 					end: rate.calendarDate,
 					allDay: true,
@@ -57,6 +62,7 @@ const ZUpdateCase3 = ({
 				prepopulatedEvents.forEach((event) => calendarApi.addEvent(event));
 			}
 		}
+		// eslint-disable-next-line
 	}, [existingRoomDetails, getColorForPrice]);
 
 	// Helper function to generate an array of dates between two dates
@@ -118,7 +124,7 @@ const ZUpdateCase3 = ({
 
 	// Submit the pricing data for the selected date range
 	const handleDateRangeSubmit = (isBlocking = false) => {
-		if (!pricingRate && !isBlocking) {
+		if ((!pricingRate && !isBlocking) || (!rootPrice && !isBlocking)) {
 			setPriceError(true);
 			return;
 		}
@@ -134,6 +140,7 @@ const ZUpdateCase3 = ({
 			calendarDate: date.toISOString().split("T")[0],
 			room_type: roomType,
 			price: isBlocking ? 0 : pricingRate,
+			rootPrice: isBlocking ? 0 : rootPrice, // Include rootPrice
 			color: isBlocking
 				? "black"
 				: getColorForPrice(pricingRate, selectedDateRange.join("-")),
@@ -164,7 +171,7 @@ const ZUpdateCase3 = ({
 					...newPricingRates,
 				];
 			} else {
-				// If room doesn't exist, add it (this shouldn't happen for updates, but it's safe to include)
+				// If room doesn't exist, add it
 				updatedRoomCountDetails.push({
 					_id: existingRoomDetails._id,
 					roomType,
@@ -345,6 +352,7 @@ const ZUpdateCase3 = ({
 									onChange={handleBlockChange}
 								/>
 							</h4>
+
 							<div>
 								<label>
 									{chosenLanguage === "Arabic" ? "سعر النطاق:" : "Price Range:"}
@@ -383,6 +391,49 @@ const ZUpdateCase3 = ({
 									</div>
 								)}
 							</div>
+							{user && user.role === 1000 ? (
+								<div>
+									<label className='mt-3'>
+										{chosenLanguage === "Arabic"
+											? "السعر الأساسي:"
+											: "Root Price:"}
+									</label>
+									<Input
+										type='number'
+										value={rootPrice}
+										onChange={(e) => {
+											setRootPrice(e.target.value);
+											setPriceError(false);
+										}}
+										placeholder={
+											chosenLanguage === "Arabic"
+												? "السعر الأساسي"
+												: "Root Price"
+										}
+										style={{
+											width: "100%",
+											padding: "8px",
+											marginTop: "8px",
+											fontSize: "1rem",
+											border: "1px solid #d9d9d9",
+											borderRadius: "4px",
+											backgroundColor: "#fff",
+											transition: "all 0.3s",
+											boxSizing: "border-box",
+											textAlign: chosenLanguage === "Arabic" ? "right" : "",
+										}}
+										disabled={isBlocked} // Disable input if blocked is selected
+									/>
+									{priceError && !rootPrice && (
+										<div style={{ color: "red" }}>
+											{chosenLanguage === "Arabic"
+												? "الرجاء إدخال السعر الأساسي"
+												: "Please enter the root price"}
+										</div>
+									)}
+								</div>
+							) : null}
+
 							<div className='text-center mt-3'>
 								<Button
 									onClick={() => handleDateRangeSubmit()}

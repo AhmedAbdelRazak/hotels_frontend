@@ -50,6 +50,7 @@ const ZUpdateHotelDetailsForm2 = ({
 	const [pricingRate, setPricingRate] = useState("");
 	const [customRoomType, setCustomRoomType] = useState("");
 	const [priceError, setPriceError] = useState(false);
+	const [rootPrice, setRootPrice] = useState("");
 	const calendarRef = useRef(null);
 	const [form] = Form.useForm();
 
@@ -82,6 +83,9 @@ const ZUpdateHotelDetailsForm2 = ({
 				extraAmenities: existingRoomDetails.extraAmenities || [],
 				pricedExtras: existingRoomDetails.pricedExtras || [],
 			});
+
+			// Prepopulate rootPrice if it exists
+			setRootPrice(existingRoomDetails.rootPrice || ""); // Set initial value for rootPrice
 
 			setRoomTypeSelected(true);
 
@@ -138,6 +142,7 @@ const ZUpdateHotelDetailsForm2 = ({
 					pricedExtras: values.pricedExtras || existingRoomDetails.pricedExtras,
 					photos: photos.length ? photos : existingRoomDetails.photos || [],
 					pricingRate: existingRoomDetails.pricingRate || [], // Retain pricingRate if not updated
+					rootPrice: rootPrice || existingRoomDetails.rootPrice || "", // Add rootPrice
 				};
 
 				// Update the hotelDetails state with the updated room details
@@ -220,6 +225,8 @@ const ZUpdateHotelDetailsForm2 = ({
 						getColorForPrice={getColorForPrice}
 						handleFinish={handleFinish}
 						form={form}
+						rootPrice={rootPrice} // Pass rootPrice to the child
+						setRootPrice={setRootPrice} // Pass setRootPrice to the child
 					/>
 				);
 
