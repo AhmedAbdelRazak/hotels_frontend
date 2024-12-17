@@ -46,7 +46,7 @@ const ZUpdateCase3 = ({
 				(rate) => ({
 					title: `Price: ${rate.price} SAR${
 						rate.rootPrice && user?.role === 1000
-							? ` | Root: ${rate.rootPrice}`
+							? ` | Root: ${rate.rootPrice} SAR`
 							: ""
 					}`,
 					start: rate.calendarDate,
@@ -251,6 +251,29 @@ const ZUpdateCase3 = ({
 		existingSelectedEvents.forEach((event) => event.remove());
 	};
 
+	const renderEventContent = (eventInfo) => {
+		const [priceLabel, rootPriceLabel] = eventInfo.event.title.split(" | ");
+		return (
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					textAlign: "center",
+					fontSize: "0.75rem",
+				}}
+			>
+				<div style={{ fontWeight: "bold" }}>{priceLabel}</div>
+				{rootPriceLabel && (
+					<>
+						{user && user.role === 1000 ? (
+							<div style={{ color: "white" }}>{rootPriceLabel}</div>
+						) : null}
+					</>
+				)}
+			</div>
+		);
+	};
+
 	const pricingEvents =
 		existingRoomDetails?.pricingRate?.map((rate) => ({
 			title: `${truncateDisplayName(existingRoomDetails.displayName)}: ${
@@ -281,6 +304,7 @@ const ZUpdateCase3 = ({
 							right: "dayGridMonth",
 						}}
 						select={handleCalendarSelect}
+						eventContent={renderEventContent}
 					/>
 				</div>
 				<div
