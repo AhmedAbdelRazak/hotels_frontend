@@ -10,6 +10,7 @@ import {
 	InputNumber,
 } from "antd";
 import dayjs from "dayjs";
+import { countryListWithAbbreviations } from "./utils";
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -504,11 +505,23 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 					/>
 				</Form.Item>
 				<Form.Item label='Nationality'>
-					<Input
+					<Select
+						showSearch
+						placeholder='Select Nationality'
+						optionFilterProp='children'
+						filterOption={(input, option) =>
+							option.children.toLowerCase().includes(input.toLowerCase())
+						}
 						value={nationality}
-						onChange={(e) => setNationality(e.target.value)}
-						placeholder='Nationality'
-					/>
+						onChange={(value) => setNationality(value)} // Set country code as nationality
+						style={{ width: "100%" }}
+					>
+						{countryListWithAbbreviations.map((country) => (
+							<Option key={country.code} value={country.code}>
+								{country.name}
+							</Option>
+						))}
+					</Select>
 				</Form.Item>
 				<Form.Item label='Phone Number'>
 					<Input
