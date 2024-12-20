@@ -328,6 +328,25 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		});
 	};
 
+	const getAverageRootPrice = (pickedRoomsType) => {
+		if (!pickedRoomsType || pickedRoomsType.length === 0) return 0;
+
+		let totalRootPrice = 0;
+		let totalDays = 0;
+
+		pickedRoomsType.forEach((room) => {
+			if (room.pricingByDay && room.pricingByDay.length > 0) {
+				room.pricingByDay.forEach((day) => {
+					totalRootPrice += parseFloat(day.rootPrice);
+				});
+				totalDays += room.pricingByDay.length;
+			}
+		});
+
+		// Avoid division by zero
+		return totalDays > 0 ? totalRootPrice / totalDays : 0;
+	};
+
 	return (
 		<Wrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
@@ -1243,6 +1262,26 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														getTotalAmountPerDay(
 															reservation.pickedRoomsType
 														).toLocaleString()}{" "}
+													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+												</h5>
+											</div>
+										</div>
+									</div>
+
+									<div className='my-3'>
+										<div className='row'>
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "معدل السعر الجزري"
+														: "Average Daily Root Price"}
+												</h6>
+											</div>
+											<div className='col-md-5 mx-auto'>
+												<h5>
+													{getAverageRootPrice(
+														reservation.pickedRoomsType
+													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
 											</div>
