@@ -75,7 +75,7 @@ const items = [
 		<AreaChartOutlined />
 	),
 	getItem(
-		<Link to='/admin/add-owner-account'>Add Owner Account</Link>,
+		<Link to='/admin/el-integrator'>El Integrator</Link>,
 		"sub3",
 		<SettingOutlined />
 	),
@@ -179,7 +179,7 @@ const AdminNavbar = ({
 						? "sub1"
 						: fromPage === "CustomerService"
 						  ? "sub2"
-						  : fromPage === "OwnerAccount"
+						  : fromPage === "ElIntegrator"
 						    ? "sub3"
 						    : fromPage === "AddCategories"
 						      ? "sub4"

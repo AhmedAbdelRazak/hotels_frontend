@@ -12,6 +12,8 @@ import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 import ZPrivacyPolicy from "./ZPrivacyPolicy";
+import { Modal, Input, Button, message } from "antd";
+import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -34,6 +36,9 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 		useState("");
 	const [termsAndConditionEnglish_B2B, setTermsAndConditionEnglish_B2B] =
 		useState("");
+	const [password, setPassword] = useState("");
+	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [isModalVisible, setIsModalVisible] = useState(false);
 
 	const gettingJanatWebsiteRecord = () => {
 		getJanatWebsiteRecord().then((data) => {
@@ -82,9 +87,32 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 		if (window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+
+		// Check if password is already verified
+		const websitePasswordVerified = localStorage.getItem(
+			"JannatBookingWebsiteVerified"
+		);
+
+		if (websitePasswordVerified) {
+			setIsPasswordVerified(true);
+		} else {
+			setIsModalVisible(true);
+		}
+
 		gettingJanatWebsiteRecord();
 		// eslint-disable-next-line
 	}, []);
+
+	const handlePasswordVerification = () => {
+		if (password === "JannatBookingWebsite2025") {
+			setIsPasswordVerified(true);
+			message.success("Password verified successfully");
+			localStorage.setItem("JannatBookingWebsiteVerified", "true");
+			setIsModalVisible(false);
+		} else {
+			message.error("Incorrect password. Please try again.");
+		}
+	};
 
 	const submitDocument = () => {
 		window.scrollTo({ top: 0, behavior: "smooth" });
@@ -126,161 +154,185 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
-			<div className='grid-container-main'>
-				<div className='navcontent'>
-					<AdminNavbar
-						fromPage='JanatWebsite'
-						AdminMenuStatus={AdminMenuStatus}
-						setAdminMenuStatus={setAdminMenuStatus}
-						collapsed={collapsed}
-						setCollapsed={setCollapsed}
-						chosenLanguage={chosenLanguage}
-					/>
-				</div>
+			<Modal
+				title='Enter Password'
+				visible={isModalVisible}
+				footer={null}
+				closable={false}
+			>
+				<Input.Password
+					placeholder='Enter password'
+					value={password}
+					onChange={(e) => setPassword(e.target.value)}
+					iconRender={(visible) =>
+						visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
+					}
+				/>
+				<Button
+					type='primary'
+					style={{ marginTop: "10px", width: "100%" }}
+					onClick={handlePasswordVerification}
+				>
+					Verify Password
+				</Button>
+			</Modal>
+			{isPasswordVerified && (
+				<div className='grid-container-main'>
+					<div className='navcontent'>
+						<AdminNavbar
+							fromPage='JanatWebsite'
+							AdminMenuStatus={AdminMenuStatus}
+							setAdminMenuStatus={setAdminMenuStatus}
+							collapsed={collapsed}
+							setCollapsed={setCollapsed}
+							chosenLanguage={chosenLanguage}
+						/>
+					</div>
 
-				<div className='otherContentWrapper'>
-					<div className='container-wrapper'>
-						<h3 className='mb-3'>Janat Booking Website Edit</h3>
+					<div className='otherContentWrapper'>
+						<div className='container-wrapper'>
+							<h3 className='mb-3'>Janat Booking Website Edit</h3>
 
-						{/* Tab Navigation */}
-						<TabNavigation>
-							<button
-								className={activeTab === "home" ? "active" : ""}
-								onClick={() => setActiveTab("home")}
-							>
-								Home Page
-							</button>
-							<button
-								className={activeTab === "about" ? "active" : ""}
-								onClick={() => setActiveTab("about")}
-							>
-								About Us
-							</button>
-							<button
-								className={activeTab === "contact" ? "active" : ""}
-								onClick={() => setActiveTab("contact")}
-							>
-								Contact Us
-							</button>
+							{/* Tab Navigation */}
+							<TabNavigation>
+								<button
+									className={activeTab === "home" ? "active" : ""}
+									onClick={() => setActiveTab("home")}
+								>
+									Home Page
+								</button>
+								<button
+									className={activeTab === "about" ? "active" : ""}
+									onClick={() => setActiveTab("about")}
+								>
+									About Us
+								</button>
+								<button
+									className={activeTab === "contact" ? "active" : ""}
+									onClick={() => setActiveTab("contact")}
+								>
+									Contact Us
+								</button>
 
-							<button
-								className={activeTab === "termsandconditions" ? "active" : ""}
-								onClick={() => setActiveTab("termsandconditions")}
-							>
-								Terms & Condition For Guests
-							</button>
+								<button
+									className={activeTab === "termsandconditions" ? "active" : ""}
+									onClick={() => setActiveTab("termsandconditions")}
+								>
+									Terms & Condition For Guests
+								</button>
 
-							<button
-								className={
-									activeTab === "termsandconditions_B2B" ? "active" : ""
-								}
-								onClick={() => setActiveTab("termsandconditions_B2B")}
-							>
-								Terms & Condition For Hotels
-							</button>
-
-							<button
-								className={activeTab === "privacyPolicy" ? "active" : ""}
-								onClick={() => setActiveTab("privacyPolicy")}
-							>
-								Privacy Policy
-							</button>
-						</TabNavigation>
-
-						{/* Conditional Rendering Based on Active Tab */}
-						{activeTab === "home" && (
-							<>
-								<div>
-									<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
-								</div>
-								<div>
-									<ZHomePageBanners
-										addThumbnail={homeMainBanners}
-										setAddThumbnail={setHomeMainBanners}
-									/>
-								</div>
-								<div>
-									<ZHomePageBanner2
-										addThumbnail={homeSecondBanner}
-										setAddThumbnail={setHomeSecondBanner}
-									/>
-								</div>
-								<div>
-									<ZHotelsMainBanner
-										addThumbnail={hotelPageBanner}
-										setAddThumbnail={setHotelPageBanner}
-									/>
-								</div>
-							</>
-						)}
-
-						{activeTab === "about" && (
-							<div>
-								<ZAboutUsAdd
-									addThumbnail={aboutUsBanner}
-									setAddThumbnail={setAboutUsBanner}
-									aboutUsArabic={aboutUsArabic}
-									setAboutUsArabic={setAboutUsArabic}
-									aboutUsEnglish={aboutUsEnglish}
-									setAboutUsEnglish={setAboutUsEnglish}
-								/>
-							</div>
-						)}
-
-						{activeTab === "contact" && (
-							<div>
-								<ZContactusBannerAdd
-									addThumbnail={contactUsBanner}
-									setAddThumbnail={setContactUsBanner}
-								/>
-							</div>
-						)}
-
-						{activeTab === "termsandconditions" && (
-							<div>
-								<ZTermsAndConditions
-									termsAndConditionEnglish={termsAndConditionEnglish}
-									termsAndConditionArabic={termsAndConditionArabic}
-									setTermsAndConditionEnglish={setTermsAndConditionEnglish}
-									setTermsAndConditionArabic={setTermsAndConditionArabic}
-								/>
-							</div>
-						)}
-
-						{activeTab === "termsandconditions_B2B" && (
-							<div>
-								<ZTermsAndConditionsB2B
-									termsAndConditionEnglish_B2B={termsAndConditionEnglish_B2B}
-									termsAndConditionArabic_B2B={termsAndConditionArabic_B2B}
-									setTermsAndConditionEnglish_B2B={
-										setTermsAndConditionEnglish_B2B
+								<button
+									className={
+										activeTab === "termsandconditions_B2B" ? "active" : ""
 									}
-									setTermsAndConditionArabic_B2B={
-										setTermsAndConditionArabic_B2B
-									}
-								/>
-							</div>
-						)}
+									onClick={() => setActiveTab("termsandconditions_B2B")}
+								>
+									Terms & Condition For Hotels
+								</button>
 
-						{activeTab === "privacyPolicy" && (
-							<div>
-								<ZPrivacyPolicy
-									privacyPolicy={privacyPolicy}
-									setPrivacyPolicy={setPrivacyPolicy}
-									privacyPolicyArabic={privacyPolicyArabic}
-									setPrivacyPolicyArabic={setPrivacyPolicyArabic}
-								/>
-							</div>
-						)}
+								<button
+									className={activeTab === "privacyPolicy" ? "active" : ""}
+									onClick={() => setActiveTab("privacyPolicy")}
+								>
+									Privacy Policy
+								</button>
+							</TabNavigation>
 
-						<div className='' style={{ marginTop: "80px" }}>
-							<button className='btn btn-primary' onClick={submitDocument}>
-								Submit...
-							</button>
+							{/* Conditional Rendering Based on Active Tab */}
+							{activeTab === "home" && (
+								<>
+									<div>
+										<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
+									</div>
+									<div>
+										<ZHomePageBanners
+											addThumbnail={homeMainBanners}
+											setAddThumbnail={setHomeMainBanners}
+										/>
+									</div>
+									<div>
+										<ZHomePageBanner2
+											addThumbnail={homeSecondBanner}
+											setAddThumbnail={setHomeSecondBanner}
+										/>
+									</div>
+									<div>
+										<ZHotelsMainBanner
+											addThumbnail={hotelPageBanner}
+											setAddThumbnail={setHotelPageBanner}
+										/>
+									</div>
+								</>
+							)}
+
+							{activeTab === "about" && (
+								<div>
+									<ZAboutUsAdd
+										addThumbnail={aboutUsBanner}
+										setAddThumbnail={setAboutUsBanner}
+										aboutUsArabic={aboutUsArabic}
+										setAboutUsArabic={setAboutUsArabic}
+										aboutUsEnglish={aboutUsEnglish}
+										setAboutUsEnglish={setAboutUsEnglish}
+									/>
+								</div>
+							)}
+
+							{activeTab === "contact" && (
+								<div>
+									<ZContactusBannerAdd
+										addThumbnail={contactUsBanner}
+										setAddThumbnail={setContactUsBanner}
+									/>
+								</div>
+							)}
+
+							{activeTab === "termsandconditions" && (
+								<div>
+									<ZTermsAndConditions
+										termsAndConditionEnglish={termsAndConditionEnglish}
+										termsAndConditionArabic={termsAndConditionArabic}
+										setTermsAndConditionEnglish={setTermsAndConditionEnglish}
+										setTermsAndConditionArabic={setTermsAndConditionArabic}
+									/>
+								</div>
+							)}
+
+							{activeTab === "termsandconditions_B2B" && (
+								<div>
+									<ZTermsAndConditionsB2B
+										termsAndConditionEnglish_B2B={termsAndConditionEnglish_B2B}
+										termsAndConditionArabic_B2B={termsAndConditionArabic_B2B}
+										setTermsAndConditionEnglish_B2B={
+											setTermsAndConditionEnglish_B2B
+										}
+										setTermsAndConditionArabic_B2B={
+											setTermsAndConditionArabic_B2B
+										}
+									/>
+								</div>
+							)}
+
+							{activeTab === "privacyPolicy" && (
+								<div>
+									<ZPrivacyPolicy
+										privacyPolicy={privacyPolicy}
+										setPrivacyPolicy={setPrivacyPolicy}
+										privacyPolicyArabic={privacyPolicyArabic}
+										setPrivacyPolicyArabic={setPrivacyPolicyArabic}
+									/>
+								</div>
+							)}
+
+							<div className='' style={{ marginTop: "80px" }}>
+								<button className='btn btn-primary' onClick={submitDocument}>
+									Submit...
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			)}
 		</JanatWebsiteMainWrapper>
 	);
 };

@@ -492,3 +492,29 @@ export const markAllMessagesAsSeenByAdmin = async (caseId, userId) => {
 			console.error("API error: ", err);
 		});
 };
+
+export const agodaData = (accountId, belongsTo, file, userId, token) => {
+	let formData = new FormData();
+	formData.append("file", file);
+
+	console.log(file);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/agoda-data-dump/xhotel-admin/${accountId}/${belongsTo}/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`, // Add the token here
+			},
+			body: formData, // Use FormData as the body
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error uploading file:", err));
+};
