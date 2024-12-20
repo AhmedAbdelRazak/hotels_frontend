@@ -347,6 +347,20 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		return totalDays > 0 ? totalRootPrice / totalDays : 0;
 	};
 
+	const calculateOverallTotalRootPrice = (pickedRoomsType) => {
+		if (!pickedRoomsType || pickedRoomsType.length === 0) return 0;
+
+		return pickedRoomsType.reduce((total, room) => {
+			if (room.pricingByDay && room.pricingByDay.length > 0) {
+				const roomTotal = room.pricingByDay.reduce((dayTotal, day) => {
+					return dayTotal + parseFloat(day.rootPrice); // Sum rootPrice for all days
+				}, 0);
+				return total + roomTotal * room.count; // Multiply by roomCount
+			}
+			return total; // If no pricingByDay, just return total
+		}, 0);
+	};
+
 	return (
 		<Wrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
@@ -1280,6 +1294,25 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{getAverageRootPrice(
+														reservation.pickedRoomsType
+													).toFixed(2)}{" "}
+													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+												</h5>
+											</div>
+										</div>
+									</div>
+									<div className='my-3'>
+										<div className='row my-3'>
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "إجمالي السعر الجزري"
+														: "Overall Total with Root Price"}
+												</h6>
+											</div>
+											<div className='col-md-5 mx-auto'>
+												<h5>
+													{calculateOverallTotalRootPrice(
 														reservation.pickedRoomsType
 													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
