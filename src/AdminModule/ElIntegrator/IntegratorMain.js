@@ -23,7 +23,11 @@ const IntegratorMain = ({ chosenLanguage }) => {
 			if (data && data.error) {
 				console.log(data.error, "Error getting all hotel details");
 			} else {
-				setAllHotelDetailsAdmin(data);
+				// Sort data alphabetically by hotelName before setting it in state
+				const sortedData = data.sort((a, b) =>
+					a.hotelName.localeCompare(b.hotelName)
+				);
+				setAllHotelDetailsAdmin(sortedData);
 			}
 		});
 	};
