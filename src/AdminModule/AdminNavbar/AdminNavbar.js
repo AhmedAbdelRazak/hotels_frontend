@@ -79,7 +79,11 @@ const items = [
 		"sub3",
 		<SettingOutlined />
 	),
-	getItem(<Link to='#'>Hotel Reports</Link>, "sub4", <ShopOutlined />),
+	getItem(
+		<Link to='/admin/all-reservations'>Hotels' Reservations</Link>,
+		"sub4",
+		<ShopOutlined />
+	),
 
 	getItem(<Link to='#'>Hotel Settings</Link>, "sub6", <AreaChartOutlined />),
 
@@ -181,7 +185,7 @@ const AdminNavbar = ({
 						  ? "sub2"
 						  : fromPage === "ElIntegrator"
 						    ? "sub3"
-						    : fromPage === "AddCategories"
+						    : fromPage === "AllReservations"
 						      ? "sub4"
 						      : fromPage === "StoreBilling"
 						        ? "sub5"

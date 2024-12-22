@@ -56,6 +56,8 @@ const ZHotelDetailsForm2 = ({
 	const [customRoomType, setCustomRoomType] = useState("");
 	const [priceError, setPriceError] = useState(false);
 	const [locationModalVisible, setLocationModalVisible] = useState(false);
+	const [newRoomCountDetailsObject, setNewRoomCountDetailsObject] =
+		useState("");
 	const [markerPosition, setMarkerPosition] = useState({
 		lat: 24.7136,
 		lng: 46.6753,
@@ -81,70 +83,6 @@ const ZHotelDetailsForm2 = ({
 		}
 		return priceColorMapping.get(key);
 	}, []);
-
-	useEffect(() => {
-		if (selectedRoomType && fromPage === "Updating") {
-			const { roomType, displayName } = selectedRoomType;
-
-			const roomCountDetailsArray = Array.isArray(hotelDetails.roomCountDetails)
-				? hotelDetails.roomCountDetails
-				: [];
-
-			const existingRoomDetails =
-				roomCountDetailsArray.find(
-					(room) =>
-						room.roomType === roomType && room.displayName === displayName
-				) || {};
-
-			// Prepopulate the form with the existing room details or set default values
-			form.setFieldsValue({
-				roomType,
-				customRoomType:
-					roomType === "other" ? existingRoomDetails.roomType || "" : "", // Populate if 'other'
-				displayName: existingRoomDetails.displayName || "",
-				roomCount: existingRoomDetails.count || 0,
-				basePrice: existingRoomDetails.price?.basePrice || 0,
-				description: existingRoomDetails.description || "",
-				amenities: existingRoomDetails.amenities || [],
-				pricedExtras: existingRoomDetails.pricedExtras || [],
-			});
-
-			// Set roomTypeSelected to true to indicate that a room type has been selected
-			setRoomTypeSelected(true);
-
-			// Clear any existing events from the calendar and add the new ones based on pricing rates
-			if (calendarRef.current) {
-				const calendarApi = calendarRef.current.getApi();
-				calendarApi.getEvents().forEach((event) => event.remove());
-
-				if (
-					existingRoomDetails.pricingRate &&
-					existingRoomDetails.pricingRate.length > 0
-				) {
-					const pricingEvents = existingRoomDetails.pricingRate.map((rate) => ({
-						title: `${existingRoomDetails.displayName || displayName}: ${
-							rate.price
-						} SAR`,
-						start: rate.calendarDate,
-						end: rate.calendarDate,
-						allDay: true,
-						backgroundColor:
-							rate.color || getColorForPrice(rate.price, rate.calendarDate),
-					}));
-
-					pricingEvents.forEach((event) => calendarApi.addEvent(event));
-				}
-			}
-		}
-	}, [
-		fromPage,
-		selectedRoomType,
-		form,
-		hotelDetails,
-		setRoomTypeSelected,
-		getColorForPrice,
-		calendarRef,
-	]);
 
 	useEffect(() => {
 		form.setFieldsValue({
@@ -173,55 +111,49 @@ const ZHotelDetailsForm2 = ({
 			.then((values) => {
 				const roomType =
 					values.roomType === "other" ? customRoomType : values.roomType;
-				const roomColor = getRoomColor(roomType);
 
-				// Find existing room details
-				const existingRoomIndex = hotelDetails.roomCountDetails.findIndex(
-					(room) =>
-						room.roomType === roomType &&
-						room.displayName === values.displayName
-				);
-
-				// Prepare the new room details, merging with existing room details
-				const existingRoomDetails =
-					hotelDetails.roomCountDetails[existingRoomIndex] || {};
-				const newRoomDetails = {
-					...existingRoomDetails, // Merge existing details to keep fields like pricedExtras
+				const updatedRoomDetails = {
 					roomType,
-					displayName: values.displayName,
-					count: values.roomCount,
-					price: { basePrice: values.basePrice },
-					description: values.description,
+					displayName: values.displayName || "",
+					displayName_OtherLanguage: values.displayName_OtherLanguage || "",
+					description: values.description || "",
+					description_OtherLanguage: values.description_OtherLanguage || "",
+					count: values.roomCount || 0,
+					price: { basePrice: values.basePrice || 0 },
 					amenities: values.amenities || [],
-					views: values.views || [],
 					extraAmenities: values.extraAmenities || [],
-					roomColor,
-					pricingRate: existingRoomDetails.pricingRate || [], // Keep existing pricing rates
-					photos: existingRoomDetails.photos || [], // Keep existing photos
+					views: values.views || [],
+					activeRoom: values.activeRoom || false,
+					commisionIncluded: values.commisionIncluded || false,
+					roomCommission: values.roomCommission || 0,
+					myKey: "ThisIsNewKey", // Ensure the key is consistent
 				};
 
-				if (existingRoomIndex > -1) {
-					// If room exists, replace it with updated details
-					setHotelDetails((prevDetails) => {
-						const updatedRoomCountDetails = [...prevDetails.roomCountDetails];
-						updatedRoomCountDetails[existingRoomIndex] = newRoomDetails;
-						return {
-							...prevDetails,
-							roomCountDetails: updatedRoomCountDetails,
+				setHotelDetails((prevDetails) => {
+					const updatedRoomCountDetails = [...prevDetails.roomCountDetails];
+					const existingRoomIndex = updatedRoomCountDetails.findIndex(
+						(room) => room.myKey === "ThisIsNewKey"
+					);
+
+					if (existingRoomIndex > -1) {
+						updatedRoomCountDetails[existingRoomIndex] = {
+							...updatedRoomCountDetails[existingRoomIndex],
+							...updatedRoomDetails,
 						};
-					});
-				} else {
-					// If room doesn't exist, add it
-					setHotelDetails((prevDetails) => ({
+					} else {
+						updatedRoomCountDetails.push(updatedRoomDetails);
+					}
+
+					return {
 						...prevDetails,
-						roomCountDetails: [...prevDetails.roomCountDetails, newRoomDetails],
-					}));
-				}
+						roomCountDetails: updatedRoomCountDetails,
+					};
+				});
 
 				setCurrentStep(currentStep + 1);
 			})
-			.catch((info) => {
-				message.error("Please fill in the required fields.");
+			.catch((error) => {
+				message.error("Please fill in all required fields.");
 			});
 	};
 
@@ -380,6 +312,9 @@ const ZHotelDetailsForm2 = ({
 							form={form}
 							viewsList={viewsList}
 							extraAmenitiesList={extraAmenitiesList}
+							newRoomCountDetailsObject={newRoomCountDetailsObject}
+							setNewRoomCountDetailsObject={setNewRoomCountDetailsObject}
+							getRoomColor={getRoomColor}
 						/>
 					</>
 				);

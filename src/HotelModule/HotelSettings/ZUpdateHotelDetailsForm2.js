@@ -75,7 +75,7 @@ const ZUpdateHotelDetailsForm2 = ({
 						? existingRoomDetails.roomType || ""
 						: "",
 				displayName: existingRoomDetails.displayName || "",
-				roomCount: existingRoomDetails.count || 0,
+				roomCount: existingRoomDetails.count || 1,
 				basePrice: existingRoomDetails.price?.basePrice || 0,
 				description: existingRoomDetails.description || "",
 				amenities: existingRoomDetails.amenities || [],
@@ -85,7 +85,7 @@ const ZUpdateHotelDetailsForm2 = ({
 			});
 
 			// Prepopulate rootPrice if it exists
-			setRootPrice(existingRoomDetails.rootPrice || ""); // Set initial value for rootPrice
+			setRootPrice(existingRoomDetails.rootPrice || 30); // Set initial value for rootPrice
 
 			setRoomTypeSelected(true);
 
@@ -142,7 +142,6 @@ const ZUpdateHotelDetailsForm2 = ({
 					pricedExtras: values.pricedExtras || existingRoomDetails.pricedExtras,
 					photos: photos.length ? photos : existingRoomDetails.photos || [],
 					pricingRate: existingRoomDetails.pricingRate || [], // Retain pricingRate if not updated
-					rootPrice: rootPrice || existingRoomDetails.rootPrice || "", // Add rootPrice
 				};
 
 				// Update the hotelDetails state with the updated room details

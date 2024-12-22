@@ -518,3 +518,28 @@ export const agodaData = (accountId, belongsTo, file, userId, token) => {
 		})
 		.catch((err) => console.error("Error uploading file:", err));
 };
+
+export const getAllReservationForAdmin = (
+	userId,
+	token,
+	page = 1,
+	limit = 100
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/all-reservations-list-admin/${userId}?page=${page}&limit=${limit}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`, // Add the token here
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching reservations:", err));
+};

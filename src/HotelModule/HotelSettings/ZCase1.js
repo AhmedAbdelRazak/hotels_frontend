@@ -34,6 +34,7 @@ const ZCase1 = ({
 	form,
 	viewsList = [],
 	extraAmenitiesList = [],
+	getRoomColor,
 }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isArabicModalVisible, setIsArabicModalVisible] = useState(false);
@@ -69,7 +70,7 @@ const ZCase1 = ({
 				: [];
 
 			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room.roomType === roomType
+				(room) => room.myKey === "ThisIsNewKey"
 			);
 
 			if (existingRoomIndex > -1) {
@@ -300,35 +301,44 @@ const ZCase1 = ({
 
 	const handleArabicModalOpen = (field) => {
 		setArabicField(field);
+
+		const existingRoomDetails = hotelDetails.roomCountDetails.find(
+			(room) => room.myKey === "ThisIsNewKey"
+		);
+
+		if (existingRoomDetails) {
+			const fieldName =
+				field === "displayName"
+					? "displayName_OtherLanguage"
+					: "description_OtherLanguage";
+
+			formArabic.setFieldsValue({
+				arabicValue: existingRoomDetails[fieldName] || "",
+			});
+		}
+
 		setIsArabicModalVisible(true);
 	};
 
 	const handleArabicModalOk = () => {
-		const roomType =
-			form.getFieldValue("roomType") === "other"
-				? customRoomType
-				: form.getFieldValue("roomType");
-
 		const value = formArabic.getFieldValue("arabicValue");
-		setHotelDetails((prevDetails) => {
-			const updatedRoomCountDetails = Array.isArray(
-				prevDetails.roomCountDetails
-			)
-				? [...prevDetails.roomCountDetails]
-				: [];
+		const fieldName =
+			arabicField === "displayName"
+				? "displayName_OtherLanguage"
+				: "description_OtherLanguage";
 
+		setHotelDetails((prevDetails) => {
+			const updatedRoomCountDetails = [...prevDetails.roomCountDetails];
 			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room.roomType === roomType
+				(room) => room.myKey === "ThisIsNewKey"
 			);
 
 			if (existingRoomIndex > -1) {
-				updatedRoomCountDetails[existingRoomIndex][
-					`${arabicField}_OtherLanguage`
-				] = value;
+				updatedRoomCountDetails[existingRoomIndex][fieldName] = value;
 			} else {
 				updatedRoomCountDetails.push({
-					roomType,
-					[`${arabicField}_OtherLanguage`]: value,
+					[fieldName]: value,
+					myKey: "ThisIsNewKey",
 				});
 			}
 
@@ -361,7 +371,7 @@ const ZCase1 = ({
 				: [];
 
 			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room.roomType === roomType
+				(room) => room.myKey === "ThisIsNewKey"
 			);
 
 			if (existingRoomIndex > -1) {
@@ -379,6 +389,44 @@ const ZCase1 = ({
 			};
 		});
 	};
+
+	useEffect(() => {
+		console.log("Updated hotelDetails:", hotelDetails);
+	}, [hotelDetails]);
+
+	const existingRoomDetails =
+		hotelDetails &&
+		hotelDetails.roomCountDetails.filter((i) => i.myKey === "ThisIsNewKey")[0];
+
+	useEffect(() => {
+		const existingRoomDetails = hotelDetails.roomCountDetails.find(
+			(room) => room.myKey === "ThisIsNewKey"
+		);
+
+		if (existingRoomDetails) {
+			form.setFieldsValue({
+				displayName: existingRoomDetails.displayName || "",
+				displayName_OtherLanguage:
+					existingRoomDetails.displayName_OtherLanguage || "",
+				description: existingRoomDetails.description || "",
+				description_OtherLanguage:
+					existingRoomDetails.description_OtherLanguage || "",
+				roomType: existingRoomDetails.roomType || "",
+				customRoomType: existingRoomDetails.customRoomType || "",
+				roomCount: existingRoomDetails.count || 0,
+				bedsCount: existingRoomDetails.bedsCount || 0,
+				roomForGender: existingRoomDetails.roomForGender || "",
+				defaultCost: existingRoomDetails.defaultCost || 0,
+				basePrice: existingRoomDetails.price?.basePrice || 0,
+				amenities: existingRoomDetails.amenities || [],
+				extraAmenities: existingRoomDetails.extraAmenities || [],
+				views: existingRoomDetails.views || [],
+				activeRoom: existingRoomDetails.activeRoom || false,
+				commisionIncluded: existingRoomDetails.commisionIncluded || false,
+				roomCommission: existingRoomDetails.roomCommission || 0,
+			});
+		}
+	}, [hotelDetails, form]);
 
 	return (
 		<ZCase1Wrapper
@@ -417,34 +465,56 @@ const ZCase1 = ({
 				>
 					<Select
 						onChange={(value) => {
+							// If user selects "other", reset the customRoomType field
 							if (value === "other") {
 								form.setFieldsValue({ customRoomType: "" });
 							}
+
+							// Set the roomTypeSelected and selectedRoomType states
 							setRoomTypeSelected(true);
 							setSelectedRoomType(value);
+
 							const roomType = value === "other" ? customRoomType : value;
 
-							const roomCountDetailsArray = Array.isArray(
-								hotelDetails.roomCountDetails
-							)
-								? hotelDetails.roomCountDetails
-								: [];
+							setHotelDetails((prevDetails) => {
+								// Create a copy of the existing roomCountDetails array
+								const updatedRoomCountDetails = Array.isArray(
+									prevDetails.roomCountDetails
+								)
+									? [...prevDetails.roomCountDetails]
+									: [];
 
-							const existingRoomDetails =
-								roomCountDetailsArray.find(
-									(room) => room.roomType === roomType
-								) || {};
+								// Remove any object with roomType as undefined
+								const filteredRoomCountDetails = updatedRoomCountDetails.filter(
+									(room) => room.roomType !== undefined
+								);
 
-							if (fromPage === "Updating") {
-								form.setFieldsValue({
-									displayName: existingRoomDetails.displayName || "",
-									roomCount: existingRoomDetails.count || 0,
-									basePrice: existingRoomDetails.price?.basePrice || 0,
-									description: existingRoomDetails.description || "",
-									amenities: existingRoomDetails.amenities || [],
-									activeRoom: existingRoomDetails.activeRoom || true,
-								});
-							}
+								// Define a new room object for the selected roomType
+								const newRoomObject = {
+									roomType,
+									displayName: form.getFieldValue("displayName") || "",
+									count: form.getFieldValue("roomCount") || 0,
+									price: { basePrice: form.getFieldValue("basePrice") || 0 },
+									description: form.getFieldValue("description") || "",
+									amenities: form.getFieldValue("amenities") || [],
+									extraAmenities: form.getFieldValue("extraAmenities") || [],
+									views: form.getFieldValue("views") || [],
+									activeRoom: form.getFieldValue("activeRoom") || false,
+									commisionIncluded:
+										form.getFieldValue("commisionIncluded") || false,
+									roomCommission: form.getFieldValue("roomCommission") || 0,
+									roomColor: getRoomColor(roomType), // Assign a color
+									myKey: "ThisIsNewKey",
+								};
+
+								filteredRoomCountDetails.push(newRoomObject);
+
+								// Return the updated hotelDetails state
+								return {
+									...prevDetails,
+									roomCountDetails: filteredRoomCountDetails,
+								};
+							});
 						}}
 					>
 						{roomTypes.map((room) => (
@@ -489,6 +559,7 @@ const ZCase1 = ({
 						/>
 					</Form.Item>
 				)}
+
 				{roomTypeSelected && (
 					<>
 						<Form.Item
@@ -520,7 +591,7 @@ const ZCase1 = ({
 											: [];
 
 										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room.roomType === roomType
+											(room) => room.myKey === "ThisIsNewKey"
 										);
 
 										if (existingRoomIndex > -1) {
@@ -557,50 +628,177 @@ const ZCase1 = ({
 							</Button>
 						</Form.Item>
 
-						<Form.Item
-							name='roomCount'
-							label={chosenLanguage === "Arabic" ? "عدد الغرف" : "Room Count"}
-							rules={[
-								{ required: true, message: "Please input the room count" },
-							]}
-						>
-							<Input
-								type='number'
-								onChange={(e) => {
-									const roomType =
-										form.getFieldValue("roomType") === "other"
-											? customRoomType
-											: form.getFieldValue("roomType");
+						<div className='row'>
+							<div className='col-md-4'>
+								<Form.Item
+									name='roomCount'
+									label={
+										chosenLanguage === "Arabic" ? "عدد الغرف" : "Room Count"
+									}
+									rules={[
+										{ required: true, message: "Please input the room count" },
+									]}
+								>
+									<Input
+										type='number'
+										onChange={(e) => {
+											const roomType =
+												form.getFieldValue("roomType") === "other"
+													? customRoomType
+													: form.getFieldValue("roomType");
 
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
+											setHotelDetails((prevDetails) => {
+												const updatedRoomCountDetails = Array.isArray(
+													prevDetails.roomCountDetails
+												)
+													? prevDetails.roomCountDetails
+													: [];
 
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room.roomType === roomType
-										);
+												const existingRoomIndex =
+													updatedRoomCountDetails.findIndex(
+														(room) => room.myKey === "ThisIsNewKey"
+													);
 
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].count =
-												parseInt(e.target.value, 10);
-										} else {
-											updatedRoomCountDetails.push({
-												roomType,
-												count: parseInt(e.target.value, 10),
+												if (existingRoomIndex > -1) {
+													updatedRoomCountDetails[existingRoomIndex].count =
+														parseInt(e.target.value, 10);
+												} else {
+													updatedRoomCountDetails.push({
+														roomType,
+														count: parseInt(e.target.value, 10),
+													});
+												}
+
+												return {
+													...prevDetails,
+													roomCountDetails: updatedRoomCountDetails,
+												};
 											});
-										}
+										}}
+									/>
+								</Form.Item>
+							</div>
+							{existingRoomDetails &&
+							existingRoomDetails.roomType === "individualBed" ? (
+								<>
+									<div className='col-md-4'>
+										<Form.Item
+											name='bedsCount'
+											label={
+												chosenLanguage === "Arabic"
+													? "عدد ٱلْأَسِرَّةُ لكل غرفة"
+													: "Beds Per Room"
+											}
+											rules={[
+												{
+													required: true,
+													message: "Please input the beds count per room",
+												},
+											]}
+										>
+											<Input
+												type='number'
+												onChange={(e) => {
+													const selectedRoomId = form.getFieldValue("_id");
 
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
-								}}
-							/>
-						</Form.Item>
+													setHotelDetails((prevDetails) => {
+														const updatedRoomCountDetails = Array.isArray(
+															prevDetails.roomCountDetails
+														)
+															? prevDetails.roomCountDetails
+															: [];
+
+														const existingRoomIndex =
+															updatedRoomCountDetails.findIndex(
+																(room) => room.myKey === "ThisIsNewKey"
+															);
+
+														if (existingRoomIndex > -1) {
+															updatedRoomCountDetails[
+																existingRoomIndex
+															].bedsCount = parseInt(e.target.value, 10);
+														} else {
+															updatedRoomCountDetails.push({
+																_id: selectedRoomId,
+																bedsCount: parseInt(e.target.value, 10),
+															});
+														}
+
+														return {
+															...prevDetails,
+															roomCountDetails: updatedRoomCountDetails,
+														};
+													});
+												}}
+											/>
+										</Form.Item>
+									</div>
+									<div className='col-md-4'>
+										<Form.Item
+											name='roomForGender'
+											label={
+												chosenLanguage === "Arabic" ? "غرفة ل" : "Room For"
+											}
+											rules={[
+												{
+													required: true,
+													message: "Please select the room's guest gender",
+												},
+											]}
+										>
+											<Select
+												placeholder={
+													chosenLanguage === "Arabic"
+														? "اختر الغرفة لرجال أو نساء"
+														: "Select For Men or Women"
+												}
+												onChange={(value) => {
+													const selectedRoomId = form.getFieldValue("_id");
+
+													setHotelDetails((prevDetails) => {
+														const updatedRoomCountDetails = Array.isArray(
+															prevDetails.roomCountDetails
+														)
+															? prevDetails.roomCountDetails
+															: [];
+
+														const existingRoomIndex =
+															updatedRoomCountDetails.findIndex(
+																(room) => room.myKey === "ThisIsNewKey"
+															);
+
+														if (existingRoomIndex > -1) {
+															updatedRoomCountDetails[
+																existingRoomIndex
+															].roomForGender = value;
+														} else {
+															updatedRoomCountDetails.push({
+																_id: selectedRoomId,
+																roomForGender: value,
+															});
+														}
+
+														return {
+															...prevDetails,
+															roomCountDetails: updatedRoomCountDetails,
+														};
+													});
+												}}
+											>
+												<Select.Option value='For Men'>
+													{chosenLanguage === "Arabic" ? "للرجال" : "For Men"}
+												</Select.Option>
+												<Select.Option value='For Women'>
+													{chosenLanguage === "Arabic" ? "للنساء" : "For Women"}
+												</Select.Option>
+											</Select>
+										</Form.Item>
+									</div>
+									\
+								</>
+							) : null}
+						</div>
+
 						<div className='row'>
 							{/* Default Cost Input */}
 							<div className='col-md-6'>
@@ -635,7 +833,7 @@ const ZCase1 = ({
 
 												const existingRoomIndex =
 													updatedRoomCountDetails.findIndex(
-														(room) => room._id === selectedRoomId
+														(room) => room.myKey === "ThisIsNewKey"
 													);
 
 												if (existingRoomIndex > -1) {
@@ -692,7 +890,7 @@ const ZCase1 = ({
 
 												const existingRoomIndex =
 													updatedRoomCountDetails.findIndex(
-														(room) => room._id === selectedRoomId
+														(room) => room.myKey === "ThisIsNewKey"
 													);
 
 												if (existingRoomIndex > -1) {
@@ -765,7 +963,7 @@ const ZCase1 = ({
 
 														const existingRoomIndex =
 															updatedRoomCountDetails.findIndex(
-																(room) => room._id === selectedRoomId
+																(room) => room.myKey === "ThisIsNewKey"
 															);
 
 														if (existingRoomIndex > -1) {
@@ -821,7 +1019,7 @@ const ZCase1 = ({
 											: [];
 
 										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room.roomType === roomType
+											(room) => room.myKey === "ThisIsNewKey"
 										);
 
 										if (existingRoomIndex > -1) {
@@ -890,7 +1088,7 @@ const ZCase1 = ({
 
 											const existingRoomIndex =
 												updatedRoomCountDetails.findIndex(
-													(room) => room.roomType === roomType
+													(room) => room.myKey === "ThisIsNewKey"
 												);
 
 											if (existingRoomIndex > -1) {
@@ -949,7 +1147,7 @@ const ZCase1 = ({
 
 											const existingRoomIndex =
 												updatedRoomCountDetails.findIndex(
-													(room) => room.roomType === roomType
+													(room) => room.myKey === "ThisIsNewKey"
 												);
 
 											if (existingRoomIndex > -1) {
@@ -1012,7 +1210,7 @@ const ZCase1 = ({
 
 											const existingRoomIndex =
 												updatedRoomCountDetails.findIndex(
-													(room) => room.roomType === roomType
+													(room) => room.myKey === "ThisIsNewKey"
 												);
 
 											if (existingRoomIndex > -1) {
@@ -1116,7 +1314,7 @@ const ZCase1 = ({
 											: [];
 
 										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room.roomType === roomType
+											(room) => room.myKey === "ThisIsNewKey"
 										);
 
 										if (existingRoomIndex > -1) {

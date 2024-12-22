@@ -46,6 +46,7 @@ import MainHotelDashboard from "./HotelModule/MainHotelDashboard";
 import CustomerServiceMain from "./AdminModule/CustomerService/CustomerServiceMain";
 import CustomerServiceHotelMain from "./HotelModule/CustomerService/CustomerServiceHotelMain";
 import IntegratorMain from "./AdminModule/ElIntegrator/IntegratorMain";
+import AllReservationMain from "./AdminModule/AllReservation/AllReservationMain";
 //Conf #: 197875718, 198354414, 199118009, 198501575, 198787549, 197674274, 195732024
 
 function App() {
@@ -93,6 +94,11 @@ function App() {
 						path='/admin/el-integrator'
 						exact
 						component={IntegratorMain}
+					/>
+					<AdminRoute
+						path='/admin/all-reservations'
+						exact
+						component={AllReservationMain}
 					/>
 					<AdminRoute path='/admin/new-hotel' exact component={AddNewHotel} />
 					<AdminRoute

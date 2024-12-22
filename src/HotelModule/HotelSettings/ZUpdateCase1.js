@@ -45,6 +45,7 @@ const ZUpdateCase1 = ({
 
 	const { user } = isAuthenticated();
 
+	console.log(existingRoomDetails, "existingRoomDetails");
 	// Prepopulate fields based on selectedRoomType
 	useEffect(() => {
 		window.scrollTo({ top: 90, behavior: "smooth" });
@@ -53,9 +54,10 @@ const ZUpdateCase1 = ({
 				displayName: existingRoomDetails.displayName || "",
 				displayName_OtherLanguage:
 					existingRoomDetails.displayName_OtherLanguage || "",
-				roomCount: existingRoomDetails.count || 0,
-				basePrice: existingRoomDetails.price?.basePrice || 0,
-				defaultCost: existingRoomDetails.defaultCost || null,
+				roomCount: existingRoomDetails.count || 1,
+				bedsCount: existingRoomDetails.bedsCount || 1,
+				basePrice: existingRoomDetails.price?.basePrice || 50,
+				defaultCost: existingRoomDetails.defaultCost || 30,
 				description: existingRoomDetails.description || "",
 				description_OtherLanguage:
 					existingRoomDetails.description_OtherLanguage || "",
@@ -66,6 +68,7 @@ const ZUpdateCase1 = ({
 				commisionIncluded: existingRoomDetails.commisionIncluded || false,
 				roomCommission: existingRoomDetails.roomCommission || 10, // Default to 10 if not set
 				pricedExtras: existingRoomDetails.pricedExtras || [],
+				roomForGender: existingRoomDetails.roomForGender || "Unisex",
 			});
 
 			setPricedExtrasData(existingRoomDetails.pricedExtras || []); // Ensure pricedExtrasData updates
@@ -625,47 +628,175 @@ const ZUpdateCase1 = ({
 						>
 							Add Name In Arabic
 						</Button>
-						<Form.Item
-							name='roomCount'
-							label={chosenLanguage === "Arabic" ? "عدد الغرف" : "Room Count"}
-							rules={[
-								{ required: true, message: "Please input the room count" },
-							]}
-						>
-							<Input
-								type='number'
-								onChange={(e) => {
-									const selectedRoomId = form.getFieldValue("_id");
 
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
+						<div className='row'>
+							<div className='col-md-4'>
+								<Form.Item
+									name='roomCount'
+									label={
+										chosenLanguage === "Arabic" ? "عدد الغرف" : "Room Count"
+									}
+									rules={[
+										{ required: true, message: "Please input the room count" },
+									]}
+								>
+									<Input
+										type='number'
+										onChange={(e) => {
+											const selectedRoomId = form.getFieldValue("_id");
 
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room._id === selectedRoomId
-										);
+											setHotelDetails((prevDetails) => {
+												const updatedRoomCountDetails = Array.isArray(
+													prevDetails.roomCountDetails
+												)
+													? prevDetails.roomCountDetails
+													: [];
 
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].count =
-												parseInt(e.target.value, 10);
-										} else {
-											updatedRoomCountDetails.push({
-												_id: selectedRoomId,
-												count: parseInt(e.target.value, 10),
+												const existingRoomIndex =
+													updatedRoomCountDetails.findIndex(
+														(room) => room._id === selectedRoomId
+													);
+
+												if (existingRoomIndex > -1) {
+													updatedRoomCountDetails[existingRoomIndex].count =
+														parseInt(e.target.value, 10);
+												} else {
+													updatedRoomCountDetails.push({
+														_id: selectedRoomId,
+														count: parseInt(e.target.value, 10),
+													});
+												}
+
+												return {
+													...prevDetails,
+													roomCountDetails: updatedRoomCountDetails,
+												};
 											});
-										}
+										}}
+									/>
+								</Form.Item>
+							</div>
 
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
-								}}
-							/>
-						</Form.Item>
+							{existingRoomDetails &&
+							existingRoomDetails.roomType === "individualBed" ? (
+								<div className='col-md-4'>
+									<Form.Item
+										name='bedsCount'
+										label={
+											chosenLanguage === "Arabic"
+												? "عدد ٱلْأَسِرَّةُ لكل غرفة"
+												: "Beds Per Room"
+										}
+										rules={[
+											{
+												required: true,
+												message: "Please input the beds count per room",
+											},
+										]}
+									>
+										<Input
+											type='number'
+											onChange={(e) => {
+												const selectedRoomId = form.getFieldValue("_id");
+
+												setHotelDetails((prevDetails) => {
+													const updatedRoomCountDetails = Array.isArray(
+														prevDetails.roomCountDetails
+													)
+														? prevDetails.roomCountDetails
+														: [];
+
+													const existingRoomIndex =
+														updatedRoomCountDetails.findIndex(
+															(room) => room._id === selectedRoomId
+														);
+
+													if (existingRoomIndex > -1) {
+														updatedRoomCountDetails[
+															existingRoomIndex
+														].bedsCount = parseInt(e.target.value, 10);
+													} else {
+														updatedRoomCountDetails.push({
+															_id: selectedRoomId,
+															bedsCount: parseInt(e.target.value, 10),
+														});
+													}
+
+													return {
+														...prevDetails,
+														roomCountDetails: updatedRoomCountDetails,
+													};
+												});
+											}}
+										/>
+									</Form.Item>
+								</div>
+							) : null}
+
+							{existingRoomDetails &&
+							existingRoomDetails.roomType === "individualBed" ? (
+								<div className='col-md-4'>
+									<Form.Item
+										name='roomForGender'
+										label={chosenLanguage === "Arabic" ? "غرفة ل" : "Room For"}
+										rules={[
+											{
+												required: true,
+												message: "Please select the room's guest gender",
+											},
+										]}
+									>
+										<Select
+											placeholder={
+												chosenLanguage === "Arabic"
+													? "اختر الغرفة لرجال أو نساء"
+													: "Select For Men or Women"
+											}
+											onChange={(value) => {
+												const selectedRoomId = form.getFieldValue("_id");
+
+												setHotelDetails((prevDetails) => {
+													const updatedRoomCountDetails = Array.isArray(
+														prevDetails.roomCountDetails
+													)
+														? prevDetails.roomCountDetails
+														: [];
+
+													const existingRoomIndex =
+														updatedRoomCountDetails.findIndex(
+															(room) => room._id === selectedRoomId
+														);
+
+													if (existingRoomIndex > -1) {
+														updatedRoomCountDetails[
+															existingRoomIndex
+														].roomForGender = value;
+													} else {
+														updatedRoomCountDetails.push({
+															_id: selectedRoomId,
+															roomForGender: value,
+														});
+													}
+
+													return {
+														...prevDetails,
+														roomCountDetails: updatedRoomCountDetails,
+													};
+												});
+											}}
+										>
+											<Select.Option value='For Men'>
+												{chosenLanguage === "Arabic" ? "للرجال" : "For Men"}
+											</Select.Option>
+											<Select.Option value='For Women'>
+												{chosenLanguage === "Arabic" ? "للنساء" : "For Women"}
+											</Select.Option>
+										</Select>
+									</Form.Item>
+								</div>
+							) : null}
+						</div>
+
 						<div className='row'>
 							{/* Default Cost Input */}
 							<div className='col-md-6'>

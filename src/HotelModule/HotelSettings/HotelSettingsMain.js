@@ -126,7 +126,10 @@ const HotelSettingsMain = () => {
 		{ value: "suite", label: "Suite" },
 		{ value: "masterSuite", label: "Master Suite" },
 		{ value: "familyRooms", label: "Family Rooms" },
-		{ value: "individualBed", label: "Rooms With Individual Beds" },
+		{
+			value: "individualBed",
+			label: "Rooms With Individual Beds (Shared Rooms)",
+		},
 		// { value: "other", label: "Other" },
 	];
 
