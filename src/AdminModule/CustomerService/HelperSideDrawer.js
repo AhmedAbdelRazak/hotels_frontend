@@ -8,14 +8,25 @@ import {
 	DatePicker,
 	message,
 	InputNumber,
+	Modal,
 } from "antd";
 import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "./utils";
+import { isAuthenticated } from "../../auth";
+import { gettingHotelDetailsForAdmin, updateSupportCase } from "../apiAdmin";
+import socket from "../../socket";
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
-const HelperSideDrawer = ({ chat, onClose, visible }) => {
+const HelperSideDrawer = ({
+	chat,
+	onClose,
+	visible,
+	selectedCase,
+	setSelectedCase,
+	setSupportCases,
+}) => {
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, commissionRate: 0 },
 	]);
@@ -31,6 +42,10 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 	const [totalAmount, setTotalAmount] = useState(0);
 	const [totalCommission, setTotalCommission] = useState(0);
 	const [numberOfNights, setNumberOfNights] = useState(0);
+	const [allHotels, setAllHotels] = useState([]);
+	const [selectedHotel, setSelectedHotel] = useState(null);
+
+	const { user, token } = isAuthenticated();
 
 	useEffect(() => {
 		if (chat && chat.conversation.length > 0) {
@@ -43,6 +58,131 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 			}
 		}
 	}, [chat]);
+
+	const getAllHotels = useCallback(async () => {
+		try {
+			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			if (data && !data.error) {
+				const sortedHotels = data.sort((a, b) =>
+					a.hotelName.localeCompare(b.hotelName)
+				);
+				setAllHotels(sortedHotels);
+			} else {
+				message.error("Failed to fetch hotels.");
+			}
+		} catch (error) {
+			console.error("Error fetching hotels:", error);
+		}
+	}, [user._id, token]);
+
+	// Handle fetching room details and initializing states
+	const initializeDrawer = useCallback(() => {
+		if (!chat || !chat.hotelId) return;
+
+		const lastMessageByUser = chat.conversation?.find(
+			(msg) => msg.messageBy?.userId === chat.conversation[0]?.messageBy?.userId
+		);
+
+		setName(lastMessageByUser?.messageBy?.customerName || "");
+		setEmail(lastMessageByUser?.messageBy?.customerEmail || "");
+		setSelectedRooms([{ roomType: "", displayName: "", count: 1 }]);
+		setSelectedHotel(chat.hotelId);
+	}, [chat]);
+
+	// Sync drawer state with `chat` and fetch hotels
+	useEffect(() => {
+		if (visible) {
+			getAllHotels();
+			initializeDrawer();
+		}
+	}, [visible, getAllHotels, initializeDrawer]);
+
+	const capitalize = (str) => {
+		return str
+			.split(" ")
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(" ");
+	};
+
+	// Handle hotel change
+	const handleHotelChange = useCallback(
+		async (hotelId) => {
+			const hotel = allHotels.find((h) => h._id === hotelId);
+
+			Modal.confirm({
+				title: "Are you sure?",
+				content: `Are you sure you want to transfer the guest to ${hotel.hotelName}?`,
+				okText: "Yes",
+				cancelText: "No",
+				onOk: async () => {
+					setSelectedHotel(hotel);
+
+					if (hotel) {
+						try {
+							// Update the support case with the new hotel
+							await updateSupportCase(chat._id, { hotelId: hotel._id });
+							message.success(`Guest transferred to ${hotel.hotelName}.`);
+
+							// Emit socket event for hotel change
+							socket.emit("hotelChanged", {
+								caseId: chat._id,
+								newHotel: hotel,
+							});
+
+							// Update the support cases in the parent state
+							setSupportCases((prevCases) =>
+								prevCases.map((supportCase) =>
+									supportCase._id === chat._id
+										? { ...supportCase, hotelId: hotel }
+										: supportCase
+								)
+							);
+
+							// Update the selected case in the parent state
+							setSelectedCase((prevCase) => ({
+								...prevCase,
+								hotelId: hotel,
+							}));
+
+							// Send a system message to the guest
+							const guestMessage = {
+								messageBy: { customerName: "System" },
+								message: `You've been transferred to ${capitalize(
+									hotel.hotelName
+								)} Hotel. Please wait 3 to 5 minutes for the reception to assist you.`,
+								date: new Date(),
+								caseId: chat._id,
+								targetRole: "guest", // Message for guest
+							};
+
+							// Update the support case conversation with the new message
+							await updateSupportCase(chat._id, { conversation: guestMessage });
+
+							// Emit the system message via socket
+							socket.emit("sendMessage", guestMessage);
+
+							// Reset all inputs, including room selection
+							const newRoomOptions = hotel.roomCountDetails || [];
+							const newSelectedRooms = newRoomOptions.length
+								? [{ roomType: "", displayName: "", count: 1 }]
+								: [];
+							setSelectedRooms(newSelectedRooms);
+
+							// Reset other inputs
+							setCheckInDate(null);
+							setCheckOutDate(null);
+							setTotalAmount(0);
+							setTotalCommission(0);
+						} catch (error) {
+							console.error("Error transferring guest:", error);
+							message.error("Failed to transfer guest.");
+						}
+					}
+				},
+			});
+		},
+		[allHotels, chat._id, setSupportCases, setSelectedCase]
+	);
 
 	// Calculate pricing by day with commission
 	const safeParseFloat = (value, fallback = 0) => {
@@ -377,13 +517,35 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 		);
 	};
 
+	// Function to transfer guest to a selected hotel (new addition)
+
+	// eslint-disable-next-line
+	const transferGuestToHotel = async () => {
+		if (!selectedHotel) {
+			message.error("Please select a hotel to transfer the guest.");
+			return;
+		}
+
+		try {
+			// Update the support case with the new hotelId
+			await updateSupportCase(chat._id, { hotelId: selectedHotel._id });
+			message.success(
+				`Support case successfully transferred to ${selectedHotel.hotelName}`
+			);
+			onClose(); // Close the drawer after successful transfer
+		} catch (err) {
+			console.error("Error transferring guest to hotel:", err);
+			message.error("Failed to transfer the support case.");
+		}
+	};
+
 	return (
 		<Drawer
 			title='Generate Booking Link'
 			placement='right'
 			onClose={onClose}
 			open={visible}
-			width={500}
+			width={700}
 		>
 			<Form layout='vertical'>
 				<Button
@@ -394,6 +556,26 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 				>
 					Clear All
 				</Button>
+				<>
+					<Form.Item label='Select Hotel'>
+						<Select
+							placeholder='Select a hotel'
+							value={selectedHotel?._id}
+							onChange={handleHotelChange}
+							style={{ textTransform: "capitalize" }}
+						>
+							{allHotels.map((hotel) => (
+								<Option
+									key={hotel._id}
+									value={hotel._id}
+									style={{ textTransform: "capitalize" }}
+								>
+									{hotel.hotelName}
+								</Option>
+							))}
+						</Select>
+					</Form.Item>
+				</>
 				{selectedRooms.map((room, index) => (
 					<div key={index} style={{ marginBottom: 20 }}>
 						<Form.Item label={`Room Type ${index + 1}`}>
@@ -411,8 +593,7 @@ const HelperSideDrawer = ({ chat, onClose, visible }) => {
 										key={idx}
 										value={`${roomDetail.roomType}|${roomDetail.displayName}`}
 									>
-										{roomDetail.displayName} ({roomDetail.roomType}) -{" "}
-										{roomDetail.price.basePrice} SAR/night
+										{roomDetail.displayName} ({roomDetail.roomType})
 									</Option>
 								))}
 							</Select>

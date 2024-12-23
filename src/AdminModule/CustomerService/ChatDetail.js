@@ -10,7 +10,14 @@ import HelperSideDrawer from "./HelperSideDrawer";
 
 const { Option } = Select;
 
-const ChatDetail = ({ chat, isHistory, fetchChats }) => {
+const ChatDetail = ({
+	chat,
+	isHistory,
+	fetchChats,
+	selectedCase,
+	setSelectedCase,
+	setSupportCases,
+}) => {
 	const { user, token } = isAuthenticated();
 	const [messages, setMessages] = useState(chat.conversation);
 	const [newMessage, setNewMessage] = useState("");
@@ -182,22 +189,24 @@ const ChatDetail = ({ chat, isHistory, fetchChats }) => {
 				</StatusSelect>
 			)}
 
-			{chat &&
+			{/* {chat &&
 				chat.openedBy === "client" &&
-				chat.conversation[0].inquiryAbout === "reserve_room" && (
-					<>
-						<div className='mx-auto text-center'>
-							<AntdButton type='primary' onClick={showDrawer}>
-								Reserve A Room
-							</AntdButton>
-						</div>
-						<HelperSideDrawer
-							chat={chat}
-							onClose={closeDrawer}
-							visible={drawerVisible}
-						/>
-					</>
-				)}
+				chat.conversation[0].inquiryAbout === "reserve_room" && ( */}
+			<>
+				<div className='mx-auto text-center'>
+					<AntdButton type='primary' onClick={showDrawer}>
+						Reserve A Room
+					</AntdButton>
+				</div>
+				<HelperSideDrawer
+					chat={chat}
+					onClose={closeDrawer}
+					visible={drawerVisible}
+					selectedCase={selectedCase}
+					setSelectedCase={setSelectedCase}
+					setSupportCases={setSupportCases}
+				/>
+			</>
 			{caseStatus === "open" && (
 				<>
 					<Form layout='vertical'>

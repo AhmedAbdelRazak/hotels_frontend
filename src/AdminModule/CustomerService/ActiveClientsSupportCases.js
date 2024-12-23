@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { List, Badge } from "antd";
 import {
@@ -57,35 +57,32 @@ const ActiveClientsSupportCases = () => {
 		});
 	};
 
-	// Fetch open client support cases
-	useEffect(() => {
-		const fetchSupportCases = () => {
-			getFilteredSupportCasesClients(token)
-				.then((data) => {
-					if (data.error) {
-						toast.error("Failed to fetch support cases");
-					} else {
-						const openCases = data.filter(
-							(chat) => chat.caseStatus !== "closed"
-						);
-						setSupportCases(openCases);
-
-						// Calculate unseen messages by admin
-						const unseenMessages = openCases.reduce((acc, supportCase) => {
-							return (
-								acc +
-								supportCase.conversation.filter((msg) => !msg.seenByAdmin)
-									.length
-							);
-						}, 0);
-						setUnseenCount(unseenMessages);
-					}
-				})
-				.catch(() => {
+	// Memoize fetchSupportCases to avoid re-creation
+	const fetchSupportCases = useCallback(() => {
+		getFilteredSupportCasesClients(token)
+			.then((data) => {
+				if (data.error) {
 					toast.error("Failed to fetch support cases");
-				});
-		};
+				} else {
+					const openCases = data.filter((chat) => chat.caseStatus !== "closed");
+					setSupportCases(openCases);
 
+					// Calculate unseen messages by admin
+					const unseenMessages = openCases.reduce((acc, supportCase) => {
+						return (
+							acc +
+							supportCase.conversation.filter((msg) => !msg.seenByAdmin).length
+						);
+					}, 0);
+					setUnseenCount(unseenMessages);
+				}
+			})
+			.catch(() => {
+				toast.error("Failed to fetch support cases");
+			});
+	}, [token]);
+
+	useEffect(() => {
 		fetchSupportCases();
 
 		// Handle new message received event
@@ -124,7 +121,7 @@ const ActiveClientsSupportCases = () => {
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCaseClosed);
 		};
-	}, [token, user._id, selectedCase]);
+	}, [fetchSupportCases, selectedCase]); // fetchSupportCases is now a dependency
 
 	// Mark messages as seen by admin
 	const handleCaseSelection = async (selectedCase) => {
@@ -149,11 +146,38 @@ const ActiveClientsSupportCases = () => {
 		}
 	};
 
+	useEffect(() => {
+		const handleHotelChanged = ({ caseId, newHotel }) => {
+			setSupportCases((prevCases) =>
+				prevCases.map((supportCase) =>
+					supportCase._id === caseId
+						? { ...supportCase, hotelId: { ...newHotel } }
+						: supportCase
+				)
+			);
+
+			if (selectedCase && selectedCase._id === caseId) {
+				setSelectedCase((prevCase) => ({
+					...prevCase,
+					hotelId: { ...newHotel },
+				}));
+			}
+		};
+
+		socket.on("hotelChanged", handleHotelChanged);
+
+		return () => {
+			socket.off("hotelChanged", handleHotelChanged);
+		};
+	}, [selectedCase, setSupportCases]);
+	// fetchSupportCases is now a dependency
+
 	return (
 		<ActiveClientsSupportCasesWrapper>
 			<MainContentWrapper>
 				<SupportCasesList>
 					<List
+						key={JSON.stringify(supportCases)} // Forces re-render when supportCases changes
 						style={{ marginTop: "20px" }}
 						header={
 							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
@@ -181,7 +205,7 @@ const ActiveClientsSupportCases = () => {
 											selectedCase && selectedCase._id === item._id
 												? "#e6f7ff"
 												: hasUnseenMessages
-												  ? "#fff1f0" // Light reddish color for unseen messages
+												  ? "#fff1f0"
 												  : "white",
 										position: "relative",
 									}}
@@ -214,7 +238,10 @@ const ActiveClientsSupportCases = () => {
 					<ChatDetailWrapper>
 						<ChatDetail
 							chat={selectedCase}
-							fetchChats={() => getFilteredSupportCasesClients(token)}
+							fetchChats={fetchSupportCases} // Pass the refactored function
+							selectedCase={selectedCase}
+							setSelectedCase={setSelectedCase}
+							setSupportCases={setSupportCases}
 						/>
 					</ChatDetailWrapper>
 				)}
