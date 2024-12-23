@@ -28,6 +28,7 @@ const ContentTable = ({
 			customer_phone: customer_details.phone || "N/A",
 			customer_email: customer_details.email || "N/A",
 			hotel_name: hotelId.hotelName || "Unknown Hotel", // Extract hotelName from hotelId
+			hotel_belongs_to: hotelId.belongsTo || {}, // Add belongsTo for redirection
 		};
 	});
 
@@ -81,6 +82,20 @@ const ContentTable = ({
 				: false,
 	});
 
+	// Function to handle clicking on a hotel name
+	const handleHotelClick = (hotel) => {
+		// console.log(hotel, "hotel");
+
+		const hotelDetailsFinal = {
+			...hotel.hotelId,
+			belongsTo: hotel.belongsTo,
+		};
+		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
+
+		// Redirect to the dashboard
+		window.location.href = `/hotel-management/dashboard/${hotel.belongsTo._id}/${hotel.hotelId._id}`;
+	};
+
 	// Show Modal with selected reservation details
 	const showDetailsModal = (record) => {
 		setSelectedReservation(record);
@@ -125,9 +140,19 @@ const ContentTable = ({
 			dataIndex: "hotel_name", // Preprocessed field
 			key: "hotel_name",
 			...getColumnSearchProps("hotel_name"),
-			render: (text) => (
-				<span style={{ textTransform: "capitalize" }}>{text}</span>
-			), // Apply text-transform: capitalize
+			render: (text, record) => (
+				<span
+					style={{
+						textTransform: "capitalize",
+						color: "blue",
+						cursor: "pointer",
+						textDecoration: "underline",
+					}}
+					onClick={() => handleHotelClick(record)}
+				>
+					{text}
+				</span>
+			), // Make the hotel name clickable
 		},
 		{
 			title: "Check-in Date",
