@@ -93,7 +93,7 @@ const ContentTable = ({
 		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
 
 		// Redirect to the dashboard
-		window.location.href = `/hotel-management/dashboard/${hotel.belongsTo._id}/${hotel.hotelId._id}`;
+		window.location.href = `/hotel-management/new-reservation/${hotel.belongsTo._id}/${hotel.hotelId._id}?list`;
 	};
 
 	// Show Modal with selected reservation details
