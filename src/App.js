@@ -47,6 +47,7 @@ import CustomerServiceMain from "./AdminModule/CustomerService/CustomerServiceMa
 import CustomerServiceHotelMain from "./HotelModule/CustomerService/CustomerServiceHotelMain";
 import IntegratorMain from "./AdminModule/ElIntegrator/IntegratorMain";
 import AllReservationMain from "./AdminModule/AllReservation/AllReservationMain";
+import JannatBookingToolsMain from "./AdminModule/JannatTools/JannatBookingToolsMain";
 //Conf #: 197875718, 198354414, 199118009, 198501575, 198787549, 197674274, 195732024
 
 function App() {
@@ -99,6 +100,11 @@ function App() {
 						path='/admin/all-reservations'
 						exact
 						component={AllReservationMain}
+					/>
+					<AdminRoute
+						path='/admin/jannatbooking-tools'
+						exact
+						component={JannatBookingToolsMain}
 					/>
 					<AdminRoute path='/admin/new-hotel' exact component={AddNewHotel} />
 					<AdminRoute

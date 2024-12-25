@@ -205,6 +205,7 @@ const ChatDetail = ({
 					selectedCase={selectedCase}
 					setSelectedCase={setSelectedCase}
 					setSupportCases={setSupportCases}
+					agentName={displayName}
 				/>
 			</>
 			{caseStatus === "open" && (

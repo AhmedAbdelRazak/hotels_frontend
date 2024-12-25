@@ -10,11 +10,13 @@ import {
 	InputNumber,
 	Modal,
 } from "antd";
+import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "./utils";
 import { isAuthenticated } from "../../auth";
 import { gettingHotelDetailsForAdmin, updateSupportCase } from "../apiAdmin";
 import socket from "../../socket";
+import EditPricingModal from "./EditPricingModal";
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -26,6 +28,7 @@ const HelperSideDrawer = ({
 	selectedCase,
 	setSelectedCase,
 	setSupportCases,
+	agentName,
 }) => {
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, commissionRate: 0 },
@@ -44,6 +47,8 @@ const HelperSideDrawer = ({
 	const [numberOfNights, setNumberOfNights] = useState(0);
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
+	const [editingRoomIndex, setEditingRoomIndex] = useState(null); // Track which room is being edited
+	const [isModalVisible, setIsModalVisible] = useState(false); // Modal visibility
 
 	const { user, token } = isAuthenticated();
 
@@ -58,6 +63,34 @@ const HelperSideDrawer = ({
 			}
 		}
 	}, [chat]);
+
+	const openModal = (roomIndex) => {
+		setEditingRoomIndex(roomIndex);
+		setIsModalVisible(true);
+	};
+
+	const closeModal = () => {
+		setEditingRoomIndex(null);
+		setIsModalVisible(false);
+	};
+
+	const handlePricingUpdate = (updatedPricingByDay) => {
+		// Update the specific room's pricingByDay
+		const updatedRooms = selectedRooms.map((room, index) =>
+			index === editingRoomIndex
+				? { ...room, pricingByDay: updatedPricingByDay }
+				: room
+		);
+
+		// Update state with the modified rooms
+		setSelectedRooms(updatedRooms);
+
+		// Recalculate totals after the state is updated
+		calculateTotals(updatedRooms);
+
+		// Close the modal
+		closeModal();
+	};
 
 	const getAllHotels = useCallback(async () => {
 		try {
@@ -200,10 +233,6 @@ const HelperSideDrawer = ({
 			defaultCost,
 			commissionRate
 		) => {
-			console.log("Calculating pricing by day...");
-			console.log("Start date:", startDate);
-			console.log("End date:", endDate);
-
 			const start = dayjs(startDate).startOf("day");
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
 
@@ -213,12 +242,10 @@ const HelperSideDrawer = ({
 			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
 				const formattedDate = currentDate.format("YYYY-MM-DD");
 
-				// Find rate for the current date
 				const rateForDate = pricingRate.find(
 					(rate) => rate.calendarDate === formattedDate
 				);
 
-				// Fallback handling for price, rootPrice, and commissionRate
 				const price = rateForDate
 					? safeParseFloat(rateForDate.price, basePrice)
 					: basePrice;
@@ -227,14 +254,9 @@ const HelperSideDrawer = ({
 					? safeParseFloat(rateForDate.rootPrice, defaultCost)
 					: defaultCost;
 
-				// Ensure commissionRate has a fallback
 				const rateCommission = rateForDate
 					? safeParseFloat(rateForDate.commissionRate, commissionRate)
 					: commissionRate;
-
-				console.log(
-					`Date: ${formattedDate}, Price: ${price}, RootPrice: ${rootPrice}, CommissionRate: ${rateCommission}`
-				);
 
 				dateArray.push({
 					date: formattedDate,
@@ -270,91 +292,120 @@ const HelperSideDrawer = ({
 				commissionRate
 			);
 
-			console.log("Pricing by day:", pricingByDay);
-
-			return pricingByDay.map((day) => {
-				const totalPriceWithCommission = Number(
-					(
-						Number(day.price) +
-						Number(day.rootPrice) * (Number(day.commissionRate) / 100)
-					).toFixed(2)
-				);
-
-				console.log(
-					`Date: ${day.date}, TotalPriceWithCommission: ${totalPriceWithCommission}`
-				);
-
-				return {
-					...day,
-					totalPriceWithCommission,
-					totalPriceWithoutCommission: Number(day.price),
-				};
-			});
+			// Add total price with commission to each day
+			return pricingByDay.map((day) => ({
+				...day,
+				totalPriceWithCommission:
+					Number(day.price) +
+					Number(day.rootPrice) * (Number(day.commissionRate) / 100), // Keep it as a number
+			}));
 		},
 		[calculatePricingByDay]
 	);
 
 	// Calculate totals
-	const calculateTotals = useCallback(() => {
-		if (!checkInDate || !checkOutDate || selectedRooms.length === 0) return;
+	const calculateTotals = useCallback(
+		(rooms = selectedRooms) => {
+			if (!checkInDate || !checkOutDate || rooms.length === 0) return;
 
-		const startDate = dayjs(checkInDate).startOf("day");
-		const endDate = dayjs(checkOutDate).startOf("day");
-		const nights = endDate.diff(startDate, "day");
+			const startDate = dayjs(checkInDate).startOf("day");
+			const endDate = dayjs(checkOutDate).startOf("day");
+			const nights = endDate.diff(startDate, "day");
 
-		let totalAmount = 0;
-		let totalCommission = 0;
-		let totalPriceWithCommission = 0;
+			let totalAmount = 0;
+			let totalCommission = 0;
+			let totalPriceWithCommission = 0;
 
-		selectedRooms.forEach((room) => {
-			const matchedRoom = chat.hotelId.roomCountDetails.find(
-				(r) =>
-					r.roomType === room.roomType && r.displayName === room.displayName
-			);
+			// Flag to track whether `pricingByDay` has changed
+			let hasChanges = false;
 
-			if (matchedRoom) {
-				const pricingByDay = calculatePricingByDayWithCommission(
-					matchedRoom.pricingRate || [],
-					startDate,
-					endDate,
-					parseFloat(matchedRoom.price?.basePrice),
-					parseFloat(matchedRoom.defaultCost),
-					parseFloat(
-						matchedRoom.roomCommission || chat.hotelId.commission || 0.1
-					)
+			// Map through each room and calculate totals
+			const updatedRooms = rooms.map((room) => {
+				// Only recalculate `pricingByDay` if it's not already present
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					const roomTotalAmount = room.pricingByDay.reduce(
+						(acc, day) => acc + day.rootPrice * room.count,
+						0
+					);
+					const roomTotalPriceWithCommission = room.pricingByDay.reduce(
+						(acc, day) => acc + day.totalPriceWithCommission * room.count,
+						0
+					);
+
+					totalAmount += roomTotalAmount;
+					totalPriceWithCommission += roomTotalPriceWithCommission;
+
+					return room;
+				}
+
+				// Find the corresponding room details in the hotel data
+				const matchedRoom = chat.hotelId.roomCountDetails.find(
+					(r) =>
+						r.roomType === room.roomType && r.displayName === room.displayName
 				);
 
-				const roomTotalAmount = pricingByDay.reduce(
-					(acc, day) => acc + day.rootPrice * room.count,
-					0
-				);
-				const roomTotalPriceWithCommission = pricingByDay.reduce(
-					(acc, day) => acc + day.totalPriceWithCommission * room.count,
-					0
-				);
+				if (matchedRoom) {
+					// Calculate pricing breakdown for the selected date range
+					const pricingByDay = calculatePricingByDayWithCommission(
+						matchedRoom.pricingRate || [],
+						startDate,
+						endDate,
+						parseFloat(matchedRoom.price?.basePrice) || 0,
+						parseFloat(matchedRoom.defaultCost) || 0,
+						parseFloat(
+							matchedRoom.roomCommission || chat.hotelId.commission || 0.1
+						)
+					);
 
-				totalAmount += roomTotalAmount;
-				totalPriceWithCommission += roomTotalPriceWithCommission;
+					// Check if `pricingByDay` has changed
+					if (
+						JSON.stringify(pricingByDay) !== JSON.stringify(room.pricingByDay)
+					) {
+						hasChanges = true;
+					}
+
+					const roomTotalAmount = pricingByDay.reduce(
+						(acc, day) => acc + day.rootPrice * room.count,
+						0
+					);
+					const roomTotalPriceWithCommission = pricingByDay.reduce(
+						(acc, day) => acc + day.totalPriceWithCommission * room.count,
+						0
+					);
+
+					totalAmount += roomTotalAmount;
+					totalPriceWithCommission += roomTotalPriceWithCommission;
+
+					return { ...room, pricingByDay };
+				}
+
+				return room;
+			});
+
+			totalCommission = totalPriceWithCommission - totalAmount;
+
+			// Update state if there are changes
+			if (hasChanges) {
+				setSelectedRooms(updatedRooms);
 			}
-		});
-
-		totalCommission = totalPriceWithCommission - totalAmount;
-
-		setTotalAmount(totalAmount.toFixed(2));
-		setTotalCommission(totalCommission.toFixed(2));
-		setNumberOfNights(nights);
-	}, [
-		checkInDate,
-		checkOutDate,
-		selectedRooms,
-		calculatePricingByDayWithCommission,
-		chat.hotelId.roomCountDetails,
-		chat.hotelId.commission,
-	]);
+			setTotalAmount(Number(totalAmount.toFixed(2)));
+			setTotalCommission(Number(totalCommission.toFixed(2)));
+			setNumberOfNights(nights);
+		},
+		[
+			checkInDate,
+			checkOutDate,
+			selectedRooms,
+			calculatePricingByDayWithCommission,
+			chat.hotelId.roomCountDetails,
+			chat.hotelId.commission,
+		]
+	);
 
 	useEffect(() => {
 		calculateTotals();
-	}, [calculateTotals]);
+		// Only trigger when the relevant state changes
+	}, [checkInDate, checkOutDate, selectedRooms, calculateTotals]);
 
 	// Handle room selection changes
 	const handleRoomSelectionChange = (value, index) => {
@@ -363,14 +414,30 @@ const HelperSideDrawer = ({
 			(r) => r.roomType === roomType && r.displayName === displayName
 		);
 
+		if (!matchedRoom) {
+			message.error(`No details found for room: ${displayName}`);
+			return;
+		}
+
+		const pricingByDay = calculatePricingByDayWithCommission(
+			matchedRoom.pricingRate || [],
+			checkInDate,
+			checkOutDate,
+			parseFloat(matchedRoom.price?.basePrice),
+			parseFloat(matchedRoom.defaultCost),
+			parseFloat(matchedRoom.roomCommission || chat.hotelId.commission || 0.1)
+		);
+
+		console.log("Pricing by Day for Selected Room:", pricingByDay); // Debugging line
+
 		const updatedRooms = [...selectedRooms];
 		updatedRooms[index] = {
 			...updatedRooms[index],
 			roomType,
 			displayName,
-			commissionRate:
-				matchedRoom?.roomCommission || chat.hotelId.commission || 0.1,
+			pricingByDay,
 		};
+
 		setSelectedRooms(updatedRooms);
 	};
 
@@ -434,6 +501,7 @@ const HelperSideDrawer = ({
 			return;
 		}
 
+		// Initialize query parameters with basic details
 		const queryParams = new URLSearchParams({
 			hotelId: chat.hotelId._id,
 			name,
@@ -449,27 +517,11 @@ const HelperSideDrawer = ({
 			phone,
 		});
 
+		// Iterate through selected rooms to add room-specific details
 		selectedRooms.forEach((room, index) => {
-			// Ensure matchedRoom is scoped properly within the loop
-			const matchedRoom = chat.hotelId.roomCountDetails.find(
-				(r) =>
-					r.roomType === room.roomType && r.displayName === room.displayName
-			);
-
-			if (matchedRoom) {
-				const pricingByDay = calculatePricingByDayWithCommission(
-					matchedRoom.pricingRate || [],
-					checkInDate,
-					checkOutDate,
-					parseFloat(matchedRoom.price?.basePrice),
-					parseFloat(matchedRoom.defaultCost),
-					parseFloat(
-						matchedRoom.roomCommission || chat.hotelId.commission || 0.1
-					)
-				);
-
-				// Adding structured breakdown data to the link
-				const pricingBreakdown = pricingByDay.map(
+			// Use the `pricingByDay` directly from the room if it exists and is up-to-date
+			if (room.pricingByDay && room.pricingByDay.length > 0) {
+				const pricingBreakdown = room.pricingByDay.map(
 					({
 						date,
 						price,
@@ -487,6 +539,7 @@ const HelperSideDrawer = ({
 					})
 				);
 
+				// Add room details to the query parameters
 				queryParams.append(`roomType${index + 1}`, room.roomType);
 				queryParams.append(`displayName${index + 1}`, room.displayName);
 				queryParams.append(`roomCount${index + 1}`, room.count);
@@ -496,16 +549,22 @@ const HelperSideDrawer = ({
 				);
 			} else {
 				console.warn(
-					`Room type ${room.roomType} with display name ${room.displayName} not found in roomCountDetails.`
+					`Pricing breakdown for room "${room.displayName}" is missing or incomplete.`
 				);
 			}
 		});
 
+		// Generate the booking link
 		const bookingLink = `${
 			process.env.REACT_APP_MAIN_URL_JANNAT
 		}/generated-link?${queryParams.toString()}`;
+
+		// Set the generated link and notify the user
 		setGeneratedLink(bookingLink);
 		message.success("Link generated successfully!");
+
+		// Optional: Log the link for debugging
+		console.log("Generated Link:", bookingLink);
 	};
 
 	const getAvailableRoomOptions = () => {
@@ -539,6 +598,127 @@ const HelperSideDrawer = ({
 		}
 	};
 
+	const handleSendEmail = async () => {
+		if (!name || !email || !generatedLink) {
+			message.error(
+				"Please fill in all required fields before sending the email."
+			);
+			return;
+		}
+
+		try {
+			if (!selectedRooms || selectedRooms.length === 0) {
+				throw new Error("No rooms have been selected.");
+			}
+
+			selectedRooms.forEach((room, index) => {
+				if (!room.pricingByDay || room.pricingByDay.length === 0) {
+					console.error(
+						`Room at index ${index} has missing pricingByDay:`,
+						room
+					); // Debugging line
+					throw new Error(
+						`Pricing details are missing for room: ${room.displayName}`
+					);
+				}
+			});
+
+			// Calculate totals
+			const totalAmountWithCommission = selectedRooms.reduce((total, room) => {
+				return (
+					total +
+					room.pricingByDay.reduce(
+						(subTotal, day) => subTotal + day.totalPriceWithCommission,
+						0
+					) *
+						room.count
+				);
+			}, 0);
+
+			const totalRootPrice = selectedRooms.reduce((total, room) => {
+				return (
+					total +
+					room.pricingByDay.reduce(
+						(subTotal, day) => subTotal + day.rootPrice,
+						0
+					) *
+						room.count
+				);
+			}, 0);
+
+			const totalCommission = totalAmountWithCommission - totalRootPrice;
+			const depositPercentage = Number(
+				(totalCommission / totalAmountWithCommission) * 100
+			).toFixed(0);
+			const depositAmount = totalCommission;
+
+			// Email payload
+			const emailPayload = {
+				hotelName: selectedHotel.hotelName,
+				name,
+				email,
+				phone,
+				nationality,
+				checkInDate: checkInDate.format("YYYY-MM-DD"),
+				checkOutDate: checkOutDate.format("YYYY-MM-DD"),
+				numberOfNights,
+				adults,
+				children,
+				totalAmount: Number(totalAmountWithCommission.toFixed(2)),
+				totalCommission: Number(totalCommission.toFixed(2)),
+				depositPercentage: depositPercentage,
+				depositAmount: Number(depositAmount.toFixed(2)),
+				generatedLink,
+				selectedRooms: selectedRooms.map((room) => ({
+					roomType: room.roomType,
+					displayName: room.displayName,
+					count: room.count,
+					pricingByDay: room.pricingByDay.map((day) => ({
+						date: day.date,
+						price: Number(day.price).toFixed(2),
+						rootPrice: Number(day.rootPrice).toFixed(2),
+						commissionRate: Number(day.commissionRate).toFixed(2),
+						totalPriceWithCommission: Number(
+							day.totalPriceWithCommission
+						).toFixed(2),
+					})),
+				})),
+				agentName,
+			};
+
+			console.log("Email Payload:", emailPayload); // Debugging line
+
+			// Send email
+			const response = await fetch(
+				`${process.env.REACT_APP_API_URL}/send-payment-link-email/${user._id}`,
+				{
+					method: "POST",
+					headers: {
+						Accept: "application/json",
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify(emailPayload),
+				}
+			);
+
+			const result = await response.json();
+			if (response.ok) {
+				message.success("Email sent successfully!");
+			} else {
+				message.error(result.error || "Failed to send email.");
+			}
+		} catch (error) {
+			console.error(
+				"Error during email preparation or sending:",
+				error.message
+			);
+			message.error(
+				error.message || "An error occurred while sending the email."
+			);
+		}
+	};
+
 	return (
 		<Drawer
 			title='Generate Booking Link'
@@ -548,6 +728,13 @@ const HelperSideDrawer = ({
 			width={700}
 		>
 			<Form layout='vertical'>
+				<EditPricingModal
+					visible={isModalVisible}
+					onClose={closeModal}
+					pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
+					onUpdate={handlePricingUpdate}
+					roomDetails={selectedRooms[editingRoomIndex]} // Optional, if you want to show room details
+				/>
 				<Button
 					type='primary'
 					danger
@@ -576,69 +763,100 @@ const HelperSideDrawer = ({
 						</Select>
 					</Form.Item>
 				</>
-				{selectedRooms.map((room, index) => (
-					<div key={index} style={{ marginBottom: 20 }}>
-						<Form.Item label={`Room Type ${index + 1}`}>
-							<Select
-								value={
-									room.roomType
-										? `${room.roomType}|${room.displayName}`
-										: undefined
-								}
-								onChange={(value) => handleRoomSelectionChange(value, index)}
-								placeholder='Select Room Type'
-							>
-								{getAvailableRoomOptions().map((roomDetail, idx) => (
-									<Option
-										key={idx}
-										value={`${roomDetail.roomType}|${roomDetail.displayName}`}
+				<Form.Item label='Check-in and Check-out Dates'>
+					<RangePicker
+						format='YYYY-MM-DD'
+						value={[checkInDate, checkOutDate]}
+						onChange={(dates) => {
+							setCheckInDate(dates ? dates[0] : null);
+							setCheckOutDate(dates ? dates[1] : null);
+						}}
+						disabledDate={(current) =>
+							current && current < dayjs().endOf("day")
+						}
+					/>
+				</Form.Item>
+				{checkInDate && checkOutDate && (
+					<>
+						{selectedRooms.map((room, index) => (
+							<div key={index} style={{ marginBottom: 20 }}>
+								<Form.Item label={`Room Type ${index + 1}`}>
+									<Select
+										value={
+											room.roomType
+												? `${room.roomType}|${room.displayName}`
+												: undefined
+										}
+										onChange={(value) =>
+											handleRoomSelectionChange(value, index)
+										}
+										placeholder='Select Room Type'
 									>
-										{roomDetail.displayName} ({roomDetail.roomType})
-									</Option>
-								))}
-							</Select>
-						</Form.Item>
-						<Form.Item label='Count'>
-							<InputNumber
-								min={1}
-								value={room.count}
-								onChange={(count) => handleRoomCountChange(count, index)}
-							/>
-						</Form.Item>
-						{/* Optional Pricing Breakdown */}
-						{room.pricingByDay && (
-							<Form.Item label='Pricing Breakdown'>
-								<ul style={{ paddingLeft: "20px" }}>
-									{room.pricingByDay.map((day, i) => (
-										<li key={i}>
-											{day.date}: {day.totalPriceWithCommission.toFixed(2)} SAR
-										</li>
-									))}
-								</ul>
-							</Form.Item>
-						)}
-						{index > 0 && (
-							<Button
-								type='link'
-								danger
-								onClick={() => removeRoomSelection(index)}
-							>
-								Remove
-							</Button>
-						)}
-					</div>
-				))}
-				<Button
-					type='dashed'
-					onClick={addRoomSelection}
-					disabled={
-						selectedRooms[selectedRooms.length - 1]?.roomType === "" ||
-						selectedRooms[selectedRooms.length - 1]?.displayName === ""
-					}
-					style={{ marginBottom: 20 }}
-				>
-					Add Another Room
-				</Button>
+										{getAvailableRoomOptions().map((roomDetail, idx) => (
+											<Option
+												key={idx}
+												value={`${roomDetail.roomType}|${roomDetail.displayName}`}
+											>
+												{roomDetail.displayName} ({roomDetail.roomType})
+											</Option>
+										))}
+									</Select>
+								</Form.Item>
+								<Form.Item label='Count'>
+									<InputNumber
+										min={1}
+										value={room.count}
+										onChange={(count) => handleRoomCountChange(count, index)}
+									/>
+								</Form.Item>
+								{/* Optional Pricing Breakdown */}
+								{room.pricingByDay && (
+									<Form.Item label='Pricing Breakdown'>
+										<ul style={{ paddingLeft: "20px" }}>
+											{room.pricingByDay.map((day, i) => (
+												<li key={i}>
+													{day.date}: {day.totalPriceWithCommission.toFixed(2)}{" "}
+													SAR
+												</li>
+											))}
+											<Button
+												type='link'
+												onClick={() => openModal(index)} // Open modal for editing
+												style={{
+													fontSize: "1rem",
+													fontWeight: "bold",
+													textDecoration: "underline",
+												}}
+											>
+												<EditOutlined /> Edit Pricing
+											</Button>
+										</ul>
+									</Form.Item>
+								)}
+								{index > 0 && (
+									<Button
+										type='link'
+										danger
+										onClick={() => removeRoomSelection(index)}
+									>
+										Remove
+									</Button>
+								)}
+							</div>
+						))}
+						<Button
+							type='dashed'
+							onClick={addRoomSelection}
+							disabled={
+								selectedRooms[selectedRooms.length - 1]?.roomType === "" ||
+								selectedRooms[selectedRooms.length - 1]?.displayName === ""
+							}
+							style={{ marginBottom: 20 }}
+						>
+							Add Another Room
+						</Button>
+					</>
+				)}
 
 				{/* Other Form Fields */}
 				<Form.Item label='Name'>
@@ -656,19 +874,7 @@ const HelperSideDrawer = ({
 						placeholder='Email'
 					/>
 				</Form.Item>
-				<Form.Item label='Check-in and Check-out Dates'>
-					<RangePicker
-						format='YYYY-MM-DD'
-						value={[checkInDate, checkOutDate]}
-						onChange={(dates) => {
-							setCheckInDate(dates ? dates[0] : null);
-							setCheckOutDate(dates ? dates[1] : null);
-						}}
-						disabledDate={(current) =>
-							current && current < dayjs().endOf("day")
-						}
-					/>
-				</Form.Item>
+
 				<Form.Item label='Number of Adults'>
 					<Input
 						type='number'
@@ -715,6 +921,24 @@ const HelperSideDrawer = ({
 				<Form.Item>
 					<Button type='primary' onClick={handleGenerateLink}>
 						Generate Link
+					</Button>
+				</Form.Item>
+
+				<Form.Item>
+					<Button
+						type='primary'
+						onClick={handleSendEmail}
+						disabled={
+							!generatedLink ||
+							!name ||
+							!email ||
+							selectedRooms.some(
+								(room) => !room.pricingByDay || room.pricingByDay.length === 0
+							)
+						}
+						style={{ marginTop: 20 }}
+					>
+						Send Email
 					</Button>
 				</Form.Item>
 

@@ -85,7 +85,11 @@ const items = [
 		<ShopOutlined />
 	),
 
-	getItem(<Link to='#'>Hotel Settings</Link>, "sub6", <AreaChartOutlined />),
+	getItem(
+		<Link to='/admin/jannatbooking-tools'>Jannat Booking Tools</Link>,
+		"sub6",
+		<AreaChartOutlined />
+	),
 
 	getItem(<Link to='#'>Hotel Branches</Link>, "sub7", <TeamOutlined />),
 
@@ -189,7 +193,7 @@ const AdminNavbar = ({
 						      ? "sub4"
 						      : fromPage === "StoreBilling"
 						        ? "sub5"
-						        : fromPage === "AddSubCategory"
+						        : fromPage === "Tools"
 						          ? "sub6"
 						          : fromPage === "AddOccasions"
 						            ? "sub7"

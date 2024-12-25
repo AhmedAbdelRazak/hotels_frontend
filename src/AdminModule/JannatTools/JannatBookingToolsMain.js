@@ -1,79 +1,43 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
-import { isAuthenticated } from "../../auth";
-import { getAllReservationForAdmin } from "../apiAdmin";
-import ContentTable from "./ContentTable";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import ReservationCalculator from "./ReservationCalculator";
 
-const AllReservationMain = ({ chosenLanguage }) => {
+const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
-	const [allReservationsForAdmin, setAllReservationForAdmin] = useState([]);
-	const [currentPage, setCurrentPage] = useState(1); // Current page number
-	const [pageSize, setPageSize] = useState(100); // Number of records per page
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [activeTab, setActiveTab] = useState("calculator"); // Active tab state
 
+	// Check password verification on mount
 	useEffect(() => {
-		// Handle responsive collapse
-		const handleResize = () => {
-			setCollapsed(window.innerWidth <= 1000);
-		};
-		handleResize();
-		window.addEventListener("resize", handleResize);
-		return () => {
-			window.removeEventListener("resize", handleResize);
-		};
-	}, []);
+		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
 
-	useEffect(() => {
-		// Check password verification on mount
-		const reservationPasswordVerified = localStorage.getItem(
-			"ReservationListVerified"
-		);
-		if (reservationPasswordVerified) {
-			setIsPasswordVerified(true);
+		if (toolsPasswordVerified) {
+			setIsPasswordVerified(true); // Skip modal if already verified
 		} else {
-			setIsModalVisible(true);
+			setIsModalVisible(true); // Show modal if not verified
 		}
 	}, []);
 
 	const handlePasswordVerification = () => {
-		if (password === process.env.REACT_APP_RSERVATION_LIST) {
+		if (password === process.env.REACT_APP_TOOLS) {
 			setIsPasswordVerified(true);
 			message.success("Password verified successfully");
-			localStorage.setItem("ReservationListVerified", "true");
-			setIsModalVisible(false);
+			localStorage.setItem("ToolsVerified", "true"); // Save verification status
+			setIsModalVisible(false); // Close modal
 		} else {
 			message.error("Incorrect password. Please try again.");
 		}
 	};
 
-	const { user, token } = isAuthenticated();
-
-	const gettingAllReservationForAdmin = useCallback(() => {
-		getAllReservationForAdmin(user._id, token).then((data) => {
-			if (data && data.error) {
-				console.error(data.error, "Error getting all hotel details");
-				alert("Failed to fetch reservations. Please try again.");
-			} else {
-				setAllReservationForAdmin(data);
-			}
-		});
-	}, [user._id, token]);
-
-	useEffect(() => {
-		if (isPasswordVerified) {
-			gettingAllReservationForAdmin();
-		}
-	}, [isPasswordVerified, gettingAllReservationForAdmin]);
-
 	return (
-		<AllReservationMainWrapper
+		<JannatBookingToolsMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
@@ -101,13 +65,13 @@ const AllReservationMain = ({ chosenLanguage }) => {
 				</Button>
 			</Modal>
 
-			{/* Content Rendering */}
+			{/* Render Content if Password is Verified */}
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
 						{chosenLanguage === "Arabic" ? (
 							<AdminNavbarArabic
-								fromPage='AllReservations'
+								fromPage='Tools'
 								AdminMenuStatus={AdminMenuStatus}
 								setAdminMenuStatus={setAdminMenuStatus}
 								collapsed={collapsed}
@@ -116,7 +80,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 							/>
 						) : (
 							<AdminNavbar
-								fromPage='AllReservations'
+								fromPage='Tools'
 								AdminMenuStatus={AdminMenuStatus}
 								setAdminMenuStatus={setAdminMenuStatus}
 								collapsed={collapsed}
@@ -128,32 +92,58 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							<div>
-								{allReservationsForAdmin &&
-								allReservationsForAdmin.data &&
-								allReservationsForAdmin.data.length > 0 ? (
-									<ContentTable
-										allReservationsForAdmin={allReservationsForAdmin}
-										currentPage={currentPage}
-										setCurrentPage={setCurrentPage}
-										pageSize={pageSize}
-										setPageSize={setPageSize}
-									/>
-								) : (
-									<div>No Reservations Found</div>
-								)}
-							</div>
+							{/* Tab Navigation */}
+							<TabNavigation>
+								<button
+									className={activeTab === "calculator" ? "active" : ""}
+									onClick={() => setActiveTab("calculator")}
+								>
+									Reservation Calculator
+								</button>
+								<button
+									className={activeTab === "reservations" ? "active" : ""}
+									onClick={() => setActiveTab("reservations")}
+								>
+									Reservations Tools
+								</button>
+								<button
+									className={activeTab === "other" ? "active" : ""}
+									onClick={() => setActiveTab("other")}
+								>
+									Other Tools
+								</button>
+							</TabNavigation>
+
+							{/* Tab Content Rendering */}
+							{activeTab === "calculator" && (
+								<div>
+									<h3>Reservation Calculator</h3>
+									<ReservationCalculator />
+								</div>
+							)}
+							{activeTab === "reservations" && (
+								<div>
+									<h3>Reservations Tools</h3>
+									<p>This is the Reservations Tools content.</p>
+								</div>
+							)}
+							{activeTab === "other" && (
+								<div>
+									<h3>Other Tools</h3>
+									<p>This is the Other Tools content.</p>
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
 			)}
-		</AllReservationMainWrapper>
+		</JannatBookingToolsMainWrapper>
 	);
 };
 
-export default AllReservationMain;
+export default JannatBookingToolsMain;
 
-const AllReservationMainWrapper = styled.div`
+const JannatBookingToolsMainWrapper = styled.div`
 	overflow-x: hidden;
 	margin-top: 20px;
 	min-height: 715px;
@@ -174,6 +164,30 @@ const AllReservationMainWrapper = styled.div`
 	@media (max-width: 768px) {
 		.grid-container-main {
 			grid-template-columns: 1fr;
+		}
+	}
+`;
+
+const TabNavigation = styled.div`
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+
+	button {
+		padding: 10px 20px;
+		border: none;
+		background-color: #ddd;
+		cursor: pointer;
+		font-weight: bold;
+		border-radius: 5px;
+
+		&.active {
+			background-color: #006ad1;
+			color: white;
+		}
+
+		&:hover {
+			background-color: #bbb;
 		}
 	}
 `;
