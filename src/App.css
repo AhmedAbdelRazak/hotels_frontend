@@ -85,6 +85,12 @@ body {
 	/* Transitions */
 	--main-transition: all 0.3s ease-in-out;
 	--main-spacing: 0.3rem;
+
+	/*Admin Messages*/
+	--admin-message-bg: #f0f9ff; /* Light blue for admin */
+	--admin-message-color: #004085; /* Dark blue text for admin */
+	--user-message-bg: #e8f5e9; /* Light green for user */
+	--user-message-color: #1b5e20; /* Dark green text for user */
 }
 
 .submitForm:hover {

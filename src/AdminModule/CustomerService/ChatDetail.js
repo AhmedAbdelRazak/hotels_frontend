@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { updateSupportCase } from "../apiAdmin";
+import { updateSupportCase, deleteSpecificMessage } from "../apiAdmin";
 import { Input, Select, Button as AntdButton, Upload, Form } from "antd";
 import socket from "../../socket";
 import EmojiPicker from "emoji-picker-react";
-import { SmileOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+	SmileOutlined,
+	UploadOutlined,
+	DeleteOutlined,
+} from "@ant-design/icons";
 import HelperSideDrawer from "./HelperSideDrawer";
 
 const { Option } = Select;
@@ -29,10 +33,18 @@ const ChatDetail = ({
 		chat.displayName1 || chat.supporterName || user.name.split(" ")[0]
 	);
 	const [drawerVisible, setDrawerVisible] = useState(false);
+	// Reference for the ChatMessages container
+	const messagesEndRef = useRef(null);
+
+	// Scroll to the bottom function
+	const scrollToBottom = () => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	};
 
 	useEffect(() => {
 		let foundDisplayName = user.name.split(" ")[0];
 
+		// Find the most recent name used by the admin in the chat
 		for (let i = chat.conversation.length - 1; i >= 0; i--) {
 			if (chat.conversation[i].messageBy.userId === user._id) {
 				foundDisplayName = chat.conversation[i].messageBy.customerName;
@@ -44,20 +56,85 @@ const ChatDetail = ({
 		setMessages(chat.conversation);
 		setCaseStatus(chat.caseStatus);
 
-		socket.on("receiveMessage", (message) => {
+		// Join the room for this chat
+		socket.emit("joinRoom", { caseId: chat._id });
+
+		const handleReceiveMessage = (message) => {
 			if (message.caseId === chat._id) {
 				setMessages((prevMessages) => [...prevMessages, message]);
 			}
-		});
-
-		return () => {
-			socket.off("receiveMessage");
 		};
-	}, [chat, user._id, user.name]);
+
+		const handleMessageDeleted = ({ caseId, messageId }) => {
+			if (caseId === chat._id) {
+				setMessages((prevMessages) =>
+					prevMessages.filter((msg) => msg._id !== messageId)
+				);
+			}
+		};
+
+		socket.on("receiveMessage", handleReceiveMessage);
+		socket.on("messageDeleted", handleMessageDeleted);
+
+		// Cleanup listeners and leave the room on unmount
+		return () => {
+			socket.off("receiveMessage", handleReceiveMessage);
+			socket.off("messageDeleted", handleMessageDeleted);
+			socket.emit("leaveRoom", { caseId: chat._id });
+		};
+	}, [chat, chat._id, user._id, user.name]);
+
+	// Automatically scroll when messages change
+	useEffect(() => {
+		scrollToBottom();
+	}, [messages]);
+
+	const handleDeleteMessage = async (messageId) => {
+		try {
+			// Show confirmation dialog
+			const userConfirmed = window.confirm(
+				"Are you sure you want to delete this message?"
+			);
+
+			if (!userConfirmed) {
+				return; // Exit if the user cancels the action
+			}
+
+			// Use the deleteSpecificMessage API function
+			const response = await deleteSpecificMessage(chat._id, messageId);
+			if (response && response.message === "Message deleted successfully") {
+				setMessages((prevMessages) =>
+					prevMessages.filter((msg) => msg._id !== messageId)
+				);
+				socket.emit("deleteMessage", { caseId: chat._id, messageId });
+			} else {
+				console.error(
+					"Error deleting message:",
+					response.error || "Unknown error"
+				);
+			}
+		} catch (err) {
+			console.error("Error deleting message:", err);
+		}
+	};
 
 	const handleInputChange = (e) => {
-		setNewMessage(e.target.value);
+		const inputValue = e.target.value;
+
+		// Check for multiline input and notify the user
+		if (inputValue.includes("\n")) {
+			console.log("Detected multiline input");
+		}
+
+		setNewMessage(inputValue);
 		socket.emit("typing", { name: displayName, caseId: chat._id });
+	};
+
+	const handleKeyPress = (e) => {
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault(); // Prevent default behavior for Enter
+			handleSendMessage(); // Send message
+		}
 	};
 
 	const handleInputBlur = () => {
@@ -65,6 +142,15 @@ const ChatDetail = ({
 	};
 
 	const handleSendMessage = async () => {
+		if (
+			["management", "Management"].includes(displayName.toLowerCase()) ||
+			!displayName
+		) {
+			// Show error message
+			alert("Please change your name before sending a message.");
+			return; // Prevent sending the message
+		}
+
 		const messageData = {
 			messageBy: {
 				customerName: displayName,
@@ -223,23 +309,40 @@ const ChatDetail = ({
 			)}
 			<ChatMessages>
 				{messages.map((msg, index) => (
-					<Message key={index}>
+					<Message
+						key={index}
+						isAdminMessage={msg.messageBy.userId === user._id} // Admin check
+					>
 						<strong>{msg.messageBy.customerName}:</strong> {msg.message}
 						<div>
 							<small>{new Date(msg.date).toLocaleString()}</small>
+							{msg.messageBy.userId === user._id && (
+								<DeleteOutlined
+									style={{
+										color: "red",
+										cursor: "pointer",
+										marginLeft: "10px",
+									}}
+									onClick={() => handleDeleteMessage(msg._id)}
+								/>
+							)}
 						</div>
 					</Message>
 				))}
+				{/* Display typing status if someone is typing */}
 				{typingStatus && <TypingStatus>{typingStatus}</TypingStatus>}
+				<div ref={messagesEndRef} />
 			</ChatMessages>
+
 			{caseStatus === "open" && (
 				<ChatInputContainer>
-					<Input
+					<Input.TextArea
 						placeholder='Type your message...'
 						value={newMessage}
 						onChange={handleInputChange}
-						onBlur={handleInputBlur}
-						onPressEnter={handleSendMessage}
+						onKeyDown={handleKeyPress} // Use custom key press handler
+						onBlur={handleInputBlur} // Notify stop typing when input loses focus
+						autoSize={{ minRows: 1, maxRows: 6 }} // Automatically adjust height for multiline input
 					/>
 					<SmileOutlined onClick={() => setShowEmojiPicker(!showEmojiPicker)} />
 					{showEmojiPicker && (
@@ -278,16 +381,29 @@ const ChatDetailWrapper = styled.div`
 
 const ChatMessages = styled.div`
 	flex: 1;
-	overflow-y: auto;
+	max-height: 700px; /* Limit height to 600px */
+	overflow-y: auto; /* Enable scrolling when content exceeds height */
 	margin-bottom: 20px;
+	padding-right: 10px; /* Add padding for better usability */
 `;
 
 const Message = styled.div`
 	padding: 10px;
 	border: 1px solid var(--border-color-dark);
 	border-radius: 8px;
-	background-color: var(--background-light);
 	margin-bottom: 10px;
+
+	background-color: ${(props) =>
+		props.isAdminMessage
+			? "var(--admin-message-bg)"
+			: "var(--user-message-bg)"};
+	color: ${(props) =>
+		props.isAdminMessage
+			? "var(--admin-message-color)"
+			: "var(--user-message-color)"};
+
+	white-space: pre-wrap; /* Preserve line breaks and extra spaces */
+	word-wrap: break-word; /* Break long words if necessary */
 `;
 
 const StatusSelect = styled(Select)`

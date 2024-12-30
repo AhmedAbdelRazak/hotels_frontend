@@ -66,6 +66,17 @@ const EditHotelForm = ({
 				/>
 			</Form.Item>
 			<Form.Item
+				label='Hotel Name (Arabic)'
+				name='hotelName_OtherLanguage'
+				rules={[{ required: true }]}
+			>
+				<Input
+					value={hotel.hotelName_OtherLanguage}
+					onChange={handleChange("hotelName_OtherLanguage")}
+					placeholder='Hotel Name In Arabic'
+				/>
+			</Form.Item>
+			<Form.Item
 				label='Country'
 				name='hotelCountry'
 				rules={[{ required: true }]}
@@ -106,6 +117,27 @@ const EditHotelForm = ({
 					value={hotel.hotelAddress}
 					onChange={handleChange("hotelAddress")}
 					placeholder='Address'
+				/>
+			</Form.Item>
+			<Form.Item
+				label='Hotel Rating'
+				name='hotelRating'
+				rules={[
+					{ required: true, message: "Hotel rating is required" },
+					{
+						type: "number",
+						min: 1,
+						max: 5,
+						transform: (value) => Number(value), // Transform the input to a number
+						message: "Please enter a number between 1 and 5",
+					},
+				]}
+			>
+				<Input
+					value={hotel.hotelRating}
+					onChange={handleChange("hotelRating")}
+					placeholder='Add A Number From 1 to 5'
+					type='number' // Set input type to "number"
 				/>
 			</Form.Item>
 			<Form.Item

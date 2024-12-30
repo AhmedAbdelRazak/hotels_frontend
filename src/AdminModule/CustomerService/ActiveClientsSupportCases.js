@@ -57,6 +57,24 @@ const ActiveClientsSupportCases = () => {
 		});
 	};
 
+	const sortSupportCases = useCallback(
+		(cases) => {
+			return [...cases].sort((a, b) => {
+				const latestMessageA =
+					a.conversation
+						.filter((msg) => msg.messageBy.userId !== user._id)
+						.slice(-1)[0]?.date || a.createdAt;
+				const latestMessageB =
+					b.conversation
+						.filter((msg) => msg.messageBy.userId !== user._id)
+						.slice(-1)[0]?.date || b.createdAt;
+
+				return new Date(latestMessageB) - new Date(latestMessageA); // Descending order
+			});
+		},
+		[user._id]
+	);
+
 	// Memoize fetchSupportCases to avoid re-creation
 	const fetchSupportCases = useCallback(() => {
 		getFilteredSupportCasesClients(token)
@@ -65,9 +83,8 @@ const ActiveClientsSupportCases = () => {
 					toast.error("Failed to fetch support cases");
 				} else {
 					const openCases = data.filter((chat) => chat.caseStatus !== "closed");
-					setSupportCases(openCases);
+					setSupportCases(sortSupportCases(openCases));
 
-					// Calculate unseen messages by admin
 					const unseenMessages = openCases.reduce((acc, supportCase) => {
 						return (
 							acc +
@@ -80,16 +97,22 @@ const ActiveClientsSupportCases = () => {
 			.catch(() => {
 				toast.error("Failed to fetch support cases");
 			});
-	}, [token]);
+	}, [token, sortSupportCases]);
 
 	useEffect(() => {
 		fetchSupportCases();
 
 		// Handle new message received event
 		const handleReceiveMessage = (message) => {
-			if (message && message.messageBy && message.messageBy.customerName) {
-				playNotificationSound(); // Play notification sound
-				fetchSupportCases(); // Refresh the support cases list
+			if (message && message.caseId) {
+				playNotificationSound();
+				setSupportCases((prevCases) =>
+					prevCases.map((c) =>
+						c._id === message.caseId
+							? { ...c, conversation: [...c.conversation, message] }
+							: c
+					)
+				);
 			}
 		};
 
@@ -125,9 +148,17 @@ const ActiveClientsSupportCases = () => {
 
 	// Mark messages as seen by admin
 	const handleCaseSelection = async (selectedCase) => {
+		// Leave the previous room if a case was already selected
+		if (selectedCase && selectedCase._id) {
+			socket.emit("leaveRoom", { caseId: selectedCase._id });
+		}
+
 		setSelectedCase(selectedCase);
 
 		if (selectedCase) {
+			// Join the new room for the selected case
+			socket.emit("joinRoom", { caseId: selectedCase._id });
+
 			try {
 				await markAllMessagesAsSeenByAdmin(selectedCase._id, user._id);
 				socket.emit("messageSeen", {

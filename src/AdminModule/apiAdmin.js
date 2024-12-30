@@ -358,6 +358,23 @@ export const updateSeenByCustomer = async (caseId) => {
 		});
 };
 
+export const deleteSpecificMessage = async (caseId, messageId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/support-cases/${caseId}/messages/${messageId}`,
+		{
+			method: "DELETE",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.error("API error: ", err);
+		});
+};
+
 // Fetch unseen messages by Super Admin or PMS Owner
 export const getUnseenMessagesCountByAdmin = async (userId) => {
 	return fetch(
