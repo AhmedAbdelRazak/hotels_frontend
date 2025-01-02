@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { Form, Input, Button, Select, message, Modal, Checkbox } from "antd";
+import {
+	Form,
+	Input,
+	Button,
+	Select,
+	message,
+	Modal,
+	Checkbox,
+	Switch,
+} from "antd";
 import styled from "styled-components";
 import ImageCardMain from "./ImageCardMain";
 import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
@@ -196,6 +205,17 @@ const ZCase0 = ({
 			setMarkerPosition({ lat: 24.7136, lng: 46.6753 });
 		}
 		setLocationModalVisible(true);
+	};
+
+	// Handle toggle for guestPaymentAcceptance switches
+	const handleSwitchChange = (key, value) => {
+		setHotelDetails((prevDetails) => ({
+			...prevDetails,
+			guestPaymentAcceptance: {
+				...prevDetails.guestPaymentAcceptance,
+				[key]: value,
+			},
+		}));
 	};
 
 	return (
@@ -440,6 +460,73 @@ const ZCase0 = ({
 						</GoogleMap>
 					</LoadScript>
 				</Modal>
+
+				<div
+					className='row'
+					style={{
+						display: "flex",
+						marginBottom: "30px",
+						marginTop: "10px",
+						gap: "20px",
+					}}
+				>
+					<h5
+						className='mx-4'
+						style={{
+							fontWeight: "bold",
+							color: "darkred",
+							fontSize: "1.1rem",
+							textDecoration: "underline",
+						}}
+					>
+						{chosenLanguage === "Arabic"
+							? "إعدادات الدفع للضيوف"
+							: "Payment Settings For Guests"}
+					</h5>
+
+					<div>
+						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
+							{chosenLanguage === "Arabic"
+								? "قبول العربون أونلاين"
+								: "Accept Deposit Online"}
+						</span>
+						<Switch
+							className='mx-1'
+							checked={hotelDetails.guestPaymentAcceptance.acceptDeposit}
+							onChange={(value) => handleSwitchChange("acceptDeposit", value)}
+						/>
+					</div>
+					<div>
+						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
+							{chosenLanguage === "Arabic"
+								? "ادفع المبلغ الإجمالي أونلاين"
+								: "Pay Whole Amount Online"}
+						</span>
+						<Switch
+							className='mx-1'
+							checked={hotelDetails.guestPaymentAcceptance.acceptPayWholeAmount}
+							onChange={(value) =>
+								handleSwitchChange("acceptPayWholeAmount", value)
+							}
+						/>
+					</div>
+					<div>
+						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
+							{chosenLanguage === "Arabic"
+								? "احجز الآن وادفع في الفندق"
+								: "Reserve Now, Pay Later..."}
+						</span>
+						<Switch
+							className='mx-1'
+							checked={
+								hotelDetails.guestPaymentAcceptance.acceptReserveNowPayInHotel
+							}
+							onChange={(value) =>
+								handleSwitchChange("acceptReserveNowPayInHotel", value)
+							}
+						/>
+					</div>
+				</div>
 
 				<h4 style={{ fontSize: "1.3rem", fontWeight: "bold" }} className='mt-3'>
 					{chosenLanguage === "Arabic"
