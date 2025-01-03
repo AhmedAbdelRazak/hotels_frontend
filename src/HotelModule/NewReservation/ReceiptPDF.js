@@ -106,6 +106,11 @@ const ReceiptPDF = forwardRef(
 							{reservation &&
 								reservation.pickedRoomsType &&
 								reservation.pickedRoomsType.map((i) => i.room_type + ", ")}
+							<div>
+								{reservation &&
+									reservation.pickedRoomsType &&
+									reservation.pickedRoomsType.map((i) => i.displayName + ", ")}
+							</div>
 						</div>
 						<div className='col-md-2 tableBody'>
 							{calculateReservationPeriod(
@@ -124,7 +129,7 @@ const ReceiptPDF = forwardRef(
 										Number(reservation.sub_total)
 								).toLocaleString()
 								? Number(reservation.sub_total).toLocaleString()
-								: Number(reservation.total_amount)}{" "}
+								: Number(reservation.total_amount).toFixed(2)}{" "}
 							SAR
 						</div>
 
@@ -170,7 +175,7 @@ const ReceiptPDF = forwardRef(
 						</span>{" "}
 						Hotel
 						<div>
-							For better rates next time, please check https://janatbooking.com
+							For better rates next time, please check https://jannatbooking.com
 						</div>
 					</div>
 				</div>

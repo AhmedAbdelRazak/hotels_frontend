@@ -40,6 +40,12 @@ const PaymentTrigger = ({ reservation }) => {
 		}
 	};
 
+	// Disable button conditions
+	const isDisabled =
+		reservation.payment === "paid online" ||
+		reservation.reservation_status === "cancelled" ||
+		reservation.payment_details?.captured;
+
 	return (
 		<PaymentTriggerWrapper>
 			<h3>Trigger Payment</h3>
@@ -50,7 +56,7 @@ const PaymentTrigger = ({ reservation }) => {
 			</p>
 			<Button
 				onClick={handlePaymentTrigger}
-				disabled={loading}
+				disabled={loading || isDisabled}
 				success={"Payment captured successfully!" === message}
 			>
 				{loading ? "Processing..." : "Capture Payment"}
@@ -94,6 +100,5 @@ const Button = styled.button`
 const Message = styled.p`
 	margin-top: 10px;
 	color: ${(props) => (props.success ? "green" : "red")};
-
 	font-weight: bold;
 `;

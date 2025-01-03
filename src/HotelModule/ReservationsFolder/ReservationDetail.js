@@ -690,7 +690,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													}}
 													onClick={() => {
 														setLinkGenerated(
-															`https://xhotelpro.com/client-payment/${
+															`${process.env.REACT_APP_MAIN_URL_JANNAT}/${
 																reservation._id
 															}/${reservation._id}/${reservation._id}/${
 																hotelDetails.hotelName
@@ -763,7 +763,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													}}
 													onClick={() => {
 														setLinkGenerated(
-															`https://xhotelpro.com/client-payment/${
+															`${process.env.REACT_APP_MAIN_URL_JANNAT}/${
 																reservation._id
 															}/${reservation._id}/${reservation._id}/${
 																hotelDetails.hotelName

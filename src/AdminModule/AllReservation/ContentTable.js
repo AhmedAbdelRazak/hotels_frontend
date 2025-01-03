@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import styled from "styled-components";
-import { Table, Input, Button, Space, Modal } from "antd";
+import { Table, Input, Button, Space, Modal, Tooltip } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import MoreDetails from "./MoreDetails";
 import ScoreCards from "./ScoreCards";
+// eslint-disable-next-line
+import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 
 const ContentTable = ({
 	allReservationsForAdmin,
@@ -14,7 +16,7 @@ const ContentTable = ({
 }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
-	const [filterType, setFilterType] = useState(""); // New state for filter type
+	const [filterType, setFilterType] = useState("");
 	const capturedConfirmationNumbers = ["2944008828"];
 	const reservations = allReservationsForAdmin?.data || [];
 	const totalDocuments = allReservationsForAdmin?.totalDocuments || 0;
@@ -33,23 +35,23 @@ const ContentTable = ({
 
 		return {
 			...reservation,
-			index: index + 1 + (currentPage - 1) * pageSize, // Calculate the index
+			index: index + 1 + (currentPage - 1) * pageSize,
 			customer_name: customer_details.name || "N/A",
 			customer_phone: customer_details.phone || "N/A",
 			customer_email: customer_details.email || "N/A",
 			hotel_name: hotelId.hotelName || "Unknown Hotel",
-			payment_status: isCaptured ? "Captured" : "Not Captured", // Add Payment Status
+			payment_status: isCaptured ? "Captured" : "Not Captured",
 			isCheckinToday:
 				new Date(reservation.checkin_date).toDateString() ===
 				new Date().toDateString(),
 			isCheckoutToday:
 				new Date(reservation.checkout_date).toDateString() ===
 				new Date().toDateString(),
-			isPaymentTriggered: !!payment_details.capturing || isCaptured, // Check if payment is triggered
+			total_amount: reservation.total_amount || 0,
+			isPaymentTriggered: !!payment_details.capturing || isCaptured,
 		};
 	});
 
-	// Filter data based on filterType
 	const filteredReservations = formattedReservations.filter((reservation) => {
 		if (filterType === "checkinToday") return reservation.isCheckinToday;
 		if (filterType === "checkoutToday") return reservation.isCheckoutToday;
@@ -57,10 +59,9 @@ const ContentTable = ({
 			return reservation.isPaymentTriggered;
 		if (filterType === "paymentNotTriggered")
 			return !reservation.isPaymentTriggered;
-		return true; // Show all if no filter is applied
+		return true;
 	});
 
-	// Generic search filter with case-insensitive matching
 	const getColumnSearchProps = (dataIndex) => ({
 		filterDropdown: ({
 			setSelectedKeys,
@@ -110,21 +111,15 @@ const ContentTable = ({
 				: false,
 	});
 
-	// Function to handle clicking on a hotel name
 	const handleHotelClick = (hotel) => {
-		// console.log(hotel, "hotel");
-
 		const hotelDetailsFinal = {
 			...hotel.hotelId,
 			belongsTo: hotel.belongsTo,
 		};
 		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
-
-		// Redirect to the dashboard
 		window.location.href = `/hotel-management/new-reservation/${hotel.belongsTo._id}/${hotel.hotelId._id}?list`;
 	};
 
-	// Show Modal with selected reservation details
 	const showDetailsModal = (record) => {
 		setSelectedReservation(record);
 		setIsModalVisible(true);
@@ -135,83 +130,125 @@ const ContentTable = ({
 		setSelectedReservation(null);
 	};
 
-	// Handle button click to toggle filters
 	const handleFilterClick = (type) => {
 		setFilterType((prevType) => (prevType === type ? "" : type));
 	};
 
-	// Define columns for the table
 	const columns = [
 		{
-			title: "Index",
+			title: <Tooltip title='Index'>Index</Tooltip>,
 			dataIndex: "index",
 			key: "index",
 		},
 		{
-			title: "Confirmation Number",
+			title: <Tooltip title='Confirmation Number'>Confirmation Number</Tooltip>,
 			dataIndex: "confirmation_number",
 			key: "confirmation_number",
 			sorter: (a, b) =>
 				a.confirmation_number.localeCompare(b.confirmation_number),
 			...getColumnSearchProps("confirmation_number"),
+			render: (text) => (
+				<Tooltip title={text} placement='top'>
+					<span
+						style={{
+							whiteSpace: "nowrap",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							display: "block",
+						}}
+					>
+						{text}
+					</span>
+				</Tooltip>
+			),
 		},
 		{
-			title: "Customer Name",
+			title: <Tooltip title='Customer Name'>Customer Name</Tooltip>,
 			dataIndex: "customer_name",
 			key: "customer_name",
 			...getColumnSearchProps("customer_name"),
+			render: (text) => (
+				<Tooltip title={text} placement='top'>
+					<span
+						style={{
+							whiteSpace: "nowrap",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							display: "block",
+						}}
+					>
+						{text}
+					</span>
+				</Tooltip>
+			),
 		},
 		{
-			title: "Phone",
+			title: <Tooltip title='Phone'>Phone</Tooltip>,
 			dataIndex: "customer_phone",
 			key: "customer_phone",
 			...getColumnSearchProps("customer_phone"),
+			render: (text) => (
+				<Tooltip title={text} placement='top'>
+					<span
+						style={{
+							whiteSpace: "nowrap",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							display: "block",
+						}}
+					>
+						{text}
+					</span>
+				</Tooltip>
+			),
 		},
 		{
-			title: "Hotel Name",
-			dataIndex: "hotel_name", // Preprocessed field
+			title: <Tooltip title='Hotel Name'>Hotel Name</Tooltip>,
+			dataIndex: "hotel_name",
 			key: "hotel_name",
-			...getColumnSearchProps("hotel_name"), // Keep the search props
+			...getColumnSearchProps("hotel_name"),
 			render: (text, record) => (
-				<span
-					style={{
-						textTransform: "capitalize",
-						color: "blue",
-						cursor: "pointer",
-						textDecoration: "underline",
-					}}
-					onClick={() => handleHotelClick(record)} // Add the click handler
-				>
-					{text}
-				</span>
-			), // Make the hotel name clickable
-		},
-
-		{
-			title: "Check-in Date",
-			dataIndex: "checkin_date",
-			key: "checkin_date",
-			sorter: (a, b) => new Date(a.checkin_date) - new Date(b.checkin_date),
-			render: (text) => new Date(text).toLocaleDateString(),
+				<Tooltip title={text} placement='top'>
+					<span
+						style={{
+							textTransform: "capitalize",
+							color: "blue",
+							cursor: "pointer",
+							textDecoration: "underline",
+							whiteSpace: "nowrap",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							display: "block",
+						}}
+						onClick={() => handleHotelClick(record)}
+					>
+						{text}
+					</span>
+				</Tooltip>
+			),
 		},
 		{
-			title: "Check-out Date",
-			dataIndex: "checkout_date",
-			key: "checkout_date",
-			sorter: (a, b) => new Date(a.checkout_date) - new Date(b.checkout_date),
-			render: (text) => new Date(text).toLocaleDateString(),
-		},
-		{
-			title: "Payment",
-			dataIndex: "payment_status",
-			key: "payment_status",
+			title: <Tooltip title='Reservation Status'>Reservation Status</Tooltip>,
+			dataIndex: "reservation_status",
+			key: "reservation_status",
 			render: (text) => (
 				<span
 					style={{
-						backgroundColor: text === "Captured" ? "#d4edda" : undefined, // Light green for captured payments
-						color: text === "Captured" ? "#155724" : undefined,
+						backgroundColor:
+							text === "cancelled"
+								? "darkred"
+								: text === "not paid"
+								  ? "#222222"
+								  : undefined,
+						color:
+							text === "cancelled" || text === "not paid" ? "white" : undefined,
 						padding: "5px 10px",
 						borderRadius: "5px",
+						whiteSpace: "nowrap",
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+						display: "block",
+						textTransform: "capitalize",
 					}}
 				>
 					{text}
@@ -219,7 +256,61 @@ const ContentTable = ({
 			),
 		},
 		{
-			title: "Details",
+			title: <Tooltip title='Check-in Date'>Check-in Date</Tooltip>,
+			dataIndex: "checkin_date",
+			key: "checkin_date",
+			sorter: (a, b) => new Date(a.checkin_date) - new Date(b.checkin_date),
+			render: (text) => new Date(text).toLocaleDateString(),
+		},
+		{
+			title: <Tooltip title='Check-out Date'>Check-out Date</Tooltip>,
+			dataIndex: "checkout_date",
+			key: "checkout_date",
+			sorter: (a, b) => new Date(a.checkout_date) - new Date(b.checkout_date),
+			render: (text) => new Date(text).toLocaleDateString(),
+		},
+		{
+			title: <Tooltip title='Payment'>Payment</Tooltip>,
+			dataIndex: "payment_status",
+			key: "payment_status",
+			render: (text) => (
+				<span
+					style={{
+						backgroundColor: text === "Captured" ? "#d4edda" : undefined,
+						color: text === "Captured" ? "#155724" : undefined,
+						padding: "5px 10px",
+						borderRadius: "5px",
+						whiteSpace: "nowrap",
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+						display: "block",
+					}}
+				>
+					{text}
+				</span>
+			),
+		},
+		{
+			title: <Tooltip title='Total Amount'>Total Amount</Tooltip>,
+			dataIndex: "total_amount",
+			key: "total_amount",
+			render: (text) => (
+				<Tooltip title={text} placement='top'>
+					<span
+						style={{
+							whiteSpace: "nowrap",
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							display: "block",
+						}}
+					>
+						{Number(text).toFixed(2)} SAR
+					</span>
+				</Tooltip>
+			),
+		},
+		{
+			title: <Tooltip title='Details'>Details</Tooltip>,
 			key: "details",
 			render: (_, record) => (
 				<Button type='link' onClick={() => showDetailsModal(record)}>
@@ -229,7 +320,6 @@ const ContentTable = ({
 		},
 	];
 
-	// Handle table pagination and sorting
 	const handleTableChange = (pagination, filters, sorter) => {
 		setCurrentPage(pagination.current);
 		setPageSize(pagination.pageSize);
@@ -248,7 +338,6 @@ const ContentTable = ({
 				<div>No Reservation</div>
 			)}
 
-			{/* Filter Bar */}
 			<div style={{ marginBottom: 16 }}>
 				<Space>
 					<FilterButton
@@ -293,10 +382,11 @@ const ContentTable = ({
 				}}
 				onChange={handleTableChange}
 				bordered
+				rowClassName={() => "custom-row-height"}
 			/>
 
 			<Modal
-				title='Reservation Details'
+				// title={<div style={{ fontSize: "1.5rem" }}>Reservation Details</div>}
 				open={isModalVisible}
 				onCancel={handleModalClose}
 				className='float-right'
@@ -307,7 +397,28 @@ const ContentTable = ({
 					</Button>,
 				]}
 			>
-				<MoreDetails selectedReservation={selectedReservation} />
+				<>
+					{selectedReservation &&
+					selectedReservation.hotelId &&
+					selectedReservation.hotelId.hotelName ? (
+						<MoreDetails
+							selectedReservation={selectedReservation}
+							hotelDetails={selectedReservation.hotelId}
+							reservation={selectedReservation}
+							setReservation={setSelectedReservation}
+						/>
+					) : null}
+				</>
+
+				{/* {selectedReservation &&
+				selectedReservation.hotelId &&
+				selectedReservation.hotelId.hotelName ? (
+					<ReservationDetail
+						reservation={selectedReservation}
+						setReservation={setSelectedReservation}
+						hotelDetails={selectedReservation.hotelId}
+					/>
+				) : null} */}
 			</Modal>
 		</ContentTableWrapper>
 	);
@@ -319,9 +430,20 @@ const ContentTableWrapper = styled.div`
 	.ant-table {
 		border-radius: 10px;
 		overflow: hidden;
+		font-size: 12px;
+	}
+
+	.th {
+		font-size: 12px;
+		font-weight: bold !important;
 	}
 	.ant-pagination {
 		margin-top: 16px;
+	}
+	.custom-row-height .ant-table-cell {
+		height: auto !important;
+		line-height: 1.5 !important; /* Adjust line-height to align with the text */
+		padding: 8px !important; /* Ensure consistent padding */
 	}
 `;
 
