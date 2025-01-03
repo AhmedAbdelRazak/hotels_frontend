@@ -110,6 +110,20 @@ const ContentTable = ({
 				: false,
 	});
 
+	// Function to handle clicking on a hotel name
+	const handleHotelClick = (hotel) => {
+		// console.log(hotel, "hotel");
+
+		const hotelDetailsFinal = {
+			...hotel.hotelId,
+			belongsTo: hotel.belongsTo,
+		};
+		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
+
+		// Redirect to the dashboard
+		window.location.href = `/hotel-management/new-reservation/${hotel.belongsTo._id}/${hotel.hotelId._id}?list`;
+	};
+
 	// Show Modal with selected reservation details
 	const showDetailsModal = (record) => {
 		setSelectedReservation(record);
@@ -155,10 +169,24 @@ const ContentTable = ({
 		},
 		{
 			title: "Hotel Name",
-			dataIndex: "hotel_name",
+			dataIndex: "hotel_name", // Preprocessed field
 			key: "hotel_name",
-			...getColumnSearchProps("hotel_name"),
+			...getColumnSearchProps("hotel_name"), // Keep the search props
+			render: (text, record) => (
+				<span
+					style={{
+						textTransform: "capitalize",
+						color: "blue",
+						cursor: "pointer",
+						textDecoration: "underline",
+					}}
+					onClick={() => handleHotelClick(record)} // Add the click handler
+				>
+					{text}
+				</span>
+			), // Make the hotel name clickable
 		},
+
 		{
 			title: "Check-in Date",
 			dataIndex: "checkin_date",
