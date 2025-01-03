@@ -1,5 +1,6 @@
 import React from "react";
 import styled from "styled-components";
+import PaymentTrigger from "./PaymentTrigger";
 
 const MoreDetails = ({ selectedReservation }) => {
 	return (
@@ -31,6 +32,8 @@ const MoreDetails = ({ selectedReservation }) => {
 						<strong>Created At:</strong>{" "}
 						{new Date(selectedReservation.createdAt).toLocaleDateString()}
 					</p>
+
+					<PaymentTrigger reservation={selectedReservation} />
 				</div>
 			)}
 		</MoreDetailsWrapper>

@@ -14,22 +14,50 @@ const ContentTable = ({
 }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
-
+	const [filterType, setFilterType] = useState(""); // New state for filter type
+	const capturedConfirmationNumbers = ["2944008828"];
 	const reservations = allReservationsForAdmin?.data || [];
 	const totalDocuments = allReservationsForAdmin?.totalDocuments || 0;
 
 	// Preprocess data to ensure all fields are properly accessible
 	const formattedReservations = reservations.map((reservation, index) => {
-		const { customer_details = {}, hotelId = {} } = reservation; // Default to empty objects if missing
+		const {
+			customer_details = {},
+			hotelId = {},
+			payment_details = {},
+		} = reservation;
+
+		const isCaptured =
+			payment_details.captured ||
+			capturedConfirmationNumbers.includes(reservation.confirmation_number);
+
 		return {
 			...reservation,
 			index: index + 1 + (currentPage - 1) * pageSize, // Calculate the index
-			customer_name: customer_details.name || "N/A", // Fallback to "N/A" if missing
+			customer_name: customer_details.name || "N/A",
 			customer_phone: customer_details.phone || "N/A",
 			customer_email: customer_details.email || "N/A",
-			hotel_name: hotelId.hotelName || "Unknown Hotel", // Extract hotelName from hotelId
-			hotel_belongs_to: hotelId.belongsTo || {}, // Add belongsTo for redirection
+			hotel_name: hotelId.hotelName || "Unknown Hotel",
+			payment_status: isCaptured ? "Captured" : "Not Captured", // Add Payment Status
+			isCheckinToday:
+				new Date(reservation.checkin_date).toDateString() ===
+				new Date().toDateString(),
+			isCheckoutToday:
+				new Date(reservation.checkout_date).toDateString() ===
+				new Date().toDateString(),
+			isPaymentTriggered: !!payment_details.capturing || isCaptured, // Check if payment is triggered
 		};
+	});
+
+	// Filter data based on filterType
+	const filteredReservations = formattedReservations.filter((reservation) => {
+		if (filterType === "checkinToday") return reservation.isCheckinToday;
+		if (filterType === "checkoutToday") return reservation.isCheckoutToday;
+		if (filterType === "paymentTriggered")
+			return reservation.isPaymentTriggered;
+		if (filterType === "paymentNotTriggered")
+			return !reservation.isPaymentTriggered;
+		return true; // Show all if no filter is applied
 	});
 
 	// Generic search filter with case-insensitive matching
@@ -82,20 +110,6 @@ const ContentTable = ({
 				: false,
 	});
 
-	// Function to handle clicking on a hotel name
-	const handleHotelClick = (hotel) => {
-		// console.log(hotel, "hotel");
-
-		const hotelDetailsFinal = {
-			...hotel.hotelId,
-			belongsTo: hotel.belongsTo,
-		};
-		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
-
-		// Redirect to the dashboard
-		window.location.href = `/hotel-management/new-reservation/${hotel.belongsTo._id}/${hotel.hotelId._id}?list`;
-	};
-
 	// Show Modal with selected reservation details
 	const showDetailsModal = (record) => {
 		setSelectedReservation(record);
@@ -107,13 +121,17 @@ const ContentTable = ({
 		setSelectedReservation(null);
 	};
 
+	// Handle button click to toggle filters
+	const handleFilterClick = (type) => {
+		setFilterType((prevType) => (prevType === type ? "" : type));
+	};
+
 	// Define columns for the table
 	const columns = [
 		{
 			title: "Index",
 			dataIndex: "index",
 			key: "index",
-			render: (_, __, index) => index + 1 + (currentPage - 1) * pageSize, // Dynamic index based on current page
 		},
 		{
 			title: "Confirmation Number",
@@ -125,55 +143,52 @@ const ContentTable = ({
 		},
 		{
 			title: "Customer Name",
-			dataIndex: "customer_name", // Preprocessed field
+			dataIndex: "customer_name",
 			key: "customer_name",
 			...getColumnSearchProps("customer_name"),
 		},
 		{
 			title: "Phone",
-			dataIndex: "customer_phone", // Preprocessed field
+			dataIndex: "customer_phone",
 			key: "customer_phone",
 			...getColumnSearchProps("customer_phone"),
 		},
 		{
 			title: "Hotel Name",
-			dataIndex: "hotel_name", // Preprocessed field
+			dataIndex: "hotel_name",
 			key: "hotel_name",
 			...getColumnSearchProps("hotel_name"),
-			render: (text, record) => (
-				<span
-					style={{
-						textTransform: "capitalize",
-						color: "blue",
-						cursor: "pointer",
-						textDecoration: "underline",
-					}}
-					onClick={() => handleHotelClick(record)}
-				>
-					{text}
-				</span>
-			), // Make the hotel name clickable
 		},
 		{
 			title: "Check-in Date",
 			dataIndex: "checkin_date",
 			key: "checkin_date",
 			sorter: (a, b) => new Date(a.checkin_date) - new Date(b.checkin_date),
-			render: (text) => new Date(text).toLocaleDateString(), // Format date
+			render: (text) => new Date(text).toLocaleDateString(),
 		},
 		{
 			title: "Check-out Date",
 			dataIndex: "checkout_date",
 			key: "checkout_date",
 			sorter: (a, b) => new Date(a.checkout_date) - new Date(b.checkout_date),
-			render: (text) => new Date(text).toLocaleDateString(), // Format date
+			render: (text) => new Date(text).toLocaleDateString(),
 		},
 		{
-			title: "Created At",
-			dataIndex: "createdAt",
-			key: "createdAt",
-			sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
-			render: (text) => new Date(text).toLocaleDateString(), // Format date
+			title: "Payment",
+			dataIndex: "payment_status",
+			key: "payment_status",
+			render: (text) => (
+				<span
+					style={{
+						backgroundColor: text === "Captured" ? "#d4edda" : undefined, // Light green for captured payments
+						color: text === "Captured" ? "#155724" : undefined,
+						padding: "5px 10px",
+						borderRadius: "5px",
+					}}
+				>
+					{text}
+				</span>
+			),
 		},
 		{
 			title: "Details",
@@ -190,7 +205,6 @@ const ContentTable = ({
 	const handleTableChange = (pagination, filters, sorter) => {
 		setCurrentPage(pagination.current);
 		setPageSize(pagination.pageSize);
-		console.log("Sorter:", sorter); // Optional: Use this for backend sorting if needed
 	};
 
 	return (
@@ -206,11 +220,41 @@ const ContentTable = ({
 				<div>No Reservation</div>
 			)}
 
+			{/* Filter Bar */}
+			<div style={{ marginBottom: 16 }}>
+				<Space>
+					<FilterButton
+						onClick={() => handleFilterClick("checkinToday")}
+						isActive={filterType === "checkinToday"}
+					>
+						Check-in Today
+					</FilterButton>
+					<FilterButton
+						onClick={() => handleFilterClick("checkoutToday")}
+						isActive={filterType === "checkoutToday"}
+					>
+						Check-out Today
+					</FilterButton>
+					<FilterButton
+						onClick={() => handleFilterClick("paymentTriggered")}
+						isActive={filterType === "paymentTriggered"}
+					>
+						Payment Triggered
+					</FilterButton>
+					<FilterButton
+						onClick={() => handleFilterClick("paymentNotTriggered")}
+						isActive={filterType === "paymentNotTriggered"}
+					>
+						Payment Not Triggered
+					</FilterButton>
+				</Space>
+			</div>
+
 			<Table
 				columns={columns}
-				dataSource={formattedReservations.map((reservation) => ({
+				dataSource={filteredReservations.map((reservation) => ({
 					...reservation,
-					key: reservation._id, // Use _id as unique key for each row
+					key: reservation._id,
 				}))}
 				pagination={{
 					current: currentPage,
@@ -222,6 +266,7 @@ const ContentTable = ({
 				onChange={handleTableChange}
 				bordered
 			/>
+
 			<Modal
 				title='Reservation Details'
 				open={isModalVisible}
@@ -250,4 +295,10 @@ const ContentTableWrapper = styled.div`
 	.ant-pagination {
 		margin-top: 16px;
 	}
+`;
+
+const FilterButton = styled(Button)`
+	background-color: ${(props) => (props.isActive ? "#d4edda" : undefined)};
+	color: ${(props) => (props.isActive ? "#155724" : undefined)};
+	border-color: ${(props) => (props.isActive ? "#d4edda" : undefined)};
 `;

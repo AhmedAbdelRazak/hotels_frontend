@@ -560,3 +560,55 @@ export const getAllReservationForAdmin = (
 		})
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
+
+export const updatePaymentToken = (
+	userId,
+	token,
+	reservationId,
+	newTokenId
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/update-payment-token/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json", // Specify content type
+				Authorization: `Bearer ${token}`, // Add the token here
+			},
+			body: JSON.stringify({
+				reservationId, // Reservation ID to update
+				newTokenId, // New tokenized payment ID
+			}),
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error updating payment token:", err));
+};
+
+export const triggerPayment = (userId, token, reservationId, amount) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/create-payment/${userId}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json", // Specify content type
+			Authorization: `Bearer ${token}`, // Add the token here
+		},
+		body: JSON.stringify({
+			reservationId, // Reservation ID to charge
+			amount, // Amount to charge
+		}),
+	})
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error triggering payment:", err));
+};
