@@ -9,27 +9,28 @@ import {
 	MessageOutlined,
 	SettingOutlined,
 	GlobalOutlined,
+	CalendarOutlined,
 } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import DigitalClock from "./DigitalClock";
 import { isAuthenticated, signout } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
 
-const TopNavbar = ({ collapsed }) => {
+const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [dropdownVisible, setDropdownVisible] = useState(false);
 	const { languageToggle, chosenLanguage } = useCartContext();
 	const [hotelName, setHotelName] = useState("");
+	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
 
 	const location = useLocation();
 	const history = useHistory();
 	const { user } = isAuthenticated();
 
-	useEffect(() => {
-		const selectedHotel =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userId = user._id;
-		const hotelId = selectedHotel._id;
+	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+	const hotelId = selectedHotel._id;
 
+	useEffect(() => {
 		const pathContainsUserIdAndHotelId =
 			location.pathname.includes(userId) && location.pathname.includes(hotelId);
 		if (pathContainsUserIdAndHotelId) {
@@ -37,7 +38,7 @@ const TopNavbar = ({ collapsed }) => {
 		} else {
 			setHotelName("");
 		}
-	}, [location, user]);
+	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
 	const handleMenuClick = ({ key }) => {
 		if (key === "profile" && user.role === 2000) {
@@ -67,6 +68,25 @@ const TopNavbar = ({ collapsed }) => {
 			<Menu.Item key='logout' icon={<LogoutOutlined />}>
 				Logout
 			</Menu.Item>
+		</Menu>
+	);
+
+	const handleRoomClick = ({ key }) => {
+		setRoomTypesDropdown(false);
+
+		window.location.href = `
+/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
+	};
+
+	const menuRoomTypes = (
+		<Menu onClick={handleRoomClick}>
+			{roomCountDetails && roomCountDetails.length > 0 ? (
+				roomCountDetails.map((room) => (
+					<Menu.Item key={room._id}>{room.displayName}</Menu.Item>
+				))
+			) : (
+				<Menu.Item disabled>No rooms available</Menu.Item>
+			)}
 		</Menu>
 	);
 
@@ -107,7 +127,7 @@ const TopNavbar = ({ collapsed }) => {
 			<LeftSection>
 				<Logo show={collapsed} isArabic2={chosenLanguage === "Arabic"}>
 					<img
-						src='https://res.cloudinary.com/infiniteapps/image/upload/v1719970937/janat/1719970937849.png'
+						src='https://res.cloudinary.com/infiniteapps/image/upload/v1732323307/janat/1732323307087.png'
 						alt='jannatbooking'
 						style={{ width: "200px" }}
 					/>
@@ -136,6 +156,23 @@ const TopNavbar = ({ collapsed }) => {
 					</IconWrapper>
 					<IconWrapper onClick={handleSettingsClick}>
 						<SettingOutlined />
+					</IconWrapper>
+
+					<IconWrapper style={{ width: "25%" }}>
+						<Dropdown
+							overlay={menuRoomTypes}
+							trigger={["click"]}
+							open={roomTypesDropdown}
+							onOpenChange={(flag) => setRoomTypesDropdown(flag)}
+						>
+							<div style={{ display: "flex", alignItems: "center" }}>
+								<CalendarOutlined
+									className='mx-2'
+									style={{ color: "#eecccc" }}
+								/>
+								<LanguageText2>Calendar</LanguageText2>
+							</div>
+						</Dropdown>
 					</IconWrapper>
 					<IconWrapper
 						className='w-25'
@@ -202,6 +239,11 @@ const Logo = styled.div`
 	align-items: center;
 	margin-right: ${(props) =>
 		props.show && props.isArabic2 ? "50px" : ""} !important;
+
+	img {
+		width: 100% !important;
+		margin: auto 20px;
+	}
 `;
 
 const DigitalClockWrapper = styled.div`
@@ -232,7 +274,7 @@ const Icons = styled.div`
 	margin-right: ${(props) => (props.isArabic ? "" : "40px")} !important;
 
 	svg {
-		font-size: 25px; /* Icon font size */
+		font-size: 23px; /* Icon font size */
 		color: #fff;
 		cursor: pointer;
 	}
@@ -255,7 +297,15 @@ const IconWrapper = styled.div`
 const LanguageText = styled.span`
 	color: #fff;
 	margin-left: 5px;
-	font-size: 14px;
+	font-size: 15px;
+	font-weight: bolder;
+`;
+
+const LanguageText2 = styled.span`
+	color: #eecccc;
+	margin-left: 5px;
+	font-size: 15px;
+	font-weight: bolder;
 `;
 
 const NotificationDot = styled.div`

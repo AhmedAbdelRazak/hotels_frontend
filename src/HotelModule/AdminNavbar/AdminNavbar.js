@@ -57,6 +57,8 @@ const AdminNavbar = ({
 		: user._id;
 	const hotelId = selectedHotel._id;
 
+	const roomCountDetails = selectedHotel.roomCountDetails || [];
+
 	const toggleCollapsed = () => {
 		setCollapsed(!collapsed);
 		setAdminMenuStatus(!collapsed);
@@ -185,7 +187,10 @@ const AdminNavbar = ({
 
 	return (
 		<>
-			<TopNavbar chosenLanguage={chosenLanguage} />
+			<TopNavbar
+				chosenLanguage={chosenLanguage}
+				roomCountDetails={roomCountDetails}
+			/>
 			<AdminNavbarWrapper
 				show={collapsed}
 				show2={clickedOn}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useHistory } from "react-router-dom";
 import { Form, Button, message } from "antd";
 import styled from "styled-components";
 import ZUpdateCase1 from "./ZUpdateCase1";
@@ -53,6 +54,7 @@ const ZUpdateHotelDetailsForm2 = ({
 	const [rootPrice, setRootPrice] = useState("");
 	const calendarRef = useRef(null);
 	const [form] = Form.useForm();
+	const history = useHistory(); // Initialize history
 
 	const getColorForPrice = useCallback((price, dateRange) => {
 		const key = `${price}-${dateRange}`;
@@ -154,6 +156,15 @@ const ZUpdateHotelDetailsForm2 = ({
 					...prevDetails,
 					roomCountDetails: updatedRoomCountDetails,
 				}));
+
+				// Update the URL to include the selectedRoomType
+				const updatedUrl = `/hotel-management/settings/${
+					hotelDetails.belongsTo
+				}/${hotelDetails._id}?activeTab=roomcount&currentStep=${
+					currentStep + 1
+				}&selectedRoomType=${selectedRoomType}`;
+
+				history.push(updatedUrl); // Use history.push to navigate
 
 				setCurrentStep(currentStep + 1);
 			})

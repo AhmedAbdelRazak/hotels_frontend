@@ -35,6 +35,7 @@ const ZUpdateCase3 = ({
 	const [isBlocked, setIsBlocked] = useState(false);
 	const { user } = isAuthenticated();
 	// Helper function to truncate displayName to 10 characters followed by "..."
+	// eslint-disable-next-line
 	const truncateDisplayName = (name) => {
 		return name.length > 10 ? `${name.slice(0, 10)}...` : name;
 	};
@@ -131,7 +132,6 @@ const ZUpdateCase3 = ({
 
 		const roomType =
 			selectedRoomType === "other" ? customRoomType : selectedRoomType;
-		const fullDisplayName = form.getFieldValue("displayName");
 
 		const newPricingRates = generateDateRangeArray(
 			selectedDateRange[0],
@@ -140,13 +140,13 @@ const ZUpdateCase3 = ({
 			calendarDate: date.toISOString().split("T")[0],
 			room_type: roomType,
 			price: isBlocking ? 0 : pricingRate,
-			rootPrice: isBlocking ? 0 : rootPrice, // Include rootPrice
+			rootPrice: isBlocking ? 0 : rootPrice,
 			color: isBlocking
 				? "black"
 				: getColorForPrice(pricingRate, selectedDateRange.join("-")),
 		}));
 
-		// Update the roomCountDetails state with new pricing data
+		// Update the roomCountDetails state
 		setHotelDetails((prevDetails) => {
 			const updatedRoomCountDetails = [...prevDetails.roomCountDetails];
 
@@ -171,11 +171,9 @@ const ZUpdateCase3 = ({
 					...newPricingRates,
 				];
 			} else {
-				// If room doesn't exist, add it
 				updatedRoomCountDetails.push({
 					_id: existingRoomDetails._id,
 					roomType,
-					displayName: fullDisplayName,
 					pricingRate: newPricingRates,
 				});
 			}
@@ -186,21 +184,35 @@ const ZUpdateCase3 = ({
 			};
 		});
 
+		// Immediately update calendar after state update
 		const calendarApi = calendarRef.current.getApi();
-		newPricingRates.forEach((rate) => {
-			const existingEvents = calendarApi
-				.getEvents()
-				.filter((event) => event.startStr === rate.calendarDate);
-			existingEvents.forEach((event) => event.remove());
+		calendarApi.getEvents().forEach((event) => event.remove()); // Clear all events
 
-			calendarApi.addEvent({
-				title: `${truncateDisplayName(fullDisplayName)}: ${rate.price} SAR`,
-				start: rate.calendarDate,
-				end: rate.calendarDate,
-				allDay: true,
-				backgroundColor: rate.color,
-			});
+		const updatedEvents = newPricingRates.flatMap((rate) => {
+			const events = [
+				{
+					title: `Price: ${rate.price} SAR`,
+					start: rate.calendarDate,
+					end: rate.calendarDate,
+					allDay: true,
+					backgroundColor: rate.color,
+				},
+			];
+
+			if (rate.rootPrice && !isBlocking) {
+				events.push({
+					title: `Root: ${rate.rootPrice} SAR`,
+					start: rate.calendarDate,
+					end: rate.calendarDate,
+					allDay: true,
+					backgroundColor: rate.color,
+				});
+			}
+
+			return events;
 		});
+
+		updatedEvents.forEach((event) => calendarApi.addEvent(event));
 
 		handleCancelSelection();
 
@@ -252,7 +264,9 @@ const ZUpdateCase3 = ({
 	};
 
 	const renderEventContent = (eventInfo) => {
-		const [priceLabel, rootPriceLabel] = eventInfo.event.title.split(" | ");
+		const { title } = eventInfo.event;
+		const [priceLabel, rootLabel] = title.split(" | ");
+
 		return (
 			<div
 				style={{
@@ -260,30 +274,39 @@ const ZUpdateCase3 = ({
 					flexDirection: "column",
 					textAlign: "center",
 					fontSize: "0.75rem",
+					fontWeight: "bold",
 				}}
 			>
-				<div style={{ fontWeight: "bold" }}>{priceLabel}</div>
-				{rootPriceLabel && (
-					<>
-						{user && user.role === 1000 ? (
-							<div style={{ color: "white" }}>{rootPriceLabel}</div>
-						) : null}
-					</>
-				)}
+				{priceLabel && <div>{priceLabel}</div>}
+				{rootLabel && user?.role === 1000 && <div>{rootLabel}</div>}
 			</div>
 		);
 	};
 
 	const pricingEvents =
-		existingRoomDetails?.pricingRate?.map((rate) => ({
-			title: `${truncateDisplayName(existingRoomDetails.displayName)}: ${
-				rate.price
-			} SAR`,
-			start: rate.calendarDate,
-			end: rate.calendarDate,
-			allDay: true,
-			backgroundColor: rate.color || getColorForPrice(rate.price),
-		})) || [];
+		existingRoomDetails?.pricingRate?.flatMap((rate) => {
+			const events = [
+				{
+					title: `Price: ${rate.price} SAR`,
+					start: rate.calendarDate,
+					end: rate.calendarDate,
+					allDay: true,
+					backgroundColor: rate.color || getColorForPrice(rate.price),
+				},
+			];
+
+			if (rate.rootPrice && user.role === 1000) {
+				events.push({
+					title: `Root: ${rate.rootPrice} SAR`,
+					start: rate.calendarDate,
+					end: rate.calendarDate,
+					allDay: true,
+					backgroundColor: rate.color || getColorForPrice(rate.price),
+				});
+			}
+
+			return events;
+		}) || [];
 
 	return (
 		<ZUpdateCase3Wrapper

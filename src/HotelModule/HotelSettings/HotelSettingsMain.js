@@ -91,7 +91,15 @@ const HotelSettingsMain = () => {
 	useEffect(() => {
 		const searchParams = new URLSearchParams(window.location.search);
 		const step = searchParams.get("currentStep");
-		setCurrentStep(step ? parseInt(step, 10) : 0);
+		const roomType = searchParams.get("selectedRoomType");
+
+		// Set currentStep (default to 1 if not in params)
+		setCurrentStep(step ? parseInt(step, 10) : 1);
+
+		// Set selectedRoomType if it exists in the params
+		if (roomType) {
+			setSelectedRoomType(roomType);
+		}
 	}, []);
 
 	useEffect(() => {

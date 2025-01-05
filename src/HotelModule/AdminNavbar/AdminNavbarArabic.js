@@ -63,6 +63,8 @@ const AdminNavbarArabic = ({
 		: user._id;
 	const hotelId = selectedHotel._id;
 
+	const roomCountDetails = selectedHotel.roomCountDetails || [];
+
 	const items = [
 		getItem(
 			<Link to={`/hotel-management/dashboard/${userId}/${hotelId}`}>
@@ -186,7 +188,11 @@ const AdminNavbarArabic = ({
 
 	return (
 		<>
-			<TopNavbar chosenLanguage={chosenLanguage} collapsed={collapsed} />
+			<TopNavbar
+				chosenLanguage={chosenLanguage}
+				collapsed={collapsed}
+				roomCountDetails={roomCountDetails}
+			/>
 			<AdminNavbarWrapper
 				show={collapsed}
 				show2={clickedOn}
