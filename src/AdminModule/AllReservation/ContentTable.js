@@ -39,8 +39,13 @@ const ContentTable = ({
 			customer_name: customer_details.name || "N/A",
 			customer_phone: customer_details.phone || "N/A",
 			customer_email: customer_details.email || "N/A",
-			hotel_name: hotelId.hotelName || "Unknown Hotel",
-			payment_status: isCaptured ? "Captured" : "Not Captured",
+			hotel_name: (hotelId && hotelId.hotelName) || "Unknown Hotel",
+			payment_status:
+				reservation.payment === "not paid"
+					? "Not Paid"
+					: isCaptured
+					  ? "Captured"
+					  : "Not Captured",
 			isCheckinToday:
 				new Date(reservation.checkin_date).toDateString() ===
 				new Date().toDateString(),

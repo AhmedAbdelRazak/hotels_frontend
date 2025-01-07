@@ -338,9 +338,9 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 		pickedRoomsType.forEach((room) => {
 			if (room.pricingByDay && room.pricingByDay.length > 0) {
 				room.pricingByDay.forEach((day) => {
-					totalRootPrice += parseFloat(day.rootPrice);
+					totalRootPrice += parseFloat(day.rootPrice) * room.count; // Multiply by room count
 				});
-				totalDays += room.pricingByDay.length;
+				totalDays += room.pricingByDay.length * room.count; // Multiply days by room count
 			}
 		});
 
@@ -356,7 +356,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				const roomTotal = room.pricingByDay.reduce((dayTotal, day) => {
 					return dayTotal + parseFloat(day.rootPrice); // Sum rootPrice for all days
 				}, 0);
-				return total + roomTotal * room.count; // Multiply by roomCount
+				return total + roomTotal * room.count; // Multiply by room count
 			}
 			return total; // If no pricingByDay, just return total
 		}, 0);
@@ -683,17 +683,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 													}}
 													onClick={() => {
 														setLinkGenerated(
-															`${
-																process.env.REACT_APP_MAIN_URL_JANNAT
-															}/client-payment/${reservation._id}/${
-																reservation._id
-															}/${reservation._id}/${
-																hotelDetails.hotelName
-															}/roomTypes/${reservation._id}/${
-																reservation._id
-															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount
-															).toFixed(2)}`
+															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`
 														);
 													}}
 												>

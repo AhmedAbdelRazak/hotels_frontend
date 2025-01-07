@@ -5,6 +5,7 @@ import styled from "styled-components";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import ReservationCalculator from "./ReservationCalculator";
+import OrderTaker from "./OrderTaker";
 
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -123,8 +124,8 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 							)}
 							{activeTab === "reservations" && (
 								<div>
-									<h3>Reservations Tools</h3>
-									<p>This is the Reservations Tools content.</p>
+									<h3>Reservation Taker</h3>
+									<OrderTaker />
 								</div>
 							)}
 							{activeTab === "other" && (

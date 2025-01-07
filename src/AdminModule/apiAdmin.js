@@ -591,6 +591,24 @@ export const updatePaymentToken = (
 		.catch((err) => console.error("Error updating payment token:", err));
 };
 
+export const createNewReservationClient = async (reservationData) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/new-reservation-client-employee`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(reservationData), // This line was missing the body to send the request data
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.error("API error: ", err);
+		});
+};
+
 export const triggerPayment = (userId, token, reservationId, amount) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/create-payment/${userId}`, {
 		method: "POST",

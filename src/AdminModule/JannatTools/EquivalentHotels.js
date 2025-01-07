@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import styled from "styled-components";
 import { Table, Input, Button, Space } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 
 const EquivalentHotels = ({
 	checkInDate,
@@ -12,14 +13,92 @@ const EquivalentHotels = ({
 	// eslint-disable-next-line
 	const [searchedColumn, setSearchedColumn] = useState("");
 
-	// Calculate the number of nights
-	const nights = checkOutDate.diff(checkInDate, "day");
-
 	// Helper function for safe parsing of float values
 	const safeParseFloat = (value, fallback = 0) => {
 		const parsed = parseFloat(value);
 		return isNaN(parsed) ? fallback : parsed;
 	};
+
+	// Function to calculate pricingByDay with no commission
+	const calculatePricingByDay = useCallback(
+		(
+			pricingRate,
+			startDate,
+			endDate,
+			basePrice,
+			defaultCost,
+			commissionRate
+		) => {
+			const start = dayjs(startDate).startOf("day");
+			const end = dayjs(endDate).subtract(1, "day").startOf("day");
+
+			const dateArray = [];
+			let currentDate = start;
+
+			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
+				const formattedDate = currentDate.format("YYYY-MM-DD");
+
+				const rateForDate = pricingRate.find(
+					(rate) => rate.calendarDate === formattedDate
+				);
+
+				const price = rateForDate
+					? safeParseFloat(rateForDate.price, basePrice)
+					: basePrice;
+
+				const rootPrice = rateForDate
+					? safeParseFloat(rateForDate.rootPrice, defaultCost)
+					: defaultCost
+					  ? defaultCost
+					  : basePrice;
+
+				const rateCommission = rateForDate
+					? safeParseFloat(rateForDate.commissionRate, commissionRate)
+					: commissionRate;
+
+				dateArray.push({
+					date: formattedDate,
+					price,
+					rootPrice,
+					commissionRate: rateCommission,
+				});
+
+				currentDate = currentDate.add(1, "day");
+			}
+
+			return dateArray;
+		},
+		[]
+	);
+
+	const calculatePricingByDayWithCommission = useCallback(
+		(
+			pricingRate,
+			startDate,
+			endDate,
+			basePrice,
+			defaultCost,
+			commissionRate
+		) => {
+			const pricingByDay = calculatePricingByDay(
+				pricingRate,
+				startDate,
+				endDate,
+				basePrice,
+				defaultCost,
+				commissionRate
+			);
+
+			// Add total price with commission to each day
+			return pricingByDay.map((day) => ({
+				...day,
+				totalPriceWithCommission:
+					Number(day.price) +
+					Number(day.rootPrice) * (Number(day.commissionRate) / 100),
+			}));
+		},
+		[calculatePricingByDay]
+	);
 
 	// Calculate equivalent hotels
 	const equivalentHotels = useMemo(() => {
@@ -29,28 +108,65 @@ const EquivalentHotels = ({
 					.filter((room) => selectedRoomTypes.includes(room.roomType))
 					.map((room) => {
 						const basePrice = safeParseFloat(room.price?.basePrice, 0);
+						const defaultCost = safeParseFloat(room.defaultCost, 0);
 						const commissionRate = safeParseFloat(
 							room.roomCommission || hotel.commission || 10,
 							10 // Default to 10%
 						);
 
-						const totalAmount = nights * basePrice;
-						const totalCommission = (totalAmount * commissionRate) / 100;
-						const grandTotal = totalAmount + totalCommission;
+						const nights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
+
+						// Calculate pricingByDay
+						const pricingByDay = calculatePricingByDayWithCommission(
+							room.pricingRate || [],
+							checkInDate,
+							checkOutDate,
+							basePrice,
+							defaultCost,
+							commissionRate
+						);
+
+						// Calculate metrics
+						const averagePricePerNight =
+							pricingByDay.reduce((total, day) => total + day.rootPrice, 0) /
+							nights;
+
+						const totalAmount = pricingByDay.reduce(
+							(total, day) => total + day.rootPrice,
+							0
+						);
+						const totalPriceWithCommission = pricingByDay.reduce(
+							(total, day) => total + day.totalPriceWithCommission,
+							0
+						);
+						const totalCommission =
+							Number(totalPriceWithCommission - totalAmount) || 0;
+
+						// console.log(totalCommission, "totalCommission");
+						// console.log(totalPriceWithCommission, "totalPriceWithCommission");
+						// console.log(totalAmount, "totalAmount");
+						// console.log(pricingByDay, "pricingByDaypricingByDay");
 
 						return {
 							hotelName: hotel.hotelName,
 							roomType: room.roomType,
 							displayName: room.displayName,
-							basePrice,
+							totalPriceWithCommission,
 							totalAmount,
 							totalCommission,
-							grandTotal,
+							averagePricePerNight,
+							grandTotal: totalAmount + totalCommission,
 						};
 					})
 			)
 			.sort((a, b) => a.hotelName.localeCompare(b.hotelName));
-	}, [allHotels, selectedRoomTypes, nights]);
+	}, [
+		allHotels,
+		selectedRoomTypes,
+		checkInDate,
+		checkOutDate,
+		calculatePricingByDayWithCommission,
+	]);
 
 	// Ant Design's search filter
 	const getColumnSearchProps = (dataIndex) => ({
@@ -133,9 +249,9 @@ const EquivalentHotels = ({
 			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
 		},
 		{
-			title: "Base Price",
-			dataIndex: "basePrice",
-			key: "basePrice",
+			title: "Root Price/ Night",
+			dataIndex: "averagePricePerNight",
+			key: "averagePricePerNight",
 			render: (value) => `${value.toFixed(2)} SAR`,
 		},
 		{

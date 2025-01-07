@@ -28,7 +28,10 @@ const ReservationCalculator = () => {
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
-				const sortedHotels = data.sort((a, b) =>
+				const activeHotels = data.filter(
+					(hotel) => hotel.activateHotel === true
+				);
+				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
 				setAllHotels(sortedHotels);
@@ -108,7 +111,9 @@ const ReservationCalculator = () => {
 
 				const rootPrice = rateForDate
 					? safeParseFloat(rateForDate.rootPrice, defaultCost)
-					: defaultCost;
+					: defaultCost
+					  ? defaultCost
+					  : basePrice;
 
 				const rateCommission = rateForDate
 					? safeParseFloat(rateForDate.commissionRate, commissionRate)
