@@ -42,29 +42,50 @@ const ZUpdateCase3 = ({
 
 	// Prepopulate selected date range and pricing events for the selected room
 	useEffect(() => {
-		if (existingRoomDetails && existingRoomDetails.pricingRate) {
-			const prepopulatedEvents = existingRoomDetails.pricingRate.map(
-				(rate) => ({
-					title: `Price: ${rate.price} SAR${
-						rate.rootPrice && user?.role === 1000
-							? ` | Root: ${rate.rootPrice} SAR`
-							: ""
-					}`,
-					start: rate.calendarDate,
-					end: rate.calendarDate,
-					allDay: true,
-					backgroundColor: rate.color || getColorForPrice(rate.price),
-				})
-			);
-
-			if (calendarRef.current) {
-				const calendarApi = calendarRef.current.getApi();
-				calendarApi.getEvents().forEach((event) => event.remove()); // Clear previous events
-				prepopulatedEvents.forEach((event) => calendarApi.addEvent(event));
+		if (
+			existingRoomDetails &&
+			existingRoomDetails.pricingRate &&
+			calendarRef.current
+		) {
+			// Ensure the calendar API is initialized before accessing it
+			const calendarApi = calendarRef.current.getApi();
+			if (calendarApi) {
+				handleVisibleRangeChange(); // Initialize the calendar with current month's events
 			}
 		}
 		// eslint-disable-next-line
-	}, [existingRoomDetails, getColorForPrice]);
+	}, [existingRoomDetails]);
+
+	const handleVisibleRangeChange = (info) => {
+		if (!calendarRef.current) return; // Ensure the calendar is initialized
+		const calendarApi = calendarRef.current.getApi();
+		if (!calendarApi) return; // Ensure the API is available
+
+		const visibleStart = info ? info.start : moment().startOf("month").toDate();
+		const visibleEnd = info ? info.end : moment().endOf("month").toDate();
+
+		// Filter events for the visible range
+		const filteredEvents = (existingRoomDetails.pricingRate || [])
+			.filter((rate) => {
+				const eventDate = new Date(rate.calendarDate);
+				return eventDate >= visibleStart && eventDate <= visibleEnd;
+			})
+			.map((rate) => ({
+				title: `Price: ${rate.price} SAR${
+					rate.rootPrice && user?.role === 1000
+						? ` | Root: ${rate.rootPrice} SAR`
+						: ""
+				}`,
+				start: rate.calendarDate,
+				end: rate.calendarDate,
+				allDay: true,
+				backgroundColor: rate.color || getColorForPrice(rate.price),
+			}));
+
+		// Clear previous events and add new ones
+		calendarApi.getEvents().forEach((event) => event.remove());
+		filteredEvents.forEach((event) => calendarApi.addEvent(event));
+	};
 
 	// Helper function to generate an array of dates between two dates
 	const generateDateRangeArray = (startDate, endDate) => {
@@ -328,6 +349,7 @@ const ZUpdateCase3 = ({
 						}}
 						select={handleCalendarSelect}
 						eventContent={renderEventContent}
+						datesSet={handleVisibleRangeChange}
 					/>
 				</div>
 				<div

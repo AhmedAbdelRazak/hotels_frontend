@@ -128,8 +128,10 @@ const EquivalentHotels = ({
 
 						// Calculate metrics
 						const averagePricePerNight =
-							pricingByDay.reduce((total, day) => total + day.rootPrice, 0) /
-							nights;
+							pricingByDay.reduce(
+								(total, day) => total + day.totalPriceWithCommission,
+								0
+							) / nights;
 
 						const totalAmount = pricingByDay.reduce(
 							(total, day) => total + day.rootPrice,
@@ -152,6 +154,7 @@ const EquivalentHotels = ({
 							roomType: room.roomType,
 							displayName: room.displayName,
 							totalPriceWithCommission,
+							nights,
 							totalAmount,
 							totalCommission,
 							averagePricePerNight,
@@ -249,7 +252,13 @@ const EquivalentHotels = ({
 			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
 		},
 		{
-			title: "Root Price/ Night",
+			title: "Nights",
+			dataIndex: "nights",
+			key: "nights",
+			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
+		},
+		{
+			title: "Price / Night",
 			dataIndex: "averagePricePerNight",
 			key: "averagePricePerNight",
 			render: (value) => `${value.toFixed(2)} SAR`,

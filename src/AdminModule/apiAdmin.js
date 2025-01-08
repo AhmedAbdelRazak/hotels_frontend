@@ -630,3 +630,20 @@ export const triggerPayment = (userId, token, reservationId, amount) => {
 		})
 		.catch((err) => console.error("Error triggering payment:", err));
 };
+
+export const readUserId = (userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/user/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`, // Add the token here
+		},
+	})
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching reservations:", err));
+};

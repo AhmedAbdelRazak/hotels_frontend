@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useLocation, useHistory } from "react-router-dom"; // Import React Router hooks
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
-import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
+import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import { readUserId } from "../apiAdmin";
+import { isAuthenticated } from "../../auth";
 import ReservationCalculator from "./ReservationCalculator";
 import OrderTaker from "./OrderTaker";
+import EmployeeRegister from "./EmployeeRegister";
 
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -13,29 +17,112 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
-	const [activeTab, setActiveTab] = useState("calculator"); // Active tab state
+	const [activeTab, setActiveTab] = useState("calculator");
+	const [getUser, setGetUser] = useState("");
+	const { user, token } = isAuthenticated();
+	const location = useLocation();
+	const history = useHistory();
 
-	// Check password verification on mount
+	// Fetch user details
+	const gettingUserId = useCallback(() => {
+		readUserId(user._id, token).then((data) => {
+			if (data && data.error) {
+				console.error(data.error);
+			} else {
+				setGetUser(data);
+			}
+		});
+	}, [user._id, token]);
+
+	// Validate user and handle access control
 	useEffect(() => {
-		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
+		if (getUser) {
+			// Check if activeUser is false
+			if (!getUser.activeUser) {
+				history.push("/");
+				return;
+			}
 
-		if (toolsPasswordVerified) {
-			setIsPasswordVerified(true); // Skip modal if already verified
-		} else {
-			setIsModalVisible(true); // Show modal if not verified
+			const accessTo = getUser.accessTo || [];
+			if (accessTo.includes("JannatTools")) {
+				// User has access to JannatTools; skip password verification
+				setIsPasswordVerified(true);
+				setIsModalVisible(false); // Ensure the modal does not show
+				return;
+			}
+
+			if (accessTo.length === 0 || accessTo.includes("all")) {
+				// Stay as is if accessTo is empty or contains "all"
+				return;
+			}
+
+			// Redirect based on accessTo[0]
+			switch (accessTo[0]) {
+				case "CustomerService":
+					history.push("/admin/customer-service?tab=active-client-cases");
+					break;
+				case "HotelsReservations":
+					history.push("/admin/all-reservations");
+					break;
+				case "Integrator":
+					history.push("/admin/el-integrator");
+					break;
+				case "JannatBookingWebsite":
+					history.push("/admin/janat-website");
+					break;
+				case "AdminDashboard":
+					history.push("/admin/dashboard");
+					break;
+				default:
+					// Stay as is if no match
+					break;
+			}
 		}
-	}, []);
+	}, [getUser, history]);
+
+	// Initial setup
+	useEffect(() => {
+		gettingUserId();
+
+		if (window.innerWidth <= 1000) {
+			setCollapsed(true);
+		}
+
+		// If the modal is required for verification but the accessTo array allows skipping it
+		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
+		if (toolsPasswordVerified) {
+			setIsPasswordVerified(true);
+		} else {
+			setIsModalVisible(true);
+		}
+	}, [gettingUserId]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_TOOLS) {
 			setIsPasswordVerified(true);
 			message.success("Password verified successfully");
-			localStorage.setItem("ToolsVerified", "true"); // Save verification status
-			setIsModalVisible(false); // Close modal
+			localStorage.setItem("ToolsVerified", "true");
+			setIsModalVisible(false);
 		} else {
 			message.error("Incorrect password. Please try again.");
 		}
 	};
+
+	const handleTabChange = (tab) => {
+		setActiveTab(tab);
+		history.push(`?tab=${tab}`);
+	};
+
+	useEffect(() => {
+		const queryParams = new URLSearchParams(location.search);
+		const tab = queryParams.get("tab");
+
+		if (tab) {
+			setActiveTab(tab);
+		} else {
+			history.replace("?tab=calculator");
+		}
+	}, [location.search, history]);
 
 	return (
 		<JannatBookingToolsMainWrapper
@@ -107,12 +194,25 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 								>
 									Reservations Tools
 								</button>
-								<button
-									className={activeTab === "other" ? "active" : ""}
-									onClick={() => setActiveTab("other")}
-								>
-									Other Tools
-								</button>
+								{/* Conditionally render "Add Employee" and "Update Employee" */}
+								{(!getUser.accessTo ||
+									getUser.accessTo.length === 0 ||
+									getUser.accessTo.includes("all")) && (
+									<>
+										<button
+											className={activeTab === "addEmployee" ? "active" : ""}
+											onClick={() => handleTabChange("addEmployee")}
+										>
+											Add Employee
+										</button>
+										<button
+											className={activeTab === "updateEmployee" ? "active" : ""}
+											onClick={() => handleTabChange("updateEmployee")}
+										>
+											Update Employee
+										</button>
+									</>
+								)}
 							</TabNavigation>
 
 							{/* Tab Content Rendering */}
@@ -128,10 +228,16 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 									<OrderTaker />
 								</div>
 							)}
-							{activeTab === "other" && (
+							{activeTab === "addEmployee" && (
 								<div>
-									<h3>Other Tools</h3>
-									<p>This is the Other Tools content.</p>
+									<h3>Register a New Employee</h3>
+									<EmployeeRegister />
+								</div>
+							)}
+							{activeTab === "updateEmployee" && (
+								<div>
+									<h3>Update an Employee</h3>
+									<p>Create a new component for employee update</p>
 								</div>
 							)}
 						</div>

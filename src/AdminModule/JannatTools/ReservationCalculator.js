@@ -306,6 +306,10 @@ const ReservationCalculator = () => {
 							<strong>Number of Nights:</strong> {summary.nights}
 						</p>
 						<p>
+							<strong>Average Price per Day:</strong>{" "}
+							{(summary.grandTotal / summary.nights).toFixed(2)} SAR
+						</p>
+						<p>
 							<strong>Total Amount:</strong> {summary.totalAmount.toFixed(2)}{" "}
 							SAR
 						</p>

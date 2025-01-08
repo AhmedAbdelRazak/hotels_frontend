@@ -12,7 +12,7 @@ import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
 import notificationSound from "./Notification.wav"; // Ensure the path is correct
 
-const ActiveClientsSupportCases = () => {
+const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [unseenCount, setUnseenCount] = useState(0);
@@ -82,9 +82,28 @@ const ActiveClientsSupportCases = () => {
 				if (data.error) {
 					toast.error("Failed to fetch support cases");
 				} else {
-					const openCases = data.filter((chat) => chat.caseStatus !== "closed");
+					let filteredCases = data;
+
+					// If not super admin, filter support cases based on allowed hotels
+					if (!isSuperAdmin && getUser.hotelsToSupport) {
+						const allowedHotelIds = getUser.hotelsToSupport.map(
+							(hotel) => hotel._id
+						);
+
+						// Filter cases where hotelId is in the allowedHotelIds
+						filteredCases = data.filter((chat) =>
+							allowedHotelIds.includes(chat.hotelId)
+						);
+					}
+
+					// Filter out closed cases
+					const openCases = filteredCases.filter(
+						(chat) => chat.caseStatus !== "closed"
+					);
+
 					setSupportCases(sortSupportCases(openCases));
 
+					// Calculate unseen messages
 					const unseenMessages = openCases.reduce((acc, supportCase) => {
 						return (
 							acc +
@@ -97,7 +116,7 @@ const ActiveClientsSupportCases = () => {
 			.catch(() => {
 				toast.error("Failed to fetch support cases");
 			});
-	}, [token, sortSupportCases]);
+	}, [token, isSuperAdmin, getUser, sortSupportCases]);
 
 	useEffect(() => {
 		fetchSupportCases();

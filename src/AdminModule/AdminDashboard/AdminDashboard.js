@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import MainHotelDashboard from "../AddedHotels/MainHotelDashboard";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import { readUserId } from "../apiAdmin";
+import { isAuthenticated } from "../../auth";
+import { useHistory } from "react-router-dom";
 
 const AdminDashboard = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -12,23 +15,84 @@ const AdminDashboard = ({ chosenLanguage }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [getUser, setGetUser] = useState("");
+	const { user, token } = isAuthenticated();
+	const history = useHistory();
 
+	// Fetch user details
+	const gettingUserId = useCallback(() => {
+		readUserId(user._id, token).then((data) => {
+			if (data && data.error) {
+				console.error(data.error);
+			} else {
+				setGetUser(data);
+			}
+		});
+	}, [user._id, token]);
+
+	// Determine if the user is a Super Admin
+	const isSuperAdmin =
+		!getUser.accessTo ||
+		getUser.accessTo.length === 0 ||
+		getUser.accessTo.includes("all");
+
+	// Validate user and handle access control
 	useEffect(() => {
+		if (getUser) {
+			// If the user is not active, redirect to home
+			if (!getUser.activeUser) {
+				history.push("/");
+				return;
+			}
+
+			const accessTo = getUser.accessTo || [];
+
+			// Check if the user has access to AdminDashboard
+			if (accessTo.includes("AdminDashboard") || isSuperAdmin) {
+				setIsPasswordVerified(true);
+				setIsModalVisible(false); // Ensure modal does not show
+				return;
+			}
+
+			// Redirect based on the first valid access in accessTo
+			if (accessTo.includes("JannatTools")) {
+				history.push("/admin/jannatbooking-tools?tab=calculator");
+			} else if (accessTo.includes("CustomerService")) {
+				history.push("/admin/customer-service?tab=active-client-cases");
+			} else if (accessTo.includes("Integrator")) {
+				history.push("/admin/el-integrator");
+			} else if (accessTo.includes("JannatBookingWebsite")) {
+				history.push("/admin/janat-website");
+			} else {
+				history.push("/"); // Redirect to home if no valid access
+			}
+		}
+	}, [getUser, history, isSuperAdmin]);
+
+	// Initial setup
+	useEffect(() => {
+		gettingUserId();
+
 		if (window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 
-		// Check if password is already verified
-		const dashboardPasswordVerified = localStorage.getItem(
-			"AdminDashboardVerified"
-		);
-
-		if (dashboardPasswordVerified) {
+		// If user is a Super Admin, skip modal
+		if (isSuperAdmin) {
 			setIsPasswordVerified(true);
+			setIsModalVisible(false);
 		} else {
-			setIsModalVisible(true);
+			// Check if password is already verified
+			const dashboardPasswordVerified = localStorage.getItem(
+				"AdminDashboardVerified"
+			);
+			if (dashboardPasswordVerified) {
+				setIsPasswordVerified(true);
+			} else {
+				setIsModalVisible(true);
+			}
 		}
-	}, []);
+	}, [gettingUserId, isSuperAdmin]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_ADMIN_DASHBOARD) {
@@ -46,6 +110,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
+			{/* Password Verification Modal */}
 			<Modal
 				title='Enter Password'
 				open={isModalVisible}
@@ -69,6 +134,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				</Button>
 			</Modal>
 
+			{/* Content Rendering */}
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>

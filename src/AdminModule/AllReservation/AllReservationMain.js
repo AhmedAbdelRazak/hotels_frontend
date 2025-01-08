@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useHistory } from "react-router-dom"; // Import for navigation
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { getAllReservationForAdmin } from "../apiAdmin";
-import ContentTable from "./ContentTable";
+import { getAllReservationForAdmin, readUserId } from "../apiAdmin"; // Fixed missing import
+import ContentTable from "./ContentTable"; // Fixed missing import
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 
@@ -17,30 +18,87 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [getUser, setGetUser] = useState(""); // Added to fetch user details
 
-	useEffect(() => {
-		// Handle responsive collapse
-		const handleResize = () => {
-			setCollapsed(window.innerWidth <= 1000);
-		};
-		handleResize();
-		window.addEventListener("resize", handleResize);
-		return () => {
-			window.removeEventListener("resize", handleResize);
-		};
-	}, []);
+	const { user, token } = isAuthenticated();
+	const history = useHistory();
 
+	// Fetch user details
+	const gettingUserId = useCallback(() => {
+		readUserId(user._id, token).then((data) => {
+			if (data && data.error) {
+				console.error(data.error, "Error fetching user details");
+			} else {
+				setGetUser(data);
+			}
+		});
+	}, [user._id, token]);
+
+	// Determine if the user is a Super Admin
+	const isSuperAdmin =
+		!getUser.accessTo ||
+		getUser.accessTo.length === 0 ||
+		getUser.accessTo.includes("all");
+
+	// Validate user and handle access control
 	useEffect(() => {
-		// Check password verification on mount
-		const reservationPasswordVerified = localStorage.getItem(
-			"ReservationListVerified"
-		);
-		if (reservationPasswordVerified) {
-			setIsPasswordVerified(true);
-		} else {
-			setIsModalVisible(true);
+		if (getUser) {
+			// If the user is not active, redirect to home
+			if (!getUser.activeUser) {
+				history.push("/");
+				return;
+			}
+
+			const accessTo = getUser.accessTo || [];
+
+			// Check if the user has access to HotelsReservations or is a Super Admin
+			if (accessTo.includes("HotelsReservations") || isSuperAdmin) {
+				setIsPasswordVerified(true);
+				setIsModalVisible(false); // Ensure modal does not show
+				return;
+			}
+
+			// Redirect based on the first valid access in accessTo
+			if (accessTo.includes("JannatTools")) {
+				history.push("/admin/jannatbooking-tools?tab=calculator");
+			} else if (accessTo.includes("CustomerService")) {
+				history.push("/admin/customer-service?tab=active-client-cases");
+			} else if (accessTo.includes("Integrator")) {
+				history.push("/admin/el-integrator");
+			} else if (accessTo.includes("JannatBookingWebsite")) {
+				history.push("/admin/janat-website");
+			} else if (accessTo.includes("AdminDashboard")) {
+				history.push("/admin/dashboard");
+			} else {
+				history.push("/"); // Redirect to home if no valid access
+			}
 		}
-	}, []);
+	}, [getUser, history, isSuperAdmin]);
+
+	// Initial setup
+	useEffect(() => {
+		gettingUserId();
+
+		if (window.innerWidth <= 1000) {
+			setCollapsed(true);
+		}
+
+		// If user is a Super Admin, skip modal
+		if (isSuperAdmin) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+		} else {
+			// Check if password is already verified
+			const reservationPasswordVerified = localStorage.getItem(
+				"ReservationListVerified"
+			);
+			if (reservationPasswordVerified) {
+				setIsPasswordVerified(true);
+			} else {
+				setIsModalVisible(true);
+			}
+		}
+	}, [gettingUserId, isSuperAdmin]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_RSERVATION_LIST) {
@@ -53,13 +111,10 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		}
 	};
 
-	const { user, token } = isAuthenticated();
-
 	const gettingAllReservationForAdmin = useCallback(() => {
 		getAllReservationForAdmin(user._id, token).then((data) => {
 			if (data && data.error) {
-				console.error(data.error, "Error getting all hotel details");
-				alert("Failed to fetch reservations. Please try again.");
+				console.error(data.error, "Error getting reservations");
 			} else {
 				setAllReservationForAdmin(data);
 			}

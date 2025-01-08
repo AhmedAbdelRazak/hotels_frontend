@@ -12,7 +12,7 @@ import {
 } from "../apiAdmin"; // Assume you have these API functions
 import socket from "../../socket";
 
-const CustomerServiceDetails = () => {
+const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 	const history = useHistory();
 	const location = useLocation();
 	const [activeTab, setActiveTab] = useState("active-hotel-cases");
@@ -106,29 +106,40 @@ const CustomerServiceDetails = () => {
 						}}
 					/>
 				</Tab>
-				<Tab
-					isActive={activeTab === "history-hotel-cases"}
-					onClick={() => handleTabChange("history-hotel-cases")}
-				>
-					History Of Hotel Support Cases
-				</Tab>
-				<Tab
-					isActive={activeTab === "history-client-cases"}
-					onClick={() => handleTabChange("history-client-cases")}
-				>
-					History Of Client Support Cases
-				</Tab>
+				{/* Render history tabs only if the user is a super admin */}
+				{isSuperAdmin && (
+					<>
+						<Tab
+							isActive={activeTab === "history-hotel-cases"}
+							onClick={() => handleTabChange("history-hotel-cases")}
+						>
+							History Of Hotel Support Cases
+						</Tab>
+						<Tab
+							isActive={activeTab === "history-client-cases"}
+							onClick={() => handleTabChange("history-client-cases")}
+						>
+							History Of Client Support Cases
+						</Tab>
+					</>
+				)}
 			</div>
 
 			<div className='content-wrapper'>
 				{activeTab === "active-hotel-cases" && (
 					<div>
-						<ActiveHotelSupportCases />
+						<ActiveHotelSupportCases
+							getUser={getUser}
+							isSuperAdmin={isSuperAdmin}
+						/>
 					</div>
 				)}
 				{activeTab === "active-client-cases" && (
 					<div>
-						<ActiveClientsSupportCases />
+						<ActiveClientsSupportCases
+							getUser={getUser}
+							isSuperAdmin={isSuperAdmin}
+						/>
 					</div>
 				)}
 				{activeTab === "history-hotel-cases" && (
