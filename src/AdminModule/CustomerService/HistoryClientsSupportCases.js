@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
+import { useLocation, useHistory } from "react-router-dom"; // For mobile param logic
 import { List, Select, Spin } from "antd";
 import {
 	getFilteredClosedSupportCasesClients,
@@ -8,7 +9,7 @@ import {
 import { isAuthenticated } from "../../auth";
 import socket from "../../socket";
 import ChatDetail from "./ChatDetail";
-import StarRatings from "react-star-ratings"; // Import StarRatings for displaying ratings
+import StarRatings from "react-star-ratings";
 
 const { Option } = Select;
 
@@ -18,9 +19,16 @@ const HistoryClientsSupportCases = () => {
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [loading, setLoading] = useState(true);
 
+	// For mobile routing:
+	const location = useLocation();
+	const history = useHistory();
+	const queryParams = new URLSearchParams(location.search);
+	const caseIdParam = queryParams.get("id");
+	const isMobile = window.innerWidth <= 768; // Basic detection
+
 	useEffect(() => {
 		const fetchClosedCases = () => {
-			getFilteredClosedSupportCasesClients(token) // Using the client-specific API
+			getFilteredClosedSupportCasesClients(token) // Using client-specific API
 				.then((data) => {
 					if (!data.error) {
 						setClosedCases(data);
@@ -53,8 +61,14 @@ const HistoryClientsSupportCases = () => {
 		};
 	}, [token]);
 
-	const handleCaseSelection = (selectedCase) => {
-		setSelectedCase(selectedCase);
+	const handleCaseSelection = (caseObj) => {
+		// Desktop: local state, side-by-side
+		if (!isMobile) {
+			setSelectedCase(caseObj);
+		} else {
+			// Mobile: add ?id=someCase
+			history.push(`?id=${caseObj._id}`);
+		}
 	};
 
 	const handleChangeStatus = async (value) => {
@@ -77,15 +91,109 @@ const HistoryClientsSupportCases = () => {
 		}
 	};
 
+	/* ---------------- MOBILE LOGIC ---------------- */
+	if (isMobile) {
+		// If there's a param => show only chat detail
+		if (caseIdParam) {
+			const foundCase = closedCases.find((c) => c._id === caseIdParam);
+			if (!foundCase) {
+				return <div>Loading case...</div>;
+			}
+
+			return (
+				<HistoryClientsSupportCasesWrapper>
+					<MobileBackArrow
+						onClick={() => {
+							// Remove ?id from the URL
+							const params = new URLSearchParams(location.search);
+							params.delete("id");
+							history.replace({ search: params.toString() });
+						}}
+					>
+						← Back
+					</MobileBackArrow>
+
+					<MobileChatWrapper>
+						<h3>Chat with {foundCase.displayName2}</h3>
+						<StatusSelect
+							value={foundCase.caseStatus}
+							onChange={(val) => {
+								setSelectedCase(foundCase); // temporarily store
+								handleChangeStatus(val);
+							}}
+						>
+							<Option value='closed'>Closed</Option>
+							<Option value='open'>Open</Option>
+						</StatusSelect>
+						<ChatDetail chat={foundCase} isHistory={true} />
+					</MobileChatWrapper>
+				</HistoryClientsSupportCasesWrapper>
+			);
+		}
+
+		// Else show only the list
+		return (
+			<HistoryClientsSupportCasesWrapper>
+				{loading ? (
+					<Spin tip='Loading closed cases...' />
+				) : (
+					<List
+						style={{ marginTop: "20px" }}
+						header={
+							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
+								Closed Client Support Cases
+							</div>
+						}
+						bordered
+						dataSource={closedCases}
+						renderItem={(item) => (
+							<List.Item
+								key={item._id}
+								onClick={() => handleCaseSelection(item)}
+								style={{
+									cursor: "pointer",
+									textTransform: "capitalize",
+									backgroundColor: "white",
+									marginBottom: "8px",
+									display: "flex",
+									flexDirection: "column",
+									alignItems: "flex-start",
+								}}
+							>
+								<div>
+									{item.inquiryAbout} -{" "}
+									{item.hotelId
+										? item.hotelId.hotelName +
+										  " | " +
+										  item.conversation[0].inquiryAbout
+										: ""}
+								</div>
+								<StarRatingWrapper>
+									<StarRatings
+										rating={item.rating || 0}
+										starRatedColor='gold'
+										numberOfStars={5}
+										starDimension='20px'
+										starSpacing='2px'
+									/>
+								</StarRatingWrapper>
+							</List.Item>
+						)}
+					/>
+				)}
+			</HistoryClientsSupportCasesWrapper>
+		);
+	}
+
+	/* ---------------- DESKTOP / LARGE SCREENS ---------------- */
 	return (
-		<HistoryClientsSupportCasesWrapper dir='ltr'>
+		<HistoryClientsSupportCasesWrapper>
 			<MainContentWrapper>
 				<SupportCasesList>
 					{loading ? (
 						<Spin tip='Loading closed cases...' />
 					) : (
 						<List
-							dir='ltr'
 							style={{ marginTop: "20px" }}
 							header={
 								<div
@@ -108,8 +216,8 @@ const HistoryClientsSupportCases = () => {
 												? "#e6f7ff"
 												: "white",
 										display: "flex",
-										flexDirection: "column", // Arrange content vertically
-										alignItems: "flex-start", // Align items to the start
+										flexDirection: "column",
+										alignItems: "flex-start",
 									}}
 								>
 									<div>
@@ -122,7 +230,7 @@ const HistoryClientsSupportCases = () => {
 									</div>
 									<StarRatingWrapper>
 										<StarRatings
-											rating={item.rating || 0} // Display the rating
+											rating={item.rating || 0}
 											starRatedColor='gold'
 											numberOfStars={5}
 											starDimension='20px'
@@ -136,12 +244,11 @@ const HistoryClientsSupportCases = () => {
 				</SupportCasesList>
 
 				{selectedCase && (
-					<ChatDetailWrapper dir='ltr'>
+					<ChatDetailWrapper>
 						<h3>Chat with {selectedCase.displayName2}</h3>
 						<StatusSelect
-							dir='ltr'
 							value={selectedCase.caseStatus}
-							onChange={handleChangeStatus}
+							onChange={(val) => handleChangeStatus(val)}
 						>
 							<Option value='closed'>Closed</Option>
 							<Option value='open'>Open</Option>
@@ -156,23 +263,34 @@ const HistoryClientsSupportCases = () => {
 
 export default HistoryClientsSupportCases;
 
-// Styled-components
+/* ------------------ STYLES ------------------ */
 
 const HistoryClientsSupportCasesWrapper = styled.div`
 	padding: 20px;
+
+	@media (max-width: 1000px) {
+		padding: 5px;
+
+		ul {
+			font-size: 0.75rem !important;
+		}
+	}
 `;
 
+/* For desktop two-column layout */
 const MainContentWrapper = styled.div`
 	display: flex;
 	width: 100%;
 	margin-top: 20px;
 `;
 
+/* The left column with the list */
 const SupportCasesList = styled.div`
 	width: 25%;
 	padding-right: 10px;
 `;
 
+/* The right column with chat details */
 const ChatDetailWrapper = styled.div`
 	width: 75%;
 	padding-left: 10px;
@@ -186,6 +304,26 @@ const StatusSelect = styled(Select)`
 	margin-top: 20px;
 `;
 
+/* For star ratings in the list items */
 const StarRatingWrapper = styled.div`
-	margin-top: 5px; /* Add space between the text and stars */
+	margin-top: 5px;
+`;
+
+/* For mobile full-width arrangement */
+const MobileChatWrapper = styled.div`
+	margin-top: 20px;
+`;
+
+/* Simple back arrow link on mobile */
+const MobileBackArrow = styled.div`
+	color: blue;
+	cursor: pointer;
+	font-size: 1.1rem;
+	font-weight: bold;
+	margin-bottom: 12px;
+	width: fit-content;
+
+	&:hover {
+		text-decoration: underline;
+	}
 `;

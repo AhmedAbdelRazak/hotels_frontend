@@ -6,11 +6,13 @@ import { gettingHotelDetailsForAdmin } from "../apiAdmin";
 import dayjs from "dayjs";
 import EquivalentHotels from "./EquivalentHotels";
 
-const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Panel } = Collapse;
 
 const ReservationCalculator = () => {
+	// Detect if user is on mobile (<= 768px)
+	const isMobile = window.innerWidth <= 768;
+
 	const [allHotels, setAllHotels] = useState([]);
 	const [checkInDate, setCheckInDate] = useState(null);
 	const [checkOutDate, setCheckOutDate] = useState(null);
@@ -66,7 +68,6 @@ const ReservationCalculator = () => {
 		if (selectedHotel) {
 			const hotel = allHotels.find((h) => h._id === selectedHotel);
 			if (hotel) {
-				// Filter display names based on selected room types
 				const roomOptions = hotel.roomCountDetails
 					.filter((room) => selectedRoomTypes.includes(room.roomType))
 					.map((room) => `${room.displayName} | ${room.roomType}`);
@@ -111,9 +112,7 @@ const ReservationCalculator = () => {
 
 				const rootPrice = rateForDate
 					? safeParseFloat(rateForDate.rootPrice, defaultCost)
-					: defaultCost
-					  ? defaultCost
-					  : basePrice;
+					: defaultCost || basePrice;
 
 				const rateCommission = rateForDate
 					? safeParseFloat(rateForDate.commissionRate, commissionRate)
@@ -152,7 +151,6 @@ const ReservationCalculator = () => {
 				commissionRate
 			);
 
-			// Add total price with commission to each day
 			return pricingByDay.map((day) => ({
 				...day,
 				totalPriceWithCommission:
@@ -163,6 +161,7 @@ const ReservationCalculator = () => {
 		[calculatePricingByDay]
 	);
 
+	// If user clicks "Show Details"
 	const handleShowDetails = () => {
 		if (!checkInDate || !checkOutDate || !selectedDisplayName) {
 			message.error("Please fill in all fields to calculate the summary.");
@@ -195,11 +194,11 @@ const ReservationCalculator = () => {
 		);
 
 		const totalAmount = pricingByDay.reduce(
-			(total, day) => total + day.rootPrice,
+			(sum, day) => sum + day.rootPrice,
 			0
 		);
 		const totalPriceWithCommission = pricingByDay.reduce(
-			(total, day) => total + day.totalPriceWithCommission,
+			(sum, day) => sum + day.totalPriceWithCommission,
 			0
 		);
 		const totalCommission = totalPriceWithCommission - totalAmount;
@@ -216,6 +215,48 @@ const ReservationCalculator = () => {
 		});
 	};
 
+	// RENDER: DatePickers vs. RangePicker
+	//   On desktop: show RangePicker
+	//   On mobile: show two separate DatePickers
+	const renderDateControls = () => {
+		if (isMobile) {
+			// Two separate DatePickers for FROM and TO
+			return (
+				<MobileDateFields>
+					<label style={{ display: "block", marginBottom: 4 }}>
+						Check-in Date:
+					</label>
+					<DatePicker
+						style={{ width: "100%", marginBottom: 12 }}
+						format='YYYY-MM-DD'
+						value={checkInDate}
+						onChange={(val) => setCheckInDate(val)}
+					/>
+					<label style={{ display: "block", marginBottom: 4 }}>
+						Check-out Date:
+					</label>
+					<DatePicker
+						style={{ width: "100%" }}
+						format='YYYY-MM-DD'
+						value={checkOutDate}
+						onChange={(val) => setCheckOutDate(val)}
+					/>
+				</MobileDateFields>
+			);
+		}
+
+		// Desktop => one RangePicker
+		return (
+			<StyledRangePicker
+				format='YYYY-MM-DD'
+				onChange={(dates) => {
+					setCheckInDate(dates ? dates[0] : null);
+					setCheckOutDate(dates ? dates[1] : null);
+				}}
+			/>
+		);
+	};
+
 	return (
 		<ReservationCalculatorWrapper>
 			{/* Left Form */}
@@ -223,14 +264,9 @@ const ReservationCalculator = () => {
 				<h2>Reservation Calculator</h2>
 				<div style={{ marginBottom: "20px" }}>
 					<label>Check-in and Check-out Dates:</label>
-					<RangePicker
-						format='YYYY-MM-DD'
-						onChange={(dates) => {
-							setCheckInDate(dates ? dates[0] : null);
-							setCheckOutDate(dates ? dates[1] : null);
-						}}
-					/>
+					{renderDateControls()}
 				</div>
+
 				{checkInDate && checkOutDate && (
 					<div style={{ marginBottom: "20px" }}>
 						<label>Select Room Types:</label>
@@ -254,6 +290,7 @@ const ReservationCalculator = () => {
 						</Select>
 					</div>
 				)}
+
 				{selectedRoomTypes.length > 0 && (
 					<div style={{ marginBottom: "20px" }}>
 						<label>Select Hotel:</label>
@@ -270,6 +307,7 @@ const ReservationCalculator = () => {
 						</Select>
 					</div>
 				)}
+
 				{selectedHotel && displayNames.length > 0 && (
 					<div style={{ marginBottom: "20px" }}>
 						<label>Select Room Display Name:</label>
@@ -292,7 +330,6 @@ const ReservationCalculator = () => {
 					</Button>
 				)}
 
-				{/* Summary for Selected Hotel */}
 				{summary && (
 					<SummaryWrapper>
 						<h3>Summary for {summary.hotelName}</h3>
@@ -321,7 +358,6 @@ const ReservationCalculator = () => {
 							<strong>Grand Total:</strong> {summary.grandTotal.toFixed(2)} SAR
 						</p>
 
-						{/* Pricing Breakdown */}
 						<Collapse>
 							<Panel header='Pricing Breakdown' key='1'>
 								<ul>
@@ -357,6 +393,10 @@ const ReservationCalculator = () => {
 
 export default ReservationCalculator;
 
+/* ----------------------------------------------------- */
+/* ---------------------- STYLES ----------------------- */
+/* ----------------------------------------------------- */
+
 const ReservationCalculatorWrapper = styled.div`
 	display: flex;
 
@@ -376,17 +416,33 @@ const ReservationCalculatorWrapper = styled.div`
 		font-size: 0.9rem;
 		text-transform: capitalize;
 	}
+
+	@media (max-width: 768px) {
+		/* On mobile, stack the form & child components vertically */
+		flex-direction: column;
+	}
 `;
 
+/* Left Container */
 const FormWrapper = styled.div`
 	flex: 0 0 31%;
 	background: #f9f9f9;
 	padding: 20px;
 	border-radius: 8px;
+
+	@media (max-width: 768px) {
+		width: 100%;
+		margin-bottom: 20px;
+	}
 `;
 
+/* Right container */
 const ChildWrapper = styled.div`
 	flex: 0 0 69%;
+
+	@media (max-width: 768px) {
+		width: 100%;
+	}
 `;
 
 const SummaryWrapper = styled.div`
@@ -399,4 +455,16 @@ const SummaryWrapper = styled.div`
 	h3 {
 		margin-bottom: 10px;
 	}
+`;
+
+/* This is the RangePicker for desktop usage only */
+export const StyledRangePicker = styled(DatePicker.RangePicker)`
+	width: 100%;
+`;
+
+/* 
+  Two separate fields for mobile 
+*/
+const MobileDateFields = styled.div`
+	margin-top: 8px;
 `;

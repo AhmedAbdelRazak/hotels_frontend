@@ -23,6 +23,7 @@ import { hotelsForAccount } from "../../HotelModule/apiAdmin";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
 import notificationSound from "./Notification.wav"; // Make sure the path is correct
+import { useLocation, useHistory } from "react-router-dom"; // for mobile param
 
 const { Option } = Select;
 const { Title } = Typography;
@@ -44,32 +45,33 @@ const ActiveHotelSupportCases = () => {
 	const [unseenCount, setUnseenCount] = useState(0);
 	const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
+	// For mobile
+	const location = useLocation();
+	const history = useHistory();
+	const queryParams = new URLSearchParams(location.search);
+	const caseIdParam = queryParams.get("caseId");
+	const isMobile = window.innerWidth <= 768;
+
 	useEffect(() => {
 		const fetchUnseenCount = async () => {
 			try {
 				const result = await getUnseenMessagesCountByAdmin(user._id);
-				console.log("Fetched unseen count: ", result);
 				if (result && result.count !== undefined) {
-					setUnseenCount(result.count === 0 ? 0 : result.count); // Ensure the count is accurate
-					console.log("Updated unseen count to: ", result.count);
+					setUnseenCount(result.count === 0 ? 0 : result.count);
 				} else {
-					setUnseenCount(0); // Ensure the count is reset if the result is not as expected
-					console.error("Failed to fetch unseen message count");
+					setUnseenCount(0);
 				}
 			} catch (error) {
-				setUnseenCount(0); // Reset to 0 on error
+				setUnseenCount(0);
 				console.error("Error fetching unseen messages count:", error);
 			}
 		};
 
 		fetchUnseenCount();
-	}, [user._id, unseenCount]);
-
-	// Play notification sound
+	}, [user._id]);
 
 	const playNotificationSound = () => {
 		if (!hasUserInteracted) return;
-
 		const audio = new Audio(notificationSound);
 		audio.play().catch((error) => {
 			console.error("Audio play error:", error);
@@ -80,10 +82,7 @@ const ActiveHotelSupportCases = () => {
 		const handleUserInteraction = () => {
 			setHasUserInteracted(true);
 		};
-
-		// Add an event listener for user interaction (click)
 		window.addEventListener("click", handleUserInteraction);
-
 		return () => {
 			window.removeEventListener("click", handleUserInteraction);
 		};
@@ -166,7 +165,6 @@ const ActiveHotelSupportCases = () => {
 
 		// Handle new case event
 		const handleNewChat = (newCase) => {
-			// Only add cases where the openedBy field is 'hotel owner' or 'super admin'
 			if (
 				newCase.openedBy === "hotel owner" ||
 				newCase.openedBy === "super admin"
@@ -178,7 +176,7 @@ const ActiveHotelSupportCases = () => {
 		// Handle new message received
 		const handleReceiveMessage = (message) => {
 			if (message && message.messageBy && message.messageBy.customerName) {
-				playNotificationSound(); // Play the notification sound
+				playNotificationSound();
 				fetchSupportCases(); // Refresh support cases list
 			}
 		};
@@ -188,7 +186,7 @@ const ActiveHotelSupportCases = () => {
 		socket.on("newChat", handleNewChat);
 		socket.on("receiveMessage", handleReceiveMessage);
 
-		// Cleanup socket listeners on component unmount
+		// Cleanup socket listeners
 		return () => {
 			socket.off("closeCase", handleCaseClosed);
 			socket.off("newChat", handleNewChat);
@@ -199,8 +197,8 @@ const ActiveHotelSupportCases = () => {
 
 	const handleOwnerSelection = (value) => {
 		setSelectedOwner(value);
-		setSelectedHotel(null); // Reset hotel selection when a new owner is selected
-		setHotels([]); // Clear the hotel list
+		setSelectedHotel(null);
+		setHotels([]);
 	};
 
 	const handleHotelSelection = (value) => {
@@ -213,7 +211,7 @@ const ActiveHotelSupportCases = () => {
 
 	const handleCloseModal = () => {
 		setIsModalVisible(false);
-		setSelectedOwner(null); // Reset selections when the modal is closed
+		setSelectedOwner(null);
 		setSelectedHotel(null);
 		setInquiryAbout("");
 		setInquiryDetails("");
@@ -273,29 +271,196 @@ const ActiveHotelSupportCases = () => {
 		}
 	};
 
-	const handleCaseSelection = async (selectedCase) => {
-		setSelectedCase(selectedCase);
+	const handleCaseSelection = async (caseItem) => {
+		// On large screens => keep local state
+		if (!isMobile) {
+			setSelectedCase(caseItem);
 
-		if (selectedCase) {
-			try {
-				await markAllMessagesAsSeenByAdmin(selectedCase._id, user._id);
-				console.log("Messages marked as seen for case:", selectedCase._id);
-
-				// Re-fetch unseen count
-				const result = await getUnseenMessagesCountByAdmin(user._id);
-				console.log("Re-fetched unseen count after marking as seen: ", result);
-				if (result && result.count !== undefined) {
-					setUnseenCount(result.count);
-					console.log("Updated unseen count to: ", result.count);
-				} else {
-					console.error("Failed to re-fetch unseen message count");
+			if (caseItem) {
+				try {
+					await markAllMessagesAsSeenByAdmin(caseItem._id, user._id);
+					const result = await getUnseenMessagesCountByAdmin(user._id);
+					if (result && result.count !== undefined) {
+						setUnseenCount(result.count);
+					}
+				} catch (error) {
+					console.error("Error marking messages as seen: ", error);
 				}
-			} catch (error) {
-				console.error("Error marking messages as seen: ", error);
 			}
+		} else {
+			// On mobile => push ?caseId=someCase
+			history.push(`?caseId=${caseItem._id}`);
 		}
 	};
 
+	// On mobile, if we have ?caseId => find that case and show only ChatDetail
+	if (isMobile && caseIdParam) {
+		const foundCase = supportCases.find((c) => c._id === caseIdParam);
+		if (!foundCase) {
+			return <div>Loading case...</div>;
+		}
+		// Mark messages as seen
+		markAllMessagesAsSeenByAdmin(foundCase._id, user._id).catch((err) =>
+			console.error(err)
+		);
+
+		return (
+			<ActiveHotelSupportCasesWrapperMobile>
+				<ChatDetail
+					chat={foundCase}
+					fetchChats={() => getFilteredSupportCases(token)}
+				/>
+			</ActiveHotelSupportCasesWrapperMobile>
+		);
+	}
+
+	// If mobile and no ?caseId => show the list only
+	if (isMobile && !caseIdParam) {
+		return (
+			<ActiveHotelSupportCasesWrapperMobile>
+				<Button type='primary' onClick={handleOpenModal}>
+					Open a New Case
+				</Button>
+
+				<Modal
+					title='Choose a Hotel Owner'
+					visible={isModalVisible}
+					onCancel={handleCloseModal}
+					footer={null}
+				>
+					<Form layout='vertical'>
+						<Title level={5}>Select Hotel Owner</Title>
+						<Form.Item>
+							<Select
+								placeholder='Select a hotel owner'
+								onChange={handleOwnerSelection}
+								value={selectedOwner}
+							>
+								{hotelOwners.map((owner) => (
+									<Option key={owner._id} value={owner._id}>
+										{owner.name} | {owner.email}
+									</Option>
+								))}
+							</Select>
+						</Form.Item>
+
+						{selectedOwner && (
+							<Form.Item label='Select Hotel'>
+								<Select
+									placeholder='Select a hotel'
+									onChange={handleHotelSelection}
+									value={selectedHotel}
+									disabled={!selectedOwner || hotels.length === 0}
+								>
+									{hotels.map((hotel) => (
+										<Option key={hotel._id} value={hotel._id}>
+											{hotel.hotelName}
+										</Option>
+									))}
+								</Select>
+							</Form.Item>
+						)}
+
+						<Form.Item label='Display Name'>
+							<Input
+								placeholder='Enter your name'
+								value={adminName}
+								onChange={(e) => setAdminName(e.target.value)}
+							/>
+						</Form.Item>
+
+						<Form.Item label='Inquiry About'>
+							<Input
+								placeholder='Enter the subject of the inquiry'
+								value={inquiryAbout}
+								onChange={(e) => setInquiryAbout(e.target.value)}
+							/>
+						</Form.Item>
+
+						<Form.Item label='Inquiry Details'>
+							<TextArea
+								placeholder='Enter the details of the inquiry'
+								value={inquiryDetails}
+								onChange={(e) => setInquiryDetails(e.target.value)}
+								rows={4}
+							/>
+						</Form.Item>
+
+						<Form.Item>
+							<Button
+								type='primary'
+								onClick={handleSubmit}
+								loading={isLoading}
+								disabled={
+									!selectedOwner ||
+									!selectedHotel ||
+									!inquiryAbout ||
+									!inquiryDetails ||
+									!adminName
+								}
+							>
+								Submit
+							</Button>
+						</Form.Item>
+					</Form>
+				</Modal>
+
+				<List
+					style={{ marginTop: "20px", padding: "2px" }}
+					header={
+						<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
+							Open Support Cases
+							<Badge
+								count={unseenCount}
+								style={{ backgroundColor: "#f5222d", marginLeft: "10px" }}
+							/>
+						</div>
+					}
+					bordered
+					dataSource={supportCases}
+					renderItem={(item) => {
+						const hasUnseenMessages = item.conversation.some(
+							(msg) => !msg.seenByAdmin
+						);
+						return (
+							<List.Item
+								key={item._id}
+								onClick={() => handleCaseSelection(item)}
+								style={{
+									cursor: "pointer",
+									textTransform: "capitalize",
+									backgroundColor: hasUnseenMessages ? "#fff1f0" : "white",
+									position: "relative",
+									marginBottom: "4px",
+								}}
+							>
+								{item.inquiryAbout} -{" "}
+								{item.hotelId
+									? item.hotelId.hotelName +
+									  " | " +
+									  item.conversation[0].inquiryAbout
+									: ""}
+								{hasUnseenMessages && (
+									<Badge
+										count={
+											item.conversation.filter((msg) => !msg.seenByAdmin).length
+										}
+										style={{
+											backgroundColor: "#f5222d",
+											position: "absolute",
+											right: 10,
+										}}
+									/>
+								)}
+							</List.Item>
+						);
+					}}
+				/>
+			</ActiveHotelSupportCasesWrapperMobile>
+		);
+	}
+
+	// Desktop layout (unchanged)
 	return (
 		<ActiveHotelSupportCasesWrapper>
 			<Button type='primary' onClick={handleOpenModal}>
@@ -418,7 +583,7 @@ const ActiveHotelSupportCases = () => {
 											selectedCase && selectedCase._id === item._id
 												? "#e6f7ff"
 												: hasUnseenMessages
-												  ? "#fff1f0" // Light reddish color for unseen messages
+												  ? "#fff1f0"
 												  : "white",
 										position: "relative",
 									}}
@@ -463,6 +628,8 @@ const ActiveHotelSupportCases = () => {
 
 export default ActiveHotelSupportCases;
 
+/* ------------------ STYLES ------------------ */
+
 const ActiveHotelSupportCasesWrapper = styled.div`
 	padding: 20px;
 
@@ -484,6 +651,11 @@ const ActiveHotelSupportCasesWrapper = styled.div`
 			font-weight: bold;
 		}
 	}
+`;
+
+/* Minimal mobile wrapper to show full width list or chat */
+const ActiveHotelSupportCasesWrapperMobile = styled.div`
+	padding: 2px;
 `;
 
 const MainContentWrapper = styled.div`

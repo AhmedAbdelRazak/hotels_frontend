@@ -1,410 +1,633 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import styled from "styled-components";
-import { Table, Input, Button, Space, Modal, Tooltip } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
-import MoreDetails from "./MoreDetails";
+import { Tooltip, Modal, Button } from "antd";
 import ScoreCards from "./ScoreCards";
-// eslint-disable-next-line
+import MoreDetails from "./MoreDetails";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 
-const ContentTable = ({
+const EnhancedContentTable = ({
 	allReservationsForAdmin,
 	currentPage,
 	setCurrentPage,
 	pageSize,
 	setPageSize,
 }) => {
-	const [isModalVisible, setIsModalVisible] = useState(false);
-	const [selectedReservation, setSelectedReservation] = useState(null);
-	const [filterType, setFilterType] = useState("");
-	const capturedConfirmationNumbers = ["2944008828"];
-	const reservations = allReservationsForAdmin?.data || [];
+	/* ------------------ Data & Memoization ------------------ */
+	const reservations = useMemo(
+		() => allReservationsForAdmin?.data || [],
+		[allReservationsForAdmin]
+	);
+
+	// If capturedConfirmationNumbers is truly constant, memoize it
+	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
+
 	const totalDocuments = allReservationsForAdmin?.totalDocuments || 0;
 
-	// Preprocess data to ensure all fields are properly accessible
-	const formattedReservations = reservations.map((reservation, index) => {
-		const {
-			customer_details = {},
-			hotelId = {},
-			payment_details = {},
-		} = reservation;
-
-		const isCaptured =
-			payment_details.captured ||
-			capturedConfirmationNumbers.includes(reservation.confirmation_number);
-
-		return {
-			...reservation,
-			index: index + 1 + (currentPage - 1) * pageSize,
-			customer_name: customer_details.name || "N/A",
-			customer_phone: customer_details.phone || "N/A",
-			customer_email: customer_details.email || "N/A",
-			hotel_name: (hotelId && hotelId.hotelName) || "Unknown Hotel",
-			payment_status:
-				reservation.payment === "not paid"
-					? "Not Paid"
-					: isCaptured
-					  ? "Captured"
-					  : "Not Captured",
-			isCheckinToday:
-				new Date(reservation.checkin_date).toDateString() ===
-				new Date().toDateString(),
-			isCheckoutToday:
-				new Date(reservation.checkout_date).toDateString() ===
-				new Date().toDateString(),
-			total_amount: reservation.total_amount || 0,
-			isPaymentTriggered: !!payment_details.capturing || isCaptured,
-		};
+	/* ------------------ State ------------------ */
+	const [filterType, setFilterType] = useState("");
+	const [searchTexts, setSearchTexts] = useState({
+		confirmation_number: "",
+		customer_name: "",
+		customer_phone: "",
+		hotel_name: "",
+	});
+	const [sortConfig, setSortConfig] = useState({
+		sortField: null,
+		direction: null,
 	});
 
-	const filteredReservations = formattedReservations.filter((reservation) => {
-		if (filterType === "checkinToday") return reservation.isCheckinToday;
-		if (filterType === "checkoutToday") return reservation.isCheckoutToday;
-		if (filterType === "paymentTriggered")
-			return reservation.isPaymentTriggered;
-		if (filterType === "paymentNotTriggered")
-			return !reservation.isPaymentTriggered;
-		return true;
-	});
+	// Modal
+	const [isModalVisible, setIsModalVisible] = useState(false);
+	const [selectedReservation, setSelectedReservation] = useState(null);
 
-	const getColumnSearchProps = (dataIndex) => ({
-		filterDropdown: ({
-			setSelectedKeys,
-			selectedKeys,
-			confirm,
-			clearFilters,
-		}) => (
-			<div style={{ padding: 8 }}>
-				<Input
-					placeholder={`Search ${dataIndex}`}
-					value={selectedKeys[0]}
-					onChange={(e) =>
-						setSelectedKeys(e.target.value ? [e.target.value] : [])
-					}
-					onPressEnter={() => confirm()}
-					style={{ marginBottom: 8, display: "block" }}
-				/>
-				<Space>
-					<Button
-						type='primary'
-						onClick={() => confirm()}
-						icon={<SearchOutlined />}
-						size='small'
-						style={{ width: 90 }}
-					>
-						Search
-					</Button>
-					<Button
-						onClick={() => clearFilters()}
-						size='small'
-						style={{ width: 90 }}
-					>
-						Reset
-					</Button>
-				</Space>
-			</div>
-		),
-		filterIcon: (filtered) => (
-			<SearchOutlined style={{ color: filtered ? "#1890ff" : undefined }} />
-		),
-		onFilter: (value, record) =>
-			record[dataIndex]
-				? record[dataIndex]
-						.toString()
-						.toLowerCase()
-						.includes(value.toLowerCase())
-				: false,
-	});
+	/* ------------------ Format & Preprocess ------------------ */
+	const formattedReservations = useMemo(() => {
+		return reservations.map((reservation, index) => {
+			const {
+				customer_details = {},
+				hotelId = {},
+				payment_details = {},
+			} = reservation;
 
-	const handleHotelClick = (hotel) => {
-		const hotelDetailsFinal = {
-			...hotel.hotelId,
-			belongsTo: hotel.belongsTo,
-		};
-		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
-		window.location.href = `/hotel-management/new-reservation/${hotel.belongsTo._id}/${hotel.hotelId._id}?list`;
-	};
+			const isCaptured =
+				payment_details.captured ||
+				capturedConfirmationNumbers.includes(reservation.confirmation_number);
 
-	const showDetailsModal = (record) => {
-		setSelectedReservation(record);
-		setIsModalVisible(true);
-	};
+			return {
+				...reservation,
+				index: index + 1 + (currentPage - 1) * pageSize,
+				customer_name: customer_details.name || "N/A",
+				customer_phone: customer_details.phone || "N/A",
+				hotel_name: hotelId.hotelName || "Unknown Hotel",
+				createdAt: reservation.createdAt || null,
+				payment_status:
+					reservation.payment === "not paid"
+						? "Not Paid"
+						: isCaptured
+						  ? "Captured"
+						  : "Not Captured",
+				isCheckinToday:
+					new Date(reservation.checkin_date).toDateString() ===
+					new Date().toDateString(),
+				isCheckoutToday:
+					new Date(reservation.checkout_date).toDateString() ===
+					new Date().toDateString(),
+				isPaymentTriggered: !!payment_details.capturing || isCaptured,
+			};
+		});
+	}, [reservations, capturedConfirmationNumbers, currentPage, pageSize]);
 
-	const handleModalClose = () => {
-		setIsModalVisible(false);
-		setSelectedReservation(null);
-	};
+	/* ------------------ Filtering Logic ------------------ */
+	const filteredByType = useMemo(() => {
+		return formattedReservations.filter((r) => {
+			switch (filterType) {
+				// Existing filters
+				case "checkinToday":
+					return r.isCheckinToday;
+				case "checkoutToday":
+					return r.isCheckoutToday;
+				case "paymentTriggered":
+					return r.isPaymentTriggered;
+				case "paymentNotTriggered":
+					return !r.isPaymentTriggered;
+				// New filters
+				case "notPaid":
+					return r.payment_status.toLowerCase() === "not paid";
+				case "notCaptured":
+					return r.payment_status.toLowerCase() === "not captured";
+				case "captured":
+					return r.payment_status.toLowerCase() === "captured";
+				default:
+					return true; // no filter
+			}
+		});
+	}, [formattedReservations, filterType]);
 
+	/* ------------------ Column-based Searching ------------------ */
+	const filteredBySearch = useMemo(() => {
+		return filteredByType.filter((r) => {
+			const matchConfirmation = r.confirmation_number
+				?.toLowerCase()
+				.includes(searchTexts.confirmation_number.toLowerCase());
+			const matchName = r.customer_name
+				?.toLowerCase()
+				.includes(searchTexts.customer_name.toLowerCase());
+			const matchPhone = r.customer_phone
+				?.toLowerCase()
+				.includes(searchTexts.customer_phone.toLowerCase());
+			const matchHotel = r.hotel_name
+				?.toLowerCase()
+				.includes(searchTexts.hotel_name.toLowerCase());
+
+			const passesConfirmation =
+				!searchTexts.confirmation_number || matchConfirmation;
+			const passesName = !searchTexts.customer_name || matchName;
+			const passesPhone = !searchTexts.customer_phone || matchPhone;
+			const passesHotel = !searchTexts.hotel_name || matchHotel;
+
+			return passesConfirmation && passesName && passesPhone && passesHotel;
+		});
+	}, [filteredByType, searchTexts]);
+
+	/* ------------------ Sorting ------------------ */
+	const sortedData = useMemo(() => {
+		if (!sortConfig.sortField || !sortConfig.direction) {
+			return filteredBySearch;
+		}
+		const { sortField, direction } = sortConfig;
+
+		const sorted = [...filteredBySearch].sort((a, b) => {
+			let valA = a[sortField];
+			let valB = b[sortField];
+
+			// Handle date or numeric fields
+			if (sortField === "checkin_date" || sortField === "checkout_date") {
+				valA = new Date(valA).getTime();
+				valB = new Date(valB).getTime();
+			} else if (sortField === "index" || sortField === "total_amount") {
+				valA = Number(valA) || 0;
+				valB = Number(valB) || 0;
+			} else if (sortField === "confirmation_number") {
+				// Compare strings
+				return direction === "asc"
+					? valA.localeCompare(valB)
+					: valB.localeCompare(valA);
+			} else if (sortField === "createdAt") {
+				valA = new Date(valA).getTime();
+				valB = new Date(valB).getTime();
+			}
+
+			return direction === "asc" ? valA - valB : valB - valA;
+		});
+		return sorted;
+	}, [filteredBySearch, sortConfig]);
+
+	/* ------------------ Pagination ------------------ */
+	const paginatedData = useMemo(() => {
+		const startIndex = (currentPage - 1) * pageSize;
+		const endIndex = startIndex + pageSize;
+		return sortedData.slice(startIndex, endIndex);
+	}, [sortedData, currentPage, pageSize]);
+
+	/* ------------------ Handlers ------------------ */
 	const handleFilterClick = (type) => {
 		setFilterType((prevType) => (prevType === type ? "" : type));
 	};
 
-	const columns = [
-		{
-			title: <Tooltip title='Index'>Index</Tooltip>,
-			dataIndex: "index",
-			key: "index",
-		},
-		{
-			title: <Tooltip title='Confirmation Number'>Confirmation Number</Tooltip>,
-			dataIndex: "confirmation_number",
-			key: "confirmation_number",
-			sorter: (a, b) =>
-				a.confirmation_number.localeCompare(b.confirmation_number),
-			...getColumnSearchProps("confirmation_number"),
-			render: (text) => (
-				<Tooltip title={text} placement='top'>
-					<span
-						style={{
-							whiteSpace: "nowrap",
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							display: "block",
-						}}
-					>
-						{text}
-					</span>
-				</Tooltip>
-			),
-		},
-		{
-			title: <Tooltip title='Customer Name'>Customer Name</Tooltip>,
-			dataIndex: "customer_name",
-			key: "customer_name",
-			...getColumnSearchProps("customer_name"),
-			render: (text) => (
-				<Tooltip title={text} placement='top'>
-					<span
-						style={{
-							whiteSpace: "nowrap",
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							display: "block",
-						}}
-					>
-						{text}
-					</span>
-				</Tooltip>
-			),
-		},
-		{
-			title: <Tooltip title='Phone'>Phone</Tooltip>,
-			dataIndex: "customer_phone",
-			key: "customer_phone",
-			...getColumnSearchProps("customer_phone"),
-			render: (text) => (
-				<Tooltip title={text} placement='top'>
-					<span
-						style={{
-							whiteSpace: "nowrap",
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							display: "block",
-						}}
-					>
-						{text}
-					</span>
-				</Tooltip>
-			),
-		},
-		{
-			title: <Tooltip title='Hotel Name'>Hotel Name</Tooltip>,
-			dataIndex: "hotel_name",
-			key: "hotel_name",
-			...getColumnSearchProps("hotel_name"),
-			render: (text, record) => (
-				<Tooltip title={text} placement='top'>
-					<span
-						style={{
-							textTransform: "capitalize",
-							color: "blue",
-							cursor: "pointer",
-							textDecoration: "underline",
-							whiteSpace: "nowrap",
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							display: "block",
-						}}
-						onClick={() => handleHotelClick(record)}
-					>
-						{text}
-					</span>
-				</Tooltip>
-			),
-		},
-		{
-			title: <Tooltip title='Reservation Status'>Reservation Status</Tooltip>,
-			dataIndex: "reservation_status",
-			key: "reservation_status",
-			render: (text) => (
-				<span
-					style={{
-						backgroundColor:
-							text === "cancelled"
-								? "darkred"
-								: text === "not paid"
-								  ? "#222222"
-								  : undefined,
-						color:
-							text === "cancelled" || text === "not paid" ? "white" : undefined,
-						padding: "5px 10px",
-						borderRadius: "5px",
-						whiteSpace: "nowrap",
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-						display: "block",
-						textTransform: "capitalize",
-					}}
-				>
-					{text}
-				</span>
-			),
-		},
-		{
-			title: <Tooltip title='Check-in Date'>Check-in Date</Tooltip>,
-			dataIndex: "checkin_date",
-			key: "checkin_date",
-			sorter: (a, b) => new Date(a.checkin_date) - new Date(b.checkin_date),
-			render: (text) => new Date(text).toLocaleDateString(),
-		},
-		{
-			title: <Tooltip title='Check-out Date'>Check-out Date</Tooltip>,
-			dataIndex: "checkout_date",
-			key: "checkout_date",
-			sorter: (a, b) => new Date(a.checkout_date) - new Date(b.checkout_date),
-			render: (text) => new Date(text).toLocaleDateString(),
-		},
-		{
-			title: <Tooltip title='Payment'>Payment</Tooltip>,
-			dataIndex: "payment_status",
-			key: "payment_status",
-			render: (text) => (
-				<span
-					style={{
-						backgroundColor: text === "Captured" ? "#d4edda" : undefined,
-						color: text === "Captured" ? "#155724" : undefined,
-						padding: "5px 10px",
-						borderRadius: "5px",
-						whiteSpace: "nowrap",
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-						display: "block",
-					}}
-				>
-					{text}
-				</span>
-			),
-		},
-		{
-			title: <Tooltip title='Total Amount'>Total Amount</Tooltip>,
-			dataIndex: "total_amount",
-			key: "total_amount",
-			render: (text) => (
-				<Tooltip title={text} placement='top'>
-					<span
-						style={{
-							whiteSpace: "nowrap",
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							display: "block",
-						}}
-					>
-						{Number(text).toFixed(2)} SAR
-					</span>
-				</Tooltip>
-			),
-		},
-		{
-			title: <Tooltip title='Details'>Details</Tooltip>,
-			key: "details",
-			render: (_, record) => (
-				<Button type='link' onClick={() => showDetailsModal(record)}>
-					View Details
-				</Button>
-			),
-		},
-	];
+	const handleSearchChange = (colKey, value) => {
+		setSearchTexts((prev) => ({ ...prev, [colKey]: value }));
+	};
 
-	const handleTableChange = (pagination, filters, sorter) => {
-		setCurrentPage(pagination.current);
-		setPageSize(pagination.pageSize);
+	// Sorting only on label click
+	const handleSortLabelClick = (colKey) => {
+		setSortConfig((prev) => {
+			if (prev.sortField === colKey) {
+				// Cycle asc -> desc -> none
+				if (prev.direction === "asc") {
+					return { sortField: colKey, direction: "desc" };
+				} else if (prev.direction === "desc") {
+					return { sortField: null, direction: null };
+				}
+			}
+			return { sortField: colKey, direction: "asc" };
+		});
+	};
+
+	// Pagination
+	const totalFiltered = sortedData.length;
+	const totalPages = Math.ceil(totalFiltered / pageSize);
+
+	const handlePageChange = (newPage) => {
+		if (newPage < 1 || newPage > totalPages) return;
+		setCurrentPage(newPage);
+	};
+
+	const handlePageSizeChange = (e) => {
+		setPageSize(Number(e.target.value));
+		setCurrentPage(1);
+	};
+
+	// Hotel click (exact logic from Component B)
+	const handleHotelClick = (record) => {
+		// Exactly as in B
+		const hotelDetailsFinal = {
+			...record.hotelId,
+			belongsTo: record.belongsTo,
+		};
+		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
+		window.location.href = `/hotel-management/new-reservation/${record.belongsTo._id}/${record.hotelId._id}?list`;
+	};
+
+	// Modal
+	const showDetailsModal = (reservation) => {
+		setSelectedReservation(reservation);
+		setIsModalVisible(true);
+	};
+
+	const handleModalClose = () => {
+		setSelectedReservation(null);
+		setIsModalVisible(false);
+	};
+
+	// Clear All filters & search
+	const handleClearAllFilters = () => {
+		setFilterType("");
+		setSearchTexts({
+			confirmation_number: "",
+			customer_name: "",
+			customer_phone: "",
+			hotel_name: "",
+		});
+		setSortConfig({ sortField: null, direction: null });
 	};
 
 	return (
 		<ContentTableWrapper>
-			{reservations && reservations.length > 0 ? (
-				<div className='my-4'>
-					<ScoreCards
-						reservations={reservations}
-						totalReservations={totalDocuments}
-					/>
-				</div>
-			) : (
-				<div>No Reservation</div>
-			)}
-
-			<div style={{ marginBottom: 16 }}>
-				<Space>
-					<FilterButton
-						onClick={() => handleFilterClick("checkinToday")}
-						isActive={filterType === "checkinToday"}
-					>
-						Check-in Today
-					</FilterButton>
-					<FilterButton
-						onClick={() => handleFilterClick("checkoutToday")}
-						isActive={filterType === "checkoutToday"}
-					>
-						Check-out Today
-					</FilterButton>
-					<FilterButton
-						onClick={() => handleFilterClick("paymentTriggered")}
-						isActive={filterType === "paymentTriggered"}
-					>
-						Payment Triggered
-					</FilterButton>
-					<FilterButton
-						onClick={() => handleFilterClick("paymentNotTriggered")}
-						isActive={filterType === "paymentNotTriggered"}
-					>
-						Payment Not Triggered
-					</FilterButton>
-				</Space>
-			</div>
-
-			<Table
-				columns={columns}
-				dataSource={filteredReservations.map((reservation) => ({
-					...reservation,
-					key: reservation._id,
-				}))}
-				pagination={{
-					current: currentPage,
-					total: totalDocuments,
-					pageSize: pageSize,
-					showSizeChanger: true,
-					pageSizeOptions: ["5", "10", "20", "50"],
-				}}
-				onChange={handleTableChange}
-				bordered
-				rowClassName={() => "custom-row-height"}
+			{/* Score Cards */}
+			<ScoreCards
+				reservations={reservations}
+				totalReservations={totalDocuments}
 			/>
 
+			{/* Filter Buttons (Including new ones and "Clear All") */}
+			<div
+				style={{ margin: "16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}
+			>
+				<FilterButton
+					onClick={() => handleFilterClick("checkinToday")}
+					isActive={filterType === "checkinToday"}
+				>
+					Check-in Today
+				</FilterButton>
+				<FilterButton
+					onClick={() => handleFilterClick("checkoutToday")}
+					isActive={filterType === "checkoutToday"}
+				>
+					Check-out Today
+				</FilterButton>
+
+				{/* New Payment Filters */}
+				<FilterButton
+					onClick={() => handleFilterClick("notPaid")}
+					isActive={filterType === "notPaid"}
+				>
+					Not Paid
+				</FilterButton>
+				<FilterButton
+					onClick={() => handleFilterClick("notCaptured")}
+					isActive={filterType === "notCaptured"}
+				>
+					Not Captured
+				</FilterButton>
+				<FilterButton
+					onClick={() => handleFilterClick("captured")}
+					isActive={filterType === "captured"}
+				>
+					Captured
+				</FilterButton>
+
+				{/* Clear All */}
+				<FilterButton onClick={handleClearAllFilters}>Clear All</FilterButton>
+			</div>
+
+			{/* Page Size Select */}
+			<div style={{ marginBottom: 8 }}>
+				<label htmlFor='pageSizeSelect'>Page Size: </label>
+				<select
+					id='pageSizeSelect'
+					value={pageSize}
+					onChange={handlePageSizeChange}
+				>
+					<option value={5}>5</option>
+					<option value={10}>10</option>
+					<option value={20}>20</option>
+					<option value={50}>50</option>
+				</select>
+			</div>
+
+			{/* Manual Table */}
+			<TableWrapper>
+				<StyledTable>
+					<thead>
+						<tr>
+							{/* Index */}
+							<th>
+								<HeaderLabel onClick={() => handleSortLabelClick("index")}>
+									#
+									{sortConfig.sortField === "index"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Confirmation Number */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("confirmation_number")}
+								>
+									Confirmation Number
+									{sortConfig.sortField === "confirmation_number"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+								<div>
+									<input
+										type='text'
+										placeholder='Search...'
+										value={searchTexts.confirmation_number}
+										onChange={(e) =>
+											handleSearchChange("confirmation_number", e.target.value)
+										}
+										style={{ width: "100%" }}
+									/>
+								</div>
+							</th>
+
+							{/* Customer Name */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("customer_name")}
+								>
+									Customer Name
+									{sortConfig.sortField === "customer_name"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+								<div>
+									<input
+										type='text'
+										placeholder='Search...'
+										value={searchTexts.customer_name}
+										onChange={(e) =>
+											handleSearchChange("customer_name", e.target.value)
+										}
+										style={{ width: "100%" }}
+									/>
+								</div>
+							</th>
+
+							{/* Phone */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("customer_phone")}
+								>
+									Phone
+									{sortConfig.sortField === "customer_phone"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+								<div>
+									<input
+										type='text'
+										placeholder='Search...'
+										value={searchTexts.customer_phone}
+										onChange={(e) =>
+											handleSearchChange("customer_phone", e.target.value)
+										}
+										style={{ width: "100%" }}
+									/>
+								</div>
+							</th>
+
+							{/* Hotel Name */}
+							<th>
+								<HeaderLabel onClick={() => handleSortLabelClick("hotel_name")}>
+									Hotel Name
+									{sortConfig.sortField === "hotel_name"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+								<div>
+									<input
+										type='text'
+										placeholder='Search...'
+										value={searchTexts.hotel_name}
+										onChange={(e) =>
+											handleSearchChange("hotel_name", e.target.value)
+										}
+										style={{ width: "100%" }}
+									/>
+								</div>
+							</th>
+
+							{/* Reservation Status */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("reservation_status")}
+								>
+									Reservation Status
+									{sortConfig.sortField === "reservation_status"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Check-in Date */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("checkin_date")}
+								>
+									Check-in Date
+									{sortConfig.sortField === "checkin_date"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Check-out Date */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("checkout_date")}
+								>
+									Check-out Date
+									{sortConfig.sortField === "checkout_date"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Payment Status */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("payment_status")}
+								>
+									Payment Status
+									{sortConfig.sortField === "payment_status"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Total Amount */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("total_amount")}
+								>
+									Total Amount
+									{sortConfig.sortField === "total_amount"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* createdAt */}
+							<th>
+								<HeaderLabel onClick={() => handleSortLabelClick("createdAt")}>
+									Created At
+									{sortConfig.sortField === "createdAt"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
+							{/* Details */}
+							<th>Details</th>
+						</tr>
+					</thead>
+
+					<tbody>
+						{paginatedData.map((reservation) => (
+							<tr key={reservation._id}>
+								{/* Index */}
+								<td>{reservation.index}</td>
+
+								{/* Confirmation Number */}
+								<td>
+									<Tooltip title={reservation.confirmation_number}>
+										<span>{reservation.confirmation_number}</span>
+									</Tooltip>
+								</td>
+
+								{/* Customer Name */}
+								<td>
+									<Tooltip title={reservation.customer_name}>
+										<span>{reservation.customer_name}</span>
+									</Tooltip>
+								</td>
+
+								{/* Phone */}
+								<td>
+									<Tooltip title={reservation.customer_phone}>
+										<span>{reservation.customer_phone}</span>
+									</Tooltip>
+								</td>
+
+								{/* Hotel Name with onClick from B */}
+								<td>
+									<Tooltip title={reservation.hotel_name}>
+										<span
+											style={{
+												color: "blue",
+												textDecoration: "underline",
+												cursor: "pointer",
+											}}
+											onClick={() => handleHotelClick(reservation)}
+										>
+											{reservation.hotel_name}
+										</span>
+									</Tooltip>
+								</td>
+
+								{/* Reservation Status (conditional background) */}
+								<td>
+									<StatusSpan status={reservation.reservation_status}>
+										{reservation.reservation_status}
+									</StatusSpan>
+								</td>
+
+								{/* Check-in Date */}
+								<td>
+									{new Date(reservation.checkin_date).toLocaleDateString()}
+								</td>
+
+								{/* Check-out Date */}
+								<td>
+									{new Date(reservation.checkout_date).toLocaleDateString()}
+								</td>
+
+								{/* Payment Status (conditional background) */}
+								<td>
+									<PaymentSpan payment={reservation.payment_status}>
+										{reservation.payment_status}
+									</PaymentSpan>
+								</td>
+
+								{/* Total Amount */}
+								<td>{Number(reservation.total_amount || 0).toFixed(2)} SAR</td>
+
+								{/* createdAt */}
+								<td>
+									{reservation.createdAt
+										? new Date(reservation.createdAt).toLocaleDateString()
+										: "N/A"}
+								</td>
+
+								{/* Details Button */}
+								<td>
+									<Button onClick={() => showDetailsModal(reservation)}>
+										View Details
+									</Button>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</StyledTable>
+			</TableWrapper>
+
+			{/* Pagination Controls */}
+			<PaginationWrapper>
+				<Button
+					onClick={() => handlePageChange(currentPage - 1)}
+					disabled={currentPage <= 1}
+				>
+					Prev
+				</Button>
+				<span style={{ margin: "0 8px" }}>
+					Page {currentPage} of {totalPages}
+				</span>
+				<Button
+					onClick={() => handlePageChange(currentPage + 1)}
+					disabled={currentPage >= totalPages}
+				>
+					Next
+				</Button>
+			</PaginationWrapper>
+
+			{/* Modal */}
 			<Modal
-				// title={<div style={{ fontSize: "1.5rem" }}>Reservation Details</div>}
 				open={isModalVisible}
 				onCancel={handleModalClose}
 				className='float-right'
-				width={"84%"}
+				width='84%'
 				footer={[
 					<Button key='close' onClick={handleModalClose}>
 						Close
 					</Button>,
 				]}
 			>
-				<>
-					{selectedReservation &&
-					selectedReservation.hotelId &&
+				{selectedReservation && selectedReservation.hotelId ? (
 					selectedReservation.hotelId.hotelName ? (
 						<MoreDetails
 							selectedReservation={selectedReservation}
@@ -412,48 +635,102 @@ const ContentTable = ({
 							reservation={selectedReservation}
 							setReservation={setSelectedReservation}
 						/>
-					) : null}
-				</>
-
-				{/* {selectedReservation &&
-				selectedReservation.hotelId &&
-				selectedReservation.hotelId.hotelName ? (
-					<ReservationDetail
-						reservation={selectedReservation}
-						setReservation={setSelectedReservation}
-						hotelDetails={selectedReservation.hotelId}
-					/>
-				) : null} */}
+					) : (
+						<ReservationDetail
+							reservation={selectedReservation}
+							hotelDetails={selectedReservation.hotelId}
+						/>
+					)
+				) : null}
 			</Modal>
 		</ContentTableWrapper>
 	);
 };
 
-export default ContentTable;
+export default EnhancedContentTable;
+
+/* ------------------ STYLES ------------------ */
 
 const ContentTableWrapper = styled.div`
-	.ant-table {
-		border-radius: 10px;
-		overflow: hidden;
-		font-size: 12px;
-	}
+	padding: 20px;
+`;
 
-	.th {
+// Filter Button with active styling
+const FilterButton = styled(Button)`
+	font-size: 12px;
+	background-color: ${(props) => (props.isActive ? "#d4edda" : "initial")};
+	color: ${(props) => (props.isActive ? "#155724" : "initial")};
+	border-color: ${(props) => (props.isActive ? "#c3e6cb" : "initial")};
+`;
+
+const TableWrapper = styled.div`
+	max-height: 700px;
+	overflow-y: auto;
+	margin-bottom: 16px;
+`;
+
+const StyledTable = styled.table`
+	width: 100%;
+	border-collapse: collapse;
+	th,
+	td {
+		padding: 4px 8px; /* narrower row height */
+		text-align: left;
+		white-space: nowrap;
+		border: 1px solid #f0f0f0;
 		font-size: 12px;
-		font-weight: bold !important;
+		text-transform: capitalize;
+		line-height: 1.2;
 	}
-	.ant-pagination {
-		margin-top: 16px;
-	}
-	.custom-row-height .ant-table-cell {
-		height: auto !important;
-		line-height: 1.5 !important; /* Adjust line-height to align with the text */
-		padding: 8px !important; /* Ensure consistent padding */
+	th {
+		background-color: #fafafa;
+		position: sticky;
+		top: 0;
+		z-index: 1;
 	}
 `;
 
-const FilterButton = styled(Button)`
-	background-color: ${(props) => (props.isActive ? "#d4edda" : undefined)};
-	color: ${(props) => (props.isActive ? "#155724" : undefined)};
-	border-color: ${(props) => (props.isActive ? "#d4edda" : undefined)};
+const HeaderLabel = styled.div`
+	cursor: pointer;
+	font-weight: 600;
+	user-select: none;
+	display: inline-block;
+	margin-bottom: 4px;
+`;
+
+const PaginationWrapper = styled.div`
+	display: flex;
+	align-items: center;
+	margin-top: 16px;
+	button {
+		margin-right: 8px;
+	}
+`;
+
+/* Conditional styling for reservation status (like in B) */
+const StatusSpan = styled.span`
+	display: inline-block;
+	padding: 5px 10px;
+	border-radius: 5px;
+	background-color: ${(props) =>
+		props.status?.toLowerCase() === "cancelled"
+			? "darkred"
+			: props.status?.toLowerCase() === "not paid"
+			  ? "#222"
+			  : "transparent"};
+	color: ${(props) =>
+		props.status?.toLowerCase() === "cancelled" ||
+		props.status?.toLowerCase() === "not paid"
+			? "#fff"
+			: "inherit"};
+`;
+
+/* Conditional styling for payment status (like in B) */
+const PaymentSpan = styled.span`
+	display: inline-block;
+	padding: 5px 10px;
+	border-radius: 5px;
+	background-color: ${(props) =>
+		props.payment === "Captured" ? "#d4edda" : "transparent"};
+	color: ${(props) => (props.payment === "Captured" ? "#155724" : "inherit")};
 `;

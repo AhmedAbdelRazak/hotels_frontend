@@ -8,6 +8,14 @@ const ImageCardHomeSecBanner = ({
 	addThumbnail,
 	fileUploadAndResizeThumbNail,
 }) => {
+	const handleFieldChange = (field, value) => {
+		const updatedImage = {
+			...addThumbnail.images[0], // Assuming only one image is allowed
+			[field]: value,
+		};
+		setAddThumbnail({ ...addThumbnail, images: [updatedImage] });
+	};
+
 	return (
 		<ImageCardHomeSecBannerWrapper>
 			<div className='card card-flush py-4'>
@@ -20,31 +28,74 @@ const ImageCardHomeSecBanner = ({
 						<div className='col-12'>
 							{addThumbnail &&
 								addThumbnail.images &&
-								addThumbnail.images.map((image) => {
-									return (
-										<div className='image-container m-3 col-6'>
-											<button
-												type='button'
-												className='close'
-												onClick={() => {
-													handleImageRemove(image.public_id);
-													setAddThumbnail([]);
-												}}
-												aria-label='Close'
-											>
-												<span aria-hidden='true'>&times;</span>
-											</button>
-											<img
-												src={image.url}
-												alt='Img Not Found'
-												className='thumbnail-image'
-												key={image.public_id}
+								addThumbnail.images.length > 0 &&
+								addThumbnail.images.map((image, index) => (
+									<div
+										className='image-container m-3 col-6'
+										key={image.public_id}
+									>
+										<button
+											type='button'
+											className='close'
+											onClick={() => handleImageRemove(image.public_id)}
+											aria-label='Close'
+										>
+											<span aria-hidden='true'>&times;</span>
+										</button>
+										<img
+											src={image.url}
+											alt='Img Not Found'
+											className='thumbnail-image'
+										/>
+										<div className='input-fields'>
+											<input
+												type='text'
+												placeholder='Title (You can leave blank)'
+												value={image.title || ""}
+												onChange={(e) =>
+													handleFieldChange("title", e.target.value)
+												}
+											/>
+											<input
+												type='text'
+												placeholder='Subtitle (You can leave blank)'
+												value={image.subTitle || ""}
+												onChange={(e) =>
+													handleFieldChange("subTitle", e.target.value)
+												}
+											/>
+											<input
+												type='text'
+												placeholder='Button Title (You can leave blank)'
+												value={image.buttonTitle || ""}
+												onChange={(e) =>
+													handleFieldChange("buttonTitle", e.target.value)
+												}
+											/>
+											<input
+												type='text'
+												placeholder='Redirect URL (You can leave blank)'
+												value={image.pageRedirectURL || ""}
+												onChange={(e) =>
+													handleFieldChange("pageRedirectURL", e.target.value)
+												}
+											/>
+											<input
+												type='text'
+												placeholder='Button Background Color (You can leave blank)'
+												value={image.btnBackgroundColor || ""}
+												onChange={(e) =>
+													handleFieldChange(
+														"btnBackgroundColor",
+														e.target.value
+													)
+												}
 											/>
 										</div>
-									);
-								})}
+									</div>
+								))}
 						</div>
-						{!addThumbnail.images ? (
+						{!addThumbnail.images || addThumbnail.images.length === 0 ? (
 							<label
 								className=''
 								style={{ cursor: "pointer", fontSize: "0.95rem" }}
@@ -69,7 +120,7 @@ const ImageCardHomeSecBanner = ({
 						Width: 1920px, Height: 600px;
 						<br />
 						Set the secondary banner image. Only *.png, *.jpg and *.jpeg image
-						files are accepted
+						files are accepted.
 					</div>
 				</div>
 			</div>
@@ -86,13 +137,27 @@ const ImageCardHomeSecBannerWrapper = styled.div`
 
 	.image-container {
 		position: relative;
-		display: inline-block; // To keep images in line
+		display: inline-block;
 	}
 
 	.thumbnail-image {
 		width: 130px;
 		height: 130px;
 		box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.2);
+	}
+
+	.input-fields {
+		margin-top: 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+	}
+
+	.input-fields input {
+		padding: 5px;
+		border: 1px solid #ccc;
+		border-radius: 5px;
+		width: 100%;
 	}
 
 	.close {
@@ -102,7 +167,7 @@ const ImageCardHomeSecBannerWrapper = styled.div`
 		color: white;
 		background: black;
 		font-size: 20px;
-		border: none; // Remove border if any
-		cursor: pointer; // To indicate this is clickable
+		border: none;
+		cursor: pointer;
 	}
 `;

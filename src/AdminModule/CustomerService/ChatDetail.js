@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
+import { useLocation, useHistory } from "react-router-dom"; // For going back
 import { isAuthenticated } from "../../auth";
 import { updateSupportCase, deleteSpecificMessage } from "../apiAdmin";
 import { Input, Select, Button as AntdButton, Upload, Form } from "antd";
@@ -33,8 +34,14 @@ const ChatDetail = ({
 		chat.displayName1 || chat.supporterName || user.name.split(" ")[0]
 	);
 	const [drawerVisible, setDrawerVisible] = useState(false);
-	// Reference for the ChatMessages container
 	const messagesEndRef = useRef(null);
+
+	// For mobile "back" arrow logic
+	const history = useHistory();
+	const location = useLocation();
+	const isMobile = window.innerWidth <= 768;
+	const queryParams = new URLSearchParams(location.search);
+	const caseIdParam = queryParams.get("id"); // e.g., ?id=someCase
 
 	// Scroll to the bottom function
 	const scrollToBottom = () => {
@@ -56,7 +63,7 @@ const ChatDetail = ({
 		setMessages(chat.conversation);
 		setCaseStatus(chat.caseStatus);
 
-		// Join the room for this chat
+		// Join the socket room for this chat
 		socket.emit("joinRoom", { caseId: chat._id });
 
 		const handleReceiveMessage = (message) => {
@@ -76,7 +83,7 @@ const ChatDetail = ({
 		socket.on("receiveMessage", handleReceiveMessage);
 		socket.on("messageDeleted", handleMessageDeleted);
 
-		// Cleanup listeners and leave the room on unmount
+		// Cleanup listeners and leave room on unmount
 		return () => {
 			socket.off("receiveMessage", handleReceiveMessage);
 			socket.off("messageDeleted", handleMessageDeleted);
@@ -91,21 +98,14 @@ const ChatDetail = ({
 
 	const handleDeleteMessage = async (messageId) => {
 		try {
-			// Show confirmation dialog
 			const userConfirmed = window.confirm(
 				"Are you sure you want to delete this message?"
 			);
+			if (!userConfirmed) return;
 
-			if (!userConfirmed) {
-				return; // Exit if the user cancels the action
-			}
-
-			// Use the deleteSpecificMessage API function
 			const response = await deleteSpecificMessage(chat._id, messageId);
 			if (response && response.message === "Message deleted successfully") {
-				setMessages((prevMessages) =>
-					prevMessages.filter((msg) => msg._id !== messageId)
-				);
+				setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
 				socket.emit("deleteMessage", { caseId: chat._id, messageId });
 			} else {
 				console.error(
@@ -120,20 +120,14 @@ const ChatDetail = ({
 
 	const handleInputChange = (e) => {
 		const inputValue = e.target.value;
-
-		// Check for multiline input and notify the user
-		if (inputValue.includes("\n")) {
-			console.log("Detected multiline input");
-		}
-
 		setNewMessage(inputValue);
 		socket.emit("typing", { name: displayName, caseId: chat._id });
 	};
 
 	const handleKeyPress = (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault(); // Prevent default behavior for Enter
-			handleSendMessage(); // Send message
+			e.preventDefault();
+			handleSendMessage();
 		}
 	};
 
@@ -146,9 +140,8 @@ const ChatDetail = ({
 			["management", "Management"].includes(displayName.toLowerCase()) ||
 			!displayName
 		) {
-			// Show error message
 			alert("Please change your name before sending a message.");
-			return; // Prevent sending the message
+			return;
 		}
 
 		const messageData = {
@@ -229,11 +222,26 @@ const ChatDetail = ({
 		};
 	}, [chat._id, displayName]);
 
+	// On mobile + we have a case param => show back arrow
+	const handleBackArrow = () => {
+		// Remove the `?id=someCaseId` from URL
+		const params = new URLSearchParams(location.search);
+		params.delete("id");
+		history.replace({
+			search: params.toString(),
+		});
+	};
+
 	return (
 		<ChatDetailWrapper>
-			<h3 style={{ textTransform: "capitalize" }}>
+			{/* Mobile back arrow if needed */}
+			{isMobile && caseIdParam && (
+				<MobileBackArrow onClick={handleBackArrow}>← Back</MobileBackArrow>
+			)}
+
+			<h3 className='chat-title'>
 				{chat && chat.openedBy === "client" ? (
-					<span style={{ fontSize: "20px" }}>
+					<span className='chat-client-title'>
 						{chat.hotelId && chat.hotelId._id === "674cf8997e3780f1f838d458" ? (
 							<>
 								Client ({chat.conversation[0].messageBy.customerName}) Needs
@@ -258,16 +266,18 @@ const ChatDetail = ({
 							{chat &&
 								(chat.hotelId.hotelName ||
 									chat.conversation[0].messageBy.customerName)}
-						</span>{" "}
+						</span>
 					</>
 				)}
 			</h3>
+
 			<p>
 				<strong>Inquiry About:</strong> {chat.conversation[0].inquiryAbout}
 			</p>
 			<p>
 				<strong>Details:</strong> {chat.conversation[0].inquiryDetails}
 			</p>
+
 			{!isHistory && (
 				<StatusSelect value={caseStatus} onChange={handleChangeStatus}>
 					<Option value='open'>Open</Option>
@@ -275,43 +285,38 @@ const ChatDetail = ({
 				</StatusSelect>
 			)}
 
-			{/* {chat &&
-				chat.openedBy === "client" &&
-				chat.conversation[0].inquiryAbout === "reserve_room" && ( */}
-			<>
-				<div className='mx-auto text-center'>
-					<AntdButton type='primary' onClick={showDrawer}>
-						Reserve A Room
-					</AntdButton>
-				</div>
-				<HelperSideDrawer
-					chat={chat}
-					onClose={closeDrawer}
-					visible={drawerVisible}
-					selectedCase={selectedCase}
-					setSelectedCase={setSelectedCase}
-					setSupportCases={setSupportCases}
-					agentName={displayName}
-				/>
-			</>
+			<div className='mx-auto text-center my-3'>
+				<AntdButton type='primary' onClick={showDrawer}>
+					Reserve A Room
+				</AntdButton>
+			</div>
+			<HelperSideDrawer
+				chat={chat}
+				onClose={closeDrawer}
+				visible={drawerVisible}
+				selectedCase={selectedCase}
+				setSelectedCase={setSelectedCase}
+				setSupportCases={setSupportCases}
+				agentName={displayName}
+			/>
+
 			{caseStatus === "open" && (
-				<>
-					<Form layout='vertical'>
-						<Form.Item label='Custom Display Name'>
-							<Input
-								value={displayName}
-								onChange={handleDisplayNameChange}
-								placeholder='Enter a custom display name'
-							/>
-						</Form.Item>
-					</Form>
-				</>
+				<Form layout='vertical'>
+					<Form.Item label='Custom Display Name'>
+						<Input
+							value={displayName}
+							onChange={handleDisplayNameChange}
+							placeholder='Enter a custom display name'
+						/>
+					</Form.Item>
+				</Form>
 			)}
+
 			<ChatMessages>
 				{messages.map((msg, index) => (
 					<Message
 						key={index}
-						isAdminMessage={msg.messageBy.userId === user._id} // Admin check
+						isAdminMessage={msg.messageBy.userId === user._id}
 					>
 						<strong>{msg.messageBy.customerName}:</strong> {msg.message}
 						<div>
@@ -329,7 +334,6 @@ const ChatDetail = ({
 						</div>
 					</Message>
 				))}
-				{/* Display typing status if someone is typing */}
 				{typingStatus && <TypingStatus>{typingStatus}</TypingStatus>}
 				<div ref={messagesEndRef} />
 			</ChatMessages>
@@ -340,9 +344,9 @@ const ChatDetail = ({
 						placeholder='Type your message...'
 						value={newMessage}
 						onChange={handleInputChange}
-						onKeyDown={handleKeyPress} // Use custom key press handler
-						onBlur={handleInputBlur} // Notify stop typing when input loses focus
-						autoSize={{ minRows: 1, maxRows: 6 }} // Automatically adjust height for multiline input
+						onKeyDown={handleKeyPress}
+						onBlur={handleInputBlur}
+						autoSize={{ minRows: 1, maxRows: 6 }}
 					/>
 					<SmileOutlined onClick={() => setShowEmojiPicker(!showEmojiPicker)} />
 					{showEmojiPicker && (
@@ -368,6 +372,8 @@ const ChatDetail = ({
 
 export default ChatDetail;
 
+/* ------------------ STYLES ------------------ */
+
 const ChatDetailWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
@@ -377,14 +383,61 @@ const ChatDetailWrapper = styled.div`
 	background-color: var(--background-light);
 	border-radius: 8px;
 	box-shadow: var(--box-shadow-dark);
+
+	.chat-title {
+		text-transform: capitalize;
+	}
+	.chat-client-title {
+		font-size: 20px;
+	}
+
+	/* --- MOBILE ADJUSTMENTS --- */
+	@media (max-width: 768px) {
+		padding: 10px; /* reduce padding on mobile */
+
+		.chat-title {
+			font-size: 1rem; /* smaller title font */
+		}
+		.chat-client-title {
+			font-size: 0.95rem;
+		}
+		p {
+			font-size: 0.9rem;
+			margin-bottom: 6px;
+		}
+	}
+`;
+
+const MobileBackArrow = styled.div`
+	color: blue;
+	cursor: pointer;
+	margin-bottom: 8px;
+	font-size: 1.1rem;
+	font-weight: bold;
+	width: fit-content;
+
+	&:hover {
+		text-decoration: underline;
+	}
+
+	@media (max-width: 768px) {
+		font-size: 1rem;
+		margin-bottom: 12px;
+	}
 `;
 
 const ChatMessages = styled.div`
 	flex: 1;
-	max-height: 700px; /* Limit height to 600px */
-	overflow-y: auto; /* Enable scrolling when content exceeds height */
+	max-height: 700px;
+	overflow-y: auto;
 	margin-bottom: 20px;
-	padding-right: 10px; /* Add padding for better usability */
+	padding-right: 10px;
+
+	@media (max-width: 768px) {
+		max-height: 60vh; /* or something smaller for mobile */
+		margin-bottom: 12px;
+		padding-right: 5px;
+	}
 `;
 
 const Message = styled.div`
@@ -392,7 +445,6 @@ const Message = styled.div`
 	border: 1px solid var(--border-color-dark);
 	border-radius: 8px;
 	margin-bottom: 10px;
-
 	background-color: ${(props) =>
 		props.isAdminMessage
 			? "var(--admin-message-bg)"
@@ -401,14 +453,25 @@ const Message = styled.div`
 		props.isAdminMessage
 			? "var(--admin-message-color)"
 			: "var(--user-message-color)"};
+	white-space: pre-wrap;
+	word-wrap: break-word;
 
-	white-space: pre-wrap; /* Preserve line breaks and extra spaces */
-	word-wrap: break-word; /* Break long words if necessary */
+	@media (max-width: 768px) {
+		padding: 8px;
+		margin-bottom: 6px;
+		font-size: 0.9rem;
+	}
 `;
 
 const StatusSelect = styled(Select)`
 	width: 150px;
 	margin-bottom: 20px;
+
+	@media (max-width: 768px) {
+		width: 120px;
+		margin-bottom: 12px;
+		font-size: 0.9rem;
+	}
 `;
 
 const ChatInputContainer = styled.div`
@@ -416,12 +479,16 @@ const ChatInputContainer = styled.div`
 	align-items: center;
 	gap: 5px;
 
-	input {
+	@media (max-width: 768px) {
+		gap: 3px;
+	}
+
+	.ant-input-textarea {
 		flex-grow: 1;
 	}
 
-	button {
-		width: auto;
+	textarea {
+		font-size: 0.95rem; /* smaller text for mobile */
 	}
 `;
 
@@ -430,6 +497,12 @@ const EmojiPickerWrapper = styled.div`
 	bottom: 60px;
 	right: 20px;
 	z-index: 1002;
+
+	@media (max-width: 768px) {
+		bottom: 80px;
+		right: 10px;
+		transform: scale(0.95); /* slightly smaller emoji picker on mobile */
+	}
 `;
 
 const SendButton = styled(AntdButton)`
@@ -442,10 +515,20 @@ const SendButton = styled(AntdButton)`
 		background-color: var(--button-bg-primary-light);
 		color: var(--button-font-color);
 	}
+
+	@media (max-width: 768px) {
+		font-size: 0.9rem;
+		padding: 0 8px;
+	}
 `;
 
 const TypingStatus = styled.div`
 	font-style: italic;
 	color: gray;
 	margin-top: 10px;
+
+	@media (max-width: 768px) {
+		font-size: 0.85rem;
+		margin-top: 6px;
+	}
 `;

@@ -209,7 +209,6 @@ const AllReservationMain = ({ chosenLanguage }) => {
 export default AllReservationMain;
 
 const AllReservationMainWrapper = styled.div`
-	overflow-x: hidden;
 	margin-top: 20px;
 	min-height: 715px;
 

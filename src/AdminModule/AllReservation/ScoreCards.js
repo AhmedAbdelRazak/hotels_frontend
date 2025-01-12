@@ -41,9 +41,9 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 	}, {});
 
 	const topHotels = Object.entries(hotelCounts)
-		.map(([name, reservations]) => ({ name, reservations }))
+		.map(([name, count]) => ({ name, reservations: count }))
 		.sort((a, b) => b.reservations - a.reservations)
-		.slice(0, 3); // Get top 3 hotels
+		.slice(0, 3); // Top 3
 
 	return (
 		<ScoreCardsWrapper>
@@ -59,7 +59,7 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 						) : todayReservations < yesterdayReservations ? (
 							<ArrowDownOutlined style={{ color: "red" }} />
 						) : (
-							<MinusOutlined style={{ color: "#b0b0b0" }} /> // Greish neutral icon
+							<MinusOutlined style={{ color: "#b0b0b0" }} />
 						)}
 						<span
 							style={{
@@ -91,7 +91,7 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 						) : weeklyReservations < lastWeekReservations ? (
 							<ArrowDownOutlined style={{ color: "red" }} />
 						) : (
-							<MinusOutlined style={{ color: "#b0b0b0" }} /> // Greish neutral icon
+							<MinusOutlined style={{ color: "#b0b0b0" }} />
 						)}
 						<span
 							style={{
@@ -118,7 +118,11 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 					{topHotels.map((hotel, index) => (
 						<p
 							key={index}
-							style={{ textTransform: "capitalize", fontSize: "0.78rem" }}
+							style={{
+								textTransform: "capitalize",
+								fontSize: "0.78rem",
+								margin: "4px 0",
+							}}
 						>
 							{index + 1}. {hotel.name} - {hotel.reservations} reservations
 						</p>
@@ -137,17 +141,16 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 	);
 };
 
-// Utility functions for date calculations
-const isToday = (date) => {
+// Utility functions
+function isToday(date) {
 	const today = new Date();
 	return (
 		date.getDate() === today.getDate() &&
 		date.getMonth() === today.getMonth() &&
 		date.getFullYear() === today.getFullYear()
 	);
-};
-
-const isYesterday = (date) => {
+}
+function isYesterday(date) {
 	const today = new Date();
 	const yesterday = new Date(today);
 	yesterday.setDate(today.getDate() - 1);
@@ -156,17 +159,15 @@ const isYesterday = (date) => {
 		date.getMonth() === yesterday.getMonth() &&
 		date.getFullYear() === yesterday.getFullYear()
 	);
-};
-
-const isThisWeek = (date) => {
+}
+function isThisWeek(date) {
 	const today = new Date();
 	const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
 	const endOfWeek = new Date(startOfWeek);
 	endOfWeek.setDate(startOfWeek.getDate() + 6);
 	return date >= startOfWeek && date <= endOfWeek;
-};
-
-const isLastWeek = (date) => {
+}
+function isLastWeek(date) {
 	const today = new Date();
 	const startOfThisWeek = new Date(
 		today.setDate(today.getDate() - today.getDay())
@@ -175,19 +176,21 @@ const isLastWeek = (date) => {
 	const startOfLastWeek = new Date(startOfThisWeek);
 	startOfLastWeek.setDate(endOfLastWeek.getDate() - 7);
 	return date >= startOfLastWeek && date < endOfLastWeek;
-};
+}
 
 export default ScoreCards;
 
-// Styled Components
+/* ------------------ STYLES ------------------ */
 const ScoreCardsWrapper = styled.div`
 	display: flex;
 	flex-wrap: wrap;
 	gap: 20px;
 	justify-content: space-between;
 
+	/* On mobile, stack them vertically */
 	@media (max-width: 768px) {
 		flex-direction: column;
+		gap: 12px; /* slightly smaller gap on mobile */
 	}
 `;
 
@@ -202,8 +205,11 @@ const Card = styled.div`
 	text-align: center;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 
+	/* Make each card go full-width on small screens */
 	@media (max-width: 768px) {
-		max-width: 100%;
+		max-width: 330px;
+
+		padding: 14px; /* reduce padding on mobile */
 	}
 `;
 
@@ -211,6 +217,10 @@ const CardTitle = styled.h3`
 	margin-bottom: 10px;
 	font-size: 18px;
 	color: #f0f0f0;
+
+	@media (max-width: 768px) {
+		font-size: 16px;
+	}
 `;
 
 const CardData = styled.div`
@@ -220,6 +230,13 @@ const CardData = styled.div`
 	p {
 		font-size: 14px;
 		margin: 5px 0;
+	}
+
+	@media (max-width: 768px) {
+		font-size: 20px;
+		p {
+			font-size: 13px;
+		}
 	}
 `;
 
@@ -233,5 +250,12 @@ const PercentageWrapper = styled.div`
 		margin-left: 5px;
 		font-size: 14px;
 		font-weight: bold;
+	}
+
+	@media (max-width: 768px) {
+		margin-top: 6px;
+		span {
+			font-size: 12px;
+		}
 	}
 `;

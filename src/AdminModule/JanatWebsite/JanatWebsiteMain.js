@@ -6,6 +6,7 @@ import ZHomePageBanners from "./ZHomePageBanners";
 import ZHomePageBanner2 from "./ZHomePageBanner2";
 import ZContactusBannerAdd from "./ZContactusBannerAdd";
 import ZAboutUsAdd from "./ZAboutUsAdd";
+// eslint-disable-next-line
 import ZHotelsMainBanner from "./ZHotelsMainBanner";
 import { JanatWebsite, getJanatWebsiteRecord } from "../apiAdmin";
 import { toast } from "react-toastify";
@@ -14,6 +15,7 @@ import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 import ZPrivacyPolicy from "./ZPrivacyPolicy";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import ZHomePageBanner3 from "./ZHomePageBanner3";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -21,6 +23,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [logo, setLogo] = useState([]);
 	const [homeMainBanners, setHomeMainBanners] = useState([]);
 	const [homeSecondBanner, setHomeSecondBanner] = useState([]);
+	const [homeThirdBanner, setHomeThirdBanner] = useState([]);
 	const [contactUsBanner, setContactUsBanner] = useState([]);
 	const [aboutUsBanner, setAboutUsBanner] = useState([]);
 	const [hotelPageBanner, setHotelPageBanner] = useState([]);
@@ -52,6 +55,9 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 					});
 					setHomeSecondBanner({
 						images: data[0].homeSecondBanner ? [data[0].homeSecondBanner] : [],
+					});
+					setHomeThirdBanner({
+						images: data[0].homeThirdBanner ? [data[0].homeThirdBanner] : [],
 					});
 					setContactUsBanner({
 						images: data[0].contactUsBanner ? [data[0].contactUsBanner] : [],
@@ -124,6 +130,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 				homeSecondBanner &&
 				homeSecondBanner.images &&
 				homeSecondBanner.images[0],
+			homeThirdBanner:
+				homeThirdBanner && homeThirdBanner.images && homeThirdBanner.images[0],
 			contactUsBanner:
 				contactUsBanner && contactUsBanner.images && contactUsBanner.images[0],
 			aboutUsBanner:
@@ -257,11 +265,17 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 										/>
 									</div>
 									<div>
+										<ZHomePageBanner3
+											addThumbnail={homeThirdBanner}
+											setAddThumbnail={setHomeThirdBanner}
+										/>
+									</div>
+									{/* <div>
 										<ZHotelsMainBanner
 											addThumbnail={hotelPageBanner}
 											setAddThumbnail={setHotelPageBanner}
 										/>
-									</div>
+									</div> */}
 								</>
 							)}
 

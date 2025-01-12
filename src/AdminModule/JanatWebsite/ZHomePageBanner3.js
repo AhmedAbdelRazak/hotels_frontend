@@ -10,7 +10,7 @@ import { cloudinaryUpload1 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ImageCardHomeSecBanner from "./ImageCardHomeSecBanner";
 
-const ZHomePageBanner2 = ({ addThumbnail, setAddThumbnail }) => {
+const ZHomePageBanner3 = ({ addThumbnail, setAddThumbnail }) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState("");
 
@@ -92,25 +92,25 @@ const ZHomePageBanner2 = ({ addThumbnail, setAddThumbnail }) => {
 	};
 
 	return (
-		<ZHomePageBanner2Wrapper>
+		<ZHomePageBanner3Wrapper>
 			<div className=''>
 				<div className='container mt-3'>
 					<h3
 						style={{ color: "#009ef7", fontWeight: "bold" }}
 						className='mt-1 mb-3 text-center'
 					>
-						Home Page Second Section Banner (In Middle)
+						Home Page Second Section Banner Before Footer
 					</h3>
 					<div className=''>{FileUploadThumbnail()}</div>
 				</div>
 			</div>
-		</ZHomePageBanner2Wrapper>
+		</ZHomePageBanner3Wrapper>
 	);
 };
 
-export default ZHomePageBanner2;
+export default ZHomePageBanner3;
 
-const ZHomePageBanner2Wrapper = styled.div`
+const ZHomePageBanner3Wrapper = styled.div`
 	.container {
 		border: 2px solid lightgrey;
 		border-radius: 20px;

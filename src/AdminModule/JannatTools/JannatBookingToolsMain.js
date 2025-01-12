@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useLocation, useHistory } from "react-router-dom"; // Import React Router hooks
+import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
@@ -42,21 +42,21 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 				history.push("/");
 				return;
 			}
-
 			const accessTo = getUser.accessTo || [];
+
+			// If user has access to "JannatTools", skip password verification
 			if (accessTo.includes("JannatTools")) {
-				// User has access to JannatTools; skip password verification
 				setIsPasswordVerified(true);
-				setIsModalVisible(false); // Ensure the modal does not show
+				setIsModalVisible(false);
 				return;
 			}
 
 			if (accessTo.length === 0 || accessTo.includes("all")) {
-				// Stay as is if accessTo is empty or contains "all"
+				// If there's no restriction or "all" is included, do nothing special
 				return;
 			}
 
-			// Redirect based on accessTo[0]
+			// Otherwise, redirect to first available module
 			switch (accessTo[0]) {
 				case "CustomerService":
 					history.push("/admin/customer-service?tab=active-client-cases");
@@ -74,7 +74,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 					history.push("/admin/dashboard");
 					break;
 				default:
-					// Stay as is if no match
+					// If no match, stay here or redirect somewhere else
 					break;
 			}
 		}
@@ -88,7 +88,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 			setCollapsed(true);
 		}
 
-		// If the modal is required for verification but the accessTo array allows skipping it
+		// If password was previously verified
 		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
 		if (toolsPasswordVerified) {
 			setIsPasswordVerified(true);
@@ -184,17 +184,16 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 							<TabNavigation>
 								<button
 									className={activeTab === "calculator" ? "active" : ""}
-									onClick={() => setActiveTab("calculator")}
+									onClick={() => handleTabChange("calculator")}
 								>
 									Reservation Calculator
 								</button>
 								<button
 									className={activeTab === "reservations" ? "active" : ""}
-									onClick={() => setActiveTab("reservations")}
+									onClick={() => handleTabChange("reservations")}
 								>
 									Reservations Tools
 								</button>
-								{/* Conditionally render "Add Employee" and "Update Employee" */}
 								{(!getUser.accessTo ||
 									getUser.accessTo.length === 0 ||
 									getUser.accessTo.includes("all")) && (
@@ -250,8 +249,9 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 
 export default JannatBookingToolsMain;
 
+/* ---------------------------------- STYLES ---------------------------------- */
+
 const JannatBookingToolsMainWrapper = styled.div`
-	overflow-x: hidden;
 	margin-top: 20px;
 	min-height: 715px;
 
@@ -287,6 +287,7 @@ const TabNavigation = styled.div`
 		cursor: pointer;
 		font-weight: bold;
 		border-radius: 5px;
+		flex: 1; /* so the buttons share the row's space */
 
 		&.active {
 			background-color: #006ad1;
@@ -295,6 +296,18 @@ const TabNavigation = styled.div`
 
 		&:hover {
 			background-color: #bbb;
+		}
+	}
+
+	/* ------------- MOBILE TABS: 2 PER ROW ------------- */
+	@media (max-width: 768px) {
+		flex-wrap: wrap;
+		gap: 8px;
+
+		button {
+			width: 48%;
+			padding: 8px;
+			font-size: 0.9rem;
 		}
 	}
 `;

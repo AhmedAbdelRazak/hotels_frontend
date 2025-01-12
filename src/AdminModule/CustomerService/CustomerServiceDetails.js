@@ -21,52 +21,48 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 	const [activeHotelCasesCount, setActiveHotelCasesCount] = useState(0);
 	const [activeClientCasesCount, setActiveClientCasesCount] = useState(0);
 
-	// Function to handle tab change
+	// Handle tab changes
 	const handleTabChange = (tab) => {
 		setActiveTab(tab);
 		history.push(`?tab=${tab}`);
 	};
 
-	// Function to fetch the active case counts
+	// Fetch active case counts
 	const fetchCaseCounts = async () => {
 		try {
-			const hotelCount = await getFilteredSupportCases(); // Fetch active hotel cases count
-			const clientCount = await getFilteredSupportCasesClients(); // Fetch active client cases count
-			setActiveHotelCasesCount(hotelCount.length); // Assuming the API returns an array
+			const hotelCount = await getFilteredSupportCases(); // Fetch active hotel cases
+			const clientCount = await getFilteredSupportCasesClients(); // Fetch active client cases
+			setActiveHotelCasesCount(hotelCount.length); // API presumably returns an array
 			setActiveClientCasesCount(clientCount.length);
 		} catch (error) {
 			console.error("Error fetching case counts", error);
 		}
 	};
 
-	// Fetch the case counts initially when component mounts
+	// Initial fetch
 	useEffect(() => {
 		fetchCaseCounts();
 	}, []);
 
-	// Listen for socket events to update the case counts in real-time
+	// Socket real-time updates
 	useEffect(() => {
-		// Handle new case or closed case events
 		const handleNewChat = () => {
-			fetchCaseCounts(); // Re-fetch the case counts when a new chat is added
+			fetchCaseCounts();
 		};
-
 		const handleCloseCase = () => {
-			fetchCaseCounts(); // Re-fetch the case counts when a case is closed
+			fetchCaseCounts();
 		};
 
-		// Listen for these events on the socket
 		socket.on("newChat", handleNewChat);
 		socket.on("closeCase", handleCloseCase);
 
-		// Cleanup on unmount
 		return () => {
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCloseCase);
 		};
 	}, []);
 
-	// Set active tab based on URL query parameter
+	// Sync active tab with URL query param
 	useEffect(() => {
 		const query = new URLSearchParams(location.search);
 		const tab = query.get("tab");
@@ -92,6 +88,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 						}}
 					/>
 				</Tab>
+
 				<Tab
 					isActive={activeTab === "active-client-cases"}
 					onClick={() => handleTabChange("active-client-cases")}
@@ -106,7 +103,8 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 						}}
 					/>
 				</Tab>
-				{/* Render history tabs only if the user is a super admin */}
+
+				{/* History tabs only if super admin */}
 				{isSuperAdmin && (
 					<>
 						<Tab
@@ -115,6 +113,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 						>
 							History Of Hotel Support Cases
 						</Tab>
+
 						<Tab
 							isActive={activeTab === "history-client-cases"}
 							onClick={() => handleTabChange("history-client-cases")}
@@ -167,6 +166,11 @@ const CustomerServiceDetailsWrapper = styled.div`
 	.tab-grid {
 		display: flex;
 		margin-bottom: 20px;
+		/* On mobile, allow wrapping so we can have 2 tabs per row */
+		@media (max-width: 768px) {
+			flex-wrap: wrap;
+			gap: 8px; /* small gap between wrapped tabs */
+		}
 	}
 
 	.content-wrapper {
@@ -187,14 +191,24 @@ const Tab = styled.div`
 		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
 	transition: all 0.3s ease;
 	min-width: 25px;
-	width: 100%;
+	width: 100%; /* Each tab expands equally in the row */
 	text-align: center;
 	z-index: 100;
 	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "black" : "black")};
+	color: black; /* same color whether active or not */
 
+	/* Adjust slightly for medium-ish screens */
 	@media (max-width: 1600px) {
 		font-size: 1rem;
 		padding: 10px 1px;
+	}
+
+	/* On mobile, 2 tabs per row */
+	@media (max-width: 768px) {
+		flex: 1 0 48%; /* each tab ~48% so two fit in one row */
+		box-sizing: border-box;
+		font-size: 0.95rem; /* slightly smaller font on mobile */
+		margin: 0; /* override the 0 3px for consistent spacing within .tab-grid gap */
+		padding: 10px 0;
 	}
 `;

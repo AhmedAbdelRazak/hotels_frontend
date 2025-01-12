@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
+import { useLocation, useHistory } from "react-router-dom";
 import { List, Badge } from "antd";
 import {
 	getFilteredSupportCasesClients,
@@ -18,7 +19,16 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	const [unseenCount, setUnseenCount] = useState(0);
 	const { user, token } = isAuthenticated();
 
-	// Fetch unseen messages count for the admin
+	// For smaller-screen routing
+	const location = useLocation();
+	const history = useHistory();
+	const queryParams = new URLSearchParams(location.search);
+	const caseIdParam = queryParams.get("id");
+
+	// Detect if user is on a mobile screen
+	const isMobile = window.innerWidth <= 768;
+
+	/* ------------------- FETCH UNSEEN COUNT ------------------- */
 	useEffect(() => {
 		const fetchUnseenCount = async () => {
 			try {
@@ -39,17 +49,16 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		// Listen for messageSeen to update unseen count
 		socket.on("messageSeen", ({ caseId, userId }) => {
 			if (userId === user._id) {
-				fetchUnseenCount(); // Update unseen messages when seen
+				fetchUnseenCount();
 			}
 		});
 
-		// Cleanup socket listeners
 		return () => {
 			socket.off("messageSeen");
 		};
 	}, [user._id]);
 
-	// Play notification sound when new messages arrive
+	/* ------------------- NOTIFICATION SOUND ------------------- */
 	const playNotificationSound = () => {
 		const audio = new Audio(notificationSound);
 		audio.play().catch((error) => {
@@ -57,25 +66,25 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		});
 	};
 
+	/* ------------------- SORT SUPPORT CASES ------------------- */
 	const sortSupportCases = useCallback(
 		(cases) => {
 			return [...cases].sort((a, b) => {
-				const latestMessageA =
+				const latestA =
 					a.conversation
 						.filter((msg) => msg.messageBy.userId !== user._id)
 						.slice(-1)[0]?.date || a.createdAt;
-				const latestMessageB =
+				const latestB =
 					b.conversation
 						.filter((msg) => msg.messageBy.userId !== user._id)
 						.slice(-1)[0]?.date || b.createdAt;
-
-				return new Date(latestMessageB) - new Date(latestMessageA); // Descending order
+				return new Date(latestB) - new Date(latestA); // Descending order
 			});
 		},
 		[user._id]
 	);
 
-	// Memoize fetchSupportCases to avoid re-creation
+	/* ------------------- FETCH SUPPORT CASES ------------------- */
 	const fetchSupportCases = useCallback(() => {
 		getFilteredSupportCasesClients(token)
 			.then((data) => {
@@ -89,21 +98,19 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						const allowedHotelIds = getUser.hotelsToSupport.map(
 							(hotel) => hotel._id
 						);
-
-						// Filter cases where hotelId is in the allowedHotelIds
 						filteredCases = data.filter((chat) =>
 							allowedHotelIds.includes(chat.hotelId)
 						);
 					}
 
-					// Filter out closed cases
+					// Filter out closed
 					const openCases = filteredCases.filter(
 						(chat) => chat.caseStatus !== "closed"
 					);
 
 					setSupportCases(sortSupportCases(openCases));
 
-					// Calculate unseen messages
+					// Calculate total unseen messages
 					const unseenMessages = openCases.reduce((acc, supportCase) => {
 						return (
 							acc +
@@ -118,10 +125,11 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			});
 	}, [token, isSuperAdmin, getUser, sortSupportCases]);
 
+	/* ------------------- SETUP / SOCKET LISTENERS ------------------- */
 	useEffect(() => {
 		fetchSupportCases();
 
-		// Handle new message received event
+		// On receiving a new message
 		const handleReceiveMessage = (message) => {
 			if (message && message.caseId) {
 				playNotificationSound();
@@ -135,14 +143,14 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			}
 		};
 
-		// Handle real-time new case event for clients only
+		// On new chat
 		const handleNewChat = (newCase) => {
 			if (newCase.openedBy === "client") {
 				setSupportCases((prevCases) => [...prevCases, newCase]);
 			}
 		};
 
-		// Handle case closed event
+		// On case closed
 		const handleCaseClosed = (closedCase) => {
 			setSupportCases((prevCases) =>
 				prevCases.filter((c) => c._id !== closedCase.case._id)
@@ -152,50 +160,57 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			}
 		};
 
-		// Socket listeners
 		socket.on("receiveMessage", handleReceiveMessage);
 		socket.on("newChat", handleNewChat);
-		socket.on("closeCase", handleCaseClosed); // Ensure closed cases are handled
+		socket.on("closeCase", handleCaseClosed);
 
-		// Cleanup socket listeners
 		return () => {
 			socket.off("receiveMessage", handleReceiveMessage);
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCaseClosed);
 		};
-	}, [fetchSupportCases, selectedCase]); // fetchSupportCases is now a dependency
+	}, [fetchSupportCases, selectedCase]);
 
-	// Mark messages as seen by admin
-	const handleCaseSelection = async (selectedCase) => {
-		// Leave the previous room if a case was already selected
-		if (selectedCase && selectedCase._id) {
-			socket.emit("leaveRoom", { caseId: selectedCase._id });
-		}
+	/* ------------------- MARK CASE AS SEEN ------------------- */
+	const markCaseAsSeen = async (caseObj) => {
+		if (!caseObj || !caseObj._id) return;
 
-		setSelectedCase(selectedCase);
+		// Join the socket room
+		socket.emit("joinRoom", { caseId: caseObj._id });
 
-		if (selectedCase) {
-			// Join the new room for the selected case
-			socket.emit("joinRoom", { caseId: selectedCase._id });
-
-			try {
-				await markAllMessagesAsSeenByAdmin(selectedCase._id, user._id);
-				socket.emit("messageSeen", {
-					caseId: selectedCase._id,
-					userId: user._id,
-				});
-
-				// Re-fetch unseen count after marking messages as seen
-				const result = await getUnseenMessagesCountByAdmin(user._id);
-				if (result && result.count !== undefined) {
-					setUnseenCount(result.count); // Update unseen count
-				}
-			} catch (error) {
-				console.error("Error marking messages as seen: ", error);
+		try {
+			await markAllMessagesAsSeenByAdmin(caseObj._id, user._id);
+			socket.emit("messageSeen", {
+				caseId: caseObj._id,
+				userId: user._id,
+			});
+			// Re-fetch unseen
+			const result = await getUnseenMessagesCountByAdmin(user._id);
+			if (result && result.count !== undefined) {
+				setUnseenCount(result.count);
 			}
+		} catch (error) {
+			console.error("Error marking messages as seen:", error);
 		}
 	};
 
+	/* ------------------- HANDLE CASE SELECTION ------------------- */
+	const handleCaseSelection = async (item) => {
+		// On large screens => local selection, side by side
+		if (!isMobile) {
+			// Leave previous room if needed
+			if (selectedCase && selectedCase._id) {
+				socket.emit("leaveRoom", { caseId: selectedCase._id });
+			}
+			setSelectedCase(item);
+			await markCaseAsSeen(item);
+		} else {
+			// On small screens => add ?id=someCaseId, show chat in full screen
+			history.push(`?id=${item._id}`);
+		}
+	};
+
+	/* ------------------- HOTEL CHANGED SOCKET ------------------- */
 	useEffect(() => {
 		const handleHotelChanged = ({ caseId, newHotel }) => {
 			setSupportCases((prevCases) =>
@@ -205,10 +220,9 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						: supportCase
 				)
 			);
-
 			if (selectedCase && selectedCase._id === caseId) {
-				setSelectedCase((prevCase) => ({
-					...prevCase,
+				setSelectedCase((prev) => ({
+					...prev,
 					hotelId: { ...newHotel },
 				}));
 			}
@@ -220,14 +234,98 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			socket.off("hotelChanged", handleHotelChanged);
 		};
 	}, [selectedCase, setSupportCases]);
-	// fetchSupportCases is now a dependency
 
+	/* ------------------- MOBILE LOGIC ------------------- */
+	// If we're on mobile, check if we have ?id=someCase
+	if (isMobile) {
+		// If we have a caseId in the URL, show chat in full screen
+		if (caseIdParam) {
+			const foundCase = supportCases.find((c) => c._id === caseIdParam);
+			if (!foundCase) {
+				return <div>Loading case...</div>; // or fetch single case if needed
+			}
+			// Mark as seen
+			markCaseAsSeen(foundCase);
+
+			return (
+				<ActiveClientsSupportCasesWrapperMobile>
+					<ChatDetail
+						chat={foundCase}
+						fetchChats={fetchSupportCases}
+						selectedCase={foundCase}
+						setSelectedCase={setSelectedCase}
+						setSupportCases={setSupportCases}
+					/>
+				</ActiveClientsSupportCasesWrapperMobile>
+			);
+		} else {
+			// Show only the list, 100% width, 2px padding, no chat detail
+			return (
+				<ActiveClientsSupportCasesWrapperMobile>
+					<List
+						key={JSON.stringify(supportCases)}
+						style={{ marginTop: "20px", padding: "2px" }}
+						header={
+							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
+								Open Client Support Cases
+								<Badge
+									count={unseenCount}
+									style={{ backgroundColor: "#f5222d", marginLeft: "10px" }}
+								/>
+							</div>
+						}
+						bordered
+						dataSource={supportCases}
+						renderItem={(item) => {
+							const hasUnseen = item.conversation.some(
+								(msg) => !msg.seenByAdmin
+							);
+							return (
+								<List.Item
+									key={item._id}
+									onClick={() => handleCaseSelection(item)}
+									style={{
+										cursor: "pointer",
+										textTransform: "capitalize",
+										backgroundColor: hasUnseen ? "#fff1f0" : "white",
+										position: "relative",
+										marginBottom: "4px", // optional spacing
+									}}
+								>
+									{item.hotelId &&
+									item.hotelId._id !== "674cf8997e3780f1f838d458"
+										? item.hotelId.hotelName
+										: "Jannat Booking"}{" "}
+									- <strong>{item.displayName1}</strong>
+									{hasUnseen && (
+										<Badge
+											count={
+												item.conversation.filter((msg) => !msg.seenByAdmin)
+													.length
+											}
+											style={{
+												backgroundColor: "#f5222d",
+												position: "absolute",
+												right: 10,
+											}}
+										/>
+									)}
+								</List.Item>
+							);
+						}}
+					/>
+				</ActiveClientsSupportCasesWrapperMobile>
+			);
+		}
+	}
+
+	/* ------------------- DESKTOP / LARGE SCREEN LAYOUT ------------------- */
 	return (
 		<ActiveClientsSupportCasesWrapper>
 			<MainContentWrapper>
 				<SupportCasesList>
 					<List
-						key={JSON.stringify(supportCases)} // Forces re-render when supportCases changes
+						key={JSON.stringify(supportCases)}
 						style={{ marginTop: "20px" }}
 						header={
 							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
@@ -288,7 +386,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 					<ChatDetailWrapper>
 						<ChatDetail
 							chat={selectedCase}
-							fetchChats={fetchSupportCases} // Pass the refactored function
+							fetchChats={fetchSupportCases}
 							selectedCase={selectedCase}
 							setSelectedCase={setSelectedCase}
 							setSupportCases={setSupportCases}
@@ -302,7 +400,9 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 
 export default ActiveClientsSupportCases;
 
-// Styled-components
+/* ------------------------------------------------------- */
+/*                     STYLED COMPONENTS                   */
+/* ------------------------------------------------------- */
 
 const ActiveClientsSupportCasesWrapper = styled.div`
 	padding: 20px;
@@ -314,6 +414,16 @@ const ActiveClientsSupportCasesWrapper = styled.div`
 		&:hover {
 			background-color: #40a9ff;
 			border-color: #40a9ff;
+		}
+	}
+`;
+
+// For the mobile full-width container
+const ActiveClientsSupportCasesWrapperMobile = styled.div`
+	padding: 2px; /* minimal padding as requested */
+	@media (max-width: 1000px) {
+		ul {
+			font-size: 0.75rem !important;
 		}
 	}
 `;
