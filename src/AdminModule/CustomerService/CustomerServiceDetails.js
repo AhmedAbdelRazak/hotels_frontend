@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import styled from "styled-components";
 import { useHistory, useLocation } from "react-router-dom";
 import { Badge } from "antd";
@@ -12,6 +12,9 @@ import {
 } from "../apiAdmin"; // Assume you have these API functions
 import socket from "../../socket";
 
+// 1) Import your NotificationContext here
+import { NotificationContext } from "./NotificationContext";
+
 const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 	const history = useHistory();
 	const location = useLocation();
@@ -20,6 +23,9 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 	// State for case counts
 	const [activeHotelCasesCount, setActiveHotelCasesCount] = useState(0);
 	const [activeClientCasesCount, setActiveClientCasesCount] = useState(0);
+
+	// 2) Destructure your notification context
+	const { soundEnabled, enableSound } = useContext(NotificationContext);
 
 	// Handle tab changes
 	const handleTabChange = (tab) => {
@@ -73,6 +79,21 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 
 	return (
 		<CustomerServiceDetailsWrapper>
+			{/* 3) Minimal button to enable sound (and optional vibration) */}
+			{!soundEnabled && (
+				<EnableSoundButton
+					onClick={() => {
+						enableSound();
+						// Optional: if you want a quick vibration on mobile
+						if ("vibrate" in navigator) {
+							navigator.vibrate(200);
+						}
+					}}
+				>
+					Enable Notification Sound
+				</EnableSoundButton>
+			)}
+
 			<div className='tab-grid'>
 				<Tab
 					isActive={activeTab === "active-hotel-cases"}
@@ -158,7 +179,8 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 
 export default CustomerServiceDetails;
 
-// Styled-components
+/* ---------------- Styled-components ---------------- */
+
 const CustomerServiceDetailsWrapper = styled.div`
 	padding: 20px;
 	background-color: #f5f5f5;
@@ -210,5 +232,27 @@ const Tab = styled.div`
 		font-size: 0.95rem; /* slightly smaller font on mobile */
 		margin: 0; /* override the 0 3px for consistent spacing within .tab-grid gap */
 		padding: 10px 0;
+	}
+`;
+
+const EnableSoundButton = styled.button`
+	display: inline-block;
+	margin-bottom: 20px;
+	padding: 8px 16px;
+	font-size: 1rem;
+	font-weight: bold;
+	background-color: #1890ff;
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+
+	&:hover {
+		background-color: #40a9ff;
+	}
+
+	@media (max-width: 768px) {
+		font-size: 0.9rem;
+		padding: 6px 12px;
 	}
 `;

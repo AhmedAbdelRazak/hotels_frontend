@@ -8,6 +8,7 @@ import { readUserId } from "../apiAdmin";
 import CustomerServiceDetails from "./CustomerServiceDetails";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import { NotificationProvider } from "./NotificationContext";
 
 const CustomerServiceMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -109,68 +110,70 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 	};
 
 	return (
-		<CustomerServiceMainWrapper
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-			show={collapsed}
-		>
-			<Modal
-				title='Enter Password'
-				visible={isModalVisible}
-				footer={null}
-				closable={false}
+		<NotificationProvider>
+			<CustomerServiceMainWrapper
+				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+				show={collapsed}
 			>
-				<Input.Password
-					placeholder='Enter password'
-					value={password}
-					onChange={(e) => setPassword(e.target.value)}
-					iconRender={(visible) =>
-						visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-					}
-				/>
-				<Button
-					type='primary'
-					style={{ marginTop: "10px", width: "100%" }}
-					onClick={handlePasswordVerification}
+				<Modal
+					title='Enter Password'
+					visible={isModalVisible}
+					footer={null}
+					closable={false}
 				>
-					Verify Password
-				</Button>
-			</Modal>
+					<Input.Password
+						placeholder='Enter password'
+						value={password}
+						onChange={(e) => setPassword(e.target.value)}
+						iconRender={(visible) =>
+							visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
+						}
+					/>
+					<Button
+						type='primary'
+						style={{ marginTop: "10px", width: "100%" }}
+						onClick={handlePasswordVerification}
+					>
+						Verify Password
+					</Button>
+				</Modal>
 
-			{isPasswordVerified && (
-				<div className='grid-container-main'>
-					<div className='navcontent'>
-						{chosenLanguage === "Arabic" ? (
-							<AdminNavbarArabic
-								fromPage='CustomerService'
-								AdminMenuStatus={AdminMenuStatus}
-								setAdminMenuStatus={setAdminMenuStatus}
-								collapsed={collapsed}
-								setCollapsed={setCollapsed}
-								chosenLanguage={chosenLanguage}
-							/>
-						) : (
-							<AdminNavbar
-								fromPage='CustomerService'
-								AdminMenuStatus={AdminMenuStatus}
-								setAdminMenuStatus={setAdminMenuStatus}
-								collapsed={collapsed}
-								setCollapsed={setCollapsed}
-								chosenLanguage={chosenLanguage}
-							/>
-						)}
-					</div>
+				{isPasswordVerified && (
+					<div className='grid-container-main'>
+						<div className='navcontent'>
+							{chosenLanguage === "Arabic" ? (
+								<AdminNavbarArabic
+									fromPage='CustomerService'
+									AdminMenuStatus={AdminMenuStatus}
+									setAdminMenuStatus={setAdminMenuStatus}
+									collapsed={collapsed}
+									setCollapsed={setCollapsed}
+									chosenLanguage={chosenLanguage}
+								/>
+							) : (
+								<AdminNavbar
+									fromPage='CustomerService'
+									AdminMenuStatus={AdminMenuStatus}
+									setAdminMenuStatus={setAdminMenuStatus}
+									collapsed={collapsed}
+									setCollapsed={setCollapsed}
+									chosenLanguage={chosenLanguage}
+								/>
+							)}
+						</div>
 
-					<div className='otherContentWrapper'>
-						<div className='container-wrapper'>
-							<CustomerServiceDetails
-								getUser={getUser}
-								isSuperAdmin={isSuperAdmin}
-							/>
+						<div className='otherContentWrapper'>
+							<div className='container-wrapper'>
+								<CustomerServiceDetails
+									getUser={getUser}
+									isSuperAdmin={isSuperAdmin}
+								/>
+							</div>
 						</div>
 					</div>
-				</div>
-			)}
-		</CustomerServiceMainWrapper>
+				)}
+			</CustomerServiceMainWrapper>
+		</NotificationProvider>
 	);
 };
 

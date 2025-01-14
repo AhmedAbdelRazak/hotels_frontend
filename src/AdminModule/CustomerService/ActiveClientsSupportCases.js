@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useContext } from "react";
 import styled from "styled-components";
 import { useLocation, useHistory } from "react-router-dom";
 import { List, Badge } from "antd";
@@ -11,7 +11,9 @@ import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
-import notificationSound from "./Notification.wav"; // Ensure the path is correct
+
+/* 1) Import NotificationContext */
+import { NotificationContext } from "./NotificationContext";
 
 const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	const [supportCases, setSupportCases] = useState([]);
@@ -27,6 +29,11 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 
 	// Detect if user is on a mobile screen
 	const isMobile = window.innerWidth <= 768;
+
+	// 2) Destructure from context:
+	//    - soundEnabled (if you want to conditionally do something)
+	//    - playSound (to actually play the notification audio)
+	const { soundEnabled, playSound } = useContext(NotificationContext);
 
 	/* ------------------- FETCH UNSEEN COUNT ------------------- */
 	useEffect(() => {
@@ -57,14 +64,6 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			socket.off("messageSeen");
 		};
 	}, [user._id]);
-
-	/* ------------------- NOTIFICATION SOUND ------------------- */
-	const playNotificationSound = () => {
-		const audio = new Audio(notificationSound);
-		audio.play().catch((error) => {
-			console.error("Audio play error:", error);
-		});
-	};
 
 	/* ------------------- SORT SUPPORT CASES ------------------- */
 	const sortSupportCases = useCallback(
@@ -132,7 +131,15 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		// On receiving a new message
 		const handleReceiveMessage = (message) => {
 			if (message && message.caseId) {
-				playNotificationSound();
+				// 3) Play sound if user has enabled it
+				if (soundEnabled) {
+					playSound();
+					// Optionally vibrate for mobile
+					if ("vibrate" in navigator) {
+						navigator.vibrate(200);
+					}
+				}
+
 				setSupportCases((prevCases) =>
 					prevCases.map((c) =>
 						c._id === message.caseId
@@ -146,6 +153,15 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		// On new chat
 		const handleNewChat = (newCase) => {
 			if (newCase.openedBy === "client") {
+				// If you want a beep for brand new cases, do it here
+				if (soundEnabled) {
+					playSound();
+					// Optionally vibrate
+					if ("vibrate" in navigator) {
+						navigator.vibrate(200);
+					}
+				}
+
 				setSupportCases((prevCases) => [...prevCases, newCase]);
 			}
 		};
@@ -169,7 +185,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCaseClosed);
 		};
-	}, [fetchSupportCases, selectedCase]);
+	}, [fetchSupportCases, selectedCase, soundEnabled, playSound]);
 
 	/* ------------------- MARK CASE AS SEEN ------------------- */
 	const markCaseAsSeen = async (caseObj) => {
@@ -236,7 +252,6 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	}, [selectedCase, setSupportCases]);
 
 	/* ------------------- MOBILE LOGIC ------------------- */
-	// If we're on mobile, check if we have ?id=someCase
 	if (isMobile) {
 		// If we have a caseId in the URL, show chat in full screen
 		if (caseIdParam) {
