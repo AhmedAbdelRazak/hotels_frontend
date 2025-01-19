@@ -647,3 +647,23 @@ export const readUserId = (userId, token) => {
 		})
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
+
+export const updateSingleReservation = (reservationId, reservation) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservation-update/${reservationId}`,
+		{
+			method: "PUT",
+			headers: {
+				// content type?
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				// Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(reservation),
+		}
+	)
+		.then((response) => {
+			return response.json();
+		})
+		.catch((err) => console.log(err));
+};

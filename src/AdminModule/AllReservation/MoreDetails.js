@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
-import { Spin, Modal, Select } from "antd";
+import { Spin, Modal, Select, Checkbox } from "antd";
 import moment from "moment";
 import { EditOutlined } from "@ant-design/icons";
 import {
@@ -12,13 +12,13 @@ import {
 	updateSingleReservation,
 } from "../../HotelModule/apiAdmin";
 import { toast } from "react-toastify";
-import { EditReservationMain } from "../../HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain";
-import ReceiptPDF from "../../HotelModule/NewReservation/ReceiptPDF"; // Adjust the path as needed
+import EditReservationMain from "./EditReservationMain";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
 import { relocationArray1 } from "../../HotelModule/ReservationsFolder/ReservationAssets";
 import PaymentTrigger from "./PaymentTrigger";
+import ReceiptPDF from "./ReceiptPDF";
 
 const Wrapper = styled.div`
 	min-height: 750px;
@@ -94,6 +94,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
+	const [sendEmail, setSendEmail] = useState(true);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -157,9 +158,10 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			const updateData = {
 				reservation_status: selectedStatus,
 				hotelName: hotelDetails.hotelName,
+				sendEmail, // ✅ Include sendEmail in the update
 			};
 
-			// If the selected status is 'early_checked_out', also update the checkout_date and related fields
+			// ✅ Handle early check-out logic
 			if (selectedStatus === "early_checked_out") {
 				const newCheckoutDate = new Date();
 				const startDate = new Date(reservation.checkin_date);
@@ -169,17 +171,15 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.checkout_date = newCheckoutDate.toISOString();
 				updateData.days_of_residence = daysOfResidence;
 
-				// Calculate the new total amount
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
-					(total, room) => {
-						return total + room.count * parseFloat(room.chosenPrice);
-					},
+					(total, room) => total + room.count * parseFloat(room.chosenPrice),
 					0
 				);
 
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
 			}
 
+			// ✅ Call API with sendEmail flag
 			updateSingleReservation(reservation._id, updateData).then((response) => {
 				if (response.error) {
 					console.error(response.error);
@@ -187,8 +187,6 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				} else {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-
-					// Update local state or re-fetch reservation data if necessary
 					setReservation(response.reservation);
 				}
 			});
@@ -386,7 +384,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 						style={{
 							// If Arabic, align to the left, else align to the right
 							position: "absolute",
-							left: chosenLanguage === "Arabic" ? "1%" : "auto",
+							left: chosenLanguage === "Arabic" ? "15%" : "auto",
 							right: chosenLanguage === "Arabic" ? "auto" : "5%",
 							top: "1%",
 						}}
@@ -431,6 +429,13 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 								Early Check Out
 							</Select.Option>
 						</Select>
+						<Checkbox
+							checked={sendEmail}
+							onChange={(e) => setSendEmail(e.target.checked)}
+							style={{ marginTop: "16px" }}
+						>
+							Send Email Notification to the Customer
+						</Checkbox>
 					</Modal>
 
 					<Modal
@@ -570,7 +575,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 							style={{
 								// If Arabic, align to the left, else align to the right
 								position: "absolute",
-								left: chosenLanguage === "Arabic" ? "1%" : "auto",
+								left: chosenLanguage === "Arabic" ? "15%" : "auto",
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}

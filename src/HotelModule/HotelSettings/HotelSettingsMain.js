@@ -19,6 +19,7 @@ import HotelOverview from "./HotelOverview";
 import { defaultHotelDetails } from "../../AdminModule/NewHotels/Assets";
 import ZUpdateRoomCount from "./ZUpdateRoomCount";
 import ZSuccessfulUpdate from "./ZSuccessfulUpdate";
+import PaymentSettings from "./PaymentSettings";
 
 const roomTypeColors = {
 	standardRooms: "#003366", // Dark Blue
@@ -115,6 +116,8 @@ const HotelSettingsMain = () => {
 			setActiveTab("PricingCalendar");
 		} else if (window.location.search.includes("roomcount")) {
 			setActiveTab("UpdateRoomCount");
+		} else if (window.location.search.includes("paymentsettings")) {
+			setActiveTab("PaymentSettings");
 		} else {
 			setActiveTab("HotelDetails");
 		}
@@ -282,26 +285,39 @@ const HotelSettingsMain = () => {
 		// eslint-disable-next-line
 	}, [clickedFloor]);
 
-	const hotelDetailsUpdate = (fromPage) => {
+	const hotelDetailsUpdate = (fromPage, updatedDetailsParam) => {
+		// Get the currently selected hotel information
 		const selectedHotel =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const updatedDetails = { ...hotelDetails, fromPage };
 		const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+		const hotelId = hotelDetails._id; // Make sure hotelDetails contains an _id
 
-		// Call the API to update the hotel details
-		const hotelId = hotelDetails._id; // Assuming your hotelDetails object has an _id field
+		// If fromPage is "paymentSettings", use the passed-in updatedDetails; otherwise, merge from the existing state
+		const detailsToUpdate =
+			fromPage === "paymentSettings"
+				? { ...updatedDetailsParam, fromPage }
+				: { ...hotelDetails, fromPage };
 
-		// Using the API function from your API admin file
-		updateHotelDetails(hotelId, user._id, token, updatedDetails)
+		console.log("Updating hotel details with:", detailsToUpdate);
+
+		// Use your API function to update the hotel details
+		updateHotelDetails(hotelId, user._id, token, detailsToUpdate)
 			.then((response) => {
 				window.scrollTo({ top: 0, behavior: "smooth" });
 				if (response.error) {
 					console.log("Error updating hotel details:", response.error);
 				} else {
+					// Clear selected room type if needed
 					setSelectedRoomType("");
 					toast.success("Hotel Was Successfully Updated");
-					console.log("Hotel details updated successfully.");
-					setHotelDetails(updatedDetails); // Update the state with the new details
+					console.log("Hotel details updated successfully:", response);
+					// If updating paymentSettings, update state with the passed-in updatedDetailsParam
+					// otherwise, update with the merged details.
+					if (fromPage === "paymentSettings") {
+						setHotelDetails(updatedDetailsParam);
+					} else {
+						setHotelDetails(detailsToUpdate);
+					}
 					if (fromPage !== "Updating") {
 						setFinalStepModal(true);
 					} else {
@@ -466,6 +482,20 @@ const HotelSettingsMain = () => {
 									? "توزيع الغرف على الطوابق"
 									: "Room Details"}
 							</Tab>
+
+							<Tab
+								isActive={activeTab === "PaymentSettings"}
+								onClick={() => {
+									setActiveTab("PaymentSettings");
+									history.push(
+										`/hotel-management/settings/${user._id}/${hotelDetails._id}?paymentsettings`
+									); // Programmatic navigation
+								}}
+							>
+								{chosenLanguage === "Arabic"
+									? "إعدادات الدفع"
+									: "Payment Settings"}
+							</Tab>
 						</div>
 					</div>
 
@@ -564,6 +594,19 @@ const HotelSettingsMain = () => {
 									fromPage={"Updating"}
 									viewsList={viewsList}
 									extraAmenitiesList={extraAmenitiesList}
+								/>
+							</>
+						) : null}
+
+						{activeTab === "PaymentSettings" &&
+						hotelDetails &&
+						hotelDetails.hotelName ? (
+							<>
+								<PaymentSettings
+									setHotelDetails={setHotelDetails}
+									hotelDetails={hotelDetails}
+									submittingHotelDetails={hotelDetailsUpdate}
+									chosenLanguage={chosenLanguage}
 								/>
 							</>
 						) : null}

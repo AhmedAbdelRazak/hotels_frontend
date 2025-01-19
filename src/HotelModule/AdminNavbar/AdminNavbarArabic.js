@@ -88,7 +88,9 @@ const AdminNavbarArabic = ({
 			<AreaChartOutlined />
 		),
 		getItem(
-			<Link to={`/hotel-management/settings/${userId}/${hotelId}`}>
+			<Link
+				to={`/hotel-management/settings/${userId}/${hotelId}/?activeTab=HotelDetails&currentStep=0`}
+			>
 				إعدادات الفندق
 			</Link>,
 			"sub6",

@@ -87,7 +87,9 @@ const AdminNavbar = ({
 			<AreaChartOutlined />
 		),
 		getItem(
-			<Link to={`/hotel-management/settings/${userId}/${hotelId}`}>
+			<Link
+				to={`/hotel-management/settings/${userId}/${hotelId}/?activeTab=HotelDetails&currentStep=0`}
+			>
 				Hotel Settings
 			</Link>,
 			"sub6",
