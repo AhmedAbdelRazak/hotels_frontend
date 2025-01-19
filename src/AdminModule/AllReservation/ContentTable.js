@@ -21,6 +21,8 @@ const EnhancedContentTable = ({
 	// If capturedConfirmationNumbers is truly constant, memoize it
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
 
+	// totalDocuments from API (not used in filtered view, but you may use it as needed)
+	// eslint-disable-next-line
 	const totalDocuments = allReservationsForAdmin?.totalDocuments || 0;
 
 	/* ------------------ State ------------------ */
@@ -36,26 +38,24 @@ const EnhancedContentTable = ({
 		direction: null,
 	});
 
-	// Modal
+	// Modal state
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 
 	/* ------------------ Format & Preprocess ------------------ */
 	const formattedReservations = useMemo(() => {
-		return reservations.map((reservation, index) => {
+		return reservations.map((reservation) => {
 			const {
 				customer_details = {},
 				hotelId = {},
 				payment_details = {},
 			} = reservation;
-
 			const isCaptured =
 				payment_details.captured ||
 				capturedConfirmationNumbers.includes(reservation.confirmation_number);
 
 			return {
 				...reservation,
-				index: index + 1 + (currentPage - 1) * pageSize,
 				customer_name: customer_details.name || "N/A",
 				customer_phone: customer_details.phone || "N/A",
 				hotel_name: hotelId.hotelName || "Unknown Hotel",
@@ -75,13 +75,20 @@ const EnhancedContentTable = ({
 				isPaymentTriggered: !!payment_details.capturing || isCaptured,
 			};
 		});
-	}, [reservations, capturedConfirmationNumbers, currentPage, pageSize]);
+	}, [reservations, capturedConfirmationNumbers]);
 
 	/* ------------------ Filtering Logic ------------------ */
 	const filteredByType = useMemo(() => {
 		return formattedReservations.filter((r) => {
+			// If the filter type is one of these three, exclude cancelled rows.
+			if (["checkinToday", "checkoutToday", "notPaid"].includes(filterType)) {
+				if (r.reservation_status?.toLowerCase() === "cancelled") {
+					return false;
+				}
+			}
+
+			// Then apply the filter based on filterType.
 			switch (filterType) {
-				// Existing filters
 				case "checkinToday":
 					return r.isCheckinToday;
 				case "checkoutToday":
@@ -90,15 +97,24 @@ const EnhancedContentTable = ({
 					return r.isPaymentTriggered;
 				case "paymentNotTriggered":
 					return !r.isPaymentTriggered;
-				// New filters
 				case "notPaid":
 					return r.payment_status.toLowerCase() === "not paid";
 				case "notCaptured":
 					return r.payment_status.toLowerCase() === "not captured";
 				case "captured":
 					return r.payment_status.toLowerCase() === "captured";
+				case "cancelled":
+					return (
+						r.reservation_status &&
+						r.reservation_status.toLowerCase() === "cancelled"
+					);
+				case "notCancelled":
+					return (
+						r.reservation_status &&
+						r.reservation_status.toLowerCase() !== "cancelled"
+					);
 				default:
-					return true; // no filter
+					return true;
 			}
 		});
 	}, [formattedReservations, filterType]);
@@ -119,13 +135,12 @@ const EnhancedContentTable = ({
 				?.toLowerCase()
 				.includes(searchTexts.hotel_name.toLowerCase());
 
-			const passesConfirmation =
-				!searchTexts.confirmation_number || matchConfirmation;
-			const passesName = !searchTexts.customer_name || matchName;
-			const passesPhone = !searchTexts.customer_phone || matchPhone;
-			const passesHotel = !searchTexts.hotel_name || matchHotel;
-
-			return passesConfirmation && passesName && passesPhone && passesHotel;
+			return (
+				(!searchTexts.confirmation_number || matchConfirmation) &&
+				(!searchTexts.customer_name || matchName) &&
+				(!searchTexts.customer_phone || matchPhone) &&
+				(!searchTexts.hotel_name || matchHotel)
+			);
 		});
 	}, [filteredByType, searchTexts]);
 
@@ -135,7 +150,6 @@ const EnhancedContentTable = ({
 			return filteredBySearch;
 		}
 		const { sortField, direction } = sortConfig;
-
 		const sorted = [...filteredBySearch].sort((a, b) => {
 			let valA = a[sortField];
 			let valB = b[sortField];
@@ -144,11 +158,10 @@ const EnhancedContentTable = ({
 			if (sortField === "checkin_date" || sortField === "checkout_date") {
 				valA = new Date(valA).getTime();
 				valB = new Date(valB).getTime();
-			} else if (sortField === "index" || sortField === "total_amount") {
+			} else if (sortField === "total_amount") {
 				valA = Number(valA) || 0;
 				valB = Number(valB) || 0;
 			} else if (sortField === "confirmation_number") {
-				// Compare strings
 				return direction === "asc"
 					? valA.localeCompare(valB)
 					: valB.localeCompare(valA);
@@ -156,7 +169,6 @@ const EnhancedContentTable = ({
 				valA = new Date(valA).getTime();
 				valB = new Date(valB).getTime();
 			}
-
 			return direction === "asc" ? valA - valB : valB - valA;
 		});
 		return sorted;
@@ -165,8 +177,7 @@ const EnhancedContentTable = ({
 	/* ------------------ Pagination ------------------ */
 	const paginatedData = useMemo(() => {
 		const startIndex = (currentPage - 1) * pageSize;
-		const endIndex = startIndex + pageSize;
-		return sortedData.slice(startIndex, endIndex);
+		return sortedData.slice(startIndex, startIndex + pageSize);
 	}, [sortedData, currentPage, pageSize]);
 
 	/* ------------------ Handlers ------------------ */
@@ -178,11 +189,10 @@ const EnhancedContentTable = ({
 		setSearchTexts((prev) => ({ ...prev, [colKey]: value }));
 	};
 
-	// Sorting only on label click
+	// Sorting on header click
 	const handleSortLabelClick = (colKey) => {
 		setSortConfig((prev) => {
 			if (prev.sortField === colKey) {
-				// Cycle asc -> desc -> none
 				if (prev.direction === "asc") {
 					return { sortField: colKey, direction: "desc" };
 				} else if (prev.direction === "desc") {
@@ -196,20 +206,17 @@ const EnhancedContentTable = ({
 	// Pagination
 	const totalFiltered = sortedData.length;
 	const totalPages = Math.ceil(totalFiltered / pageSize);
-
 	const handlePageChange = (newPage) => {
 		if (newPage < 1 || newPage > totalPages) return;
 		setCurrentPage(newPage);
 	};
-
 	const handlePageSizeChange = (e) => {
 		setPageSize(Number(e.target.value));
 		setCurrentPage(1);
 	};
 
-	// Hotel click (exact logic from Component B)
+	// Hotel click handler (exact logic from Component B)
 	const handleHotelClick = (record) => {
-		// Exactly as in B
 		const hotelDetailsFinal = {
 			...record.hotelId,
 			belongsTo: record.belongsTo,
@@ -218,12 +225,11 @@ const EnhancedContentTable = ({
 		window.location.href = `/hotel-management/new-reservation/${record.belongsTo._id}/${record.hotelId._id}?list`;
 	};
 
-	// Modal
+	// Modal handlers
 	const showDetailsModal = (reservation) => {
 		setSelectedReservation(reservation);
 		setIsModalVisible(true);
 	};
-
 	const handleModalClose = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
@@ -243,16 +249,14 @@ const EnhancedContentTable = ({
 
 	return (
 		<ContentTableWrapper>
-			{/* Score Cards */}
+			{/* ScoreCards receives filtered data */}
 			<ScoreCards
-				reservations={reservations}
-				totalReservations={totalDocuments}
+				reservations={filteredBySearch}
+				totalReservations={filteredBySearch.length}
 			/>
 
-			{/* Filter Buttons (Including new ones and "Clear All") */}
-			<div
-				style={{ margin: "16px 0", display: "flex", flexWrap: "wrap", gap: 8 }}
-			>
+			{/* Filter Buttons */}
+			<FilterButtonContainer>
 				<FilterButton
 					onClick={() => handleFilterClick("checkinToday")}
 					isActive={filterType === "checkinToday"}
@@ -265,8 +269,6 @@ const EnhancedContentTable = ({
 				>
 					Check-out Today
 				</FilterButton>
-
-				{/* New Payment Filters */}
 				<FilterButton
 					onClick={() => handleFilterClick("notPaid")}
 					isActive={filterType === "notPaid"}
@@ -285,10 +287,20 @@ const EnhancedContentTable = ({
 				>
 					Captured
 				</FilterButton>
-
-				{/* Clear All */}
+				<FilterButton
+					onClick={() => handleFilterClick("cancelled")}
+					isActive={filterType === "cancelled"}
+				>
+					Cancelled
+				</FilterButton>
+				<FilterButton
+					onClick={() => handleFilterClick("notCancelled")}
+					isActive={filterType === "notCancelled"}
+				>
+					Un-Cancelled
+				</FilterButton>
 				<FilterButton onClick={handleClearAllFilters}>Clear All</FilterButton>
-			</div>
+			</FilterButtonContainer>
 
 			{/* Page Size Select */}
 			<div style={{ marginBottom: 8 }}>
@@ -305,12 +317,11 @@ const EnhancedContentTable = ({
 				</select>
 			</div>
 
-			{/* Manual Table */}
+			{/* Table with responsive wrapper */}
 			<TableWrapper>
 				<StyledTable>
 					<thead>
 						<tr>
-							{/* Index */}
 							<th>
 								<HeaderLabel onClick={() => handleSortLabelClick("index")}>
 									#
@@ -321,8 +332,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Confirmation Number */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("confirmation_number")}
@@ -346,8 +355,6 @@ const EnhancedContentTable = ({
 									/>
 								</div>
 							</th>
-
-							{/* Customer Name */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("customer_name")}
@@ -371,8 +378,6 @@ const EnhancedContentTable = ({
 									/>
 								</div>
 							</th>
-
-							{/* Phone */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("customer_phone")}
@@ -396,8 +401,6 @@ const EnhancedContentTable = ({
 									/>
 								</div>
 							</th>
-
-							{/* Hotel Name */}
 							<th>
 								<HeaderLabel onClick={() => handleSortLabelClick("hotel_name")}>
 									Hotel Name
@@ -419,8 +422,6 @@ const EnhancedContentTable = ({
 									/>
 								</div>
 							</th>
-
-							{/* Reservation Status */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("reservation_status")}
@@ -433,8 +434,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Check-in Date */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("checkin_date")}
@@ -447,8 +446,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Check-out Date */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("checkout_date")}
@@ -461,8 +458,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Payment Status */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("payment_status")}
@@ -475,8 +470,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Total Amount */}
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("total_amount")}
@@ -489,8 +482,6 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* createdAt */}
 							<th>
 								<HeaderLabel onClick={() => handleSortLabelClick("createdAt")}>
 									Created At
@@ -501,40 +492,29 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
-
-							{/* Details */}
 							<th>Details</th>
 						</tr>
 					</thead>
-
 					<tbody>
-						{paginatedData.map((reservation) => (
+						{paginatedData.map((reservation, i) => (
 							<tr key={reservation._id}>
-								{/* Index */}
-								<td>{reservation.index}</td>
-
-								{/* Confirmation Number */}
+								{/* Use map index (i) so that the first row of the current view is always "1" */}
+								<td>{i + 1}</td>
 								<td>
 									<Tooltip title={reservation.confirmation_number}>
 										<span>{reservation.confirmation_number}</span>
 									</Tooltip>
 								</td>
-
-								{/* Customer Name */}
 								<td>
 									<Tooltip title={reservation.customer_name}>
 										<span>{reservation.customer_name}</span>
 									</Tooltip>
 								</td>
-
-								{/* Phone */}
 								<td>
 									<Tooltip title={reservation.customer_phone}>
 										<span>{reservation.customer_phone}</span>
 									</Tooltip>
 								</td>
-
-								{/* Hotel Name with onClick from B */}
 								<td>
 									<Tooltip title={reservation.hotel_name}>
 										<span
@@ -549,42 +529,28 @@ const EnhancedContentTable = ({
 										</span>
 									</Tooltip>
 								</td>
-
-								{/* Reservation Status (conditional background) */}
 								<td>
 									<StatusSpan status={reservation.reservation_status}>
 										{reservation.reservation_status}
 									</StatusSpan>
 								</td>
-
-								{/* Check-in Date */}
 								<td>
 									{new Date(reservation.checkin_date).toLocaleDateString()}
 								</td>
-
-								{/* Check-out Date */}
 								<td>
 									{new Date(reservation.checkout_date).toLocaleDateString()}
 								</td>
-
-								{/* Payment Status (conditional background) */}
 								<td>
 									<PaymentSpan payment={reservation.payment_status}>
 										{reservation.payment_status}
 									</PaymentSpan>
 								</td>
-
-								{/* Total Amount */}
 								<td>{Number(reservation.total_amount || 0).toFixed(2)} SAR</td>
-
-								{/* createdAt */}
 								<td>
 									{reservation.createdAt
 										? new Date(reservation.createdAt).toLocaleDateString()
 										: "N/A"}
 								</td>
-
-								{/* Details Button */}
 								<td>
 									<Button onClick={() => showDetailsModal(reservation)}>
 										View Details
@@ -621,6 +587,11 @@ const EnhancedContentTable = ({
 				onCancel={handleModalClose}
 				className='float-right'
 				width='84%'
+				style={{
+					position: "absolute",
+					left: "15.4%",
+					top: "1%",
+				}}
 				footer={[
 					<Button key='close' onClick={handleModalClose}>
 						Close
@@ -663,18 +634,30 @@ const FilterButton = styled(Button)`
 	border-color: ${(props) => (props.isActive ? "#c3e6cb" : "initial")};
 `;
 
+// Container for filter buttons, using flex-wrap
+const FilterButtonContainer = styled.div`
+	margin: 16px 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+`;
+
+// Table wrapper enables both vertical and horizontal scrolling
 const TableWrapper = styled.div`
 	max-height: 700px;
 	overflow-y: auto;
+	overflow-x: auto;
 	margin-bottom: 16px;
 `;
 
+// StyledTable with media queries to adjust cell sizes on smaller screens
 const StyledTable = styled.table`
 	width: 100%;
 	border-collapse: collapse;
+
 	th,
 	td {
-		padding: 4px 8px; /* narrower row height */
+		padding: 4px 8px;
 		text-align: left;
 		white-space: nowrap;
 		border: 1px solid #f0f0f0;
@@ -682,22 +665,37 @@ const StyledTable = styled.table`
 		text-transform: capitalize;
 		line-height: 1.2;
 	}
+
 	th {
 		background-color: #fafafa;
 		position: sticky;
 		top: 0;
 		z-index: 1;
 	}
+
+	@media (max-width: 768px) {
+		th,
+		td {
+			padding: 2px 4px;
+			font-size: 10px;
+		}
+	}
 `;
 
+// HeaderLabel adjusted for responsiveness
 const HeaderLabel = styled.div`
 	cursor: pointer;
 	font-weight: 600;
 	user-select: none;
 	display: inline-block;
 	margin-bottom: 4px;
+
+	@media (max-width: 768px) {
+		font-size: 11px;
+	}
 `;
 
+// Pagination wrapper styling remains mostly unchanged
 const PaginationWrapper = styled.div`
 	display: flex;
 	align-items: center;
@@ -707,7 +705,7 @@ const PaginationWrapper = styled.div`
 	}
 `;
 
-/* Conditional styling for reservation status (like in B) */
+// Conditional styling for reservation status
 const StatusSpan = styled.span`
 	display: inline-block;
 	padding: 5px 10px;
@@ -725,7 +723,7 @@ const StatusSpan = styled.span`
 			: "inherit"};
 `;
 
-/* Conditional styling for payment status (like in B) */
+// Conditional styling for payment status
 const PaymentSpan = styled.span`
 	display: inline-block;
 	padding: 5px 10px;
