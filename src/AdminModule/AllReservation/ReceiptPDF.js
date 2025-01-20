@@ -43,9 +43,7 @@ const ReceiptPDF = forwardRef(
 		const calculateNights = (checkin, checkout) => {
 			const start = new Date(checkin);
 			const end = new Date(checkout);
-			// Calculate days difference and subtract one to get nights.
-			let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) - 1;
-			// Ensure a minimum of 1 night
+			let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 			return nights < 1 ? 1 : nights;
 		};
 
@@ -89,9 +87,11 @@ const ReceiptPDF = forwardRef(
 			<ReceiptPDFWrapper ref={ref}>
 				{/* Header */}
 				<div className='header1'>
-					<div className='logo'>
+					<div className='left'></div>
+					<div className='center logo'>
 						JANNAT <span>Booking.com</span>
 					</div>
+					<div className='right'>Booking Receipt</div>
 				</div>
 				<div className='header2'>
 					<div className='hotel-name'>
@@ -103,7 +103,11 @@ const ReceiptPDF = forwardRef(
 					<div className='booking-info'>
 						<div>
 							<strong>Booking No:</strong>{" "}
-							{reservation && reservation.confirmation_number}
+							{reservation && reservation.confirmation_number}{" "}
+							{reservation &&
+							reservation.confirmation_number === supplierBookingNo
+								? null
+								: `/ ${supplierBookingNo}`}
 						</div>
 						<div>
 							<strong>Booking Date:</strong> {bookingDate}
@@ -149,6 +153,7 @@ const ReceiptPDF = forwardRef(
 							<th>Check In</th>
 							<th>Check Out</th>
 							<th>Booking Status</th>
+							<th>Guests</th>
 							<th>Booking Source</th>
 							<th>Payment Method</th>
 						</tr>
@@ -162,6 +167,8 @@ const ReceiptPDF = forwardRef(
 								{new Date(reservation?.checkout_date).toLocaleDateString()}
 							</td>
 							<td>{reservation?.reservation_status || "Confirmed"}</td>
+							<td>{reservation?.total_guests}</td>
+
 							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
 							<td>
 								{isFullyPaid
@@ -179,7 +186,6 @@ const ReceiptPDF = forwardRef(
 							<th>Hotel</th>
 							<th>Room Type</th>
 							<th>Qty</th>
-							<th>Guests</th>
 							<th>Extras</th>
 							<th>Nights</th>
 							<th>Rate</th>
@@ -192,7 +198,6 @@ const ReceiptPDF = forwardRef(
 								<td>{hotelDetails?.hotelName}</td>
 								<td>{room.displayName}</td>
 								<td>{room.count}</td>
-								<td>{reservation?.total_guests}</td>
 								<td>N/T</td>
 								<td>{nights}</td>
 								<td>{room.chosenPrice} SAR</td>
@@ -288,15 +293,37 @@ const ReceiptPDFWrapper = styled.div`
 	text-transform: capitalize;
 
 	/* Header Styling */
-	.header1,
+	.header1 {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px 0;
+		background-color: #d9d9d9;
+	}
+	.header1 .left {
+		flex: 1;
+	}
+	.header1 .center {
+		flex: 1;
+		text-align: center;
+	}
+
+	.header1 .right {
+		color: #777;
+		flex: 1;
+		text-align: right;
+		font-size: 20px;
+		font-weight: bold;
+		padding-right: 7px;
+		/* Align the content to the bottom and add extra bottom padding */
+		align-self: flex-end;
+		padding-top: 35px;
+	}
+
 	.header2,
 	.header3 {
 		text-align: center;
 		padding: 8px 0;
-	}
-
-	.header1 {
-		background-color: #d9d9d9;
 	}
 
 	.header2 {
@@ -343,6 +370,10 @@ const ReceiptPDFWrapper = styled.div`
 		width: 100%;
 		border-collapse: collapse;
 		margin-top: 20px;
+	}
+
+	.room-details-table td {
+		font-size: 11px;
 	}
 
 	th,
