@@ -39,6 +39,16 @@ const ReceiptPDF = forwardRef(
 			Number(reservation?.paid_amount).toFixed(0) ===
 			Number(reservation?.total_amount).toFixed(0);
 
+		// Calculate the number of nights between check-in and check-out
+		const calculateNights = (checkin, checkout) => {
+			const start = new Date(checkin);
+			const end = new Date(checkout);
+			// Calculate days difference and subtract one to get nights.
+			let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) - 1;
+			// Ensure a minimum of 1 night
+			return nights < 1 ? 1 : nights;
+		};
+
 		// Handle Modal actions for Supplier Name
 		const showModal = () => {
 			setTempSupplierName(supplierName); // Set the temp state when modal opens
@@ -68,6 +78,12 @@ const ReceiptPDF = forwardRef(
 		const handleBookingNoCancel = () => {
 			setIsBookingNoModalVisible(false);
 		};
+
+		// Calculate nights once (assuming all room bookings have same checkin/checkout)
+		const nights = calculateNights(
+			reservation?.checkin_date,
+			reservation?.checkout_date
+		);
 
 		return (
 			<ReceiptPDFWrapper ref={ref}>
@@ -178,14 +194,11 @@ const ReceiptPDF = forwardRef(
 								<td>{room.count}</td>
 								<td>{reservation?.total_guests}</td>
 								<td>N/T</td>
-								<td>
-									{calculateReservationPeriod(
-										reservation.checkin_date,
-										reservation.checkout_date
-									)}
-								</td>
+								<td>{nights}</td>
 								<td>{room.chosenPrice} SAR</td>
-								<td>{(room.chosenPrice * room.count).toFixed(2)} SAR</td>
+								<td>
+									{(room.chosenPrice * room.count * nights).toFixed(2)} SAR
+								</td>
 							</tr>
 						))}
 					</tbody>
@@ -337,6 +350,10 @@ const ReceiptPDFWrapper = styled.div`
 		border: 1px solid #000;
 		padding: 8px;
 		text-align: center;
+	}
+
+	td {
+		font-size: 11.5px;
 	}
 
 	th {
