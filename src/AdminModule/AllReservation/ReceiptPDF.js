@@ -16,8 +16,17 @@ const ReceiptPDF = forwardRef(
 		const [supplierName, setSupplierName] = useState(
 			hotelDetails?.belongsTo?.name || "N/A"
 		);
+		// State for the editable supplier booking no in supplier-info
+		const [supplierBookingNo, setSupplierBookingNo] = useState(
+			reservation?.confirmation_number || "N/A"
+		);
 		const [isModalVisible, setIsModalVisible] = useState(false);
 		const [tempSupplierName, setTempSupplierName] = useState(supplierName);
+		// New state and modal flag for editing Supplier Booking No
+		const [isBookingNoModalVisible, setIsBookingNoModalVisible] =
+			useState(false);
+		const [tempSupplierBookingNo, setTempSupplierBookingNo] =
+			useState(supplierBookingNo);
 
 		// Calculate dynamic deposit percentage
 		const calculateDepositPercentage = () => {
@@ -30,7 +39,7 @@ const ReceiptPDF = forwardRef(
 			Number(reservation?.paid_amount).toFixed(0) ===
 			Number(reservation?.total_amount).toFixed(0);
 
-		// Handle Modal actions
+		// Handle Modal actions for Supplier Name
 		const showModal = () => {
 			setTempSupplierName(supplierName); // Set the temp state when modal opens
 			setIsModalVisible(true);
@@ -43,6 +52,21 @@ const ReceiptPDF = forwardRef(
 
 		const handleCancel = () => {
 			setIsModalVisible(false);
+		};
+
+		// Handle modal actions for Supplier Booking No
+		const showBookingNoModal = () => {
+			setTempSupplierBookingNo(supplierBookingNo);
+			setIsBookingNoModalVisible(true);
+		};
+
+		const handleBookingNoOk = () => {
+			setSupplierBookingNo(tempSupplierBookingNo);
+			setIsBookingNoModalVisible(false);
+		};
+
+		const handleBookingNoCancel = () => {
+			setIsBookingNoModalVisible(false);
 		};
 
 		return (
@@ -95,7 +119,10 @@ const ReceiptPDF = forwardRef(
 					</div>
 					<div>
 						<strong>Supplier Booking No:</strong>{" "}
-						{reservation?.confirmation_number || "N/A"}
+						{/* Editable portion with pointer cursor */}
+						<span onClick={showBookingNoModal} style={{ cursor: "pointer" }}>
+							{supplierBookingNo}
+						</span>
 					</div>
 				</div>
 
@@ -200,7 +227,7 @@ const ReceiptPDF = forwardRef(
 					<a href='https://jannatbooking.com'>jannatbooking.com</a>
 				</div>
 
-				{/* Editable Modal */}
+				{/* Editable Modal for Supplier Name */}
 				<Modal
 					title='Edit Supplier'
 					open={isModalVisible}
@@ -213,6 +240,22 @@ const ReceiptPDF = forwardRef(
 						value={tempSupplierName}
 						onChange={(e) => setTempSupplierName(e.target.value)}
 						placeholder='Enter Supplier Name'
+					/>
+				</Modal>
+
+				{/* Editable Modal for Supplier Booking No */}
+				<Modal
+					title='Edit Supplier Booking No'
+					open={isBookingNoModalVisible}
+					onOk={handleBookingNoOk}
+					onCancel={handleBookingNoCancel}
+					okText='Save'
+					cancelText='Cancel'
+				>
+					<Input
+						value={tempSupplierBookingNo}
+						onChange={(e) => setTempSupplierBookingNo(e.target.value)}
+						placeholder='Enter Supplier Booking No'
 					/>
 				</Modal>
 			</ReceiptPDFWrapper>
