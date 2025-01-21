@@ -64,6 +64,28 @@ function App() {
 		// eslint-disable-next-line
 	}, [chosenLanguage]);
 
+	useEffect(() => {
+		const fetchCurrencyRates = async () => {
+			try {
+				const response = await fetch(
+					`${process.env.REACT_APP_API_URL}/currency-rates`
+				); // Backend API endpoint
+				if (!response.ok) {
+					throw new Error("Failed to fetch currency rates");
+				}
+
+				const rates = await response.json();
+				// Store rates in localStorage
+				localStorage.setItem("rates", JSON.stringify(rates));
+			} catch (error) {
+				console.error("Error fetching currency rates:", error);
+			}
+		};
+
+		// Fetch rates when the app loads
+		fetchCurrencyRates();
+	}, []);
+
 	return (
 		<BrowserRouter>
 			<>

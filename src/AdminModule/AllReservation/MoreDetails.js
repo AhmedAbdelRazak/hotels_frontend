@@ -264,7 +264,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 					setIsModalVisible4(false);
 					setTimeout(() => {
 						window.location.reload(false);
-					}, 2000);
+					}, 1500);
 				}
 			});
 		}
@@ -359,6 +359,60 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			return total; // If no pricingByDay, just return total
 		}, 0);
 	};
+
+	const calculateNights = (checkin, checkout) => {
+		const start = new Date(checkin);
+		const end = new Date(checkout);
+		let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+		return nights < 1 ? 1 : nights;
+	};
+
+	// Calculate nights once (assuming all room bookings have same checkin/checkout)
+	// eslint-disable-next-line
+	const nights = calculateNights(
+		reservation?.checkin_date,
+		reservation?.checkout_date
+	);
+
+	// Compute the commission for one night from each room's pricingByDay data.
+	// Same names, minimal changes
+	const computedCommissionPerNight = reservation.pickedRoomsType
+		? reservation.pickedRoomsType.reduce((total, room) => {
+				let roomCommission = 0;
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					// Use the difference: (price - rootPrice) for each day
+					// then multiply by room.count
+					roomCommission =
+						room.pricingByDay.reduce((acc, day) => {
+							// daily commission
+							return acc + (Number(day.price) - Number(day.rootPrice));
+						}, 0) * Number(room.count);
+				}
+				return total + roomCommission;
+		  }, 0)
+		: 0;
+
+	// We've already accounted for all nights in pricingByDay,
+	// so we do NOT multiply by 'nights' again.
+	const computedCommission = computedCommissionPerNight;
+
+	// Compute the one night cost using the room's totalPriceWithoutCommission if available.
+	const oneNightCost = reservation.pickedRoomsType
+		? reservation.pickedRoomsType.reduce((total, room) => {
+				let roomNightCost = 0;
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					roomNightCost =
+						Number(room.pricingByDay[0].totalPriceWithoutCommission) *
+						Number(room.count);
+				} else {
+					roomNightCost = Number(room.chosenPrice) * Number(room.count);
+				}
+				return total + roomNightCost;
+		  }, 0)
+		: 0;
+
+	// The final deposit is the sum of the computed commission and one night cost.
+	const finalDeposit = computedCommission + oneNightCost;
 
 	return (
 		<Wrapper
@@ -1173,23 +1227,51 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 								</div>
 								<div className='mt-5'>
+									{/* Taxes & Extra Fees Row */}
 									<div className='row' style={{ fontWeight: "bold" }}>
 										<div className='col-md-5 mx-auto text-center my-2'>
 											{chosenLanguage === "Arabic"
-												? "الضرائب والرسوم "
+												? "الضرائب والرسوم"
 												: "Taxes & Extra Fees"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
 											{0} {chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
+									</div>
 
+									{/* Commission Row */}
+									<div className='row' style={{ fontWeight: "bold" }}>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{chosenLanguage === "Arabic" ? "عمولة" : "Commision"}
+											{chosenLanguage === "Arabic" ? "عمولة" : "Commission"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{reservation &&
-												reservation.commission &&
-												reservation.commission.toLocaleString()}{" "}
+											{computedCommission.toLocaleString()}{" "}
+											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+										</div>
+									</div>
+
+									{/* One Night Cost Row */}
+									<div className='row' style={{ fontWeight: "bold" }}>
+										<div className='col-md-5 mx-auto text-center my-2'>
+											{chosenLanguage === "Arabic"
+												? "سعر الليلة الواحدة"
+												: "One Night Cost"}
+										</div>
+										<div className='col-md-5 mx-auto text-center my-2'>
+											{oneNightCost.toLocaleString()}{" "}
+											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+										</div>
+									</div>
+
+									{/* Final Deposit Row */}
+									<div className='row' style={{ fontWeight: "bold" }}>
+										<div className='col-md-5 mx-auto text-center my-2'>
+											{chosenLanguage === "Arabic"
+												? "المبلغ المستحق"
+												: "Final Deposit"}
+										</div>
+										<div className='col-md-5 mx-auto text-center my-2'>
+											{finalDeposit.toLocaleString()}{" "}
 											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
 									</div>

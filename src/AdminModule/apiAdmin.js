@@ -609,17 +609,31 @@ export const createNewReservationClient = async (reservationData) => {
 		});
 };
 
-export const triggerPayment = (userId, token, reservationId, amount) => {
+export const triggerPayment = (
+	userId,
+	token,
+	reservationId,
+	amountUSD,
+	paymentOption,
+	customUSD,
+	amountSAR
+) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/create-payment/${userId}`, {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
-			"Content-Type": "application/json", // Specify content type
-			Authorization: `Bearer ${token}`, // Add the token here
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
 		},
 		body: JSON.stringify({
-			reservationId, // Reservation ID to charge
-			amount, // Amount to charge
+			reservationId,
+			// The final USD amount to charge via Authorize.Net
+			amount: amountUSD,
+			paymentOption,
+			// If customAmount chosen, original custom USD typed by user
+			customUSD,
+			// The matching SAR amount for your own records
+			amountSAR,
 		}),
 	})
 		.then((response) => {

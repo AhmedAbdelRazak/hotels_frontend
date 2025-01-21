@@ -515,6 +515,9 @@ const EditReservationMain = ({
 				message.success("Reservation updated successfully!");
 				setReservationCreated(true);
 				setReservation(response.reservation);
+				setTimeout(() => {
+					window.location.reload(false);
+				}, 1500);
 			} else {
 				message.error(response.message || "Error updating reservation.");
 			}
