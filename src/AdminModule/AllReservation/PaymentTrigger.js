@@ -114,6 +114,7 @@ const PaymentTrigger = ({ reservation }) => {
 	};
 
 	// Disable the capture button if:
+	// eslint-disable-next-line
 	const isDisabled =
 		!hasPaymentDetails ||
 		reservation.payment === "paid online" ||
@@ -181,7 +182,7 @@ const PaymentTrigger = ({ reservation }) => {
 		<PaymentTriggerWrapper>
 			<h3>Trigger Payment</h3>
 			<p>This action will capture the payment for the reservation.</p>
-			<Button onClick={openOptionsModal} disabled={loading || isDisabled}>
+			<Button onClick={openOptionsModal} disabled={loading}>
 				{loading ? "Processing..." : "Capture Payment"}
 			</Button>
 			{message && (

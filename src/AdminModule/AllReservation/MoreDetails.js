@@ -19,6 +19,7 @@ import "jspdf-autotable";
 import { relocationArray1 } from "../../HotelModule/ReservationsFolder/ReservationAssets";
 import PaymentTrigger from "./PaymentTrigger";
 import ReceiptPDF from "./ReceiptPDF";
+import ReceiptPDFB2B from "./ReceiptPDFB2B";
 
 const Wrapper = styled.div`
 	min-height: 750px;
@@ -90,6 +91,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [isModalVisible3, setIsModalVisible3] = useState(false);
+	const [isModalVisible5, setIsModalVisible5] = useState(false);
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
@@ -657,6 +659,44 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 							)}
 						</Modal>
 
+						<Modal
+							title='Ops Receipt'
+							open={isModalVisible5}
+							onCancel={() => setIsModalVisible5(false)}
+							onOk={() => setIsModalVisible5(false)}
+							footer={null}
+							width='84.5%' // Set the width to 80%
+							style={{
+								// If Arabic, align to the left, else align to the right
+								position: "absolute",
+								left: chosenLanguage === "Arabic" ? "15%" : "auto",
+								right: chosenLanguage === "Arabic" ? "auto" : "5%",
+								top: "1%",
+							}}
+						>
+							<div className='text-center my-3 '>
+								<button
+									className='btn btn-info w-50'
+									style={{ fontWeight: "bold", fontSize: "1.1rem" }}
+									onClick={downloadPDF}
+								>
+									Print To PDF
+								</button>
+							</div>
+
+							{reservation && (
+								<div dir='ltr'>
+									<ReceiptPDFB2B
+										ref={pdfRef}
+										reservation={reservation}
+										hotelDetails={hotelDetails}
+										calculateReservationPeriod={calculateReservationPeriod}
+										getTotalAmountPerDay={getTotalAmountPerDay}
+									/>
+								</div>
+							)}
+						</Modal>
+
 						<Header>
 							<Section>
 								{/* Left side of the header */}
@@ -695,9 +735,9 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 											</button>
 											<button
 												className='mx-2 my-2'
-												onClick={() => setIsModalVisible3(true)}
+												onClick={() => setIsModalVisible5(true)}
 											>
-												كشف حساب
+												Operation Order
 											</button>
 											{linkGenerate ? (
 												<>
@@ -760,9 +800,9 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 											</button>
 											<button
 												className='mx-2'
-												onClick={() => setIsModalVisible3(true)}
+												onClick={() => setIsModalVisible5(true)}
 											>
-												Account Statement
+												Operation Order
 											</button>
 											{linkGenerate ? (
 												<>

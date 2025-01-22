@@ -3,7 +3,7 @@ import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
 import { updateSingleReservation } from "../../HotelModule/apiAdmin";
 
-const ReceiptPDF = forwardRef(
+const ReceiptPDFB2B = forwardRef(
 	(
 		{
 			reservation,
@@ -13,13 +13,14 @@ const ReceiptPDF = forwardRef(
 		},
 		ref
 	) => {
+		// Use the reservation creation date for the booking date.
 		const bookingDate = new Date(reservation?.createdAt).toLocaleDateString();
+		// Initialize supplier name & booking number either from your local supplier info or from the reservation’s confirmation number.
 		const [supplierName, setSupplierName] = useState(
 			(reservation?.supplierData && reservation.supplierData.supplierName) ||
 				hotelDetails?.belongsTo?.name ||
 				"N/A"
 		);
-		// State for the editable supplier booking no in supplier-info
 		const [supplierBookingNo, setSupplierBookingNo] = useState(
 			(reservation?.supplierData &&
 				reservation.supplierData.suppliedBookingNo) ||
@@ -28,7 +29,6 @@ const ReceiptPDF = forwardRef(
 		);
 		const [isModalVisible, setIsModalVisible] = useState(false);
 		const [tempSupplierName, setTempSupplierName] = useState(supplierName);
-		// New state and modal flag for editing Supplier Booking No
 		const [isBookingNoModalVisible, setIsBookingNoModalVisible] =
 			useState(false);
 		const [tempSupplierBookingNo, setTempSupplierBookingNo] =
@@ -42,86 +42,59 @@ const ReceiptPDF = forwardRef(
 			return nights < 1 ? 1 : nights;
 		};
 
-		// Calculate nights once (assuming all room bookings have same checkin/checkout)
 		const nights = calculateNights(
 			reservation?.checkin_date,
 			reservation?.checkout_date
 		);
 
-		// Compute the commission for one night from each room's pricingByDay data.
-		// Same names, minimal changes
-		const computedCommissionPerNight = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
-					let roomCommission = 0;
-					if (room.pricingByDay && room.pricingByDay.length > 0) {
-						// Use the difference: (price - rootPrice) for each day
-						// then multiply by room.count
-						roomCommission =
-							room.pricingByDay.reduce((acc, day) => {
-								// daily commission
-								return acc + (Number(day.price) - Number(day.rootPrice));
-							}, 0) * Number(room.count);
-					}
-					return total + roomCommission;
-			  }, 0)
-			: 0;
-
-		// We've already accounted for all nights in pricingByDay,
-		// so we do NOT multiply by 'nights' again.
-		const computedCommission = computedCommissionPerNight;
-
-		// Compute one night cost for all rooms using totalPriceWithoutCommission (if available), otherwise fallback to chosenPrice.
-		const oneNightCost = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
-					let roomNightCost = 0;
-					if (room.pricingByDay && room.pricingByDay.length > 0) {
-						roomNightCost =
-							Number(room.pricingByDay[0].totalPriceWithoutCommission) *
-							Number(room.count);
-					} else {
-						roomNightCost = Number(room.chosenPrice) * Number(room.count);
-					}
-					return total + roomNightCost;
-			  }, 0)
-			: 0;
-
-		// Full amount from reservation (in SAR)
-		const totalAmount = Number(reservation.total_amount) || 0;
-
-		// The final deposit (in SAR) is computed as the sum of the computed commission and the one night cost.
-		const finalDeposit = computedCommission + oneNightCost;
-
-		// Compute the deposit percentage (finalDeposit / totalAmount * 100)
-		const depositPercentage =
-			totalAmount !== 0 ? ((finalDeposit / totalAmount) * 100).toFixed(0) : 0;
-		// ------------------------------------------------------------------
-
-		// For non-deposit parts, keep the original dynamic deposit percentage calculation:
-		// eslint-disable-next-line
-		const calculateDepositPercentage = () => {
-			const paid = Number(reservation?.paid_amount || 0);
-			const total = Number(reservation?.total_amount || 0);
-			return total !== 0 ? ((paid / total) * 100).toFixed(0) : 0;
+		// Helper function: get the room rate for one night based solely on rootPrice,
+		// falling back to the chosenPrice if rootPrice is unavailable.
+		const getRoomRate = (room) => {
+			if (room.pricingByDay && room.pricingByDay.length > 0) {
+				return (
+					Number(room.pricingByDay[0].rootPrice) || Number(room.chosenPrice)
+				);
+			}
+			return Number(room.chosenPrice);
 		};
 
+		// Deposit is hard coded to the one-night price for each room.
+		const deposit = reservation.pickedRoomsType
+			? reservation.pickedRoomsType.reduce((total, room) => {
+					const roomRate = getRoomRate(room);
+					// Multiply the room's one-night rate by its count
+					return total + roomRate * Number(room.count);
+			  }, 0)
+			: 0;
+
+		// Net Accommodation Charge calculated for the total stay (number of nights * rootPrice * count)
+		const netAccommodationCharge = reservation.pickedRoomsType
+			? reservation.pickedRoomsType.reduce((total, room) => {
+					const roomRate = getRoomRate(room);
+					return total + roomRate * Number(room.count) * nights;
+			  }, 0)
+			: 0;
+
+		// For display purposes in the summary, we can compute the remaining amount
+		const totalToBeCollected = netAccommodationCharge - deposit;
+
+		// Determine if the reservation is fully paid, here we assume if the paid_amount
+		// equals the net accommodation charge, it is fully paid.
 		const isFullyPaid =
 			Number(reservation?.paid_amount).toFixed(0) ===
-			Number(reservation?.total_amount).toFixed(0);
+			Number(netAccommodationCharge).toFixed(0);
 
-		// Handle Modal actions for Supplier Name
-		const showModal = () => {
-			setTempSupplierName(supplierName); // Set the temp state when modal opens
-			setIsModalVisible(true);
-		};
-
-		const handleOk = () => {
+		// ----------------------------
+		// Modal Handlers for Supplier Name
+		// When the OK button is clicked, update local state and update the database.
+		const handleSupplierNameOk = async () => {
 			setSupplierName(tempSupplierName);
 			setIsModalVisible(false);
-			// Update reservation with new supplierData; sendEmail is always false
+			// Construct updateData with the new supplierData (and ensure sendEmail remains false)
 			const updateData = {
 				supplierData: {
 					supplierName: tempSupplierName,
-					suppliedBookingNo: supplierBookingNo, // keep current value
+					suppliedBookingNo: supplierBookingNo, // Keep the existing booking no
 				},
 				sendEmail: false,
 			};
@@ -132,23 +105,18 @@ const ReceiptPDF = forwardRef(
 			});
 		};
 
-		const handleCancel = () => {
+		const handleSupplierNameCancel = () => {
 			setIsModalVisible(false);
 		};
 
-		// Handle modal actions for Supplier Booking No
-		const showBookingNoModal = () => {
-			setTempSupplierBookingNo(supplierBookingNo);
-			setIsBookingNoModalVisible(true);
-		};
-
-		const handleBookingNoOk = () => {
+		// Modal Handlers for Supplier Booking No
+		const handleSupplierBookingNoOk = async () => {
 			setSupplierBookingNo(tempSupplierBookingNo);
 			setIsBookingNoModalVisible(false);
-			// Update reservation with new supplierData; sendEmail is always false
+			// Construct updateData with the new supplierData while keeping the supplierName value intact.
 			const updateData = {
 				supplierData: {
-					supplierName: supplierName, // keep current value
+					supplierName: supplierName,
 					suppliedBookingNo: tempSupplierBookingNo,
 				},
 				sendEmail: false,
@@ -160,19 +128,30 @@ const ReceiptPDF = forwardRef(
 			});
 		};
 
-		const handleBookingNoCancel = () => {
+		const handleSupplierBookingNoCancel = () => {
 			setIsBookingNoModalVisible(false);
 		};
 
+		// Show Modals
+		const showSupplierNameModal = () => {
+			setTempSupplierName(supplierName);
+			setIsModalVisible(true);
+		};
+
+		const showSupplierBookingNoModal = () => {
+			setTempSupplierBookingNo(supplierBookingNo);
+			setIsBookingNoModalVisible(true);
+		};
+
 		return (
-			<ReceiptPDFWrapper ref={ref}>
+			<ReceiptPDFB2BWrapper ref={ref}>
 				{/* Header */}
 				<div className='header1'>
 					<div className='left'></div>
 					<div className='center logo'>
 						JANNAT <span>Booking.com</span>
 					</div>
-					<div className='right'>Booking Receipt</div>
+					<div className='right'>Operation Order</div>
 				</div>
 				<div className='header2'>
 					<div className='hotel-name'>
@@ -204,25 +183,26 @@ const ReceiptPDF = forwardRef(
 						<div>{reservation?.customer_details?.nationality}</div>
 					</div>
 					<div className='info-box'>
-						<strong>
-							{isFullyPaid ? "Paid Amount" : `${depositPercentage}% Deposit`}
-						</strong>
+						<strong>{isFullyPaid ? "Paid Amount" : "Deposit Amount"}</strong>
 						<div>
 							{isFullyPaid
-								? `${reservation?.paid_amount?.toFixed(2)} SAR`
-								: `${depositPercentage}% Deposit`}
+								? `${Number(reservation?.paid_amount).toFixed(2)} SAR`
+								: `${deposit.toFixed(2)} SAR`}
 						</div>
 					</div>
 				</div>
 
 				{/* Supplier Info */}
 				<div className='supplier-info mt-2'>
-					<div onClick={showModal} className='editable-supplier'>
+					<div onClick={showSupplierNameModal} className='editable-supplier'>
 						<strong>Supplied By:</strong> {supplierName}
 					</div>
 					<div>
 						<strong>Supplier Booking No:</strong>{" "}
-						<span onClick={showBookingNoModal} style={{ cursor: "pointer" }}>
+						<span
+							onClick={showSupplierBookingNoModal}
+							style={{ cursor: "pointer" }}
+						>
 							{supplierBookingNo}
 						</span>
 					</div>
@@ -251,9 +231,7 @@ const ReceiptPDF = forwardRef(
 							<td>{reservation?.reservation_status || "Confirmed"}</td>
 							<td>{reservation?.total_guests}</td>
 							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
-							<td>
-								{isFullyPaid ? "Paid in Full" : `${depositPercentage}% Deposit`}
-							</td>
+							<td>{isFullyPaid ? "Paid in Full" : "Deposit"}</td>
 						</tr>
 					</tbody>
 				</table>
@@ -267,24 +245,26 @@ const ReceiptPDF = forwardRef(
 							<th>Qty</th>
 							<th>Extras</th>
 							<th>Nights</th>
-							<th>Rate</th>
+							<th>Rate (Root Price)</th>
 							<th>Total</th>
 						</tr>
 					</thead>
 					<tbody>
-						{reservation?.pickedRoomsType?.map((room, index) => (
-							<tr key={index}>
-								<td>{hotelDetails?.hotelName}</td>
-								<td>{room.displayName}</td>
-								<td>{room.count}</td>
-								<td>N/T</td>
-								<td>{nights}</td>
-								<td>{room.chosenPrice} SAR</td>
-								<td>
-									{(room.chosenPrice * room.count * nights).toFixed(2)} SAR
-								</td>
-							</tr>
-						))}
+						{reservation?.pickedRoomsType?.map((room, index) => {
+							const roomRate = getRoomRate(room);
+							const roomTotal = roomRate * Number(room.count) * nights;
+							return (
+								<tr key={index}>
+									<td>{hotelDetails?.hotelName}</td>
+									<td>{room.displayName}</td>
+									<td>{room.count}</td>
+									<td>N/T</td>
+									<td>{nights}</td>
+									<td>{roomRate.toFixed(2)} SAR</td>
+									<td>{roomTotal.toFixed(2)} SAR</td>
+								</tr>
+							);
+						})}
 					</tbody>
 				</table>
 
@@ -292,36 +272,14 @@ const ReceiptPDF = forwardRef(
 				<div className='summary'>
 					<div>
 						<strong>Net Accommodation Charge:</strong>{" "}
-						{reservation?.total_amount?.toFixed(2)} SAR
+						{netAccommodationCharge.toFixed(2)} SAR
 					</div>
-					{isFullyPaid ? (
-						<div>
-							<strong>Paid Amount:</strong>{" "}
-							{reservation?.paid_amount?.toFixed(2)} SAR
-						</div>
-					) : (
-						<>
-							{/* <div>
-								<strong>Taxes:</strong> {computedCommission.toLocaleString()}{" "}
-								SAR
-							</div>
-							<div>
-								<strong>One Night Cost:</strong> {oneNightCost.toLocaleString()}{" "}
-								SAR
-							</div> */}
-							<div>
-								<strong>Final Deposit ({depositPercentage}% of Total):</strong>{" "}
-								{Number(finalDeposit.toLocaleString()).toFixed(2)} SAR
-							</div>
-						</>
-					)}
+					<div>
+						<strong>Deposit (One Night):</strong> {deposit.toFixed(2)} SAR
+					</div>
 					<div>
 						<strong>Total To Be Collected:</strong>{" "}
-						{(
-							Number(reservation?.total_amount) -
-							Number(finalDeposit.toLocaleString())
-						).toFixed(2)}{" "}
-						SAR
+						{totalToBeCollected.toFixed(2)} SAR
 					</div>
 				</div>
 
@@ -338,8 +296,8 @@ const ReceiptPDF = forwardRef(
 				<Modal
 					title='Edit Supplier'
 					open={isModalVisible}
-					onOk={handleOk}
-					onCancel={handleCancel}
+					onOk={handleSupplierNameOk}
+					onCancel={handleSupplierNameCancel}
 					okText='Save'
 					cancelText='Cancel'
 				>
@@ -354,8 +312,8 @@ const ReceiptPDF = forwardRef(
 				<Modal
 					title='Edit Supplier Booking No'
 					open={isBookingNoModalVisible}
-					onOk={handleBookingNoOk}
-					onCancel={handleBookingNoCancel}
+					onOk={handleSupplierBookingNoOk}
+					onCancel={handleSupplierBookingNoCancel}
 					okText='Save'
 					cancelText='Cancel'
 				>
@@ -365,15 +323,15 @@ const ReceiptPDF = forwardRef(
 						placeholder='Enter Supplier Booking No'
 					/>
 				</Modal>
-			</ReceiptPDFWrapper>
+			</ReceiptPDFB2BWrapper>
 		);
 	}
 );
 
-export default ReceiptPDF;
+export default ReceiptPDFB2B;
 
 /* Styled Components */
-const ReceiptPDFWrapper = styled.div`
+const ReceiptPDFB2BWrapper = styled.div`
 	font-family: Arial, Helvetica, sans-serif;
 	padding: 20px;
 	border: 1px solid #ccc;
