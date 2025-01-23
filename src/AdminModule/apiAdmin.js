@@ -645,6 +645,39 @@ export const triggerPayment = (
 		.catch((err) => console.error("Error triggering payment:", err));
 };
 
+export const emailSendForTriggeringPayment = (
+	userId,
+	token,
+	reservationId,
+	amountSAR
+) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/email-send/${userId}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify({
+			reservationId,
+			amountInSAR: amountSAR, // Correct key as expected by backend
+		}),
+	})
+		.then(async (response) => {
+			const data = await response.json();
+			if (!response.ok) {
+				throw new Error(
+					data.message || `HTTP error! Status: ${response.status}`
+				);
+			}
+			return data;
+		})
+		.catch((err) => {
+			console.error("Error triggering payment:", err);
+			throw err; // Re-throw to handle it in the caller
+		});
+};
+
 export const readUserId = (userId, token) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/user/${userId}`, {
 		method: "GET",

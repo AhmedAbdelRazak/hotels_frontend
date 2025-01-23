@@ -1,13 +1,16 @@
-import React, { useState } from "react";
+// src/components/admin/PaymentTrigger.js
+
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { triggerPayment } from "../apiAdmin";
-import { Modal, Radio, Input } from "antd";
+import { triggerPayment, emailSendForTriggeringPayment } from "../apiAdmin"; // Import the updated API function
+import { Modal, Radio, Input, message } from "antd";
+import { toast } from "react-toastify";
 
 const PaymentTrigger = ({ reservation }) => {
 	const { user, token } = isAuthenticated();
 	const [loading, setLoading] = useState(false);
-	const [message, setMessage] = useState("");
+	const [messageText, setMessageText] = useState("");
 	// For showing our options modal:
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedOption, setSelectedOption] = useState(null);
@@ -16,9 +19,36 @@ const PaymentTrigger = ({ reservation }) => {
 	// For showing error message in the modal if needed:
 	const [modalError, setModalError] = useState("");
 
+	// For password confirmation modal:
+	const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+	const [passwordInput, setPasswordInput] = useState("");
+	const [modalErrorPassword, setModalErrorPassword] = useState("");
+
+	// Import and configure Ant Design's message
+	useEffect(() => {
+		message.config({
+			top: 100,
+			duration: 3,
+			maxCount: 3,
+		});
+	}, []);
+
 	// Check if customer has payment details (cardNumber)
 	const hasPaymentDetails =
 		reservation.customer_details && reservation.customer_details.cardNumber;
+
+	// Check if a payment has already been captured
+	const isCaptured =
+		reservation.payment_details && reservation.payment_details.captured;
+
+	// Calculate remaining amount if payment has been captured
+	const remainingAmount = isCaptured
+		? Number(reservation.total_amount) - Number(reservation.paid_amount)
+		: Number(reservation.total_amount);
+
+	// Convert remaining amount to USD
+	const sarToUsdRate = 0.2667; // Example rate, ensure this rate matches your actual rate
+	const remainingAmountUSD = (remainingAmount * sarToUsdRate).toFixed(2);
 
 	// Calculate nights (not crucial for final deposit but used in your code)
 	const calculateNights = (checkin, checkout) => {
@@ -76,10 +106,6 @@ const PaymentTrigger = ({ reservation }) => {
 	// Option 3: Full Amount
 	const optionFullAmountSAR = totalAmount;
 
-	// Retrieve SAR->USD rate from localStorage
-	const storedRates = JSON.parse(localStorage.getItem("rates")) || {};
-	const sarToUsdRate = Number(storedRates["SARtoUSD"]) || 0.2667;
-
 	// Convert each SAR to USD
 	const option1_USD = (optionCommissionSAR * sarToUsdRate).toFixed(2);
 	const option2_USD = (depositWithOneNight * sarToUsdRate).toFixed(2);
@@ -113,16 +139,16 @@ const PaymentTrigger = ({ reservation }) => {
 		return { finalUSD, finalSAR };
 	};
 
-	// Disable the capture button if:
-	// eslint-disable-next-line
+	// **First Requirement: Disable the capture button if**
+	// - The user hasn't added his card details
+	// - OR the paid_amount is greater than or equal to the total_amount
 	const isDisabled =
 		!hasPaymentDetails ||
-		reservation.payment === "paid online" ||
-		reservation.reservation_status === "cancelled" ||
-		(reservation.payment_details && reservation.payment_details.captured);
+		(Number(reservation.paid_amount) >= Number(reservation.total_amount) &&
+			reservation.payment_details.isCaptured);
 
-	const handlePaymentTrigger = async () => {
-		// Validate
+	const handlePaymentOptionConfirm = () => {
+		// Validate payment options selection
 		if (!selectedOption) {
 			setModalError("Please select a payment option.");
 			return;
@@ -132,12 +158,42 @@ const PaymentTrigger = ({ reservation }) => {
 			return;
 		}
 
+		// Compute final amounts in USD & SAR
+		// eslint-disable-next-line
+		const { finalUSD, finalSAR } = getChargeAmount();
+
+		// If payment is captured, ensure not to exceed remainingAmount
+		if (isCaptured && finalSAR > remainingAmount) {
+			toast.error("You can't over charge the guest, Please try another amount");
+			return;
+		}
+
 		setModalError("");
+		// Open the password confirmation modal
+		setIsPasswordModalVisible(true);
+	};
+
+	const handlePasswordConfirm = async () => {
+		// Validate password input
+		if (!passwordInput) {
+			setModalErrorPassword("Please enter the confirmation password.");
+			return;
+		}
+
+		// Check if the entered password matches the environment variable
+		if (passwordInput !== process.env.REACT_APP_CONFIRM_PAYMENT) {
+			setModalErrorPassword("Incorrect password. Please try again.");
+			toast.error("Incorrect password. Please try again.");
+			return;
+		}
+
+		setModalErrorPassword("");
+
+		// Proceed with payment trigger
 		try {
 			setLoading(true);
-			setMessage("");
+			setMessageText("");
 
-			// Compute final amounts in USD & SAR
 			const { finalUSD, finalSAR } = getChargeAmount();
 			const reservationId = reservation._id;
 
@@ -152,82 +208,227 @@ const PaymentTrigger = ({ reservation }) => {
 				finalSAR // new argument: the SAR amount
 			);
 			console.log(response, "response");
-			setMessage(response.message || "Payment captured successfully!");
+			toast.success(response.message || "Payment captured successfully!");
 
 			setTimeout(() => {
 				window.location.reload(false);
 			}, 1500);
 		} catch (error) {
 			console.error(error);
-			setMessage(
+			toast.error(
 				"This customer was charged before, confirm with your admin Ahmed."
 			);
 		} finally {
 			setLoading(false);
-			if (!modalError) {
-				setIsModalVisible(false);
-			}
+			setIsPasswordModalVisible(false);
 		}
 	};
 
 	const openOptionsModal = () => {
 		setSelectedOption(null);
 		setCustomAmountUSD("");
-		setMessage("");
+		setMessageText("");
 		setModalError("");
 		setIsModalVisible(true);
 	};
 
+	// **Updated Function: Handle Send Email Click**
+	const handleSendEmailClick = async (
+		reservationId,
+		confirmationNumber,
+		amountUSD,
+		amountSAR
+	) => {
+		try {
+			const response = await emailSendForTriggeringPayment(
+				user._id, // userId
+				token, // Bearer token
+				reservationId,
+				amountSAR
+			);
+
+			if (response.message === "Confirmation email sent successfully.") {
+				toast.success(
+					`Email successfully sent to ${reservation.customer_details.name}`
+				);
+			} else {
+				toast.error(response.message || "Failed to send confirmation email.");
+			}
+		} catch (error) {
+			toast.error(
+				error.message || "An unexpected error occurred while sending the email."
+			);
+		}
+	};
+
+	// **Determine if the Send Email button should be disabled**
+	const { finalUSD, finalSAR } = getChargeAmount();
+	const isSendEmailDisabled =
+		!hasPaymentDetails ||
+		(Number(reservation.paid_amount) >= Number(reservation.total_amount) &&
+			reservation.payment_details.isCaptured) ||
+		!selectedOption ||
+		(selectedOption === "customAmount" && !customAmountUSD) ||
+		finalSAR > remainingAmount ||
+		finalUSD <= 0;
+
 	return (
 		<PaymentTriggerWrapper>
+			{/* No need for ToastContainer since you're using react-toastify */}
 			<h3>Trigger Payment</h3>
 			<p>This action will capture the payment for the reservation.</p>
-			<Button onClick={openOptionsModal} disabled={loading}>
+			<Button onClick={openOptionsModal} disabled={loading || isDisabled}>
 				{loading ? "Processing..." : "Capture Payment"}
 			</Button>
-			{message && (
-				<Message success={message === "Payment captured successfully!"}>
-					{message}
+			{isDisabled && (
+				<DisabledMessage>
+					{!hasPaymentDetails
+						? "Add payment details to capture payment."
+						: "The paid amount has already been captured."}
+				</DisabledMessage>
+			)}
+			{messageText && (
+				<Message success={messageText === "Payment captured successfully!"}>
+					{messageText}
 				</Message>
 			)}
+
+			{/* Payment Options Modal */}
 			<Modal
 				title='Select Payment Option'
 				visible={isModalVisible}
-				onOk={handlePaymentTrigger}
+				onOk={handlePaymentOptionConfirm}
 				onCancel={() => setIsModalVisible(false)}
 				okText='Confirm'
 				cancelText='Cancel'
+				width={600} // Adjust width if needed to accommodate the new button
 			>
 				<Radio.Group
 					onChange={(e) => setSelectedOption(e.target.value)}
 					value={selectedOption}
 				>
-					<Radio value='depositOnly'>
+					<Radio
+						value='depositOnly'
+						disabled={isCaptured && optionCommissionSAR > remainingAmount}
+					>
 						Capture Commission Only: ${option1_USD} USD ({option1_SAR} SAR)
+						{isCaptured && optionCommissionSAR > remainingAmount && (
+							<span style={{ color: "red", marginLeft: "10px" }}>
+								(Exceeds remaining amount)
+							</span>
+						)}
 					</Radio>
 					<br />
-					<Radio value='depositAndOneNight' style={{ marginTop: "10px" }}>
+					<Radio
+						value='depositAndOneNight'
+						style={{ marginTop: "10px" }}
+						disabled={isCaptured && depositWithOneNight > remainingAmount}
+					>
 						Capture Commission + 1 Night: ${option2_USD} USD ({option2_SAR} SAR)
+						{isCaptured && depositWithOneNight > remainingAmount && (
+							<span style={{ color: "red", marginLeft: "10px" }}>
+								(Exceeds remaining amount)
+							</span>
+						)}
 					</Radio>
 					<br />
-					<Radio value='fullAmount' style={{ marginTop: "10px" }}>
+					<Radio
+						value='fullAmount'
+						style={{ marginTop: "10px" }}
+						disabled={isCaptured && optionFullAmountSAR > remainingAmount}
+					>
 						Capture Entire Amount: ${option3_USD} USD ({option3_SAR} SAR)
+						{isCaptured && optionFullAmountSAR > remainingAmount && (
+							<span style={{ color: "red", marginLeft: "10px" }}>
+								(Exceeds remaining amount)
+							</span>
+						)}
 					</Radio>
 					<br />
-					<Radio value='customAmount' style={{ marginTop: "10px" }}>
+					<Radio
+						value='customAmount'
+						style={{ marginTop: "10px" }}
+						disabled={isCaptured && remainingAmount <= 0}
+					>
 						<span style={{ fontSize: "18px", fontWeight: "bold" }}>
 							Custom Withdrawal Amount (USD)
 						</span>
+						{isCaptured && remainingAmount <= 0 && (
+							<span style={{ color: "red", marginLeft: "10px" }}>
+								(No remaining amount)
+							</span>
+						)}
 					</Radio>
 				</Radio.Group>
 				{selectedOption === "customAmount" && (
 					<CustomInput
-						placeholder='Enter custom USD amount'
+						placeholder={`Max ${remainingAmountUSD} USD`}
 						value={customAmountUSD}
-						onChange={(e) => setCustomAmountUSD(e.target.value)}
+						onChange={(e) => {
+							const value = e.target.value;
+							// Allow only numbers and decimal
+							if (/^\d*\.?\d*$/.test(value)) {
+								// Ensure the entered amount does not exceed remainingAmount in USD
+								if (isCaptured) {
+									const maxUSD = remainingAmount / sarToUsdRate;
+									if (Number(value) > maxUSD) {
+										toast.error(
+											`Maximum allowable amount is ${maxUSD.toFixed(2)} USD`
+										);
+										setCustomAmountUSD(maxUSD.toFixed(2));
+										return;
+									}
+								}
+								setCustomAmountUSD(value);
+							}
+						}}
+						max={
+							isCaptured
+								? (remainingAmount / sarToUsdRate).toFixed(2)
+								: undefined
+						}
 					/>
 				)}
 				{modalError && <ModalError>{modalError}</ModalError>}
+
+				{/* **Send Email Button Inside Modal** */}
+				<SendEmailButton
+					onClick={() => {
+						handleSendEmailClick(
+							reservation._id,
+							reservation.confirmation_number,
+							finalUSD,
+							finalSAR
+						);
+					}}
+					disabled={isSendEmailDisabled} // Disabled until a valid amount is selected
+					aria-label='Send Email To Client To Confirm Payment'
+				>
+					Send Email To Client To Confirm Payment
+				</SendEmailButton>
+			</Modal>
+
+			{/* Password Confirmation Modal */}
+			<Modal
+				title='Confirm Payment'
+				visible={isPasswordModalVisible}
+				onOk={handlePasswordConfirm}
+				onCancel={() => {
+					setIsPasswordModalVisible(false);
+					setPasswordInput("");
+					setModalErrorPassword("");
+				}}
+				okText='Confirm'
+				cancelText='Cancel'
+			>
+				<p>Please enter your password to confirm the payment:</p>
+				<PasswordInput
+					type='password'
+					placeholder='Enter confirmation password'
+					value={passwordInput}
+					onChange={(e) => setPasswordInput(e.target.value)}
+				/>
+				{modalErrorPassword && <ModalError>{modalErrorPassword}</ModalError>}
 			</Modal>
 		</PaymentTriggerWrapper>
 	);
@@ -243,6 +444,7 @@ const PaymentTriggerWrapper = styled.div`
 	border-radius: 10px;
 	background-color: #f9f9f9;
 	box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+	position: relative; /* To position the send email button inside the modal */
 `;
 
 const Button = styled.button`
@@ -270,10 +472,22 @@ const Message = styled.p`
 	font-weight: bold;
 `;
 
+const DisabledMessage = styled.p`
+	color: red;
+	font-size: 14px;
+	margin-top: 10px;
+`;
+
 const CustomInput = styled(Input)`
 	margin-top: 10px;
 	font-size: 18px;
 	font-weight: bold;
+	text-align: center;
+`;
+
+const PasswordInput = styled(Input)`
+	margin-top: 10px;
+	font-size: 16px;
 	text-align: center;
 `;
 
@@ -282,4 +496,27 @@ const ModalError = styled.p`
 	font-size: 14px;
 	margin-top: 10px;
 	text-align: center;
+`;
+
+// **New Styled Component: SendEmailButton**
+const SendEmailButton = styled.button`
+	width: 100%;
+	margin-top: 20px;
+	background-color: #28a745;
+	color: white;
+	padding: 12px 0;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+	font-size: 16px;
+	font-weight: bold;
+	box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+
+	&:hover {
+		background-color: #218838;
+	}
+	&:disabled {
+		background-color: #ccc;
+		cursor: not-allowed;
+	}
 `;
