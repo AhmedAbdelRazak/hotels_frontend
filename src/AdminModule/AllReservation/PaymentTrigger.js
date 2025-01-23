@@ -33,6 +33,20 @@ const PaymentTrigger = ({ reservation }) => {
 		});
 	}, []);
 
+	// **Added: State Variables for Exchange Rates**
+	const [exchangeRateUSD, setExchangeRateUSD] = useState(0.2667); // Default value
+	// eslint-disable-next-line
+	const [exchangeRateEUR, setExchangeRateEUR] = useState(0.25597836); // Default value
+
+	// **Added: Fetch Exchange Rates from LocalStorage**
+	useEffect(() => {
+		const rates = JSON.parse(localStorage.getItem("rate"));
+		if (rates) {
+			setExchangeRateUSD(rates.SAR_USD || 0.2667);
+			setExchangeRateEUR(rates.SAR_EUR || 0.25597836);
+		}
+	}, []);
+
 	// Check if customer has payment details (cardNumber)
 	const hasPaymentDetails =
 		reservation.customer_details && reservation.customer_details.cardNumber;
@@ -46,9 +60,9 @@ const PaymentTrigger = ({ reservation }) => {
 		? Number(reservation.total_amount) - Number(reservation.paid_amount)
 		: Number(reservation.total_amount);
 
+	// **Replaced sarToUsdRate with exchangeRateUSD**
 	// Convert remaining amount to USD
-	const sarToUsdRate = 0.2667; // Example rate, ensure this rate matches your actual rate
-	const remainingAmountUSD = (remainingAmount * sarToUsdRate).toFixed(2);
+	const remainingAmountUSD = (remainingAmount * exchangeRateUSD).toFixed(2);
 
 	// Calculate nights (not crucial for final deposit but used in your code)
 	const calculateNights = (checkin, checkout) => {
@@ -106,10 +120,11 @@ const PaymentTrigger = ({ reservation }) => {
 	// Option 3: Full Amount
 	const optionFullAmountSAR = totalAmount;
 
+	// **Replaced sarToUsdRate with exchangeRateUSD**
 	// Convert each SAR to USD
-	const option1_USD = (optionCommissionSAR * sarToUsdRate).toFixed(2);
-	const option2_USD = (depositWithOneNight * sarToUsdRate).toFixed(2);
-	const option3_USD = (optionFullAmountSAR * sarToUsdRate).toFixed(2);
+	const option1_USD = (optionCommissionSAR * exchangeRateUSD).toFixed(2);
+	const option2_USD = (depositWithOneNight * exchangeRateUSD).toFixed(2);
+	const option3_USD = (optionFullAmountSAR * exchangeRateUSD).toFixed(2);
 
 	// Also store them as strings for display
 	const option1_SAR = optionCommissionSAR.toLocaleString();
@@ -134,7 +149,7 @@ const PaymentTrigger = ({ reservation }) => {
 			// customAmountUSD is the user’s typed USD
 			finalUSD = parseFloat(customAmountUSD) || 0;
 			// Convert that custom USD back to SAR
-			finalSAR = finalUSD / sarToUsdRate;
+			finalSAR = finalUSD / exchangeRateUSD;
 		}
 		return { finalUSD, finalSAR };
 	};
@@ -370,7 +385,7 @@ const PaymentTrigger = ({ reservation }) => {
 							if (/^\d*\.?\d*$/.test(value)) {
 								// Ensure the entered amount does not exceed remainingAmount in USD
 								if (isCaptured) {
-									const maxUSD = remainingAmount / sarToUsdRate;
+									const maxUSD = remainingAmount / exchangeRateUSD;
 									if (Number(value) > maxUSD) {
 										toast.error(
 											`Maximum allowable amount is ${maxUSD.toFixed(2)} USD`
@@ -384,7 +399,7 @@ const PaymentTrigger = ({ reservation }) => {
 						}}
 						max={
 							isCaptured
-								? (remainingAmount / sarToUsdRate).toFixed(2)
+								? (remainingAmount / exchangeRateUSD).toFixed(2)
 								: undefined
 						}
 					/>
