@@ -83,7 +83,8 @@ const PaymentTrigger = ({ reservation }) => {
 		? reservation.pickedRoomsType.reduce((total, room) => {
 				let roomCommission = 0;
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// difference = (day.price - day.rootPrice)
+					// difference = sum( day.price - day.rootPrice ) for each day
+					// multiplied by room.count
 					roomCommission =
 						room.pricingByDay.reduce((acc, day) => {
 							return acc + (Number(day.price) - Number(day.rootPrice));
@@ -100,10 +101,10 @@ const PaymentTrigger = ({ reservation }) => {
 		? reservation.pickedRoomsType.reduce((total, room) => {
 				let roomNightCost = 0;
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					roomNightCost =
-						Number(room.pricingByDay[0].totalPriceWithoutCommission) *
-						Number(room.count);
+					const firstDay = room.pricingByDay[0];
+					roomNightCost = Number(firstDay.rootPrice) * Number(room.count);
 				} else {
+					// Fallback if no pricingByDay
 					roomNightCost = Number(room.chosenPrice) * Number(room.count);
 				}
 				return total + roomNightCost;
@@ -311,7 +312,7 @@ const PaymentTrigger = ({ reservation }) => {
 			{/* Payment Options Modal */}
 			<Modal
 				title='Select Payment Option'
-				visible={isModalVisible}
+				open={isModalVisible}
 				onOk={handlePaymentOptionConfirm}
 				onCancel={() => setIsModalVisible(false)}
 				okText='Confirm'
