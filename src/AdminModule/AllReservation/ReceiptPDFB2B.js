@@ -13,9 +13,8 @@ const ReceiptPDFB2B = forwardRef(
 		},
 		ref
 	) => {
-		// Use the reservation creation date for the booking date.
 		const bookingDate = new Date(reservation?.createdAt).toLocaleDateString();
-		// Initialize supplier name & booking number either from your local supplier info or from the reservation’s confirmation number.
+
 		const [supplierName, setSupplierName] = useState(
 			(reservation?.supplierData && reservation.supplierData.supplierName) ||
 				hotelDetails?.belongsTo?.name ||
@@ -34,77 +33,85 @@ const ReceiptPDFB2B = forwardRef(
 		const [tempSupplierBookingNo, setTempSupplierBookingNo] =
 			useState(supplierBookingNo);
 
-		// Calculate the number of nights between check-in and check-out
+		// Helper: safely parse a numeric value
+		const safeNumber = (val) => {
+			const parsed = Number(val);
+			return isNaN(parsed) ? 0 : parsed;
+		};
+
+		// Payment checks
+		const paymentLower = reservation?.payment?.toLowerCase() || "";
+		const isDepositPaid = paymentLower === "deposit paid";
+		const isPaidOnline = paymentLower === "paid online";
+		// const isNotPaid = paymentLower === "not paid";
+
+		// Calculate nights
 		const calculateNights = (checkin, checkout) => {
 			const start = new Date(checkin);
 			const end = new Date(checkout);
 			let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 			return nights < 1 ? 1 : nights;
 		};
-
 		const nights = calculateNights(
 			reservation?.checkin_date,
 			reservation?.checkout_date
 		);
 
-		// Helper function: get the room rate for one night based solely on rootPrice,
-		// falling back to the chosenPrice if rootPrice is unavailable.
+		// Return the rootPrice (or fallback to chosenPrice) for the first day in `pricingByDay`.
 		const getRoomRate = (room) => {
 			if (room.pricingByDay && room.pricingByDay.length > 0) {
 				return (
-					Number(room.pricingByDay[0].rootPrice) || Number(room.chosenPrice)
+					safeNumber(room.pricingByDay[0].rootPrice) ||
+					safeNumber(room.chosenPrice)
 				);
 			}
-			return Number(room.chosenPrice);
+			return safeNumber(room.chosenPrice);
 		};
 
-		// Deposit is hard coded to the one-night price for each room.
-		const deposit = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
-					const roomRate = getRoomRate(room);
-					// Multiply the room's one-night rate by its count
-					return total + roomRate * Number(room.count);
-			  }, 0)
-			: 0;
-
-		// Net Accommodation Charge calculated for the total stay (number of nights * rootPrice * count)
+		// Net Accommodation Charge = sum of (rootPrice × nights × roomCount)
 		const netAccommodationCharge = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
+			? reservation.pickedRoomsType.reduce((acc, room) => {
 					const roomRate = getRoomRate(room);
-					return total + roomRate * Number(room.count) * nights;
+					return acc + roomRate * safeNumber(room.count) * nights;
 			  }, 0)
 			: 0;
 
-		// For display purposes in the summary, we can compute the remaining amount
-		const totalToBeCollected = netAccommodationCharge - deposit;
+		// Compute "Deposit" based on reservation.payment
+		// - If deposit paid => one-night cost
+		// - If paid online => fully paid => deposit = netAccommodationCharge
+		// - If not paid => deposit = 0
+		let deposit = 0;
+		if (isDepositPaid) {
+			deposit = reservation.pickedRoomsType
+				? reservation.pickedRoomsType.reduce((acc, room) => {
+						const roomRate = getRoomRate(room); // rootPrice
+						return acc + roomRate * safeNumber(room.count);
+				  }, 0)
+				: 0;
+		} else if (isPaidOnline) {
+			deposit = netAccommodationCharge;
+		} else {
+			deposit = 0;
+		}
 
-		// Determine if the reservation is fully paid, here we assume if the paid_amount
-		// equals the net accommodation charge, it is fully paid.
-		const isFullyPaid =
-			Number(reservation?.paid_amount).toFixed(0) ===
-			Number(netAccommodationCharge).toFixed(0);
+		// Compute the remainder
+		// const totalToBeCollected = netAccommodationCharge - deposit;
 
-		// ----------------------------
 		// Modal Handlers for Supplier Name
-		// When the OK button is clicked, update local state and update the database.
 		const handleSupplierNameOk = async () => {
 			setSupplierName(tempSupplierName);
 			setIsModalVisible(false);
-			// Construct updateData with the new supplierData (and ensure sendEmail remains false)
 			const updateData = {
 				supplierData: {
 					supplierName: tempSupplierName,
-					suppliedBookingNo: supplierBookingNo, // Keep the existing booking no
+					suppliedBookingNo: supplierBookingNo,
 				},
 				sendEmail: false,
 			};
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-				}
+				if (response.error) console.error(response.error);
 			});
 		};
-
 		const handleSupplierNameCancel = () => {
 			setIsModalVisible(false);
 		};
@@ -113,21 +120,17 @@ const ReceiptPDFB2B = forwardRef(
 		const handleSupplierBookingNoOk = async () => {
 			setSupplierBookingNo(tempSupplierBookingNo);
 			setIsBookingNoModalVisible(false);
-			// Construct updateData with the new supplierData while keeping the supplierName value intact.
 			const updateData = {
 				supplierData: {
-					supplierName: supplierName,
+					supplierName,
 					suppliedBookingNo: tempSupplierBookingNo,
 				},
 				sendEmail: false,
 			};
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-				}
+				if (response.error) console.error(response.error);
 			});
 		};
-
 		const handleSupplierBookingNoCancel = () => {
 			setIsBookingNoModalVisible(false);
 		};
@@ -137,7 +140,6 @@ const ReceiptPDFB2B = forwardRef(
 			setTempSupplierName(supplierName);
 			setIsModalVisible(true);
 		};
-
 		const showSupplierBookingNoModal = () => {
 			setTempSupplierBookingNo(supplierBookingNo);
 			setIsBookingNoModalVisible(true);
@@ -183,11 +185,19 @@ const ReceiptPDFB2B = forwardRef(
 						<div>{reservation?.customer_details?.nationality}</div>
 					</div>
 					<div className='info-box'>
-						<strong>{isFullyPaid ? "Paid Amount" : "Deposit Amount"}</strong>
+						<strong>
+							{isPaidOnline
+								? "Paid Amount"
+								: isDepositPaid
+								  ? "Deposit Amount"
+								  : "Payment Status"}
+						</strong>
 						<div>
-							{isFullyPaid
-								? `${Number(reservation?.paid_amount).toFixed(2)} SAR`
-								: `${deposit.toFixed(2)} SAR`}
+							{isPaidOnline
+								? `${deposit.toFixed(2)} SAR`
+								: isDepositPaid
+								  ? `${deposit.toFixed(2)} SAR`
+								  : "Not Paid"}
 						</div>
 					</div>
 				</div>
@@ -231,7 +241,13 @@ const ReceiptPDFB2B = forwardRef(
 							<td>{reservation?.reservation_status || "Confirmed"}</td>
 							<td>{reservation?.total_guests}</td>
 							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
-							<td>{isFullyPaid ? "Paid in Full" : "Deposit"}</td>
+							<td>
+								{isPaidOnline
+									? "Paid in Full"
+									: isDepositPaid
+									  ? "Deposit"
+									  : "Not Paid"}
+							</td>
 						</tr>
 					</tbody>
 				</table>
@@ -245,14 +261,14 @@ const ReceiptPDFB2B = forwardRef(
 							<th>Qty</th>
 							<th>Extras</th>
 							<th>Nights</th>
-							<th>Rate (Root Price)</th>
+							<th>Rate</th>
 							<th>Total</th>
 						</tr>
 					</thead>
 					<tbody>
 						{reservation?.pickedRoomsType?.map((room, index) => {
 							const roomRate = getRoomRate(room);
-							const roomTotal = roomRate * Number(room.count) * nights;
+							const roomTotal = roomRate * safeNumber(room.count) * nights;
 							return (
 								<tr key={index}>
 									<td>{hotelDetails?.hotelName}</td>
@@ -275,11 +291,14 @@ const ReceiptPDFB2B = forwardRef(
 						{netAccommodationCharge.toFixed(2)} SAR
 					</div>
 					<div>
-						<strong>Deposit (One Night):</strong> {deposit.toFixed(2)} SAR
+						<strong>
+							{isPaidOnline ? "Paid Amount" : "Deposit (One Night)"}
+						</strong>
+						: {deposit.toFixed(2)} SAR
 					</div>
 					<div>
 						<strong>Total To Be Collected:</strong>{" "}
-						{totalToBeCollected.toFixed(2)} SAR
+						{(netAccommodationCharge - deposit).toFixed(2)} SAR
 					</div>
 				</div>
 

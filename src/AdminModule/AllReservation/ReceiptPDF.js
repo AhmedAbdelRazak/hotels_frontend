@@ -48,65 +48,112 @@ const ReceiptPDF = forwardRef(
 			reservation?.checkout_date
 		);
 
-		// Compute the commission for one night from each room's pricingByDay data.
-		// Same names, minimal changes
-		const computedCommissionPerNight = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
-					let roomCommission = 0;
-					if (room.pricingByDay && room.pricingByDay.length > 0) {
-						// Use the difference: (price - rootPrice) for each day
-						// then multiply by room.count
-						roomCommission =
-							room.pricingByDay.reduce((acc, day) => {
-								// daily commission
-								return acc + (Number(day.price) - Number(day.rootPrice));
-							}, 0) * Number(room.count);
-					}
-					return total + roomCommission;
-			  }, 0)
-			: 0;
+		// Utility function to safely parse numbers and handle NaN
+		const safeNumber = (value) => {
+			const num = Number(value);
+			return isNaN(num) ? 0 : num;
+		};
 
-		// We've already accounted for all nights in pricingByDay,
-		// so we do NOT multiply by 'nights' again.
-		const computedCommission = computedCommissionPerNight;
+		// Compute the total commission considering dynamic commissionRate
+		function computeTotalCommission() {
+			if (!reservation.pickedRoomsType) return 0;
 
-		// Compute one night cost for all rooms using totalPriceWithoutCommission (if available), otherwise fallback to chosenPrice.
-		const oneNightCost = reservation.pickedRoomsType
-			? reservation.pickedRoomsType.reduce((total, room) => {
-					let roomNightCost = 0;
-					if (room.pricingByDay && room.pricingByDay.length > 0) {
-						roomNightCost =
-							Number(room.pricingByDay[0].totalPriceWithoutCommission) *
-							Number(room.count);
-					} else {
-						roomNightCost = Number(room.chosenPrice) * Number(room.count);
+			// If 1-night only, do a pure difference approach for each room:
+			if (nights === 1) {
+				return reservation.pickedRoomsType.reduce((total, room) => {
+					if (!room.pricingByDay || room.pricingByDay.length === 0)
+						return total;
+
+					// day.price = final daily price w/ commission
+					// day.rootPrice = base daily price
+					// difference = (310 - 280) = 30
+					const diff =
+						room.pricingByDay[0].price - room.pricingByDay[0].rootPrice;
+					const count = Number(room.count) || 1;
+					return total + diff * count;
+				}, 0);
+			}
+
+			// Otherwise, keep your original multi-night logic.
+			return reservation.pickedRoomsType.reduce((total, room) => {
+				let roomCommissionRateComponent = 0;
+				let roomAdditionalCommission = 0;
+
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					const firstDay = room.pricingByDay[0];
+					const rootPrice = safeNumber(firstDay.rootPrice);
+					let commissionRate = safeNumber(firstDay.commissionRate);
+					if (commissionRate >= 1) {
+						commissionRate = commissionRate / 100; // e.g. 10 => 0.10
+					} else if (commissionRate < 0) {
+						commissionRate = 0;
 					}
-					return total + roomNightCost;
-			  }, 0)
-			: 0;
+					const count = safeNumber(room.count);
+
+					// Commission Rate Component
+					roomCommissionRateComponent =
+						commissionRate * rootPrice * nights * count;
+
+					// Additional Commission
+					const totalPriceWithoutCommission = safeNumber(
+						firstDay.totalPriceWithoutCommission
+					);
+					roomAdditionalCommission =
+						Math.max(totalPriceWithoutCommission - rootPrice, 0) *
+						nights *
+						count;
+				}
+				return total + roomCommissionRateComponent + roomAdditionalCommission;
+			}, 0);
+		}
+
+		const totalCommission = computeTotalCommission();
+
+		// Compute one night cost for all rooms using rootPrice
+		const computeOneNightCost = () => {
+			if (!reservation.pickedRoomsType) return 0;
+
+			return reservation.pickedRoomsType.reduce((total, room) => {
+				let roomOneNightCost = 0;
+
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					const firstDay = room.pricingByDay[0];
+					const rootPrice = safeNumber(firstDay.rootPrice);
+					const count = safeNumber(room.count);
+					roomOneNightCost = rootPrice * count;
+				} else {
+					// Fallback to chosenPrice if pricingByDay is missing or invalid
+					const chosenPrice = safeNumber(room.chosenPrice);
+					const count = safeNumber(room.count);
+					roomOneNightCost = chosenPrice * count;
+				}
+
+				return total + roomOneNightCost;
+			}, 0);
+		};
+
+		const oneNightCost = computeOneNightCost();
 
 		// Full amount from reservation (in SAR)
-		const totalAmount = Number(reservation.total_amount) || 0;
+		const totalAmount = safeNumber(reservation.total_amount);
 
-		// The final deposit (in SAR) is computed as the sum of the computed commission and the one night cost.
-		const finalDeposit = computedCommission + oneNightCost;
+		// The final deposit (in SAR) is computed as the sum of the total commission and the one night cost.
+		const finalDeposit = totalCommission + oneNightCost;
+
+		// Determine if "Not Paid" should be displayed
+		const hasCardNumber =
+			reservation?.customer_details?.cardNumber &&
+			reservation.customer_details.cardNumber.trim() !== "";
+
+		const isNotPaid = reservation.payment === "not paid" || !hasCardNumber;
 
 		// Compute the deposit percentage (finalDeposit / totalAmount * 100)
 		const depositPercentage =
 			totalAmount !== 0 ? ((finalDeposit / totalAmount) * 100).toFixed(0) : 0;
-		// ------------------------------------------------------------------
-
-		// For non-deposit parts, keep the original dynamic deposit percentage calculation:
-		// eslint-disable-next-line
-		const calculateDepositPercentage = () => {
-			const paid = Number(reservation?.paid_amount || 0);
-			const total = Number(reservation?.total_amount || 0);
-			return total !== 0 ? ((paid / total) * 100).toFixed(0) : 0;
-		};
 
 		const isFullyPaid =
-			Number(reservation?.paid_amount).toFixed(0) ===
-			Number(reservation?.total_amount).toFixed(0);
+			safeNumber(reservation.paid_amount).toFixed(0) ===
+			safeNumber(reservation.total_amount).toFixed(0);
 
 		// Handle Modal actions for Supplier Name
 		const showModal = () => {
@@ -200,17 +247,23 @@ const ReceiptPDF = forwardRef(
 				<div className='info-boxes'>
 					<div className='info-box'>
 						<strong>Guest Name</strong>
-						<div>{reservation?.customer_details?.name}</div>
-						<div>{reservation?.customer_details?.nationality}</div>
+						<div>{reservation?.customer_details?.name || "N/A"}</div>
+						<div>{reservation?.customer_details?.nationality || "N/A"}</div>
 					</div>
 					<div className='info-box'>
 						<strong>
-							{isFullyPaid ? "Paid Amount" : `${depositPercentage}% Deposit`}
+							{isFullyPaid
+								? "Paid Amount"
+								: isNotPaid
+								  ? "Not Paid"
+								  : `${depositPercentage}% Deposit`}
 						</strong>
 						<div>
 							{isFullyPaid
-								? `${reservation?.paid_amount?.toFixed(2)} SAR`
-								: `${depositPercentage}% Deposit`}
+								? `${Number(reservation?.paid_amount).toFixed(2)} SAR`
+								: isNotPaid
+								  ? "Not Paid"
+								  : `${depositPercentage}% Deposit`}
 						</div>
 					</div>
 				</div>
@@ -252,7 +305,11 @@ const ReceiptPDF = forwardRef(
 							<td>{reservation?.total_guests}</td>
 							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
 							<td>
-								{isFullyPaid ? "Paid in Full" : `${depositPercentage}% Deposit`}
+								{isFullyPaid
+									? "Paid in Full"
+									: isNotPaid
+									  ? "Not Paid"
+									  : `${depositPercentage}% Deposit`}
 							</td>
 						</tr>
 					</tbody>
@@ -272,19 +329,32 @@ const ReceiptPDF = forwardRef(
 						</tr>
 					</thead>
 					<tbody>
-						{reservation?.pickedRoomsType?.map((room, index) => (
-							<tr key={index}>
-								<td>{hotelDetails?.hotelName}</td>
-								<td>{room.displayName}</td>
-								<td>{room.count}</td>
-								<td>N/T</td>
-								<td>{nights}</td>
-								<td>{room.chosenPrice} SAR</td>
-								<td>
-									{(room.chosenPrice * room.count * nights).toFixed(2)} SAR
-								</td>
-							</tr>
-						))}
+						{reservation?.pickedRoomsType?.map((room, index) => {
+							// Safely parse chosenPrice and rootPrice
+							const chosenPrice = safeNumber(room.chosenPrice);
+							const firstDay = room.pricingByDay && room.pricingByDay[0];
+							const rootPrice = firstDay ? safeNumber(firstDay.rootPrice) : 0;
+
+							// Determine the rate to display
+							const rate = chosenPrice > 0 ? chosenPrice : rootPrice;
+
+							// Calculate total price: rate * count * nights
+							const totalPrice = rate * safeNumber(room.count) * nights;
+
+							return (
+								<tr key={index}>
+									<td>{hotelDetails?.hotelName || "N/A"}</td>
+									<td>{room.displayName || "N/A"}</td>
+									<td>{room.count}</td>
+									<td>N/T</td>
+									<td>{nights}</td>
+									<td>{rate > 0 ? `${rate} SAR` : "N/A"}</td>
+									<td>
+										{totalPrice > 0 ? `${totalPrice.toFixed(2)} SAR` : "N/A"}{" "}
+									</td>
+								</tr>
+							);
+						})}
 					</tbody>
 				</table>
 
@@ -292,35 +362,32 @@ const ReceiptPDF = forwardRef(
 				<div className='summary'>
 					<div>
 						<strong>Net Accommodation Charge:</strong>{" "}
-						{reservation?.total_amount?.toFixed(2)} SAR
+						{Number(reservation?.total_amount).toFixed(2)} SAR
 					</div>
 					{isFullyPaid ? (
 						<div>
 							<strong>Paid Amount:</strong>{" "}
-							{reservation?.paid_amount?.toFixed(2)} SAR
+							{Number(reservation?.paid_amount).toFixed(2)} SAR
+						</div>
+					) : isNotPaid ? (
+						<div>
+							<strong>Payment Status:</strong> Not Paid
 						</div>
 					) : (
 						<>
-							{/* <div>
-								<strong>Taxes:</strong> {computedCommission.toLocaleString()}{" "}
-								SAR
-							</div>
-							<div>
-								<strong>One Night Cost:</strong> {oneNightCost.toLocaleString()}{" "}
-								SAR
-							</div> */}
 							<div>
 								<strong>Final Deposit ({depositPercentage}% of Total):</strong>{" "}
-								{Number(finalDeposit.toLocaleString()).toFixed(2)} SAR
+								{Number(finalDeposit).toFixed(2)} SAR
 							</div>
 						</>
 					)}
 					<div>
 						<strong>Total To Be Collected:</strong>{" "}
-						{(
-							Number(reservation?.total_amount) -
-							Number(finalDeposit.toLocaleString())
-						).toFixed(2)}{" "}
+						{isNotPaid
+							? Number(reservation?.total_amount).toFixed(2)
+							: (
+									Number(reservation?.total_amount) - Number(finalDeposit)
+							  ).toFixed(2)}{" "}
 						SAR
 					</div>
 				</div>
@@ -328,7 +395,7 @@ const ReceiptPDF = forwardRef(
 				{/* Footer */}
 				<div className='footer'>
 					Many Thanks for staying with us at{" "}
-					<strong>{hotelDetails?.hotelName}</strong> Hotel.
+					<strong>{hotelDetails?.hotelName || "N/A"}</strong> Hotel.
 					<br />
 					For better rates next time, please check{" "}
 					<a href='https://jannatbooking.com'>jannatbooking.com</a>

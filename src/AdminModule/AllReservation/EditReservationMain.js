@@ -489,7 +489,7 @@ const EditReservationMain = ({
 			booking_source: "Jannat Employee",
 			pickedRoomsType,
 			total_amount: totalAmount + totalCommission,
-			payment: "Not Paid",
+			payment: selectedHotel.payment,
 			paid_amount: reservation.paid_amount,
 			commission: totalCommission,
 			commissionPaid: false,

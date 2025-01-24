@@ -403,10 +403,11 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 		? reservation.pickedRoomsType.reduce((total, room) => {
 				let roomNightCost = 0;
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					// Take the rootPrice of the first day:
 					roomNightCost =
-						Number(room.pricingByDay[0].totalPriceWithoutCommission) *
-						Number(room.count);
+						Number(room.pricingByDay[0].rootPrice) * Number(room.count);
 				} else {
+					// Fallback to chosenPrice if no pricingByDay is available
 					roomNightCost = Number(room.chosenPrice) * Number(room.count);
 				}
 				return total + roomNightCost;
