@@ -486,7 +486,9 @@ const EditReservationMain = ({
 			checkin_date: checkInDate.format("YYYY-MM-DD"),
 			checkout_date: checkOutDate.format("YYYY-MM-DD"),
 			days_of_residence: numberOfNights,
-			booking_source: "Jannat Employee",
+			booking_source: reservation.booking_source
+				? reservation.booking_source
+				: "Jannat Employee",
 			pickedRoomsType,
 			total_amount: totalAmount + totalCommission,
 			payment: selectedHotel.payment,
