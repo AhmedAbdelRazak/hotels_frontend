@@ -9,6 +9,8 @@ import {
 	InputNumber,
 	Modal,
 	Checkbox,
+	Spin,
+	Descriptions,
 } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -30,6 +32,9 @@ const EditReservationMain = ({
 	chosenLanguage,
 	hotelDetails,
 }) => {
+	/** --------------
+	 * Existing States
+	 * -------------- */
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 	]);
@@ -43,57 +48,51 @@ const EditReservationMain = ({
 	const [agentName, setAgentName] = useState("");
 	const [phone, setPhone] = useState("");
 	const [comment, setComment] = useState("");
-	const [totalAmount, setTotalAmount] = useState(0);
+
+	/**
+	 * Adjusted States for Totals:
+	 * - hotelCost: sum of all rootPrice (daily) => "Total Amount (For the Hotel)"
+	 * - totalAmount: sum of all totalPriceWithCommission (daily) => "Grand Total"
+	 * - totalCommission: difference => totalAmount - hotelCost
+	 * - oneNightCost: sum of first-day rootPrice for each room => "Cost of One Night"
+	 * - finalDeposit: totalCommission + oneNightCost
+	 * - numberOfNights: checkIn->checkOut difference (min 1)
+	 */
+	const [hotelCost, setHotelCost] = useState(0); // NEW for "For the Hotel"
+	const [totalAmount, setTotalAmount] = useState(0); // "Grand Total"
 	const [totalCommission, setTotalCommission] = useState(0);
 	const [numberOfNights, setNumberOfNights] = useState(0);
+	const [oneNightCost, setOneNightCost] = useState(0);
+	const [finalDeposit, setFinalDeposit] = useState(0);
+
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
-	const [editingRoomIndex, setEditingRoomIndex] = useState(null); // Track which room is being edited
-	const [isModalVisible, setIsModalVisible] = useState(false); // Modal visibility
-	const [isModalVisible2, setIsModalVisible2] = useState(false); // Modal visibility
-	const [reservationCreated, setReservationCreated] = useState(false); // Modal visibility
-	const [selectedReservation, setSelectedReservation] = useState(""); // Modal visibility
+	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
+	const [isModalVisible, setIsModalVisible] = useState(false);
+	const [isModalVisible2, setIsModalVisible2] = useState(false);
+	const [reservationCreated, setReservationCreated] = useState(false);
+	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(true);
+	const [isLoading, setIsLoading] = useState(false);
 
 	const { user, token } = isAuthenticated();
 
-	// Prepopulate fields when reservation data is passed
-	useEffect(() => {
-		if (reservation) {
-			setName(reservation.customer_details?.name || "");
-			setEmail(reservation.customer_details?.email || "");
-			setPhone(reservation.customer_details?.phone || "");
-			setNationality(reservation.customer_details?.nationality || "");
-			setAdults(reservation.adults || 1);
-			setChildren(reservation.children || 0);
-			setCheckInDate(dayjs(reservation.checkin_date));
-			setCheckOutDate(dayjs(reservation.checkout_date));
-			setSelectedRooms(
-				reservation.pickedRoomsType || [
-					{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
-				]
-			);
-			setSelectedHotel(reservation.hotelId || null);
-			setComment(reservation.comment || "");
-		}
-	}, [reservation]);
-
-	// Reference to store previous state values
+	// Keep track of old values (no changes here)
 	const prevValues = useRef({
 		checkInDate: null,
 		checkOutDate: null,
 		selectedRooms: [],
 	});
 
-	// Fetch all hotels
+	/** ------------------
+	 *  Fetch all hotels
+	 * ------------------ */
 	const getAllHotels = useCallback(async () => {
+		setIsLoading(true);
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.filter(
-					(hotel) => hotel.activateHotel === true
-				);
-
+				const activeHotels = data.filter((h) => h.activateHotel === true);
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
@@ -103,25 +102,77 @@ const EditReservationMain = ({
 			}
 		} catch (error) {
 			console.error("Error fetching hotels:", error);
+			message.error("An error occurred while fetching hotels.");
+		} finally {
+			setIsLoading(false);
 		}
 	}, [user._id, token]);
 
 	useEffect(() => {
 		setAgentName(user.name || "");
 		getAllHotels();
-		// eslint-disable-next-line
-	}, [getAllHotels]);
+	}, [getAllHotels, user.name]);
 
-	// Calculate pricing by day with commission
+	/** ---------------------
+	 *  Prepopulate fields
+	 * --------------------- */
+	useEffect(() => {
+		if (reservation) {
+			setName(reservation.customer_details?.name || "");
+			setEmail(reservation.customer_details?.email || "");
+			setPhone(reservation.customer_details?.phone || "");
+			setNationality(reservation.customer_details?.nationality || "");
+			setAdults(reservation.adults || 1);
+			setChildren(reservation.children || 0);
+			setCheckInDate(
+				reservation.checkin_date ? dayjs(reservation.checkin_date) : null
+			);
+			setCheckOutDate(
+				reservation.checkout_date ? dayjs(reservation.checkout_date) : null
+			);
+			setComment(reservation.comment || "");
+			// Do not set selectedHotel or selectedRooms here, intentionally.
+		}
+	}, [reservation]);
+
+	/** ------------------------
+	 *  After hotels are fetched,
+	 *  set selectedHotel & Rooms
+	 * ------------------------ */
+	useEffect(() => {
+		if (reservation && allHotels.length > 0) {
+			const hotel = allHotels.find((h) => h._id === reservation.hotelId._id);
+			if (hotel) {
+				setSelectedHotel(hotel);
+				// Map pickedRoomsType => selectedRooms with calculated pricingByDay
+				const mappedRooms = reservation.pickedRoomsType.map((room) => ({
+					roomType: room.room_type || "",
+					displayName: room.displayName || "",
+					count: room.count || 1,
+					pricingByDay: room.pricingByDay || [],
+				}));
+				setSelectedRooms(mappedRooms);
+			} else {
+				setSelectedHotel(null);
+				message.error("Selected hotel not found.");
+			}
+		}
+	}, [reservation, allHotels]);
+
+	/** ------------------------------
+	 *  Helpers: safe parse float
+	 * ------------------------------ */
 	const safeParseFloat = (value, fallback = 0) => {
 		const parsed = parseFloat(value);
 		return isNaN(parsed) ? fallback : parsed;
 	};
 
-	// Calculate pricing by day
+	/** ------------------------------
+	 *  Calculate Pricing by Day (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const calculatePricingByDay = useCallback(
 		(
-			pricingRate,
+			pricingRate = [],
 			startDate,
 			endDate,
 			basePrice,
@@ -168,7 +219,9 @@ const EditReservationMain = ({
 		[]
 	);
 
-	// Calculate pricing by day with commission
+	/** ------------------------------
+	 *  Calculate Pricing by Day with Commission (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const calculatePricingByDayWithCommission = useCallback(
 		(
 			pricingRate,
@@ -187,18 +240,20 @@ const EditReservationMain = ({
 				commissionRate
 			);
 
-			// Add total price with commission to each day
 			return pricingByDay.map((day) => ({
 				...day,
 				totalPriceWithCommission:
-					Number(day.price) +
-					Number(day.rootPrice) * (Number(day.commissionRate) / 100), // Keep it as a number
+					safeParseFloat(day.price) +
+					safeParseFloat(day.rootPrice) *
+						(safeParseFloat(day.commissionRate) / 100),
 			}));
 		},
 		[calculatePricingByDay]
 	);
 
-	// Calculate totals
+	/** ------------------------------
+	 *  Calculate Totals (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms) => {
 			if (!checkInDate || !checkOutDate || rooms.length === 0 || !selectedHotel)
@@ -206,15 +261,17 @@ const EditReservationMain = ({
 
 			const startDate = dayjs(checkInDate).startOf("day");
 			const endDate = dayjs(checkOutDate).startOf("day");
-			const nights = endDate.diff(startDate, "day");
+			let nightsDiff = endDate.diff(startDate, "day");
+			if (nightsDiff < 1) nightsDiff = 1; // minimum 1 night
 
-			let totalAmount = 0;
-			let totalCommission = 0;
+			// Summations
+			let sumHotelCost = 0; // sum of rootPrice * count
+			let sumGrandTotal = 0; // sum of totalPriceWithCommission * count
 
-			// Map through each room and calculate totals
+			// Updated Rooms array to include recalculated pricingByDay
 			const updatedRooms = rooms.map((room) => {
-				// Respect existing pricingByDay if it exists
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
+					// Pricing already exists, no need to recalculate
 					const roomTotalAmount = room.pricingByDay.reduce(
 						(acc, day) => acc + day.rootPrice * room.count,
 						0
@@ -224,104 +281,129 @@ const EditReservationMain = ({
 						0
 					);
 
-					totalAmount += roomTotalAmount;
-					totalCommission += roomTotalPriceWithCommission - roomTotalAmount;
+					sumHotelCost += roomTotalAmount;
+					sumGrandTotal += roomTotalPriceWithCommission;
 
 					return room;
+				} else {
+					// Recalculate pricingByDay based on selectedHotel's roomCountDetails
+					const matchedRoom =
+						selectedHotel.roomCountDetails &&
+						selectedHotel.roomCountDetails.find(
+							(r) =>
+								r.roomType.trim() === room.roomType.trim() &&
+								r.displayName.trim() === room.displayName.trim()
+						);
+
+					if (matchedRoom) {
+						const recalculatedPricingByDay =
+							calculatePricingByDayWithCommission(
+								matchedRoom.pricingRate || [],
+								startDate,
+								endDate,
+								parseFloat(matchedRoom.price?.basePrice) || 0,
+								parseFloat(matchedRoom.defaultCost) || 0,
+								parseFloat(
+									matchedRoom.roomCommission || selectedHotel.commission || 0.1
+								)
+							);
+
+						const roomTotalAmount = recalculatedPricingByDay.reduce(
+							(acc, day) => acc + day.rootPrice * room.count,
+							0
+						);
+						const roomTotalPriceWithCommission =
+							recalculatedPricingByDay.reduce(
+								(acc, day) => acc + day.totalPriceWithCommission * room.count,
+								0
+							);
+
+						sumHotelCost += roomTotalAmount;
+						sumGrandTotal += roomTotalPriceWithCommission;
+
+						return { ...room, pricingByDay: recalculatedPricingByDay };
+					} else {
+						console.warn("No matching room found for", room);
+						return room;
+					}
 				}
-
-				// Otherwise, recalculate pricingByDay
-				const matchedRoom =
-					selectedHotel.roomCountDetails &&
-					selectedHotel.roomCountDetails.find(
-						(r) =>
-							r.roomType === room.roomType && r.displayName === room.displayName
-					);
-
-				if (matchedRoom) {
-					const pricingByDay = calculatePricingByDayWithCommission(
-						matchedRoom.pricingRate || [],
-						startDate,
-						endDate,
-						parseFloat(matchedRoom.price?.basePrice) || 0,
-						parseFloat(matchedRoom.defaultCost) || 0,
-						parseFloat(
-							matchedRoom.roomCommission || selectedHotel.commission || 0.1
-						)
-					);
-
-					const roomTotalAmount = pricingByDay.reduce(
-						(acc, day) => acc + day.rootPrice * room.count,
-						0
-					);
-					const roomTotalPriceWithCommission = pricingByDay.reduce(
-						(acc, day) => acc + day.totalPriceWithCommission * room.count,
-						0
-					);
-
-					totalAmount += roomTotalAmount;
-					totalCommission += roomTotalPriceWithCommission - roomTotalAmount;
-
-					return { ...room, pricingByDay };
-				}
-
-				return room;
 			});
 
-			// Update state
-			setTotalAmount(Number(totalAmount.toFixed(2)));
-			setTotalCommission(Number(totalCommission.toFixed(2)));
-			setNumberOfNights(nights);
+			// Compute oneNightCost: sum of firstDay's rootPrice for each room * count
+			let sumOneNight = 0;
+			updatedRooms.forEach((room) => {
+				if (room.pricingByDay.length > 0) {
+					const firstDayRoot = safeParseFloat(
+						room.pricingByDay[0].rootPrice,
+						0
+					);
+					sumOneNight += firstDayRoot * room.count;
+				}
+			});
+
+			const sumCommission = sumGrandTotal - sumHotelCost;
+			const deposit = sumCommission + sumOneNight;
+
+			// Update states
+			setHotelCost(Number(sumHotelCost.toFixed(2)));
+			setTotalAmount(Number(sumGrandTotal.toFixed(2))); // "Grand total"
+			setTotalCommission(Number(sumCommission.toFixed(2)));
+			setOneNightCost(Number(sumOneNight.toFixed(2)));
+			setFinalDeposit(Number(deposit.toFixed(2)));
+			setNumberOfNights(nightsDiff);
+
+			// Update selectedRooms with recalculated pricingByDay
 			setSelectedRooms(updatedRooms);
 		},
 		[
 			checkInDate,
 			checkOutDate,
 			selectedRooms,
-			calculatePricingByDayWithCommission,
 			selectedHotel,
+			calculatePricingByDayWithCommission,
 		]
 	);
 
+	/** ------------------------------
+	 *  useEffect to Recalculate Totals
+	 * ------------------------------ */
 	useEffect(() => {
+		const prev = prevValues.current;
 		if (
-			!dayjs(prevValues.current.checkInDate).isSame(checkInDate) ||
-			!dayjs(prevValues.current.checkOutDate).isSame(checkOutDate) ||
-			JSON.stringify(prevValues.current.selectedRooms) !==
-				JSON.stringify(selectedRooms)
+			!dayjs(prev.checkInDate).isSame(checkInDate) ||
+			!dayjs(prev.checkOutDate).isSame(checkOutDate) ||
+			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms)
 		) {
 			calculateTotals(selectedRooms);
-
-			// Update the ref with the latest state
 			prevValues.current = { checkInDate, checkOutDate, selectedRooms };
 		}
 	}, [checkInDate, checkOutDate, selectedRooms, calculateTotals]);
 
-	// Handle room selection changes
+	/** ------------------------------
+	 *  Handle Room Selection & Counts (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const handleRoomSelectionChange = (value, index) => {
 		const [roomType, displayName] = value.split("|");
 		const updatedRooms = [...selectedRooms];
 		updatedRooms[index] = {
 			...updatedRooms[index],
-			roomType: roomType.trim(), // Ensure roomType is stored correctly
-			displayName: displayName.trim(), // Ensure displayName is stored correctly
-			pricingByDay: [], // Reset pricingByDay when a new room is selected
+			roomType: roomType.trim(),
+			displayName: displayName.trim(),
+			pricingByDay: [], // Reset pricing when room selection changes
 		};
 		setSelectedRooms(updatedRooms);
-	};
-
-	// Handle room count changes
-	const handleRoomCountChange = (count, index) => {
-		// Ensure immutability by spreading the state
-		const updatedRooms = [...selectedRooms];
-		updatedRooms[index] = { ...updatedRooms[index], count };
-		setSelectedRooms(updatedRooms);
-
-		// Recalculate totals
+		// Recalculate totals after room selection change
 		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
-	// Add a new room selection
+	const handleRoomCountChange = (count, index) => {
+		const updatedRooms = [...selectedRooms];
+		updatedRooms[index] = { ...updatedRooms[index], count };
+		setSelectedRooms(updatedRooms);
+		// Recalculate totals after count change
+		setTimeout(() => calculateTotals(updatedRooms), 0);
+	};
+
 	const addRoomSelection = () => {
 		setSelectedRooms([
 			...selectedRooms,
@@ -329,14 +411,17 @@ const EditReservationMain = ({
 		]);
 	};
 
-	// Remove a room selection
 	const removeRoomSelection = (index) => {
 		const updatedRooms = [...selectedRooms];
 		updatedRooms.splice(index, 1);
 		setSelectedRooms(updatedRooms);
+		// Recalculate totals after removing a room
+		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
-	// Open and close modal
+	/** ------------------------------
+	 *  Edit Pricing Modal logic (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const openModal = (roomIndex) => {
 		setEditingRoomIndex(roomIndex);
 		setIsModalVisible(true);
@@ -348,20 +433,19 @@ const EditReservationMain = ({
 	};
 
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		const updatedRooms = selectedRooms.map((room, index) =>
-			index === editingRoomIndex
+		const updatedRooms = selectedRooms.map((room, idx) =>
+			idx === editingRoomIndex
 				? { ...room, pricingByDay: updatedPricingByDay }
 				: room
 		);
-
-		// Update state with the modified rooms
 		setSelectedRooms(updatedRooms);
-
-		// Recalculate totals after updating selectedRooms
+		// Recalculate totals after pricing update
 		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
-	// Clear all fields
+	/** ------------------------------
+	 *  Clear All Fields (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const clearAll = () => {
 		setSelectedRooms([
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
@@ -374,13 +458,45 @@ const EditReservationMain = ({
 		setChildren(0);
 		setNationality("");
 		setPhone("");
+		setComment("");
+
+		// Reset totals to 0 as well
+		setHotelCost(0);
 		setTotalAmount(0);
 		setTotalCommission(0);
 		setNumberOfNights(0);
+		setOneNightCost(0);
+		setFinalDeposit(0);
 	};
 
+	/** ------------------------------
+	 *  Hotel Change (Aligned with OrderTaker)
+	 * ------------------------------ */
+	const handleHotelChange = (hotelId) => {
+		const newHotel = allHotels.find((ht) => ht._id === hotelId);
+		if (selectedHotel && selectedHotel._id !== hotelId) {
+			message.warning(
+				"Hotel changed! Room selection and pricing will be reset."
+			);
+			setSelectedRooms([
+				{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
+			]);
+			setHotelCost(0);
+			setTotalAmount(0);
+			setTotalCommission(0);
+			setNumberOfNights(0);
+			setOneNightCost(0);
+			setFinalDeposit(0);
+		}
+		setSelectedHotel(newHotel);
+		// Optionally, you might want to recalculate pricing for existing rooms here
+		setTimeout(() => calculateTotals(selectedRooms), 0);
+	};
+
+	/** ------------------------------
+	 *  Handle Submission (Aligned with OrderTaker)
+	 * ------------------------------ */
 	const handleSubmit = async () => {
-		// Enhanced Validation
 		if (
 			!name ||
 			!email ||
@@ -396,7 +512,6 @@ const EditReservationMain = ({
 			return;
 		}
 
-		// Validate pricing for all rooms
 		if (!selectedRooms.every((room) => room.pricingByDay.length > 0)) {
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
@@ -417,7 +532,7 @@ const EditReservationMain = ({
 
 					const averagePriceWithCommission =
 						pricingDetails.reduce(
-							(sum, day) => sum + day.totalPriceWithCommission,
+							(acc, day) => acc + day.totalPriceWithCommission,
 							0
 						) / pricingDetails.length;
 
@@ -428,11 +543,11 @@ const EditReservationMain = ({
 						count: 1,
 						pricingByDay: pricingDetails,
 						totalPriceWithCommission: pricingDetails.reduce(
-							(sum, day) => sum + day.totalPriceWithCommission,
+							(acc, day) => acc + day.totalPriceWithCommission,
 							0
 						),
 						hotelShouldGet: pricingDetails.reduce(
-							(sum, day) => sum + day.rootPrice,
+							(acc, day) => acc + day.rootPrice,
 							0
 						),
 					};
@@ -443,27 +558,23 @@ const EditReservationMain = ({
 		const pickedRoomsType =
 			transformPickedRoomsToPickedRoomsType(selectedRooms);
 
-		// ✅ Handle '_relocate' suffix increment ONLY if hotelId has changed
+		// _relocate suffix if hotel changed
 		let updatedConfirmationNumber = reservation.confirmation_number;
-
-		if (selectedHotel._id !== reservation.hotelId) {
+		if (selectedHotel._id !== reservation.hotelId._id) {
+			// Corrected comparison
 			const relocatePattern = /_relocate(\d*)$/;
 			const match = updatedConfirmationNumber.match(relocatePattern);
-
 			if (match) {
-				// If '_relocate' exists, increment the number (e.g., '_relocate2', '_relocate3')
-				const count = match[1] ? parseInt(match[1], 10) + 1 : 2;
+				const c = match[1] ? parseInt(match[1], 10) + 1 : 2;
 				updatedConfirmationNumber = updatedConfirmationNumber.replace(
 					relocatePattern,
-					`_relocate${count}`
+					`_relocate${c}`
 				);
 			} else {
-				// If '_relocate' doesn't exist, add it
 				updatedConfirmationNumber += "_relocate";
 			}
 		}
 
-		// Construct reservation data
 		const reservationData = {
 			userId: user ? user._id : null,
 			hotelId: selectedHotel._id,
@@ -473,10 +584,11 @@ const EditReservationMain = ({
 				name,
 				email,
 				phone,
-				passport: "Not Provided",
-				passportExpiry: "1/1/2027",
+				passport: reservation.customer_details?.passport || "Not Provided",
+				passportExpiry:
+					reservation.customer_details?.passportExpiry || "2027-01-01",
 				nationality,
-				postalCode: "00000",
+				postalCode: reservation.customer_details?.postalCode || "00000",
 				reservedBy: agentName,
 			},
 			total_rooms: selectedRooms.reduce((total, room) => total + room.count, 0),
@@ -490,45 +602,53 @@ const EditReservationMain = ({
 				? reservation.booking_source
 				: "Jannat Employee",
 			pickedRoomsType,
-			total_amount: totalAmount + totalCommission,
-			payment: selectedHotel.payment,
-			paid_amount: reservation.paid_amount,
+			// totalAmount now truly = sum of all priceAfterCommission for each day => "Grand Total"
+			total_amount: totalAmount,
+			payment: selectedHotel.payment || "not paid",
+			paid_amount: reservation.payment_details?.paid_amount || 0,
 			commission: totalCommission,
-			commissionPaid: false,
+			commissionPaid: reservation.payment_details?.commissionPaid || false,
 			paymentDetails: {
-				cardNumber: "",
-				cardExpiryDate: "",
-				cardCVV: "",
-				cardHolderName: "",
+				cardNumber: reservation.payment_details?.cardNumber || "",
+				cardExpiryDate: reservation.payment_details?.cardExpiryDate || "",
+				cardCVV: reservation.payment_details?.cardCVV || "",
+				cardHolderName: reservation.payment_details?.cardHolderName || "",
 			},
 			sentFrom: "employee",
-			confirmation_number: updatedConfirmationNumber, // ✅ Correctly updated confirmation number
+			confirmation_number: updatedConfirmationNumber,
 			sendEmail,
 			comment,
 		};
 
 		try {
+			setIsLoading(true); // Start loading
 			const response = await updateSingleReservation(
 				reservation._id,
 				reservationData
 			);
-
 			if (response?.message === "Reservation updated successfully") {
 				message.success("Reservation updated successfully!");
 				setReservationCreated(true);
 				setReservation(response.reservation);
+				window.scrollTo({ top: 0, behavior: "smooth" });
 				setTimeout(() => {
 					window.location.reload(false);
 				}, 1500);
+				// Everything else remains as-is
 			} else {
 				message.error(response.message || "Error updating reservation.");
 			}
 		} catch (error) {
 			console.error("Error updating reservation:", error);
 			message.error("An error occurred while updating the reservation.");
+		} finally {
+			setIsLoading(false); // Stop loading
 		}
 	};
 
+	/** ------------------------------
+	 * Show / hide details modal
+	 * ------------------------------ */
 	const showDetailsModal = () => {
 		setIsModalVisible2(true);
 	};
@@ -539,22 +659,9 @@ const EditReservationMain = ({
 
 	console.log("Selected Rooms:", selectedRooms);
 
-	const handleHotelChange = (hotelId) => {
-		const newHotel = allHotels.find((hotel) => hotel._id === hotelId);
-		if (selectedHotel && selectedHotel._id !== hotelId) {
-			message.warning(
-				"Hotel changed! Room selection and pricing will be reset."
-			);
-			setSelectedRooms([
-				{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
-			]);
-			setTotalAmount(0);
-			setTotalCommission(0);
-			setNumberOfNights(0);
-		}
-		setSelectedHotel(newHotel);
-	};
-
+	/** ------------------------------
+	 * Render - intact except <Descriptions>
+	 * ------------------------------ */
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
 			<Form layout='vertical'>
@@ -566,6 +673,12 @@ const EditReservationMain = ({
 				>
 					Clear All
 				</Button>
+
+				{isLoading && (
+					<div style={{ textAlign: "center", marginBottom: "20px" }}>
+						<Spin tip='Loading hotels...' />
+					</div>
+				)}
 
 				<div className='my-3'>
 					<h3 style={{ fontSize: "1.3rem", fontWeight: "bold" }}>
@@ -582,6 +695,7 @@ const EditReservationMain = ({
 						</Checkbox>
 					</Form.Item>
 				</div>
+
 				<div className='row'>
 					<div className='col-md-6'>
 						<Form.Item label='Select Hotel'>
@@ -589,10 +703,11 @@ const EditReservationMain = ({
 								placeholder='Select a hotel'
 								value={selectedHotel?._id}
 								onChange={handleHotelChange}
+								disabled={isLoading}
 							>
-								{allHotels.map((hotel) => (
-									<Option key={hotel._id} value={hotel._id}>
-										{hotel.hotelName}
+								{allHotels.map((ht) => (
+									<Option key={ht._id} value={ht._id}>
+										{ht.hotelName}
 									</Option>
 								))}
 							</Select>
@@ -604,6 +719,7 @@ const EditReservationMain = ({
 							<Input
 								value={agentName}
 								onChange={(e) => setAgentName(e.target.value)}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 					</div>
@@ -618,6 +734,7 @@ const EditReservationMain = ({
 									setCheckInDate(dates ? dates[0] : null);
 									setCheckOutDate(dates ? dates[1] : null);
 								}}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 					</div>
@@ -634,6 +751,7 @@ const EditReservationMain = ({
 										: undefined
 								}
 								onChange={(value) => handleRoomSelectionChange(value, index)}
+								disabled={isLoading || !selectedHotel}
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((roomDetail) => (
@@ -646,11 +764,13 @@ const EditReservationMain = ({
 									))}
 							</Select>
 						</Form.Item>
+
 						<Form.Item label='Count'>
 							<InputNumber
 								min={1}
 								value={room.count}
-								onChange={(count) => handleRoomCountChange(count, index)}
+								onChange={(cnt) => handleRoomCountChange(cnt, index)}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 
@@ -671,16 +791,19 @@ const EditReservationMain = ({
 										fontWeight: "bold",
 										textDecoration: "underline",
 									}}
+									disabled={isLoading}
 								>
 									<EditOutlined /> Edit Pricing
 								</Button>
 							</Form.Item>
 						)}
+
 						{index > 0 && (
 							<Button
 								type='link'
 								danger
 								onClick={() => removeRoomSelection(index)}
+								disabled={isLoading}
 							>
 								Remove
 							</Button>
@@ -688,26 +811,41 @@ const EditReservationMain = ({
 					</div>
 				))}
 
-				<Button type='dashed' onClick={addRoomSelection}>
+				<Button
+					type='dashed'
+					onClick={addRoomSelection}
+					disabled={isLoading || !selectedHotel}
+				>
 					Add Another Room
 				</Button>
 
 				{/* Other Fields */}
-
 				<div className='row my-3'>
 					<div className='col-md-4'>
 						<Form.Item label='Guest Name'>
-							<Input value={name} onChange={(e) => setName(e.target.value)} />
+							<Input
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+								disabled={isLoading}
+							/>
 						</Form.Item>
 					</div>
 					<div className='col-md-4'>
 						<Form.Item label='Email'>
-							<Input value={email} onChange={(e) => setEmail(e.target.value)} />
+							<Input
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								disabled={isLoading}
+							/>
 						</Form.Item>
 					</div>
 					<div className='col-md-4'>
 						<Form.Item label='Phone'>
-							<Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+							<Input
+								value={phone}
+								onChange={(e) => setPhone(e.target.value)}
+								disabled={isLoading}
+							/>
 						</Form.Item>
 					</div>
 
@@ -721,8 +859,9 @@ const EditReservationMain = ({
 									option.children.toLowerCase().includes(input.toLowerCase())
 								}
 								value={nationality}
-								onChange={(value) => setNationality(value)} // Set country code as nationality
+								onChange={(val) => setNationality(val)}
 								style={{ width: "100%" }}
+								disabled={isLoading}
 							>
 								{countryListWithAbbreviations.map((country) => (
 									<Option key={country.code} value={country.code}>
@@ -738,7 +877,8 @@ const EditReservationMain = ({
 								className='w-100'
 								min={1}
 								value={adults}
-								onChange={(value) => setAdults(value)}
+								onChange={(val) => setAdults(val)}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 					</div>
@@ -748,7 +888,8 @@ const EditReservationMain = ({
 								className='w-100'
 								min={0}
 								value={children}
-								onChange={(value) => setChildren(value)}
+								onChange={(val) => setChildren(val)}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 					</div>
@@ -759,63 +900,72 @@ const EditReservationMain = ({
 								placeholder='Add any comments here...'
 								value={comment}
 								onChange={(e) => setComment(e.target.value)}
+								disabled={isLoading}
 							/>
 						</Form.Item>
 					</div>
 				</div>
 
-				{/* Totals */}
+				{/* Totals: updated lines only */}
 				<Form.Item>
-					<p>
-						<strong>Total Amount (For the Hotel): </strong>
-						{Number(totalAmount).toFixed(2)} SAR
-					</p>
-					<p>
-						<strong>Total Commission: </strong>
-						{Number(totalCommission).toFixed(2)} SAR
-					</p>
-					<p>
-						<strong>Grand Total (Including Commission): </strong>
-						{(Number(totalAmount) + Number(totalCommission)).toFixed(2)} SAR
-					</p>
-					<p>
-						<strong>Paid Amount: </strong>
-						{reservation.paid_amount} SAR
-					</p>
-					<p>
-						<strong>Number of Nights: </strong>
-						{numberOfNights}
-					</p>
+					<Descriptions bordered column={1} size='small'>
+						<Descriptions.Item label='Total Amount (For the Hotel)'>
+							{Number(hotelCost).toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Total Commission'>
+							{Number(totalCommission).toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Cost of One Night'>
+							{Number(oneNightCost).toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Total Deposit'>
+							{Number(finalDeposit).toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Grand Total (Including Commission)'>
+							{Number(totalAmount).toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Paid Amount'>
+							{reservation.payment_details?.paid_amount || 0} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Number of Nights'>
+							{numberOfNights}
+						</Descriptions.Item>
+					</Descriptions>
 				</Form.Item>
 
-				<Button type='primary' onClick={handleSubmit}>
+				<Button
+					type='primary'
+					onClick={handleSubmit}
+					disabled={isLoading}
+					loading={isLoading}
+				>
 					Submit
 				</Button>
 			</Form>
 
 			{selectedHotel &&
-			selectedHotel._id &&
-			reservationCreated &&
-			selectedReservation &&
-			selectedReservation._id ? (
-				<Button
-					type='link'
-					className='my-4'
-					onClick={() => showDetailsModal()}
-					style={{
-						fontWeight: "bold",
-						fontSize: "1.5rem",
-						textDecoration: "underline !important",
-						color: "white",
-						padding: "0px",
-						background: "black",
-						width: "50%",
-						height: "10%",
-					}}
-				>
-					View Details
-				</Button>
-			) : null}
+				selectedHotel._id &&
+				reservationCreated &&
+				selectedReservation &&
+				selectedReservation._id && (
+					<Button
+						type='link'
+						className='my-4'
+						onClick={showDetailsModal}
+						style={{
+							fontWeight: "bold",
+							fontSize: "1.5rem",
+							textDecoration: "underline",
+							color: "white",
+							padding: "0px",
+							background: "black",
+							width: "50%",
+							height: "10%",
+						}}
+					>
+						View Details
+					</Button>
+				)}
 
 			{/* Edit Pricing Modal */}
 			<EditPricingModal
@@ -826,8 +976,8 @@ const EditReservationMain = ({
 				roomDetails={selectedRooms[editingRoomIndex]} // Optional
 			/>
 
+			{/* "MoreDetails" Modal */}
 			<Modal
-				// title={<div style={{ fontSize: "1.5rem" }}>Reservation Details</div>}
 				open={isModalVisible2}
 				onCancel={handleModalClose}
 				className='float-right'
@@ -839,17 +989,17 @@ const EditReservationMain = ({
 				]}
 			>
 				{selectedHotel &&
-				selectedHotel._id &&
-				reservationCreated &&
-				selectedReservation &&
-				selectedReservation._id ? (
-					<MoreDetails
-						selectedReservation={selectedReservation}
-						hotelDetails={selectedHotel}
-						reservation={selectedReservation}
-						setReservation={setSelectedReservation}
-					/>
-				) : null}
+					selectedHotel._id &&
+					reservationCreated &&
+					selectedReservation &&
+					selectedReservation._id && (
+						<MoreDetails
+							selectedReservation={selectedReservation}
+							hotelDetails={selectedHotel}
+							reservation={selectedReservation}
+							setReservation={setSelectedReservation}
+						/>
+					)}
 			</Modal>
 		</div>
 	);
