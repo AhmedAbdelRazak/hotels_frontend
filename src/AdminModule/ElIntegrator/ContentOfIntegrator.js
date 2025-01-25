@@ -6,7 +6,7 @@ import {
 	EyeTwoTone,
 	UploadOutlined,
 } from "@ant-design/icons";
-import { agodaData } from "../apiAdmin";
+import { agodaData, expediaData } from "../apiAdmin"; // Import both functions
 import { isAuthenticated } from "../../auth";
 
 const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
@@ -15,7 +15,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [activeTab, setActiveTab] = useState("Agoda");
-	const [file, setFile] = useState(null);
+	const [files, setFiles] = useState({ Agoda: null, Expedia: null }); // Manage files per tab
 	const [integrateClicked, setIntegrateClicked] = useState(false);
 	const { user, token } = isAuthenticated();
 
@@ -31,6 +31,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 
 		setIsModalVisible(true);
 		setPassword(""); // Clear password field
+		setFiles({ Agoda: null, Expedia: null }); // Reset files when opening modal
 	};
 
 	const handlePasswordVerification = () => {
@@ -43,25 +44,39 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 		}
 	};
 
-	const handleFileChange = (file) => {
-		setFile(file); // Store the file in state
+	const handleFileChange = (tab, file) => {
+		setFiles((prevFiles) => ({
+			...prevFiles,
+			[tab]: file,
+		}));
 	};
 
 	const handleIntegrateReservations = async () => {
-		if (!file) {
+		if (!files[activeTab]) {
 			message.error("Please upload a file before integrating.");
 			return;
 		}
 
 		try {
-			// Call the agodaData function
-			const response = await agodaData(
-				selectedHotel._id, // hotelId (accountId)
-				selectedHotel.belongsTo._id, // belongsTo
-				file,
-				user._id, // userId
-				token
-			);
+			let response;
+			if (activeTab === "Agoda") {
+				response = await agodaData(
+					selectedHotel._id, // hotelId (accountId)
+					selectedHotel.belongsTo._id, // belongsTo
+					files.Agoda,
+					user._id, // userId
+					token
+				);
+			} else if (activeTab === "Expedia") {
+				response = await expediaData(
+					selectedHotel._id,
+					selectedHotel.belongsTo._id,
+					files.Expedia,
+					user._id,
+					token
+				);
+			}
+			// Add more else-if blocks if you have other tabs like Booking.com
 
 			if (response && response.message) {
 				message.success(
@@ -78,7 +93,11 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 	};
 
 	const modalContent = isPasswordVerified ? (
-		<Tabs defaultActiveKey='Agoda' onChange={(key) => setActiveTab(key)}>
+		<Tabs
+			defaultActiveKey='Agoda'
+			activeKey={activeTab}
+			onChange={(key) => setActiveTab(key)}
+		>
 			<Tabs.TabPane tab='Agoda' key='Agoda'>
 				<p>
 					Please ensure that the room types naming in the sheet matches the room
@@ -90,7 +109,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 				</p>
 				<Upload
 					beforeUpload={(file) => {
-						handleFileChange(file);
+						handleFileChange("Agoda", file);
 						return false; // Prevent auto-upload
 					}}
 					accept='.xls,.xlsx,.csv'
@@ -98,11 +117,11 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 				>
 					<Button icon={<UploadOutlined />}>Upload Excel File</Button>
 				</Upload>
-				{file && <p>File selected: {file.name}</p>}
+				{files.Agoda && <p>File selected: {files.Agoda.name}</p>}
 				<CenteredButton type='primary' onClick={handleIntegrateReservations}>
 					Integrate Reservations ({activeTab})
 				</CenteredButton>
-				{integrateClicked && (
+				{integrateClicked && activeTab === "Agoda" && (
 					<div
 						style={{
 							fontWeight: "bold",
@@ -127,21 +146,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 				)}
 			</Tabs.TabPane>
 
-			<Tabs.TabPane tab='Booking.com' key='Booking.com'>
-				<p>
-					Please ensure that the room types naming in the sheet matches the room
-					types naming added in xhotelpro for hotel{" "}
-					<span style={{ textTransform: "capitalize" }}>
-						{selectedHotel?.hotelName}
-					</span>
-					.
-				</p>
-
-				<CenteredButton type='primary'>
-					Integrate Reservations ({activeTab})
-				</CenteredButton>
-			</Tabs.TabPane>
-
+			{/* Expedia Tab */}
 			<Tabs.TabPane tab='Expedia' key='Expedia'>
 				<p>
 					Please ensure that the room types naming in the sheet matches the room
@@ -151,13 +156,46 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 					</span>
 					.
 				</p>
-
-				<CenteredButton type='primary'>
+				<Upload
+					beforeUpload={(file) => {
+						handleFileChange("Expedia", file);
+						return false; // Prevent auto-upload
+					}}
+					accept='.xls,.xlsx,.csv'
+					showUploadList={false}
+				>
+					<Button icon={<UploadOutlined />}>Upload Excel File</Button>
+				</Upload>
+				{files.Expedia && <p>File selected: {files.Expedia.name}</p>}
+				<CenteredButton type='primary' onClick={handleIntegrateReservations}>
 					Integrate Reservations ({activeTab})
 				</CenteredButton>
+				{integrateClicked && activeTab === "Expedia" && (
+					<div
+						style={{
+							fontWeight: "bold",
+							textDecoration: "underline",
+							color: "darkgray",
+							cursor: "pointer",
+						}}
+						onClick={() => {
+							localStorage.setItem(
+								"selectedHotel",
+								JSON.stringify(selectedHotel)
+							);
+
+							window.open(
+								`/hotel-management/new-reservation/${selectedHotel.belongsTo._id}/${selectedHotel._id}?list`,
+								"_blank"
+							);
+						}}
+					>
+						CLICK HERE to Check Hotel Reservations List After Integrating...
+					</div>
+				)}
 			</Tabs.TabPane>
 
-			{/* Other tabs remain unchanged */}
+			{/* Add more tabs here if needed */}
 		</Tabs>
 	) : (
 		<div>
@@ -199,7 +237,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 				onCancel={() => {
 					setIntegrateClicked(false);
 					setIsModalVisible(false);
-					setFile(null); // Clear file selection when modal closes
+					setFiles({ Agoda: null, Expedia: null }); // Reset files on modal close
 				}}
 				footer={null}
 			>
@@ -222,7 +260,7 @@ const ContentWrapper = styled.div`
 
 const HotelButtons = styled.div`
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 	gap: 20px;
 `;
 

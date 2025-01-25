@@ -536,6 +536,32 @@ export const agodaData = (accountId, belongsTo, file, userId, token) => {
 		.catch((err) => console.error("Error uploading file:", err));
 };
 
+export const expediaData = (accountId, belongsTo, file, userId, token) => {
+	let formData = new FormData();
+	formData.append("file", file);
+
+	console.log(file);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/expedia-data-dump/xhotel-admin/${accountId}/${belongsTo}/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`, // Add the token here
+			},
+			body: formData, // Use FormData as the body
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error uploading file:", err));
+};
+
 export const getAllReservationForAdmin = (
 	userId,
 	token,
