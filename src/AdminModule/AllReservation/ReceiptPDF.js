@@ -109,26 +109,30 @@ const ReceiptPDF = forwardRef(
 
 		const totalCommission = computeTotalCommission();
 
-		// Compute one night cost for all rooms using rootPrice
+		// Compute one night cost for all rooms using the average rootPrice of each room
 		const computeOneNightCost = () => {
-			if (!reservation.pickedRoomsType) return 0;
+			if (
+				!reservation.pickedRoomsType ||
+				reservation.pickedRoomsType.length === 0
+			)
+				return 0;
 
 			return reservation.pickedRoomsType.reduce((total, room) => {
-				let roomOneNightCost = 0;
+				let averageRootPrice = 0;
 
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const firstDay = room.pricingByDay[0];
-					const rootPrice = safeNumber(firstDay.rootPrice);
-					const count = safeNumber(room.count);
-					roomOneNightCost = rootPrice * count;
+					const totalRootPrice = room.pricingByDay.reduce(
+						(sum, day) => sum + safeNumber(day.rootPrice),
+						0
+					);
+					averageRootPrice = totalRootPrice / room.pricingByDay.length;
 				} else {
 					// Fallback to chosenPrice if pricingByDay is missing or invalid
-					const chosenPrice = safeNumber(room.chosenPrice);
-					const count = safeNumber(room.count);
-					roomOneNightCost = chosenPrice * count;
+					averageRootPrice = safeNumber(room.chosenPrice);
 				}
 
-				return total + roomOneNightCost;
+				// Multiply by the number of rooms (count)
+				return total + averageRootPrice * safeNumber(room.count);
 			}, 0);
 		};
 
