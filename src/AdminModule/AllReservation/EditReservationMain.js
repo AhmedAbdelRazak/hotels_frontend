@@ -604,8 +604,8 @@ const EditReservationMain = ({
 			pickedRoomsType,
 			// totalAmount now truly = sum of all priceAfterCommission for each day => "Grand Total"
 			total_amount: totalAmount,
-			payment: selectedHotel.payment || "not paid",
-			paid_amount: reservation.payment_details?.paid_amount || 0,
+			payment: reservation.payment || "not paid",
+			paid_amount: reservation.paid_amount || 0,
 			commission: totalCommission,
 			commissionPaid: reservation.payment_details?.commissionPaid || false,
 			paymentDetails: {
