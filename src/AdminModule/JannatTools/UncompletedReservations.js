@@ -41,6 +41,7 @@ const UncompletedReservations = () => {
 		};
 
 		fetchReservations();
+		// eslint-disable-next-line
 	}, [user?._id, token]); // Depend on specific, stable properties
 
 	// Define table headers
@@ -57,7 +58,6 @@ const UncompletedReservations = () => {
 		"Total Amount",
 	];
 
-	console.log(reservations, "reservations");
 	return (
 		<UncompletedReservationsWrapper>
 			<h2>Uncompleted Reservations</h2>

@@ -388,9 +388,13 @@ const ReceiptPDF = forwardRef(
 					<div>
 						<strong>Total To Be Collected:</strong>{" "}
 						{isNotPaid
-							? Number(reservation?.total_amount).toFixed(2)
+							? (
+									Number(reservation?.total_amount) -
+									Number(reservation?.paid_amount)
+							  ).toFixed(2)
 							: (
-									Number(reservation?.total_amount) - Number(finalDeposit)
+									Number(reservation?.total_amount) -
+									Number(reservation?.paid_amount)
 							  ).toFixed(2)}{" "}
 						SAR
 					</div>
