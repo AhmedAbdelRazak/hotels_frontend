@@ -587,6 +587,26 @@ export const getAllReservationForAdmin = (
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
 
+export const getUncompletedReservations = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/uncomplete-reservations-list/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`, // Add the token here
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching reservations:", err));
+};
+
 export const updatePaymentToken = (
 	userId,
 	token,

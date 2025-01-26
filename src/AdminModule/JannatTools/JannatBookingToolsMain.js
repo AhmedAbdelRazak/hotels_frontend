@@ -10,6 +10,7 @@ import { isAuthenticated } from "../../auth";
 import ReservationCalculator from "./ReservationCalculator";
 import OrderTaker from "./OrderTaker";
 import EmployeeRegister from "./EmployeeRegister";
+import UncompletedReservations from "./UncompletedReservations";
 
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -194,10 +195,17 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 								>
 									Reservations Tools
 								</button>
+
 								{(!getUser.accessTo ||
 									getUser.accessTo.length === 0 ||
 									getUser.accessTo.includes("all")) && (
 									<>
+										<button
+											className={activeTab === "uncompleted" ? "active" : ""}
+											onClick={() => handleTabChange("uncompleted")}
+										>
+											Uncompleted Reservations
+										</button>
 										<button
 											className={activeTab === "addEmployee" ? "active" : ""}
 											onClick={() => handleTabChange("addEmployee")}
@@ -237,6 +245,11 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 								<div>
 									<h3>Update an Employee</h3>
 									<p>Create a new component for employee update</p>
+								</div>
+							)}
+							{activeTab === "uncompleted" && (
+								<div>
+									<UncompletedReservations />
 								</div>
 							)}
 						</div>

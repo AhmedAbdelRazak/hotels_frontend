@@ -35,6 +35,7 @@ const PaymentTrigger = ({ reservation }) => {
 
 	// **State Variables for Exchange Rates**
 	const [exchangeRateUSD, setExchangeRateUSD] = useState(0.2667); // Default value
+	// eslint-disable-next-line
 	const [exchangeRateEUR, setExchangeRateEUR] = useState(0.25597836); // Default value
 
 	// **Fetch Exchange Rates from LocalStorage**
@@ -220,6 +221,7 @@ const PaymentTrigger = ({ reservation }) => {
 		}
 
 		// Compute final amounts in USD & SAR
+		// eslint-disable-next-line
 		const { finalUSD, finalSAR } = getChargeAmount();
 
 		// If payment is captured, ensure not to exceed remainingAmount
