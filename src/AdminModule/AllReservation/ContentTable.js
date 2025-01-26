@@ -545,7 +545,10 @@ const EnhancedContentTable = ({
 										{reservation.payment_status}
 									</PaymentSpan>
 								</td>
-								<td>{Number(reservation.total_amount || 0).toFixed(2)} SAR</td>
+								<td>
+									{Number(reservation.total_amount || 0).toFixed(2)}{" "}
+									{reservation.state === "expedia" ? "USD" : "SAR"}
+								</td>
 								<td>
 									{reservation.createdAt
 										? new Date(reservation.createdAt).toLocaleDateString()
