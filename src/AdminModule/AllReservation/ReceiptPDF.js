@@ -365,7 +365,9 @@ const ReceiptPDF = forwardRef(
 							  ).toFixed(2)
 							: (
 									Number(reservation?.total_amount) -
-									Number(finalDeposit ? finalDeposit : 0)
+									Number(
+										reservation?.paid_amount ? reservation?.paid_amount : 0
+									)
 							  ).toFixed(2)}{" "}
 						SAR
 					</div>
