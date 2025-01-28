@@ -39,12 +39,6 @@ const ReceiptPDFB2B = forwardRef(
 			return isNaN(parsed) ? 0 : parsed;
 		};
 
-		// Payment checks
-		const paymentLower = reservation?.payment?.toLowerCase() || "";
-		const isDepositPaid = paymentLower === "deposit paid";
-		const isPaidOnline = paymentLower === "paid online";
-		// const isNotPaid = paymentLower === "not paid";
-
 		// Calculate nights
 		const calculateNights = (checkin, checkout) => {
 			const start = new Date(checkin);
@@ -57,45 +51,47 @@ const ReceiptPDFB2B = forwardRef(
 			reservation?.checkout_date
 		);
 
-		// Return the rootPrice (or fallback to chosenPrice) for the first day in `pricingByDay`.
-		const getRoomRate = (room) => {
+		// **New Function: Calculate Average rootPrice per room (Rate is already fixed)**
+		const getAverageRootPrice = (room) => {
 			if (room.pricingByDay && room.pricingByDay.length > 0) {
-				return (
-					safeNumber(room.pricingByDay[0].rootPrice) ||
-					safeNumber(room.chosenPrice)
+				const totalRootPrice = room.pricingByDay.reduce(
+					(sum, day) => sum + safeNumber(day.rootPrice),
+					0
 				);
+				return totalRootPrice / room.pricingByDay.length;
 			}
 			return safeNumber(room.chosenPrice);
 		};
 
-		// Net Accommodation Charge = sum of (rootPrice × nights × roomCount)
-		const netAccommodationCharge = reservation.pickedRoomsType
+		// **New Calculations Based on Card Information**
+		// Determine if the client has added card information
+		const hasCardNumber =
+			reservation?.customer_details?.cardNumber &&
+			reservation.customer_details.cardNumber.trim() !== "";
+
+		// Calculate total root price across all days and rooms
+		const totalRootPrice =
+			reservation?.pickedRoomsType?.reduce((acc, room) => {
+				const roomTotal =
+					room.pricingByDay?.reduce((sum, day) => {
+						return sum + safeNumber(day.rootPrice) * safeNumber(room.count);
+					}, 0) || 0;
+				return acc + roomTotal;
+			}, 0) || 0;
+
+		// Calculate deposit: sum of first night's rootPrice * roomCount per room
+		const deposit = hasCardNumber
 			? reservation.pickedRoomsType.reduce((acc, room) => {
-					const roomRate = getRoomRate(room);
-					return acc + roomRate * safeNumber(room.count) * nights;
+					const firstDayRootPrice =
+						room.pricingByDay && room.pricingByDay.length > 0
+							? safeNumber(room.pricingByDay[0].rootPrice)
+							: safeNumber(room.chosenPrice);
+					return acc + firstDayRootPrice * safeNumber(room.count);
 			  }, 0)
 			: 0;
 
-		// Compute "Deposit" based on reservation.payment
-		// - If deposit paid => one-night cost
-		// - If paid online => fully paid => deposit = netAccommodationCharge
-		// - If not paid => deposit = 0
-		let deposit = 0;
-		if (isDepositPaid) {
-			deposit = reservation.pickedRoomsType
-				? reservation.pickedRoomsType.reduce((acc, room) => {
-						const roomRate = getRoomRate(room); // rootPrice
-						return acc + roomRate * safeNumber(room.count);
-				  }, 0)
-				: 0;
-		} else if (isPaidOnline) {
-			deposit = netAccommodationCharge;
-		} else {
-			deposit = 0;
-		}
-
 		// Compute the remainder
-		// const totalToBeCollected = netAccommodationCharge - deposit;
+		const remainder = totalRootPrice - deposit;
 
 		// Modal Handlers for Supplier Name
 		const handleSupplierNameOk = async () => {
@@ -186,18 +182,10 @@ const ReceiptPDFB2B = forwardRef(
 					</div>
 					<div className='info-box'>
 						<strong>
-							{isPaidOnline
-								? "Paid Amount"
-								: isDepositPaid
-								  ? "Deposit Amount"
-								  : "Payment Status"}
+							{hasCardNumber ? "Deposit Amount" : "Payment Status"}
 						</strong>
 						<div>
-							{isPaidOnline
-								? `${deposit.toFixed(2)} SAR`
-								: isDepositPaid
-								  ? `${deposit.toFixed(2)} SAR`
-								  : "Not Paid"}
+							{hasCardNumber ? `${deposit.toFixed(2)} SAR` : "Not Paid"}
 						</div>
 					</div>
 				</div>
@@ -241,13 +229,7 @@ const ReceiptPDFB2B = forwardRef(
 							<td>{reservation?.reservation_status || "Confirmed"}</td>
 							<td>{reservation?.total_guests}</td>
 							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
-							<td>
-								{isPaidOnline
-									? "Paid in Full"
-									: isDepositPaid
-									  ? "Deposit"
-									  : "Not Paid"}
-							</td>
+							<td>{hasCardNumber ? "Deposit Required" : "Not Paid"}</td>
 						</tr>
 					</tbody>
 				</table>
@@ -261,22 +243,24 @@ const ReceiptPDFB2B = forwardRef(
 							<th>Qty</th>
 							<th>Extras</th>
 							<th>Nights</th>
-							<th>Rate</th>
+							<th>Rate (Avg Root Price)</th>
 							<th>Total</th>
 						</tr>
 					</thead>
 					<tbody>
 						{reservation?.pickedRoomsType?.map((room, index) => {
-							const roomRate = getRoomRate(room);
-							const roomTotal = roomRate * safeNumber(room.count) * nights;
+							// **Use Average Root Price for Rate**
+							const averageRootPrice = getAverageRootPrice(room);
+							const roomTotal =
+								averageRootPrice * safeNumber(room.count) * nights;
 							return (
 								<tr key={index}>
-									<td>{hotelDetails?.hotelName}</td>
-									<td>{room.displayName}</td>
+									<td>{hotelDetails?.hotelName || "N/A"}</td>
+									<td>{room.displayName || "N/A"}</td>
 									<td>{room.count}</td>
 									<td>N/T</td>
 									<td>{nights}</td>
-									<td>{roomRate.toFixed(2)} SAR</td>
+									<td>{averageRootPrice.toFixed(2)} SAR</td>
 									<td>{roomTotal.toFixed(2)} SAR</td>
 								</tr>
 							);
@@ -288,24 +272,29 @@ const ReceiptPDFB2B = forwardRef(
 				<div className='summary'>
 					<div>
 						<strong>Net Accommodation Charge:</strong>{" "}
-						{netAccommodationCharge.toFixed(2)} SAR
+						{totalRootPrice.toFixed(2)} SAR
 					</div>
-					<div>
-						<strong>
-							{isPaidOnline ? "Paid Amount" : "Deposit (One Night)"}
-						</strong>
-						: {deposit.toFixed(2)} SAR
-					</div>
-					<div>
-						<strong>Total To Be Collected:</strong>{" "}
-						{(netAccommodationCharge - deposit).toFixed(2)} SAR
-					</div>
+					{hasCardNumber ? (
+						<>
+							<div>
+								<strong>Deposit (First Night):</strong> {deposit.toFixed(2)} SAR
+							</div>
+							<div>
+								<strong>Total To Be Collected:</strong> {remainder.toFixed(2)}{" "}
+								SAR
+							</div>
+						</>
+					) : (
+						<div>
+							<strong>Payment Status:</strong> Not Paid
+						</div>
+					)}
 				</div>
 
 				{/* Footer */}
 				<div className='footer'>
 					Many Thanks for staying with us at{" "}
-					<strong>{hotelDetails?.hotelName}</strong> Hotel.
+					<strong>{hotelDetails?.hotelName || "N/A"}</strong> Hotel.
 					<br />
 					For better rates next time, please check{" "}
 					<a href='https://jannatbooking.com'>jannatbooking.com</a>

@@ -84,6 +84,11 @@ const ContentSection = styled.div`
 
 // ... other styled components
 
+const safeNumber = (val) => {
+	const parsed = Number(val);
+	return isNaN(parsed) ? 0 : parsed;
+};
+
 const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const pdfRef = useRef(null);
 	// eslint-disable-next-line
@@ -398,21 +403,31 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	// so we do NOT multiply by 'nights' again.
 	const computedCommission = computedCommissionPerNight;
 
+	const computeOneNightCost = () => {
+		if (
+			!reservation.pickedRoomsType ||
+			reservation.pickedRoomsType.length === 0
+		)
+			return 0;
+
+		return reservation.pickedRoomsType.reduce((total, room) => {
+			let firstDayRootPrice = 0;
+
+			if (room.pricingByDay && room.pricingByDay.length > 0) {
+				const firstDay = room.pricingByDay[0];
+				firstDayRootPrice = safeNumber(firstDay.rootPrice);
+			} else {
+				// Fallback to chosenPrice if pricingByDay is missing or invalid
+				firstDayRootPrice = safeNumber(room.chosenPrice);
+			}
+
+			// Multiply by the number of rooms (count)
+			return total + firstDayRootPrice * safeNumber(room.count);
+		}, 0);
+	};
+
 	// Compute the one night cost using the room's totalPriceWithoutCommission if available.
-	const oneNightCost = reservation.pickedRoomsType
-		? reservation.pickedRoomsType.reduce((total, room) => {
-				let roomNightCost = 0;
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// Take the rootPrice of the first day:
-					roomNightCost =
-						Number(room.pricingByDay[0].rootPrice) * Number(room.count);
-				} else {
-					// Fallback to chosenPrice if no pricingByDay is available
-					roomNightCost = Number(room.chosenPrice) * Number(room.count);
-				}
-				return total + roomNightCost;
-		  }, 0)
-		: 0;
+	const oneNightCost = computeOneNightCost() ? computeOneNightCost() : 0;
 
 	// The final deposit is the sum of the computed commission and one night cost.
 	const finalDeposit = computedCommission + oneNightCost;

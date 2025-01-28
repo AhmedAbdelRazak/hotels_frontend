@@ -187,19 +187,15 @@ const EditReservationMain = ({
 
 			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
 				const formattedDate = currentDate.format("YYYY-MM-DD");
-
 				const rateForDate = pricingRate.find(
 					(rate) => rate.calendarDate === formattedDate
 				);
-
 				const price = rateForDate
 					? safeParseFloat(rateForDate.price, basePrice)
 					: basePrice;
-
 				const rootPrice = rateForDate
 					? safeParseFloat(rateForDate.rootPrice, defaultCost)
 					: defaultCost;
-
 				const rateCommission = rateForDate
 					? safeParseFloat(rateForDate.commissionRate, commissionRate)
 					: commissionRate;
@@ -243,9 +239,9 @@ const EditReservationMain = ({
 			return pricingByDay.map((day) => ({
 				...day,
 				totalPriceWithCommission:
-					safeParseFloat(day.price) +
-					safeParseFloat(day.rootPrice) *
-						(safeParseFloat(day.commissionRate) / 100),
+					Number(day.price) +
+					Number(day.rootPrice) * (Number(day.commissionRate) / 100),
+				totalPriceWithoutCommission: Number(day.price),
 			}));
 		},
 		[calculatePricingByDay]
@@ -267,11 +263,13 @@ const EditReservationMain = ({
 			// Summations
 			let sumHotelCost = 0; // sum of rootPrice * count
 			let sumGrandTotal = 0; // sum of totalPriceWithCommission * count
+			let sumCommission = 0; // sum of commission * count
+			let sumOneNight = 0; // Cost of One Night
 
 			// Updated Rooms array to include recalculated pricingByDay
 			const updatedRooms = rooms.map((room) => {
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// Pricing already exists, no need to recalculate
+					// Pricing already exists, calculate sums based on ReceiptPDF's formula
 					const roomTotalAmount = room.pricingByDay.reduce(
 						(acc, day) => acc + day.rootPrice * room.count,
 						0
@@ -280,9 +278,18 @@ const EditReservationMain = ({
 						(acc, day) => acc + day.totalPriceWithCommission * room.count,
 						0
 					);
+					const roomTotalCommission = room.pricingByDay.reduce(
+						(acc, day) =>
+							acc +
+							(day.rootPrice * (day.commissionRate / 100) +
+								(day.totalPriceWithoutCommission - day.rootPrice)) *
+								room.count,
+						0
+					);
 
 					sumHotelCost += roomTotalAmount;
 					sumGrandTotal += roomTotalPriceWithCommission;
+					sumCommission += roomTotalCommission;
 
 					return room;
 				} else {
@@ -317,9 +324,23 @@ const EditReservationMain = ({
 								(acc, day) => acc + day.totalPriceWithCommission * room.count,
 								0
 							);
+						const roomTotalCommission = recalculatedPricingByDay.reduce(
+							(acc, day) =>
+								acc +
+								(day.rootPrice * (day.commissionRate / 100) +
+									(day.totalPriceWithoutCommission - day.rootPrice)) *
+									room.count,
+							0
+						);
+
+						console.log(
+							roomTotalCommission,
+							"roomTotalCommissionroomTotalCommission"
+						);
 
 						sumHotelCost += roomTotalAmount;
 						sumGrandTotal += roomTotalPriceWithCommission;
+						sumCommission += roomTotalCommission;
 
 						return { ...room, pricingByDay: recalculatedPricingByDay };
 					} else {
@@ -330,7 +351,6 @@ const EditReservationMain = ({
 			});
 
 			// Compute oneNightCost: sum of firstDay's rootPrice for each room * count
-			let sumOneNight = 0;
 			updatedRooms.forEach((room) => {
 				if (room.pricingByDay.length > 0) {
 					const firstDayRoot = safeParseFloat(
@@ -341,7 +361,7 @@ const EditReservationMain = ({
 				}
 			});
 
-			const sumCommission = sumGrandTotal - sumHotelCost;
+			// Final Deposit is sum of commissions and one-night cost
 			const deposit = sumCommission + sumOneNight;
 
 			// Update states
@@ -915,7 +935,7 @@ const EditReservationMain = ({
 						<Descriptions.Item label='Total Commission'>
 							{Number(totalCommission).toFixed(2)} SAR
 						</Descriptions.Item>
-						<Descriptions.Item label='Cost of One Night'>
+						<Descriptions.Item label='Cost of One Night (First Night)'>
 							{Number(oneNightCost).toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Deposit'>

@@ -58,52 +58,26 @@ const ReceiptPDF = forwardRef(
 		function computeTotalCommission() {
 			if (!reservation.pickedRoomsType) return 0;
 
-			// If 1-night only, do a pure difference approach for each room:
-			if (nights === 1) {
-				return reservation.pickedRoomsType.reduce((total, room) => {
-					if (!room.pricingByDay || room.pricingByDay.length === 0)
-						return total;
-
-					// day.price = final daily price w/ commission
-					// day.rootPrice = base daily price
-					// difference = (310 - 280) = 30
-					const diff =
-						room.pricingByDay[0].price - room.pricingByDay[0].rootPrice;
-					const count = Number(room.count) || 1;
-					return total + diff * count;
-				}, 0);
-			}
-
-			// Otherwise, keep your original multi-night logic.
 			return reservation.pickedRoomsType.reduce((total, room) => {
-				let roomCommissionRateComponent = 0;
-				let roomAdditionalCommission = 0;
+				if (!room.pricingByDay || room.pricingByDay.length === 0) return total;
 
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const firstDay = room.pricingByDay[0];
-					const rootPrice = safeNumber(firstDay.rootPrice);
-					let commissionRate = safeNumber(firstDay.commissionRate);
-					if (commissionRate >= 1) {
-						commissionRate = commissionRate / 100; // e.g. 10 => 0.10
-					} else if (commissionRate < 0) {
-						commissionRate = 0;
-					}
+				room.pricingByDay.forEach((day) => {
+					const rootPrice = safeNumber(day.rootPrice);
+					const commissionRate = safeNumber(day.commissionRate) / 100; // Convert percentage to decimal
+					const totalPriceWithoutCommission = safeNumber(
+						day.totalPriceWithoutCommission
+					);
+
+					// Commission per day
+					const commission =
+						rootPrice * commissionRate +
+						(totalPriceWithoutCommission - rootPrice);
 					const count = safeNumber(room.count);
 
-					// Commission Rate Component
-					roomCommissionRateComponent =
-						commissionRate * rootPrice * nights * count;
+					total += commission * count;
+				});
 
-					// Additional Commission
-					const totalPriceWithoutCommission = safeNumber(
-						firstDay.totalPriceWithoutCommission
-					);
-					roomAdditionalCommission =
-						Math.max(totalPriceWithoutCommission - rootPrice, 0) *
-						nights *
-						count;
-				}
-				return total + roomCommissionRateComponent + roomAdditionalCommission;
+				return total;
 			}, 0);
 		}
 
@@ -118,21 +92,18 @@ const ReceiptPDF = forwardRef(
 				return 0;
 
 			return reservation.pickedRoomsType.reduce((total, room) => {
-				let averageRootPrice = 0;
+				let firstDayRootPrice = 0;
 
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const totalRootPrice = room.pricingByDay.reduce(
-						(sum, day) => sum + safeNumber(day.rootPrice),
-						0
-					);
-					averageRootPrice = totalRootPrice / room.pricingByDay.length;
+					const firstDay = room.pricingByDay[0];
+					firstDayRootPrice = safeNumber(firstDay.rootPrice);
 				} else {
 					// Fallback to chosenPrice if pricingByDay is missing or invalid
-					averageRootPrice = safeNumber(room.chosenPrice);
+					firstDayRootPrice = safeNumber(room.chosenPrice);
 				}
 
 				// Multiply by the number of rooms (count)
-				return total + averageRootPrice * safeNumber(room.count);
+				return total + firstDayRootPrice * safeNumber(room.count);
 			}, 0);
 		};
 
@@ -394,7 +365,7 @@ const ReceiptPDF = forwardRef(
 							  ).toFixed(2)
 							: (
 									Number(reservation?.total_amount) -
-									Number(reservation?.paid_amount)
+									Number(finalDeposit ? finalDeposit : 0)
 							  ).toFixed(2)}{" "}
 						SAR
 					</div>
