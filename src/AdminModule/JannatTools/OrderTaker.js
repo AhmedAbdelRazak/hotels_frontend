@@ -94,7 +94,7 @@ const OrderTaker = () => {
 	}, [user._id, token]);
 
 	useEffect(() => {
-		setAgentName(user.name || "");
+		setAgentName(user?.name || "");
 		getAllHotels();
 		// eslint-disable-next-line
 	}, [getAllHotels]);
@@ -192,8 +192,10 @@ const OrderTaker = () => {
 	 * ------------------------------ */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms) => {
-			if (!checkInDate || !checkOutDate || rooms.length === 0 || !selectedHotel)
-				return;
+			// Early returns to prevent errors
+			if (!selectedHotel) return;
+			if (!checkInDate || !checkOutDate) return;
+			if (!rooms || rooms.length === 0) return;
 
 			const startDate = dayjs(checkInDate).startOf("day");
 			const endDate = dayjs(checkOutDate).startOf("day");
@@ -208,6 +210,11 @@ const OrderTaker = () => {
 
 			// Updated Rooms array to include recalculated pricingByDay
 			const updatedRooms = rooms.map((room) => {
+				if (!room.roomType || !room.displayName) {
+					// If the user hasn't selected a room type/display, skip calculations
+					return room;
+				}
+
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
 					// Pricing already exists, calculate sums based on ReceiptPDF's formula
 					const roomTotalAmount = room.pricingByDay.reduce(
@@ -218,12 +225,14 @@ const OrderTaker = () => {
 						(acc, day) => acc + day.totalPriceWithCommission * room.count,
 						0
 					);
+
+					// Commission can be derived from the difference between
+					// totalPriceWithCommission and rootPrice (or by day-based approach)
 					const roomTotalCommission = room.pricingByDay.reduce(
 						(acc, day) =>
 							acc +
 							(day.rootPrice * (day.commissionRate / 100) +
-								(day.totalPriceWithoutCommission - day.rootPrice) *
-									nightsDiff) *
+								(day.totalPriceWithoutCommission - day.rootPrice)) *
 								room.count,
 						0
 					);
@@ -235,13 +244,11 @@ const OrderTaker = () => {
 					return room;
 				} else {
 					// Recalculate pricingByDay based on selectedHotel's roomCountDetails
-					const matchedRoom =
-						selectedHotel.roomCountDetails &&
-						selectedHotel.roomCountDetails.find(
-							(r) =>
-								r.roomType.trim() === room.roomType.trim() &&
-								r.displayName.trim() === room.displayName.trim()
-						);
+					const matchedRoom = selectedHotel?.roomCountDetails?.find(
+						(r) =>
+							r.roomType?.trim() === room.roomType.trim() &&
+							r.displayName?.trim() === room.displayName.trim()
+					);
 
 					if (matchedRoom) {
 						const recalculatedPricingByDay =
@@ -274,11 +281,6 @@ const OrderTaker = () => {
 							0
 						);
 
-						console.log(
-							roomTotalCommission,
-							"roomTotalCommissionroomTotalCommission"
-						);
-
 						sumHotelCost += roomTotalAmount;
 						sumGrandTotal += roomTotalPriceWithCommission;
 						sumCommission += roomTotalCommission;
@@ -293,7 +295,7 @@ const OrderTaker = () => {
 
 			// Compute oneNightCost: sum of firstDay's rootPrice for each room * count
 			updatedRooms.forEach((room) => {
-				if (room.pricingByDay.length > 0) {
+				if (room.pricingByDay && room.pricingByDay.length > 0) {
 					const firstDayRoot = safeParseFloat(
 						room.pricingByDay[0].rootPrice,
 						0
@@ -330,11 +332,13 @@ const OrderTaker = () => {
 	 * ------------------------------ */
 	useEffect(() => {
 		const prev = prevValues.current;
-		if (
+		const hasDateChanged =
 			!dayjs(prev.checkInDate).isSame(checkInDate) ||
-			!dayjs(prev.checkOutDate).isSame(checkOutDate) ||
-			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms)
-		) {
+			!dayjs(prev.checkOutDate).isSame(checkOutDate);
+		const hasRoomsChanged =
+			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms);
+
+		if (hasDateChanged || hasRoomsChanged) {
 			calculateTotals(selectedRooms);
 			prevValues.current = { checkInDate, checkOutDate, selectedRooms };
 		}
@@ -344,6 +348,20 @@ const OrderTaker = () => {
 	 * Handle Room Type Selection Change
 	 * ------------------------------ */
 	const handleRoomSelectionChange = (value, index) => {
+		// If user cleared the Select (allowClear), value can be null or undefined
+		if (!value) {
+			const updatedRooms = [...selectedRooms];
+			updatedRooms[index] = {
+				...updatedRooms[index],
+				roomType: "",
+				displayName: "",
+				pricingByDay: [], // reset pricing
+			};
+			setSelectedRooms(updatedRooms);
+			setTimeout(() => calculateTotals(updatedRooms), 0);
+			return;
+		}
+
 		const [roomType, displayName] = value.split("|");
 		const updatedRooms = [...selectedRooms];
 		updatedRooms[index] = {
@@ -439,7 +457,16 @@ const OrderTaker = () => {
 	 * Handle Hotel Change
 	 * ------------------------------ */
 	const handleHotelChange = (hotelId) => {
+		if (!hotelId) {
+			// If cleared
+			setSelectedHotel(null);
+			clearAll();
+			return;
+		}
+
 		const newHotel = allHotels.find((ht) => ht._id === hotelId);
+
+		// If user changes from one hotel to another, reset rooms & totals
 		if (selectedHotel && selectedHotel._id !== hotelId) {
 			message.warning(
 				"Hotel changed! Room selection and pricing will be reset."
@@ -454,7 +481,9 @@ const OrderTaker = () => {
 			setOneNightCost(0);
 			setFinalDeposit(0);
 		}
+
 		setSelectedHotel(newHotel);
+
 		// Recalculate totals after hotel change
 		setTimeout(() => calculateTotals(selectedRooms), 0);
 	};
@@ -606,11 +635,6 @@ const OrderTaker = () => {
 		setIsModalVisible2(false);
 	};
 
-	console.log("Selected Rooms:", selectedRooms);
-
-	/** ------------------------------
-	 * Render Component
-	 * ------------------------------ */
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
 			<Form layout='vertical'>
@@ -679,6 +703,7 @@ const OrderTaker = () => {
 								}
 								onChange={(value) => handleRoomSelectionChange(value, index)}
 								disabled={!selectedHotel}
+								allowClear
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((roomDetail) => (
@@ -850,7 +875,7 @@ const OrderTaker = () => {
 						</Descriptions.Item>
 
 						<Descriptions.Item label='Paid Amount'>
-							{selectedReservation.payment_details?.paid_amount || 0} SAR
+							{selectedReservation?.payment_details?.paid_amount || 0} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Number of Nights'>
 							{numberOfNights}
