@@ -11,6 +11,7 @@ import {
 	InputNumber,
 	Modal,
 	Descriptions,
+	Radio,
 } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -47,11 +48,24 @@ const OrderTaker = () => {
 	const [numberOfNights, setNumberOfNights] = useState(0);
 
 	/** --------------
-	 * New State Variables
+	 * New State Variables (Advance Payment)
 	 * -------------- */
 	const [hotelCost, setHotelCost] = useState(0); // Total Amount (For the Hotel)
 	const [oneNightCost, setOneNightCost] = useState(0); // Cost of One Night
-	const [finalDeposit, setFinalDeposit] = useState(0); // Total Deposit
+	const [defaultDeposit, setDefaultDeposit] = useState(0); // Commission + 1 Day deposit
+	const [finalDeposit, setFinalDeposit] = useState(0); // The ACTUAL deposit based on chosen method
+
+	// Radio option states:
+	// 1) 'commission_plus_one_day' (default),
+	// 2) 'percentage',
+	// 3) 'sar'
+	const [advancePaymentOption, setAdvancePaymentOption] = useState(
+		"commission_plus_one_day"
+	);
+	// If "percentage" is chosen, store 1..100 in this:
+	const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState("");
+	// If "sar" is chosen, store an amount 1..totalAmount in this:
+	const [advancePaymentSAR, setAdvancePaymentSAR] = useState("");
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
@@ -192,7 +206,6 @@ const OrderTaker = () => {
 	 * ------------------------------ */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms) => {
-			// Early returns to prevent errors
 			if (!selectedHotel) return;
 			if (!checkInDate || !checkOutDate) return;
 			if (!rooms || rooms.length === 0) return;
@@ -202,7 +215,6 @@ const OrderTaker = () => {
 			let nightsDiff = endDate.diff(startDate, "day");
 			if (nightsDiff < 1) nightsDiff = 1; // minimum 1 night
 
-			// Summations
 			let sumHotelCost = 0; // sum of rootPrice * count
 			let sumGrandTotal = 0; // sum of totalPriceWithCommission * count
 			let sumCommission = 0; // sum of commission * count
@@ -211,12 +223,10 @@ const OrderTaker = () => {
 			// Updated Rooms array to include recalculated pricingByDay
 			const updatedRooms = rooms.map((room) => {
 				if (!room.roomType || !room.displayName) {
-					// If the user hasn't selected a room type/display, skip calculations
-					return room;
+					return room; // skip calculations if not selected
 				}
-
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// Pricing already exists, calculate sums based on ReceiptPDF's formula
+					// Pricing already exists
 					const roomTotalAmount = room.pricingByDay.reduce(
 						(acc, day) => acc + day.rootPrice * room.count,
 						0
@@ -225,9 +235,6 @@ const OrderTaker = () => {
 						(acc, day) => acc + day.totalPriceWithCommission * room.count,
 						0
 					);
-
-					// Commission can be derived from the difference between
-					// totalPriceWithCommission and rootPrice (or by day-based approach)
 					const roomTotalCommission = room.pricingByDay.reduce(
 						(acc, day) =>
 							acc +
@@ -240,16 +247,14 @@ const OrderTaker = () => {
 					sumHotelCost += roomTotalAmount;
 					sumGrandTotal += roomTotalPriceWithCommission;
 					sumCommission += roomTotalCommission;
-
 					return room;
 				} else {
-					// Recalculate pricingByDay based on selectedHotel's roomCountDetails
+					// Recalculate pricingByDay
 					const matchedRoom = selectedHotel?.roomCountDetails?.find(
 						(r) =>
 							r.roomType?.trim() === room.roomType.trim() &&
 							r.displayName?.trim() === room.displayName.trim()
 					);
-
 					if (matchedRoom) {
 						const recalculatedPricingByDay =
 							calculatePricingByDayWithCommission(
@@ -304,19 +309,18 @@ const OrderTaker = () => {
 				}
 			});
 
-			// Final Deposit is sum of commissions and one-night cost
+			// Our *default* deposit = sumCommission + sumOneNight (Commission + 1 day)
 			const deposit = sumCommission + sumOneNight;
 
-			// Update states
+			setSelectedRooms(updatedRooms);
 			setHotelCost(Number(sumHotelCost.toFixed(2)));
-			setTotalAmount(Number(sumGrandTotal.toFixed(2))); // "Grand total"
+			setTotalAmount(Number(sumGrandTotal.toFixed(2)));
 			setTotalCommission(Number(sumCommission.toFixed(2)));
 			setOneNightCost(Number(sumOneNight.toFixed(2)));
-			setFinalDeposit(Number(deposit.toFixed(2)));
 			setNumberOfNights(nightsDiff);
 
-			// Update selectedRooms with recalculated pricingByDay
-			setSelectedRooms(updatedRooms);
+			// We store the "default deposit" for the Commission + 1 Day option
+			setDefaultDeposit(Number(deposit.toFixed(2)));
 		},
 		[
 			checkInDate,
@@ -328,7 +332,7 @@ const OrderTaker = () => {
 	);
 
 	/** ------------------------------
-	 *  useEffect to Recalculate Totals
+	 * Recalculate Totals when checkInDate, checkOutDate, or selectedRooms change
 	 * ------------------------------ */
 	useEffect(() => {
 		const prev = prevValues.current;
@@ -344,18 +348,48 @@ const OrderTaker = () => {
 		}
 	}, [checkInDate, checkOutDate, selectedRooms, calculateTotals]);
 
+	/**
+	 * Update finalDeposit whenever any of these states change:
+	 * - advancePaymentOption
+	 * - advancePaymentPercentage
+	 * - advancePaymentSAR
+	 * - defaultDeposit (commission + 1 day)
+	 * - totalAmount
+	 */
+	useEffect(() => {
+		if (advancePaymentOption === "commission_plus_one_day") {
+			// Default deposit = Commission + 1 Day
+			setFinalDeposit(defaultDeposit);
+		} else if (advancePaymentOption === "percentage") {
+			// deposit = totalAmount * (percentage / 100)
+			const perc = parseFloat(advancePaymentPercentage) || 0;
+			let depositCalc = totalAmount * (perc / 100);
+			if (depositCalc < 0) depositCalc = 0;
+			setFinalDeposit(depositCalc);
+		} else if (advancePaymentOption === "sar") {
+			// deposit = user input
+			const amt = parseFloat(advancePaymentSAR) || 0;
+			setFinalDeposit(amt < 0 ? 0 : amt);
+		}
+	}, [
+		advancePaymentOption,
+		advancePaymentPercentage,
+		advancePaymentSAR,
+		defaultDeposit,
+		totalAmount,
+	]);
+
 	/** ------------------------------
 	 * Handle Room Type Selection Change
 	 * ------------------------------ */
 	const handleRoomSelectionChange = (value, index) => {
-		// If user cleared the Select (allowClear), value can be null or undefined
 		if (!value) {
 			const updatedRooms = [...selectedRooms];
 			updatedRooms[index] = {
 				...updatedRooms[index],
 				roomType: "",
 				displayName: "",
-				pricingByDay: [], // reset pricing
+				pricingByDay: [],
 			};
 			setSelectedRooms(updatedRooms);
 			setTimeout(() => calculateTotals(updatedRooms), 0);
@@ -368,10 +402,9 @@ const OrderTaker = () => {
 			...updatedRooms[index],
 			roomType: roomType.trim(),
 			displayName: displayName.trim(),
-			pricingByDay: [], // Reset pricing when room selection changes
+			pricingByDay: [], // Reset pricing
 		};
 		setSelectedRooms(updatedRooms);
-		// Recalculate totals after room selection change
 		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
@@ -382,7 +415,6 @@ const OrderTaker = () => {
 		const updatedRooms = [...selectedRooms];
 		updatedRooms[index] = { ...updatedRooms[index], count };
 		setSelectedRooms(updatedRooms);
-		// Recalculate totals after count change
 		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
@@ -403,7 +435,6 @@ const OrderTaker = () => {
 		const updatedRooms = [...selectedRooms];
 		updatedRooms.splice(index, 1);
 		setSelectedRooms(updatedRooms);
-		// Recalculate totals after removing a room
 		setTimeout(() => calculateTotals(updatedRooms), 0);
 	};
 
@@ -450,7 +481,13 @@ const OrderTaker = () => {
 		setNumberOfNights(0);
 		setHotelCost(0);
 		setOneNightCost(0);
+		setDefaultDeposit(0);
 		setFinalDeposit(0);
+
+		// Reset radio fields
+		setAdvancePaymentOption("commission_plus_one_day");
+		setAdvancePaymentPercentage("");
+		setAdvancePaymentSAR("");
 	};
 
 	/** ------------------------------
@@ -458,15 +495,12 @@ const OrderTaker = () => {
 	 * ------------------------------ */
 	const handleHotelChange = (hotelId) => {
 		if (!hotelId) {
-			// If cleared
 			setSelectedHotel(null);
 			clearAll();
 			return;
 		}
-
 		const newHotel = allHotels.find((ht) => ht._id === hotelId);
 
-		// If user changes from one hotel to another, reset rooms & totals
 		if (selectedHotel && selectedHotel._id !== hotelId) {
 			message.warning(
 				"Hotel changed! Room selection and pricing will be reset."
@@ -479,12 +513,16 @@ const OrderTaker = () => {
 			setTotalCommission(0);
 			setNumberOfNights(0);
 			setOneNightCost(0);
+			setDefaultDeposit(0);
 			setFinalDeposit(0);
+
+			// Reset radio fields
+			setAdvancePaymentOption("commission_plus_one_day");
+			setAdvancePaymentPercentage("");
+			setAdvancePaymentSAR("");
 		}
 
 		setSelectedHotel(newHotel);
-
-		// Recalculate totals after hotel change
 		setTimeout(() => calculateTotals(selectedRooms), 0);
 	};
 
@@ -492,7 +530,7 @@ const OrderTaker = () => {
 	 * Handle Form Submission
 	 * ------------------------------ */
 	const handleSubmit = async () => {
-		// Validation
+		// Basic validation
 		if (
 			!name ||
 			!email ||
@@ -508,12 +546,31 @@ const OrderTaker = () => {
 			return;
 		}
 
+		// Ensure all selected rooms have valid pricing
 		if (!selectedRooms.every((room) => room.pricingByDay.length > 0)) {
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
 
-		// Transform picked rooms into the expected format (aligned with ReceiptPDF's logic)
+		// Validate advance payment inputs
+		if (advancePaymentOption === "percentage") {
+			const p = parseFloat(advancePaymentPercentage);
+			if (isNaN(p) || p < 1 || p > 100) {
+				message.error("Please enter a valid percentage between 1 and 100.");
+				return;
+			}
+		}
+		if (advancePaymentOption === "sar") {
+			const amt = parseFloat(advancePaymentSAR);
+			if (isNaN(amt) || amt < 1 || amt > totalAmount) {
+				message.error(
+					"Please enter a valid SAR amount between 1 and the total amount."
+				);
+				return;
+			}
+		}
+
+		// Transform picked rooms into the expected format
 		const transformPickedRoomsToPickedRoomsType = (rooms) => {
 			return rooms.flatMap((room) =>
 				Array.from({ length: room.count }, () => {
@@ -581,7 +638,7 @@ const OrderTaker = () => {
 			total_amount: totalAmount, // Grand Total (Including Commission)
 			payment: "Not Paid",
 			paid_amount: 0,
-			commission: totalCommission, // Aligned with ReceiptPDF
+			commission: totalCommission,
 			commissionPaid: false,
 			paymentDetails: {
 				cardNumber: "",
@@ -590,6 +647,15 @@ const OrderTaker = () => {
 				cardHolderName: "",
 			},
 			sentFrom: "employee",
+
+			// NEW: Storing advancePayment
+			advancePayment: {
+				// If the user selected "percentage," store that. Otherwise, leave it blank
+				paymentPercentage:
+					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
+				// We'll always store the final calculated deposit in `finalAdvancePayment`
+				finalAdvancePayment: finalDeposit.toFixed(2), // number or string is fine
+			},
 		};
 
 		try {
@@ -847,7 +913,43 @@ const OrderTaker = () => {
 					</div>
 				</div>
 
-				{/* Totals: Replaced with Descriptions */}
+				{/* Advance Payment Options */}
+				<Form.Item label='Advance/ Deposit Payment Option' required>
+					<Radio.Group
+						onChange={(e) => setAdvancePaymentOption(e.target.value)}
+						value={advancePaymentOption}
+					>
+						<Radio value='commission_plus_one_day'>Commission + 1 Day</Radio>
+						<Radio value='percentage'>Percentage (%)</Radio>
+						<Radio value='sar'>SAR Amount</Radio>
+					</Radio.Group>
+				</Form.Item>
+
+				{advancePaymentOption === "percentage" && (
+					<Form.Item label='Deposit Payment Percentage' required>
+						<InputNumber
+							min={1}
+							max={100}
+							value={advancePaymentPercentage}
+							onChange={(value) => setAdvancePaymentPercentage(value)}
+							style={{ width: "100%" }}
+						/>
+					</Form.Item>
+				)}
+
+				{advancePaymentOption === "sar" && (
+					<Form.Item label='Deposit Payment in SAR' required>
+						<InputNumber
+							min={1}
+							max={totalAmount}
+							value={advancePaymentSAR}
+							onChange={(value) => setAdvancePaymentSAR(value)}
+							style={{ width: "100%" }}
+						/>
+					</Form.Item>
+				)}
+
+				{/* Totals */}
 				<Form.Item>
 					<Descriptions bordered column={1} size='small'>
 						<Descriptions.Item label='Total Amount (For the Hotel)'>
@@ -859,7 +961,7 @@ const OrderTaker = () => {
 						<Descriptions.Item label='Cost of One Night (First Night)'>
 							{Number(oneNightCost).toFixed(2)} SAR
 						</Descriptions.Item>
-						<Descriptions.Item label='Total Deposit'>
+						<Descriptions.Item label='Total Deposit (Based on Option Above)'>
 							{Number(finalDeposit).toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Grand Total (Including Commission)'>
@@ -873,7 +975,6 @@ const OrderTaker = () => {
 								{Number(totalAmount).toFixed(2)} SAR
 							</span>
 						</Descriptions.Item>
-
 						<Descriptions.Item label='Paid Amount'>
 							{selectedReservation?.payment_details?.paid_amount || 0} SAR
 						</Descriptions.Item>
