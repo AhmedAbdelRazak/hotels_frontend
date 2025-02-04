@@ -14,7 +14,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [collapsed, setCollapsed] = useState(false);
 	const [allReservationsForAdmin, setAllReservationForAdmin] = useState([]);
 	const [currentPage, setCurrentPage] = useState(1); // Current page number
-	const [pageSize, setPageSize] = useState(100); // Number of records per page
+	const [pageSize, setPageSize] = useState(500); // Number of records per page
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
