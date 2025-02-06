@@ -762,9 +762,64 @@ export const updateSingleReservation = (reservationId, reservation) => {
 };
 
 // Start of reports for the admin
-// 1) Reservations By Day
-export const getReservationsByDay = (userId, token, selectedHotels = []) => {
-	const query = buildHotelsQuery(selectedHotels);
+
+// (A) Helper to build the combined query string with both hotel info + any extra params
+function buildQueryWithParams(selectedHotels, limit, extraParams = {}) {
+	// First build the basic query string for hotels & limit
+	let baseQuery = buildHotelsQuery(selectedHotels, limit);
+
+	// Then, if we have extra params, convert them to a query string
+	const extraQuery = buildQueryString(extraParams);
+
+	if (extraQuery) {
+		// If we already have a base query (e.g. '?hotels=ABC'), then append with '&'
+		if (baseQuery) {
+			baseQuery += `&${extraQuery}`;
+		} else {
+			// Otherwise, start fresh with '?'
+			baseQuery = `?${extraQuery}`;
+		}
+	}
+
+	return baseQuery; // e.g. "?hotels=HotelA&limit=20&excludeCancelled=true"
+}
+
+/**
+ * Build the query string for selectedHotels.
+ * If hotels = ["all"], we do NOT filter by hotels.
+ * If hotels are multiple, we pass them joined by comma.
+ */
+function buildHotelsQuery(selectedHotels, limit) {
+	let queryArray = [];
+	if (selectedHotels && !selectedHotels.includes("all")) {
+		queryArray.push(`hotels=${encodeURIComponent(selectedHotels.join(","))}`);
+	}
+	if (limit) {
+		queryArray.push(`limit=${encodeURIComponent(limit)}`);
+	}
+	return queryArray.length ? "?" + queryArray.join("&") : "";
+}
+
+function buildQueryString(params) {
+	return Object.entries(params)
+		.map(
+			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
+		)
+		.join("&");
+}
+
+/* ========================================================================
+	 1) Reservations By Day
+	 Added optional extraParams so you can pass { excludeCancelled: true }, etc.
+	 ======================================================================== */
+export const getReservationsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-day/${userId}${query}`,
 		{
@@ -786,9 +841,17 @@ export const getReservationsByDay = (userId, token, selectedHotels = []) => {
 		);
 };
 
-// 2) Checkins By Day
-export const getCheckinsByDay = (userId, token, selectedHotels = []) => {
-	const query = buildHotelsQuery(selectedHotels);
+/* ========================================================================
+	 2) Checkins By Day
+	 ======================================================================== */
+export const getCheckinsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/checkins-by-day/${userId}${query}`,
 		{
@@ -808,9 +871,17 @@ export const getCheckinsByDay = (userId, token, selectedHotels = []) => {
 		.catch((err) => console.error("Error fetching checkinsByDay data:", err));
 };
 
-// 3) Checkouts By Day
-export const getCheckoutsByDay = (userId, token, selectedHotels = []) => {
-	const query = buildHotelsQuery(selectedHotels);
+/* ========================================================================
+	 3) Checkouts By Day
+	 ======================================================================== */
+export const getCheckoutsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/checkouts-by-day/${userId}${query}`,
 		{
@@ -830,13 +901,17 @@ export const getCheckoutsByDay = (userId, token, selectedHotels = []) => {
 		.catch((err) => console.error("Error fetching checkoutsByDay data:", err));
 };
 
-// 4) Reservations By Day By Hotel (optional if you use it)
+/* ========================================================================
+	 4) Reservations By Day By Hotel Name
+	 ======================================================================== */
 export const getReservationsByDayByHotelName = (
 	userId,
 	token,
-	selectedHotels = []
+	selectedHotels = [],
+	extraParams = {}
 ) => {
-	const query = buildHotelsQuery(selectedHotels);
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-day-by-hotel/${userId}${query}`,
 		{
@@ -858,13 +933,17 @@ export const getReservationsByDayByHotelName = (
 		);
 };
 
-// 5) Reservations By Booking Status
+/* ========================================================================
+	 5) Reservations By Booking Status
+	 ======================================================================== */
 export const getReservationsByBookingStatus = (
 	userId,
 	token,
-	selectedHotels = []
+	selectedHotels = [],
+	extraParams = {}
 ) => {
-	const query = buildHotelsQuery(selectedHotels);
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-booking-status/${userId}${query}`,
 		{
@@ -886,13 +965,17 @@ export const getReservationsByBookingStatus = (
 		);
 };
 
-// 6) Reservations By Hotel Names
+/* ========================================================================
+	 6) Reservations By Hotel Names
+	 ======================================================================== */
 export const getReservationsByHotelNames = (
 	userId,
 	token,
-	selectedHotels = []
+	selectedHotels = [],
+	extraParams = {}
 ) => {
-	const query = buildHotelsQuery(selectedHotels);
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-hotel-names/${userId}${query}`,
 		{
@@ -914,14 +997,18 @@ export const getReservationsByHotelNames = (
 		);
 };
 
-// 7) Top Hotels By Reservations
+/* ========================================================================
+	 7) Top Hotels By Reservations
+	 ======================================================================== */
 export const getTopHotelsByReservations = (
 	userId,
 	token,
 	limit = 5,
-	selectedHotels = []
+	selectedHotels = [],
+	extraParams = {}
 ) => {
-	const query = buildHotelsQuery(selectedHotels, limit);
+	const query = buildQueryWithParams(selectedHotels, limit, extraParams);
+
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/top-hotels-by-reservations/${userId}${query}`,
 		{
@@ -943,31 +1030,9 @@ export const getTopHotelsByReservations = (
 		);
 };
 
-function buildQueryString(params) {
-	return Object.entries(params)
-		.map(
-			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
-		)
-		.join("&");
-}
-
-/**
- * Build the query string for selectedHotels.
- * If hotels = ["all"], we do NOT filter by hotels.
- * If hotels are multiple, we pass them joined by comma.
- */
-function buildHotelsQuery(selectedHotels, limit) {
-	let queryArray = [];
-	if (selectedHotels && !selectedHotels.includes("all")) {
-		queryArray.push(`hotels=${encodeURIComponent(selectedHotels.join(","))}`);
-	}
-	if (limit) {
-		queryArray.push(`limit=${encodeURIComponent(limit)}`);
-	}
-	return queryArray.length ? "?" + queryArray.join("&") : "";
-}
-
-// For detailed reservations
+/* ========================================================================
+	 8) getSpecificListOfReservations (already takes queryParamsObj)
+	 ======================================================================== */
 export const getSpecificListOfReservations = (
 	userId,
 	token,
@@ -995,5 +1060,4 @@ export const getSpecificListOfReservations = (
 			console.error("Error fetching specific list of reservations:", err)
 		);
 };
-
 // End of reports for the admin

@@ -287,6 +287,9 @@ const ReservationsOverview = () => {
 	// Default to "all" selected
 	const [selectedHotels, setSelectedHotels] = useState(["all"]);
 
+	// NEW STATE: Toggle exclude cancelled or not
+	const [excludeCancelled, setExcludeCancelled] = useState(true);
+
 	const adminAllHotelDetails = useCallback(() => {
 		gettingHotelDetailsForAdmin(user._id, token).then((data) => {
 			if (data && data.error) {
@@ -306,24 +309,39 @@ const ReservationsOverview = () => {
 		adminAllHotelDetails();
 	}, [adminAllHotelDetails]);
 
-	// Whenever selectedHotels changes, re‐fetch the main data
+	// Whenever selectedHotels *or excludeCancelled* changes, re‐fetch the main data
 	useEffect(() => {
 		loadAllReportData();
 		// eslint-disable-next-line
-	}, [selectedHotels]);
+	}, [selectedHotels, excludeCancelled]);
 
 	console.log("Currently selected hotels:", selectedHotels);
+	console.log("Exclude Cancelled?", excludeCancelled);
 
 	function loadAllReportData() {
 		setLoading(true);
 
+		// Pass the excludeCancelled toggle in as an extra param object
+		const extraParams = { excludeCancelled };
+
 		Promise.all([
-			getReservationsByDay(user._id, token, selectedHotels),
-			getCheckinsByDay(user._id, token, selectedHotels),
-			getCheckoutsByDay(user._id, token, selectedHotels),
-			getReservationsByBookingStatus(user._id, token, selectedHotels),
-			getReservationsByHotelNames(user._id, token, selectedHotels),
-			getTopHotelsByReservations(user._id, token, 20, selectedHotels),
+			getReservationsByDay(user._id, token, selectedHotels, extraParams),
+			getCheckinsByDay(user._id, token, selectedHotels, extraParams),
+			getCheckoutsByDay(user._id, token, selectedHotels, extraParams),
+			getReservationsByBookingStatus(
+				user._id,
+				token,
+				selectedHotels,
+				extraParams
+			),
+			getReservationsByHotelNames(user._id, token, selectedHotels, extraParams),
+			getTopHotelsByReservations(
+				user._id,
+				token,
+				100,
+				selectedHotels,
+				extraParams
+			),
 		])
 			.then((results) => {
 				const [
@@ -431,6 +449,8 @@ const ReservationsOverview = () => {
 				hotels: selectedHotels.includes("all")
 					? "all"
 					: selectedHotels.join(","),
+				// also respect the excludeCancelled toggle globally
+				excludeCancelled,
 			});
 			setModalData(data || []);
 			setCurrentPage(1);
@@ -796,18 +816,12 @@ const ReservationsOverview = () => {
 	 *  - If the user clears everything, revert to ["all"].
 	 */
 	const handleHotelSelectChange = (value) => {
-		// If user picks "all" + something else in one shot, we decide if we keep "all" or remove it.
-		// According to your requirement: "once user chooses other than 'all', remove 'all'."
-		// But if they specifically choose "all" again while hotels are selected, keep only "all".
-
-		// Case: user explicitly cleared all => revert to "all"
+		// If user picks "all" + something else in one shot, decide which to keep
 		if (value.length === 0) {
 			setSelectedHotels(["all"]);
 			return;
 		}
 
-		// If user just selected "all" while there were other hotels,
-		// the final array might have 'all' plus some others. In that case, keep only "all".
 		if (value.includes("all") && !selectedHotels.includes("all")) {
 			// That means "all" was newly selected => keep only "all"
 			setSelectedHotels(["all"]);
@@ -815,21 +829,17 @@ const ReservationsOverview = () => {
 		}
 
 		// If the user has "all" in the old selection, but picks other hotels, remove "all"
-		// so that the user can pick multiple. (This covers the scenario user tries to add a hotel
-		// while "all" is selected.)
 		if (
 			value.includes("all") &&
 			selectedHotels.includes("all") &&
 			value.length > 1
 		) {
-			// That means the user tried to select something else while "all" is already selected
-			// => remove "all" from the new array
 			const withoutAll = value.filter((v) => v !== "all");
 			setSelectedHotels(withoutAll);
 			return;
 		}
 
-		// Otherwise, they are just picking normal hotels (no "all")
+		// Otherwise, normal multi select
 		setSelectedHotels(value);
 	};
 
@@ -858,6 +868,16 @@ const ReservationsOverview = () => {
 									);
 								})}
 						</Select>
+
+						{/* NEW BUTTON: Exclude/Include Cancelled */}
+						<Button
+							style={{ marginTop: 10 }}
+							onClick={() => setExcludeCancelled(!excludeCancelled)}
+						>
+							{excludeCancelled
+								? "Include Cancelled Reservations"
+								: "Exclude Cancelled Reservations"}
+						</Button>
 					</div>
 
 					<Collapse defaultActiveKey={["1", "2", "3"]} expandIconPosition='end'>
