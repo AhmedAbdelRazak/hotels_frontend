@@ -15,9 +15,12 @@ import UncompletedReservations from "./UncompletedReservations";
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
+
+	// Control the password modal:
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+
 	const [activeTab, setActiveTab] = useState("calculator");
 	const [getUser, setGetUser] = useState("");
 	const { user, token } = isAuthenticated();
@@ -35,69 +38,101 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		});
 	}, [user._id, token]);
 
-	// Validate user and handle access control
-	useEffect(() => {
-		if (getUser) {
-			// Check if activeUser is false
-			if (!getUser.activeUser) {
-				history.push("/");
-				return;
-			}
-			const accessTo = getUser.accessTo || [];
-
-			// If user has access to "JannatTools", skip password verification
-			if (accessTo.includes("JannatTools")) {
-				setIsPasswordVerified(true);
-				setIsModalVisible(false);
-				return;
-			}
-
-			if (accessTo.length === 0 || accessTo.includes("all")) {
-				// If there's no restriction or "all" is included, do nothing special
-				return;
-			}
-
-			// Otherwise, redirect to first available module
-			switch (accessTo[0]) {
-				case "CustomerService":
-					history.push("/admin/customer-service?tab=active-client-cases");
-					break;
-				case "HotelsReservations":
-					history.push("/admin/all-reservations");
-					break;
-				case "Integrator":
-					history.push("/admin/el-integrator");
-					break;
-				case "JannatBookingWebsite":
-					history.push("/admin/janat-website");
-					break;
-				case "AdminDashboard":
-					history.push("/admin/dashboard");
-					break;
-				default:
-					// If no match, stay here or redirect somewhere else
-					break;
-			}
-		}
-	}, [getUser, history]);
-
-	// Initial setup
+	// 1) On mount, fetch user and set layout
 	useEffect(() => {
 		gettingUserId();
 
 		if (window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+	}, [gettingUserId]);
 
-		// If password was previously verified
+	// 2) Once we have `getUser`, decide whether we need the password modal
+	useEffect(() => {
+		if (!getUser) return; // wait until fetched
+
+		// If the user is not active, redirect out
+		if (getUser.activeUser === false) {
+			history.push("/");
+			return;
+		}
+
+		// If the user has both 'hotelsToSupport' and 'accessTo' (and they're non-empty),
+		// we skip the password check entirely.
+		const hasHotelsToSupport =
+			Array.isArray(getUser.hotelsToSupport) &&
+			getUser.hotelsToSupport.length > 0;
+		const hasAccessTo =
+			Array.isArray(getUser.accessTo) && getUser.accessTo.length > 0;
+
+		// Check if user is allowed "JannatTools" => skip password
+		const includesJannatTools = getUser.accessTo?.includes("JannatTools");
+
+		if (hasHotelsToSupport && hasAccessTo) {
+			// Or if they have JannatTools specifically
+			if (includesJannatTools) {
+				setIsPasswordVerified(true);
+				setIsModalVisible(false);
+				localStorage.setItem("ToolsVerified", "true");
+				return;
+			}
+		}
+
+		//  Otherwise, check localStorage
 		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
 		if (toolsPasswordVerified) {
 			setIsPasswordVerified(true);
+			setIsModalVisible(false);
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [gettingUserId]);
+	}, [getUser, history]);
 
+	// Access control: if user doesn't have "JannatTools", but does have something else
+	// we redirect them to the relevant module
+	useEffect(() => {
+		if (!getUser) return;
+		const accessTo = getUser.accessTo || [];
+
+		// If user has "JannatTools", do nothing special here
+		if (accessTo.includes("JannatTools")) {
+			return;
+		}
+
+		// If user has no restrictions or 'all', do nothing
+		if (accessTo.length === 0 || accessTo.includes("all")) {
+			return;
+		}
+
+		// Otherwise, send them to the first available module
+		switch (accessTo[0]) {
+			case "CustomerService":
+				history.push("/admin/customer-service?tab=active-client-cases");
+				break;
+			case "HotelsReservations":
+				history.push("/admin/all-reservations");
+				break;
+			case "Integrator":
+				history.push("/admin/el-integrator");
+				break;
+			case "JannatBookingWebsite":
+				history.push("/admin/janat-website");
+				break;
+			case "AdminDashboard":
+				history.push("/admin/dashboard");
+				break;
+			default:
+				break;
+		}
+	}, [getUser, history]);
+
+	// isSuperAdmin logic
+	const isSuperAdmin =
+		!getUser.accessTo ||
+		getUser.accessTo.length === 0 ||
+		getUser.accessTo.includes("all");
+
+	// Handle password verification
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_TOOLS) {
 			setIsPasswordVerified(true);
@@ -109,6 +144,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		}
 	};
 
+	// Tabs
 	const handleTabChange = (tab) => {
 		setActiveTab(tab);
 		history.push(`?tab=${tab}`);
@@ -196,9 +232,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 									Reservations Tools
 								</button>
 
-								{(!getUser.accessTo ||
-									getUser.accessTo.length === 0 ||
-									getUser.accessTo.includes("all")) && (
+								{isSuperAdmin && (
 									<>
 										<button
 											className={activeTab === "uncompleted" ? "active" : ""}
@@ -222,23 +256,29 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 								)}
 							</TabNavigation>
 
-							{/* Tab Content Rendering */}
+							{/* Tab Content */}
 							{activeTab === "calculator" && (
 								<div>
 									<h3>Reservation Calculator</h3>
-									<ReservationCalculator />
+									<ReservationCalculator
+										getUser={getUser}
+										isSuperAdmin={isSuperAdmin}
+									/>
 								</div>
 							)}
 							{activeTab === "reservations" && (
 								<div>
 									<h3>Reservation Taker</h3>
-									<OrderTaker />
+									<OrderTaker getUser={getUser} isSuperAdmin={isSuperAdmin} />
 								</div>
 							)}
 							{activeTab === "addEmployee" && (
 								<div>
 									<h3>Register a New Employee</h3>
-									<EmployeeRegister />
+									<EmployeeRegister
+										getUser={getUser}
+										isSuperAdmin={isSuperAdmin}
+									/>
 								</div>
 							)}
 							{activeTab === "updateEmployee" && (

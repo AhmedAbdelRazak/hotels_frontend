@@ -1,5 +1,3 @@
-// src/components/admin/OrderTaker.js
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
 	Form,
@@ -27,10 +25,14 @@ import MoreDetails from "../AllReservation/MoreDetails";
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
-const OrderTaker = () => {
-	/** --------------
-	 * State Variables
-	 * -------------- */
+/** --------------------- Safe Parse Float --------------------- */
+const safeParseFloat = (value, fallback = 0) => {
+	const parsed = parseFloat(value);
+	return isNaN(parsed) ? fallback : parsed;
+};
+
+const OrderTaker = ({ getUser, isSuperAdmin }) => {
+	/** -------------- State Variables -------------- */
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 	]);
@@ -43,61 +45,81 @@ const OrderTaker = () => {
 	const [nationality, setNationality] = useState("");
 	const [agentName, setAgentName] = useState("");
 	const [phone, setPhone] = useState("");
-	const [totalAmount, setTotalAmount] = useState(0); // Grand Total (Including Commission)
+
+	// Grand Total (including commission):
+	const [totalAmount, setTotalAmount] = useState(0);
 	const [totalCommission, setTotalCommission] = useState(0);
 	const [numberOfNights, setNumberOfNights] = useState(0);
 
-	/** --------------
-	 * New State Variables (Advance Payment)
-	 * -------------- */
-	const [hotelCost, setHotelCost] = useState(0); // Total Amount (For the Hotel)
-	const [oneNightCost, setOneNightCost] = useState(0); // Cost of One Night
-	const [defaultDeposit, setDefaultDeposit] = useState(0); // Commission + 1 Day deposit
-	const [finalDeposit, setFinalDeposit] = useState(0); // The ACTUAL deposit based on chosen method
+	/** Advance Payment‐related state */
+	const [hotelCost, setHotelCost] = useState(0); // Base total for the hotel
+	const [oneNightCost, setOneNightCost] = useState(0); // Sum of first‐night “rootPrice” across all rooms
+	const [defaultDeposit, setDefaultDeposit] = useState(0); // Commission + oneNight
+	const [finalDeposit, setFinalDeposit] = useState(0);
 
-	// Radio option states:
-	// 1) 'commission_plus_one_day' (default),
-	// 2) 'percentage',
-	// 3) 'sar'
+	// Radio options: "commission_plus_one_day", "percentage", or "sar"
 	const [advancePaymentOption, setAdvancePaymentOption] = useState(
 		"commission_plus_one_day"
 	);
-	// If "percentage" is chosen, store 1..100 in this:
 	const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState("");
-	// If "sar" is chosen, store an amount 1..totalAmount in this:
 	const [advancePaymentSAR, setAdvancePaymentSAR] = useState("");
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
+
+	// Edit Pricing Modal
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
 	const [isModalVisible, setIsModalVisible] = useState(false);
+
+	// Details Modal
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 
 	const { user, token } = isAuthenticated();
 
-	// Ref to store previous state values (for optimization)
+	// Keep track of previous values to avoid repeatedly recalculating
 	const prevValues = useRef({
 		checkInDate: null,
 		checkOutDate: null,
 		selectedRooms: [],
+		selectedHotel: null,
 	});
 
-	/** ------------------
-	 * Fetch All Hotels
-	 * ------------------ */
+	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.filter(
-					(hotel) => hotel.activateHotel === true
-				);
+				// Only keep active hotels
+				const activeHotels = data.filter((h) => h.activateHotel === true);
+				// Sort by name
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
-				setAllHotels(sortedHotels);
+
+				// Super admin sees all
+				if (isSuperAdmin) {
+					setAllHotels(sortedHotels);
+				} else {
+					// For normal user, check userHotelsToSupport
+					const userHotelsToSupport = getUser?.hotelsToSupport;
+					if (
+						!userHotelsToSupport ||
+						userHotelsToSupport === "all" ||
+						userHotelsToSupport.length === 0
+					) {
+						// Show all
+						setAllHotels(sortedHotels);
+					} else {
+						// Filter
+						const allowedIds = userHotelsToSupport.map((h) => h._id);
+						const filtered = sortedHotels.filter((h) =>
+							allowedIds.includes(h._id)
+						);
+						setAllHotels(filtered);
+					}
+				}
 			} else {
 				message.error("Failed to fetch hotels.");
 			}
@@ -105,7 +127,7 @@ const OrderTaker = () => {
 			console.error("Error fetching hotels:", error);
 			message.error("An error occurred while fetching hotels.");
 		}
-	}, [user._id, token]);
+	}, [user._id, token, getUser, isSuperAdmin]);
 
 	useEffect(() => {
 		setAgentName(user?.name || "");
@@ -113,20 +135,13 @@ const OrderTaker = () => {
 		// eslint-disable-next-line
 	}, [getAllHotels]);
 
-	/** ---------------------
-	 * Helper: Safe Parse Float
-	 * --------------------- */
-	const safeParseFloat = (value, fallback = 0) => {
-		const parsed = parseFloat(value);
-		return isNaN(parsed) ? fallback : parsed;
-	};
-
-	/** ------------------------------
-	 * Calculate Pricing by Day
-	 * ------------------------------ */
+	/**
+	 * Return an array of day‐by‐day pricing from `startDate` to `endDate - 1`.
+	 * Each day includes: { date, price, rootPrice, commissionRate }.
+	 */
 	const calculatePricingByDay = useCallback(
 		(
-			pricingRate = [],
+			pricingRate = [], // from DB
 			startDate,
 			endDate,
 			basePrice,
@@ -138,12 +153,12 @@ const OrderTaker = () => {
 
 			const dateArray = [];
 			let currentDate = start;
-
 			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
 				const formattedDate = currentDate.format("YYYY-MM-DD");
 				const rateForDate = pricingRate.find(
-					(rate) => rate.calendarDate === formattedDate
+					(r) => r.calendarDate === formattedDate
 				);
+				// If that date has a special override
 				const price = rateForDate
 					? safeParseFloat(rateForDate.price, basePrice)
 					: basePrice;
@@ -160,18 +175,18 @@ const OrderTaker = () => {
 					rootPrice,
 					commissionRate: rateCommission,
 				});
-
 				currentDate = currentDate.add(1, "day");
 			}
-
 			return dateArray;
 		},
 		[]
 	);
 
-	/** ------------------------------
-	 * Calculate Pricing by Day with Commission (Aligned with ReceiptPDF)
-	 * ------------------------------ */
+	/**
+	 * For each day, compute:
+	 *   totalPriceWithCommission = price + (rootPrice * (commissionRate/100))
+	 *   totalPriceWithoutCommission = price
+	 */
 	const calculatePricingByDayWithCommission = useCallback(
 		(
 			pricingRate,
@@ -181,7 +196,7 @@ const OrderTaker = () => {
 			defaultCost,
 			commissionRate
 		) => {
-			const pricingByDay = calculatePricingByDay(
+			const noCommissionArray = calculatePricingByDay(
 				pricingRate,
 				startDate,
 				endDate,
@@ -189,137 +204,146 @@ const OrderTaker = () => {
 				defaultCost,
 				commissionRate
 			);
+			return noCommissionArray.map((day) => {
+				const totalPriceWithCommission =
+					safeParseFloat(day.price) +
+					safeParseFloat(day.rootPrice) *
+						(safeParseFloat(day.commissionRate) / 100);
 
-			return pricingByDay.map((day) => ({
-				...day,
-				totalPriceWithCommission:
-					Number(day.price) +
-					Number(day.rootPrice) * (Number(day.commissionRate) / 100),
-				totalPriceWithoutCommission: Number(day.price),
-			}));
+				return {
+					...day,
+					totalPriceWithCommission,
+					totalPriceWithoutCommission: safeParseFloat(day.price),
+				};
+			});
 		},
 		[calculatePricingByDay]
 	);
 
-	/** ------------------------------
-	 * Calculate Totals (Aligned with ReceiptPDF)
-	 * ------------------------------ */
+	/**
+	 * Recalculate all relevant totals:
+	 *  - hotelCost (sum of rootPrice across all days * counts)
+	 *  - totalAmount (sum of totalPriceWithCommission across all days * counts)
+	 *  - totalCommission (difference between the two, or explicit formula)
+	 *  - cost of first night, etc.
+	 */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms) => {
-			if (!selectedHotel) return;
-			if (!checkInDate || !checkOutDate) return;
+			if (!selectedHotel || !checkInDate || !checkOutDate) {
+				return;
+			}
 			if (!rooms || rooms.length === 0) return;
 
 			const startDate = dayjs(checkInDate).startOf("day");
 			const endDate = dayjs(checkOutDate).startOf("day");
-			let nightsDiff = endDate.diff(startDate, "day");
-			if (nightsDiff < 1) nightsDiff = 1; // minimum 1 night
+			let nights = endDate.diff(startDate, "day");
+			if (nights < 1) nights = 1; // at least 1 night
 
-			let sumHotelCost = 0; // sum of rootPrice * count
-			let sumGrandTotal = 0; // sum of totalPriceWithCommission * count
-			let sumCommission = 0; // sum of commission * count
-			let sumOneNight = 0; // Cost of One Night
+			let sumHotelCost = 0; // total rootPrice
+			let sumGrandTotal = 0; // total with commission
+			let sumCommission = 0; // total commission
+			let sumOneNightCost = 0; // sum of rootPrice from first day for each room
 
-			// Updated Rooms array to include recalculated pricingByDay
 			const updatedRooms = rooms.map((room) => {
 				if (!room.roomType || !room.displayName) {
-					return room; // skip calculations if not selected
+					return room;
 				}
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// Pricing already exists
-					const roomTotalAmount = room.pricingByDay.reduce(
-						(acc, day) => acc + day.rootPrice * room.count,
+				// If the user has a "pricingByDay" array, we rely on it. If empty, we recalc from scratch:
+				if (room.pricingByDay && room.pricingByDay.length) {
+					// We already have day-by-day. Sum them:
+					const roomTotalRoot = room.pricingByDay.reduce(
+						(acc, day) => acc + safeParseFloat(day.rootPrice),
 						0
 					);
-					const roomTotalPriceWithCommission = room.pricingByDay.reduce(
-						(acc, day) => acc + day.totalPriceWithCommission * room.count,
+					const roomTotalWithComm = room.pricingByDay.reduce(
+						(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
 						0
 					);
-					const roomTotalCommission = room.pricingByDay.reduce(
-						(acc, day) =>
+					const roomTotalCommission = room.pricingByDay.reduce((acc, day) => {
+						// Commission for this day is ( rootPrice*(commissionRate/100) + (price - rootPrice) )
+						// Already coded as: (totalPriceWithCommission - rootPrice).
+						return (
 							acc +
-							(day.rootPrice * (day.commissionRate / 100) +
-								(day.totalPriceWithoutCommission - day.rootPrice)) *
-								room.count,
-						0
-					);
+							(safeParseFloat(day.totalPriceWithCommission) -
+								safeParseFloat(day.rootPrice))
+						);
+					}, 0);
 
-					sumHotelCost += roomTotalAmount;
-					sumGrandTotal += roomTotalPriceWithCommission;
-					sumCommission += roomTotalCommission;
+					// multiply by the # of identical “count” rooms
+					sumHotelCost += roomTotalRoot * room.count;
+					sumGrandTotal += roomTotalWithComm * room.count;
+					sumCommission += roomTotalCommission * room.count;
+
+					// For the first day’s root price only:
+					if (room.pricingByDay[0]) {
+						sumOneNightCost +=
+							safeParseFloat(room.pricingByDay[0].rootPrice) * room.count;
+					}
 					return room;
 				} else {
-					// Recalculate pricingByDay
-					const matchedRoom = selectedHotel?.roomCountDetails?.find(
+					// We need to recalc from the DB’s base pricing
+					const matched = selectedHotel?.roomCountDetails?.find(
 						(r) =>
 							r.roomType?.trim() === room.roomType.trim() &&
 							r.displayName?.trim() === room.displayName.trim()
 					);
-					if (matchedRoom) {
-						const recalculatedPricingByDay =
-							calculatePricingByDayWithCommission(
-								matchedRoom.pricingRate || [],
-								startDate,
-								endDate,
-								parseFloat(matchedRoom.price?.basePrice) || 0,
-								parseFloat(matchedRoom.defaultCost) || 0,
-								parseFloat(
-									matchedRoom.roomCommission || selectedHotel.commission || 0.1
-								)
-							);
-
-						const roomTotalAmount = recalculatedPricingByDay.reduce(
-							(acc, day) => acc + day.rootPrice * room.count,
-							0
-						);
-						const roomTotalPriceWithCommission =
-							recalculatedPricingByDay.reduce(
-								(acc, day) => acc + day.totalPriceWithCommission * room.count,
-								0
-							);
-						const roomTotalCommission = recalculatedPricingByDay.reduce(
-							(acc, day) =>
-								acc +
-								(day.rootPrice * (day.commissionRate / 100) +
-									(day.totalPriceWithoutCommission - day.rootPrice)) *
-									room.count,
-							0
-						);
-
-						sumHotelCost += roomTotalAmount;
-						sumGrandTotal += roomTotalPriceWithCommission;
-						sumCommission += roomTotalCommission;
-
-						return { ...room, pricingByDay: recalculatedPricingByDay };
-					} else {
+					if (!matched) {
 						console.warn("No matching room found for", room);
 						return room;
 					}
-				}
-			});
 
-			// Compute oneNightCost: sum of firstDay's rootPrice for each room * count
-			updatedRooms.forEach((room) => {
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const firstDayRoot = safeParseFloat(
-						room.pricingByDay[0].rootPrice,
+					const recalculated = calculatePricingByDayWithCommission(
+						matched.pricingRate || [],
+						startDate,
+						endDate,
+						safeParseFloat(matched.price?.basePrice, 0),
+						safeParseFloat(matched.defaultCost, 0),
+						safeParseFloat(
+							matched.roomCommission ?? selectedHotel.commission ?? 0.1
+						)
+					);
+
+					// Now sum them:
+					const roomTotalRoot = recalculated.reduce(
+						(acc, day) => acc + safeParseFloat(day.rootPrice),
 						0
 					);
-					sumOneNight += firstDayRoot * room.count;
+					const roomTotalWithComm = recalculated.reduce(
+						(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
+						0
+					);
+					const roomTotalCommission = recalculated.reduce(
+						(acc, day) =>
+							acc +
+							(safeParseFloat(day.totalPriceWithCommission) -
+								safeParseFloat(day.rootPrice)),
+						0
+					);
+
+					sumHotelCost += roomTotalRoot * room.count;
+					sumGrandTotal += roomTotalWithComm * room.count;
+					sumCommission += roomTotalCommission * room.count;
+
+					// First day’s root price
+					if (recalculated[0]) {
+						sumOneNightCost +=
+							safeParseFloat(recalculated[0].rootPrice) * room.count;
+					}
+
+					return { ...room, pricingByDay: recalculated };
 				}
 			});
 
-			// Our *default* deposit = sumCommission + sumOneNight (Commission + 1 day)
-			const deposit = sumCommission + sumOneNight;
+			// Default deposit = sumCommission + sumOneNightCost
+			const deposit = sumCommission + sumOneNightCost;
 
 			setSelectedRooms(updatedRooms);
 			setHotelCost(Number(sumHotelCost.toFixed(2)));
 			setTotalAmount(Number(sumGrandTotal.toFixed(2)));
 			setTotalCommission(Number(sumCommission.toFixed(2)));
-			setOneNightCost(Number(sumOneNight.toFixed(2)));
-			setNumberOfNights(nightsDiff);
+			setOneNightCost(Number(sumOneNightCost.toFixed(2)));
+			setNumberOfNights(nights);
 
-			// We store the "default deposit" for the Commission + 1 Day option
 			setDefaultDeposit(Number(deposit.toFixed(2)));
 		},
 		[
@@ -331,44 +355,54 @@ const OrderTaker = () => {
 		]
 	);
 
-	/** ------------------------------
-	 * Recalculate Totals when checkInDate, checkOutDate, or selectedRooms change
-	 * ------------------------------ */
+	/**
+	 * Whenever checkInDate, checkOutDate, selectedRooms, or selectedHotel changes,
+	 * recalc totals if anything truly changed.
+	 */
 	useEffect(() => {
 		const prev = prevValues.current;
-		const hasDateChanged =
+		const dateChanged =
 			!dayjs(prev.checkInDate).isSame(checkInDate) ||
 			!dayjs(prev.checkOutDate).isSame(checkOutDate);
-		const hasRoomsChanged =
+		const roomsChanged =
 			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms);
+		const hotelChanged = prev.selectedHotel?._id !== selectedHotel?._id;
 
-		if (hasDateChanged || hasRoomsChanged) {
+		if (dateChanged || roomsChanged || hotelChanged) {
 			calculateTotals(selectedRooms);
-			prevValues.current = { checkInDate, checkOutDate, selectedRooms };
+			prevValues.current = {
+				checkInDate,
+				checkOutDate,
+				selectedRooms,
+				selectedHotel,
+			};
 		}
-	}, [checkInDate, checkOutDate, selectedRooms, calculateTotals]);
+	}, [
+		checkInDate,
+		checkOutDate,
+		selectedRooms,
+		selectedHotel,
+		calculateTotals,
+	]);
 
 	/**
-	 * Update finalDeposit whenever any of these states change:
-	 * - advancePaymentOption
-	 * - advancePaymentPercentage
-	 * - advancePaymentSAR
-	 * - defaultDeposit (commission + 1 day)
-	 * - totalAmount
+	 * Update finalDeposit whenever user changes:
+	 *   - advancePaymentOption,
+	 *   - advancePaymentPercentage,
+	 *   - advancePaymentSAR,
+	 *   - defaultDeposit,
+	 *   - totalAmount
 	 */
 	useEffect(() => {
 		if (advancePaymentOption === "commission_plus_one_day") {
-			// Default deposit = Commission + 1 Day
 			setFinalDeposit(defaultDeposit);
 		} else if (advancePaymentOption === "percentage") {
-			// deposit = totalAmount * (percentage / 100)
-			const perc = parseFloat(advancePaymentPercentage) || 0;
+			const perc = safeParseFloat(advancePaymentPercentage, 0);
 			let depositCalc = totalAmount * (perc / 100);
 			if (depositCalc < 0) depositCalc = 0;
 			setFinalDeposit(depositCalc);
 		} else if (advancePaymentOption === "sar") {
-			// deposit = user input
-			const amt = parseFloat(advancePaymentSAR) || 0;
+			const amt = safeParseFloat(advancePaymentSAR, 0);
 			setFinalDeposit(amt < 0 ? 0 : amt);
 		}
 	}, [
@@ -379,91 +413,74 @@ const OrderTaker = () => {
 		totalAmount,
 	]);
 
-	/** ------------------------------
-	 * Handle Room Type Selection Change
-	 * ------------------------------ */
+	/** ------------------------------ Handlers ------------------------------ */
+
+	// Room Type selection
 	const handleRoomSelectionChange = (value, index) => {
+		const updated = [...selectedRooms];
 		if (!value) {
-			const updatedRooms = [...selectedRooms];
-			updatedRooms[index] = {
-				...updatedRooms[index],
+			updated[index] = {
 				roomType: "",
 				displayName: "",
+				count: 1,
 				pricingByDay: [],
 			};
-			setSelectedRooms(updatedRooms);
-			setTimeout(() => calculateTotals(updatedRooms), 0);
+			setSelectedRooms(updated);
 			return;
 		}
-
 		const [roomType, displayName] = value.split("|");
-		const updatedRooms = [...selectedRooms];
-		updatedRooms[index] = {
-			...updatedRooms[index],
+		updated[index] = {
+			...updated[index],
 			roomType: roomType.trim(),
 			displayName: displayName.trim(),
-			pricingByDay: [], // Reset pricing
+			pricingByDay: [],
 		};
-		setSelectedRooms(updatedRooms);
-		setTimeout(() => calculateTotals(updatedRooms), 0);
+		setSelectedRooms(updated);
 	};
 
-	/** ------------------------------
-	 * Handle Room Count Change
-	 * ------------------------------ */
+	// Room Count
 	const handleRoomCountChange = (count, index) => {
-		const updatedRooms = [...selectedRooms];
-		updatedRooms[index] = { ...updatedRooms[index], count };
-		setSelectedRooms(updatedRooms);
-		setTimeout(() => calculateTotals(updatedRooms), 0);
+		const updated = [...selectedRooms];
+		updated[index].count = count;
+		setSelectedRooms(updated);
 	};
 
-	/** ------------------------------
-	 * Add a New Room Selection
-	 * ------------------------------ */
+	// Add new room
 	const addRoomSelection = () => {
-		setSelectedRooms([
-			...selectedRooms,
+		setSelectedRooms((prev) => [
+			...prev,
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 		]);
 	};
 
-	/** ------------------------------
-	 * Remove a Room Selection
-	 * ------------------------------ */
+	// Remove room
 	const removeRoomSelection = (index) => {
-		const updatedRooms = [...selectedRooms];
-		updatedRooms.splice(index, 1);
-		setSelectedRooms(updatedRooms);
-		setTimeout(() => calculateTotals(updatedRooms), 0);
+		const updated = [...selectedRooms];
+		updated.splice(index, 1);
+		setSelectedRooms(updated);
 	};
 
-	/** ------------------------------
-	 * Edit Pricing Modal Logic
-	 * ------------------------------ */
+	// Edit Pricing Modal
 	const openModal = (roomIndex) => {
 		setEditingRoomIndex(roomIndex);
 		setIsModalVisible(true);
 	};
-
 	const closeModal = () => {
 		setEditingRoomIndex(null);
 		setIsModalVisible(false);
 	};
 
+	// After user edits day‐by‐day pricing, update the store, then recalc totals
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		const updatedRooms = selectedRooms.map((room, index) =>
-			index === editingRoomIndex
+		const updated = selectedRooms.map((room, i) =>
+			i === editingRoomIndex
 				? { ...room, pricingByDay: updatedPricingByDay }
 				: room
 		);
-		setSelectedRooms(updatedRooms);
-		setTimeout(() => calculateTotals(updatedRooms), 0);
+		setSelectedRooms(updated);
 	};
 
-	/** ------------------------------
-	 * Clear All Form Fields
-	 * ------------------------------ */
+	// Clear all fields
 	const clearAll = () => {
 		setSelectedRooms([
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
@@ -476,6 +493,7 @@ const OrderTaker = () => {
 		setChildren(0);
 		setNationality("");
 		setPhone("");
+
 		setTotalAmount(0);
 		setTotalCommission(0);
 		setNumberOfNights(0);
@@ -484,15 +502,12 @@ const OrderTaker = () => {
 		setDefaultDeposit(0);
 		setFinalDeposit(0);
 
-		// Reset radio fields
 		setAdvancePaymentOption("commission_plus_one_day");
 		setAdvancePaymentPercentage("");
 		setAdvancePaymentSAR("");
 	};
 
-	/** ------------------------------
-	 * Handle Hotel Change
-	 * ------------------------------ */
+	// Hotel dropdown
 	const handleHotelChange = (hotelId) => {
 		if (!hotelId) {
 			setSelectedHotel(null);
@@ -500,37 +515,17 @@ const OrderTaker = () => {
 			return;
 		}
 		const newHotel = allHotels.find((ht) => ht._id === hotelId);
-
 		if (selectedHotel && selectedHotel._id !== hotelId) {
 			message.warning(
 				"Hotel changed! Room selection and pricing will be reset."
 			);
-			setSelectedRooms([
-				{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
-			]);
-			setHotelCost(0);
-			setTotalAmount(0);
-			setTotalCommission(0);
-			setNumberOfNights(0);
-			setOneNightCost(0);
-			setDefaultDeposit(0);
-			setFinalDeposit(0);
-
-			// Reset radio fields
-			setAdvancePaymentOption("commission_plus_one_day");
-			setAdvancePaymentPercentage("");
-			setAdvancePaymentSAR("");
+			clearAll();
 		}
-
 		setSelectedHotel(newHotel);
-		setTimeout(() => calculateTotals(selectedRooms), 0);
 	};
 
-	/** ------------------------------
-	 * Handle Form Submission
-	 * ------------------------------ */
+	// Submit form
 	const handleSubmit = async () => {
-		// Basic validation
 		if (
 			!name ||
 			!email ||
@@ -545,24 +540,22 @@ const OrderTaker = () => {
 			message.error("Please fill in all required fields.");
 			return;
 		}
-
-		// Ensure all selected rooms have valid pricing
-		if (!selectedRooms.every((room) => room.pricingByDay.length > 0)) {
+		// Ensure each selected room has some pricing
+		if (!selectedRooms.every((r) => r.pricingByDay.length > 0)) {
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
-
-		// Validate advance payment inputs
+		// Validate deposit input
 		if (advancePaymentOption === "percentage") {
-			const p = parseFloat(advancePaymentPercentage);
-			if (isNaN(p) || p < 1 || p > 100) {
+			const p = safeParseFloat(advancePaymentPercentage, -1);
+			if (p < 1 || p > 100) {
 				message.error("Please enter a valid percentage between 1 and 100.");
 				return;
 			}
 		}
 		if (advancePaymentOption === "sar") {
-			const amt = parseFloat(advancePaymentSAR);
-			if (isNaN(amt) || amt < 1 || amt > totalAmount) {
+			const amt = safeParseFloat(advancePaymentSAR, -1);
+			if (amt < 1 || amt > totalAmount) {
 				message.error(
 					"Please enter a valid SAR amount between 1 and the total amount."
 				);
@@ -570,37 +563,42 @@ const OrderTaker = () => {
 			}
 		}
 
-		// Transform picked rooms into the expected format
-		const transformPickedRoomsToPickedRoomsType = (rooms) => {
+		// Transform into the final format
+		const transformPickedRooms = (rooms) => {
 			return rooms.flatMap((room) =>
 				Array.from({ length: room.count }, () => {
+					// Summarize day‐by‐day:
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
-						price: day.totalPriceWithCommission, // Price with commission
-						rootPrice: Number(day.rootPrice) || 0, // Base price
-						commissionRate: Number(day.commissionRate) || 0,
-						totalPriceWithCommission: day.totalPriceWithCommission,
-						totalPriceWithoutCommission: Number(day.price) || 0,
+						price: day.totalPriceWithCommission, // The final nightly cost user sees
+						rootPrice: safeParseFloat(day.rootPrice),
+						commissionRate: safeParseFloat(day.commissionRate),
+						totalPriceWithCommission: safeParseFloat(
+							day.totalPriceWithCommission
+						),
+						totalPriceWithoutCommission: safeParseFloat(
+							day.totalPriceWithoutCommission
+						),
 					}));
-
-					const averagePriceWithCommission =
+					// Average out the day‐by‐day “price with comm”
+					const avg =
 						pricingDetails.reduce(
-							(sum, day) => sum + day.totalPriceWithCommission,
+							(acc, d) => acc + d.totalPriceWithCommission,
 							0
 						) / pricingDetails.length;
 
 					return {
 						room_type: room.roomType.trim(),
 						displayName: room.displayName.trim(),
-						chosenPrice: Number(averagePriceWithCommission).toFixed(2),
-						count: 1,
+						chosenPrice: avg.toFixed(2),
+						count: 1, // because we flattened by “count”
 						pricingByDay: pricingDetails,
 						totalPriceWithCommission: pricingDetails.reduce(
-							(sum, day) => sum + day.totalPriceWithCommission,
+							(acc, d) => acc + d.totalPriceWithCommission,
 							0
 						),
 						hotelShouldGet: pricingDetails.reduce(
-							(sum, day) => sum + day.rootPrice,
+							(acc, d) => acc + d.rootPrice,
 							0
 						),
 					};
@@ -608,8 +606,7 @@ const OrderTaker = () => {
 			);
 		};
 
-		const pickedRoomsType =
-			transformPickedRoomsToPickedRoomsType(selectedRooms);
+		const pickedRoomsType = transformPickedRooms(selectedRooms);
 
 		const reservationData = {
 			userId: user ? user._id : null,
@@ -626,7 +623,7 @@ const OrderTaker = () => {
 				postalCode: "00000",
 				reservedBy: agentName,
 			},
-			total_rooms: selectedRooms.reduce((total, room) => total + room.count, 0),
+			total_rooms: selectedRooms.reduce((t, r) => t + r.count, 0),
 			total_guests: adults + children,
 			adults,
 			children,
@@ -635,7 +632,7 @@ const OrderTaker = () => {
 			days_of_residence: numberOfNights,
 			booking_source: "Jannat Employee",
 			pickedRoomsType,
-			total_amount: totalAmount, // Grand Total (Including Commission)
+			total_amount: totalAmount, // Grand total
 			payment: "Not Paid",
 			paid_amount: 0,
 			commission: totalCommission,
@@ -647,14 +644,10 @@ const OrderTaker = () => {
 				cardHolderName: "",
 			},
 			sentFrom: "employee",
-
-			// NEW: Storing advancePayment
 			advancePayment: {
-				// If the user selected "percentage," store that. Otherwise, leave it blank
 				paymentPercentage:
 					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
-				// We'll always store the final calculated deposit in `finalAdvancePayment`
-				finalAdvancePayment: finalDeposit.toFixed(2), // number or string is fine
+				finalAdvancePayment: finalDeposit.toFixed(2),
 			},
 		};
 
@@ -670,8 +663,9 @@ const OrderTaker = () => {
 				setReservationCreated(true);
 				setSelectedReservation(response.data);
 				window.scrollTo({ top: 0, behavior: "smooth" });
+				// Optionally reload or do something else
 				setTimeout(() => {
-					window.location.reload(false);
+					// window.location.reload(false);
 				}, 1500);
 			} else {
 				message.error({
@@ -690,16 +684,9 @@ const OrderTaker = () => {
 		}
 	};
 
-	/** ------------------------------
-	 * Show / Hide Details Modal
-	 * ------------------------------ */
-	const showDetailsModal = () => {
-		setIsModalVisible2(true);
-	};
-
-	const handleModalClose = () => {
-		setIsModalVisible2(false);
-	};
+	// View Details modal
+	const showDetailsModal = () => setIsModalVisible2(true);
+	const handleModalClose = () => setIsModalVisible2(false);
 
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
@@ -722,15 +709,14 @@ const OrderTaker = () => {
 								onChange={handleHotelChange}
 								allowClear
 							>
-								{allHotels.map((hotel) => (
-									<Option key={hotel._id} value={hotel._id}>
-										{hotel.hotelName}
+								{allHotels.map((h) => (
+									<Option key={h._id} value={h._id}>
+										{h.hotelName}
 									</Option>
 								))}
 							</Select>
 						</Form.Item>
 					</div>
-
 					<div className='col-md-6'>
 						<Form.Item label='Agent Name' required>
 							<Input
@@ -740,7 +726,6 @@ const OrderTaker = () => {
 							/>
 						</Form.Item>
 					</div>
-
 					<div className='col-md-8'>
 						<Form.Item label='Check-in and Check-out Dates' required>
 							<RangePicker
@@ -767,21 +752,21 @@ const OrderTaker = () => {
 										? `${room.roomType}|${room.displayName}`
 										: undefined
 								}
-								onChange={(value) => handleRoomSelectionChange(value, index)}
+								onChange={(v) => handleRoomSelectionChange(v, index)}
 								disabled={!selectedHotel}
 								allowClear
 							>
-								{selectedHotel &&
-									selectedHotel.roomCountDetails?.map((roomDetail) => (
-										<Option
-											key={`${roomDetail.roomType}|${roomDetail.displayName}`}
-											value={`${roomDetail.roomType}|${roomDetail.displayName}`}
-										>
-											{roomDetail.displayName} ({roomDetail.roomType})
+								{selectedHotel?.roomCountDetails?.map((rd) => {
+									const val = `${rd.roomType}|${rd.displayName}`;
+									return (
+										<Option key={val} value={val}>
+											{rd.displayName} ({rd.roomType})
 										</Option>
-									))}
+									);
+								})}
 							</Select>
 						</Form.Item>
+
 						<Form.Item label='Count' required>
 							<InputNumber
 								min={1}
@@ -866,7 +851,6 @@ const OrderTaker = () => {
 							/>
 						</Form.Item>
 					</div>
-
 					<div className='col-md-6'>
 						<Form.Item label='Nationality' required>
 							<Select
@@ -877,13 +861,13 @@ const OrderTaker = () => {
 									option.children.toLowerCase().includes(input.toLowerCase())
 								}
 								value={nationality}
-								onChange={(value) => setNationality(value)}
+								onChange={(val) => setNationality(val)}
 								style={{ width: "100%" }}
 								disabled={!selectedHotel}
 							>
-								{countryListWithAbbreviations.map((country) => (
-									<Option key={country.code} value={country.code}>
-										{country.name}
+								{countryListWithAbbreviations.map((c) => (
+									<Option key={c.code} value={c.code}>
+										{c.name}
 									</Option>
 								))}
 							</Select>
@@ -895,7 +879,7 @@ const OrderTaker = () => {
 								className='w-100'
 								min={1}
 								value={adults}
-								onChange={(value) => setAdults(value)}
+								onChange={(val) => setAdults(val)}
 								disabled={!selectedHotel}
 							/>
 						</Form.Item>
@@ -906,14 +890,14 @@ const OrderTaker = () => {
 								className='w-100'
 								min={0}
 								value={children}
-								onChange={(value) => setChildren(value)}
+								onChange={(val) => setChildren(val)}
 								disabled={!selectedHotel}
 							/>
 						</Form.Item>
 					</div>
 				</div>
 
-				{/* Advance Payment Options */}
+				{/* Advance Payment Option */}
 				<Form.Item label='Advance/ Deposit Payment Option' required>
 					<Radio.Group
 						onChange={(e) => setAdvancePaymentOption(e.target.value)}
@@ -931,19 +915,18 @@ const OrderTaker = () => {
 							min={1}
 							max={100}
 							value={advancePaymentPercentage}
-							onChange={(value) => setAdvancePaymentPercentage(value)}
+							onChange={(val) => setAdvancePaymentPercentage(val)}
 							style={{ width: "100%" }}
 						/>
 					</Form.Item>
 				)}
-
 				{advancePaymentOption === "sar" && (
 					<Form.Item label='Deposit Payment in SAR' required>
 						<InputNumber
 							min={1}
 							max={totalAmount}
 							value={advancePaymentSAR}
-							onChange={(value) => setAdvancePaymentSAR(value)}
+							onChange={(val) => setAdvancePaymentSAR(val)}
 							style={{ width: "100%" }}
 						/>
 					</Form.Item>
@@ -953,16 +936,16 @@ const OrderTaker = () => {
 				<Form.Item>
 					<Descriptions bordered column={1} size='small'>
 						<Descriptions.Item label='Total Amount (For the Hotel)'>
-							{Number(hotelCost).toFixed(2)} SAR
+							{hotelCost.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Commission'>
-							{Number(totalCommission).toFixed(2)} SAR
+							{totalCommission.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Cost of One Night (First Night)'>
-							{Number(oneNightCost).toFixed(2)} SAR
+							{oneNightCost.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Deposit (Based on Option Above)'>
-							{Number(finalDeposit).toFixed(2)} SAR
+							{finalDeposit.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Grand Total (Including Commission)'>
 							<span
@@ -972,7 +955,7 @@ const OrderTaker = () => {
 									color: "darkgreen",
 								}}
 							>
-								{Number(totalAmount).toFixed(2)} SAR
+								{totalAmount.toFixed(2)} SAR
 							</span>
 						</Descriptions.Item>
 						<Descriptions.Item label='Paid Amount'>
@@ -992,8 +975,7 @@ const OrderTaker = () => {
 			{selectedHotel &&
 				selectedHotel._id &&
 				reservationCreated &&
-				selectedReservation &&
-				selectedReservation._id && (
+				selectedReservation?._id && (
 					<Button
 						type='link'
 						className='my-4'
@@ -1006,7 +988,6 @@ const OrderTaker = () => {
 							padding: "0px",
 							background: "black",
 							width: "50%",
-							height: "10%",
 						}}
 					>
 						View Details
@@ -1022,11 +1003,11 @@ const OrderTaker = () => {
 				roomDetails={selectedRooms[editingRoomIndex]}
 			/>
 
+			{/* Reservation Details Modal */}
 			<Modal
 				open={isModalVisible2}
 				onCancel={handleModalClose}
-				className='float-right'
-				width={"84%"}
+				width='84%'
 				footer={[
 					<Button key='close' onClick={handleModalClose}>
 						Close
@@ -1036,8 +1017,7 @@ const OrderTaker = () => {
 				{selectedHotel &&
 					selectedHotel._id &&
 					reservationCreated &&
-					selectedReservation &&
-					selectedReservation._id && (
+					selectedReservation?._id && (
 						<MoreDetails
 							selectedReservation={selectedReservation}
 							hotelDetails={selectedHotel}

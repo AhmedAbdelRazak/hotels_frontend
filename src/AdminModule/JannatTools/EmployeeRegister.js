@@ -55,11 +55,7 @@ const EmployeeRegister = () => {
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.filter(
-					(hotel) => hotel.activateHotel === true
-				);
-
-				const sortedHotels = activeHotels.sort((a, b) =>
+				const sortedHotels = data.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
 				setAllHotels(sortedHotels);

@@ -12,7 +12,7 @@ import { toast } from "react-toastify";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
 
-/* 1) Import NotificationContext */
+// 1) Import NotificationContext
 import { NotificationContext } from "./NotificationContext";
 
 const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
@@ -77,7 +77,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 					b.conversation
 						.filter((msg) => msg.messageBy.userId !== user._id)
 						.slice(-1)[0]?.date || b.createdAt;
-				return new Date(latestB) - new Date(latestA); // Descending order
+				return new Date(latestB) - new Date(latestA); // Descending
 			});
 		},
 		[user._id]
@@ -92,15 +92,28 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 				} else {
 					let filteredCases = data;
 
-					// If not super admin, filter support cases based on allowed hotels
-					if (!isSuperAdmin && getUser.hotelsToSupport) {
-						const allowedHotelIds = getUser.hotelsToSupport.map(
-							(hotel) => hotel._id
-						);
-						filteredCases = data.filter((chat) =>
-							allowedHotelIds.includes(chat.hotelId)
-						);
+					// ------------------ THIS IS THE KEY PART ------------------ //
+					// Only filter if NOT super admin and user has hotelsToSupport
+					if (!isSuperAdmin) {
+						const userHotelsToSupport =
+							(getUser && getUser.hotelsToSupport) || [];
+						if (userHotelsToSupport.length > 0) {
+							const allowedHotelIds = userHotelsToSupport.map(
+								(hotel) => hotel._id
+							);
+
+							filteredCases = filteredCases.filter((chat) => {
+								// Sometimes chat.hotelId can be an object with _id
+								// or just a string with the hotel's ID
+								const chatHotelId =
+									typeof chat.hotelId === "object"
+										? chat.hotelId._id
+										: chat.hotelId;
+								return allowedHotelIds.includes(chatHotelId);
+							});
+						}
 					}
+					// ---------------------------------------------------------- //
 
 					// Filter out closed
 					const openCases = filteredCases.filter(
@@ -139,7 +152,6 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						navigator.vibrate(200);
 					}
 				}
-
 				setSupportCases((prevCases) =>
 					prevCases.map((c) =>
 						c._id === message.caseId
@@ -152,8 +164,8 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 
 		// On new chat
 		const handleNewChat = (newCase) => {
+			// If you want a beep for brand new cases, do it here
 			if (newCase.openedBy === "client") {
-				// If you want a beep for brand new cases, do it here
 				if (soundEnabled) {
 					playSound();
 					// Optionally vibrate
@@ -161,7 +173,6 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						navigator.vibrate(200);
 					}
 				}
-
 				setSupportCases((prevCases) => [...prevCases, newCase]);
 			}
 		};

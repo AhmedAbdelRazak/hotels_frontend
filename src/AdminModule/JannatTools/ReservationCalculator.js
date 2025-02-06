@@ -30,12 +30,15 @@ const ReservationCalculator = () => {
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
+				// Only keep hotels that are activateHotel === true
 				const activeHotels = data.filter(
 					(hotel) => hotel.activateHotel === true
 				);
+				// Sort them by hotelName
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
+
 				setAllHotels(sortedHotels);
 			} else {
 				message.error("Failed to fetch hotels.");
