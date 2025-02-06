@@ -99,6 +99,12 @@ body {
 	transition: 0.5s;
 }
 
+.apexcharts-canvas,
+.apexchartstop-5-hotels-chart,
+.apexcharts-theme-light {
+	text-transform: capitalize !important;
+}
+
 .sidePhoto:hover {
 	transition: 0.5s;
 	box-shadow:

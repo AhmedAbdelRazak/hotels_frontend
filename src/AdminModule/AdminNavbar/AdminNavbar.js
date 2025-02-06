@@ -91,7 +91,11 @@ const items = [
 		<AreaChartOutlined />
 	),
 
-	getItem(<Link to='#'>Hotel Branches</Link>, "sub7", <TeamOutlined />),
+	getItem(
+		<Link to='/admin/overall-hotel-reports'>Hotel Reports</Link>,
+		"sub7",
+		<TeamOutlined />
+	),
 
 	getItem(
 		<div className='margin-divider'></div>,
@@ -195,7 +199,7 @@ const AdminNavbar = ({
 						        ? "sub5"
 						        : fromPage === "Tools"
 						          ? "sub6"
-						          : fromPage === "AddOccasions"
+						          : fromPage === "AdminReports"
 						            ? "sub7"
 						            : fromPage === "AddProducts"
 						              ? "sub8"

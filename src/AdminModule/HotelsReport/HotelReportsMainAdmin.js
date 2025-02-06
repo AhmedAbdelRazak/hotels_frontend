@@ -7,24 +7,21 @@ import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
-import ReservationCalculator from "./ReservationCalculator";
-import OrderTaker from "./OrderTaker";
-import EmployeeRegister from "./EmployeeRegister";
-import UncompletedReservations from "./UncompletedReservations";
+import ReservationsOverview from "./ReservationsOverview";
 
-const JannatBookingToolsMain = ({ chosenLanguage }) => {
+const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
-	const [activeTab, setActiveTab] = useState("calculator");
+	const [activeTab, setActiveTab] = useState("reservations");
 	const [getUser, setGetUser] = useState("");
 	const { user, token } = isAuthenticated();
 	const location = useLocation();
 	const history = useHistory();
 
-	// Fetch user details
+	/* ------------------ 1) Fetch User Details ------------------ */
 	const gettingUserId = useCallback(() => {
 		readUserId(user._id, token).then((data) => {
 			if (data && data.error) {
@@ -35,53 +32,58 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		});
 	}, [user._id, token]);
 
-	// Validate user and handle access control
+	/* -----------------------------------------------------------
+     2) Validate user & handle access control upon user fetch
+        - If user is inactive => push to "/"
+        - If user has "HotelReports" => skip password
+        - If user has no or "all" => do nothing special (still require password)
+        - Otherwise, redirect to a fallback page
+  ----------------------------------------------------------- */
 	useEffect(() => {
 		if (getUser) {
-			// Check if activeUser is false
+			// 2a) If user is not active => redirect to homepage
 			if (!getUser.activeUser) {
 				history.push("/");
 				return;
 			}
+
 			const accessTo = getUser.accessTo || [];
 
-			// If user has access to "JannatTools", skip password verification
-			if (accessTo.includes("JannatTools")) {
+			// 2b) If user has "HotelReports" in their access => skip password
+			if (accessTo.includes("HotelReports")) {
 				setIsPasswordVerified(true);
 				setIsModalVisible(false);
 				return;
 			}
 
+			// 2c) If user has no restrictions or includes("all"), we do NOT skip password by default
+			//     (You can decide here if you want to skip or still require password.)
 			if (accessTo.length === 0 || accessTo.includes("all")) {
-				// If there's no restriction or "all" is included, do nothing special
+				// do nothing special => continue with password flow
 				return;
 			}
 
-			// Otherwise, redirect to first available module
+			// 2d) If user does NOT have "HotelReports", check for other access modules
+			//     and potentially redirect them. (Adjust as needed for your app.)
 			switch (accessTo[0]) {
-				case "CustomerService":
-					history.push("/admin/customer-service?tab=active-client-cases");
+				case "reservations":
+					history.push("/super-admin/hotel-reports?tab=reservations");
 					break;
-				case "HotelsReservations":
-					history.push("/admin/all-reservations");
-					break;
-				case "Integrator":
-					history.push("/admin/el-integrator");
-					break;
-				case "JannatBookingWebsite":
-					history.push("/admin/janat-website");
-					break;
-				case "AdminDashboard":
-					history.push("/admin/dashboard");
+				case "inventory":
+					history.push("/super-admin/hotel-reports?tab=inventory");
 					break;
 				default:
-					// If no match, stay here or redirect somewhere else
+					// Fallback (if no recognized modules)
+					history.push("/");
 					break;
 			}
 		}
 	}, [getUser, history]);
 
-	// Initial setup
+	/* -----------------------------------------------------------
+     3) Initial setup: fetch user, handle small-screen collapses,
+        check localStorage for "ReportsVerified"
+  ----------------------------------------------------------- */
 	useEffect(() => {
 		gettingUserId();
 
@@ -89,31 +91,39 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 			setCollapsed(true);
 		}
 
-		// If password was previously verified
-		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
-		if (toolsPasswordVerified) {
+		// Check if password was previously verified
+		const adminReportsPasswordVerified =
+			localStorage.getItem("ReportsVerified");
+		if (adminReportsPasswordVerified) {
 			setIsPasswordVerified(true);
 		} else {
 			setIsModalVisible(true);
 		}
 	}, [gettingUserId]);
 
+	/* -----------------------------------------------------------
+     4) Handle Password Verification
+  ----------------------------------------------------------- */
 	const handlePasswordVerification = () => {
-		if (password === process.env.REACT_APP_TOOLS) {
+		if (password === process.env.REACT_APP_REPORTS) {
 			setIsPasswordVerified(true);
 			message.success("Password verified successfully");
-			localStorage.setItem("ToolsVerified", "true");
+			localStorage.setItem("ReportsVerified", "true");
 			setIsModalVisible(false);
 		} else {
 			message.error("Incorrect password. Please try again.");
 		}
 	};
 
+	/* -----------------------------------------------------------
+     5) Handle Tab Changes (push query param to URL)
+  ----------------------------------------------------------- */
 	const handleTabChange = (tab) => {
 		setActiveTab(tab);
 		history.push(`?tab=${tab}`);
 	};
 
+	// On mount or location change, parse "tab" from URL
 	useEffect(() => {
 		const queryParams = new URLSearchParams(location.search);
 		const tab = queryParams.get("tab");
@@ -121,16 +131,16 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		if (tab) {
 			setActiveTab(tab);
 		} else {
-			history.replace("?tab=calculator");
+			history.replace("?tab=reservations");
 		}
 	}, [location.search, history]);
 
 	return (
-		<JannatBookingToolsMainWrapper
+		<HotelReportsMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
-			{/* Password Verification Modal */}
+			{/* --------------- Modal for Password --------------- */}
 			<Modal
 				title='Enter Password'
 				open={isModalVisible}
@@ -154,13 +164,13 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 				</Button>
 			</Modal>
 
-			{/* Render Content if Password is Verified */}
+			{/* --------------- Main Content --------------- */}
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
 						{chosenLanguage === "Arabic" ? (
 							<AdminNavbarArabic
-								fromPage='Tools'
+								fromPage='AdminReports'
 								AdminMenuStatus={AdminMenuStatus}
 								setAdminMenuStatus={setAdminMenuStatus}
 								collapsed={collapsed}
@@ -169,7 +179,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 							/>
 						) : (
 							<AdminNavbar
-								fromPage='Tools'
+								fromPage='AdminReports'
 								AdminMenuStatus={AdminMenuStatus}
 								setAdminMenuStatus={setAdminMenuStatus}
 								collapsed={collapsed}
@@ -181,90 +191,52 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							{/* Tab Navigation */}
+							{/* --------------- Tab Navigation --------------- */}
 							<TabNavigation>
-								<button
-									className={activeTab === "calculator" ? "active" : ""}
-									onClick={() => handleTabChange("calculator")}
-								>
-									Reservation Calculator
-								</button>
 								<button
 									className={activeTab === "reservations" ? "active" : ""}
 									onClick={() => handleTabChange("reservations")}
 								>
-									Reservations Tools
+									Reservations Overview
 								</button>
-
-								{(!getUser.accessTo ||
-									getUser.accessTo.length === 0 ||
-									getUser.accessTo.includes("all")) && (
-									<>
-										<button
-											className={activeTab === "uncompleted" ? "active" : ""}
-											onClick={() => handleTabChange("uncompleted")}
-										>
-											Uncompleted Reservations
-										</button>
-										<button
-											className={activeTab === "addEmployee" ? "active" : ""}
-											onClick={() => handleTabChange("addEmployee")}
-										>
-											Add Employee
-										</button>
-										<button
-											className={activeTab === "updateEmployee" ? "active" : ""}
-											onClick={() => handleTabChange("updateEmployee")}
-										>
-											Update Employee
-										</button>
-									</>
-								)}
+								<button
+									className={activeTab === "inventory" ? "active" : ""}
+									onClick={() => handleTabChange("inventory")}
+								>
+									Hotels' Inventory
+								</button>
 							</TabNavigation>
 
-							{/* Tab Content Rendering */}
-							{activeTab === "calculator" && (
-								<div>
-									<h3>Reservation Calculator</h3>
-									<ReservationCalculator />
-								</div>
-							)}
+							{/* --------------- Tab Content --------------- */}
 							{activeTab === "reservations" && (
 								<div>
-									<h3>Reservation Taker</h3>
-									<OrderTaker />
+									<h3>Reservations Overview</h3>
+									<ReservationsOverview />
 								</div>
 							)}
-							{activeTab === "addEmployee" && (
+
+							{activeTab === "inventory" && (
 								<div>
-									<h3>Register a New Employee</h3>
-									<EmployeeRegister />
-								</div>
-							)}
-							{activeTab === "updateEmployee" && (
-								<div>
-									<h3>Update an Employee</h3>
-									<p>Create a new component for employee update</p>
-								</div>
-							)}
-							{activeTab === "uncompleted" && (
-								<div>
-									<UncompletedReservations />
+									<h3>Hotels Inventory</h3>
+									<p>
+										{/* You could create a new component here for a specific hotel's reports */}
+										Work in progress...
+									</p>
 								</div>
 							)}
 						</div>
 					</div>
 				</div>
 			)}
-		</JannatBookingToolsMainWrapper>
+		</HotelReportsMainWrapper>
 	);
 };
 
-export default JannatBookingToolsMain;
+export default HotelReportsMainAdmin;
 
 /* ---------------------------------- STYLES ---------------------------------- */
 
-const JannatBookingToolsMainWrapper = styled.div`
+const HotelReportsMainWrapper = styled.div`
 	margin-top: 20px;
 	min-height: 715px;
 

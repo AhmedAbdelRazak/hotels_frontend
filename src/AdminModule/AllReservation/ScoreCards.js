@@ -81,18 +81,13 @@ function safeNumber(val) {
 function computeReservationCommission(reservation) {
 	if (!reservation || !reservation.pickedRoomsType) return 0;
 
-	// Check for "sahet al hegaz" override:
+	// Convert the hotel name to lower case for matching
 	const hotelName = reservation.hotelId?.hotelName?.toLowerCase() || "";
-	const payment = reservation.payment || "";
 	const totalAmount = safeNumber(reservation.total_amount);
 
-	if (
-		hotelName === "sahet al hegaz" &&
-		payment === "not paid" &&
-		totalAmount > 1000
-	) {
-		// If all conditions match => Return flat 200 SAR
-		return 200;
+	// If 'sahet al hegaz', override => 10% of total_amount
+	if (hotelName === "sahet al hegaz") {
+		return 0.1 * totalAmount;
 	}
 
 	// Otherwise, do the normal logic
@@ -122,7 +117,7 @@ function computeReservationCommission(reservation) {
 	return totalCommission;
 }
 
-const ScoreCards = ({ reservations, totalReservations }) => {
+const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 	// For convenience, let's ensure we have an array
 	const allReservations = Array.isArray(reservations) ? reservations : [];
 
@@ -377,7 +372,8 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 			</ScoreCardsWrapper>
 
 			{/* ====== ROW 2: COMMISSION STATS (Dark Cards, margin-top) ====== */}
-			<CommissionCardsWrapper>
+			{/* THE ONLY ENHANCEMENT: Pass a "center" prop based on fromPage */}
+			<CommissionCardsWrapper center={fromPage !== "reports"}>
 				{/* 1) Commission Today vs. Yesterday (nonCancelled) */}
 				<CommissionCard>
 					<CardTitle>Today's Commission (SAR)</CardTitle>
@@ -492,48 +488,52 @@ const ScoreCards = ({ reservations, totalReservations }) => {
 					</CardData>
 				</CommissionCard>
 
-				{/* 3) Top 3 Hotels by Commission (nonCancelled) */}
-				<CommissionCard>
-					<CardTitle>Top 3 Hotels (Commission)</CardTitle>
-					<CardData>
-						{topHotelsByCommission.map((hotel, index) => (
-							<p
-								key={index}
-								style={{
-									textTransform: "capitalize",
-									fontSize: "0.78rem",
-									margin: "4px 0",
-								}}
-							>
-								{index + 1}. {hotel.name} -{" "}
-								<CountUp
-									end={hotel.commission}
-									duration={2.9}
-									decimals={2}
-									separator=','
-									delay={2}
-								/>{" "}
-								SAR
-							</p>
-						))}
-					</CardData>
-				</CommissionCard>
+				{fromPage === "reports" ? (
+					<>
+						<CommissionCard className='mx-auto'>
+							<CardTitle>Top 3 Hotels (Commission)</CardTitle>
+							<CardData>
+								{topHotelsByCommission.map((hotel, index) => (
+									<p
+										key={index}
+										style={{
+											textTransform: "capitalize",
+											fontSize: "0.78rem",
+											margin: "4px 0",
+										}}
+									>
+										{index + 1}. {hotel.name} -{" "}
+										<CountUp
+											end={hotel.commission}
+											duration={2.9}
+											decimals={2}
+											separator=','
+											delay={2}
+										/>{" "}
+										SAR
+									</p>
+								))}
+							</CardData>
+						</CommissionCard>
 
-				{/* 4) Overall Commission (nonCancelled) */}
-				<CommissionCard>
-					<CardTitle>Overall Commission (SAR)</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={overallCommission}
-								duration={3}
-								decimals={2}
-								separator=','
-								delay={2.3}
-							/>
-						</span>
-					</CardData>
-				</CommissionCard>
+						{/* 4) Overall Commission (nonCancelled) */}
+						<CommissionCard className='mx-auto'>
+							<CardTitle>Overall Commission (SAR)</CardTitle>
+							<CardData>
+								<span>
+									<CountUp
+										end={overallCommission}
+										duration={3}
+										decimals={2}
+										separator=','
+										delay={2.3}
+									/>
+								</span>
+							</CardData>
+						</CommissionCard>
+					</>
+				) : null}
+				{/* 3) Top 3 Hotels by Commission (nonCancelled) */}
 			</CommissionCardsWrapper>
 		</>
 	);
@@ -555,8 +555,14 @@ const ScoreCardsWrapper = styled.div`
 	}
 `;
 
+/* 
+  ENHANCED: Accept a "center" prop. 
+  If "center" is true (when fromPage !== "reports"), 
+  it will center the 2 commission cards. Otherwise space-between.
+*/
 const CommissionCardsWrapper = styled(ScoreCardsWrapper)`
 	margin-top: 30px; /* spacing for second row */
+	justify-content: ${({ center }) => (center ? "center" : "space-between")};
 `;
 
 const Card = styled.div`

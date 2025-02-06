@@ -760,3 +760,240 @@ export const updateSingleReservation = (reservationId, reservation) => {
 		})
 		.catch((err) => console.log(err));
 };
+
+// Start of reports for the admin
+// 1) Reservations By Day
+export const getReservationsByDay = (userId, token, selectedHotels = []) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByDay data:", err)
+		);
+};
+
+// 2) Checkins By Day
+export const getCheckinsByDay = (userId, token, selectedHotels = []) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/checkins-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching checkinsByDay data:", err));
+};
+
+// 3) Checkouts By Day
+export const getCheckoutsByDay = (userId, token, selectedHotels = []) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/checkouts-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching checkoutsByDay data:", err));
+};
+
+// 4) Reservations By Day By Hotel (optional if you use it)
+export const getReservationsByDayByHotelName = (
+	userId,
+	token,
+	selectedHotels = []
+) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-day-by-hotel/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByDayByHotelName data:", err)
+		);
+};
+
+// 5) Reservations By Booking Status
+export const getReservationsByBookingStatus = (
+	userId,
+	token,
+	selectedHotels = []
+) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-booking-status/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByBookingStatus data:", err)
+		);
+};
+
+// 6) Reservations By Hotel Names
+export const getReservationsByHotelNames = (
+	userId,
+	token,
+	selectedHotels = []
+) => {
+	const query = buildHotelsQuery(selectedHotels);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservations-by-hotel-names/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByHotelNames data:", err)
+		);
+};
+
+// 7) Top Hotels By Reservations
+export const getTopHotelsByReservations = (
+	userId,
+	token,
+	limit = 5,
+	selectedHotels = []
+) => {
+	const query = buildHotelsQuery(selectedHotels, limit);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/top-hotels-by-reservations/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching topHotelsByReservations data:", err)
+		);
+};
+
+function buildQueryString(params) {
+	return Object.entries(params)
+		.map(
+			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
+		)
+		.join("&");
+}
+
+/**
+ * Build the query string for selectedHotels.
+ * If hotels = ["all"], we do NOT filter by hotels.
+ * If hotels are multiple, we pass them joined by comma.
+ */
+function buildHotelsQuery(selectedHotels, limit) {
+	let queryArray = [];
+	if (selectedHotels && !selectedHotels.includes("all")) {
+		queryArray.push(`hotels=${encodeURIComponent(selectedHotels.join(","))}`);
+	}
+	if (limit) {
+		queryArray.push(`limit=${encodeURIComponent(limit)}`);
+	}
+	return queryArray.length ? "?" + queryArray.join("&") : "";
+}
+
+// For detailed reservations
+export const getSpecificListOfReservations = (
+	userId,
+	token,
+	queryParamsObj
+) => {
+	const queryString = buildQueryString(queryParamsObj);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/specific-list/${userId}?${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching specific list of reservations:", err)
+		);
+};
+
+// End of reports for the admin

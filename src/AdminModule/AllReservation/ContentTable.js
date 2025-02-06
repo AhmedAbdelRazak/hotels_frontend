@@ -11,6 +11,7 @@ const EnhancedContentTable = ({
 	setCurrentPage,
 	pageSize,
 	setPageSize,
+	fromPage,
 }) => {
 	/* ------------------ Data & Memoization ------------------ */
 	const reservations = useMemo(
@@ -253,6 +254,7 @@ const EnhancedContentTable = ({
 			<ScoreCards
 				reservations={filteredBySearch}
 				totalReservations={filteredBySearch.length}
+				fromPage={fromPage}
 			/>
 
 			{/* Filter Buttons */}
