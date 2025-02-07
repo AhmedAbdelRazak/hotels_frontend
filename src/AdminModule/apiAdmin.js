@@ -1060,4 +1060,3 @@ export const getSpecificListOfReservations = (
 			console.error("Error fetching specific list of reservations:", err)
 		);
 };
-// End of reports for the admin
