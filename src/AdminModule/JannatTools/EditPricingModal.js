@@ -2,96 +2,121 @@ import React, { useState, useEffect } from "react";
 import { Modal, Table, Button, InputNumber, message } from "antd";
 
 /**
- * A safe parse float function.
- * If val is not parseable, returns fallback.
+ * Safely parse float; if invalid, return fallback.
  */
 const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
 	return isNaN(parsed) ? fallback : parsed;
 };
 
+/**
+ * Convert the "commissionRate" stored in each day (which might be 10 or 0.1)
+ * into a decimal fraction (e.g. 0.1). If it's <= 1, assume it's already decimal. If > 1, divide by 100.
+ */
+const toDecimalCommission = (commissionRateValue) => {
+	const raw = safeParseFloat(commissionRateValue, 10);
+	return raw > 1 ? raw / 100 : raw;
+};
+
 const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	const [editableData, setEditableData] = useState([]);
 	const [distributeTotalValue, setDistributeTotalValue] = useState("");
 
-	// Initialize the editable data with the current `pricingByDay`
+	// Initialize from incoming pricingByDay whenever modal becomes visible
 	useEffect(() => {
 		if (visible) {
-			setEditableData(
-				(pricingByDay || []).map((row) => {
-					const price = safeParseFloat(row.price, 0);
-					const rootPrice = safeParseFloat(row.rootPrice, 0);
-					const commissionRate = safeParseFloat(row.commissionRate, 10); // default 10% if missing
-					const totalWithComm =
-						row.totalPriceWithCommission ||
-						price + rootPrice * (commissionRate / 100);
+			const initialData = (pricingByDay || []).map((row) => {
+				const price = safeParseFloat(row.price, 0);
+				const rootPrice = safeParseFloat(row.rootPrice, 0);
+				// Commission rate can be 10 => means 10%, or 0.1 => also means 10%
+				const commissionRate = safeParseFloat(row.commissionRate, 10);
+				const commRateDecimal = toDecimalCommission(commissionRate);
 
-					return {
-						...row,
-						price,
-						rootPrice,
-						commissionRate,
-						totalPriceWithCommission: totalWithComm,
-					};
-				})
-			);
-			setDistributeTotalValue(""); // Reset the distribute field each time we open
+				// totalPriceWithCommission fallback if missing
+				const totalWithComm =
+					row.totalPriceWithCommission || price + rootPrice * commRateDecimal;
+
+				return {
+					...row,
+					price,
+					rootPrice,
+					commissionRate, // We store the "raw" (10 or 0.1)
+					totalPriceWithCommission: totalWithComm,
+				};
+			});
+
+			setEditableData(initialData);
+			setDistributeTotalValue("");
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [visible]);
+	}, [visible, pricingByDay]);
 
-	// Handle individual input changes in the table
-	const handleInputChange = (value, index, field) => {
-		const updatedData = [...editableData];
-		updatedData[index][field] = value;
+	/**
+	 * Called whenever user manually edits a row's price/rootPrice/commissionRate
+	 */
+	const handleInputChange = (val, rowIndex, field) => {
+		const newData = [...editableData];
+		newData[rowIndex][field] = val;
 
-		// Recalculate totalPriceWithCommission if user edits price/rootPrice/commissionRate
 		if (
 			["price", "rootPrice", "commissionRate"].includes(field) &&
-			updatedData[index].price != null &&
-			updatedData[index].rootPrice != null &&
-			updatedData[index].commissionRate != null
+			newData[rowIndex].price != null &&
+			newData[rowIndex].rootPrice != null &&
+			newData[rowIndex].commissionRate != null
 		) {
-			const { price, rootPrice, commissionRate } = updatedData[index];
-			updatedData[index].totalPriceWithCommission =
-				Number(price) + Number(rootPrice) * (Number(commissionRate) / 100);
+			const commDecimal = toDecimalCommission(newData[rowIndex].commissionRate);
+			const p = safeParseFloat(newData[rowIndex].price, 0);
+			const r = safeParseFloat(newData[rowIndex].rootPrice, 0);
+			// Recompute daily total
+			newData[rowIndex].totalPriceWithCommission = p + r * commDecimal;
 		}
 
-		setEditableData(updatedData);
-		// If you want immediate reflection in parent, you can call onUpdate here:
-		onUpdate(updatedData);
+		setEditableData(newData);
+		onUpdate(newData); // If immediate updates are desired in the parent
 	};
 
-	// Handle inheritance of first row's values
+	/**
+	 * Copies the first row's [price, rootPrice, commissionRate] into every row
+	 */
 	const handleInherit = () => {
-		if (editableData.length === 0) return;
+		if (!editableData.length) return;
 
-		const firstRow = editableData[0];
+		const first = editableData[0];
 		if (
-			firstRow.price == null ||
-			firstRow.rootPrice == null ||
-			firstRow.commissionRate == null
+			first.price == null ||
+			first.rootPrice == null ||
+			first.commissionRate == null
 		) {
 			message.error("First row must have valid values to inherit.");
 			return;
 		}
 
-		const { price, rootPrice, commissionRate } = firstRow;
-		const newData = editableData.map((row) => ({
-			...row,
-			price,
-			rootPrice,
-			commissionRate,
-			totalPriceWithCommission:
-				Number(price) + Number(rootPrice) * (Number(commissionRate) / 100),
-		}));
+		const commDecimal = toDecimalCommission(first.commissionRate);
+		const newData = editableData.map((row, idx) => {
+			const price = safeParseFloat(first.price, 0);
+			const rootPrice = safeParseFloat(first.rootPrice, 0);
+			const totalWithComm = price + rootPrice * commDecimal;
+			return {
+				...row,
+				price,
+				rootPrice,
+				commissionRate: first.commissionRate, // keep raw
+				totalPriceWithCommission: totalWithComm,
+			};
+		});
 
 		setEditableData(newData);
-		message.success("Values inherited successfully.");
 		onUpdate(newData);
+		message.success("Values inherited successfully.");
 	};
 
-	// Distribute a total across all days
+	/**
+	 * Distribute `distributeTotalValue` across all days so that:
+	 *   - dayTotal = dayShare
+	 *   - rootPrice = price
+	 *   - dayShare = price + rootPrice * commDecimal = price + price * commDecimal = price * (1 + commDecimal)
+	 *   => price = dayShare / (1 + commDecimal)
+	 *   => rootPrice = price
+	 */
 	const handleDistributeTotal = () => {
 		const total = safeParseFloat(distributeTotalValue, 0);
 		if (total <= 0) {
@@ -103,70 +128,83 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			return;
 		}
 
-		const numberOfDays = editableData.length;
-		const dailyShare = total / numberOfDays;
+		const dayCount = editableData.length;
+		const totalCents = Math.round(total * 100);
 
-		// For each day:
-		//   totalPriceWithCommission = dailyShare
-		//   dailyShare = price + (rootPrice * commissionRate/100)
-		// We pick a ratio so that rootPrice < price. For example:
-		//   rootPrice = dailyShare * 0.3
-		//   price = dailyShare - (rootPrice * commissionRate)
-		// Adjust this formula to your business logic as needed
-		const newData = editableData.map((day) => {
-			const usedCommissionRate = safeParseFloat(day.commissionRate, 10) / 100; // default 10%
-			const newTotal = dailyShare;
-			const newRoot = newTotal * 0.85; // e.g. 30% of dailyShare
-			// price = dailyShare - (rootPrice * commRate)
-			const newPrice = newTotal - newRoot * usedCommissionRate;
+		let sumSoFar = 0;
+		const newData = [...editableData];
 
-			return {
-				...day,
-				rootPrice: parseFloat(newRoot.toFixed(2)),
-				price: parseFloat(newPrice.toFixed(2)),
-				totalPriceWithCommission: parseFloat(newTotal.toFixed(2)),
+		for (let i = 0; i < dayCount; i++) {
+			// This daily chunk in cents. The last day picks up leftover so total is exact.
+			let dayCents =
+				i < dayCount - 1
+					? Math.round(totalCents / dayCount) // approximate share for first (N-1) days
+					: totalCents - sumSoFar; // leftover for the final day
+
+			if (dayCents < 0) dayCents = 0;
+			sumSoFar += dayCents;
+
+			const dayShare = dayCents / 100;
+			// Commission rate => decimal
+			const commDecimal = toDecimalCommission(newData[i].commissionRate);
+
+			// price = dayShare / (1 + commDecimal)
+			const rawPrice = dayShare / (1 + commDecimal);
+			// rootPrice = price
+			const rawRoot = rawPrice;
+
+			// Round to 2 decimals
+			const finalPrice = parseFloat(rawPrice.toFixed(2));
+			const finalRoot = parseFloat(rawRoot.toFixed(2));
+
+			// totalPriceWithCommission = dayShare
+			newData[i] = {
+				...newData[i],
+				price: finalPrice,
+				rootPrice: finalRoot,
+				totalPriceWithCommission: parseFloat(dayShare.toFixed(2)),
 			};
-		});
+		}
 
 		setEditableData(newData);
 		onUpdate(newData);
-		message.success("Distributed total across all days!");
+		message.success("Distributed total across days with no leftover!");
 	};
 
-	// Handle save
+	/**
+	 * Validate and pass final data to parent
+	 */
 	const handleSave = () => {
-		// Validate that all rows have valid data
 		const invalidRow = editableData.find(
 			(row) =>
 				row.price == null || row.rootPrice == null || row.commissionRate == null
 		);
-
 		if (invalidRow) {
 			message.error("Please fill in all fields before saving.");
 			return;
 		}
 
-		console.log("Saving updated pricing data:", editableData);
-		onUpdate(editableData); // Pass the updated data back to the parent
+		onUpdate(editableData);
 		onClose();
 	};
 
-	// Columns for the table
+	// The columns
 	const columns = [
 		{
 			title: "Date",
 			dataIndex: "date",
 			key: "date",
-			render: (value) => <b>{value}</b>,
+			render: (val) => <b>{val}</b>,
 		},
 		{
 			title: "Root Price",
 			dataIndex: "rootPrice",
 			key: "rootPrice",
-			render: (value, _, index) => (
+			render: (value, record, index) => (
 				<InputNumber
 					value={value}
 					min={0}
+					step={0.01}
 					onChange={(val) => handleInputChange(val, index, "rootPrice")}
 				/>
 			),
@@ -175,10 +213,11 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			title: "Price per Day (No Comm.)",
 			dataIndex: "price",
 			key: "price",
-			render: (value, _, index) => (
+			render: (value, record, index) => (
 				<InputNumber
 					value={value}
 					min={0}
+					step={0.01}
 					onChange={(val) => handleInputChange(val, index, "price")}
 				/>
 			),
@@ -187,11 +226,12 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			title: "Commission Rate (%)",
 			dataIndex: "commissionRate",
 			key: "commissionRate",
-			render: (value, _, index) => (
+			render: (value, record, index) => (
 				<InputNumber
 					value={value}
 					min={0}
 					max={100}
+					step={0.1}
 					onChange={(val) => handleInputChange(val, index, "commissionRate")}
 				/>
 			),
@@ -200,7 +240,7 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			title: "Total Price (With Commission)",
 			dataIndex: "totalPriceWithCommission",
 			key: "totalPriceWithCommission",
-			render: (value) => <span>{Number(value || 0).toFixed(2)}</span>,
+			render: (val) => <span>{Number(val || 0).toFixed(2)}</span>,
 		},
 	];
 
@@ -240,7 +280,6 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 				columns={columns}
 				pagination={false}
 				rowKey='date'
-				// ----- ADD A SUMMARY ROW -----
 				summary={(pageData) => {
 					const totalWithCommission = pageData.reduce(
 						(acc, item) => acc + (item.totalPriceWithCommission || 0),
@@ -248,7 +287,6 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 					);
 					return (
 						<Table.Summary.Row>
-							{/* Combine the first 4 columns into one cell */}
 							<Table.Summary.Cell colSpan={4} align='right'>
 								<b>Total (With Commission) for All Days:</b>
 							</Table.Summary.Cell>

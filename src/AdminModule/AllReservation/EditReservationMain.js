@@ -27,6 +27,16 @@ import MoreDetails from "../AllReservation/MoreDetails";
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
+/** --------------------- Safe Parse Float --------------------- */
+const safeParseFloat = (val, fallback = 0) => {
+	const parsed = parseFloat(val);
+	return isNaN(parsed) ? fallback : parsed;
+};
+
+// Load the “manual paid amount” password from env (or set a fallback)
+const PASSWORD_FOR_PAID_AMOUNT =
+	process.env.REACT_APP_MANUAL_PAID_AMOUNT || "secret123";
+
 const EditReservationMain = ({
 	reservation,
 	setReservation,
@@ -77,6 +87,7 @@ const EditReservationMain = ({
 
 	const { user, token } = isAuthenticated();
 
+	// Keep track of previous values
 	const prevValues = useRef({
 		checkInDate: null,
 		checkOutDate: null,
@@ -86,18 +97,23 @@ const EditReservationMain = ({
 	// ----------------------
 	// ADDED FOR paid_amount EDIT
 	// ----------------------
-	// Keep track of the modal to edit paid_amount
+	// 1) "Verify Password" modal
+	const [verifyPasswordModalVisible, setVerifyPasswordModalVisible] =
+		useState(false);
+	const [verifyPasswordInput, setVerifyPasswordInput] = useState("");
+
+	// 2) "Update Paid Amount" modal
 	const [paidAmountModalVisible, setPaidAmountModalVisible] = useState(false);
 	const [tempPaidAmount, setTempPaidAmount] = useState(
 		reservation?.payment_details?.onsite_paid_amount || 0
 	);
 
-	// This ensures that if `reservation` changes, we reset the tempPaidAmount
+	// If `reservation` changes, reset the tempPaidAmount
 	useEffect(() => {
 		setTempPaidAmount(reservation?.payment_details?.onsite_paid_amount || 0);
 	}, [reservation]);
 
-	// Partial update for paid_amount
+	// Step to handle actual saving of onsite_paid_amount
 	const handlePaidAmountUpdate = async () => {
 		try {
 			setIsLoading(true);
@@ -134,6 +150,31 @@ const EditReservationMain = ({
 			message.error("An error occurred while updating the paid amount.");
 		} finally {
 			setIsLoading(false);
+		}
+	};
+
+	/**
+	 * Called when user clicks the Edit icon next to Paid Amount.
+	 * First, we show a "verify password" modal that doesn't allow close
+	 * except success or user chooses to cancel. If success => open actual paid-amount modal.
+	 */
+	const handleOpenPaidAmountEdit = () => {
+		setVerifyPasswordModalVisible(true);
+		setVerifyPasswordInput("");
+	};
+
+	/**
+	 * Check the password. If correct => close the verification modal, open the paidAmount modal.
+	 * If incorrect => show error, keep the modal open.
+	 */
+	const handleVerifyPasswordSubmit = () => {
+		if (verifyPasswordInput.trim() === PASSWORD_FOR_PAID_AMOUNT) {
+			// success
+			setVerifyPasswordModalVisible(false);
+			setPaidAmountModalVisible(true);
+		} else {
+			// fail
+			message.error("Incorrect password. Please try again.");
 		}
 	};
 	// ----------------------
@@ -220,13 +261,7 @@ const EditReservationMain = ({
 		}
 	}, [reservation, allHotels]);
 
-	// Safe parse float
-	const safeParseFloat = (value, fallback = 0) => {
-		const parsed = parseFloat(value);
-		return isNaN(parsed) ? fallback : parsed;
-	};
-
-	// Calculate Pricing by Day
+	// =============== HELPER: calculatePricingByDay + Commission ================
 	const calculatePricingByDay = useCallback(
 		(
 			pricingRate = [],
@@ -238,32 +273,31 @@ const EditReservationMain = ({
 		) => {
 			const start = dayjs(startDate).startOf("day");
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
-
 			const dateArray = [];
-			let currentDate = start;
 
+			let currentDate = start;
 			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
 				const formattedDate = currentDate.format("YYYY-MM-DD");
-				const rateForDate = pricingRate.find(
+				const matchedRate = pricingRate.find(
 					(r) => r.calendarDate === formattedDate
 				);
-				const price = rateForDate
-					? safeParseFloat(rateForDate.price, basePrice)
+
+				const dailyPrice = matchedRate
+					? safeParseFloat(matchedRate.price, basePrice)
 					: basePrice;
-				const rootPrice = rateForDate
-					? safeParseFloat(rateForDate.rootPrice, defaultCost)
+				const dailyRoot = matchedRate
+					? safeParseFloat(matchedRate.rootPrice, defaultCost)
 					: defaultCost;
-				const rateCommission = rateForDate
-					? safeParseFloat(rateForDate.commissionRate, commissionRate)
+				const dailyComm = matchedRate
+					? safeParseFloat(matchedRate.commissionRate, commissionRate)
 					: commissionRate;
 
 				dateArray.push({
 					date: formattedDate,
-					price,
-					rootPrice,
-					commissionRate: rateCommission,
+					price: dailyPrice,
+					rootPrice: dailyRoot,
+					commissionRate: dailyComm,
 				});
-
 				currentDate = currentDate.add(1, "day");
 			}
 			return dateArray;
@@ -271,7 +305,6 @@ const EditReservationMain = ({
 		[]
 	);
 
-	// Calculate Pricing by Day + Commission
 	const calculatePricingByDayWithCommission = useCallback(
 		(
 			pricingRate,
@@ -281,7 +314,7 @@ const EditReservationMain = ({
 			defaultCost,
 			commissionRate
 		) => {
-			const pricingByDay = calculatePricingByDay(
+			const noCommissionArray = calculatePricingByDay(
 				pricingRate,
 				startDate,
 				endDate,
@@ -289,125 +322,133 @@ const EditReservationMain = ({
 				defaultCost,
 				commissionRate
 			);
-			return pricingByDay.map((day) => ({
+			return noCommissionArray.map((day) => ({
 				...day,
 				totalPriceWithCommission:
-					Number(day.price) +
-					Number(day.rootPrice) * (Number(day.commissionRate) / 100),
-				totalPriceWithoutCommission: Number(day.price),
+					safeParseFloat(day.price) +
+					safeParseFloat(day.rootPrice) *
+						(safeParseFloat(day.commissionRate) / 100),
+				totalPriceWithoutCommission: safeParseFloat(day.price),
 			}));
 		},
 		[calculatePricingByDay]
 	);
+	// ===========================================================================
 
-	// Calculate Totals
+	/**
+	 * 4) Recalculate all relevant totals (Hotel cost, Commission, etc.)
+	 *    - Summation logic exactly like the updated OrderTaker
+	 */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms) => {
-			if (!checkInDate || !checkOutDate || rooms.length === 0 || !selectedHotel)
-				return;
+			if (!selectedHotel || !checkInDate || !checkOutDate) return;
+			if (!rooms || rooms.length === 0) return;
 
 			const startDate = dayjs(checkInDate).startOf("day");
 			const endDate = dayjs(checkOutDate).startOf("day");
-			let nightsDiff = endDate.diff(startDate, "day");
-			if (nightsDiff < 1) nightsDiff = 1; // minimum 1 night
+			let nights = endDate.diff(startDate, "day");
+			if (nights < 1) nights = 1; // min 1 night
 
 			let sumHotelCost = 0;
 			let sumGrandTotal = 0;
 			let sumCommission = 0;
-			let sumOneNight = 0;
+			let sumOneNightCost = 0;
 
 			const updatedRooms = rooms.map((room) => {
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const roomTotalAmount = room.pricingByDay.reduce(
-						(acc, day) => acc + day.rootPrice * room.count,
-						0
-					);
-					const roomTotalPriceWithCommission = room.pricingByDay.reduce(
-						(acc, day) => acc + day.totalPriceWithCommission * room.count,
-						0
-					);
-					const roomTotalCommission = room.pricingByDay.reduce(
-						(acc, day) =>
-							acc +
-							(day.rootPrice * (day.commissionRate / 100) +
-								(day.totalPriceWithoutCommission - day.rootPrice)) *
-								room.count,
-						0
-					);
+				if (!room.roomType || !room.displayName) return room;
 
-					sumHotelCost += roomTotalAmount;
-					sumGrandTotal += roomTotalPriceWithCommission;
-					sumCommission += roomTotalCommission;
+				if (room.pricingByDay && room.pricingByDay.length) {
+					// Already have day-by-day; sum them directly
+					const roomTotalRoot = room.pricingByDay.reduce(
+						(acc, day) => acc + safeParseFloat(day.rootPrice),
+						0
+					);
+					const roomTotalWithComm = room.pricingByDay.reduce(
+						(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
+						0
+					);
+					// Commission for each day = totalPriceWithCommission - rootPrice
+					const roomTotalCommission = room.pricingByDay.reduce((acc, day) => {
+						return (
+							acc +
+							(safeParseFloat(day.totalPriceWithCommission) -
+								safeParseFloat(day.rootPrice))
+						);
+					}, 0);
+
+					sumHotelCost += roomTotalRoot * room.count;
+					sumGrandTotal += roomTotalWithComm * room.count;
+					sumCommission += roomTotalCommission * room.count;
+
+					// For the first day’s root price only:
+					if (room.pricingByDay[0]) {
+						sumOneNightCost +=
+							safeParseFloat(room.pricingByDay[0].rootPrice) * room.count;
+					}
 					return room;
 				} else {
-					// Recompute if no day-by-day found
+					// We need to recalc from the DB's base pricing
 					const matchedRoom = selectedHotel.roomCountDetails?.find(
 						(r) =>
 							r.roomType.trim() === room.roomType.trim() &&
 							r.displayName.trim() === room.displayName.trim()
 					);
-					if (matchedRoom) {
-						const recalculatedPricingByDay =
-							calculatePricingByDayWithCommission(
-								matchedRoom.pricingRate || [],
-								startDate,
-								endDate,
-								parseFloat(matchedRoom.price?.basePrice) || 0,
-								parseFloat(matchedRoom.defaultCost) || 0,
-								parseFloat(
-									matchedRoom.roomCommission || selectedHotel.commission || 0.1
-								)
-							);
-
-						const roomTotalAmount = recalculatedPricingByDay.reduce(
-							(acc, day) => acc + day.rootPrice * room.count,
-							0
-						);
-						const roomTotalPriceWithCommission =
-							recalculatedPricingByDay.reduce(
-								(acc, day) => acc + day.totalPriceWithCommission * room.count,
-								0
-							);
-						const roomTotalCommission = recalculatedPricingByDay.reduce(
-							(acc, day) =>
-								acc +
-								(day.rootPrice * (day.commissionRate / 100) +
-									(day.totalPriceWithoutCommission - day.rootPrice)) *
-									room.count,
-							0
-						);
-
-						sumHotelCost += roomTotalAmount;
-						sumGrandTotal += roomTotalPriceWithCommission;
-						sumCommission += roomTotalCommission;
-
-						return { ...room, pricingByDay: recalculatedPricingByDay };
-					} else {
+					if (!matchedRoom) {
 						console.warn("No matching room found for", room);
 						return room;
 					}
-				}
-			});
 
-			updatedRooms.forEach((room) => {
-				if (room.pricingByDay.length > 0) {
-					const firstDayRoot = safeParseFloat(
-						room.pricingByDay[0].rootPrice,
+					const recalculated = calculatePricingByDayWithCommission(
+						matchedRoom.pricingRate || [],
+						startDate,
+						endDate,
+						safeParseFloat(matchedRoom.price?.basePrice, 0),
+						safeParseFloat(matchedRoom.defaultCost, 0),
+						safeParseFloat(
+							matchedRoom.roomCommission ?? selectedHotel.commission ?? 0.1
+						)
+					);
+
+					const roomTotalRoot = recalculated.reduce(
+						(acc, d) => acc + safeParseFloat(d.rootPrice),
 						0
 					);
-					sumOneNight += firstDayRoot * room.count;
+					const roomTotalWithComm = recalculated.reduce(
+						(acc, d) => acc + safeParseFloat(d.totalPriceWithCommission),
+						0
+					);
+					const roomTotalCommission = recalculated.reduce(
+						(acc, d) =>
+							acc +
+							(safeParseFloat(d.totalPriceWithCommission) -
+								safeParseFloat(d.rootPrice)),
+						0
+					);
+
+					sumHotelCost += roomTotalRoot * room.count;
+					sumGrandTotal += roomTotalWithComm * room.count;
+					sumCommission += roomTotalCommission * room.count;
+
+					// For the first day’s root price:
+					if (recalculated[0]) {
+						sumOneNightCost +=
+							safeParseFloat(recalculated[0].rootPrice) * room.count;
+					}
+					return { ...room, pricingByDay: recalculated };
 				}
 			});
 
+			// Now set the final states
+			setSelectedRooms(updatedRooms);
 			setHotelCost(Number(sumHotelCost.toFixed(2)));
 			setTotalAmount(Number(sumGrandTotal.toFixed(2)));
 			setTotalCommission(Number(sumCommission.toFixed(2)));
-			setOneNightCost(Number(sumOneNight.toFixed(2)));
-			setNumberOfNights(nightsDiff);
+			setOneNightCost(Number(sumOneNightCost.toFixed(2)));
+			setNumberOfNights(nights);
 
-			const deposit = sumCommission + sumOneNight;
+			// Default deposit = Commission + OneNight
+			const deposit = sumCommission + sumOneNightCost;
 			setDefaultDeposit(Number(deposit.toFixed(2)));
-			setSelectedRooms(updatedRooms);
 		},
 		[
 			checkInDate,
@@ -418,32 +459,32 @@ const EditReservationMain = ({
 		]
 	);
 
-	// Recalculate totals when relevant changes occur
+	// 5) Re-run `calculateTotals` if checkInDate, checkOutDate, or selectedRooms change
 	useEffect(() => {
 		const prev = prevValues.current;
-		const hasDateChanged =
+		const dateChanged =
 			!dayjs(prev.checkInDate).isSame(checkInDate) ||
 			!dayjs(prev.checkOutDate).isSame(checkOutDate);
-		const hasRoomsChanged =
+		const roomsChanged =
 			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms);
 
-		if (hasDateChanged || hasRoomsChanged) {
+		if (dateChanged || roomsChanged) {
 			calculateTotals(selectedRooms);
 			prevValues.current = { checkInDate, checkOutDate, selectedRooms };
 		}
 	}, [checkInDate, checkOutDate, selectedRooms, calculateTotals]);
 
-	// Update finalDeposit whenever user changes radio or numeric inputs
+	// 6) Advance Payment Option changes => recalc finalDeposit
 	useEffect(() => {
 		if (advancePaymentOption === "commission_plus_one_day") {
 			setFinalDeposit(defaultDeposit);
 		} else if (advancePaymentOption === "percentage") {
-			const p = parseFloat(advancePaymentPercentage) || 0;
+			const p = safeParseFloat(advancePaymentPercentage, 0);
 			let depositCalc = totalAmount * (p / 100);
 			if (depositCalc < 0) depositCalc = 0;
 			setFinalDeposit(depositCalc);
 		} else if (advancePaymentOption === "sar") {
-			const amt = parseFloat(advancePaymentSAR) || 0;
+			const amt = safeParseFloat(advancePaymentSAR, 0);
 			setFinalDeposit(amt < 0 ? 0 : amt);
 		}
 	}, [
@@ -468,9 +509,9 @@ const EditReservationMain = ({
 		setTimeout(() => calculateTotals(updated), 0);
 	};
 
-	const handleRoomCountChange = (count, index) => {
+	const handleRoomCountChange = (cnt, index) => {
 		const updated = [...selectedRooms];
-		updated[index] = { ...updated[index], count };
+		updated[index] = { ...updated[index], count: cnt };
 		setSelectedRooms(updated);
 		setTimeout(() => calculateTotals(updated), 0);
 	};
@@ -569,6 +610,7 @@ const EditReservationMain = ({
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
+
 		if (advancePaymentOption === "percentage") {
 			const p = parseFloat(advancePaymentPercentage);
 			if (isNaN(p) || p < 1 || p > 100) {
@@ -592,10 +634,12 @@ const EditReservationMain = ({
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
 						price: day.totalPriceWithCommission,
-						rootPrice: Number(day.rootPrice) || 0,
-						commissionRate: Number(day.commissionRate) || 0,
-						totalPriceWithCommission: day.totalPriceWithCommission,
-						totalPriceWithoutCommission: Number(day.price) || 0,
+						rootPrice: safeParseFloat(day.rootPrice),
+						commissionRate: safeParseFloat(day.commissionRate),
+						totalPriceWithCommission: safeParseFloat(
+							day.totalPriceWithCommission
+						),
+						totalPriceWithoutCommission: safeParseFloat(day.price),
 					}));
 					const averagePriceWithCommission =
 						pricingDetails.reduce(
@@ -606,7 +650,7 @@ const EditReservationMain = ({
 					return {
 						room_type: room.roomType.trim(),
 						displayName: room.displayName.trim(),
-						chosenPrice: Number(averagePriceWithCommission).toFixed(2),
+						chosenPrice: averagePriceWithCommission.toFixed(2),
 						count: 1,
 						pricingByDay: pricingDetails,
 						totalPriceWithCommission: pricingDetails.reduce(
@@ -670,8 +714,7 @@ const EditReservationMain = ({
 			pickedRoomsType,
 			total_amount: totalAmount,
 			payment: reservation.payment || "not paid",
-			// Use the existing top-level reservation.paid_amount if you want, or the nested one
-			paid_amount: reservation.paid_amount || 0, // <--- top-level
+			paid_amount: reservation.paid_amount || 0,
 			commission: totalCommission,
 			commissionPaid: reservation.payment_details?.commissionPaid || false,
 			paymentDetails: {
@@ -679,7 +722,6 @@ const EditReservationMain = ({
 				cardExpiryDate: reservation.payment_details?.cardExpiryDate || "",
 				cardCVV: reservation.payment_details?.cardCVV || "",
 				cardHolderName: reservation.payment_details?.cardHolderName || "",
-				// If you want to store paid_amount here instead, you'd do that, but let's keep existing logic
 			},
 			sentFrom: "employee",
 			confirmation_number: updatedConfirmationNumber,
@@ -809,14 +851,14 @@ const EditReservationMain = ({
 										? `${room.roomType}|${room.displayName}`
 										: undefined
 								}
-								onChange={(value) => handleRoomSelectionChange(value, index)}
+								onChange={(val) => handleRoomSelectionChange(val, index)}
 								disabled={isLoading || !selectedHotel}
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((roomDetail) => {
-										const val = `${roomDetail.roomType}|${roomDetail.displayName}`;
+										const valueString = `${roomDetail.roomType}|${roomDetail.displayName}`;
 										return (
-											<Option key={val} value={val}>
+											<Option key={valueString} value={valueString}>
 												{roomDetail.displayName} ({roomDetail.roomType})
 											</Option>
 										);
@@ -965,7 +1007,7 @@ const EditReservationMain = ({
 					</div>
 				</div>
 
-				{/* ADVANCE PAYMENT OPTIONS (Radio + conditionals) */}
+				{/* ADVANCE PAYMENT OPTIONS */}
 				<Form.Item label='Advance Payment Option' required>
 					<Radio.Group
 						onChange={(e) => setAdvancePaymentOption(e.target.value)}
@@ -984,7 +1026,7 @@ const EditReservationMain = ({
 							min={1}
 							max={100}
 							value={advancePaymentPercentage}
-							onChange={(value) => setAdvancePaymentPercentage(value)}
+							onChange={(val) => setAdvancePaymentPercentage(val)}
 							style={{ width: "100%" }}
 							disabled={isLoading}
 						/>
@@ -997,39 +1039,38 @@ const EditReservationMain = ({
 							min={1}
 							max={totalAmount}
 							value={advancePaymentSAR}
-							onChange={(value) => setAdvancePaymentSAR(value)}
+							onChange={(val) => setAdvancePaymentSAR(val)}
 							style={{ width: "100%" }}
 							disabled={isLoading}
 						/>
 					</Form.Item>
 				)}
 
-				{/* Totals: updated lines only */}
+				{/* Totals */}
 				<Form.Item>
 					<Descriptions bordered column={1} size='small'>
 						<Descriptions.Item label='Total Amount (For the Hotel)'>
-							{Number(hotelCost).toFixed(2)} SAR
+							{hotelCost.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Commission'>
-							{Number(totalCommission).toFixed(2)} SAR
+							{totalCommission.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Cost of One Night (First Night)'>
-							{Number(oneNightCost).toFixed(2)} SAR
+							{oneNightCost.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Deposit (Based on Option Above)'>
-							{Number(finalDeposit).toFixed(2)} SAR
+							{finalDeposit.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Grand Total (Including Commission)'>
-							{Number(totalAmount).toFixed(2)} SAR
+							{totalAmount.toFixed(2)} SAR
 						</Descriptions.Item>
 
 						<Descriptions.Item label='Paid Amount'>
-							{/* Show the nested payment_details?.paid_amount */}
 							{reservation.payment_details?.onsite_paid_amount || 0} SAR{" "}
-							{/* EDIT ICON to open paid amount modal */}
 							<EditOutlined
 								style={{ marginLeft: 8, cursor: "pointer" }}
-								onClick={() => setPaidAmountModalVisible(true)}
+								// Instead of opening "paidAmountModalVisible" directly, we open the verification modal:
+								onClick={handleOpenPaidAmountEdit}
 							/>
 						</Descriptions.Item>
 
@@ -1049,7 +1090,7 @@ const EditReservationMain = ({
 				</Button>
 			</Form>
 
-			{/* Possibly show a 'View Details' button if needed */}
+			{/* Possibly a "View Details" button */}
 			{selectedHotel &&
 				selectedHotel._id &&
 				reservationCreated &&
@@ -1067,7 +1108,6 @@ const EditReservationMain = ({
 							padding: "0px",
 							background: "black",
 							width: "50%",
-							height: "10%",
 						}}
 					>
 						View Details
@@ -1088,7 +1128,7 @@ const EditReservationMain = ({
 				open={isModalVisible2}
 				onCancel={handleModalClose}
 				className='float-right'
-				width={"84%"}
+				width='84%'
 				footer={[
 					<Button key='close' onClick={handleModalClose}>
 						Close
@@ -1109,9 +1149,29 @@ const EditReservationMain = ({
 					)}
 			</Modal>
 
-			{/* ---------------------- */}
-			{/* ADDED FOR paid_amount EDIT: Modal */}
-			{/* ---------------------- */}
+			{/* Modal #1: VERIFY PASSWORD */}
+			<Modal
+				title='Password Verification'
+				open={verifyPasswordModalVisible}
+				closable={false} // remove "X" close button
+				maskClosable={false} // clicking outside doesn't close
+				keyboard={false} // pressing ESC doesn't close
+				footer={[
+					// Only an OK button that attempts to verify
+					<Button key='ok' type='primary' onClick={handleVerifyPasswordSubmit}>
+						OK
+					</Button>,
+				]}
+			>
+				<p>Please enter the admin password to proceed:</p>
+				<Input.Password
+					value={verifyPasswordInput}
+					onChange={(e) => setVerifyPasswordInput(e.target.value)}
+					placeholder='Enter password'
+				/>
+			</Modal>
+
+			{/* Modal #2: Update Paid Amount */}
 			<Modal
 				title='Update Paid Amount'
 				open={paidAmountModalVisible}
