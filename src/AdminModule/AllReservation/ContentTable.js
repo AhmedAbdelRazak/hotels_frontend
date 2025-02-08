@@ -4,6 +4,7 @@ import { Tooltip, Modal, Button } from "antd";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
+import ExportToExcelButton from "./ExportToExcelButton";
 
 const EnhancedContentTable = ({
 	allReservationsForAdmin,
@@ -319,6 +320,7 @@ const EnhancedContentTable = ({
 				</select>
 			</div>
 
+			<ExportToExcelButton data={sortedData} />
 			{/* Table with responsive wrapper */}
 			<TableWrapper>
 				<StyledTable>
