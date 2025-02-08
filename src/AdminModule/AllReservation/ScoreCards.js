@@ -375,121 +375,121 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 			{/* THE ONLY ENHANCEMENT: Pass a "center" prop based on fromPage */}
 			<CommissionCardsWrapper center={fromPage !== "reports"}>
 				{/* 1) Commission Today vs. Yesterday (nonCancelled) */}
-				<CommissionCard>
-					<CardTitle>Today's Commission (SAR)</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={todayCommission}
-								duration={2.3}
-								decimals={2}
-								separator=','
-								delay={2}
-							/>
-						</span>
-						<p>
-							Yesterday:{" "}
-							<CountUp
-								end={yesterdayCommission}
-								duration={2.4}
-								decimals={2}
-								separator=','
-								delay={2}
-							/>
-						</p>
-						<PercentageWrapper>
-							{todayCommission > yesterdayCommission ? (
-								<ArrowUpOutlined style={{ color: "green" }} />
-							) : todayCommission < yesterdayCommission ? (
-								<ArrowDownOutlined style={{ color: "red" }} />
-							) : (
-								<MinusOutlined style={{ color: "#b0b0b0" }} />
-							)}
-							<span
-								style={{
-									color:
-										todayCommission > yesterdayCommission
-											? "green"
-											: todayCommission < yesterdayCommission
-											  ? "red"
-											  : "#b0b0b0",
-								}}
-							>
-								{todayCommission === yesterdayCommission ? (
-									"No Change"
-								) : (
-									<CountUp
-										end={Math.abs(todayCommissionRatio)}
-										decimals={2}
-										duration={2.5}
-										suffix='%'
-										delay={2}
-									/>
-								)}
-							</span>
-						</PercentageWrapper>
-					</CardData>
-				</CommissionCard>
-
-				{/* 2) Weekly Commission (nonCancelled) */}
-				<CommissionCard>
-					<CardTitle>Weekly Commission (SAR)</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={weeklyCommission}
-								duration={2.6}
-								decimals={2}
-								separator=','
-								delay={2}
-							/>
-						</span>
-						<p>
-							Last Week:{" "}
-							<CountUp
-								end={lastWeekCommission}
-								duration={2.7}
-								decimals={2}
-								separator=','
-								delay={2}
-							/>
-						</p>
-						<PercentageWrapper>
-							{weeklyCommission > lastWeekCommission ? (
-								<ArrowUpOutlined style={{ color: "green" }} />
-							) : weeklyCommission < lastWeekCommission ? (
-								<ArrowDownOutlined style={{ color: "red" }} />
-							) : (
-								<MinusOutlined style={{ color: "#b0b0b0" }} />
-							)}
-							<span
-								style={{
-									color:
-										weeklyCommission > lastWeekCommission
-											? "green"
-											: weeklyCommission < lastWeekCommission
-											  ? "red"
-											  : "#b0b0b0",
-								}}
-							>
-								{weeklyCommission === lastWeekCommission ? (
-									"No Change"
-								) : (
-									<CountUp
-										end={Math.abs(weeklyCommissionRatio)}
-										decimals={2}
-										duration={2.8}
-										suffix='%'
-										delay={2}
-									/>
-								)}
-							</span>
-						</PercentageWrapper>
-					</CardData>
-				</CommissionCard>
-
 				{fromPage === "reports" ? (
 					<>
+						<CommissionCard>
+							<CardTitle>Today's Commission (SAR)</CardTitle>
+							<CardData>
+								<span>
+									<CountUp
+										end={todayCommission}
+										duration={2.3}
+										decimals={2}
+										separator=','
+										delay={2}
+									/>
+								</span>
+								<p>
+									Yesterday:{" "}
+									<CountUp
+										end={yesterdayCommission}
+										duration={2.4}
+										decimals={2}
+										separator=','
+										delay={2}
+									/>
+								</p>
+								<PercentageWrapper>
+									{todayCommission > yesterdayCommission ? (
+										<ArrowUpOutlined style={{ color: "green" }} />
+									) : todayCommission < yesterdayCommission ? (
+										<ArrowDownOutlined style={{ color: "red" }} />
+									) : (
+										<MinusOutlined style={{ color: "#b0b0b0" }} />
+									)}
+									<span
+										style={{
+											color:
+												todayCommission > yesterdayCommission
+													? "green"
+													: todayCommission < yesterdayCommission
+													  ? "red"
+													  : "#b0b0b0",
+										}}
+									>
+										{todayCommission === yesterdayCommission ? (
+											"No Change"
+										) : (
+											<CountUp
+												end={Math.abs(todayCommissionRatio)}
+												decimals={2}
+												duration={2.5}
+												suffix='%'
+												delay={2}
+											/>
+										)}
+									</span>
+								</PercentageWrapper>
+							</CardData>
+						</CommissionCard>
+
+						{/* 2) Weekly Commission (nonCancelled) */}
+						<CommissionCard>
+							<CardTitle>Weekly Commission (SAR)</CardTitle>
+							<CardData>
+								<span>
+									<CountUp
+										end={weeklyCommission}
+										duration={2.6}
+										decimals={2}
+										separator=','
+										delay={2}
+									/>
+								</span>
+								<p>
+									Last Week:{" "}
+									<CountUp
+										end={lastWeekCommission}
+										duration={2.7}
+										decimals={2}
+										separator=','
+										delay={2}
+									/>
+								</p>
+								<PercentageWrapper>
+									{weeklyCommission > lastWeekCommission ? (
+										<ArrowUpOutlined style={{ color: "green" }} />
+									) : weeklyCommission < lastWeekCommission ? (
+										<ArrowDownOutlined style={{ color: "red" }} />
+									) : (
+										<MinusOutlined style={{ color: "#b0b0b0" }} />
+									)}
+									<span
+										style={{
+											color:
+												weeklyCommission > lastWeekCommission
+													? "green"
+													: weeklyCommission < lastWeekCommission
+													  ? "red"
+													  : "#b0b0b0",
+										}}
+									>
+										{weeklyCommission === lastWeekCommission ? (
+											"No Change"
+										) : (
+											<CountUp
+												end={Math.abs(weeklyCommissionRatio)}
+												decimals={2}
+												duration={2.8}
+												suffix='%'
+												delay={2}
+											/>
+										)}
+									</span>
+								</PercentageWrapper>
+							</CardData>
+						</CommissionCard>
+
 						<CommissionCard className='mx-auto'>
 							<CardTitle>Top 3 Hotels (Commission)</CardTitle>
 							<CardData>
