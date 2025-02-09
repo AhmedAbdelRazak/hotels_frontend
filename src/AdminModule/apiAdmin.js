@@ -562,19 +562,34 @@ export const expediaData = (accountId, belongsTo, file, userId, token) => {
 		.catch((err) => console.error("Error uploading file:", err));
 };
 
+// apiAdmin.js
+
 export const getAllReservationForAdmin = (
 	userId,
 	token,
-	page = 1,
-	limit = 100
+	{ page = 1, limit = 100, searchQuery = "", filterType = "" }
 ) => {
+	const params = new URLSearchParams({
+		page,
+		limit,
+	});
+
+	if (searchQuery.trim()) {
+		params.set("searchQuery", searchQuery);
+	}
+	if (filterType.trim()) {
+		params.set("filterType", filterType);
+	}
+
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/all-reservations-list-admin/${userId}?page=${page}&limit=${limit}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/all-reservations-list-admin/${userId}?${params.toString()}`,
 		{
 			method: "GET",
 			headers: {
 				Accept: "application/json",
-				Authorization: `Bearer ${token}`, // Add the token here
+				Authorization: `Bearer ${token}`,
 			},
 		}
 	)
@@ -1042,6 +1057,30 @@ export const getSpecificListOfReservations = (
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/specific-list/${userId}?${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching specific list of reservations:", err)
+		);
+};
+
+export const getExportToExcelList = (userId, token, queryParamsObj) => {
+	const queryString = buildQueryString(queryParamsObj);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/export-to-excel/${userId}?${queryString}`,
 		{
 			method: "GET",
 			headers: {

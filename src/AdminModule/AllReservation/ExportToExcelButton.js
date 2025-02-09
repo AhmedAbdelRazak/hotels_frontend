@@ -1,107 +1,138 @@
-// ExportToExcelButton.jsx
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
-import * as XLSX from "xlsx"; // or use the browser build if preferred
+import * as XLSX from "xlsx";
+import { Modal, Radio, Select, Button, message, DatePicker } from "antd";
+import dayjs from "dayjs";
+
+import { getExportToExcelList } from "../apiAdmin";
+import { isAuthenticated } from "../../auth";
+
+const { Option } = Select;
 
 /**
- * @param {Array} data        - The array of reservations to be exported
- * @param {String} fileName   - (optional) The file name for the Excel file
- * @param {String} sheetName  - (optional) The sheet name inside the workbook
+ * @param {Array} allHotelDetailsAdmin - Array of hotels { _id, hotelName }.
+ * @param {String} defaultFileName     - Default filename for Excel.
+ * @param {String} sheetName           - Sheet name.
  */
 const ExportToExcelButton = ({
-	data,
-	fileName = "ReservationsData.xlsx", // default name
+	allHotelDetailsAdmin = [],
+	defaultFileName = "ReservationsData.xlsx",
 	sheetName = "Reservations",
 }) => {
-	// Determine the user locale. If ends in 'US' or 'CA', use 'en-US' => mm/dd/yyyy
-	// Otherwise, use 'en-GB' => dd/mm/yyyy
-	const userLocale = navigator.language || "en-US";
-	const localeForDate =
-		userLocale.endsWith("US") || userLocale.endsWith("CA") ? "en-US" : "en-GB";
+	const [exportModalVisible, setExportModalVisible] = useState(false);
+	const [exporting, setExporting] = useState(false);
 
-	// This array maps room_type values to human‐readable labels.
-	const roomTypes = [
-		{ value: "standardRooms", label: "Standard Rooms" },
-		{ value: "singleRooms", label: "Single Rooms" },
-		{ value: "doubleRooms", label: "Double Room" },
-		{ value: "twinRooms", label: "Twin Rooms" },
-		{ value: "queenRooms", label: "Queen Rooms" },
-		{ value: "kingRooms", label: "King Rooms" },
-		{ value: "tripleRooms", label: "Triple Room" },
-		{ value: "quadRooms", label: "Quad Rooms" },
-		{ value: "studioRooms", label: "Studio Rooms" },
-		{ value: "suite", label: "Suite" },
-		{ value: "masterSuite", label: "Master Suite" },
-		{ value: "familyRooms", label: "Family Rooms" },
-		{
-			value: "individualBed",
-			label: "Rooms With Individual Beds (Shared Rooms)",
-		},
-		// { value: "other", label: "Other" },
+	// Date field: createdAt / checkin_date / checkout_date
+	const [dateField, setDateField] = useState("createdAt");
+	const dateFieldOptions = [
+		{ label: "Booked At", value: "createdAt" },
+		{ label: "Checkin Date", value: "checkin_date" },
+		{ label: "Checkout Date", value: "checkout_date" },
 	];
 
-	const handleExport = () => {
-		// 1) Ensure fileName ends with .xlsx
-		let finalFileName = fileName;
+	// Multi-select hotels
+	const [selectedHotels, setSelectedHotels] = useState(["all"]);
+
+	// From/To dates (default last 30 days)
+	const [fromDate, setFromDate] = useState(dayjs().subtract(29, "day"));
+	const [toDate, setToDate] = useState(dayjs());
+
+	const { user, token } = isAuthenticated();
+
+	// Open modal
+	const handleOpenModal = () => {
+		setExportModalVisible(true);
+	};
+
+	// Confirm => fetch data => export
+	const handleConfirmExport = async () => {
+		try {
+			setExporting(true);
+
+			// Build query object for backend
+			const paramObj = {
+				dateField,
+				from: fromDate.format("YYYY-MM-DD"),
+				to: toDate.format("YYYY-MM-DD"),
+				hotels: selectedHotels.includes("all")
+					? "all"
+					: selectedHotels.join(","),
+			};
+
+			// Call your backend
+			const reservations = await getExportToExcelList(
+				user._id,
+				token,
+				paramObj
+			);
+
+			if (!Array.isArray(reservations) || reservations.length === 0) {
+				message.warning("No data found for the selected filters.");
+				return;
+			}
+
+			// reservations now have fields like:
+			// {
+			//   confirmation_number, customer_name, customer_phone, hotel_name,
+			//   reservation_status, checkin_date, checkout_date, payment_status,
+			//   total_amount, paid_amount, room_type, room_count,
+			//   paid_onsite, createdAt
+			// }
+
+			doExportToExcel(reservations);
+			setExportModalVisible(false);
+		} catch (err) {
+			console.error("Export error:", err);
+			message.error("Failed to export data. Please try again.");
+		} finally {
+			setExporting(false);
+		}
+	};
+
+	// Cancel => close modal
+	const handleCancel = () => {
+		setExportModalVisible(false);
+	};
+
+	// Create the XLSX file
+	const doExportToExcel = (dataArray) => {
+		let finalFileName = defaultFileName;
 		if (!finalFileName.toLowerCase().endsWith(".xlsx")) {
 			finalFileName += ".xlsx";
 		}
 
-		// 2) Transform data to match the columns you want.
-		//    Format dates according to the locale determined above.
-		//    Also ensure money-related fields are never empty (default to 0).
-		const exportData = data.map((item) => {
-			// --- Compute "Room Type" from pickedRoomsType ---
-			let roomTypeString = "";
-			let roomCount = 0;
-			if (
-				Array.isArray(item.pickedRoomsType) &&
-				item.pickedRoomsType.length > 0
-			) {
-				// Grab unique room_type values
-				const distinctRoomTypes = [
-					...new Set(item.pickedRoomsType.map((rt) => rt.room_type)),
-				];
-				// Map to the nice label using our roomTypes array.
-				const roomTypeLabels = distinctRoomTypes.map((rt) => {
-					const found = roomTypes.find((r) => r.value === rt);
-					return found ? found.label : rt;
-				});
-				roomTypeString = roomTypeLabels.join(", ");
-				roomCount = item.pickedRoomsType.length;
-			}
+		// Determine locale => date format
+		const userLocale = navigator.language || "en-US";
+		const localeForDate =
+			userLocale.endsWith("US") || userLocale.endsWith("CA")
+				? "en-US"
+				: "en-GB";
 
-			// --- Paid Onsite (from payment_details) ---
-			const paidOnsite =
-				item.payment_details && item.payment_details.onside_paid_amount
-					? item.payment_details.onside_paid_amount
-					: 0;
+		// Map each reservation to the 14 fields you originally had
+		const exportData = dataArray.map((item) => ({
+			"Confirmation Number": item.confirmation_number || "",
+			Name: item.customer_name || "",
+			Phone: item.customer_phone || "",
+			"Hotel Name": item.hotel_name || "",
+			Status: item.reservation_status || "",
+			"Checkin Date": item.checkin_date
+				? new Date(item.checkin_date).toLocaleDateString(localeForDate)
+				: "",
+			"Checkout Date": item.checkout_date
+				? new Date(item.checkout_date).toLocaleDateString(localeForDate)
+				: "",
+			"Payment Status": item.payment_status || "",
+			"Total Amount": item.total_amount || 0,
+			"Paid Amount": item.paid_amount || 0,
+			"Room Type": item.room_type || "",
+			"Room Count": item.room_count || 0,
+			"Paid Onsite": item.paid_onsite || 0,
+			"Created At": item.createdAt
+				? new Date(item.createdAt).toLocaleDateString(localeForDate)
+				: "",
+		}));
 
-			return {
-				"Confirmation Number": item.confirmation_number || "",
-				Name: item.customer_name || "",
-				Phone: item.customer_phone || "",
-				"Hotel Name": item.hotel_name || "",
-				Status: item.reservation_status || "",
-				"Checkin Date": item.checkin_date
-					? new Date(item.checkin_date).toLocaleDateString(localeForDate)
-					: "",
-				"Checkout Date": item.checkout_date
-					? new Date(item.checkout_date).toLocaleDateString(localeForDate)
-					: "",
-				"Payment Status": item.payment_status || "",
-				"Total Amount": item.total_amount || 0,
-				"Paid Amount": item.paid_amount || 0,
-				"Room Type": roomTypeString,
-				"Room Count": roomCount,
-				"Paid Onsite": paidOnsite,
-				"Created At": item.createdAt
-					? new Date(item.createdAt).toLocaleDateString(localeForDate)
-					: "N/A",
-			};
-		});
-
-		// Define the desired header order
+		// Define headers in desired order
 		const headers = [
 			"Confirmation Number",
 			"Name",
@@ -119,14 +150,13 @@ const ExportToExcelButton = ({
 			"Created At",
 		];
 
-		// 3) Convert the JSON array to a Worksheet.
-		//    Passing the header array ensures the columns are in the proper order.
-		const worksheet = XLSX.utils.json_to_sheet(exportData, { header: headers });
+		// Convert to worksheet
+		const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
 
-		// 4) Set column widths so data fits nicely.
-		worksheet["!cols"] = [
-			{ wch: 20 }, // Confirmation Number
-			{ wch: 20 }, // Name
+		// Optional column widths
+		ws["!cols"] = [
+			{ wch: 15 }, // Confirmation Number
+			{ wch: 15 }, // Name
 			{ wch: 15 }, // Phone
 			{ wch: 25 }, // Hotel Name
 			{ wch: 15 }, // Status
@@ -135,49 +165,119 @@ const ExportToExcelButton = ({
 			{ wch: 15 }, // Payment Status
 			{ wch: 15 }, // Total Amount
 			{ wch: 15 }, // Paid Amount
-			{ wch: 20 }, // Room Type
+			{ wch: 15 }, // Room Type
 			{ wch: 10 }, // Room Count
 			{ wch: 15 }, // Paid Onsite
 			{ wch: 15 }, // Created At
 		];
 
-		// 5) (Optional) Apply header styling.
-		//    (Note: For styling to work, you may need to use a library like xlsx-style.)
-		const headerStyle = {
-			font: { bold: true, color: { rgb: "FFFFFF" } },
-			fill: { fgColor: { rgb: "1E88E5" } }, // using your primary blue color
-			alignment: { horizontal: "center", vertical: "center" },
-		};
+		// Create workbook & append sheet
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, ws, sheetName);
+		XLSX.writeFile(wb, finalFileName);
+	};
 
-		// Get the range of the worksheet (ex: A1:N{numRows})
-		const range = XLSX.utils.decode_range(worksheet["!ref"]);
-		// Iterate over the first row (header row) and assign the style.
-		for (let C = range.s.c; C <= range.e.c; C++) {
-			const cellAddress = { c: C, r: 0 };
-			const cellRef = XLSX.utils.encode_cell(cellAddress);
-			if (worksheet[cellRef]) {
-				worksheet[cellRef].s = headerStyle;
-			}
+	// Handle hotel multi-select
+	const handleHotelSelectChange = (value) => {
+		if (value.length === 0) {
+			setSelectedHotels(["all"]);
+			return;
 		}
-
-		// 6) Create a new Workbook and append the Worksheet.
-		const workbook = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-
-		// 7) Trigger a file download in the browser.
-		XLSX.writeFile(workbook, finalFileName);
+		if (value.includes("all") && !selectedHotels.includes("all")) {
+			setSelectedHotels(["all"]);
+			return;
+		}
+		if (value.includes("all") && value.length > 1) {
+			const withoutAll = value.filter((v) => v !== "all");
+			setSelectedHotels(withoutAll);
+			return;
+		}
+		setSelectedHotels(value);
 	};
 
 	return (
-		<StyledExportButton onClick={handleExport}>
-			Export to Excel
-		</StyledExportButton>
+		<>
+			<StyledExportButton onClick={handleOpenModal}>
+				Export to Excel
+			</StyledExportButton>
+
+			<Modal
+				title='Export Reservations'
+				open={exportModalVisible}
+				onCancel={handleCancel}
+				footer={null}
+			>
+				{/* 1) Date Field Radio */}
+				<div style={{ marginBottom: 16 }}>
+					<strong>Date Field:</strong>{" "}
+					<Radio.Group
+						options={dateFieldOptions}
+						onChange={(e) => setDateField(e.target.value)}
+						value={dateField}
+						optionType='button'
+						style={{ marginLeft: 10 }}
+					/>
+				</div>
+
+				{/* 2) From/To DatePickers */}
+				<div style={{ marginBottom: 16 }}>
+					<strong>From:</strong>{" "}
+					<DatePicker
+						style={{ marginRight: 8 }}
+						value={fromDate}
+						onChange={(val) => setFromDate(val)}
+						format='YYYY-MM-DD'
+					/>
+					<strong>To:</strong>{" "}
+					<DatePicker
+						style={{ marginLeft: 8 }}
+						value={toDate}
+						onChange={(val) => setToDate(val)}
+						format='YYYY-MM-DD'
+					/>
+				</div>
+
+				{/* 3) Hotel Multi-select */}
+				<div style={{ marginBottom: "20px" }}>
+					<strong>Select Hotels:</strong>
+					<Select
+						mode='multiple'
+						style={{ width: "100%", marginTop: 8 }}
+						placeholder='Please select hotels'
+						value={selectedHotels}
+						onChange={handleHotelSelectChange}
+					>
+						<Option value='all'>All Hotels</Option>
+						{allHotelDetailsAdmin &&
+							allHotelDetailsAdmin.map((h, i) => (
+								<Option key={h._id || i} value={h.hotelName}>
+									{h.hotelName}
+								</Option>
+							))}
+					</Select>
+				</div>
+
+				{/* 4) Confirm/Cancel */}
+				<div style={{ textAlign: "right" }}>
+					<Button onClick={handleCancel} style={{ marginRight: 8 }}>
+						Cancel
+					</Button>
+					<Button
+						type='primary'
+						onClick={handleConfirmExport}
+						loading={exporting}
+					>
+						Confirm &amp; Export
+					</Button>
+				</div>
+			</Modal>
+		</>
 	);
 };
 
 export default ExportToExcelButton;
 
-/* ----------------- Styled Components ----------------- */
+/* ----- Styled Button ----- */
 const StyledExportButton = styled.button`
 	padding: 8px 16px;
 	background-color: var(--button-bg-primary, #1e88e5);
@@ -185,17 +285,16 @@ const StyledExportButton = styled.button`
 	border: none;
 	border-radius: 4px;
 	cursor: pointer;
-	transition: var(--main-transition, all 0.3s ease-in-out);
+	transition: 0.3s ease;
 	font-size: 14px;
 	font-weight: 500;
 	margin: 10px auto;
 	display: block;
 
 	&:hover {
-		background-color: var(--primary-color-dark-blue, #1565c0);
+		background-color: #1565c0;
 	}
-
 	&:active {
-		background-color: var(--primary-color-darker-blue, #0d47a1);
+		background-color: #0d47a1;
 	}
 `;

@@ -7,213 +7,29 @@ import {
 } from "@ant-design/icons";
 import CountUp from "react-countup";
 
-/* ------------------ DATE HELPERS ------------------ */
-function isToday(date) {
-	const today = new Date();
-	return (
-		date.getDate() === today.getDate() &&
-		date.getMonth() === today.getMonth() &&
-		date.getFullYear() === today.getFullYear()
-	);
-}
+const ScoreCards = ({ fromPage, scorecardsObject = {} }) => {
+	// Destructure the stats from the back-end object (with safe defaults).
+	const {
+		// Row 1
+		todayReservations = 0,
+		yesterdayReservations = 0,
+		todayRatio = 0, // difference in reservations vs. yesterday in %
+		weeklyReservations = 0,
+		lastWeekReservations = 0,
+		weeklyRatio = 0, // difference in reservations vs. last week in %
+		topHotels = [], // top 3 hotels by reservations
+		totalReservations = 0,
 
-function isYesterday(date) {
-	const today = new Date();
-	const yesterday = new Date(today);
-	yesterday.setDate(today.getDate() - 1);
-	return (
-		date.getDate() === yesterday.getDate() &&
-		date.getMonth() === yesterday.getMonth() &&
-		date.getFullYear() === yesterday.getFullYear()
-	);
-}
-
-function isThisWeek(date) {
-	const now = new Date();
-	// Start of current week (Sunday)
-	const startOfWeek = new Date(now);
-	startOfWeek.setDate(now.getDate() - now.getDay());
-	startOfWeek.setHours(0, 0, 0, 0);
-
-	const endOfWeek = new Date(startOfWeek);
-	endOfWeek.setDate(startOfWeek.getDate() + 6);
-	endOfWeek.setHours(23, 59, 59, 999);
-
-	return date >= startOfWeek && date <= endOfWeek;
-}
-
-function isLastWeek(date) {
-	const now = new Date();
-	// Start of this week (Sunday)
-	const startOfThisWeek = new Date(now);
-	startOfThisWeek.setDate(now.getDate() - now.getDay());
-	startOfThisWeek.setHours(0, 0, 0, 0);
-
-	// End of last week is 1 ms before startOfThisWeek
-	const endOfLastWeek = new Date(startOfThisWeek.getTime() - 1);
-
-	// Start of last week is 7 days prior
-	const startOfLastWeek = new Date(startOfThisWeek);
-	startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
-	startOfLastWeek.setHours(0, 0, 0, 0);
-
-	return date >= startOfLastWeek && date <= endOfLastWeek;
-}
-
-/* ------------------ SAFE NUMBER ------------------ */
-function safeNumber(val) {
-	const parsed = Number(val);
-	return isNaN(parsed) ? 0 : parsed;
-}
-
-/* -------------------------------------------------------------------
-   COMMISSION CALC: EXACTLY LIKE IN ReceiptPDF + override for "sahet al hegaz"
-   1) If reservation.hotelId.hotelName == 'sahet al hegaz' (case-insensitive),
-      AND payment == 'not paid',
-      AND total_amount > 1000,
-      => Commission = 200 SAR (flat).
-   2) Else => normal logic:
-      For each room in pickedRoomsType => for each day in pricingByDay:
-        - finalRate = day.commissionRate < 1 ? day.commissionRate : day.commissionRate / 100
-        - dayCommission = (rootPrice * finalRate) + (totalPriceWithoutCommission - rootPrice)
-        - multiply by room.count
--------------------------------------------------------------------- */
-function computeReservationCommission(reservation) {
-	if (!reservation || !reservation.pickedRoomsType) return 0;
-
-	// Convert the hotel name to lower case for matching
-	const hotelName = reservation.hotelId?.hotelName?.toLowerCase() || "";
-	const totalAmount = safeNumber(reservation.total_amount);
-
-	// If 'sahet al hegaz', override => 10% of total_amount
-	if (hotelName === "sahet al hegaz") {
-		return 0.1 * totalAmount;
-	}
-
-	// Otherwise, do the normal logic
-	let totalCommission = 0;
-	reservation.pickedRoomsType.forEach((room) => {
-		if (!room.pricingByDay || room.pricingByDay.length === 0) {
-			return;
-		}
-
-		room.pricingByDay.forEach((day) => {
-			const rootPrice = safeNumber(day.rootPrice);
-
-			// handle 10 vs 0.1 for 10%
-			let rawRate = safeNumber(day.commissionRate);
-			const finalRate = rawRate < 1 ? rawRate : rawRate / 100;
-
-			const totalPriceWithoutComm = safeNumber(day.totalPriceWithoutCommission);
-
-			// dayCommission formula from your snippet:
-			const dayCommission =
-				rootPrice * finalRate + (totalPriceWithoutComm - rootPrice);
-
-			totalCommission += dayCommission * safeNumber(room.count);
-		});
-	});
-
-	return totalCommission;
-}
-
-const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
-	// For convenience, let's ensure we have an array
-	const allReservations = Array.isArray(reservations) ? reservations : [];
-
-	// For row 1, we do NOT exclude cancelled (unless you want to).
-	// For row 2 (commission), exclude cancelled
-	const nonCancelled = allReservations.filter(
-		(r) => r.reservation_status !== "cancelled"
-	);
-
-	/* ==================== RESERVATION STATS (Row 1) ==================== */
-	const todayReservations = allReservations.filter((r) =>
-		isToday(new Date(r.createdAt))
-	).length;
-
-	const yesterdayReservations = allReservations.filter((r) =>
-		isYesterday(new Date(r.createdAt))
-	).length;
-
-	const todayRatio =
-		yesterdayReservations > 0
-			? ((todayReservations - yesterdayReservations) / yesterdayReservations) *
-			  100
-			: todayReservations * 100;
-
-	const weeklyReservations = allReservations.filter((r) =>
-		isThisWeek(new Date(r.createdAt))
-	).length;
-
-	const lastWeekReservations = allReservations.filter((r) =>
-		isLastWeek(new Date(r.createdAt))
-	).length;
-
-	const weeklyRatio =
-		lastWeekReservations > 0
-			? ((weeklyReservations - lastWeekReservations) / lastWeekReservations) *
-			  100
-			: weeklyReservations * 100;
-
-	// Top 3 Hotels by Reservation Count
-	const hotelCounts = allReservations.reduce((acc, reservation) => {
-		const name = reservation.hotelId?.hotelName || "Unknown Hotel";
-		acc[name] = (acc[name] || 0) + 1;
-		return acc;
-	}, {});
-	const topHotels = Object.entries(hotelCounts)
-		.map(([name, count]) => ({ name, reservations: count }))
-		.sort((a, b) => b.reservations - a.reservations)
-		.slice(0, 3);
-
-	/* ====================== COMMISSION STATS (Row 2) ====================== */
-	// Today Commission
-	const todayCommission = nonCancelled
-		.filter((r) => isToday(new Date(r.createdAt)))
-		.reduce((sum, r) => sum + computeReservationCommission(r), 0);
-
-	// Yesterday Commission
-	const yesterdayCommission = nonCancelled
-		.filter((r) => isYesterday(new Date(r.createdAt)))
-		.reduce((sum, r) => sum + computeReservationCommission(r), 0);
-
-	const todayCommissionRatio =
-		yesterdayCommission > 0
-			? ((todayCommission - yesterdayCommission) / yesterdayCommission) * 100
-			: todayCommission * 100;
-
-	// Weekly Commission
-	const weeklyCommission = nonCancelled
-		.filter((r) => isThisWeek(new Date(r.createdAt)))
-		.reduce((sum, r) => sum + computeReservationCommission(r), 0);
-
-	const lastWeekCommission = nonCancelled
-		.filter((r) => isLastWeek(new Date(r.createdAt)))
-		.reduce((sum, r) => sum + computeReservationCommission(r), 0);
-
-	const weeklyCommissionRatio =
-		lastWeekCommission > 0
-			? ((weeklyCommission - lastWeekCommission) / lastWeekCommission) * 100
-			: weeklyCommission * 100;
-
-	// Top 3 Hotels by Commission
-	const hotelCommissions = nonCancelled.reduce((acc, reservation) => {
-		const name = reservation.hotelId?.hotelName || "Unknown Hotel";
-		const comm = computeReservationCommission(reservation);
-		acc[name] = (acc[name] || 0) + comm;
-		return acc;
-	}, {});
-	const topHotelsByCommission = Object.entries(hotelCommissions)
-		.map(([name, commission]) => ({ name, commission }))
-		.sort((a, b) => b.commission - a.commission)
-		.slice(0, 3);
-
-	// Overall Commission
-	const overallCommission = nonCancelled.reduce(
-		(acc, r) => acc + computeReservationCommission(r),
-		0
-	);
+		// Row 2
+		todayCommission = 0,
+		yesterdayCommission = 0,
+		todayCommissionRatio = 0, // difference in commission vs. yesterday in %
+		weeklyCommission = 0,
+		lastWeekCommission = 0,
+		weeklyCommissionRatio = 0, // difference in commission vs. last week in %
+		topHotelsByCommission = [], // top 3 hotels by commission
+		overallCommission = 0,
+	} = scorecardsObject;
 
 	return (
 		<>
@@ -372,11 +188,11 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 			</ScoreCardsWrapper>
 
 			{/* ====== ROW 2: COMMISSION STATS (Dark Cards, margin-top) ====== */}
-			{/* THE ONLY ENHANCEMENT: Pass a "center" prop based on fromPage */}
+			{/* Only show row 2 if fromPage === "reports" (same logic as your original) */}
 			<CommissionCardsWrapper center={fromPage !== "reports"}>
-				{/* 1) Commission Today vs. Yesterday (nonCancelled) */}
-				{fromPage === "reports" ? (
+				{fromPage === "reports" && (
 					<>
+						{/* 1) Commission Today vs Yesterday */}
 						<CommissionCard>
 							<CardTitle>Today's Commission (SAR)</CardTitle>
 							<CardData>
@@ -433,7 +249,7 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 							</CardData>
 						</CommissionCard>
 
-						{/* 2) Weekly Commission (nonCancelled) */}
+						{/* 2) Weekly Commission vs Last Week */}
 						<CommissionCard>
 							<CardTitle>Weekly Commission (SAR)</CardTitle>
 							<CardData>
@@ -490,6 +306,7 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 							</CardData>
 						</CommissionCard>
 
+						{/* 3) Top 3 Hotels by Commission */}
 						<CommissionCard className='mx-auto'>
 							<CardTitle>Top 3 Hotels (Commission)</CardTitle>
 							<CardData>
@@ -516,7 +333,7 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 							</CardData>
 						</CommissionCard>
 
-						{/* 4) Overall Commission (nonCancelled) */}
+						{/* 4) Overall Commission */}
 						<CommissionCard className='mx-auto'>
 							<CardTitle>Overall Commission (SAR)</CardTitle>
 							<CardData>
@@ -532,8 +349,7 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 							</CardData>
 						</CommissionCard>
 					</>
-				) : null}
-				{/* 3) Top 3 Hotels by Commission (nonCancelled) */}
+				)}
 			</CommissionCardsWrapper>
 		</>
 	);
@@ -541,7 +357,7 @@ const ScoreCards = ({ reservations, totalReservations, fromPage }) => {
 
 export default ScoreCards;
 
-/* ------------------ STYLES ------------------ */
+/* -------------------- STYLES (unchanged) -------------------- */
 const ScoreCardsWrapper = styled.div`
 	display: flex;
 	flex-wrap: wrap;
@@ -555,11 +371,6 @@ const ScoreCardsWrapper = styled.div`
 	}
 `;
 
-/* 
-  ENHANCED: Accept a "center" prop. 
-  If "center" is true (when fromPage !== "reports"), 
-  it will center the 2 commission cards. Otherwise space-between.
-*/
 const CommissionCardsWrapper = styled(ScoreCardsWrapper)`
 	margin-top: 30px; /* spacing for second row */
 	justify-content: ${({ center }) => (center ? "center" : "space-between")};

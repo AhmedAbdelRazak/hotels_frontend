@@ -14,7 +14,7 @@ import Chart from "react-apexcharts";
 import dayjs from "dayjs"; // for date filtering
 
 // Import your components/api
-import EnhancedContentTable from "../AllReservation/ContentTable"; // <-- Adjust this import path
+import EnhancedContentTable from "../AllReservation/EnhancedContentTable"; // <-- Adjust this import path
 import {
 	getReservationsByDay,
 	getCheckinsByDay,
@@ -274,7 +274,7 @@ const ReservationsOverview = () => {
 
 	// Additional state for EnhancedContentTable pagination
 	const [currentPage, setCurrentPage] = useState(1);
-	const [pageSize, setPageSize] = useState(100);
+	const [pageSize, setPageSize] = useState(50);
 
 	// Chart Mode toggles: "daily" vs "monthly" for each chart
 	const [dayChartMode, setDayChartMode] = useState("daily"); // Reservations By Day
@@ -289,6 +289,9 @@ const ReservationsOverview = () => {
 
 	// NEW STATE: Toggle exclude cancelled or not
 	const [excludeCancelled, setExcludeCancelled] = useState(true);
+
+	// Search
+	const [searchTerm, setSearchTerm] = useState("");
 
 	const adminAllHotelDetails = useCallback(() => {
 		gettingHotelDetailsForAdmin(user._id, token).then((data) => {
@@ -314,9 +317,6 @@ const ReservationsOverview = () => {
 		loadAllReportData();
 		// eslint-disable-next-line
 	}, [selectedHotels, excludeCancelled]);
-
-	console.log("Currently selected hotels:", selectedHotels);
-	console.log("Exclude Cancelled?", excludeCancelled);
 
 	function loadAllReportData() {
 		setLoading(true);
@@ -843,6 +843,12 @@ const ReservationsOverview = () => {
 		setSelectedHotels(value);
 	};
 
+	const handleSearch = () => {
+		setCurrentPage(1);
+		// The useEffect with fetchReservations() will run automatically on next render
+	};
+
+	console.log(modalData, "modalDataaaaaaaaa");
 	return (
 		<ReservationsOverviewWrapper>
 			{loading ? (
@@ -1411,11 +1417,20 @@ const ReservationsOverview = () => {
 					<p>No reservations found</p>
 				) : (
 					<EnhancedContentTable
-						allReservationsForAdmin={{ data: modalData }}
+						// We pass only the subset after user-based filtering
+						// plus totalDocuments from the server for pagination
+						data={modalData.data}
+						totalDocuments={modalData.totalDocuments}
 						currentPage={currentPage}
-						setCurrentPage={setCurrentPage}
 						pageSize={pageSize}
+						setCurrentPage={setCurrentPage}
 						setPageSize={setPageSize}
+						// For searching:
+						searchTerm={searchTerm}
+						setSearchTerm={setSearchTerm}
+						handleSearch={handleSearch}
+						scorecardsObject={modalData.scorecards}
+						// We pass fromPage for ScoreCards usage
 						fromPage='reports'
 					/>
 				)}
