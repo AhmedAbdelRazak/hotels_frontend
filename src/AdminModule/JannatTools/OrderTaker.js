@@ -22,7 +22,6 @@ import {
 import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
 
-const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 /** --------------------- Safe Parse Float --------------------- */
@@ -54,7 +53,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	/** Advance Payment‐related state */
 	const [hotelCost, setHotelCost] = useState(0); // Base total for the hotel
 	const [oneNightCost, setOneNightCost] = useState(0); // Sum of first‐night “rootPrice” across all rooms
-	const [defaultDeposit, setDefaultDeposit] = useState(0); // Commission + oneNight
+	const [defaultDeposit, setDefaultDeposit] = useState(0); // commission + oneNight
 	const [finalDeposit, setFinalDeposit] = useState(0);
 
 	// Radio options: "commission_plus_one_day", "percentage", or "sar"
@@ -78,7 +77,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 	const { user, token } = isAuthenticated();
 
-	// Keep track of previous values to avoid repeatedly recalculating
+	// Keep track of previous values to detect changes
 	const prevValues = useRef({
 		checkInDate: null,
 		checkOutDate: null,
@@ -149,6 +148,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			commissionRate
 		) => {
 			const start = dayjs(startDate).startOf("day");
+			// endDate is exclusive if we’re counting nights (subtract 1 day).
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
 
 			const dateArray = [];
@@ -158,14 +158,15 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				const rateForDate = pricingRate.find(
 					(r) => r.calendarDate === formattedDate
 				);
-				// If that date has a special override
+
+				// If that date has a special override:
 				const price = rateForDate
 					? safeParseFloat(rateForDate.price, basePrice)
 					: basePrice;
 				const rootPrice = rateForDate
 					? safeParseFloat(rateForDate.rootPrice, defaultCost)
 					: defaultCost;
-				const rateCommission = rateForDate
+				const dayCommission = rateForDate
 					? safeParseFloat(rateForDate.commissionRate, commissionRate)
 					: commissionRate;
 
@@ -173,7 +174,8 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					date: formattedDate,
 					price,
 					rootPrice,
-					commissionRate: rateCommission,
+					// store numeric "10" => means 10%
+					commissionRate: dayCommission,
 				});
 				currentDate = currentDate.add(1, "day");
 			}
@@ -186,6 +188,8 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	 * For each day, compute:
 	 *   totalPriceWithCommission = price + (rootPrice * (commissionRate/100))
 	 *   totalPriceWithoutCommission = price
+	 *
+	 * We'll ensure `commissionRate` is at least 10 if DB or override is missing.
 	 */
 	const calculatePricingByDayWithCommission = useCallback(
 		(
@@ -194,25 +198,29 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			endDate,
 			basePrice,
 			defaultCost,
-			commissionRate
+			rawCommission
 		) => {
+			// Force fallback of 10 if rawCommission is 0 or not provided
+			const baseCommission = rawCommission > 0 ? rawCommission : 10;
+
 			const noCommissionArray = calculatePricingByDay(
 				pricingRate,
 				startDate,
 				endDate,
 				basePrice,
 				defaultCost,
-				commissionRate
+				baseCommission
 			);
+
 			return noCommissionArray.map((day) => {
 				const totalPriceWithCommission =
 					safeParseFloat(day.price) +
-					safeParseFloat(day.rootPrice) *
-						(safeParseFloat(day.commissionRate) / 100);
+					safeParseFloat(day.rootPrice) * (day.commissionRate / 100);
 
 				return {
 					...day,
 					totalPriceWithCommission,
+					// This is key: store day.price in totalPriceWithoutCommission
 					totalPriceWithoutCommission: safeParseFloat(day.price),
 				};
 			});
@@ -221,14 +229,52 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	);
 
 	/**
-	 * Recalculate all relevant totals:
-	 *  - hotelCost (sum of rootPrice across all days * counts)
-	 *  - totalAmount (sum of totalPriceWithCommission across all days * counts)
-	 *  - totalCommission (difference between the two, or explicit formula)
-	 *  - cost of first night, etc.
+	 * If a user manually set a total (room.manualTotal), we re-distribute that total
+	 * across the new date range. We also use the old averageRootToTotalRatio to keep
+	 * rootPrice and commission “proportional” to what the user had.
+	 *
+	 * We also preserve `room.commissionRate` if it exists, otherwise default to 10.
+	 */
+	const redistributeManualTotal = (room, newNights, newStart, newEnd) => {
+		if (!room.manualTotal || !room.averageRootToTotalRatio) {
+			// No manual override to preserve
+			return null;
+		}
+
+		const newDailyFinalPrice = safeParseFloat(room.manualTotal, 0) / newNights;
+		const ratio = safeParseFloat(room.averageRootToTotalRatio, 0);
+		// If the user never set a commissionRate on the room object,
+		// fallback to 10
+		const fallbackRate = room.commissionRate || 10;
+
+		const dayArray = [];
+		let current = dayjs(newStart).startOf("day");
+		let finalEnd = dayjs(newEnd).subtract(1, "day").startOf("day");
+
+		while (current.isBefore(finalEnd) || current.isSame(finalEnd, "day")) {
+			const dateStr = current.format("YYYY-MM-DD");
+			const dailyRoot = newDailyFinalPrice * ratio;
+
+			dayArray.push({
+				date: dateStr,
+				price: dailyRoot, // "price" = base no-comm portion
+				rootPrice: dailyRoot,
+				commissionRate: fallbackRate, // keep the stored rate or default 10
+				totalPriceWithCommission: newDailyFinalPrice,
+				totalPriceWithoutCommission: dailyRoot, // same as "price"
+			});
+			current = current.add(1, "day");
+		}
+		return dayArray;
+	};
+
+	/**
+	 * Recalculate all relevant totals whenever called:
+	 *  - If the user had a manual override, we re‐distribute it (if the date range changed).
+	 *  - Otherwise, do normal DB or existing day‐by‐day logic.
 	 */
 	const calculateTotals = useCallback(
-		(rooms = selectedRooms) => {
+		(rooms = selectedRooms, forceRecalcFromDb = false) => {
 			if (!selectedHotel || !checkInDate || !checkOutDate) {
 				return;
 			}
@@ -248,90 +294,91 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				if (!room.roomType || !room.displayName) {
 					return room;
 				}
-				// If the user has a "pricingByDay" array, we rely on it. If empty, we recalc from scratch:
-				if (room.pricingByDay && room.pricingByDay.length) {
-					// We already have day-by-day. Sum them:
-					const roomTotalRoot = room.pricingByDay.reduce(
-						(acc, day) => acc + safeParseFloat(day.rootPrice),
-						0
-					);
-					const roomTotalWithComm = room.pricingByDay.reduce(
-						(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
-						0
-					);
-					const roomTotalCommission = room.pricingByDay.reduce((acc, day) => {
-						// Commission for this day is ( rootPrice*(commissionRate/100) + (price - rootPrice) )
-						// Already coded as: (totalPriceWithCommission - rootPrice).
-						return (
-							acc +
-							(safeParseFloat(day.totalPriceWithCommission) -
-								safeParseFloat(day.rootPrice))
-						);
-					}, 0);
 
-					// multiply by the # of identical “count” rooms
-					sumHotelCost += roomTotalRoot * room.count;
-					sumGrandTotal += roomTotalWithComm * room.count;
-					sumCommission += roomTotalCommission * room.count;
+				// 1) If user has a "manualTotal" and the date changed, re-distribute
+				const userWantsManualOverride =
+					room.manualTotal && room.averageRootToTotalRatio;
 
-					// For the first day’s root price only:
-					if (room.pricingByDay[0]) {
-						sumOneNightCost +=
-							safeParseFloat(room.pricingByDay[0].rootPrice) * room.count;
-					}
-					return room;
-				} else {
-					// We need to recalc from the DB’s base pricing
-					const matched = selectedHotel?.roomCountDetails?.find(
-						(r) =>
-							r.roomType?.trim() === room.roomType.trim() &&
-							r.displayName?.trim() === room.displayName.trim()
-					);
-					if (!matched) {
-						console.warn("No matching room found for", room);
-						return room;
-					}
+				// 2) If no user override or if user never edited,
+				//    do the old logic if forced or if length mismatch
+				const oldLength = room.pricingByDay ? room.pricingByDay.length : 0;
+				const lengthMismatch = oldLength !== nights;
 
-					const recalculated = calculatePricingByDayWithCommission(
-						matched.pricingRate || [],
+				if (userWantsManualOverride && (lengthMismatch || forceRecalcFromDb)) {
+					const reDistributed = redistributeManualTotal(
+						room,
+						nights,
 						startDate,
-						endDate,
-						safeParseFloat(matched.price?.basePrice, 0),
-						safeParseFloat(matched.defaultCost, 0),
-						safeParseFloat(
-							matched.roomCommission ?? selectedHotel.commission ?? 0.1
-						)
+						endDate
 					);
-
-					// Now sum them:
-					const roomTotalRoot = recalculated.reduce(
-						(acc, day) => acc + safeParseFloat(day.rootPrice),
-						0
-					);
-					const roomTotalWithComm = recalculated.reduce(
-						(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
-						0
-					);
-					const roomTotalCommission = recalculated.reduce(
-						(acc, day) =>
-							acc +
-							(safeParseFloat(day.totalPriceWithCommission) -
-								safeParseFloat(day.rootPrice)),
-						0
-					);
-
-					sumHotelCost += roomTotalRoot * room.count;
-					sumGrandTotal += roomTotalWithComm * room.count;
-					sumCommission += roomTotalCommission * room.count;
-
-					// First day’s root price
-					if (recalculated[0]) {
-						sumOneNightCost +=
-							safeParseFloat(recalculated[0].rootPrice) * room.count;
+					if (reDistributed && reDistributed.length) {
+						room.pricingByDay = reDistributed;
 					}
+				} else if (!userWantsManualOverride) {
+					if (forceRecalcFromDb || lengthMismatch) {
+						// Find the DB record for this room
+						const matched = selectedHotel?.roomCountDetails?.find(
+							(r) =>
+								r.roomType?.trim() === room.roomType.trim() &&
+								r.displayName?.trim() === room.displayName.trim()
+						);
+						if (!matched) {
+							console.warn("No matching room found for", room);
+							return room;
+						}
 
-					return { ...room, pricingByDay: recalculated };
+						const fallbackCommission = safeParseFloat(
+							matched.roomCommission ?? selectedHotel.commission,
+							10
+						);
+						const finalCommission =
+							fallbackCommission > 0 ? fallbackCommission : 10;
+
+						const recalculated = calculatePricingByDayWithCommission(
+							matched.pricingRate || [],
+							startDate,
+							endDate,
+							safeParseFloat(matched.price?.basePrice, 0),
+							safeParseFloat(matched.defaultCost, 0),
+							finalCommission
+						);
+						room.pricingByDay = recalculated;
+					}
 				}
+
+				// Summation
+				if (!room.pricingByDay || room.pricingByDay.length === 0) {
+					return room; // skip if something's off
+				}
+
+				const roomTotalRoot = room.pricingByDay.reduce(
+					(acc, day) => acc + safeParseFloat(day.rootPrice),
+					0
+				);
+				const roomTotalWithComm = room.pricingByDay.reduce(
+					(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
+					0
+				);
+				const roomTotalCommission = room.pricingByDay.reduce((acc, day) => {
+					return (
+						acc +
+						(safeParseFloat(day.totalPriceWithCommission) -
+							safeParseFloat(day.rootPrice))
+					);
+				}, 0);
+
+				// multiply by the # of identical “count” rooms
+				sumHotelCost += roomTotalRoot * room.count;
+				sumGrandTotal += roomTotalWithComm * room.count;
+				sumCommission += roomTotalCommission * room.count;
+
+				// For the first day’s root price only:
+				if (room.pricingByDay[0]) {
+					sumOneNightCost +=
+						safeParseFloat(room.pricingByDay[0].rootPrice) * room.count;
+				}
+
+				return room;
 			});
 
 			// Default deposit = sumCommission + sumOneNightCost
@@ -358,18 +405,22 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	/**
 	 * Whenever checkInDate, checkOutDate, selectedRooms, or selectedHotel changes,
 	 * recalc totals if anything truly changed.
+	 *
+	 * If the date changed, we force a re-distribution of either DB pricing or
+	 * user’s manual total.
 	 */
 	useEffect(() => {
 		const prev = prevValues.current;
 		const dateChanged =
-			!dayjs(prev.checkInDate).isSame(checkInDate) ||
-			!dayjs(prev.checkOutDate).isSame(checkOutDate);
+			!dayjs(prev.checkInDate).isSame(checkInDate, "day") ||
+			!dayjs(prev.checkOutDate).isSame(checkOutDate, "day");
+
 		const roomsChanged =
 			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms);
 		const hotelChanged = prev.selectedHotel?._id !== selectedHotel?._id;
 
 		if (dateChanged || roomsChanged || hotelChanged) {
-			calculateTotals(selectedRooms);
+			calculateTotals(selectedRooms, dateChanged);
 			prevValues.current = {
 				checkInDate,
 				checkOutDate,
@@ -424,6 +475,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				displayName: "",
 				count: 1,
 				pricingByDay: [],
+				manualTotal: null,
+				averageRootToTotalRatio: null,
+				commissionRate: 10,
 			};
 			setSelectedRooms(updated);
 			return;
@@ -434,6 +488,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			roomType: roomType.trim(),
 			displayName: displayName.trim(),
 			pricingByDay: [],
+			// Reset manual overrides if user changes room type
+			manualTotal: null,
+			averageRootToTotalRatio: null,
+			commissionRate: 10,
 		};
 		setSelectedRooms(updated);
 	};
@@ -449,7 +507,13 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	const addRoomSelection = () => {
 		setSelectedRooms((prev) => [
 			...prev,
-			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
+			{
+				roomType: "",
+				displayName: "",
+				count: 1,
+				pricingByDay: [],
+				commissionRate: 10, // default
+			},
 		]);
 	};
 
@@ -470,11 +534,42 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		setIsModalVisible(false);
 	};
 
-	// After user edits day‐by‐day pricing, update the store, then recalc totals
+	// After user edits day‐by‐day pricing, update the store
 	const handlePricingUpdate = (updatedPricingByDay) => {
+		// 1. Sum up daily final
+		const sumWithComm = updatedPricingByDay.reduce(
+			(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
+			0
+		);
+		// 2. averageRootToTotalRatio
+		let ratio = 0;
+		if (updatedPricingByDay.length > 0) {
+			ratio =
+				updatedPricingByDay.reduce((acc, day) => {
+					const dayFinal = safeParseFloat(day.totalPriceWithCommission, 0);
+					const dayRoot = safeParseFloat(day.rootPrice, 0);
+					if (dayFinal <= 0) return acc;
+					return acc + dayRoot / dayFinal;
+				}, 0) / updatedPricingByDay.length;
+		}
+
+		// 3. Also derive a single "commissionRate" from the first day if needed:
+		const firstDay = updatedPricingByDay[0];
+		let newCommRate = 10; // default
+		if (firstDay && safeParseFloat(firstDay.commissionRate) > 0) {
+			newCommRate = safeParseFloat(firstDay.commissionRate, 10);
+		}
+
+		// 4. Update the correct room
 		const updated = selectedRooms.map((room, i) =>
 			i === editingRoomIndex
-				? { ...room, pricingByDay: updatedPricingByDay }
+				? {
+						...room,
+						pricingByDay: updatedPricingByDay,
+						manualTotal: sumWithComm > 0 ? sumWithComm : null,
+						averageRootToTotalRatio: ratio > 0 ? ratio : 0,
+						commissionRate: newCommRate,
+				  }
 				: room
 		);
 		setSelectedRooms(updated);
@@ -483,7 +578,13 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	// Clear all fields
 	const clearAll = () => {
 		setSelectedRooms([
-			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
+			{
+				roomType: "",
+				displayName: "",
+				count: 1,
+				pricingByDay: [],
+				commissionRate: 10,
+			},
 		]);
 		setName("");
 		setEmail("");
@@ -505,6 +606,45 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		setAdvancePaymentOption("commission_plus_one_day");
 		setAdvancePaymentPercentage("");
 		setAdvancePaymentSAR("");
+	};
+
+	// Automatically preserve # of nights if user changes "From date"
+	const handleCheckInDateChange = (value) => {
+		if (!value) {
+			setCheckInDate(null);
+			return;
+		}
+		const newDate = dayjs(value);
+		// If we already have from + to, preserve old difference
+		if (checkInDate && checkOutDate) {
+			const oldNights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
+			if (oldNights > 0) {
+				const newCheckOut = newDate.add(oldNights, "day");
+				setCheckOutDate(newCheckOut);
+			}
+		} else if (checkOutDate && newDate.isSameOrAfter(checkOutDate, "day")) {
+			setCheckOutDate(null);
+		}
+		setCheckInDate(newDate);
+	};
+
+	const handleCheckOutDateChange = (value) => {
+		if (!value) {
+			setCheckOutDate(null);
+			return;
+		}
+		const newDate = dayjs(value);
+		setCheckOutDate(newDate);
+	};
+
+	// Disable past dates
+	const disableCheckInDate = (current) => {
+		return current && current < dayjs().startOf("day");
+	};
+	// Disable any check-out date on or before checkInDate
+	const disableCheckOutDate = (current) => {
+		if (!checkInDate) return true;
+		return current && current <= dayjs(checkInDate).startOf("day");
 	};
 
 	// Hotel dropdown
@@ -540,11 +680,13 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			message.error("Please fill in all required fields.");
 			return;
 		}
+
 		// Ensure each selected room has some pricing
 		if (!selectedRooms.every((r) => r.pricingByDay.length > 0)) {
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
+
 		// Validate deposit input
 		if (advancePaymentOption === "percentage") {
 			const p = safeParseFloat(advancePaymentPercentage, -1);
@@ -570,16 +712,22 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					// Summarize day‐by‐day:
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
-						price: day.totalPriceWithCommission, // The final nightly cost user sees
+						// The final nightly cost user sees
+						price: day.totalPriceWithCommission,
 						rootPrice: safeParseFloat(day.rootPrice),
 						commissionRate: safeParseFloat(day.commissionRate),
 						totalPriceWithCommission: safeParseFloat(
 							day.totalPriceWithCommission
 						),
+						/**
+						 * Key fix: capture the final "no‐commission" portion
+						 * that your code truly wants:
+						 */
 						totalPriceWithoutCommission: safeParseFloat(
 							day.totalPriceWithoutCommission
 						),
 					}));
+
 					// Average out the day‐by‐day “price with comm”
 					const avg =
 						pricingDetails.reduce(
@@ -608,6 +756,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 		const pickedRoomsType = transformPickedRooms(selectedRooms);
 
+		// The final reservation data
 		const reservationData = {
 			userId: user ? user._id : null,
 			hotelId: selectedHotel._id,
@@ -644,6 +793,11 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				cardHolderName: "",
 			},
 			sentFrom: "employee",
+			/**
+			 * The deposit object:
+			 * By default => commission + first-night rootPrice,
+			 * or if user picks percentage or SAR => we store that accordingly
+			 */
 			advancePayment: {
 				paymentPercentage:
 					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
@@ -663,10 +817,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				setReservationCreated(true);
 				setSelectedReservation(response.data);
 				window.scrollTo({ top: 0, behavior: "smooth" });
-				// Optionally reload or do something else
-				setTimeout(() => {
-					// window.location.reload(false);
-				}, 1500);
 			} else {
 				message.error({
 					content: response.message || "Error creating reservation",
@@ -717,6 +867,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							</Select>
 						</Form.Item>
 					</div>
+
 					<div className='col-md-6'>
 						<Form.Item label='Agent Name' required>
 							<Input
@@ -726,17 +877,31 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							/>
 						</Form.Item>
 					</div>
-					<div className='col-md-8'>
-						<Form.Item label='Check-in and Check-out Dates' required>
-							<RangePicker
+				</div>
+
+				{/* Check-in / Check-out DatePickers */}
+				<div className='row'>
+					<div className='col-md-6'>
+						<Form.Item label='Check-in Date' required>
+							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								value={[checkInDate, checkOutDate]}
-								onChange={(dates) => {
-									setCheckInDate(dates ? dates[0] : null);
-									setCheckOutDate(dates ? dates[1] : null);
-								}}
 								disabled={!selectedHotel}
+								disabledDate={disableCheckInDate}
+								value={checkInDate}
+								onChange={handleCheckInDateChange}
+							/>
+						</Form.Item>
+					</div>
+					<div className='col-md-6'>
+						<Form.Item label='Check-out Date' required>
+							<DatePicker
+								className='w-100'
+								format='YYYY-MM-DD'
+								disabled={!selectedHotel || !checkInDate}
+								disabledDate={disableCheckOutDate}
+								value={checkOutDate}
+								onChange={handleCheckOutDateChange}
 							/>
 						</Form.Item>
 					</div>
@@ -1000,7 +1165,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				onClose={closeModal}
 				pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
 				onUpdate={handlePricingUpdate}
-				roomDetails={selectedRooms[editingRoomIndex]}
 			/>
 
 			{/* Reservation Details Modal */}

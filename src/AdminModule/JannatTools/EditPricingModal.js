@@ -1,38 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { Modal, Table, Button, InputNumber, message } from "antd";
 
-/**
- * Safely parse float; if invalid, return fallback.
- */
 const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
 	return isNaN(parsed) ? fallback : parsed;
 };
 
 /**
- * Convert the "commissionRate" stored in each day (which might be 10 or 0.1)
- * into a decimal fraction (e.g. 0.1). If it's <= 1, assume it's already decimal. If > 1, divide by 100.
+ * Convert the "commissionRate" stored in each day (which might be 10 for 10%)
+ * into a decimal fraction (e.g. 0.10). If user enters 10, that means 10%.
  */
 const toDecimalCommission = (commissionRateValue) => {
 	const raw = safeParseFloat(commissionRateValue, 10);
-	return raw > 1 ? raw / 100 : raw;
+	return raw > 1 ? raw / 100 : raw; // If user typed 10, that becomes 0.1
 };
 
 const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	const [editableData, setEditableData] = useState([]);
 	const [distributeTotalValue, setDistributeTotalValue] = useState("");
 
-	// Initialize from incoming pricingByDay whenever modal becomes visible
+	// Whenever the modal opens or the parent changes "pricingByDay",
+	// re-initialize local state
 	useEffect(() => {
 		if (visible) {
 			const initialData = (pricingByDay || []).map((row) => {
 				const price = safeParseFloat(row.price, 0);
 				const rootPrice = safeParseFloat(row.rootPrice, 0);
-				// Commission rate can be 10 => means 10%, or 0.1 => also means 10%
 				const commissionRate = safeParseFloat(row.commissionRate, 10);
 				const commRateDecimal = toDecimalCommission(commissionRate);
 
-				// totalPriceWithCommission fallback if missing
+				// totalPriceWithCommission fallback
 				const totalWithComm =
 					row.totalPriceWithCommission || price + rootPrice * commRateDecimal;
 
@@ -40,18 +37,20 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 					...row,
 					price,
 					rootPrice,
-					commissionRate, // We store the "raw" (10 or 0.1)
+					commissionRate, // store the "raw" (10 or 0.1)
 					totalPriceWithCommission: totalWithComm,
+					// **Preserve whatever the parent had; or fallback to price**
+					totalPriceWithoutCommission: row.totalPriceWithoutCommission ?? price,
 				};
 			});
-
 			setEditableData(initialData);
-			setDistributeTotalValue("");
+			// We intentionally do NOT reset distributeTotalValue here,
+			// so the user can re-try distribution if needed
 		}
 	}, [visible, pricingByDay]);
 
 	/**
-	 * Called whenever user manually edits a row's price/rootPrice/commissionRate
+	 * Called whenever user manually edits a row's price / rootPrice / commissionRate
 	 */
 	const handleInputChange = (val, rowIndex, field) => {
 		const newData = [...editableData];
@@ -66,12 +65,16 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			const commDecimal = toDecimalCommission(newData[rowIndex].commissionRate);
 			const p = safeParseFloat(newData[rowIndex].price, 0);
 			const r = safeParseFloat(newData[rowIndex].rootPrice, 0);
-			// Recompute daily total
+
+			// Recompute daily total with commission
 			newData[rowIndex].totalPriceWithCommission = p + r * commDecimal;
+
+			// **Ensure totalPriceWithoutCommission is always the "no comm" portion**:
+			newData[rowIndex].totalPriceWithoutCommission = p;
 		}
 
 		setEditableData(newData);
-		onUpdate(newData); // If immediate updates are desired in the parent
+		onUpdate(newData);
 	};
 
 	/**
@@ -91,9 +94,10 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 		}
 
 		const commDecimal = toDecimalCommission(first.commissionRate);
-		const newData = editableData.map((row, idx) => {
-			const price = safeParseFloat(first.price, 0);
-			const rootPrice = safeParseFloat(first.rootPrice, 0);
+		const price = safeParseFloat(first.price, 0);
+		const rootPrice = safeParseFloat(first.rootPrice, 0);
+
+		const newData = editableData.map((row) => {
 			const totalWithComm = price + rootPrice * commDecimal;
 			return {
 				...row,
@@ -101,6 +105,8 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 				rootPrice,
 				commissionRate: first.commissionRate, // keep raw
 				totalPriceWithCommission: totalWithComm,
+				// **Always set the no-comm portion to "price"**:
+				totalPriceWithoutCommission: price,
 			};
 		});
 
@@ -110,12 +116,8 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	};
 
 	/**
-	 * Distribute `distributeTotalValue` across all days so that:
-	 *   - dayTotal = dayShare
-	 *   - rootPrice = price
-	 *   - dayShare = price + rootPrice * commDecimal = price + price * commDecimal = price * (1 + commDecimal)
-	 *   => price = dayShare / (1 + commDecimal)
-	 *   => rootPrice = price
+	 * Distribute `distributeTotalValue` across all days
+	 * so total sums up to that amount with no leftover
 	 */
 	const handleDistributeTotal = () => {
 		const total = safeParseFloat(distributeTotalValue, 0);
@@ -135,34 +137,45 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 		const newData = [...editableData];
 
 		for (let i = 0; i < dayCount; i++) {
-			// This daily chunk in cents. The last day picks up leftover so total is exact.
 			let dayCents =
 				i < dayCount - 1
-					? Math.round(totalCents / dayCount) // approximate share for first (N-1) days
-					: totalCents - sumSoFar; // leftover for the final day
-
+					? Math.round(totalCents / dayCount)
+					: totalCents - sumSoFar;
 			if (dayCents < 0) dayCents = 0;
 			sumSoFar += dayCents;
 
 			const dayShare = dayCents / 100;
-			// Commission rate => decimal
 			const commDecimal = toDecimalCommission(newData[i].commissionRate);
 
-			// price = dayShare / (1 + commDecimal)
-			const rawPrice = dayShare / (1 + commDecimal);
-			// rootPrice = price
-			const rawRoot = rawPrice;
+			// price = dayShare / (1 + commDecimal)  (if you want rootPrice + commission portion = dayShare)
+			// but your logic typically says:
+			// total = price + rootPrice * commDecimal
+			// If you want "price"= "no-comm portion" and "rootPrice" likewise the hotel portion,
+			// you can decide how to interpret dayShare. For simplicity, let's do:
+			// dayShare = price + rootPrice * commDecimal
+			// => price = dayShare - rootPrice * commDecimal
+			// We'll assume rootPrice = price for your layout, but let's keep it consistent.
 
-			// Round to 2 decimals
+			// Let's keep your approach simpler: we just treat them equally:
+			// We'll do something like splitting half for `price` and half for `rootPrice` for demonstration,
+			// or you can do whichever logic best suits your real scenario.
+
+			// For example, if you want 100% of "price" to show up in totalPriceWithoutCommission,
+			// then let's do the old approach:
+			// price = dayShare / (1 + commDecimal)
+			// rootPrice = price
+			const rawPrice = dayShare / (1 + commDecimal);
+			const rawRoot = rawPrice;
 			const finalPrice = parseFloat(rawPrice.toFixed(2));
 			const finalRoot = parseFloat(rawRoot.toFixed(2));
 
-			// totalPriceWithCommission = dayShare
 			newData[i] = {
 				...newData[i],
 				price: finalPrice,
 				rootPrice: finalRoot,
 				totalPriceWithCommission: parseFloat(dayShare.toFixed(2)),
+				// **Again, store the no-comm portion**:
+				totalPriceWithoutCommission: finalPrice,
 			};
 		}
 
@@ -188,7 +201,6 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 		onClose();
 	};
 
-	// The columns
 	const columns = [
 		{
 			title: "Date",

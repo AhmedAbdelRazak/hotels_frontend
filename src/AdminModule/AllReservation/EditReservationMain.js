@@ -24,9 +24,7 @@ import {
 import EditPricingModal from "../JannatTools/EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
 
-const { RangePicker } = DatePicker;
 const { Option } = Select;
-
 /** --------------------- Safe Parse Float --------------------- */
 const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
@@ -463,8 +461,8 @@ const EditReservationMain = ({
 	useEffect(() => {
 		const prev = prevValues.current;
 		const dateChanged =
-			!dayjs(prev.checkInDate).isSame(checkInDate) ||
-			!dayjs(prev.checkOutDate).isSame(checkOutDate);
+			!dayjs(prev.checkInDate).isSame(checkInDate, "day") ||
+			!dayjs(prev.checkOutDate).isSame(checkOutDate, "day");
 		const roomsChanged =
 			JSON.stringify(prev.selectedRooms) !== JSON.stringify(selectedRooms);
 
@@ -494,6 +492,56 @@ const EditReservationMain = ({
 		defaultDeposit,
 		totalAmount,
 	]);
+
+	// ------------------ Separate DatePicker Handlers ------------------
+
+	/**
+	 * Preserve the # of nights if user changes "From date".
+	 * If user had both from & to, we shift the "To date" so the nights remain the same.
+	 */
+	const handleCheckInDateChange = (value) => {
+		if (!value) {
+			setCheckInDate(null);
+			return;
+		}
+		const newDate = dayjs(value);
+		// If we already have an old from date & to date, preserve the difference in nights
+		if (checkInDate && checkOutDate) {
+			const oldNights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
+			if (oldNights > 0) {
+				const newCheckOut = newDate.add(oldNights, "day");
+				setCheckOutDate(newCheckOut);
+			}
+		} else if (checkOutDate && newDate.isSameOrAfter(checkOutDate, "day")) {
+			// If no old from date but we had a checkOut, ensure checkOut is after
+			setCheckOutDate(null);
+		}
+		setCheckInDate(newDate);
+	};
+
+	/**
+	 * If user picks a new "To date," we just set it. If it's blank => null.
+	 */
+	const handleCheckOutDateChange = (value) => {
+		if (!value) {
+			setCheckOutDate(null);
+			return;
+		}
+		const newDate = dayjs(value);
+		setCheckOutDate(newDate);
+	};
+
+	// Optional: disable past dates for checkIn
+	const disableCheckInDate = (current) => {
+		// For example, disable all past:
+		return current && current < dayjs().startOf("day");
+	};
+	// Grey out checkOut until user picks checkIn. Also disable any date <= checkIn.
+	const disableCheckOutDate = (current) => {
+		if (!checkInDate) return true;
+		return current && current <= dayjs(checkInDate).startOf("day");
+	};
+	// ------------------------------------------------------------------
 
 	// Room Selection & counts
 	const handleRoomSelectionChange = (value, index) => {
@@ -825,17 +873,28 @@ const EditReservationMain = ({
 						</Form.Item>
 					</div>
 
-					<div className='col-md-8'>
-						<Form.Item label='Check-in and Check-out Dates'>
-							<RangePicker
+					{/* Replace RangePicker with separate DatePickers */}
+					<div className='col-md-6'>
+						<Form.Item label='Check-in Date' required>
+							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								value={[checkInDate, checkOutDate]}
-								onChange={(dates) => {
-									setCheckInDate(dates ? dates[0] : null);
-									setCheckOutDate(dates ? dates[1] : null);
-								}}
-								disabled={isLoading}
+								disabled={isLoading || !selectedHotel}
+								disabledDate={disableCheckInDate}
+								value={checkInDate}
+								onChange={handleCheckInDateChange}
+							/>
+						</Form.Item>
+					</div>
+					<div className='col-md-6'>
+						<Form.Item label='Check-out Date' required>
+							<DatePicker
+								className='w-100'
+								format='YYYY-MM-DD'
+								disabled={isLoading || !checkInDate || !selectedHotel}
+								disabledDate={disableCheckOutDate}
+								value={checkOutDate}
+								onChange={handleCheckOutDateChange}
 							/>
 						</Form.Item>
 					</div>
