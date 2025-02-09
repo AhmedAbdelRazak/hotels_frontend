@@ -1392,6 +1392,31 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 									<div className='my-3'>
 										<div className='row'>
+											{reservation.payment_details.onsite_paid_amount &&
+											reservation.payment_details.onsite_paid_amount > 0 ? (
+												<div className='col-md-5 mx-auto'>
+													<h5
+														style={{ color: "darkgreen", fontWeight: "bold" }}
+													>
+														{chosenLanguage === "Arabic"
+															? "Paid Offline"
+															: "Paid Offline"}
+													</h5>
+												</div>
+											) : null}
+											{reservation.payment_details.onsite_paid_amount &&
+											reservation.payment_details.onsite_paid_amount > 0 ? (
+												<div
+													className='col-md-5 mx-auto'
+													style={{ color: "darkgreen", fontWeight: "bold" }}
+												>
+													<h5>
+														{reservation.payment_details.onsite_paid_amount}{" "}
+														{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+													</h5>
+												</div>
+											) : null}
+
 											<div className='col-md-5 mx-auto'>
 												<h6>
 													{chosenLanguage === "Arabic"
