@@ -37,6 +37,20 @@ const ExportToExcelButton = ({
 	const [fromDate, setFromDate] = useState(dayjs().subtract(29, "day"));
 	const [toDate, setToDate] = useState(dayjs());
 
+	// NEW: Filter Type dropdown
+	const [filterType, setFilterType] = useState("all");
+	const filterOptions = [
+		{ label: "All", value: "all" },
+		{ label: "Check-in Today", value: "checkinToday" },
+		{ label: "Check-out Today", value: "checkoutToday" },
+		{ label: "Not Paid", value: "notPaid" },
+		{ label: "Not Captured", value: "notCaptured" },
+		{ label: "Captured", value: "captured" },
+		{ label: "Cancelled", value: "cancelled" },
+		{ label: "Paid Offline", value: "paidOffline" },
+		{ label: "Un-Cancelled", value: "notCancelled" },
+	];
+
 	const { user, token } = isAuthenticated();
 
 	// Open modal
@@ -59,6 +73,11 @@ const ExportToExcelButton = ({
 					: selectedHotels.join(","),
 			};
 
+			// If filterType !== "all", include it:
+			if (filterType !== "all") {
+				paramObj.filterType = filterType;
+			}
+
 			// Call your backend
 			const reservations = await getExportToExcelList(
 				user._id,
@@ -71,12 +90,12 @@ const ExportToExcelButton = ({
 				return;
 			}
 
-			// reservations now have fields like:
+			// reservations now have (per your backend):
 			// {
 			//   confirmation_number, customer_name, customer_phone, hotel_name,
 			//   reservation_status, checkin_date, checkout_date, payment_status,
 			//   total_amount, paid_amount, room_type, room_count,
-			//   paid_onsite, createdAt
+			//   paid_onsite, paid_offline, createdAt
 			// }
 
 			doExportToExcel(reservations);
@@ -108,7 +127,7 @@ const ExportToExcelButton = ({
 				? "en-US"
 				: "en-GB";
 
-		// Map each reservation to the 14 fields you originally had
+		// Map each reservation to the fields you want in Excel
 		const exportData = dataArray.map((item) => ({
 			"Confirmation Number": item.confirmation_number || "",
 			Name: item.customer_name || "",
@@ -126,7 +145,7 @@ const ExportToExcelButton = ({
 			"Paid Amount": item.paid_amount || 0,
 			"Room Type": item.room_type || "",
 			"Room Count": item.room_count || 0,
-			"Paid Onsite": item.paid_onsite || 0,
+			"Paid Offline": item.paid_offline || 0, // new column
 			"Created At": item.createdAt
 				? new Date(item.createdAt).toLocaleDateString(localeForDate)
 				: "",
@@ -143,10 +162,10 @@ const ExportToExcelButton = ({
 			"Checkout Date",
 			"Payment Status",
 			"Total Amount",
-			"Paid Amount",
+			"Paid Amount (Online)",
 			"Room Type",
 			"Room Count",
-			"Paid Onsite",
+			"Paid Offline", // new
 			"Created At",
 		];
 
@@ -167,7 +186,7 @@ const ExportToExcelButton = ({
 			{ wch: 15 }, // Paid Amount
 			{ wch: 15 }, // Room Type
 			{ wch: 10 }, // Room Count
-			{ wch: 15 }, // Paid Onsite
+			{ wch: 15 }, // Paid Offline
 			{ wch: 15 }, // Created At
 		];
 
@@ -257,7 +276,23 @@ const ExportToExcelButton = ({
 					</Select>
 				</div>
 
-				{/* 4) Confirm/Cancel */}
+				{/* NEW 4) Filter Type Dropdown */}
+				<div style={{ marginBottom: 16 }}>
+					<strong>Filter Type:</strong>
+					<Select
+						style={{ width: "100%", marginTop: 8 }}
+						value={filterType}
+						onChange={(val) => setFilterType(val)}
+					>
+						{filterOptions.map((opt) => (
+							<Option key={opt.value} value={opt.value}>
+								{opt.label}
+							</Option>
+						))}
+					</Select>
+				</div>
+
+				{/* 5) Confirm/Cancel */}
 				<div style={{ textAlign: "right" }}>
 					<Button onClick={handleCancel} style={{ marginRight: 8 }}>
 						Cancel

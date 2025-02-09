@@ -18,10 +18,9 @@ const EnhancedContentTable = ({
 	handleSearch,
 	fromPage,
 	scorecardsObject,
-	// NEW: We receive filterType + setFilterType from the parent
+	// Filter props from parent
 	filterType,
 	setFilterType,
-	// We can also pass a new parent's handleFilter if we prefer
 	handleFilterClickFromParent,
 	allHotelDetailsAdmin,
 }) => {
@@ -29,7 +28,9 @@ const EnhancedContentTable = ({
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
+	// (Currently we artificially label #2944008828 as captured as well)
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
+
 	const formattedReservations = useMemo(() => {
 		return data.map((reservation) => {
 			const {
@@ -37,9 +38,22 @@ const EnhancedContentTable = ({
 				hotelId = {},
 				payment_details = {},
 			} = reservation;
+
 			const isCaptured =
 				payment_details.captured ||
 				capturedConfirmationNumbers.includes(reservation.confirmation_number);
+
+			// Payment status logic with "Paid Offline" as last sanity check before "Not Paid"
+			let computedPaymentStatus;
+			if (isCaptured) {
+				computedPaymentStatus = "Captured";
+			} else if (payment_details?.onsite_paid_amount > 0) {
+				computedPaymentStatus = "Paid Offline";
+			} else if (reservation.payment === "not paid") {
+				computedPaymentStatus = "Not Paid";
+			} else {
+				computedPaymentStatus = "Not Captured";
+			}
 
 			return {
 				...reservation,
@@ -47,12 +61,7 @@ const EnhancedContentTable = ({
 				customer_phone: customer_details.phone || "N/A",
 				hotel_name: hotelId.hotelName || "Unknown Hotel",
 				createdAt: reservation.createdAt || null,
-				payment_status:
-					reservation.payment === "not paid"
-						? "Not Paid"
-						: isCaptured
-						  ? "Captured"
-						  : "Not Captured",
+				payment_status: computedPaymentStatus,
 			};
 		});
 	}, [data, capturedConfirmationNumbers]);
@@ -105,13 +114,10 @@ const EnhancedContentTable = ({
 		setIsModalVisible(false);
 	};
 
-	// ------------------ Filter Button Handlers (Now calls parent's function) ------------------
+	// ------------------ Filter Button Handlers ------------------
 	const onFilterClick = (type) => {
-		// If we click the same filter again, we might want to clear it:
 		const newFilter = filterType === type ? "" : type;
 		setFilterType(newFilter);
-
-		// This calls the parent's function to fetch from backend with ?filterType=newFilter
 		handleFilterClickFromParent(newFilter);
 	};
 
@@ -169,6 +175,57 @@ const EnhancedContentTable = ({
 		}
 	};
 
+	// ------------------ Helpers for dynamic background color ------------------
+	// Payment Status with background + text color
+	const getPaymentStatusStyles = (status = "") => {
+		const s = status.toLowerCase();
+		if (s === "captured") {
+			return { backgroundColor: "var(--badge-bg-green)" };
+		}
+		if (s === "paid offline") {
+			return {
+				backgroundColor: "var(--accent-color-dark-green)",
+				color: "#fff",
+			};
+		}
+		if (s === "not captured") {
+			return { backgroundColor: "var(--background-accent-yellow)" };
+		}
+		// Default: Not Paid or anything else => background-light
+		return { backgroundColor: "var(--background-light)" };
+	};
+
+	// Reservation Status with background + text color
+	const getReservationStatusStyles = (status = "") => {
+		const s = status.toLowerCase();
+		if (s === "confirmed") {
+			return { backgroundColor: "var(--background-light)", color: "inherit" };
+		}
+		if (s === "inhouse") {
+			return {
+				backgroundColor: "var(--background-accent-yellow)",
+				color: "inherit",
+			};
+		}
+		if (s === "checked_out") {
+			return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
+		}
+		if (s === "no_show") {
+			return {
+				backgroundColor: "var(--accent-color-orange)",
+				color: "inherit",
+			};
+		}
+		if (s === "cancelled") {
+			return {
+				backgroundColor: "var(--badge-bg-red)",
+				color: "var(--button-font-color)",
+			};
+		}
+		// Otherwise, no override
+		return {};
+	};
+
 	// ------------------ Render ------------------
 	return (
 		<ContentTableWrapper>
@@ -211,6 +268,14 @@ const EnhancedContentTable = ({
 					>
 						Captured
 					</FilterButton>
+					{/* "Paid Offline" filter button */}
+					<FilterButton
+						style={{ fontWeight: "bold" }}
+						onClick={() => onFilterClick("paidOffline")}
+						isActive={filterType === "paidOffline"}
+					>
+						Paid Offline
+					</FilterButton>
 					<FilterButton
 						onClick={() => onFilterClick("cancelled")}
 						isActive={filterType === "cancelled"}
@@ -223,6 +288,7 @@ const EnhancedContentTable = ({
 					>
 						Un-Cancelled
 					</FilterButton>
+
 					<FilterButton onClick={handleClearAllFilters}>Clear All</FilterButton>
 				</FilterButtonContainer>
 			)}
@@ -384,65 +450,84 @@ const EnhancedContentTable = ({
 						</tr>
 					</thead>
 					<tbody>
-						{sortedData.map((reservation, i) => (
-							<tr key={reservation._id}>
-								<td>{i + 1}</td>
-								<td>
-									<Tooltip title={reservation.confirmation_number}>
-										<span>{reservation.confirmation_number}</span>
-									</Tooltip>
-								</td>
-								<td>
-									<Tooltip title={reservation.customer_name}>
-										<span>{reservation.customer_name}</span>
-									</Tooltip>
-								</td>
-								<td>
-									<Tooltip title={reservation.customer_phone}>
-										<span>{reservation.customer_phone}</span>
-									</Tooltip>
-								</td>
-								<td>
-									<Tooltip title={reservation.hotel_name}>
-										<span
-											style={{
-												color: "blue",
-												textDecoration: "underline",
-												cursor: "pointer",
-											}}
-											onClick={() => handleHotelClick(reservation)}
-										>
-											{reservation.hotel_name}
-										</span>
-									</Tooltip>
-								</td>
-								<td>{reservation.reservation_status}</td>
-								<td>
-									{new Date(reservation.checkin_date).toLocaleDateString(
-										"en-US"
-									)}
-								</td>
-								<td>
-									{new Date(reservation.checkout_date).toLocaleDateString(
-										"en-US"
-									)}
-								</td>
-								<td>{reservation.payment_status}</td>
-								<td>{Number(reservation.total_amount || 0).toFixed(2)} SAR</td>
-								<td>
-									{reservation.createdAt
-										? new Date(reservation.createdAt).toLocaleDateString(
-												"en-US"
-										  )
-										: "N/A"}
-								</td>
-								<td>
-									<Button onClick={() => showDetailsModal(reservation)}>
-										View Details
-									</Button>
-								</td>
-							</tr>
-						))}
+						{sortedData.map((reservation, i) => {
+							const resStatusStyles = getReservationStatusStyles(
+								reservation.reservation_status
+							);
+							const payStatusStyles = getPaymentStatusStyles(
+								reservation.payment_status
+							);
+
+							return (
+								<tr key={reservation._id}>
+									<td>{i + 1}</td>
+									<td>
+										<Tooltip title={reservation.confirmation_number}>
+											<span>{reservation.confirmation_number}</span>
+										</Tooltip>
+									</td>
+									<td>
+										<Tooltip title={reservation.customer_name}>
+											<span>{reservation.customer_name}</span>
+										</Tooltip>
+									</td>
+									<td>
+										<Tooltip title={reservation.customer_phone}>
+											<span>{reservation.customer_phone}</span>
+										</Tooltip>
+									</td>
+									<td>
+										<Tooltip title={reservation.hotel_name}>
+											<span
+												style={{
+													color: "blue",
+													textDecoration: "underline",
+													cursor: "pointer",
+												}}
+												onClick={() => handleHotelClick(reservation)}
+											>
+												{reservation.hotel_name}
+											</span>
+										</Tooltip>
+									</td>
+
+									{/* Reservation Status with background and text color */}
+									<td style={resStatusStyles}>
+										{reservation.reservation_status}
+									</td>
+
+									<td>
+										{new Date(reservation.checkin_date).toLocaleDateString(
+											"en-US"
+										)}
+									</td>
+									<td>
+										{new Date(reservation.checkout_date).toLocaleDateString(
+											"en-US"
+										)}
+									</td>
+
+									{/* Payment Status with background and text color */}
+									<td style={payStatusStyles}>{reservation.payment_status}</td>
+
+									<td>
+										{Number(reservation.total_amount || 0).toFixed(2)} SAR
+									</td>
+									<td>
+										{reservation.createdAt
+											? new Date(reservation.createdAt).toLocaleDateString(
+													"en-US"
+											  )
+											: "N/A"}
+									</td>
+									<td>
+										<Button onClick={() => showDetailsModal(reservation)}>
+											View Details
+										</Button>
+									</td>
+								</tr>
+							);
+						})}
 					</tbody>
 				</StyledTable>
 			</TableWrapper>
