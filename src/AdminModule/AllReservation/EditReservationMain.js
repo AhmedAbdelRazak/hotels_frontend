@@ -200,9 +200,9 @@ const EditReservationMain = ({
 	}, [user._id, token]);
 
 	useEffect(() => {
-		setAgentName(user.name || "");
+		setAgentName(reservation.customer_details.reservedBy || user.name || "");
 		getAllHotels();
-	}, [getAllHotels, user.name]);
+	}, [getAllHotels, user.name, reservation.customer_details.reservedBy]);
 
 	// 2) Prepopulate fields from reservation
 	useEffect(() => {

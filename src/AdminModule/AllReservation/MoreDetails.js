@@ -1392,8 +1392,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 									<div className='my-3'>
 										<div className='row'>
-											{reservation.payment_details.onsite_paid_amount &&
-											reservation.payment_details.onsite_paid_amount > 0 ? (
+											{reservation?.payment_details?.onsite_paid_amount &&
+											reservation?.payment_details?.onsite_paid_amount > 0 ? (
 												<div className='col-md-5 mx-auto'>
 													<h5
 														style={{ color: "darkgreen", fontWeight: "bold" }}
@@ -1404,8 +1404,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 													</h5>
 												</div>
 											) : null}
-											{reservation.payment_details.onsite_paid_amount &&
-											reservation.payment_details.onsite_paid_amount > 0 ? (
+											{reservation?.payment_details?.onsite_paid_amount &&
+											reservation?.payment_details?.onsite_paid_amount > 0 ? (
 												<div
 													className='col-md-5 mx-auto'
 													style={{ color: "darkgreen", fontWeight: "bold" }}

@@ -115,30 +115,20 @@ const ReceiptPDF = forwardRef(
 		// The final deposit (in SAR) is computed as the sum of the total commission and the one night cost.
 		const finalDeposit = totalCommission + oneNightCost;
 
-		// Gather offline + online amounts
-		const offlinePaid = safeNumber(
-			reservation?.payment_details?.onsite_paid_amount
-		);
-		const onlinePaid = safeNumber(reservation?.paid_amount);
-		const totalPaidSoFar = offlinePaid + onlinePaid;
-
 		// Determine if "Not Paid" should be displayed
-		// (Slight tweak: only call it "not paid" if absolutely zero paid)
 		const hasCardNumber =
 			reservation?.customer_details?.cardNumber &&
 			reservation.customer_details.cardNumber.trim() !== "";
-		const isNotPaid =
-			(reservation.payment === "not paid" || !hasCardNumber) &&
-			totalPaidSoFar === 0; // <= Tweak here
 
-		// Compute the deposit percentage (based on how much is ACTUALLY paid)
+		const isNotPaid = reservation.payment === "not paid" || !hasCardNumber;
+
+		// Compute the deposit percentage (finalDeposit / totalAmount * 100)
 		const depositPercentage =
-			totalAmount !== 0 ? ((totalPaidSoFar / totalAmount) * 100).toFixed(0) : 0;
+			totalAmount !== 0 ? ((finalDeposit / totalAmount) * 100).toFixed(0) : 0;
 
-		// Check if fully paid
 		const isFullyPaid =
-			safeNumber(totalPaidSoFar).toFixed(0) ===
-			safeNumber(totalAmount).toFixed(0);
+			safeNumber(reservation.paid_amount).toFixed(0) ===
+			safeNumber(reservation.total_amount).toFixed(0);
 
 		// Handle Modal actions for Supplier Name
 		const showModal = () => {
@@ -237,18 +227,33 @@ const ReceiptPDF = forwardRef(
 					</div>
 					<div className='info-box'>
 						<strong>
-							{isFullyPaid
-								? "Paid Amount"
-								: isNotPaid
-								  ? "Not Paid"
-								  : `${depositPercentage}% Deposit`}
+							{reservation?.payment_details?.onsite_paid_amount &&
+							reservation?.payment_details?.onsite_paid_amount > 0
+								? "Paid Offline"
+								: isFullyPaid
+								  ? "Paid Amount"
+								  : isNotPaid
+								    ? "Not Paid"
+								    : `${depositPercentage}% Deposit`}
 						</strong>
 						<div>
-							{isFullyPaid
-								? `${Number(totalPaidSoFar).toFixed(2)} SAR`
-								: isNotPaid
-								  ? "Not Paid"
-								  : `${depositPercentage}% Deposit`}
+							{reservation?.payment_details?.onsite_paid_amount &&
+							reservation?.payment_details?.onsite_paid_amount > 0 ? (
+								<>
+									{Number(
+										(reservation?.payment_details?.onsite_paid_amount /
+											reservation?.total_amount) *
+											100
+									).toFixed(2)}
+									%
+								</>
+							) : isFullyPaid ? (
+								`${Number(reservation?.paid_amount).toFixed(2)} SAR`
+							) : isNotPaid ? (
+								"Not Paid"
+							) : (
+								`${depositPercentage}% Deposit`
+							)}
 						</div>
 					</div>
 				</div>
@@ -349,34 +354,62 @@ const ReceiptPDF = forwardRef(
 						<strong>Net Accommodation Charge:</strong>{" "}
 						{Number(reservation?.total_amount).toFixed(2)} SAR
 					</div>
-					{/** If the user paid onsite, we show it */}
-					{offlinePaid > 0 && (
-						<div style={{ color: "darkgreen", fontWeight: "bold" }}>
-							Paid Offline: {offlinePaid.toFixed(2)} SAR
-						</div>
-					)}
-					{isFullyPaid && (offlinePaid <= 0 || !offlinePaid) ? (
+					{isFullyPaid ? (
 						<div>
-							<strong>Paid Amount:</strong> {Number(totalPaidSoFar).toFixed(2)}{" "}
+							<strong>Paid Amount:</strong>{" "}
+							{Number(reservation?.paid_amount).toFixed(2)} SAR
+						</div>
+					) : reservation?.payment_details?.onsite_paid_amount ||
+					  reservation?.payment_details?.onsite_paid_amount > 0 ? (
+						<div>
+							<strong>Paid Amount Onsite:</strong>{" "}
+							{Number(reservation?.payment_details?.onsite_paid_amount).toFixed(
+								2
+							)}{" "}
 							SAR
 						</div>
+					) : reservation?.payment_details?.onsite_paid_amount ||
+					  reservation?.payment_details?.onsite_paid_amount > 0 ? (
+						<div>
+							<strong>Payment Status:</strong>{" "}
+							{reservation?.payment_details?.onsite_paid_amount ===
+							reservation?.total_amount
+								? "Fully Paid Onsite"
+								: "Desposit Paid Onsite"}
+						</div>
 					) : isNotPaid ? (
-						(offlinePaid <= 0 || !offlinePaid)(
-							<div>
-								<strong>Payment Status:</strong> Not Paid
-							</div>
-						)
-					) : offlinePaid <= 0 || !offlinePaid ? (
+						<div>
+							<strong>Payment Status:</strong> Not Paid
+						</div>
+					) : (
 						<>
 							<div>
 								<strong>Final Deposit ({depositPercentage}% of Total):</strong>{" "}
 								{Number(finalDeposit).toFixed(2)} SAR
 							</div>
 						</>
-					) : null}
+					)}
 					<div>
 						<strong>Total To Be Collected:</strong>{" "}
-						{(Number(reservation?.total_amount) - totalPaidSoFar).toFixed(2)}{" "}
+						{reservation?.payment_details?.onsite_paid_amount &&
+						reservation?.payment_details?.onsite_paid_amount > 0 ? (
+							<>
+								{Number(
+									Number(reservation?.total_amount) -
+										Number(reservation?.payment_details?.onsite_paid_amount)
+								).toFixed(2)}
+							</>
+						) : isNotPaid ? (
+							(
+								Number(reservation?.total_amount) -
+								Number(reservation?.paid_amount)
+							).toFixed(2)
+						) : (
+							(
+								Number(reservation?.total_amount) -
+								Number(reservation?.paid_amount ? reservation?.paid_amount : 0)
+							).toFixed(2)
+						)}{" "}
 						SAR
 					</div>
 				</div>
