@@ -14,6 +14,7 @@ const ReceiptPDF = forwardRef(
 		ref
 	) => {
 		const bookingDate = new Date(reservation?.createdAt).toLocaleDateString();
+
 		const [supplierName, setSupplierName] = useState(
 			(reservation?.supplierData && reservation.supplierData.supplierName) ||
 				hotelDetails?.belongsTo?.name ||
@@ -54,7 +55,7 @@ const ReceiptPDF = forwardRef(
 			return isNaN(num) ? 0 : num;
 		};
 
-		// Compute the total commission considering dynamic commissionRate
+		// eslint-disable-next-line
 		function computeTotalCommission() {
 			if (!reservation.pickedRoomsType) return 0;
 
@@ -63,7 +64,7 @@ const ReceiptPDF = forwardRef(
 
 				room.pricingByDay.forEach((day) => {
 					const rootPrice = safeNumber(day.rootPrice);
-					const commissionRate = safeNumber(day.commissionRate) / 100; // Convert percentage to decimal
+					const commissionRate = safeNumber(day.commissionRate) / 100; // percentage to decimal
 					const totalPriceWithoutCommission = safeNumber(
 						day.totalPriceWithoutCommission
 					);
@@ -81,10 +82,11 @@ const ReceiptPDF = forwardRef(
 			}, 0);
 		}
 
+		// eslint-disable-next-line
 		const totalCommission = computeTotalCommission();
 
-		// Compute one night cost for all rooms using the average rootPrice of each room
-		const computeOneNightCost = () => {
+		// eslint-disable-next-line
+		function computeOneNightCost() {
 			if (
 				!reservation.pickedRoomsType ||
 				reservation.pickedRoomsType.length === 0
@@ -105,26 +107,33 @@ const ReceiptPDF = forwardRef(
 				// Multiply by the number of rooms (count)
 				return total + firstDayRootPrice * safeNumber(room.count);
 			}, 0);
-		};
+		}
 
+		// eslint-disable-next-line
 		const oneNightCost = computeOneNightCost();
 
-		// Full amount from reservation (in SAR)
+		// eslint-disable-next-line
+		const oldFinalDeposit = totalCommission + oneNightCost;
+
 		const totalAmount = safeNumber(reservation.total_amount);
+		const paidAmount = safeNumber(reservation.paid_amount);
 
-		// The final deposit (in SAR) is computed as the sum of the total commission and the one night cost.
-		const finalDeposit = totalCommission + oneNightCost;
-
-		// Determine if "Not Paid" should be displayed
+		// --- NEW Logic For Final Deposit & Deposit Percentage ---
+		// If user has a card, deposit = paid_amount, depositPercentage = (paid_amount / total_amount)*100
+		// Otherwise, if user has no card, we consider it 0 or "Not Paid".
 		const hasCardNumber =
 			reservation?.customer_details?.cardNumber &&
 			reservation.customer_details.cardNumber.trim() !== "";
 
-		const isNotPaid = reservation.payment === "not paid" || !hasCardNumber;
+		const finalDeposit = hasCardNumber ? paidAmount : 0;
 
-		// Compute the deposit percentage (finalDeposit / totalAmount * 100)
 		const depositPercentage =
-			totalAmount !== 0 ? ((finalDeposit / totalAmount) * 100).toFixed(0) : 0;
+			hasCardNumber && totalAmount !== 0
+				? ((finalDeposit / totalAmount) * 100).toFixed(0)
+				: 0;
+		// -------------------------------------------------------
+
+		const isNotPaid = reservation.payment === "not paid" || !hasCardNumber;
 
 		const isFullyPaid =
 			safeNumber(reservation.paid_amount).toFixed(0) ===
@@ -248,7 +257,7 @@ const ReceiptPDF = forwardRef(
 									%
 								</>
 							) : isFullyPaid ? (
-								`${Number(reservation?.paid_amount).toFixed(2)} SAR`
+								`${paidAmount.toFixed(2)} SAR`
 							) : isNotPaid ? (
 								"Not Paid"
 							) : (
@@ -320,7 +329,6 @@ const ReceiptPDF = forwardRef(
 					</thead>
 					<tbody>
 						{reservation?.pickedRoomsType?.map((room, index) => {
-							// Safely parse chosenPrice and rootPrice
 							const chosenPrice = safeNumber(room.chosenPrice);
 							const firstDay = room.pricingByDay && room.pricingByDay[0];
 							const rootPrice = firstDay ? safeNumber(firstDay.rootPrice) : 0;
@@ -351,13 +359,12 @@ const ReceiptPDF = forwardRef(
 				{/* Payment Summary */}
 				<div className='summary'>
 					<div>
-						<strong>Net Accommodation Charge:</strong>{" "}
-						{Number(reservation?.total_amount).toFixed(2)} SAR
+						<strong>Net Accommodation Charge:</strong> {totalAmount.toFixed(2)}{" "}
+						SAR
 					</div>
 					{isFullyPaid ? (
 						<div>
-							<strong>Paid Amount:</strong>{" "}
-							{Number(reservation?.paid_amount).toFixed(2)} SAR
+							<strong>Paid Amount:</strong> {paidAmount.toFixed(2)} SAR
 						</div>
 					) : reservation?.payment_details?.onsite_paid_amount ||
 					  reservation?.payment_details?.onsite_paid_amount > 0 ? (
@@ -375,7 +382,7 @@ const ReceiptPDF = forwardRef(
 							{reservation?.payment_details?.onsite_paid_amount ===
 							reservation?.total_amount
 								? "Fully Paid Onsite"
-								: "Desposit Paid Onsite"}
+								: "Deposit Paid Onsite"}
 						</div>
 					) : isNotPaid ? (
 						<div>
@@ -385,7 +392,7 @@ const ReceiptPDF = forwardRef(
 						<>
 							<div>
 								<strong>Final Deposit ({depositPercentage}% of Total):</strong>{" "}
-								{Number(finalDeposit).toFixed(2)} SAR
+								{finalDeposit.toFixed(2)} SAR
 							</div>
 						</>
 					)}
@@ -395,20 +402,14 @@ const ReceiptPDF = forwardRef(
 						reservation?.payment_details?.onsite_paid_amount > 0 ? (
 							<>
 								{Number(
-									Number(reservation?.total_amount) -
+									Number(totalAmount) -
 										Number(reservation?.payment_details?.onsite_paid_amount)
 								).toFixed(2)}
 							</>
 						) : isNotPaid ? (
-							(
-								Number(reservation?.total_amount) -
-								Number(reservation?.paid_amount)
-							).toFixed(2)
+							(Number(totalAmount) - paidAmount).toFixed(2)
 						) : (
-							(
-								Number(reservation?.total_amount) -
-								Number(reservation?.paid_amount ? reservation?.paid_amount : 0)
-							).toFixed(2)
+							(Number(totalAmount) - paidAmount).toFixed(2)
 						)}{" "}
 						SAR
 					</div>
@@ -492,9 +493,8 @@ const ReceiptPDFWrapper = styled.div`
 		font-size: 20px;
 		font-weight: bold;
 		padding-right: 7px;
-		/* Align the content to the bottom and add extra top padding */
 		align-self: flex-end;
-		padding-top: 35px;
+		padding-top: 35px; /* Extra top padding */
 	}
 
 	.header2,
