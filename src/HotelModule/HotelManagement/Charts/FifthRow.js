@@ -2,94 +2,112 @@ import React from "react";
 import Chart from "react-apexcharts";
 import styled from "styled-components";
 
-const bookingOptions = {
-	chart: {
-		type: "line",
-		toolbar: {
-			show: false,
-		},
-	},
-	stroke: {
-		curve: "smooth",
-		width: 2,
-	},
-	xaxis: {
-		categories: [
-			"01-Mar-2023",
-			"02-Mar-2023",
-			"03-Mar-2023",
-			"04-Mar-2023",
-			"05-Mar-2023",
-			"06-Mar-2023",
-			"07-Mar-2023",
-		],
-	},
-	yaxis: {
-		title: {
-			text: "",
-		},
-	},
-	colors: ["#66BB6A"],
-	tooltip: {
-		y: {
-			formatter: (val) => `${val}`,
-		},
-	},
-};
+const FifthRow = ({
+	chosenLanguage = "English",
+	adminDashboardReport = {},
+}) => {
+	// Safely extract from adminDashboardReport.fifthRow
+	const {
+		bookingLine = { categories: [], checkIn: [], checkOut: [] },
+		visitorsLine = { categories: [], yesterday: [], today: [] },
+	} = adminDashboardReport;
 
-const bookingSeries = [
-	{
-		name: "Booking",
-		data: [30, 40, 35, 50, 49, 60, 70],
-	},
-];
-
-const visitorsOptions = {
-	chart: {
-		type: "line",
-		toolbar: {
-			show: false,
+	// 1) Booking line chart (Check In / Check Out)
+	const bookingOptions = {
+		chart: {
+			type: "line",
+			toolbar: { show: false },
 		},
-	},
-	stroke: {
-		curve: "smooth",
-		width: 3,
-	},
-	xaxis: {
-		categories: ["10am", "2pm", "6pm", "11pm"],
-	},
-	yaxis: {
-		title: {
-			text: "",
+		stroke: {
+			curve: "smooth",
+			width: 2,
 		},
-	},
-	colors: ["#A5D6A7", "#66BB6A"],
-	tooltip: {
-		y: {
-			formatter: (val) => `${val}`,
+		xaxis: {
+			categories: bookingLine.categories, // e.g. ["2025-02-02", "2025-02-03", ...]
 		},
-	},
-};
+		yaxis: {
+			title: {
+				text: "",
+			},
+		},
+		tooltip: {
+			y: {
+				formatter: (val) => `${val}`,
+			},
+		},
+		legend: {
+			position: "top",
+		},
+	};
 
-const visitorsSeries = [
-	{
-		name: "Yesterday",
-		data: [10, 20, 30, 40],
-	},
-	{
-		name: "Today",
-		data: [20, 40, 35, 50],
-	},
-];
+	// We have two series: checkIn & checkOut
+	const bookingSeries = [
+		{
+			name: chosenLanguage === "Arabic" ? "تسجيل دخول" : "Check-In",
+			data: bookingLine.checkIn || [],
+		},
+		{
+			name: chosenLanguage === "Arabic" ? "تسجيل خروج" : "Check-Out",
+			data: bookingLine.checkOut || [],
+		},
+	];
 
-const FifthRow = () => {
+	// 2) Visitors line chart (Yesterday / Today)
+	const visitorsOptions = {
+		chart: {
+			type: "line",
+			toolbar: { show: false },
+		},
+		stroke: {
+			curve: "smooth",
+			width: 3,
+		},
+		xaxis: {
+			categories: visitorsLine.categories || [], // e.g. ["10am","2pm","6pm","11pm"]
+		},
+		yaxis: {
+			title: {
+				text: "",
+			},
+		},
+		tooltip: {
+			y: {
+				formatter: (val) => `${val}`,
+			},
+		},
+		legend: {
+			position: "top",
+		},
+		// You can specify colors if you want: colors: ["#A5D6A7", "#66BB6A"],
+	};
+
+	const visitorsSeries = [
+		{
+			name: chosenLanguage === "Arabic" ? "أمس" : "Yesterday",
+			data: visitorsLine.yesterday || [],
+		},
+		{
+			name: chosenLanguage === "Arabic" ? "اليوم" : "Today",
+			data: visitorsLine.today || [],
+		},
+	];
+
 	return (
 		<FifthRowWrapper>
+			{/* Large Chart (Booking) */}
 			<ChartCardLarge>
 				<ChartHeader>
-					<ChartTitle>Booking</ChartTitle>
-					<ChartSubtitle>Last update 1m ago</ChartSubtitle>
-					<ChartTimeframe>Last 7 days</ChartTimeframe>
+					<ChartTitle>
+						{chosenLanguage === "Arabic" ? "الحجوزات" : "Booking"}
+					</ChartTitle>
+					<ChartSubtitle>
+						{chosenLanguage === "Arabic"
+							? "آخر تحديث منذ دقيقة واحدة"
+							: "Last update 1m ago"}
+					</ChartSubtitle>
+					<ChartTimeframe>
+						{chosenLanguage === "Arabic" ? "آخر 7 أيام" : "Last 7 days"}
+					</ChartTimeframe>
 				</ChartHeader>
 				<Chart
 					options={bookingOptions}
@@ -98,9 +116,15 @@ const FifthRow = () => {
 					height={250}
 				/>
 			</ChartCardLarge>
+
+			{/* Small Chart (Visitors Over Time) */}
 			<ChartCardSmall>
 				<ChartHeader>
-					<ChartTitle>Visitors Over Time</ChartTitle>
+					<ChartTitle>
+						{chosenLanguage === "Arabic"
+							? "الزوار على مدار الوقت"
+							: "Visitors Over Time"}
+					</ChartTitle>
 				</ChartHeader>
 				<Chart
 					options={visitorsOptions}
@@ -109,8 +133,12 @@ const FifthRow = () => {
 					height={250}
 				/>
 				<Legend>
-					<LegendItem color='#A5D6A7'>Yesterday</LegendItem>
-					<LegendItem color='#66BB6A'>Today</LegendItem>
+					<LegendItem color='#A5D6A7'>
+						{chosenLanguage === "Arabic" ? "أمس" : "Yesterday"}
+					</LegendItem>
+					<LegendItem color='#66BB6A'>
+						{chosenLanguage === "Arabic" ? "اليوم" : "Today"}
+					</LegendItem>
 				</Legend>
 			</ChartCardSmall>
 		</FifthRowWrapper>
@@ -118,6 +146,8 @@ const FifthRow = () => {
 };
 
 export default FifthRow;
+
+// ====================== STYLED COMPONENTS ======================
 
 const FifthRowWrapper = styled.div`
 	display: grid;

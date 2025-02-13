@@ -1,5 +1,4 @@
-import React from "react";
-
+import React, { useState } from "react";
 import { Table } from "antd";
 import {
 	FaExclamationCircle,
@@ -15,78 +14,165 @@ import {
 import Chart from "react-apexcharts";
 import styled from "styled-components";
 
-const data = [
+// Room type mapping, supporting both English & Arabic labels
+const ROOM_TYPES_MAPPING = [
 	{
-		key: "1",
-		guest: "Bessie Cooper",
-		guestId: "7105394985258",
-		accommodation: "Standard Single - STS (219)",
-		stay: "09/09/22 - 09/10/22",
-		status: "Check out",
-		amount: "$430.00",
+		value: "standardRooms",
+		labelEn: "Standard Rooms",
+		labelAr: "غرف ستاندرد",
 	},
 	{
-		key: "2",
-		guest: "Theresa Webb",
-		guestId: "7105394985258",
-		accommodation: "Standard Single - STS (219)",
-		stay: "09/09/22 - 09/13/22",
-		status: "Check out",
-		amount: "",
+		value: "singleRooms",
+		labelEn: "Single Rooms",
+		labelAr: "غرف فردية",
 	},
 	{
-		key: "3",
-		guest: "Dianne Kilmarnock-Thomas",
-		guestId: "7105394985258",
-		accommodation: "Deluxe King - DLX (341)",
-		stay: "09/09/22 - 09/12/22",
-		status: "Check out",
-		amount: "",
+		value: "doubleRooms",
+		labelEn: "Double Room",
+		labelAr: "غرفة مزدوجة",
 	},
 	{
-		key: "4",
-		guest: "Cameron Harrison",
-		guestId: "7105394985258",
-		accommodation: "Deluxe King - DLX (341)",
-		stay: "09/09/22 - 09/12/22",
-		status: "Check out",
-		amount: "",
+		value: "twinRooms",
+		labelEn: "Twin Rooms",
+		labelAr: "غرف بسريرين منفصلين",
+	},
+	{
+		value: "queenRooms",
+		labelEn: "Queen Rooms",
+		labelAr: "غرف كوين",
+	},
+	{
+		value: "kingRooms",
+		labelEn: "King Rooms",
+		labelAr: "غرف كينج",
+	},
+	{
+		value: "tripleRooms",
+		labelEn: "Triple Room",
+		labelAr: "غرفة ثلاثية",
+	},
+	{
+		value: "quadRooms",
+		labelEn: "Quad Rooms",
+		labelAr: "غرف رباعية",
+	},
+	{
+		value: "studioRooms",
+		labelEn: "Studio Rooms",
+		labelAr: "غرف ستوديو",
+	},
+	{
+		value: "suite",
+		labelEn: "Suite",
+		labelAr: "جناح",
+	},
+	{
+		value: "masterSuite",
+		labelEn: "Master Suite",
+		labelAr: "جناح رئيسي",
+	},
+	{
+		value: "familyRooms",
+		labelEn: "Family Rooms",
+		labelAr: "غرف عائلية",
+	},
+	{
+		value: "individualBed",
+		labelEn: "Rooms With Individual Beds (Shared Rooms)",
+		labelAr: "غرف بأسرة فردية (مشتركة)",
 	},
 ];
 
-const SecondRow = ({ chosenLanguage, translations }) => {
+const SecondRow = ({
+	chosenLanguage,
+	translations,
+	adminDashboardReport = {},
+}) => {
 	const t = translations[chosenLanguage] || translations.English;
 
+	// 1) Destructure from the "secondRow" data
+	const {
+		cancellations = 0,
+		noShow = 0,
+		occupancy = {},
+		upcomingCheckins = [],
+	} = adminDashboardReport;
+
+	// 2) Occupancy chart data
+	const { booked = 0, available = 0, overallRoomsCount = 0 } = occupancy;
+	const totalRooms = overallRoomsCount || 0;
+	const blocked = totalRooms - booked - available;
+
+	// Convert to percentages for the chart
+	const bookedPct = totalRooms ? Math.round((booked / totalRooms) * 100) : 0;
+	const availablePct = totalRooms
+		? Math.round((available / totalRooms) * 100)
+		: 0;
+	const blockedPct = totalRooms ? Math.round((blocked / totalRooms) * 100) : 0;
+
+	// 3) Donut Chart config
+	const pieChartOptions = {
+		chart: {
+			type: "donut",
+			toolbar: { show: false },
+		},
+		colors: ["#0069cf", "#00a753", "#636363"],
+		dataLabels: { enabled: false },
+		plotOptions: {
+			pie: {
+				donut: { size: "75%" },
+			},
+		},
+		legend: { show: false },
+	};
+	const pieChartSeries = [bookedPct, availablePct, blockedPct];
+
+	// 4) "Load More" setup
+	const [rowsToShow, setRowsToShow] = useState(3);
+	const hasMoreRows = rowsToShow < upcomingCheckins.length;
+
+	// Helper to get the right label based on chosenLanguage
+	const getRoomTypeLabel = (typeValue) => {
+		const found = ROOM_TYPES_MAPPING.find((r) => r.value === typeValue);
+		if (!found) return typeValue; // fallback if not matched
+		return chosenLanguage === "Arabic" ? found.labelAr : found.labelEn;
+	};
+
+	// 5) Table columns
 	const columns = [
 		{
+			// Guest name
 			title: chosenLanguage === "Arabic" ? "اسم الضيف" : "Guest",
 			dataIndex: "guest",
 			key: "guest",
 			render: (text, record) => (
 				<>
 					<div style={{ fontWeight: "bold" }}>{text}</div>
+					{/* Subtext in grey => confirmation_number */}
 					<div style={{ color: "grey" }}>{record.guestId}</div>
 				</>
 			),
 		},
 		{
+			// Accommodation => e.g. "Double Room - 5 nights"
 			title: chosenLanguage === "Arabic" ? "الإقامة" : "Accommodation",
 			dataIndex: "accommodation",
 			key: "accommodation",
 		},
 		{
+			// Stay => dateRange
 			title: chosenLanguage === "Arabic" ? "الفترة" : "Stay",
 			dataIndex: "stay",
 			key: "stay",
-			render: (stay) => (
+			render: (stay, record) => (
 				<StayColumn>
 					<div>{stay}</div>
 					<StayIcons>
 						<IconWrapper>
-							<FaBed /> 1
+							<FaBed /> {record.flag}
 						</IconWrapper>
 						<IconWrapper>
-							<FaUser /> 2
+							<FaUser /> {record.number_of_guests}
 						</IconWrapper>
 						<IconWrapper>
 							<FaCalendarAlt /> 0
@@ -96,6 +182,7 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 			),
 		},
 		{
+			// Status => e.g. "confirmed"
 			title: chosenLanguage === "Arabic" ? "الحالة" : "Status",
 			dataIndex: "status",
 			key: "status",
@@ -107,6 +194,7 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 			),
 		},
 		{
+			// Action icons
 			title: "",
 			dataIndex: "actions",
 			key: "actions",
@@ -126,33 +214,24 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 		},
 	];
 
-	const pieChartOptions = {
-		chart: {
-			type: "donut",
-			toolbar: {
-				show: false,
-			},
-		},
-		colors: ["#0069cf", "#00a753", "#636363"], // Colors for booked, available, and blocked
-		dataLabels: {
-			enabled: false,
-		},
-		plotOptions: {
-			pie: {
-				donut: {
-					size: "75%",
-				},
-			},
-		},
-		legend: {
-			show: false,
-		},
-	};
-
-	const pieChartSeries = [60, 35, 5]; // Example data
+	// 6) Build the table data from upcomingCheckins
+	const tableData = upcomingCheckins.slice(0, rowsToShow).map((item) => ({
+		key: item._id,
+		guest: item.name || "N/A",
+		guestId: item.confirmation_number || "",
+		accommodation: `${getRoomTypeLabel(item.room_type)} - ${item.nights} ${
+			chosenLanguage === "Arabic" ? "ليالي" : "nights"
+		}`,
+		stay: item.dateRange || "",
+		status: item.reservation_status || "",
+		number_of_guests: item.number_of_guests || 2,
+		flag: item.flag || 1,
+		amount: "",
+	}));
 
 	return (
 		<SecondRowWrapper>
+			{/* LEFT SECTION => Cancellations / NoShow / Individuals block */}
 			<LeftSection>
 				<SmallInfoCard backgroundColor='#E1F5FE'>
 					<CardTitle2>{t.cancellations}</CardTitle2>
@@ -165,9 +244,10 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 							fontSize: "16px",
 						}}
 					>
-						26
+						{cancellations}
 					</CardNumber>
 				</SmallInfoCard>
+
 				<SmallInfoCard backgroundColor='#EDE7F6'>
 					<CardTitle2>{t.noShow}</CardTitle2>
 					<CardNumber
@@ -179,9 +259,11 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 							fontSize: "16px",
 						}}
 					>
-						26
+						{noShow}
 					</CardNumber>
 				</SmallInfoCard>
+
+				{/* Hard-coded "Individuals / Online / Company" block */}
 				<InfoCard backgroundColor='#E1F5FE'>
 					<CardTitle2>{t.individuals}</CardTitle2>
 					<SmallCardRow>
@@ -198,6 +280,8 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 					</SmallCardRow>
 				</InfoCard>
 			</LeftSection>
+
+			{/* MIDDLE SECTION => Occupancy donut chart */}
 			<MiddleSection>
 				<ChartCard>
 					<Chart
@@ -209,19 +293,34 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 					<CardTitle3>{t.occupancy}</CardTitle3>
 					<LegendVertical>
 						<LegendItem color='#0069cf'>
-							<FaCheckCircle /> {t.booked} 60%
+							<FaCheckCircle /> {t.booked} {bookedPct}%
 						</LegendItem>
 						<LegendItem color='#00a753'>
-							<FaTimesCircle /> {t.available} 35%
+							<FaTimesCircle /> {t.available} {availablePct}%
 						</LegendItem>
 						<LegendItem color='#636363'>
-							<FaExclamationCircle /> {t.blocked} 5%
+							<FaExclamationCircle /> {t.blocked} {blockedPct}%
 						</LegendItem>
 					</LegendVertical>
 				</ChartCard>
 			</MiddleSection>
+
+			{/* RIGHT SECTION => Table + "Load More" for upcomingCheckins */}
 			<RightSection style={{ background: "#fff" }}>
-				<InfoTable dataSource={data} columns={columns} pagination={false} />
+				<InfoTable
+					dataSource={tableData}
+					columns={columns}
+					pagination={false}
+				/>
+				{hasMoreRows && (
+					<LoadMoreContainer>
+						<LoadMoreButton
+							onClick={() => setRowsToShow(upcomingCheckins.length)}
+						>
+							{chosenLanguage === "Arabic" ? "عرض المزيد" : "Load More"}
+						</LoadMoreButton>
+					</LoadMoreContainer>
+				)}
 			</RightSection>
 		</SecondRowWrapper>
 	);
@@ -229,14 +328,31 @@ const SecondRow = ({ chosenLanguage, translations }) => {
 
 export default SecondRow;
 
-// Second row styling
+// -------------------- STYLED COMPONENTS --------------------
 const SecondRowWrapper = styled.div`
 	display: grid;
 	grid-template-columns: 15% 15% 70%;
 	gap: 16px;
 `;
 
-// Small info card styling
+const LeftSection = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+`;
+
+const MiddleSection = styled.div`
+	display: flex;
+	justify-content: center;
+	align-items: center;
+`;
+
+const RightSection = styled.div`
+	display: flex;
+	flex-direction: column;
+	background: #fff;
+`;
+
 const SmallInfoCard = styled.div`
 	background-color: ${(props) => props.backgroundColor};
 	border-radius: 8px;
@@ -249,26 +365,46 @@ const SmallInfoCard = styled.div`
 	align-items: center;
 `;
 
-// Small card row styling for individuals, online, and company
+const InfoCard = styled.div`
+	background-color: ${(props) => props.backgroundColor};
+	border-radius: 8px;
+	padding: 16px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+`;
+
+const CardTitle2 = styled.div`
+	font-size: 18px;
+	font-weight: bold;
+	color: black;
+	text-align: left;
+`;
+
+const CardNumber = styled.div`
+	font-size: 25px;
+	font-weight: bold;
+	color: black;
+	margin: auto 10px !important;
+`;
+
 const SmallCardRow = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 `;
 
-// Small card title styling
 const SmallCardTitle = styled.div`
 	font-size: 16px;
 `;
 
-// Small card number styling
 const SmallCardNumber = styled.div`
 	font-size: 16px;
 	font-weight: bold;
 	color: #1e88e5;
 `;
 
-// Chart card styling
 const ChartCard = styled.div`
 	background-color: ${(props) => props.backgroundColor};
 	border-radius: 8px;
@@ -280,7 +416,14 @@ const ChartCard = styled.div`
 	align-items: center;
 `;
 
-// Legend styling for vertical alignment
+const CardTitle3 = styled.div`
+	font-size: 18px;
+	font-weight: bold;
+	color: black;
+	text-align: left;
+	margin-top: 8px;
+`;
+
 const LegendVertical = styled.div`
 	display: flex;
 	flex-direction: column;
@@ -289,7 +432,6 @@ const LegendVertical = styled.div`
 	margin-top: 16px;
 `;
 
-// Legend item styling
 const LegendItem = styled.div`
 	display: flex;
 	align-items: center;
@@ -297,36 +439,7 @@ const LegendItem = styled.div`
 	font-size: 14px;
 	font-weight: bold;
 	margin: 4px 0;
-`;
-
-// Define LeftSection
-const LeftSection = styled.div`
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-`;
-
-// Define MiddleSection
-const MiddleSection = styled.div`
-	display: flex;
-	justify-content: center;
-	align-items: center;
-`;
-
-// Card title styling Second Row
-const CardTitle2 = styled.div`
-	font-size: 18px;
-	font-weight: bold;
-	color: black;
-	text-align: left;
-`;
-
-// Card title styling Third Row
-const CardTitle3 = styled.div`
-	font-size: 18px;
-	font-weight: bold;
-	color: black;
-	text-align: left;
+	gap: 6px;
 `;
 
 const InfoTable = styled(Table)`
@@ -336,11 +449,6 @@ const InfoTable = styled(Table)`
 	.ant-table-tbody > tr > td {
 		background-color: #fff;
 	}
-`;
-
-const RightSection = styled.div`
-	display: flex;
-	flex-direction: column;
 `;
 
 const StayColumn = styled.div`
@@ -368,7 +476,8 @@ const StatusButton = styled.div`
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	width: 200px; /* Fixed width */
+	width: 200px; /* adjust as needed */
+	text-transform: capitalize;
 `;
 
 const Amount = styled.span`
@@ -391,28 +500,26 @@ const ActionButton = styled.button`
 	cursor: pointer;
 	color: #1e88e5;
 	font-size: 18px;
-
 	&:hover {
 		color: #0056b3;
 	}
 `;
 
-// Info card styling
-const InfoCard = styled.div`
-	background-color: ${(props) => props.backgroundColor};
-	border-radius: 8px;
-	padding: 16px;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+const LoadMoreContainer = styled.div`
 	display: flex;
-	flex-direction: column;
-	height: 100%;
+	justify-content: center;
+	margin-top: 12px;
 `;
 
-// Card number styling
-const CardNumber = styled.div`
-	font-size: 25px;
+const LoadMoreButton = styled.button`
+	background-color: #1e88e5;
+	color: #fff;
+	padding: 8px 16px;
+	border: none;
+	border-radius: 8px;
+	cursor: pointer;
 	font-weight: bold;
-	/* color: #1e88e5; */
-	color: black;
-	margin: auto 10px !important;
+	&:hover {
+		background-color: #0056b3;
+	}
 `;

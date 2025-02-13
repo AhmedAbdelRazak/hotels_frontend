@@ -1,7 +1,7 @@
 import { Input, Modal } from "antd";
 import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
-import { updateSingleReservation } from "../../HotelModule/apiAdmin";
+import { updateSingleReservation } from "../apiAdmin";
 
 const ReceiptPDFB2B = forwardRef(
 	(

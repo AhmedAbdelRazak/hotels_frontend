@@ -1,166 +1,72 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
-import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
-// import { Link } from "react-router-dom";
-import { useCartContext } from "../../cart_context";
-import {
-	checkedoutReservationsList,
-	checkedoutReservationsTotalRecords,
-	getHotelById,
-	hotelAccount,
-} from "../apiAdmin";
+import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
+import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
-import TableViewReport from "./TableViewReport";
-import { DatePicker, Space } from "antd";
-import moment from "moment";
-import { useHistory } from "react-router-dom";
-import GeneralReportMain from "./GeneralReport/GeneralReportMain";
-import AssignReservations from "./AssignReservations";
-
-const { RangePicker } = DatePicker;
+import ReservationsOverview from "./ReservationsOverview";
+import { useCartContext } from "../../cart_context";
 
 const HotelReportsMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
-	const [recordsPerPage] = useState(300);
-	const [currentPage, setCurrentPage] = useState(1);
-	const [totalRecords, setTotalRecords] = useState(0);
-	const [allReservations, setAllReservations] = useState([]);
-	const [scoreCardObject, setScoreCardObject] = useState("");
-	const [allChannels, setAllChannels] = useState([
-		"agoda",
-		"expedia",
-		"booking.com",
-		"janat",
-		"airbnb",
-		"affiliate",
-		"manual",
-	]);
-	const [selectedChannel, setSelectedChannel] = useState(undefined);
-	const [hotelDetails, setHotelDetails] = useState(0);
-	const [dateRange, setDateRange] = useState([
-		moment().subtract(45, "days"),
-		moment().add(10, "days"),
-	]);
-	const history = useHistory(); // Initialize the history object
-
-	const [activeTab, setActiveTab] = useState("general");
-
+	const [activeTab, setActiveTab] = useState("reservations");
+	const [getUser, setGetUser] = useState("");
+	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated();
-	const { languageToggle, chosenLanguage } = useCartContext();
+	const location = useLocation();
+	const history = useHistory();
+
+	/* ------------------ 1) Fetch User Details ------------------ */
+	const gettingUserId = useCallback(() => {
+		readUserId(user._id, token).then((data) => {
+			if (data && data.error) {
+				console.error(data.error);
+			} else {
+				setGetUser(data);
+			}
+		});
+	}, [user._id, token]);
+
+	/* -----------------------------------------------------------
+     3) Initial setup: fetch user, handle small-screen collapses,
+        check localStorage for "ReportsVerified"
+  ----------------------------------------------------------- */
 	useEffect(() => {
+		gettingUserId();
+
 		if (window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+	}, [gettingUserId]);
 
-		if (window.location.search.includes("finance")) {
-			setActiveTab("finance");
-		} else if (window.location.search.includes("general")) {
-			setActiveTab("general");
-		} else if (window.location.search.includes("assign-financials")) {
-			setActiveTab("assign-financials");
-		} else {
-			setActiveTab("general");
-		}
-		// eslint-disable-next-line
-	}, [activeTab]);
-
-	const formatDate = (date) => {
-		if (!date) return "";
-
-		const d = new Date(date);
-		let month = "" + (d.getMonth() + 1);
-		let day = "" + d.getDate();
-		let year = d.getFullYear();
-
-		if (month.length < 2) month = "0" + month;
-		if (day.length < 2) day = "0" + day;
-
-		return [year, month, day].join("-");
+	/* -----------------------------------------------------------
+     5) Handle Tab Changes (push query param to URL)
+  ----------------------------------------------------------- */
+	const handleTabChange = (tab) => {
+		setActiveTab(tab);
+		history.push(`?tab=${tab}`);
 	};
 
-	const gettingHotelData = () => {
-		const [startDate, endDate] = dateRange;
-		const formattedStartDate = formatDate(startDate);
-		const formattedEndDate = formatDate(endDate);
-
-		const selectedHotel =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-
-		if (!selectedHotel || !selectedHotel._id) {
-			console.log("No hotel selected");
-			return;
-		}
-
-		const hotelId = selectedHotel._id;
-
-		hotelAccount(user._id, token, user._id).then((data) => {
-			if (data && data.error) {
-				console.log(data.error, "Error rendering");
-			} else {
-				getHotelById(hotelId).then((data2) => {
-					if (data2 && data2.error) {
-						console.log(data2.error, "Error rendering");
-					} else {
-						setHotelDetails(data2);
-
-						// Use the formatted start and end dates for API calls
-						checkedoutReservationsList(
-							currentPage,
-							recordsPerPage,
-							formattedStartDate,
-							formattedEndDate,
-							hotelId,
-							selectedChannel
-						).then((data3) => {
-							if (data3 && data3.error) {
-								console.log(data3.error);
-							} else {
-								console.log(data3, "data3");
-
-								setAllReservations(data3 && data3.length > 0 ? data3 : []);
-							}
-						});
-
-						checkedoutReservationsTotalRecords(
-							formattedStartDate,
-							formattedEndDate,
-							hotelId,
-							selectedChannel
-						).then((data4) => {
-							if (data4 && data4.error) {
-								console.log(data4.error, "data4.error");
-							} else {
-								setTotalRecords(data4.total);
-								setScoreCardObject(data4);
-							}
-						});
-					}
-				});
-			}
-		});
-	};
-
-	// Call gettingHotelData whenever the date range or other relevant states change
+	// On mount or location change, parse "tab" from URL
 	useEffect(() => {
-		gettingHotelData();
-		// eslint-disable-next-line
-	}, [currentPage, recordsPerPage, dateRange, selectedChannel]);
+		const queryParams = new URLSearchParams(location.search);
+		const tab = queryParams.get("tab");
 
-	const handleDateChange = (dates, dateStrings) => {
-		if (!dates) {
-			// Handle the case where dates are cleared
-			return;
+		if (tab) {
+			setActiveTab(tab);
+		} else {
+			history.replace("?tab=reservations");
 		}
-		setDateRange(dates);
-	};
+	}, [location.search, history]);
 
 	return (
 		<HotelReportsMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
+			{/* --------------- Main Content --------------- */}
 			<div className='grid-container-main'>
 				<div className='navcontent'>
 					{chosenLanguage === "Arabic" ? (
@@ -185,111 +91,43 @@ const HotelReportsMain = () => {
 				</div>
 
 				<div className='otherContentWrapper'>
-					<div
-						style={{
-							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
-							fontWeight: "bold",
-							textDecoration: "underline",
-							cursor: "pointer",
-						}}
-						onClick={() => {
-							if (chosenLanguage === "English") {
-								languageToggle("Arabic");
-							} else {
-								languageToggle("English");
-							}
-						}}
-					>
-						{chosenLanguage === "English" ? "ARABIC" : "English"}
-					</div>
-
-					<div style={{ background: "#ededed", padding: "1px" }}>
-						<div className='my-2 tab-grid col-md-8'>
-							<Tab
-								isActive={activeTab === "general"}
-								onClick={() => {
-									setActiveTab("general");
-									history.push("/hotel-management/hotel-reports?general"); // Programmatically navigate
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "التقرير العام"
-									: "General Report"}
-							</Tab>
-							<Tab
-								isActive={activeTab === "finance"}
-								onClick={() => {
-									setActiveTab("finance");
-									history.push("/hotel-management/hotel-reports?finance");
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "Checkout Report"
-									: "Checkout Report"}
-							</Tab>
-						</div>
-					</div>
-
 					<div className='container-wrapper'>
-						{activeTab === "finance" ? (
-							<>
-								{allReservations && hotelDetails && hotelDetails._id ? (
-									<div
-										className='my-3 text-center mx-auto'
-										style={{
-											textAlign: chosenLanguage === "Arabic" ? "right" : "",
-										}}
-									>
-										<h5 style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
-											Checkout Date Range
-										</h5>
-										<Space
-											direction='vertical'
-											size={12}
-											className='w-25'
-											style={{ margin: "10px" }}
-										>
-											<RangePicker
-												className='w-100'
-												onChange={handleDateChange}
-											/>
-										</Space>
-										<TableViewReport
-											allReservations={allReservations}
-											totalRecords={totalRecords}
-											hotelDetails={hotelDetails}
-											chosenLanguage={chosenLanguage}
-											setCurrentPage={setCurrentPage}
-											currentPage={currentPage}
-											recordsPerPage={recordsPerPage}
-											selectedChannel={selectedChannel}
-											setSelectedChannel={setSelectedChannel}
-											allChannels={allChannels}
-											setAllChannels={setAllChannels}
-											scoreCardObject={scoreCardObject}
-										/>
-									</div>
-								) : null}
-							</>
-						) : null}
+						{/* --------------- Tab Navigation --------------- */}
+						<TabNavigation>
+							<button
+								className={activeTab === "reservations" ? "active" : ""}
+								onClick={() => handleTabChange("reservations")}
+							>
+								Reservations Overview
+							</button>
+							<button
+								className={activeTab === "inventory" ? "active" : ""}
+								onClick={() => handleTabChange("inventory")}
+							>
+								Hotels' Inventory
+							</button>
+						</TabNavigation>
 
-						{activeTab === "general" ? (
-							<>
-								<GeneralReportMain
-									hotelDetails={hotelDetails}
+						{/* --------------- Tab Content --------------- */}
+						{activeTab === "reservations" && (
+							<div>
+								<h3>Reservations Overview</h3>
+								<ReservationsOverview
+									getUser={getUser}
 									chosenLanguage={chosenLanguage}
 								/>
-							</>
-						) : null}
+							</div>
+						)}
 
-						{activeTab === "assign-financials" ? (
-							<>
-								<AssignReservations
-									hotelDetails={hotelDetails}
-									chosenLanguage={chosenLanguage}
-								/>
-							</>
-						) : null}
+						{activeTab === "inventory" && (
+							<div>
+								<h3>Hotels Inventory</h3>
+								<p>
+									{/* You could create a new component here for a specific hotel's reports */}
+									Work in progress...
+								</p>
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
@@ -299,15 +137,15 @@ const HotelReportsMain = () => {
 
 export default HotelReportsMain;
 
+/* ---------------------------------- STYLES ---------------------------------- */
+
 const HotelReportsMainWrapper = styled.div`
-	overflow-x: hidden;
-	/* background: #ededed; */
-	margin-top: 46px;
+	margin-top: 80px;
 	min-height: 715px;
 
 	.grid-container-main {
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "5% 92%" : "15% 83%")};
+		grid-template-columns: ${(props) => (props.show ? "5% 75%" : "17% 83%")};
 	}
 
 	.container-wrapper {
@@ -318,33 +156,46 @@ const HotelReportsMainWrapper = styled.div`
 		margin: 0px 10px;
 	}
 
-	@media (max-width: 1400px) {
-		background: white;
-	}
-
-	.tab-grid {
-		display: flex;
-		/* Additional styling for grid layout */
+	@media (max-width: 768px) {
+		.grid-container-main {
+			grid-template-columns: 1fr;
+		}
 	}
 `;
 
-const Tab = styled.div`
-	cursor: pointer;
-	margin: 0 3px; /* 3px margin between tabs */
-	padding: 15px 5px; /* Adjust padding as needed */
-	font-weight: ${(props) => (props.isActive ? "bold" : "bold")};
-	background-color: ${(props) =>
-		props.isActive
-			? "transparent"
-			: "#e0e0e0"}; /* Light grey for unselected tabs */
-	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
-	transition: all 0.3s ease; /* Smooth transition for changes */
-	min-width: 25px; /* Minimum width of the tab */
-	width: 100%; /* Full width within the container */
-	text-align: center; /* Center the text inside the tab */
-	/* Additional styling for tabs */
-	z-index: 100;
-	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "black" : "black")};
+const TabNavigation = styled.div`
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+
+	button {
+		padding: 10px 20px;
+		border: none;
+		background-color: #ddd;
+		cursor: pointer;
+		font-weight: bold;
+		border-radius: 5px;
+		flex: 1; /* so the buttons share the row's space */
+
+		&.active {
+			background-color: #006ad1;
+			color: white;
+		}
+
+		&:hover {
+			background-color: #bbb;
+		}
+	}
+
+	/* ------------- MOBILE TABS: 2 PER ROW ------------- */
+	@media (max-width: 768px) {
+		flex-wrap: wrap;
+		gap: 8px;
+
+		button {
+			width: 48%;
+			padding: 8px;
+			font-size: 0.9rem;
+		}
+	}
 `;

@@ -1193,3 +1193,357 @@ export const markAllMessagesAsSeenByHotel = async (caseId, userId) => {
 			console.error("API error: ", err);
 		});
 };
+
+export const gettingAdminDashboardFigures = (hotelId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin-dashboard-reports/${hotelId}`,
+		{
+			method: "GET",
+		}
+	)
+		.then((response) => {
+			return response.json();
+		})
+		.catch((err) => console.log(err));
+};
+
+export const readUserId = (userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/user/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`, // Add the token here
+		},
+	})
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching reservations:", err));
+};
+
+// Start of reports for the admin
+
+// (A) Helper to build the combined query string with both hotel info + any extra params
+function buildQueryWithParams(selectedHotels, limit, extraParams = {}) {
+	// First build the basic query string for hotels & limit
+	let baseQuery = buildHotelsQuery(selectedHotels, limit);
+
+	// Then, if we have extra params, convert them to a query string
+	const extraQuery = buildQueryString(extraParams);
+
+	if (extraQuery) {
+		// If we already have a base query (e.g. '?hotels=ABC'), then append with '&'
+		if (baseQuery) {
+			baseQuery += `&${extraQuery}`;
+		} else {
+			// Otherwise, start fresh with '?'
+			baseQuery = `?${extraQuery}`;
+		}
+	}
+
+	return baseQuery; // e.g. "?hotels=HotelA&limit=20&excludeCancelled=true"
+}
+
+/**
+ * Build the query string for selectedHotels.
+ * If hotels = ["all"], we do NOT filter by hotels.
+ * If hotels are multiple, we pass them joined by comma.
+ */
+function buildHotelsQuery(selectedHotels, limit) {
+	let queryArray = [];
+	if (selectedHotels && !selectedHotels.includes("all")) {
+		queryArray.push(`hotels=${encodeURIComponent(selectedHotels.join(","))}`);
+	}
+	if (limit) {
+		queryArray.push(`limit=${encodeURIComponent(limit)}`);
+	}
+	return queryArray.length ? "?" + queryArray.join("&") : "";
+}
+
+function buildQueryString(params) {
+	return Object.entries(params)
+		.map(
+			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
+		)
+		.join("&");
+}
+
+/* ========================================================================
+	 1) Reservations By Day
+	 Added optional extraParams so you can pass { excludeCancelled: true }, etc.
+	 ======================================================================== */
+export const getReservationsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/reservations-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByDay data:", err)
+		);
+};
+
+/* ========================================================================
+	 2) Checkins By Day
+	 ======================================================================== */
+export const getCheckinsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/checkins-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching checkinsByDay data:", err));
+};
+
+/* ========================================================================
+	 3) Checkouts By Day
+	 ======================================================================== */
+export const getCheckoutsByDay = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/checkouts-by-day/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => console.error("Error fetching checkoutsByDay data:", err));
+};
+
+/* ========================================================================
+	 4) Reservations By Day By Hotel Name
+	 ======================================================================== */
+export const getReservationsByDayByHotelName = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/reservations-by-day-by-hotel/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByDayByHotelName data:", err)
+		);
+};
+
+/* ========================================================================
+	 5) Reservations By Booking Status
+	 ======================================================================== */
+export const getReservationsByBookingStatus = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/reservations-by-booking-status/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByBookingStatus data:", err)
+		);
+};
+
+/* ========================================================================
+	 6) Reservations By Hotel Names
+	 ======================================================================== */
+export const getReservationsByHotelNames = (
+	userId,
+	token,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, null, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/reservations-by-hotel-names/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByHotelNames data:", err)
+		);
+};
+
+/* ========================================================================
+	 7) Top Hotels By Reservations
+	 ======================================================================== */
+export const getTopHotelsByReservations = (
+	userId,
+	token,
+	limit = 5,
+	selectedHotels = [],
+	extraParams = {}
+) => {
+	const query = buildQueryWithParams(selectedHotels, limit, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/top-hotels-by-reservations/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching topHotelsByReservations data:", err)
+		);
+};
+
+/* ========================================================================
+	 8) getSpecificListOfReservations (already takes queryParamsObj)
+	 ======================================================================== */
+export const getSpecificListOfReservations = (
+	userId,
+	token,
+	queryParamsObj
+) => {
+	const queryString = buildQueryString(queryParamsObj);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/specific-list/${userId}?${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching specific list of reservations:", err)
+		);
+};
+
+export const getExportToExcelList = (userId, token, queryParamsObj) => {
+	const queryString = buildQueryString(queryParamsObj);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-adminreports/export-to-excel/${userId}?${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching specific list of reservations:", err)
+		);
+};

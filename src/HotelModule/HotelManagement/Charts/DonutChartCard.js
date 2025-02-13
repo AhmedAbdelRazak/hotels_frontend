@@ -3,29 +3,38 @@ import styled from "styled-components";
 import { Card } from "antd";
 import Chart from "react-apexcharts";
 
-const DonutChartCard = ({ chosenLanguage }) => {
+const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
+	// 1) Extract data
+	const { availableRooms = 0, totalRooms = 0 } = DonutChartCard;
+
+	// 2) Decide which translations to use
 	const translations = {
 		English: {
 			title: "Available Room Today",
+			subLabelAvailable: "Available",
+			subLabelUsed: "Used",
 		},
 		Arabic: {
 			title: "الغرف المتاحة اليوم",
+			subLabelAvailable: "متاحة",
+			subLabelUsed: "مشغولة",
 		},
 	};
+	const { title, subLabelAvailable, subLabelUsed } =
+		translations[chosenLanguage] || translations.English;
 
-	const { title } = translations[chosenLanguage] || translations.English;
+	// 3) Donut chart setup
+	const usedRooms = Math.max(totalRooms - availableRooms, 0);
 
 	const pieChartOptions = {
 		chart: {
 			type: "donut",
-			toolbar: {
-				show: false,
-			},
+			toolbar: { show: false },
 		},
-		labels: [title],
-		colors: ["#1E90FF", "#E0E0E0"], // Blue for available, gray for the rest
+		labels: [subLabelAvailable, subLabelUsed],
+		colors: ["#1E90FF", "#E0E0E0"], // Blue for available, gray for used
 		dataLabels: {
-			enabled: false, // Disable data labels on the chart
+			enabled: false,
 		},
 		plotOptions: {
 			pie: {
@@ -39,7 +48,7 @@ const DonutChartCard = ({ chosenLanguage }) => {
 		},
 	};
 
-	const pieChartSeries = [785, 215]; // 785 available rooms out of 1000
+	const pieChartSeries = [availableRooms, usedRooms];
 
 	return (
 		<CardContainer>
@@ -53,8 +62,10 @@ const DonutChartCard = ({ chosenLanguage }) => {
 					/>
 				</ChartWrapper>
 				<CardContent>
-					<CountText>785</CountText>
-					<CardTitle>{title}</CardTitle>
+					<CountText>{availableRooms}</CountText>
+					<CardTitle>
+						{title} ({availableRooms} / {totalRooms})
+					</CardTitle>
 				</CardContent>
 			</StyledCard>
 		</CardContainer>
@@ -62,6 +73,8 @@ const DonutChartCard = ({ chosenLanguage }) => {
 };
 
 export default DonutChartCard;
+
+// ---------------- Styled ----------------
 
 const CardContainer = styled.div``;
 
@@ -85,7 +98,7 @@ const CardContent = styled.div`
 const CountText = styled.div`
 	font-size: 32px;
 	font-weight: bold;
-	margin-top: -10px; /* Adjust margin to align with the chart */
+	margin-top: -10px; /* Adjust margin to align with the chart if needed */
 `;
 
 const CardTitle = styled.div`

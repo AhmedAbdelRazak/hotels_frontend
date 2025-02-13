@@ -2,171 +2,160 @@ import React from "react";
 import Chart from "react-apexcharts";
 import styled from "styled-components";
 
-const topChannelsOptions = {
-	chart: {
-		type: "bar",
-		toolbar: {
-			show: false,
-		},
-	},
-	plotOptions: {
-		bar: {
-			horizontal: false,
-			columnWidth: "55%",
-			endingShape: "rounded",
-		},
-	},
-	dataLabels: {
-		enabled: false,
-	},
-	xaxis: {
-		categories: ["Booking", "Expedia", "Airbnb", "Agoda", "Other"],
-	},
-	yaxis: {
-		title: {
-			text: "",
-		},
-	},
-	fill: {
-		opacity: 1,
-	},
-	tooltip: {
-		y: {
-			formatter: (val) => `${val}`,
-		},
-	},
-};
+const FourthRow = ({
+	chosenLanguage = "English",
+	adminDashboardReport = {},
+}) => {
+	// 1) Safely extract from the “fourthRow” data
+	const {
+		topChannels = [],
+		roomNightsByType = [],
+		roomRevenueByType = [],
+	} = adminDashboardReport;
 
-const topChannelsSeries = [
-	{
-		name: "Top Channels",
-		data: [
-			{ x: "Booking", y: 250, fillColor: "#4285F4" },
-			{ x: "Expedia", y: 200, fillColor: "#A142F4" },
-			{ x: "Airbnb", y: 150, fillColor: "#FF6F61" },
-			{ x: "Agoda", y: 100, fillColor: "#1DB2FF" },
-			{ x: "Other", y: 75, fillColor: "#B2B2B2" },
-		],
-	},
-];
+	// 2) Translate chart titles as needed
+	const chartTitles =
+		chosenLanguage === "Arabic"
+			? {
+					topChannels: "أفضل القنوات",
+					roomNights: "ليالي الغرف حسب النوع",
+					roomRevenue: "إيرادات الغرف حسب النوع",
+			  }
+			: {
+					topChannels: "Top Channels",
+					roomNights: "Room Nights by Room Types",
+					roomRevenue: "Room Revenue by Room Types",
+			  };
 
-const roomNightsOptions = {
-	chart: {
-		type: "bar",
-		toolbar: {
-			show: false,
-		},
-	},
-	plotOptions: {
-		bar: {
-			horizontal: false,
-			columnWidth: "55%",
-			endingShape: "rounded",
-		},
-	},
-	dataLabels: {
-		enabled: false,
-	},
-	xaxis: {
-		categories: [
-			"Single room",
-			"Double room",
-			"Twin room",
-			"Queen room",
-			"Family room",
-			"Penthouse",
-		],
-	},
-	yaxis: {
-		title: {
-			text: "",
-		},
-	},
-	fill: {
-		opacity: 1,
-	},
-	tooltip: {
-		y: {
-			formatter: (val) => `${val}`,
-		},
-	},
-};
+	// ---------- 3) Build chart data for “topChannels” ----------
+	// e.g. topChannels = [ { name: "jannat employee", value: 86, fillColor: "#4285F4" }, ... ]
+	const topChannelsCategories = topChannels.map((item) => item.name);
+	const topChannelsSeriesData = topChannels.map((item) => ({
+		x: item.name,
+		y: item.value,
+		fillColor: item.fillColor || "#4285F4",
+	}));
 
-const roomNightsSeries = [
-	{
-		name: "Room Nights",
-		data: [
-			{ x: "Single room", y: 350, fillColor: "#E74C3C" },
-			{ x: "Double room", y: 400, fillColor: "#FF7373" },
-			{ x: "Twin room", y: 250, fillColor: "#1DB2FF" },
-			{ x: "Queen room", y: 200, fillColor: "#9B59B6" },
-			{ x: "Family room", y: 150, fillColor: "#3498DB" },
-			{ x: "Penthouse", y: 100, fillColor: "#7F8C8D" },
-		],
-	},
-];
+	const topChannelsOptions = {
+		chart: {
+			type: "bar",
+			toolbar: { show: false },
+		},
+		plotOptions: {
+			bar: {
+				horizontal: false,
+				columnWidth: "55%",
+				endingShape: "rounded",
+			},
+		},
+		dataLabels: { enabled: false },
+		xaxis: { categories: topChannelsCategories },
+		yaxis: {
+			title: { text: "" },
+		},
+		fill: { opacity: 1 },
+		tooltip: {
+			y: {
+				formatter: (val) => `${val}`,
+			},
+		},
+	};
 
-const roomRevenueOptions = {
-	chart: {
-		type: "bar",
-		toolbar: {
-			show: false,
+	const topChannelsSeries = [
+		{
+			name: "Top Channels",
+			data: topChannelsSeriesData, // [ {x, y, fillColor}, ...]
 		},
-	},
-	plotOptions: {
-		bar: {
-			horizontal: false,
-			columnWidth: "55%",
-			endingShape: "rounded",
-		},
-	},
-	dataLabels: {
-		enabled: false,
-	},
-	xaxis: {
-		categories: [
-			"Single room",
-			"Double room",
-			"Twin room",
-			"Queen room",
-			"Family room",
-			"Penthouse",
-		],
-	},
-	yaxis: {
-		title: {
-			text: "",
-		},
-	},
-	fill: {
-		opacity: 1,
-	},
-	tooltip: {
-		y: {
-			formatter: (val) => `${val} USD`,
-		},
-	},
-};
+	];
 
-const roomRevenueSeries = [
-	{
-		name: "Room Revenue",
-		data: [
-			{ x: "Single room", y: 50000, fillColor: "#E74C3C" },
-			{ x: "Double room", y: 48000, fillColor: "#FF7373" },
-			{ x: "Twin room", y: 35000, fillColor: "#1DB2FF" },
-			{ x: "Queen room", y: 30000, fillColor: "#9B59B6" },
-			{ x: "Family room", y: 25000, fillColor: "#3498DB" },
-			{ x: "Penthouse", y: 20000, fillColor: "#7F8C8D" },
-		],
-	},
-];
+	// ---------- 4) Build chart data for “roomNightsByType” ----------
+	// e.g. roomNightsByType = [ { type: "Quad Rooms", value: 713, fillColor: "#E74C3C" }, ... ]
+	const roomNightsCategories = roomNightsByType.map((item) => item.type);
+	const roomNightsSeriesData = roomNightsByType.map((item) => ({
+		x: item.type,
+		y: item.value,
+		fillColor: item.fillColor || "#E74C3C",
+	}));
 
-const FourthRow = () => {
+	const roomNightsOptions = {
+		chart: {
+			type: "bar",
+			toolbar: { show: false },
+		},
+		plotOptions: {
+			bar: {
+				horizontal: false,
+				columnWidth: "55%",
+				endingShape: "rounded",
+			},
+		},
+		dataLabels: { enabled: false },
+		xaxis: { categories: roomNightsCategories },
+		yaxis: {
+			title: { text: "" },
+		},
+		fill: { opacity: 1 },
+		tooltip: {
+			y: {
+				formatter: (val) => `${val}`, // e.g. "713"
+			},
+		},
+	};
+
+	const roomNightsSeries = [
+		{
+			name: "Room Nights",
+			data: roomNightsSeriesData,
+		},
+	];
+
+	// ---------- 5) Build chart data for “roomRevenueByType” ----------
+	// e.g. roomRevenueByType = [ { type: "Quad Rooms", value: 103806.1, fillColor: "#FF7373" }, ... ]
+	const roomRevenueCategories = roomRevenueByType.map((item) => item.type);
+	const roomRevenueSeriesData = roomRevenueByType.map((item) => ({
+		x: item.type,
+		y: item.value,
+		fillColor: item.fillColor || "#FF7373",
+	}));
+
+	const roomRevenueOptions = {
+		chart: {
+			type: "bar",
+			toolbar: { show: false },
+		},
+		plotOptions: {
+			bar: {
+				horizontal: false,
+				columnWidth: "55%",
+				endingShape: "rounded",
+			},
+		},
+		dataLabels: { enabled: false },
+		xaxis: { categories: roomRevenueCategories },
+		yaxis: {
+			title: { text: "" },
+		},
+		fill: { opacity: 1 },
+		tooltip: {
+			y: {
+				formatter: (val) => `${val} SAR`,
+			},
+		},
+	};
+
+	const roomRevenueSeries = [
+		{
+			name: "Room Revenue",
+			data: roomRevenueSeriesData,
+		},
+	];
+
+	// ---------- 6) Render 3 charts side by side ----------
 	return (
 		<FourthRowWrapper>
+			{/* Top Channels */}
 			<ChartCard>
-				<ChartTitle>Top channels</ChartTitle>
+				<ChartTitle>{chartTitles.topChannels}</ChartTitle>
 				<Chart
 					options={topChannelsOptions}
 					series={topChannelsSeries}
@@ -174,8 +163,10 @@ const FourthRow = () => {
 					height={250}
 				/>
 			</ChartCard>
+
+			{/* Room Nights */}
 			<ChartCard>
-				<ChartTitle>Room nights by room types</ChartTitle>
+				<ChartTitle>{chartTitles.roomNights}</ChartTitle>
 				<Chart
 					options={roomNightsOptions}
 					series={roomNightsSeries}
@@ -183,8 +174,10 @@ const FourthRow = () => {
 					height={250}
 				/>
 			</ChartCard>
+
+			{/* Room Revenue */}
 			<ChartCard>
-				<ChartTitle>Room revenue by room types</ChartTitle>
+				<ChartTitle>{chartTitles.roomRevenue}</ChartTitle>
 				<Chart
 					options={roomRevenueOptions}
 					series={roomRevenueSeries}
@@ -197,6 +190,8 @@ const FourthRow = () => {
 };
 
 export default FourthRow;
+
+// ---------------- STYLED COMPONENTS ----------------
 
 const FourthRowWrapper = styled.div`
 	display: grid;

@@ -3,106 +3,107 @@ import { Table } from "antd";
 import Chart from "react-apexcharts";
 import styled from "styled-components";
 
-const roomData = [
-	{
-		key: "1",
-		type: "Standard",
-		available: 9,
-		sold: 1,
-		outOfOrder: 0,
-		total: 10,
-	},
-	{
-		key: "2",
-		type: "Lux",
-		available: 3,
-		sold: 2,
-		outOfOrder: 0,
-		total: 5,
-	},
-	{
-		key: "3",
-		type: "Double",
-		available: 6,
-		sold: 4,
-		outOfOrder: 0,
-		total: 10,
-	},
-];
+const ThirdRow = ({
+	chosenLanguage = "English",
+	adminDashboardReport = {},
+}) => {
+	// 1) Destructure data from the thirdRow
+	const {
+		roomsTable = [],
+		housekeeping = { clean: 0, cleaning: 0, dirty: 0 },
+	} = adminDashboardReport;
 
-const pieChartOptions = {
-	chart: {
-		type: "donut",
-		toolbar: {
-			show: false,
+	// 2) Prepare the chart data for housekeeping
+	// e.g. housekeeping.clean = 25, housekeeping.cleaning = 0, housekeeping.dirty = 0
+	const pieChartSeries = [
+		housekeeping.clean || 0,
+		housekeeping.cleaning || 0,
+		housekeeping.dirty || 0,
+	];
+
+	// We'll show different labels in Arabic vs English
+	const chartLabels =
+		chosenLanguage === "Arabic"
+			? ["نظيف", "جاري التنظيف", "متسخ"]
+			: ["Clean", "Cleaning", "Dirty"];
+
+	// We can also show the total rooms in housekeeping as “total: clean+cleaning+dirty”
+	const totalHousekeeping = pieChartSeries.reduce((a, b) => a + b, 0);
+
+	// 3) Chart Options
+	const pieChartOptions = {
+		chart: {
+			type: "donut",
+			toolbar: { show: false },
 		},
-	},
-	colors: ["#4CAF50", "#FFC107", "#F44336"], // Colors for clean, cleaning, and dirty
-	dataLabels: {
-		enabled: false,
-	},
-	plotOptions: {
-		pie: {
-			donut: {
-				size: "70%",
-				labels: {
-					show: true,
-					name: {
+		colors: ["#4CAF50", "#FFC107", "#F44336"], // Clean, Cleaning, Dirty
+		dataLabels: { enabled: false },
+		plotOptions: {
+			pie: {
+				donut: {
+					size: "70%",
+					labels: {
 						show: true,
-						fontSize: "24px",
-						fontWeight: "bold",
-						color: "#333",
-						offsetY: -10,
-					},
-					value: {
-						show: false,
-					},
-					total: {
-						show: true,
-						label: "25",
-						color: "#333",
-						fontSize: "24px",
-						fontWeight: "bold",
+						name: {
+							show: true,
+							fontSize: "24px",
+							fontWeight: "bold",
+							color: "#333",
+							offsetY: -10,
+						},
+						value: {
+							show: false,
+						},
+						total: {
+							show: true,
+							// Shown in the center of donut
+							label: String(totalHousekeeping),
+							color: "#333",
+							fontSize: "24px",
+							fontWeight: "bold",
+						},
 					},
 				},
 			},
 		},
-	},
-	legend: {
-		show: false,
-	},
-	labels: ["Clean", "Cleaning", "Dirty"],
-};
+		legend: { show: false },
+		labels: chartLabels, // e.g. ["Clean", "Cleaning", "Dirty"] or Arabic
+	};
 
-const pieChartSeries = [25, 0, 0]; // Example data for housekeeping
-
-const ThirdRow = ({ chosenLanguage }) => {
-	const roomColumns = [
+	// 4) Build columns for the Rooms table
+	const columns = [
 		{
 			title: chosenLanguage === "Arabic" ? "النوع" : "Type",
 			dataIndex: "type",
 			key: "type",
 		},
 		{
-			title: chosenLanguage === "Arabic" ? "المتاح" : "Available",
-			dataIndex: "available",
-			key: "available",
-		},
-		{
-			title: chosenLanguage === "Arabic" ? "المباع" : "Sold",
+			title: chosenLanguage === "Arabic" ? "مباعة" : "Sold",
 			dataIndex: "sold",
 			key: "sold",
 		},
 		{
-			title:
-				chosenLanguage === "Arabic"
-					? "خارج النظام/الخدمة"
-					: "Out Of Order/Service",
-			dataIndex: "outOfOrder",
-			key: "outOfOrder",
+			title: chosenLanguage === "Arabic" ? "متاحة" : "Available",
+			dataIndex: "available",
+			key: "available",
 		},
 		{
-			title: chosenLanguage === "Arabic" ? "المجموع" : "Total",
+			title:
+				chosenLanguage === "Arabic" ? "الحجوزات في 7 أيام" : "Booking Next 7",
+			dataIndex: "bookingNext7",
+			key: "bookingNext7",
+		},
+		{
+			title:
+				chosenLanguage === "Arabic"
+					? "التوفر في 7 أيام"
+					: "Availability Next 7",
+			dataIndex: "availabilityNext7",
+			key: "availabilityNext7",
+		},
+		{
+			title:
+				chosenLanguage === "Arabic" ? "إجمالي الغرف في الفندق" : "Total Rooms",
 			dataIndex: "total",
 			key: "total",
 		},
@@ -110,16 +111,19 @@ const ThirdRow = ({ chosenLanguage }) => {
 
 	return (
 		<ThirdRowWrapper>
+			{/* Left => Rooms Table */}
 			<TableWrapper>
 				<TableTitle>
 					{chosenLanguage === "Arabic" ? "الغرف" : "Rooms"}
 				</TableTitle>
 				<StyledTable
-					dataSource={roomData}
-					columns={roomColumns}
+					dataSource={roomsTable}
+					columns={columns}
 					pagination={false}
 				/>
 			</TableWrapper>
+
+			{/* Right => Housekeeping donut chart */}
 			<ChartWrapper>
 				<ChartHeader>
 					<ChartTitle>
@@ -129,24 +133,26 @@ const ThirdRow = ({ chosenLanguage }) => {
 						{chosenLanguage === "Arabic" ? "عرض الكل" : "Show all"}
 					</ShowAllLink>
 				</ChartHeader>
+
 				<Chart
 					options={pieChartOptions}
 					series={pieChartSeries}
 					type='donut'
 					height={200}
 				/>
+
 				<LegendList>
 					<LegendItem>
 						<LegendDot color='#4CAF50' />
-						Clean 25
+						{chartLabels[0]} {housekeeping.clean}
 					</LegendItem>
 					<LegendItem>
 						<LegendDot color='#FFC107' />
-						Cleaning 0
+						{chartLabels[1]} {housekeeping.cleaning}
 					</LegendItem>
 					<LegendItem>
 						<LegendDot color='#F44336' />
-						Dirty 0
+						{chartLabels[2]} {housekeeping.dirty}
 					</LegendItem>
 				</LegendList>
 			</ChartWrapper>
@@ -155,6 +161,8 @@ const ThirdRow = ({ chosenLanguage }) => {
 };
 
 export default ThirdRow;
+
+// =================== STYLED COMPONENTS ===================
 
 const ThirdRowWrapper = styled.div`
 	display: grid;
@@ -180,10 +188,10 @@ const StyledTable = styled(Table)`
 		background-color: transparent;
 	}
 	.ant-table-tbody > tr:nth-child(odd) {
-		background-color: #f7f8fa; // Light grey for odd rows
+		background-color: #f7f8fa; /* Light grey for odd rows */
 	}
 	.ant-table-tbody > tr:nth-child(even) {
-		background-color: #fff; // White for even rows
+		background-color: #fff; /* White for even rows */
 	}
 `;
 
@@ -228,7 +236,6 @@ const LegendList = styled.div`
 const LegendItem = styled.div`
 	display: flex;
 	align-items: center;
-	color: ${(props) => props.color};
 	font-size: 14px;
 	margin: 4px 0;
 `;

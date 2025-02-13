@@ -6,14 +6,15 @@ import FourthRow from "./FourthRow";
 import FifthRow from "./FifthRow";
 import SecondRow from "./SecondRow";
 
+// Use the existing translations object
 const translations = {
 	English: {
 		arrivals: "Arrivals",
 		departures: "Departures",
 		inHouse: "In-house",
-		stayovers: "Stayovers",
-		booking: "Booking",
-		overBookings: "OverBookings",
+		arrivingTomorrow: "Arriving Tommorow", // We'll use this label for tomorrowArrivals
+		todaysReservations: "Reservations Today",
+		allReservations: "Overall Reservations",
 		cancellations: "Cancellations",
 		noShow: "No show",
 		occupancy: "Occupancy",
@@ -38,9 +39,9 @@ const translations = {
 		arrivals: "الوصول",
 		departures: "المغادرة",
 		inHouse: "في المنزل",
-		stayovers: "البقاء",
-		booking: "الحجز",
-		overBookings: "الحجوزات الزائدة",
+		arrivingTomorrow: "سيصل غدا", // We'll use this label for tomorrowArrivals
+		todaysReservations: "حجوزات اليوم",
+		allReservations: "جميع الحجوزات",
 		cancellations: "الإلغاءات",
 		noShow: "عدم الحضور",
 		occupancy: "الإشغال",
@@ -63,65 +64,94 @@ const translations = {
 	},
 };
 
-const Dashboard = ({ chosenLanguage = "English" }) => {
+const Dashboard = ({ chosenLanguage = "English", adminDashboardReport }) => {
 	const t = translations[chosenLanguage] || translations.English;
+
+	// Safely extract the firstRow data
+	const {
+		arrivals = 0,
+		departures = 0,
+		inHouse = 0,
+		booking = 0,
+		overAllBookings = 0,
+		tomorrowArrivals = 0,
+	} = adminDashboardReport?.firstRow || {};
 
 	return (
 		<DashboardWrapper dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+			{/* FIRST ROW of 6 InfoCards */}
 			<FirstRow>
+				{/* Arrivals */}
 				<InfoCard backgroundColor='#E3F2FD'>
-					<CardNumber>26</CardNumber>
+					<CardNumber>{arrivals}</CardNumber>
 					<CardTitle>{t.arrivals}</CardTitle>
-					<Badge>5</Badge>
 				</InfoCard>
+
+				{/* Departures */}
 				<InfoCard backgroundColor='#F3E5F5'>
-					<CardNumber>12</CardNumber>
+					<CardNumber>{departures}</CardNumber>
 					<CardTitle>{t.departures}</CardTitle>
-					<Badge>3</Badge>
 				</InfoCard>
+
+				{/* In-House */}
 				<InfoCard backgroundColor='#E8F5E9'>
-					<CardNumber>37</CardNumber>
+					<CardNumber>{inHouse}</CardNumber>
 					<CardTitle>{t.inHouse}</CardTitle>
 				</InfoCard>
+
+				{/* Tomorrow Arrivals (used as "Stayovers" label) */}
 				<InfoCard backgroundColor='#FFF3E0' border>
-					<CardNumber>25</CardNumber>
-					<CardTitle>{t.stayovers}</CardTitle>
+					<CardNumber>{tomorrowArrivals}</CardNumber>
+					<CardTitle>{t.arrivingTomorrow}</CardTitle>
 				</InfoCard>
+
+				{/* Today's Bookings */}
 				<InfoCard backgroundColor='#FFFDE7'>
-					<CardNumber>16</CardNumber>
-					<CardTitle>{t.booking}</CardTitle>
+					<CardNumber>{booking}</CardNumber>
+					<CardTitle>{t.todaysReservations}</CardTitle>
 				</InfoCard>
+
+				{/* Overall Bookings (used as "OverBookings" label) */}
 				<InfoCard backgroundColor='#FFEBEE'>
-					<CardNumber>14</CardNumber>
-					<CardTitle>{t.overBookings}</CardTitle>
+					<CardNumber>{overAllBookings}</CardNumber>
+					<CardTitle>{t.allReservations}</CardTitle>
 				</InfoCard>
 			</FirstRow>
 
-			<>
-				<SecondRow
-					chosenLanguage={chosenLanguage}
-					translations={translations}
-				/>
-			</>
+			{/* SECOND ROW */}
+			<SecondRow
+				chosenLanguage={chosenLanguage}
+				translations={translations}
+				adminDashboardReport={adminDashboardReport.secondRow}
+			/>
 
-			<>
-				<ThirdRow chosenLanguage={chosenLanguage} />
-			</>
+			{/* THIRD ROW */}
+			<ThirdRow
+				chosenLanguage={chosenLanguage}
+				translations={translations}
+				adminDashboardReport={adminDashboardReport.thirdRow}
+			/>
 
-			<>
-				<FourthRow chosenLanguage={chosenLanguage} />
-			</>
+			{/* FOURTH ROW */}
+			<FourthRow
+				chosenLanguage={chosenLanguage}
+				translations={translations}
+				adminDashboardReport={adminDashboardReport.fourthRow}
+			/>
 
-			<>
-				<FifthRow chosenLanguage={chosenLanguage} />
-			</>
+			{/* FIFTH ROW */}
+			<FifthRow
+				chosenLanguage={chosenLanguage}
+				translations={translations}
+				adminDashboardReport={adminDashboardReport.fifthRow}
+			/>
 		</DashboardWrapper>
 	);
 };
 
 export default Dashboard;
 
-// Styled components with comments for adjustments
+// ---------------- STYLES ----------------
 
 const DashboardWrapper = styled.div`
 	padding: 24px;
@@ -131,14 +161,12 @@ const DashboardWrapper = styled.div`
 	gap: 24px;
 `;
 
-// First row styling
 const FirstRow = styled.div`
 	display: grid;
 	grid-template-columns: repeat(6, 1fr);
 	gap: 16px;
 `;
 
-// Info card styling
 const InfoCard = styled.div`
 	background-color: ${(props) => props.backgroundColor};
 	border-radius: 8px;
@@ -147,9 +175,9 @@ const InfoCard = styled.div`
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+	position: relative; // allows you to position Badge absolutely if you bring it back
 `;
 
-// Card title styling First Row
 const CardTitle = styled.div`
 	font-size: 18px;
 	font-weight: bold;
@@ -157,24 +185,23 @@ const CardTitle = styled.div`
 	margin: auto 10px !important;
 `;
 
-// Card number styling
 const CardNumber = styled.div`
 	font-size: 25px;
 	font-weight: bold;
-	/* color: #1e88e5; */
 	color: black;
 	margin: auto 10px !important;
 `;
 
-// Styles for the badge
+/** Uncomment if you want a Badge somewhere
 const Badge = styled.div`
-	background-color: #1e88e5;
-	color: white;
-	border-radius: 50%;
-	padding: 4px 8px;
-	position: absolute;
-	top: 10px;
-	right: 10px;
-	font-size: 14px;
-	font-weight: bold;
+  background-color: #1e88e5;
+  color: white;
+  border-radius: 50%;
+  padding: 4px 8px;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 14px;
+  font-weight: bold;
 `;
+**/
