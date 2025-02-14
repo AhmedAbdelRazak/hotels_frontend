@@ -269,6 +269,7 @@ const MainHotelDashboard = () => {
 					token={token}
 					userId={user._id}
 					gettingHotelData={gettingHotelData}
+					currentUser={user}
 				/>
 			</Modal>
 		</MainHotelDashboardWrapper>

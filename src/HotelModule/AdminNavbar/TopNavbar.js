@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { Menu, Dropdown } from "antd";
+import { Menu, Dropdown, Modal, Form, Input, message } from "antd";
 import {
 	UserOutlined,
 	LogoutOutlined,
@@ -10,7 +10,9 @@ import {
 	SettingOutlined,
 	GlobalOutlined,
 	CalendarOutlined,
+	LockOutlined,
 } from "@ant-design/icons";
+import axios from "axios";
 import { useCartContext } from "../../cart_context";
 import DigitalClock from "./DigitalClock";
 import { isAuthenticated, signout } from "../../auth";
@@ -22,14 +24,31 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [hotelName, setHotelName] = useState("");
 	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
 
+	// Modal state
+	const [updateModalVisible, setUpdateModalVisible] = useState(false);
+
+	// Form instance from AntD
+	const [form] = Form.useForm();
+
 	const location = useLocation();
 	const history = useHistory();
-	const { user } = isAuthenticated();
+
+	// Extract user & token
+	const { user, token } = isAuthenticated();
 
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
-	const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
 	const hotelId = selectedHotel._id;
 
+	// If user.role === 2000 => user._id; otherwise => selectedHotel.belongsTo
+	const userId =
+		user.role === 2000
+			? user._id
+			: selectedHotel.belongsTo?._id || selectedHotel.belongsTo;
+
+	// userDetails (name, email) from either user or selectedHotel.belongsTo
+	const userDetails = user.role === 2000 ? user : selectedHotel.belongsTo;
+
+	// Display the hotel name if path has userId & hotelId
 	useEffect(() => {
 		const pathContainsUserIdAndHotelId =
 			location.pathname.includes(userId) && location.pathname.includes(hotelId);
@@ -40,6 +59,14 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		}
 	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
+	// -- Handle Signout
+	const handleSignout = () => {
+		signout(() => {
+			history.push("/");
+		});
+	};
+
+	// -- Profile Dropdown Menu Click
 	const handleMenuClick = ({ key }) => {
 		if (key === "profile" && user.role === 2000) {
 			history.push("/hotel-management/main-dashboard");
@@ -47,14 +74,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			history.push("/admin/dashboard");
 		} else if (key === "logout") {
 			handleSignout();
+		} else if (key === "update") {
+			handleOpenUpdateAccountModal();
 		}
 		setDropdownVisible(false);
-	};
-
-	const handleSignout = () => {
-		signout(() => {
-			history.push("/");
-		});
 	};
 
 	const menu = (
@@ -65,17 +88,19 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			<Menu.Item key='inbox' icon={<MailOutlined />}>
 				Inbox
 			</Menu.Item>
+			<Menu.Item key='update' icon={<UserOutlined />}>
+				Update Account
+			</Menu.Item>
 			<Menu.Item key='logout' icon={<LogoutOutlined />}>
 				Logout
 			</Menu.Item>
 		</Menu>
 	);
 
+	// -- Room Types Dropdown
 	const handleRoomClick = ({ key }) => {
 		setRoomTypesDropdown(false);
-
-		window.location.href = `
-/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
+		window.location.href = `/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
 	};
 
 	const menuRoomTypes = (
@@ -90,36 +115,112 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		</Menu>
 	);
 
+	// -- Settings Icon Click
 	const handleSettingsClick = () => {
-		const selectedHotel =
+		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userId = user._id;
-		const hotelId = selectedHotel._id;
+		const userIdLocal = user._id;
+		const hotelIdLocal = selectedHotelLocal._id;
 
-		// Check if both userId and hotelId are in the current path
 		const pathContainsUserIdAndHotelId =
-			location.pathname.includes(userId) && location.pathname.includes(hotelId);
+			location.pathname.includes(userIdLocal) &&
+			location.pathname.includes(hotelIdLocal);
 
 		if (pathContainsUserIdAndHotelId) {
-			window.location.href = `/hotel-management/settings/${userId}/${hotelId}`;
+			window.location.href = `/hotel-management/settings/${userIdLocal}/${hotelIdLocal}`;
 		}
-		// If not, do nothing
 	};
 
+	// -- Chat Icon Click
 	const handleChatClick = () => {
-		const selectedHotel =
+		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userId = user._id;
-		const hotelId = selectedHotel._id;
+		const userIdLocal = user._id;
+		const hotelIdLocal = selectedHotelLocal._id;
 
-		// Check if both userId and hotelId are in the current path
 		const pathContainsUserIdAndHotelId =
-			location.pathname.includes(userId) && location.pathname.includes(hotelId);
+			location.pathname.includes(userIdLocal) &&
+			location.pathname.includes(hotelIdLocal);
 
 		if (pathContainsUserIdAndHotelId) {
-			window.location.href = `/hotel-management/customer-service/${userId}/${hotelId}`;
+			window.location.href = `/hotel-management/customer-service/${userIdLocal}/${hotelIdLocal}`;
 		}
-		// If not, do nothing
+	};
+
+	// -- Open Modal & Prefill Data
+	const handleOpenUpdateAccountModal = () => {
+		// Determine name/email from userDetails or user
+		const nameToUse =
+			userDetails && typeof userDetails === "object"
+				? userDetails.name || ""
+				: user.name || "";
+
+		const emailToUse =
+			userDetails && typeof userDetails === "object"
+				? userDetails.email || ""
+				: user.email || "";
+
+		// Set initial form values
+		form.setFieldsValue({
+			name: nameToUse,
+			email: emailToUse,
+			password: "",
+			password2: "",
+		});
+
+		setUpdateModalVisible(true);
+	};
+
+	// -- Close Modal
+	const handleCancelUpdateAccount = () => {
+		setUpdateModalVisible(false);
+	};
+
+	// -- onFinish Handler for Form
+	const handleUpdateAccount = async (values) => {
+		try {
+			const { name, email, password, password2 } = values;
+
+			// Check password match
+			if (password !== password2) {
+				message.error("Passwords do not match!");
+				return;
+			}
+
+			const payload = { name, email, password, userId };
+
+			// Construct URL based on role
+			let url = "";
+			if (user.role === 2000) {
+				// normal user => /user/:userId
+				url = `${process.env.REACT_APP_API_URL}/user/${user._id}`;
+			} else {
+				// admin => /user/:updatedUserId/:userId
+				const updatedUserId =
+					userDetails && userDetails._id ? userDetails._id : userDetails;
+				url = `${process.env.REACT_APP_API_URL}/user/${updatedUserId}/${user._id}`;
+			}
+
+			const config = {
+				headers: {
+					Accept: "application/json",
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
+			};
+
+			// Make the PUT request (no unused variable)
+			await axios.put(url, payload, config);
+
+			message.success("User updated successfully!");
+			setUpdateModalVisible(false);
+			// Optionally refresh or update localStorage if needed
+		} catch (error) {
+			console.error("Error updating user:", error);
+			message.error(
+				error?.response?.data?.error || "Something went wrong updating user"
+			);
+		}
 	};
 
 	return (
@@ -136,9 +237,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					<DigitalClock />
 				</DigitalClockWrapper>
 			</LeftSection>
+
 			<MiddleSection>
 				{hotelName && <HotelName>{hotelName}</HotelName>}
 			</MiddleSection>
+
 			<RightSection>
 				<Icons>
 					<IconWrapper
@@ -154,6 +257,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							{chosenLanguage === "English" ? "عربي" : "En"}
 						</LanguageText>
 					</IconWrapper>
+
 					<IconWrapper onClick={handleSettingsClick}>
 						<SettingOutlined />
 					</IconWrapper>
@@ -174,6 +278,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							</div>
 						</Dropdown>
 					</IconWrapper>
+
 					<IconWrapper
 						className='w-25'
 						style={{ color: "white", fontWeight: "bold" }}
@@ -181,15 +286,18 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						شُموس
 						<NotificationDot2 />
 					</IconWrapper>
+
 					<IconWrapper>
 						<BellOutlined />
 						<NotificationDot />
 					</IconWrapper>
+
 					<IconWrapper onClick={handleChatClick}>
 						<MessageOutlined />
 						<NotificationDot />
 					</IconWrapper>
 				</Icons>
+
 				<ProfileMenu>
 					<Dropdown
 						overlay={menu}
@@ -198,20 +306,99 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						onVisibleChange={(flag) => setDropdownVisible(flag)}
 					>
 						<Profile>
-							<img src='https://via.placeholder.com/40' alt='Profile' />
+							<UserOutlined
+								style={{
+									fontSize: "30px",
+									color: "#fff",
+									marginRight: "10px",
+								}}
+							/>
 							<div>
-								<span>Hi {user.name.split(" ")[0]}</span>
+								<span>Hi {user.name?.split(" ")[0]}</span>
 								<small>Superadmin</small>
 							</div>
 						</Profile>
 					</Dropdown>
 				</ProfileMenu>
 			</RightSection>
+
+			{/* ===== MODAL FOR UPDATING ACCOUNT ===== */}
+			<Modal
+				title='Update Account'
+				visible={updateModalVisible}
+				// Instead of onOk={handleUpdateAccount}, we trigger form submit:
+				onOk={() => form.submit()}
+				onCancel={handleCancelUpdateAccount}
+				okText='Update'
+				cancelText='Cancel'
+			>
+				<Form
+					layout='vertical'
+					form={form}
+					onFinish={handleUpdateAccount}
+					// We'll explicitly set initialValues too, though we set them in handleOpenUpdateAccountModal
+					initialValues={{
+						name: "",
+						email: "",
+						password: "",
+						password2: "",
+					}}
+				>
+					<Form.Item
+						name='name'
+						label='User Name (Manager/ Owner/ Agent)'
+						rules={[{ required: true, message: "Please enter your name" }]}
+					>
+						<Input prefix={<UserOutlined />} placeholder='Full Name' />
+					</Form.Item>
+
+					<Form.Item
+						name='email'
+						label='Email Address'
+						rules={[{ required: true, message: "Please enter your email" }]}
+					>
+						<Input prefix={<MailOutlined />} placeholder='Email' />
+					</Form.Item>
+
+					<Form.Item
+						name='password'
+						label='Password'
+						rules={[{ required: true, message: "Please enter a password" }]}
+					>
+						<Input.Password prefix={<LockOutlined />} placeholder='Password' />
+					</Form.Item>
+
+					<Form.Item
+						name='password2'
+						label='Confirm Password'
+						dependencies={["password"]}
+						rules={[
+							{ required: true, message: "Please confirm your password" },
+							// Or add direct field validation with antd:
+							// ({ getFieldValue }) => ({
+							//   validator(_, value) {
+							//     if (!value || getFieldValue('password') === value) {
+							//       return Promise.resolve();
+							//     }
+							//     return Promise.reject(new Error('Passwords do not match!'));
+							//   },
+							// }),
+						]}
+					>
+						<Input.Password
+							prefix={<LockOutlined />}
+							placeholder='Confirm Password'
+						/>
+					</Form.Item>
+				</Form>
+			</Modal>
 		</NavbarWrapper>
 	);
 };
 
 export default TopNavbar;
+
+// ======================== Styled Components ======================== //
 
 const NavbarWrapper = styled.div`
 	position: fixed;
@@ -350,14 +537,15 @@ const Profile = styled.div`
 	display: flex;
 	align-items: center;
 	cursor: pointer;
-	img {
-		border-radius: 50%;
+
+	.anticon-user {
+		margin-right: ${(props) => (props.isArabic ? "20px" : "10px")} !important;
 	}
+
 	span {
 		font-weight: bold;
 		color: #fff;
-		margin-left: ${(props) => (props.isArabic ? "20px" : "30px")} !important;
-		margin-right: ${(props) => (props.isArabic ? "" : "10px")} !important;
+		margin-left: ${(props) => (props.isArabic ? "20px" : "10px")} !important;
 	}
 	small {
 		display: block;
