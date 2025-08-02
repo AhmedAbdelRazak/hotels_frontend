@@ -17,6 +17,11 @@ body {
 }
 
 :root {
+	/* Static Pages Colors */
+	--menu-color: #8d4109;
+	--button-color: #29a6ab;
+	--right-hand-side-color: #0a252c;
+
 	/* Primary Colors */
 	--primary-color-blue: #1e88e5;
 	--primary-color-light-blue: #e3f2fd;

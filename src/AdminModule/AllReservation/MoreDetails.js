@@ -1156,6 +1156,14 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										>
 											{reservation && reservation.booking_source}
 										</div>
+										<div
+											className='mx-1'
+											style={{ textTransform: "capitalize" }}
+										>
+											{reservation &&
+												reservation.customer_details &&
+												reservation.customer_details.reservedBy}
+										</div>
 									</div>
 
 									<div className='col-md-4'>

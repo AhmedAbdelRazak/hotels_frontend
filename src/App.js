@@ -1,13 +1,16 @@
 import React, { useEffect } from "react";
 import "./App.css";
 import "react-quill/dist/quill.snow.css";
-import { Route, Switch, BrowserRouter } from "react-router-dom";
+import { Route, Switch, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useCartContext } from "./cart_context";
 import Footer from "./Footer";
 import Signup from "./pages/Signup";
 import Signin from "./pages/Signin";
+import Contact from "./pages/Contact";
+import PMS from "./pages/PMS";
+import WhyXHotel from "./pages/WhyXHotel";
 
 // Management Routes
 import AdminRoute from "./auth/AdminRoute";
@@ -57,9 +60,14 @@ import PaymentMainFinance from "./Finance/Payment/PaymentMainFinance";
 // Owner
 import OwnerRoute from "./auth/OwnerRoute";
 import OwnerDashboardMain from "./OwnerContent/OwnerDashboardMain";
+import Navmenu from "./pages/Navmenu";
 
 function App() {
 	const { languageToggle, chosenLanguage } = useCartContext();
+	const location = useLocation(); // get current route info
+
+	const publicPaths = ["/", "/signup", "/contact", "/pms", "/why-x-hotel"];
+	const showNav = publicPaths.includes(location.pathname);
 
 	const languageToggle2 = () => {
 		localStorage.setItem("lang", JSON.stringify(chosenLanguage));
@@ -91,15 +99,19 @@ function App() {
 	}, []);
 
 	return (
-		<BrowserRouter>
+		<>
 			<ToastContainer
 				position='top-center'
 				toastStyle={{ width: "auto", minWidth: "400px" }}
 			/>
+			{showNav && <Navmenu />}
 			<Switch>
 				{/* ============== Public Routes ============== */}
 				<Route path='/signup' exact component={Signup} />
 				<Route path='/' exact component={Signin} />
+				<Route path='/contact' exact component={Contact} />
+				<Route path='/pms' exact component={PMS} />
+				<Route path='/why-x-hotel' exact component={WhyXHotel} />
 				<Route
 					path='/client-payment/:reservationId/:guestname/:guestphone/:hotelname/:roomtype/:checkin/:checkout/:daysofresidence/:totalamount'
 					exact
@@ -249,7 +261,7 @@ function App() {
 				/>
 			</Switch>
 			<Footer />
-		</BrowserRouter>
+		</>
 	);
 }
 

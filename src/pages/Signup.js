@@ -1,415 +1,362 @@
 /** @format */
+/* HotelSignup.jsx — single‑column form, defaults preset */
 
-import React, { Fragment, useState } from "react";
+import React, { useState } from "react";
 import { Link, Redirect } from "react-router-dom";
 import styled from "styled-components";
-import { signup, authenticate, isAuthenticated, signin } from "../auth";
-import { ToastContainer, toast } from "react-toastify";
+import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.min.css";
+import { signup, signin, authenticate, isAuthenticated } from "../auth";
+import { useCartContext } from "../cart_context";
 
-const Signup = () => {
-	const [values, setValues] = useState({
+/* ─── translations ─── */
+const W = {
+	en: {
+		title: "Hotel Registration Request",
+		welcome: "Welcome to",
+		brand: "X‑Hotel",
+		fill: "Please fill all data then press Register",
+		fullName: "Full account owner name",
+		email: "Email address",
+		phone: "Phone (WhatsApp)",
+		hotelName: "Hotel name",
+		country: "Country",
+		state: "State / Region",
+		city: "City",
+		address: "Street address",
+		property: "Property type",
+		floors: "Number of floors",
+		rooms: "Number of rooms",
+		password: "Password",
+		password2: "Confirm password",
+		terms: "I accept X‑Hotel Terms & Conditions",
+		note: "Please ensure all information is accurate; the data‑entry person is responsible for any errors.",
+		btn: "Register now",
+		have: "If you already have an account please",
+		login: "Login here",
+		req: "This field is required",
+		mismatch: "Passwords don't match",
+	},
+	ar: {
+		title: "طلب تسجيل فندق",
+		welcome: "مرحباً بشركائنا على منصة",
+		brand: "إكس أوتيل",
+		fill: "يرجى ملء جميع البيانات و الضغط على تسجيل",
+		fullName: "اسم صاحب الحساب بالكامل",
+		email: "البريد الإلكتروني",
+		phone: "رقم الهاتف ( يجب ان يكون عليه واتس أب )",
+		hotelName: "اسم الفندق",
+		country: "البلد",
+		state: "المنطقة / الولاية",
+		city: "المدينة",
+		address: "العنوان التفصيلي",
+		property: "نوع العقار",
+		floors: "عدد الادوار",
+		rooms: "عدد الغرف",
+		password: "كلمة المرور",
+		password2: "إعادة كتابة كلمة المرور",
+		terms: "أُقر أن جميع البيانات صحيحة وأوافق على الشروط والأحكام",
+		note: "يرجى التأكد من ملء جميع البيانات بالشكل كامل وصحيح, واي أخطاء بالبيانات تكون على مسؤولية مدخل البيانات.",
+		btn: "سجل الآن",
+		have: "إذا كنت تملك حساباً مسبقاً رجاءً",
+		login: "سجّل الدخول",
+		req: "هذا الحقل مطلوب",
+		mismatch: "كلمتا المرور غير متطابقتين",
+	},
+};
+
+const HotelSignup = ({ history }) => {
+	const { chosenLanguage } = useCartContext();
+	const isRTL = chosenLanguage === "Arabic";
+	const T = isRTL ? W.ar : W.en;
+
+	/* initial state incl. defaults */
+	const [form, setForm] = useState({
 		name: "",
 		email: "",
+		phone: "",
+		hotelName: "",
+		hotelCountry: "KSA",
+		hotelState: "makkah",
+		hotelCity: "",
+		hotelAddress: "",
+		propertyType: "Hotel",
+		hotelFloors: "",
+		hotelRooms: "",
 		password: "",
 		password2: "",
-		error: "",
-		success: false,
-		misMatch: false,
-		redirectToReferrer: "",
-		loading: false,
+		role: 2000,
+		accepted: false,
+		redirect: false,
 	});
 
-	const {
-		name,
-		email,
-		password,
-		password2,
-		// eslint-disable-next-line
-		success,
-		misMatch,
-		redirectToReferrer,
-		// eslint-disable-next-line
-		loading,
-	} = values;
+	/* two‑way binding */
+	const handle = (k) => (e) =>
+		setForm({ ...form, [k]: e.target ? e.target.value : e });
 
-	// console.log(success);
+	/* validation */
+	const required = Object.keys(form).filter(
+		(k) => !["accepted", "redirect"].includes(k)
+	);
 
-	const { user } = isAuthenticated();
-	const handleChange = (name) => (event) => {
-		setValues({
-			...values,
-			error: false,
-			misMatch: false,
-			[name]: event.target.value,
+	const submit = (e) => {
+		e.preventDefault();
+		for (const f of required) if (!form[f]) return toast.error(T.req);
+		if (form.password !== form.password2) return toast.error(T.mismatch);
+		if (!form.accepted) return toast.error(T.terms);
+
+		signup(form).then((res) => {
+			if (res.error) return toast.error(res.error);
+			signin({ emailOrPhone: form.email, password: form.password }).then(
+				(d) => {
+					if (d.error) return toast.error(d.error);
+					authenticate(d, () => setForm({ ...form, redirect: true }));
+				}
+			);
 		});
 	};
 
-	// console.log(loading);
-
-	// const informParent = (response) => {
-	// 	setValues({ ...values, error: false, loading: true });
-	// 	if (response.error) {
-	// 		setValues({ ...values, error: response.error, loading: false });
-	// 		toast.error(response.error);
-	// 	} else {
-	// 		authenticate2(response, () => {
-	// 			setValues({
-	// 				...values,
-	// 				redirectToReferrer: true,
-	// 			});
-	// 		});
-	// 	}
-	// };
-
-	const clickSubmit = (event) => {
-		event.preventDefault();
-		if (password !== password2) {
-			setValues({
-				...values,
-				success: false,
-				misMatch: true,
-			});
-			return <>{toast.error(MisMatchError)}</>;
-		} else {
-			setValues({ ...values, error: false, misMatch: false });
-			signup({
-				name,
-				email,
-				password,
-				password2,
-				misMatch,
-			}).then((data) => {
-				if (data.error || data.misMatch) {
-					setValues({ ...values, error: data.error, success: false });
-					toast.error(data.error);
-				} else
-					signin({ email, password }).then((data) => {
-						if (data.error) {
-							setValues({ ...values, error: data.error, loading: false });
-						} else {
-							authenticate(data, () => {
-								setValues({
-									...values,
-									redirectToReferrer: true,
-								});
-							});
-						}
-					});
-			});
-		}
-	};
-
-	const redirectUser = () => {
-		if (redirectToReferrer) {
-			if (user && user.role === 1) {
-				return <Redirect to='/admin/dashboard' />;
-			} else {
-				return <Redirect to='/' />;
-			}
-		}
-		if (isAuthenticated()) {
-			return <Redirect to='/' />;
-		}
-	};
-
-	const signUpForm = () => (
-		<FormSignup>
-			<div className='row justify-content-md-center mt-5'>
-				<div className='col-md-5 col-sm-12 '>
-					<div className='form-container text-center'>
-						<Fragment>
-							<h1 className='mb-3'>
-								Account <span className='text-primary'>Register</span>
-							</h1>
-							{/* <Google informParent={informParent} /> */}
-						</Fragment>
-						<form onSubmit={clickSubmit}>
-							<div className='form-group'>
-								<Fragment>
-									<label htmlFor='name' style={{ fontWeight: "bold" }}>
-										Full Name
-									</label>
-								</Fragment>
-								<input
-									type='text'
-									name='name'
-									value={name}
-									onChange={handleChange("name")}
-									required
-								/>
-							</div>
-							<div
-								className='form-group '
-								style={{
-									marginTop: "25px",
-								}}
-							></div>
-							<div className='form-group' style={{ marginTop: "25px" }}>
-								<Fragment>
-									<label htmlFor='email' style={{ fontWeight: "bold" }}>
-										Email Address / Phone
-									</label>
-								</Fragment>
-								<input
-									type='text'
-									name='email'
-									value={email}
-									onChange={handleChange("email")}
-									required
-								/>
-							</div>
-
-							<div className='form-group ' style={{ marginTop: "25px" }}>
-								<Fragment>
-									<label htmlFor='password' style={{ fontWeight: "bold" }}>
-										Password
-									</label>
-								</Fragment>
-								<input
-									type='password'
-									name='password'
-									value={password}
-									onChange={handleChange("password")}
-									required
-								/>
-							</div>
-							<div
-								className='form-group'
-								style={{ marginTop: "25px", marginBottom: "40px" }}
-							>
-								<Fragment>
-									<label htmlFor='password2' style={{ fontWeight: "bold" }}>
-										{" "}
-										Confirm Password
-									</label>
-								</Fragment>
-								<input
-									background='red'
-									type='password'
-									name='password2'
-									value={password2}
-									onChange={handleChange("password2")}
-									required
-								/>
-							</div>
-							<Fragment>
-								<input
-									type='submit'
-									value='Register'
-									className='btn btn-primary w-75 btn-block mx-auto'
-									//onClick={sendEmail}
-								/>
-							</Fragment>
-						</form>
-						<hr />
-						<Fragment>
-							<p
-								style={{
-									fontSize: "0.9rem",
-									textAlign: "center",
-								}}
-							>
-								If You Already have an account, Please{" "}
-								<strong
-									style={{
-										textDecoration: "underline",
-										fontStyle: "italic",
-										fontSize: "1rem",
-									}}
-								>
-									<Link to='/signin' className='btn btn-sm btn-outline-primary'>
-										Login Here
-									</Link>
-								</strong>
-							</p>
-						</Fragment>
-						<hr />
-					</div>
-				</div>
-				<Fragment>
-					<div className='col-md-5 SignupPic' style={{ borderRadius: "20px" }}>
-						<Fragment>
-							<h5 style={{ marginTop: "70px" }}>
-								<Link to='/'>
-									<h4
-										className=''
-										style={{
-											fontWeight: "bold",
-											fontFamily: "Brush Script MT, Brush Script Std, cursive",
-											textDecoration: "underline",
-											textAlign: "center",
-											color: "black",
-										}}
-									>
-										Online Store Name
-									</h4>
-								</Link>
-								{/* <div className="logo-type">
-                  Puristic <br /> Lyf
-                </div> */}
-							</h5>
-							<div
-								className='col-md-12'
-								style={{ textAlign: "center", marginTop: "0%" }}
-							>
-								<h3>
-									Register with{" "}
-									<span
-										style={{
-											fontWeight: "bold",
-											fontFamily: "Brush Script MT, Brush Script Std, cursive",
-											textDecoration: "underline",
-											textAlign: "center",
-											color: "black",
-										}}
-									>
-										Online Store Name
-									</span>
-								</h3>
-								<p className='container'>
-									When you Register with{" "}
-									<span
-										style={{
-											fontWeight: "bold",
-											fontFamily: "Brush Script MT, Brush Script Std, cursive",
-											textDecoration: "underline",
-											textAlign: "center",
-											color: "black",
-											fontSize: "1.3rem",
-										}}
-									>
-										Online Store Name
-									</span>
-									, you will have the privilege of obtaining free shipping,
-									discounts and free products!
-									<br />
-									Your sensitive data is safe with highly secured complicated
-									tokens and servers, furthermore, your personal information{" "}
-									<span
-										style={{ fontWeight: "bold", textDecoration: "underline" }}
-									>
-										WILL NEVER
-									</span>{" "}
-									be shared.
-								</p>
-
-								<p className='container mt-3'>
-									<span
-										style={{
-											fontWeight: "bold",
-											fontFamily: "Brush Script MT, Brush Script Std, cursive",
-											textDecoration: "underline",
-											textAlign: "center",
-											color: "black",
-											fontSize: "1.3rem",
-										}}
-									>
-										Online Store Name
-									</span>{" "}
-									is the way to uniqueness and modern fashion. <br /> Once you
-									register, you will be able to use our special program "Design
-									It" which will allow you to add your preferred text to your
-									loved ones or even photos from your design! <br />
-									<div className='mt-5'>
-										Our{" "}
-										<span
-											style={{
-												fontWeight: "bold",
-												fontFamily:
-													"Brush Script MT, Brush Script Std, cursive",
-												textDecoration: "underline",
-												textAlign: "center",
-												color: "black",
-												fontSize: "1.3rem",
-											}}
-										>
-											Online Store Name
-										</span>{" "}
-										team will be always there for your comfort in case you need
-										any advise whether at choosing items or even at designing
-										your own unique items!
-									</div>
-									<br />
-									<div className='mt-3'>
-										If you decided to design with us, Please be noted that
-										<span
-											style={{
-												fontWeight: "bold",
-												fontFamily:
-													"Brush Script MT, Brush Script Std, cursive",
-												textDecoration: "underline",
-												textAlign: "center",
-												color: "black",
-												fontSize: "1.3rem",
-											}}
-										>
-											Online Store Name
-										</span>{" "}
-										will always check the Copy Rights of any photo or even
-										quote, if your design is Copy Righted, We will address this
-										to you and give you advises.
-									</div>
-									<br />
-								</p>
-							</div>
-						</Fragment>
-					</div>
-				</Fragment>
-			</div>
-		</FormSignup>
-	);
-
-	const MisMatchError = "Passwords Don't Match, Please Try Again!!";
+	/* redirects */
+	if (form.redirect) return <Redirect to='/hotel-management/main-dashboard' />;
+	if (isAuthenticated()) return <Redirect to='/' />;
 
 	return (
-		<WholeSignup>
+		<Page dir={isRTL ? "rtl" : "ltr"} className='container'>
 			<ToastContainer />
-			{signUpForm()}
-			{redirectUser()}
-		</WholeSignup>
+
+			{/* Header */}
+			<HeroBar>
+				<h1>{T.title}</h1>
+			</HeroBar>
+			<div className='mx-auto text-center'>
+				<Ribbon className='mx-auto'>
+					<span className='mx-auto text-center'>
+						{T.welcome} <strong>{T.brand}</strong>
+					</span>
+				</Ribbon>
+			</div>
+
+			<Intro>{T.fill}</Intro>
+
+			{/* Form */}
+			<FormWrap onSubmit={submit}>
+				{[
+					["name", T.fullName],
+					["email", T.email],
+					["phone", T.phone],
+					["hotelName", T.hotelName],
+				].map(([k, lbl]) => (
+					<Field key={k} isRTL={isRTL}>
+						<label>{lbl}</label>
+						<input value={form[k]} onChange={handle(k)} />
+					</Field>
+				))}
+
+				{/* country */}
+				<Field isRTL={isRTL}>
+					<label>{T.country}</label>
+					<select value={form.hotelCountry} onChange={handle("hotelCountry")}>
+						<option value='KSA'>KSA</option>
+						<option value='UAE'>UAE</option>
+						<option value='Qatar'>Qatar</option>
+					</select>
+				</Field>
+
+				{/* state: list for KSA else text */}
+				<Field isRTL={isRTL}>
+					<label>{T.state}</label>
+					{form.hotelCountry === "KSA" ? (
+						<select value={form.hotelState} onChange={handle("hotelState")}>
+							<option value='makkah'>Makkah</option>
+							<option value='madinah'>Madinah</option>
+						</select>
+					) : (
+						<input value={form.hotelState} onChange={handle("hotelState")} />
+					)}
+				</Field>
+
+				{[
+					["hotelCity", T.city],
+					["hotelAddress", T.address],
+				].map(([k, lbl]) => (
+					<Field key={k} isRTL={isRTL}>
+						<label>{lbl}</label>
+						<input value={form[k]} onChange={handle(k)} />
+					</Field>
+				))}
+
+				{/* property type */}
+				<Field isRTL={isRTL}>
+					<label>{T.property}</label>
+					<select value={form.propertyType} onChange={handle("propertyType")}>
+						<option value='Hotel'>Hotel</option>
+						<option value='Apartments'>Apartments</option>
+						<option value='Houses'>Houses</option>
+					</select>
+				</Field>
+
+				{[
+					["hotelFloors", T.floors],
+					["hotelRooms", T.rooms],
+					["password", T.password, "password"],
+					["password2", T.password2, "password"],
+				].map(([k, lbl, type = "text"]) => (
+					<Field key={k} isRTL={isRTL}>
+						<label>{lbl}</label>
+						<input
+							type={type}
+							value={form[k]}
+							onChange={handle(k)}
+							autoComplete='new-password'
+						/>
+					</Field>
+				))}
+
+				{/* terms */}
+				<Terms isRTL={isRTL}>
+					<input
+						type='checkbox'
+						checked={form.accepted}
+						onChange={(e) => setForm({ ...form, accepted: e.target.checked })}
+					/>{" "}
+					{T.terms}
+				</Terms>
+
+				{/* submit */}
+				<Submit disabled={!form.accepted}>{T.btn}</Submit>
+			</FormWrap>
+
+			<Note>{T.note}</Note>
+
+			<Foot isRTL={isRTL}>
+				{T.have}{" "}
+				<Link to='/' className='cta'>
+					{T.login}
+				</Link>
+			</Foot>
+		</Page>
 	);
 };
 
-export default Signup;
+export default HotelSignup;
 
-const FormSignup = styled.div`
-	min-height: 677px;
+/* ───────── styled components ───────── */
 
-	input[type="text"],
-	input[type="email"],
-	input[type="password"],
-	input[type="date"],
-	select,
-	textarea {
-		display: block;
+const Page = styled.div`
+	min-height: 100vh;
+	background: #fff;
+	padding-top: 75px;
+
+	input,
+	select {
 		width: 100%;
-		padding: 0.5rem;
+		padding: 0.95rem 1rem;
+		background: #e7e7e7;
+		border: none;
 		font-size: 1rem;
-		border: 1px solid #ccc;
-	}
-	input[type="text"]:focus,
-	input[type="email"]:focus,
-	input[type="password"]:focus,
-	input[type="date"]:focus,
-	select:focus,
-	textarea:focus,
-	label:focus {
-		outline: none;
-		border: 1px solid var(--primaryColor);
-
-		box-shadow: 5px 8px 3px 0px rgba(0, 0, 0, 0.3);
-		transition: var(--mainTransition);
-		font-weight: bold;
-	}
-
-	.form-container {
-		margin-left: 50px;
-		margin-right: 50px;
 	}
 `;
 
-const WholeSignup = styled.div`
-	margin-bottom: 100px;
-	overflow: hidden;
+const HeroBar = styled.div`
+	background: #073947;
+	color: #fff;
+	text-align: center;
+	padding: 2rem 1rem; /* more vertical space like screenshot */
+	h1 {
+		margin: 0;
+		font-size: 2.2rem;
+		font-weight: 700;
+	}
+`;
+
+const Ribbon = styled.div`
+	background: #e5e5e5;
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.9rem 1rem;
+	margin: auto;
+	text-align: center;
+	img {
+		height: 28px;
+	}
+	span {
+		font-weight: 700;
+		font-size: 1.3rem;
+	}
+`;
+
+const Intro = styled.p`
+	text-align: center;
+	font-weight: 700;
+	margin: 1.7rem 0 2.2rem;
+`;
+
+const FormWrap = styled.form`
+	max-width: 700px;
+	margin: 0 auto;
+`;
+
+const Field = styled.div`
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 1.4rem;
+
+	label {
+		font-weight: 700;
+		margin-bottom: 0.45rem;
+		text-align: ${(p) => (p.isRTL ? "right" : "left")};
+	}
+`;
+
+const Terms = styled.label`
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	font-weight: 700;
+	margin: 1.5rem 0 2.5rem;
+	text-align: ${(p) => (p.isRTL ? "right" : "left")};
+
+	input {
+		width: auto;
+	}
+`;
+
+const Submit = styled.button`
+	display: block;
+	width: 260px;
+	max-width: 100%;
+	margin: 0 auto;
+	background: #d3a52e;
+	color: #fff;
+	font-weight: 700;
+	border: none;
+	padding: 0.9rem;
+	cursor: pointer;
+	transition: opacity 0.25s;
+	&:hover:enabled {
+		opacity: 0.9;
+	}
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+`;
+
+const Note = styled.p`
+	max-width: 700px;
+	margin: 2rem auto 3.5rem;
+	text-align: center;
+	font-weight: 700;
+	line-height: 1.5;
+`;
+
+const Foot = styled.p`
+	text-align: ${(p) => (p.isRTL ? "right" : "left")};
+	padding: 0 1rem 3rem;
+	.cta {
+		color: #0a8fab;
+		font-weight: 700;
+		text-decoration: underline;
+	}
 `;
