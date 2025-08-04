@@ -303,7 +303,7 @@ const Field = styled.div`
 		padding: 0.95rem 1.1rem;
 		font-size: 1rem;
 		border: none;
-		width: 360px;
+		width: 310px;
 	}
 
 	@media (min-width: 993px) {
