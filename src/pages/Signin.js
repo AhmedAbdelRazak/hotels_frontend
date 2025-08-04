@@ -255,6 +255,9 @@ const Hero = styled.h1`
 	}
 
 	@media (max-width: 992px) {
+		line-height: 1;
+		margin: 0px !important;
+		padding: 0px !important;
 		font-size: 2rem;
 	}
 `;
@@ -277,6 +280,10 @@ const Line = styled.hr`
 	border: none;
 	border-top: 3px solid #fff;
 	margin: 1.3rem 0 2.3rem;
+
+	@media (max-width: 992px) {
+		margin: 0.3rem 0 1.3rem;
+	}
 `;
 
 /* subheading */
@@ -284,6 +291,12 @@ const Sub = styled.h2`
 	font-size: 1.35rem;
 	font-weight: 700;
 	margin-bottom: 1.5rem;
+
+	@media (max-width: 992px) {
+		margin-bottom: 1rem;
+		font-size: 1.25rem;
+		margin-bottom: 0.5rem;
+	}
 `;
 
 /* form field */

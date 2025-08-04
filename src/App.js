@@ -67,7 +67,9 @@ function App() {
 	const location = useLocation(); // get current route info
 
 	const publicPaths = ["/", "/signup", "/contact", "/pms", "/why-x-hotel"];
+	const hideFooterPaths = ["/"];
 	const showNav = publicPaths.includes(location.pathname);
+	const hideFooter = hideFooterPaths.includes(location.pathname);
 
 	const languageToggle2 = () => {
 		localStorage.setItem("lang", JSON.stringify(chosenLanguage));
@@ -260,7 +262,7 @@ function App() {
 					component={OwnerDashboardMain}
 				/>
 			</Switch>
-			<Footer />
+			{!hideFooter && <Footer />}
 		</>
 	);
 }
