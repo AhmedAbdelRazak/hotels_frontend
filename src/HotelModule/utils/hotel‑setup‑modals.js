@@ -1,16 +1,23 @@
-/*  utils/hotel‑setup‑modals.js  ──────────────────────────────────────────
- *  Step‑specific modal code for MainHotelDashboard
- *  – Implements “Room types & pricing” (progress step #2)
- *  – Filters out incomplete rows before sending to the API
- *  – Works with existing ZCase1 without changing any other file
- *  --------------------------------------------------------------------- */
+/*  utils/hotel‑setup‑modals.js
+ *  One file – handles the six progress‑step modals used by
+ *  MainHotelDashboard.
+ *  – Step #2 (room types & pricing) keeps the legacy ZCase1 / ZCase2
+ *    components untouched but fixes all race‑conditions by using a
+ *    mutable ref for the draft instead of React state.
+ *  – Photos, location and bank‑details modals persist the same way.
+ *  – Everything is written back with updateHotelDetails().
+ *  ─────────────────────────────────────────────────────────────── */
 
-import React, { useState } from "react";
-import { Modal, Form, message, Spin } from "antd";
+import React, { useRef, useState } from "react";
+import { Modal, Form, message, Spin, Button } from "antd";
 import ZCase1 from "../HotelSettings/ZCase1";
+import ZCase2 from "../HotelSettings/ZCase2";
+import ImageCardMain from "../HotelSettings/ImageCardMain";
+import ZCase0 from "../HotelSettings/ZCase0";
+import PaymentSettings from "../HotelSettings/PaymentSettings";
 import { updateHotelDetails } from "../apiAdmin";
 
-/* ───────── reference data ───────── */
+/* ─────────── static dictionaries ─────────── */
 
 const roomTypes = [
 	{ value: "standardRooms", label: "Standard Rooms" },
@@ -25,10 +32,7 @@ const roomTypes = [
 	{ value: "suite", label: "Suite" },
 	{ value: "masterSuite", label: "Master Suite" },
 	{ value: "familyRooms", label: "Family Rooms" },
-	{
-		value: "individualBed",
-		label: "Rooms With Individual Beds (Shared Rooms)",
-	},
+	{ value: "individualBed", label: "Rooms With Individual Beds (Shared)" },
 ];
 
 const amenitiesList = [
@@ -73,150 +77,192 @@ const viewsList = [
 const extraAmenitiesList = [
 	"Prayer Mat",
 	"Holy Quran",
-	"Islamic Television Channels",
-	"Shuttle Service to Haram",
-	"Nearby Souks/Markets",
-	"Arabic Coffee & Dates Service",
-	"Cultural Tours/Guides",
-	"Private Pilgrimage Services",
-	"Complimentary Zamzam Water",
-	"Halal-certified Restaurant",
-	"Hajj & Umrah Booking Assistance",
+	"Islamic TV Channels",
+	"Haram Shuttle",
+	"Nearby Souks",
+	"Arabic Coffee & Dates",
+	"Cultural Tours",
+	"Private Pilgrimage",
+	"Complimentary Zamzam",
+	"Halal Restaurant",
+	"Hajj & Umrah Assistance",
 	"Dedicated Prayer Room",
 ];
 
-/* simple colour helper */
-const getRoomColor = (rt) =>
-	({
-		standardRooms: "#003366",
-		singleRooms: "#8B0000",
-		doubleRooms: "#004d00",
-		twinRooms: "#800080",
-		queenRooms: "#FF8C00",
-		kingRooms: "#2F4F4F",
-		tripleRooms: "#8B4513",
-		quadRooms: "#00008B",
-		studioRooms: "#696969",
-		suite: "#483D8B",
-		masterSuite: "#556B2F",
-		familyRooms: "#A52A2A",
-	})[rt] || "#003366";
+const roomColors = {
+	standardRooms: "#003366",
+	singleRooms: "#8B0000",
+	doubleRooms: "#004d00",
+	twinRooms: "#800080",
+	queenRooms: "#FF8C00",
+	kingRooms: "#2F4F4F",
+	tripleRooms: "#8B4513",
+	quadRooms: "#00008B",
+	studioRooms: "#696969",
+	suite: "#483D8B",
+	masterSuite: "#556B2F",
+	familyRooms: "#A52A2A",
+};
+const getRoomColor = (rt) => roomColors[rt] || "#003366";
 
-/* ═════════════════════  STEP 2  MODAL  ═════════════════════ */
+const stripMyKey = ({ myKey, ...rest }) => rest;
+
+/* ════════════════════  STEP #2 – Room‑types modal  ═══════════════════ */
 
 export const RoomTypesModal = ({
 	open,
 	onClose,
-	hotelDoc, // whole hotel object as received from server
+	hotelDoc,
 	token,
 	adminId,
 	language, // "English" | "Arabic"
-	refreshCard, // callback to reload list in MainHotelDashboard
+	refreshCard, // reload cards after save
 }) => {
-	const [hotelDetails, setHotelDetails] = useState(hotelDoc); // local draft
+	const draftRef = useRef(structuredClone(hotelDoc)); // mutable draft
+	const [photoTick, setPhotoTick] = useState(0); // forces photo re‑render
 	const [saving, setSaving] = useState(false);
-	// eslint-disable-next-line
+
+	// controlled form inside the modal
+	const [form] = Form.useForm();
 	const [selectedRoomType, setSelectedRoomType] = useState("");
 	const [roomTypeSelected, setRoomTypeSelected] = useState(false);
 	const [customRoomType, setCustomRoomType] = useState("");
-	const [form] = Form.useForm();
 
-	/* ─────── persist to API ─────── */
-	const handleSave = () => {
-		form
-			.validateFields() // ensure required inputs
-			.then((vals) => {
-				/* Build the current room object exactly like ZCase1 does */
-				const roomType =
-					vals.roomType === "other" ? customRoomType : vals.roomType;
-
-				const freshRoom = {
-					roomType,
-					displayName: vals.displayName || "",
-					displayName_OtherLanguage: vals.displayName_OtherLanguage || "",
-					description: vals.description || "",
-					description_OtherLanguage: vals.description_OtherLanguage || "",
-					count: vals.roomCount || 0,
-					price: { basePrice: vals.basePrice || 0 },
-					amenities: vals.amenities || [],
-					extraAmenities: vals.extraAmenities || [],
-					views: vals.views || [],
-					defaultCost: vals.defaultCost || 0,
-					activeRoom: vals.activeRoom ?? true,
-					commisionIncluded: vals.commisionIncluded || false,
-					roomCommission: vals.roomCommission || 0,
-					roomColor: getRoomColor(roomType),
-					myKey: "ThisIsNewKey",
-				};
-
-				/* merge/replace by myKey */
-				const current = hotelDetails.roomCountDetails || [];
-				const pos = current.findIndex((r) => r.myKey === "ThisIsNewKey");
-				const merged =
-					pos > -1
-						? current.map((r, i) => (i === pos ? { ...r, ...freshRoom } : r))
-						: [...current, freshRoom];
-
-				/* —— 1 ️⃣  CLEAN: keep only rows that really have a roomType —— */
-				const cleaned = merged.filter((r) => r.roomType && r.roomType !== "");
-
-				if (cleaned.length === 0) {
-					message.error(
-						language === "Arabic"
-							? "يجب إضافة غرفة واحدة على الأقل"
-							: "Please add at least one room"
-					);
-					return Promise.reject(); // abort save chain
-				}
-
-				/* decide which backend branch to hit */
-				const pageMode = cleaned.some((r) => !r._id) ? "AddNew" : "Updating";
-
-				const payload = {
-					...hotelDetails,
-					roomCountDetails: cleaned,
-					fromPage: pageMode,
-				};
-
-				setSaving(true);
-				return updateHotelDetails(hotelDetails._id, adminId, token, payload);
-			})
-			.then((resp) => {
-				if (!resp) return; // validation aborted
-				if (resp.error) throw new Error(resp.error);
-				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
-				refreshCard(); // refresh grid in parent
-				onClose();
-			})
-			.catch((err) => {
-				if (err) message.error(err.message || "Error");
-			})
-			.finally(() => setSaving(false));
+	/* helper – patch draft without re‑render */
+	const patchDraft = (patcher) => {
+		draftRef.current =
+			typeof patcher === "function" ? patcher(draftRef.current) : patcher;
 	};
 
-	/* ─────── render ─────── */
+	/* current WIP room ( by myKey === ThisIsNewKey ) */
+	const currentRoomId =
+		(form.getFieldValue("roomType") === "other"
+			? customRoomType
+			: form.getFieldValue("roomType")) || selectedRoomType;
+	const currentRoom =
+		draftRef.current.roomCountDetails?.find(
+			(r) => r.roomType === currentRoomId && r.myKey === "ThisIsNewKey"
+		) || {};
+
+	/* directly supplied to ZCase2 */
+	const setRoomPhotos = (newPhotos) => {
+		patchDraft((prev) => {
+			const list = Array.isArray(prev.roomCountDetails)
+				? [...prev.roomCountDetails]
+				: [];
+			const idx = list.findIndex((r) => r.myKey === "ThisIsNewKey");
+			if (idx > -1) list[idx] = { ...list[idx], photos: newPhotos };
+			else
+				list.push({
+					roomType: currentRoomId,
+					photos: newPhotos,
+					myKey: "ThisIsNewKey",
+				});
+			return { ...prev, roomCountDetails: list };
+		});
+		// force only the photo area to refresh
+		setPhotoTick((x) => x + 1);
+	};
+
+	/* ───────────── persist to backend ───────────── */
+	const handleSave = async () => {
+		try {
+			const vals = await form.validateFields();
+			const roomType =
+				vals.roomType === "other" ? customRoomType : vals.roomType;
+
+			/* rebuild the current draft room exactly like ZCase1 does */
+			const freshRoom = {
+				roomType,
+				displayName: vals.displayName,
+				displayName_OtherLanguage: vals.displayName_OtherLanguage,
+				description: vals.description,
+				description_OtherLanguage: vals.description_OtherLanguage,
+				count: vals.roomCount,
+				price: { basePrice: vals.basePrice },
+				amenities: vals.amenities,
+				extraAmenities: vals.extraAmenities,
+				views: vals.views,
+				defaultCost: vals.defaultCost,
+				activeRoom: vals.activeRoom ?? true,
+				commisionIncluded: vals.commisionIncluded,
+				roomCommission: vals.roomCommission,
+				photos: currentRoom.photos || [],
+				roomColor: getRoomColor(roomType),
+				myKey: "ThisIsNewKey",
+			};
+
+			patchDraft((prev) => {
+				const list = Array.isArray(prev.roomCountDetails)
+					? [...prev.roomCountDetails]
+					: [];
+				const idx = list.findIndex((r) => r.myKey === "ThisIsNewKey");
+				if (idx > -1) list[idx] = { ...list[idx], ...freshRoom };
+				else list.push(freshRoom);
+				return { ...prev, roomCountDetails: list };
+			});
+
+			const cleaned = draftRef.current.roomCountDetails.filter(
+				(r) => r.roomType
+			);
+			if (!cleaned.length) {
+				message.error(
+					language === "Arabic"
+						? "يجب إضافة غرفة واحدة على الأقل"
+						: "Add at least one room"
+				);
+				return;
+			}
+
+			const fromPage = cleaned.some((r) => !r._id) ? "AddNew" : "Updating";
+			const payload = {
+				...draftRef.current,
+				roomCountDetails: cleaned.map(stripMyKey),
+				fromPage,
+			};
+
+			setSaving(true);
+			const resp = await updateHotelDetails(
+				hotelDoc._id,
+				adminId,
+				token,
+				payload
+			);
+			if (resp?.error) throw new Error(resp.error);
+
+			message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+			refreshCard();
+			onClose();
+		} catch (err) {
+			if (err) message.error(err.message || "Error");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	/* ─────────────── render ─────────────── */
 	return (
 		<Modal
+			open={open}
+			onCancel={onClose}
+			onOk={handleSave}
+			confirmLoading={saving}
+			width={1000}
+			okText={language === "Arabic" ? "حفظ" : "Save"}
 			title={
 				language === "Arabic" ? "أنواع الغرف والسعر" : "Room types & pricing"
 			}
-			open={open}
-			onOk={handleSave}
-			onCancel={onClose}
-			width={1000}
-			okText={language === "Arabic" ? "حفظ" : "Save"}
-			destroyOnClose
 			bodyStyle={{ padding: 0, maxHeight: "80vh", overflowY: "auto" }}
-			confirmLoading={saving}
+			destroyOnClose
 		>
 			{saving ? (
 				<Spin style={{ width: "100%", margin: "3rem 0" }} />
 			) : (
-				/* 👇 PROVIDE FORM CONTEXT FOR ALL <Form.Item> INSIDE ZCase1 */
 				<Form form={form} layout='vertical' style={{ padding: "1.5rem" }}>
+					{/* ZCase1 – room core data */}
 					<ZCase1
-						hotelDetails={hotelDetails}
-						setHotelDetails={setHotelDetails}
+						hotelDetails={draftRef.current}
+						setHotelDetails={patchDraft}
 						chosenLanguage={language}
 						roomTypes={roomTypes}
 						setSelectedRoomType={setSelectedRoomType}
@@ -231,13 +277,285 @@ export const RoomTypesModal = ({
 						extraAmenitiesList={extraAmenitiesList}
 						getRoomColor={getRoomColor}
 					/>
+
+					{/* ZCase2 – room photos */}
+					{roomTypeSelected && (
+						<div style={{ marginTop: 32 }} key={photoTick /* force refresh */}>
+							<ZCase2
+								hotelDetails={draftRef.current}
+								setHotelDetails={patchDraft}
+								chosenLanguage={language}
+								form={form}
+								photos={currentRoom.photos || []}
+								setPhotos={setRoomPhotos}
+							/>
+						</div>
+					)}
 				</Form>
 			)}
 		</Modal>
 	);
 };
 
-/* registry used by MainHotelDashboard */
+/* ════════════════ Remaining step‑modals (unchanged logic) ═════════════ */
+
+export const InfoModal = ({ open, onClose, language }) => (
+	<Modal
+		open={open}
+		onCancel={onClose}
+		footer={null}
+		title={language === "Arabic" ? "معلومات" : "Info"}
+	>
+		{language === "Arabic"
+			? "طلب التسجيل قيد المراجعة."
+			: "Your registration request is under review."}
+	</Modal>
+);
+
+export const HotelPhotosModal = ({
+	open,
+	onClose,
+	hotelDoc,
+	token,
+	adminId,
+	language,
+	refreshCard,
+}) => {
+	const [draft, setDraft] = useState(hotelDoc);
+	const [saving, setSaving] = useState(false);
+
+	const persist = () => {
+		if (!draft.hotelPhotos?.length) {
+			message.error(
+				language === "Arabic"
+					? "أضف صورة واحدة على الأقل"
+					: "Upload at least one photo"
+			);
+			return;
+		}
+		setSaving(true);
+		updateHotelDetails(hotelDoc._id, adminId, token, {
+			...draft,
+			fromPage: "Updating",
+		})
+			.then((r) => {
+				if (r.error) throw new Error(r.error);
+				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				refreshCard();
+				onClose();
+			})
+			.catch((e) => message.error(e.message || "Error"))
+			.finally(() => setSaving(false));
+	};
+
+	return (
+		<Modal
+			open={open}
+			onCancel={onClose}
+			onOk={persist}
+			confirmLoading={saving}
+			title={language === "Arabic" ? "صور الفندق" : "Hotel photos"}
+			okText={language === "Arabic" ? "حفظ" : "Save"}
+			width={900}
+			destroyOnClose
+		>
+			<ImageCardMain
+				hotelPhotos={draft.hotelPhotos || []}
+				setHotelDetails={setDraft}
+			/>
+		</Modal>
+	);
+};
+
+export const LocationModal = ({
+	open,
+	onClose,
+	hotelDoc,
+	token,
+	adminId,
+	language,
+	refreshCard,
+}) => {
+	const [draft, setDraft] = useState(hotelDoc);
+	const [saving, setSaving] = useState(false);
+	const [modalVisible, setModalVisible] = useState(true);
+	const [markerPosition, setMarkerPosition] = useState({
+		lat: hotelDoc.location.coordinates[1] || 24.7136,
+		lng: hotelDoc.location.coordinates[0] || 46.6753,
+	});
+	const [address, setAddress] = useState(hotelDoc.hotelAddress || "");
+	const [geocoder, setGeocoder] = useState(null);
+
+	const persist = () => {
+		if (!draft.location?.coordinates || draft.location.coordinates[0] === 0) {
+			message.error(
+				language === "Arabic" ? "حدد موقع الفندق" : "Pick hotel location"
+			);
+			return;
+		}
+		setSaving(true);
+		updateHotelDetails(hotelDoc._id, adminId, token, {
+			...draft,
+			fromPage: "Updating",
+		})
+			.then((r) => {
+				if (r.error) throw new Error(r.error);
+				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				refreshCard();
+				onClose();
+			})
+			.catch((e) => message.error(e.message || "Error"))
+			.finally(() => setSaving(false));
+	};
+
+	return (
+		<Modal
+			open={open}
+			onCancel={onClose}
+			onOk={persist}
+			confirmLoading={saving}
+			title={language === "Arabic" ? "موقع الفندق" : "Hotel location"}
+			okText={language === "Arabic" ? "حفظ" : "Save"}
+			width={1000}
+			bodyStyle={{ padding: 0, maxHeight: "80vh", overflowY: "auto" }}
+			destroyOnClose
+		>
+			<ZCase0
+				hotelDetails={draft}
+				setHotelDetails={setDraft}
+				chosenLanguage={language}
+				setLocationModalVisible={setModalVisible}
+				locationModalVisible={modalVisible}
+				setMarkerPosition={setMarkerPosition}
+				markerPosition={markerPosition}
+				setAddress={setAddress}
+				address={address}
+				setHotelPhotos={() => {}}
+				hotelPhotos={[]}
+				setGeocoder={setGeocoder}
+				geocoder={geocoder}
+			/>
+		</Modal>
+	);
+};
+
+export const CompleteDataModal = ({
+	open,
+	onClose,
+	hotelDoc,
+	token,
+	adminId,
+	language,
+	refreshCard,
+}) => {
+	const [draft, setDraft] = useState(hotelDoc);
+	const [saving, setSaving] = useState(false);
+
+	const persist = () => {
+		setSaving(true);
+		updateHotelDetails(hotelDoc._id, adminId, token, {
+			...draft,
+			fromPage: "Updating",
+		})
+			.then((r) => {
+				if (r.error) throw new Error(r.error);
+				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				refreshCard();
+				onClose();
+			})
+			.catch((e) => message.error(e.message || "Error"))
+			.finally(() => setSaving(false));
+	};
+
+	return (
+		<Modal
+			open={open}
+			onCancel={onClose}
+			onOk={persist}
+			confirmLoading={saving}
+			title={language === "Arabic" ? "بيانات الفندق" : "Hotel data"}
+			okText={language === "Arabic" ? "حفظ" : "Save"}
+			width={1000}
+			destroyOnClose
+		>
+			<ZCase0
+				hotelDetails={draft}
+				setHotelDetails={setDraft}
+				chosenLanguage={language}
+				setLocationModalVisible={() => {}}
+				locationModalVisible={false}
+				setMarkerPosition={() => {}}
+				markerPosition={{}}
+				setAddress={() => {}}
+				address=''
+				setHotelPhotos={() => {}}
+				hotelPhotos={draft.hotelPhotos || []}
+				setGeocoder={() => {}}
+				geocoder={null}
+			/>
+		</Modal>
+	);
+};
+
+export const BankDetailsModal = ({
+	open,
+	onClose,
+	hotelDoc,
+	token,
+	adminId,
+	language,
+	refreshCard,
+}) => {
+	const [draft, setDraft] = useState(hotelDoc);
+	const [saving, setSaving] = useState(false);
+
+	const persist = () => {
+		setSaving(true);
+		updateHotelDetails(hotelDoc._id, adminId, token, {
+			...draft,
+			fromPage: "paymentSettings",
+		})
+			.then((r) => {
+				if (r.error) throw new Error(r.error);
+				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				refreshCard();
+				onClose();
+			})
+			.catch((e) => message.error(e.message || "Error"))
+			.finally(() => setSaving(false));
+	};
+
+	return (
+		<Modal
+			open={open}
+			onCancel={onClose}
+			footer={null}
+			width={800}
+			destroyOnClose
+			title={language === "Arabic" ? "البيانات البنكية" : "Bank details"}
+		>
+			<PaymentSettings
+				hotelDetails={draft}
+				setHotelDetails={setDraft}
+				submittingHotelDetails={() => {}}
+				chosenLanguage={language}
+			/>
+			<div style={{ textAlign: "center", marginTop: 24 }}>
+				<Button type='primary' loading={saving} onClick={persist}>
+					{language === "Arabic" ? "حفظ" : "Save"}
+				</Button>
+			</div>
+		</Modal>
+	);
+};
+
+/* ═══════════════════════  export registry  ═══════════════════════ */
+
 export const STEP_MODAL_REGISTRY = {
-	1: RoomTypesModal, // 0‑based index 1  →  progress step #2
+	0: InfoModal, // Registration request
+	1: RoomTypesModal, // Room types & pricing
+	2: HotelPhotosModal, // Upload required photos
+	3: LocationModal, // Pin hotel location
+	4: CompleteDataModal, // Complete hotel data
+	5: BankDetailsModal, // Bank details
 };

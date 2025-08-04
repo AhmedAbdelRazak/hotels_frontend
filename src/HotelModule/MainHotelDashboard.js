@@ -1,5 +1,6 @@
 /** @format
- *  MainHotelDashboard.jsx  –  reference‑design alignment  (≈650 LOC incl. style)
+ *  MainHotelDashboard.jsx  –  unified 6‑step onboarding dashboard
+ *  © 2025 Serene Code Labs – free to use in your PMS
  */
 
 import React, { useEffect, useState, useCallback, memo } from "react";
@@ -19,17 +20,24 @@ import TopNavbar from "./AdminNavbar/TopNavbar";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 
-/* NEW – step‑specific modal components */
-import { STEP_MODAL_REGISTRY } from "./utils/hotel‑setup‑modals"; // adjust path if needed
+/* 🔑  step‑modal registry */
+import { STEP_MODAL_REGISTRY } from "./utils/hotel‑setup‑modals";
 
-/* ─────────────────────────── i18n ─────────────────────────── */
+/* ──────────── literals / i18n ──────────── */
+
+const CONTACT_WHATSAPP = "19092223374";
+const CONTACT_URL = `https://wa.me/${CONTACT_WHATSAPP}`;
 
 const WORDS = {
 	en: {
 		ribbon: "Hotel under review",
+		ribbonActive: "Hotel is active ✓",
 		note:
 			"Your request is under review now, our partner‑support team will contact you by WhatsApp or e‑mail in less than 24 hours.\n" +
-			"If you want to speed up the registration, please reach us on WhatsApp 19092223374.",
+			"If you want to speed up the registration, please reach us on WhatsApp " +
+			CONTACT_WHATSAPP +
+			".",
+		noteActive: "Everything is set – your hotel is live and bookable!",
 		stepsTitle: "Steps to make the hotel ready for operation & booking:",
 		steps: [
 			"Registration request",
@@ -46,9 +54,12 @@ const WORDS = {
 	},
 	ar: {
 		ribbon: "الفندق قيد المراجعة",
+		ribbonActive: "الفندق مفعل وجاهز للحجوزات ✓",
 		note:
 			"طلبكم قيد المراجعة الآن، وسيتم التواصل معكم من قبل فريق خدمة الشركاء على رقم الواتس آب أو الإيميل خلال ٢٤ ساعة أو أقل.\n" +
-			"إذا أردت إسراع عملية التسجيل، يرجى التواصل على رقم واتس آب 19092223374",
+			"إذا أردت إسراع عملية التسجيل، يرجى التواصل على رقم واتس آب " +
+			CONTACT_WHATSAPP,
+		noteActive: "تم تفعيل الفندق – يمكنكم الآن استقبال الحجوزات!",
 		stepsTitle: "خطوات تجهيز الفندق ليصبح قابلاً للتشغيل والحجز:",
 		steps: [
 			"تقديم طلب التسجيل",
@@ -65,59 +76,60 @@ const WORDS = {
 	},
 };
 
-/* ═════════════════════════ Component ═════════════════════════ */
+/* ═══════════════════  Component  ═══════════════════ */
 
 const MainHotelDashboard = () => {
-	/* ───── context & state ───── */
 	const { chosenLanguage } = useCartContext();
 	const isRTL = chosenLanguage === "Arabic";
 	const TXT = WORDS[isRTL ? "ar" : "en"];
 
+	/* side‑nav + data */
 	const [adminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
-
 	const [userData, setUserData] = useState({});
+
+	/* add / edit property */
 	const [addVisible, setAddVisible] = useState(false);
 	const [editVisible, setEditVisible] = useState(false);
 	const [currentHotel, setCurrentHotel] = useState(null);
 
-	/* NEW – which step‑modal is open? */
-	const [stepModalIdx, setStepModalIdx] = useState(null); // number or null
+	/* onboarding modals */
+	const [stepModalIdx, setStepModalIdx] = useState(null);
 	const [stepModalHotel, setStepModalHotel] = useState(null);
 
 	const { user, token } = isAuthenticated();
 
-	/* ───── fetch hotels ───── */
+	/* fetch hotels owned by this admin */
 	const fetchHotels = useCallback(() => {
 		hotelAccount(user._id, token, user._id).then((d) => {
-			if (!d?.error) setUserData(d);
-			else console.log(d.error);
+			if (d?.error) console.log(d.error);
+			else setUserData(d);
 		});
 	}, [token, user._id]);
 
 	useEffect(fetchHotels, [fetchHotels]);
 
-	/* ───── helpers ───── */
+	/* navigation helpers */
 	const gotoHotelDashboard = (hotel) => {
-		if (!userData?.activeUser)
+		if (!userData?.activeUser) {
 			return message.error(
 				"Your account is deactivated, please contact administration."
 			);
+		}
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
 		window.location.href = `/hotel-management/dashboard/${user._id}/${hotel._id}`;
 	};
 
-	/* when a step bullet is clicked in a HotelCard */
 	const handleStepClick = (idx, hotel) => {
 		setStepModalIdx(idx);
 		setStepModalHotel(hotel);
 	};
 
-	/* ═════ render ═════ */
+	/* ═════ JSX ═════ */
 	return (
 		<Wrapper>
 			<TopNavbar
-				fromPage='AdminDasboard'
+				fromPage='AdminDashboard'
 				AdminMenuStatus={adminMenuStatus}
 				setAdminMenuStatus={setAdminMenuStatus}
 				collapsed={collapsed}
@@ -133,12 +145,13 @@ const MainHotelDashboard = () => {
 							hotel={h}
 							WORDS={TXT}
 							isRTL={isRTL}
+							adminId={user._id}
 							onEdit={() => {
 								setCurrentHotel(h);
 								setEditVisible(true);
 							}}
 							onTitleClick={() => gotoHotelDashboard(h)}
-							onStepClick={handleStepClick} /* NEW */
+							onStepClick={handleStepClick}
 						/>
 					))
 				) : (
@@ -155,12 +168,13 @@ const MainHotelDashboard = () => {
 				</Button>
 			</CardsGrid>
 
-			{/* Add / Edit modals */}
+			{/* add / edit */}
 			<Modal
 				title='Add New Property'
 				open={addVisible}
 				onCancel={() => setAddVisible(false)}
 				footer={null}
+				destroyOnClose
 			>
 				<AddHotelForm closeAddHotelModal={() => setAddVisible(false)} />
 			</Modal>
@@ -170,6 +184,7 @@ const MainHotelDashboard = () => {
 				open={editVisible}
 				onCancel={() => setEditVisible(false)}
 				footer={null}
+				destroyOnClose
 			>
 				<EditHotelForm
 					closeEditHotelModal={() => setEditVisible(false)}
@@ -180,12 +195,12 @@ const MainHotelDashboard = () => {
 				/>
 			</Modal>
 
-			{/* dynamic step modal – resolves from the registry */}
+			{/* dynamic step modal (resolved from registry) */}
 			{stepModalIdx !== null &&
 				stepModalHotel &&
 				(() => {
 					const ModalComp = STEP_MODAL_REGISTRY[stepModalIdx];
-					if (!ModalComp) return null; // step not implemented yet
+					if (!ModalComp) return null;
 					return (
 						<ModalComp
 							open={true}
@@ -204,11 +219,13 @@ const MainHotelDashboard = () => {
 
 export default MainHotelDashboard;
 
-/* ════════════════════ Single Hotel Card ═════════════════════ */
+/* ═══════════  Single hotel card  ═══════════ */
 
 const HotelCard = memo(
-	({ hotel, WORDS, isRTL, onEdit, onTitleClick, onStepClick }) => {
-		/* guard against undefined fields */
+	({ hotel, WORDS, isRTL, adminId, onEdit, onTitleClick, onStepClick }) => {
+		const isActive = !!hotel.activateHotel;
+
+		/* progress flags */
 		const photosDone = !!hotel?.hotelPhotos?.length;
 		const roomsDone = !!hotel?.roomCountDetails?.length;
 		const locationDone =
@@ -228,14 +245,50 @@ const HotelCard = memo(
 			bankDone,
 		];
 
-		/* ───── JSX ───── */
+		/* click on start */
+		const handleStart = () => {
+			if (!stepsDone.every(Boolean)) return;
+			window.location.href = `/hotel-management/new-reservation/${adminId}/${hotel._id}?newReservation`;
+		};
+
+		/* replace WhatsApp number with clickable anchor */
+		const renderNoteLine = (ln, idx) => {
+			if (ln.includes(CONTACT_WHATSAPP)) {
+				const parts = ln.split(CONTACT_WHATSAPP);
+				return (
+					<span key={idx}>
+						{parts[0]}
+						<a
+							href={CONTACT_URL}
+							target='_blank'
+							rel='noopener noreferrer'
+							style={{ fontWeight: 700 }}
+						>
+							{CONTACT_WHATSAPP}
+						</a>
+						{parts[1]}
+						<br />
+					</span>
+				);
+			}
+			return (
+				<span key={idx}>
+					{ln}
+					<br />
+				</span>
+			);
+		};
+
+		/* ─── JSX ─── */
 		return (
 			<CardShell>
 				<div className='row'>
-					{/* LEFT column */}
+					{/* LEFT */}
 					<div className='col-md-7 mx-auto'>
 						<LeftCol>
-							<ReviewRibbon>{WORDS.ribbon}</ReviewRibbon>
+							<ReviewRibbon $active={isActive}>
+								{isActive ? WORDS.ribbonActive : WORDS.ribbon}
+							</ReviewRibbon>
 
 							<NameRow onClick={onTitleClick} isRTL={isRTL}>
 								{hotel?.hotelName || "Unnamed hotel"}
@@ -256,17 +309,14 @@ const HotelCard = memo(
 							</Address>
 
 							<BigNote isRTL={isRTL}>
-								{WORDS.note.split("\n").map((ln, i) => (
-									<span key={i}>
-										{ln}
-										<br />
-									</span>
-								))}
+								{(isActive ? WORDS.noteActive : WORDS.note)
+									.split("\n")
+									.map(renderNoteLine)}
 							</BigNote>
 						</LeftCol>
 					</div>
 
-					{/* RIGHT column */}
+					{/* RIGHT */}
 					<div className='col-md-5 mx-auto'>
 						<RightCol isRTL={isRTL}>
 							<StepsHeading isRTL={isRTL}>{WORDS.stepsTitle}</StepsHeading>
@@ -283,7 +333,7 @@ const HotelCard = memo(
 										{stepsDone[idx] && (
 											<CheckCircleTwoTone
 												twoToneColor='#52c41a'
-												style={{ fontSize: "16px" }}
+												style={{ fontSize: 16 }}
 											/>
 										)}
 										<span>{label}</span>
@@ -293,7 +343,10 @@ const HotelCard = memo(
 
 							<StepNote isRTL={isRTL}>{WORDS.startNote}</StepNote>
 
-							<ProceedBtn disabled={!stepsDone.every(Boolean)}>
+							<ProceedBtn
+								disabled={!stepsDone.every(Boolean)}
+								onClick={handleStart}
+							>
 								{stepsDone.every(Boolean) ? WORDS.start : WORDS.startDisabled}
 							</ProceedBtn>
 						</RightCol>
@@ -304,7 +357,7 @@ const HotelCard = memo(
 	}
 );
 
-/* ═════════════════════ styled parts ═══════════════════ */
+/* ═════════════  styled parts  ═════════════ */
 
 const Wrapper = styled.div`
 	margin-top: 70px;
@@ -318,12 +371,10 @@ const CardsGrid = styled.div`
 	gap: 1.8rem;
 `;
 
-/* outer card shell */
 const CardShell = styled(Card)`
-	/* always split into two visible parts */
 	display: flex;
 	flex-wrap: wrap;
-	direction: ltr; /* keeps left / right placement even on RTL pages */
+	direction: ltr;
 	padding: 0 !important;
 	border: 1px solid #ccc;
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -333,7 +384,6 @@ const CardShell = styled(Card)`
 	}
 `;
 
-/* left ‑‑ 7/12 */
 const LeftCol = styled.div`
 	flex: 0 0 58%;
 	padding: 2rem 2.2rem;
@@ -343,7 +393,6 @@ const LeftCol = styled.div`
 	}
 `;
 
-/* right ‑‑ 5/12 (always visual right) */
 const RightCol = styled.div`
 	flex: 0 0 42%;
 	padding: 2rem 1.7rem;
@@ -354,9 +403,8 @@ const RightCol = styled.div`
 	}
 `;
 
-/* ribbon */
 const ReviewRibbon = styled.div`
-	background: #dea878;
+	background: ${(p) => (p.$active ? "#4caf50" : "#dea878")};
 	color: #fff;
 	text-align: center;
 	font-weight: 700;
@@ -364,7 +412,6 @@ const ReviewRibbon = styled.div`
 	margin-bottom: 2rem;
 `;
 
-/* hotel name row */
 const NameRow = styled.h2`
 	margin: 0 0 0.8rem;
 	font-size: 1.45rem;
@@ -383,14 +430,12 @@ const NameRow = styled.h2`
 		`}
 `;
 
-/* address */
 const Address = styled.p`
 	margin: 0 0 2.1rem;
 	line-height: 1.45;
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
 `;
 
-/* info paragraph */
 const BigNote = styled.p`
 	font-weight: 700;
 	line-height: 1.55;
@@ -398,7 +443,6 @@ const BigNote = styled.p`
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
 `;
 
-/* right‑column heading */
 const StepsHeading = styled.h3`
 	margin: 0 0 1.5rem;
 	font-size: 1.05rem;
@@ -406,7 +450,6 @@ const StepsHeading = styled.h3`
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
 `;
 
-/* steps list */
 const StepsUL = styled.ul`
 	list-style: none;
 	margin: 0;
@@ -416,9 +459,7 @@ const StepsUL = styled.ul`
 	gap: 0.6rem;
 `;
 
-/* individual row */
 const StepLi = styled.li`
-	/* RTL means numbered circle starts on the visual right */
 	direction: ${(p) => (p.isRTL ? "rtl" : "ltr")};
 	background: ${(p) => (p.done ? "#d6f4d9" : "#d7d7d7")};
 	padding: 0.75rem 1rem;
@@ -433,7 +474,6 @@ const StepLi = styled.li`
 	}
 `;
 
-/* numbered badge */
 const StepBadge = styled.span`
 	width: 28px;
 	height: 28px;
@@ -448,7 +488,6 @@ const StepBadge = styled.span`
 	flex-shrink: 0;
 `;
 
-/* guidance note above CTA */
 const StepNote = styled.p`
 	margin: 1.4rem 0 1.6rem;
 	font-size: 0.88rem;
@@ -457,7 +496,6 @@ const StepNote = styled.p`
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
 `;
 
-/* CTA */
 const ProceedBtn = styled.button`
 	width: 100%;
 	padding: 0.9rem;
@@ -473,7 +511,6 @@ const ProceedBtn = styled.button`
 	}
 `;
 
-/* add‑property button */
 const addBtnStyle = {
 	backgroundColor: "var(--button-bg-primary)",
 	borderColor: "var(--button-bg-primary)",

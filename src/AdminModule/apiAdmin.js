@@ -93,21 +93,17 @@ export const updateSingleRoom = (roomId, userId, token, room) => {
 		.catch((err) => console.log(err));
 };
 
-export const gettingHotelDetailsForAdmin = (userId, token) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-details/admin/${userId}`,
+export const gettingHotelDetailsForAdmin = (userId, token, query = "") =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/admin/${userId}${
+			query ? "?" + query : ""
+		}`,
 		{
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${token}`,
-			},
+			headers: { Authorization: `Bearer ${token}` },
 		}
 	)
-		.then((response) => {
-			return response.json();
-		})
-		.catch((err) => console.log(err));
-};
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
 
 export const cloudinaryUpload1 = (userId, token, image) => {
 	return fetch(

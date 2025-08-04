@@ -9,7 +9,7 @@ const getLanguageLocalStorage = () => {
 	if (language) {
 		return JSON.parse(localStorage.getItem("lang"));
 	} else {
-		return "Arabic";
+		return "English";
 	}
 };
 
