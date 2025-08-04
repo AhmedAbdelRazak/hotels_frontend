@@ -223,7 +223,7 @@ const Visual = styled.section`
 	}
 `;
 
-/* panel */
+/* pane */
 const Pane = styled.section`
 	flex: 1 1 46%;
 	background: #06232b;
@@ -288,7 +288,7 @@ const Sub = styled.h2`
 
 /* form field */
 const Field = styled.div`
-	width: 100%;
+	width: 95%;
 	max-width: 600px;
 	margin-bottom: 1.3rem;
 	display: flex;
@@ -303,7 +303,7 @@ const Field = styled.div`
 		padding: 0.95rem 1.1rem;
 		font-size: 1rem;
 		border: none;
-		width: 400px;
+		width: 360px;
 	}
 
 	@media (min-width: 993px) {

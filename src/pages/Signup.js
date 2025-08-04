@@ -221,6 +221,12 @@ const HotelSignup = ({ history }) => {
 					/>{" "}
 					{T.terms}
 				</Terms>
+				<TermsLink
+					href='https://jannatbooking.com/terms-conditions?tab=hotel'
+					target='_blank'
+				>
+					Click here to read our terms and conditions
+				</TermsLink>
 
 				{/* submit */}
 				<Submit disabled={!form.accepted}>{T.btn}</Submit>
@@ -254,6 +260,18 @@ const Page = styled.div`
 		background: #e7e7e7;
 		border: none;
 		font-size: 1rem;
+	}
+
+	@media (max-width: 992px) {
+		input,
+		select {
+			width: 90%;
+			max-width: 600px;
+			margin: 0px 20px;
+		}
+		label {
+			margin: 0px 20px;
+		}
 	}
 `;
 
@@ -320,6 +338,24 @@ const Terms = styled.label`
 	input {
 		width: auto;
 	}
+
+	@media (max-width: 992px) {
+		font-size: 0.75rem !important;
+	}
+`;
+
+const TermsLink = styled.a`
+	color: var(--primary-color);
+	text-decoration: underline;
+	margin-top: 10px;
+	cursor: pointer;
+	&:hover {
+		color: var(--primary-color-dark);
+	}
+	@media (max-width: 992px) {
+		font-size: 0.75rem !important;
+		margin: 2rem !important;
+	}
 `;
 
 const Submit = styled.button`
@@ -340,6 +376,10 @@ const Submit = styled.button`
 	&:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+
+	@media (max-width: 992px) {
+		margin-top: 10px;
 	}
 `;
 
