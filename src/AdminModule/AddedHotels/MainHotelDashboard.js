@@ -1,10 +1,10 @@
 /** @format
- *  Platform‑admin unified Hotel Dashboard  – with server‑side pagination
+ *  Platform‑admin unified Hotel Dashboard  – with server‑side pagination & debounced search
  *
  *  © 2025 Serene Code Labs  — free to use in your PMS
  */
 
-import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useState, memo } from "react";
 import styled, { css } from "styled-components";
 import {
 	Button,
@@ -21,6 +21,7 @@ import {
 	CheckCircleTwoTone,
 	EditOutlined,
 	PlusOutlined,
+	GlobalOutlined,
 } from "@ant-design/icons";
 
 import { useCartContext } from "../../cart_context";
@@ -30,7 +31,6 @@ import { gettingHotelDetailsForAdmin } from "../apiAdmin";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 import { STEP_MODAL_REGISTRY_ADMIN } from "../utils/hotel-setup-modals-admin";
-import { GlobalOutlined } from "@ant-design/icons";
 
 const { Option } = Select;
 
@@ -86,6 +86,16 @@ const WORDS = {
 	},
 };
 
+/* ═══════════ utility – debounce hook ═══════════ */
+const useDebounce = (value, delay = 400) => {
+	const [debounced, setDebounced] = useState(value);
+	useEffect(() => {
+		const id = setTimeout(() => setDebounced(value), delay);
+		return () => clearTimeout(id);
+	}, [value, delay]);
+	return debounced;
+};
+
 /* ═════════════════════ component ═════════════════════ */
 
 const PAGE_SIZES = [5, 30, 50];
@@ -107,6 +117,9 @@ const MainHotelDashboardAdmin = () => {
 	const [loading, setLoading] = useState(true);
 	const [search, setSearch] = useState("");
 
+	/* debounced search term sent to server */
+	const debouncedSearch = useDebounce(search.trim(), 400);
+
 	/* modal dialogs */
 	const [addVisible, setAddVisible] = useState(false);
 	const [editVisible, setEditVisible] = useState(false);
@@ -117,15 +130,17 @@ const MainHotelDashboardAdmin = () => {
 	const switchLanguage = () =>
 		languageToggle(chosenLanguage === "English" ? "Arabic" : "English");
 
-	/* ───── fetch list (server‑side pagination) ───── */
+	/* ───── fetch list (server‑side pagination + search) ───── */
 	const fetchHotels = useCallback(() => {
 		setLoading(true);
-		const q = new URLSearchParams({
+
+		const qs = new URLSearchParams({
 			page,
 			limit,
+			q: debouncedSearch,
 		}).toString();
 
-		gettingHotelDetailsForAdmin(admin._id, token, q)
+		gettingHotelDetailsForAdmin(admin._id, token, qs)
 			.then((d) => {
 				if (d?.error) throw new Error(d.error);
 				setHotels(Array.isArray(d.hotels) ? d.hotels : []);
@@ -133,20 +148,20 @@ const MainHotelDashboardAdmin = () => {
 			})
 			.catch((e) => message.error(e.message || "Error"))
 			.finally(() => setLoading(false));
-	}, [admin._id, token, page, limit]);
+	}, [admin._id, token, page, limit, debouncedSearch]);
 
-	/* initial + whenever page/limit changes */
+	/* initial + whenever deps change */
 	useEffect(fetchHotels, [fetchHotels]);
 
-	/* reset page when search string changes ----------- */
+	/* reset page when debounced search changes ----------- */
 	useEffect(() => {
-		if (search) setPage(1);
+		if (page !== 1) setPage(1);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [search]);
+	}, [debouncedSearch]);
 
-	/* client‑side search inside current page ---------- */
+	/* client‑side filter inside current page (safety net) */
 	const filtered = useMemo(() => {
-		const q = search.trim().toLowerCase();
+		const q = debouncedSearch.toLowerCase();
 		if (!q) return hotels;
 		return hotels.filter((h) => {
 			const ownerName = h.belongsTo?.name || "";
@@ -160,7 +175,7 @@ const MainHotelDashboardAdmin = () => {
 				ownerMail.toLowerCase().includes(q)
 			);
 		});
-	}, [hotels, search]);
+	}, [hotels, debouncedSearch]);
 
 	/* ───── handlers ───── */
 
@@ -220,6 +235,7 @@ const MainHotelDashboardAdmin = () => {
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
 						dir={isRTL ? "rtl" : "ltr"}
+						allowClear
 					/>
 					<Button
 						icon={<PlusOutlined />}
@@ -248,6 +264,7 @@ const MainHotelDashboardAdmin = () => {
 							}}
 						/>
 					</PaginationRow>
+
 					{loading ? (
 						<Spin />
 					) : filtered.length === 0 ? (
@@ -346,7 +363,7 @@ const MainHotelDashboardAdmin = () => {
 
 export default MainHotelDashboardAdmin;
 
-/* ══════════════ single hotel card ══════════════ */
+/* ══════════════ single hotel card (unchanged) ══════════════ */
 
 const HotelCard = memo(
 	({ hotel, L, isRTL, onTitleClick, onEdit, onActivate, onStepClick }) => {
@@ -458,7 +475,7 @@ const HotelCard = memo(
 	}
 );
 
-/* ══════════════  styled bits  ══════════════ */
+/* ══════════════  styled bits (unchanged) ══════════════ */
 
 const Wrapper = styled.div`
 	margin-top: 46px;

@@ -1,5 +1,5 @@
 /** @format */
-/* Signin.jsx */
+/* Signin.jsx — Arabic‑digit normaliser & phone‑number cleaner */
 
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -10,6 +10,25 @@ import "react-toastify/dist/ReactToastify.min.css";
 import queryString from "query-string";
 import { useCartContext } from "../cart_context";
 import SigninImage from "../GeneralImages/SignInImage.jpg";
+
+/* ───────────── helpers ───────────── */
+
+/* convert Eastern Arabic ٠‑٩ / ۰‑۹ to Western 0‑9 */
+const toEnglishDigits = (str) =>
+	str
+		.replace(/[٠-٩]/g, (d) => "0123456789"["٠١٢٣٤٥٦٧٨٩".indexOf(d)])
+		.replace(/[۰-۹]/g, (d) => "0123456789"["۰۱۲۳۴۵۶۷۸۹".indexOf(d)]);
+
+/* on‑the‑fly sanitiser for the “email / phone” field */
+const normaliseCredential = (value) => {
+	let v = toEnglishDigits(value);
+	const looksLikeEmail = /[A-Za-z@]/.test(v);
+	if (!looksLikeEmail) {
+		/* treat as phone → keep digits only */
+		v = v.replace(/\D/g, "");
+	}
+	return v;
+};
 
 /* ───────────── localised strings ───────────── */
 const txt = {
@@ -59,7 +78,6 @@ const Signin = ({ history }) => {
 		redirect: false,
 	});
 	const [errors, setErrors] = useState({ email: "", password: "" });
-
 	const { email, password, loading, redirect } = vals;
 
 	/* sign‑out & auto‑login */
@@ -69,13 +87,14 @@ const Signin = ({ history }) => {
 		if (qs.email && qs.password) {
 			setVals((v) => ({
 				...v,
-				email: qs.email,
+				email: normaliseCredential(qs.email),
 				password: qs.password,
 				loading: true,
 			}));
-			signin({ emailOrPhone: qs.email, password: qs.password }).then(
-				handleAuth
-			);
+			signin({
+				emailOrPhone: normaliseCredential(qs.email),
+				password: qs.password,
+			}).then(handleAuth);
 		}
 		// eslint-disable-next-line
 	}, []);
@@ -101,8 +120,10 @@ const Signin = ({ history }) => {
 			);
 			return;
 		}
+
+		const credential = normaliseCredential(email.trim());
 		setVals((v) => ({ ...v, loading: true }));
-		signin({ emailOrPhone: email, password }).then(handleAuth);
+		signin({ emailOrPhone: credential, password }).then(handleAuth);
 	};
 
 	/* redirect after login */
@@ -153,7 +174,9 @@ const Signin = ({ history }) => {
 						<input
 							className={errors.email && "err"}
 							value={email}
-							onChange={(e) => setVals({ ...vals, email: e.target.value })}
+							onChange={(e) =>
+								setVals({ ...vals, email: normaliseCredential(e.target.value) })
+							}
 							placeholder={t.phEmail}
 						/>
 						{errors.email && <em>{errors.email}</em>}
@@ -194,7 +217,7 @@ const Signin = ({ history }) => {
 
 export default Signin;
 
-/* ─────────────────────────────  STYLES  ─────────────────────────── */
+/* ─────────────────────────────  STYLES (unchanged) ─────────────────────────── */
 
 const Layout = styled.main`
 	position: relative;
@@ -204,13 +227,11 @@ const Layout = styled.main`
 		p.dir === "rtl"
 			? "'Droid Arabic Kufi', sans-serif"
 			: "Helvetica, sans-serif"};
-
 	@media (max-width: 992px) {
-		flex-direction: column; /* stacked, but pane becomes overlay */
+		flex-direction: column;
 	}
 `;
 
-/* image column */
 const Visual = styled.section`
 	flex: 0 0 54%;
 	img {
@@ -223,7 +244,6 @@ const Visual = styled.section`
 	}
 `;
 
-/* pane */
 const Pane = styled.section`
 	flex: 1 1 46%;
 	background: #06232b;
@@ -233,36 +253,28 @@ const Pane = styled.section`
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
-
 	@media (max-width: 992px) {
-		/* overlay mode on phones */
 		position: absolute;
 		inset: 0;
-		background: rgba(6, 35, 43, 0.8); /* translucent overlay */
+		background: rgba(6, 35, 43, 0.8);
 		padding: 3rem 1.5rem;
 	}
 `;
 
-/* headline */
 const Hero = styled.h1`
 	font-size: 2.8rem;
 	font-weight: bolder;
 	text-align: center;
 	line-height: 1.25;
-
 	span {
 		display: block;
 	}
-
 	@media (max-width: 992px) {
 		line-height: 1;
-		margin: 0px !important;
-		padding: 0px !important;
 		font-size: 2rem;
 	}
 `;
 
-/* accent */
 const Accent = styled.span`
 	color: #fff;
 	font-weight: bold;
@@ -273,33 +285,27 @@ const Accent = styled.span`
 	}
 `;
 
-/* rule */
 const Line = styled.hr`
 	width: 65%;
 	max-width: 350px;
 	border: none;
 	border-top: 3px solid #fff;
 	margin: 1.3rem 0 2.3rem;
-
 	@media (max-width: 992px) {
 		margin: 0.3rem 0 1.3rem;
 	}
 `;
 
-/* subheading */
 const Sub = styled.h2`
 	font-size: 1.35rem;
 	font-weight: 700;
 	margin-bottom: 1.5rem;
-
 	@media (max-width: 992px) {
-		margin-bottom: 1rem;
-		font-size: 1.25rem;
 		margin-bottom: 0.5rem;
+		font-size: 1.25rem;
 	}
 `;
 
-/* form field */
 const Field = styled.div`
 	width: 95%;
 	max-width: 600px;
@@ -311,20 +317,17 @@ const Field = styled.div`
 	label {
 		font-weight: 700;
 	}
-
 	input {
 		padding: 0.95rem 1.1rem;
 		font-size: 1rem;
 		border: none;
 		width: 310px;
 	}
-
 	@media (min-width: 993px) {
 		input {
 			width: 400px;
 		}
 	}
-
 	.err {
 		outline: 2px solid #b02828;
 	}
@@ -334,7 +337,6 @@ const Field = styled.div`
 	}
 `;
 
-/* buttons */
 const Buttons = styled.div`
 	margin-top: 0.8rem;
 	display: flex;
@@ -356,7 +358,6 @@ const Buttons = styled.div`
 			opacity: 0.9;
 		}
 	}
-
 	.alt {
 		flex: 1;
 		display: inline-block;
@@ -373,12 +374,10 @@ const Buttons = styled.div`
 	}
 `;
 
-/* footnote */
 const SmallNote = styled.p`
 	margin-top: 2rem;
 	font-size: 0.9rem;
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
-
 	.cta {
 		color: #ff8c21;
 		font-weight: 700;
@@ -386,7 +385,6 @@ const SmallNote = styled.p`
 	}
 `;
 
-/* loader */
 const Mask = styled.div`
 	position: fixed;
 	inset: 0;
