@@ -16,13 +16,15 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [activeTab, setActiveTab] = useState("reservations");
-	const [getUser, setGetUser] = useState("");
-	const { user, token } = isAuthenticated();
+	const [getUser, setGetUser] = useState(null);
+
+	const { user, token } = isAuthenticated() || {};
 	const location = useLocation();
 	const history = useHistory();
 
 	/* ------------------ 1) Fetch User Details ------------------ */
 	const gettingUserId = useCallback(() => {
+		if (!user?._id || !token) return;
 		readUserId(user._id, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error);
@@ -30,80 +32,64 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [user?._id, token]);
 
-	/* -----------------------------------------------------------
-     2) Validate user & handle access control upon user fetch
-        - If user is inactive => push to "/"
-        - If user has "HotelReports" => skip password
-        - If user has no or "all" => do nothing special (still require password)
-        - Otherwise, redirect to a fallback page
-  ----------------------------------------------------------- */
+	/* ------------------ 2) Access control ------------------ */
 	useEffect(() => {
-		if (getUser) {
-			// 2a) If user is not active => redirect to homepage
-			if (!getUser.activeUser) {
+		if (!getUser) return;
+
+		if (!getUser.activeUser) {
+			history.push("/");
+			return;
+		}
+
+		const accessTo = getUser.accessTo || [];
+
+		// If user has HotelReports in access, skip password
+		if (accessTo.includes("HotelReports")) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			return;
+		}
+
+		// If unrestricted or includes "all", keep password flow
+		if (accessTo.length === 0 || accessTo.includes("all")) {
+			return;
+		}
+
+		// Otherwise, redirect based on first available module (adjust as needed)
+		switch (accessTo[0]) {
+			case "reservations":
+				history.push("/super-admin/hotel-reports?tab=reservations");
+				break;
+			case "inventory":
+				history.push("/super-admin/hotel-reports?tab=inventory");
+				break;
+			default:
 				history.push("/");
-				return;
-			}
-
-			const accessTo = getUser.accessTo || [];
-
-			// 2b) If user has "HotelReports" in their access => skip password
-			if (accessTo.includes("HotelReports")) {
-				setIsPasswordVerified(true);
-				setIsModalVisible(false);
-				return;
-			}
-
-			// 2c) If user has no restrictions or includes("all"), we do NOT skip password by default
-			//     (You can decide here if you want to skip or still require password.)
-			if (accessTo.length === 0 || accessTo.includes("all")) {
-				// do nothing special => continue with password flow
-				return;
-			}
-
-			// 2d) If user does NOT have "HotelReports", check for other access modules
-			//     and potentially redirect them. (Adjust as needed for your app.)
-			switch (accessTo[0]) {
-				case "reservations":
-					history.push("/super-admin/hotel-reports?tab=reservations");
-					break;
-				case "inventory":
-					history.push("/super-admin/hotel-reports?tab=inventory");
-					break;
-				default:
-					// Fallback (if no recognized modules)
-					history.push("/");
-					break;
-			}
+				break;
 		}
 	}, [getUser, history]);
 
-	/* -----------------------------------------------------------
-     3) Initial setup: fetch user, handle small-screen collapses,
-        check localStorage for "ReportsVerified"
-  ----------------------------------------------------------- */
+	/* ------------------ 3) Init & localStorage ------------------ */
 	useEffect(() => {
 		gettingUserId();
 
-		if (window.innerWidth <= 1000) {
+		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 
-		// Check if password was previously verified
 		const adminReportsPasswordVerified =
 			localStorage.getItem("ReportsVerified");
 		if (adminReportsPasswordVerified) {
 			setIsPasswordVerified(true);
+			setIsModalVisible(false);
 		} else {
 			setIsModalVisible(true);
 		}
 	}, [gettingUserId]);
 
-	/* -----------------------------------------------------------
-     4) Handle Password Verification
-  ----------------------------------------------------------- */
+	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_REPORTS) {
 			setIsPasswordVerified(true);
@@ -115,15 +101,12 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		}
 	};
 
-	/* -----------------------------------------------------------
-     5) Handle Tab Changes (push query param to URL)
-  ----------------------------------------------------------- */
+	/* ------------------ 5) Tabs in URL ------------------ */
 	const handleTabChange = (tab) => {
 		setActiveTab(tab);
 		history.push(`?tab=${tab}`);
 	};
 
-	// On mount or location change, parse "tab" from URL
 	useEffect(() => {
 		const queryParams = new URLSearchParams(location.search);
 		const tab = queryParams.get("tab");
@@ -140,7 +123,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			show={collapsed}
 		>
-			{/* --------------- Modal for Password --------------- */}
+			{/* Password Modal */}
 			<Modal
 				title='Enter Password'
 				open={isModalVisible}
@@ -164,7 +147,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 				</Button>
 			</Modal>
 
-			{/* --------------- Main Content --------------- */}
+			{/* Main Content */}
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
@@ -191,7 +174,6 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							{/* --------------- Tab Navigation --------------- */}
 							<TabNavigation>
 								<button
 									className={activeTab === "reservations" ? "active" : ""}
@@ -207,7 +189,6 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 								</button>
 							</TabNavigation>
 
-							{/* --------------- Tab Content --------------- */}
 							{activeTab === "reservations" && (
 								<div>
 									<h3>Reservations Overview</h3>
@@ -218,10 +199,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 							{activeTab === "inventory" && (
 								<div>
 									<h3>Hotels Inventory</h3>
-									<p>
-										{/* You could create a new component here for a specific hotel's reports */}
-										Work in progress...
-									</p>
+									<p>Work in progress...</p>
 								</div>
 							)}
 						</div>
@@ -272,7 +250,7 @@ const TabNavigation = styled.div`
 		cursor: pointer;
 		font-weight: bold;
 		border-radius: 5px;
-		flex: 1; /* so the buttons share the row's space */
+		flex: 1;
 
 		&.active {
 			background-color: #006ad1;
@@ -284,7 +262,6 @@ const TabNavigation = styled.div`
 		}
 	}
 
-	/* ------------- MOBILE TABS: 2 PER ROW ------------- */
 	@media (max-width: 768px) {
 		flex-wrap: wrap;
 		gap: 8px;

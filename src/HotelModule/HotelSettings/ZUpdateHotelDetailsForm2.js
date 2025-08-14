@@ -5,6 +5,7 @@ import styled from "styled-components";
 import ZUpdateCase1 from "./ZUpdateCase1";
 import ZUpdateCase2 from "./ZUpdateCase2";
 import ZUpdateCase3 from "./ZUpdateCase3";
+import ZUpdateOffersMonthly from "./ZUpdateOffersMonthly";
 
 const predefinedColors = [
 	"#1e90ff",
@@ -42,19 +43,23 @@ const ZUpdateHotelDetailsForm2 = ({
 	setRoomTypeSelected,
 	submittingHotelDetails,
 	fromPage,
-	photos, // Receive photos from props
-	setPhotos, // Receive setPhotos from props
+	photos,
+	setPhotos,
 	viewsList,
 	extraAmenitiesList,
 }) => {
 	const [selectedDateRange, setSelectedDateRange] = useState([null, null]);
 	const [pricingRate, setPricingRate] = useState("");
-	const [customRoomType, setCustomRoomType] = useState("");
+	const [customRoomType, setCustomRoomType] = useState(""); // used in Case1 + Case3
 	const [priceError, setPriceError] = useState(false);
 	const [rootPrice, setRootPrice] = useState("");
 	const calendarRef = useRef(null);
 	const [form] = Form.useForm();
-	const history = useHistory(); // Initialize history
+	const history = useHistory();
+
+	// NEW: tabs inside step 3
+	const [activePricingTab, setActivePricingTab] = useState("custom"); // "custom" | "offers" | "monthly"
+	const isArabic = chosenLanguage === "Arabic";
 
 	const getColorForPrice = useCallback((price, dateRange) => {
 		const key = `${price}-${dateRange}`;
@@ -69,7 +74,7 @@ const ZUpdateHotelDetailsForm2 = ({
 
 	useEffect(() => {
 		if (existingRoomDetails && selectedRoomType) {
-			form.resetFields(); // Reset fields before setting new values
+			form.resetFields();
 			form.setFieldsValue({
 				roomType: existingRoomDetails.roomType,
 				customRoomType:
@@ -86,39 +91,10 @@ const ZUpdateHotelDetailsForm2 = ({
 				pricedExtras: existingRoomDetails.pricedExtras || [],
 			});
 
-			// Prepopulate rootPrice if it exists
-			setRootPrice(existingRoomDetails.rootPrice || 30); // Set initial value for rootPrice
-
+			setRootPrice(existingRoomDetails.rootPrice || 30);
 			setRoomTypeSelected(true);
-
-			if (calendarRef.current) {
-				const calendarApi = calendarRef.current.getApi();
-				calendarApi.getEvents().forEach((event) => event.remove());
-
-				if (existingRoomDetails.pricingRate) {
-					const pricingEvents = existingRoomDetails.pricingRate.map((rate) => ({
-						title: `${
-							existingRoomDetails.displayName || selectedRoomType.displayName
-						}: ${rate.price} SAR`,
-						start: rate.calendarDate,
-						end: rate.calendarDate,
-						allDay: true,
-						backgroundColor:
-							rate.color || getColorForPrice(rate.price, rate.calendarDate),
-					}));
-
-					pricingEvents.forEach((event) => calendarApi.addEvent(event));
-				}
-			}
 		}
-	}, [
-		selectedRoomType,
-		existingRoomDetails,
-		form,
-		setRoomTypeSelected,
-		getColorForPrice,
-		selectedRoomType.displayName,
-	]);
+	}, [selectedRoomType, existingRoomDetails, form, setRoomTypeSelected]);
 
 	const handleNext = () => {
 		form
@@ -127,7 +103,6 @@ const ZUpdateHotelDetailsForm2 = ({
 				const roomType =
 					values.roomType === "other" ? customRoomType : values.roomType;
 
-				// Merge existing data with updated data
 				const updatedRoomDetails = {
 					...existingRoomDetails,
 					roomType,
@@ -143,10 +118,9 @@ const ZUpdateHotelDetailsForm2 = ({
 						values.extraAmenities || existingRoomDetails.extraAmenities,
 					pricedExtras: values.pricedExtras || existingRoomDetails.pricedExtras,
 					photos: photos.length ? photos : existingRoomDetails.photos || [],
-					pricingRate: existingRoomDetails.pricingRate || [], // Retain pricingRate if not updated
+					pricingRate: existingRoomDetails.pricingRate || [],
 				};
 
-				// Update the hotelDetails state with the updated room details
 				const updatedRoomCountDetails = hotelDetails.roomCountDetails.map(
 					(room) =>
 						room._id === existingRoomDetails._id ? updatedRoomDetails : room
@@ -157,18 +131,16 @@ const ZUpdateHotelDetailsForm2 = ({
 					roomCountDetails: updatedRoomCountDetails,
 				}));
 
-				// Update the URL to include the selectedRoomType
 				const updatedUrl = `/hotel-management/settings/${
 					hotelDetails.belongsTo
 				}/${hotelDetails._id}?activeTab=roomcount&currentStep=${
 					currentStep + 1
 				}&selectedRoomType=${selectedRoomType}`;
-
-				history.push(updatedUrl); // Use history.push to navigate
+				history.push(updatedUrl);
 
 				setCurrentStep(currentStep + 1);
 			})
-			.catch((info) => {
+			.catch(() => {
 				message.error("Please fill in the required fields.");
 			});
 	};
@@ -211,33 +183,77 @@ const ZUpdateHotelDetailsForm2 = ({
 						setHotelDetails={setHotelDetails}
 						chosenLanguage={chosenLanguage}
 						form={form}
-						photos={photos} // Pass photos to case 2
-						setPhotos={setPhotos} // Pass setPhotos to case 2
+						photos={photos}
+						setPhotos={setPhotos}
 						existingRoomDetails={existingRoomDetails}
 					/>
 				);
 
 			case 3:
+				// Step 3 with subtabs
 				return (
-					<ZUpdateCase3
-						hotelDetails={hotelDetails}
-						setHotelDetails={setHotelDetails}
-						chosenLanguage={chosenLanguage}
-						selectedRoomType={selectedRoomType}
-						existingRoomDetails={existingRoomDetails}
-						calendarRef={calendarRef}
-						selectedDateRange={selectedDateRange}
-						setSelectedDateRange={setSelectedDateRange}
-						pricingRate={pricingRate}
-						setPricingRate={setPricingRate}
-						priceError={priceError}
-						setPriceError={setPriceError}
-						getColorForPrice={getColorForPrice}
-						handleFinish={handleFinish}
-						form={form}
-						rootPrice={rootPrice} // Pass rootPrice to the child
-						setRootPrice={setRootPrice} // Pass setRootPrice to the child
-					/>
+					<>
+						<TabsRow>
+							<TopTab
+								isActive={activePricingTab === "custom"}
+								onClick={() => setActivePricingTab("custom")}
+							>
+								{isArabic ? "تقويم مخصص" : "Custom Calendar"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "offers"}
+								onClick={() => setActivePricingTab("offers")}
+							>
+								{isArabic ? "العروض" : "Offers"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "monthly"}
+								onClick={() => setActivePricingTab("monthly")}
+							>
+								{isArabic ? "شهري" : "Monthly"}
+							</TopTab>
+						</TabsRow>
+
+						{activePricingTab === "custom" ? (
+							<ZUpdateCase3
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								chosenLanguage={chosenLanguage}
+								selectedRoomType={selectedRoomType}
+								customRoomType={customRoomType}
+								existingRoomDetails={existingRoomDetails}
+								calendarRef={calendarRef}
+								selectedDateRange={selectedDateRange}
+								setSelectedDateRange={setSelectedDateRange}
+								pricingRate={pricingRate}
+								setPricingRate={setPricingRate}
+								priceError={priceError}
+								setPriceError={setPriceError}
+								getColorForPrice={getColorForPrice}
+								form={form}
+								rootPrice={rootPrice}
+								setRootPrice={setRootPrice}
+							/>
+						) : activePricingTab === "offers" ? (
+							<ZUpdateOffersMonthly
+								mode='Offers'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								existingRoomDetails={existingRoomDetails}
+								form={form}
+							/>
+						) : (
+							<ZUpdateOffersMonthly
+								mode='Monthly'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								existingRoomDetails={existingRoomDetails}
+								form={form}
+							/>
+						)}
+					</>
 				);
 
 			default:
@@ -247,8 +263,8 @@ const ZUpdateHotelDetailsForm2 = ({
 
 	return (
 		<ZUpdateHotelDetailsForm2Wrapper
-			isArabic={chosenLanguage === "Arabic"}
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+			isArabic={isArabic}
+			dir={isArabic ? "rtl" : "ltr"}
 		>
 			<Form
 				form={form}
@@ -263,13 +279,12 @@ const ZUpdateHotelDetailsForm2 = ({
 							style={{ margin: "0 8px" }}
 							onClick={() => setCurrentStep(currentStep - 1)}
 						>
-							{chosenLanguage === "Arabic" ? "السابق" : "Previous"}
+							{isArabic ? "السابق" : "Previous"}
 						</Button>
 					)}
-
 					{currentStep < 3 && (
 						<Button type='primary' onClick={handleNext}>
-							{chosenLanguage === "Arabic" ? "التالي" : "Next"}
+							{isArabic ? "التالي" : "Next"}
 						</Button>
 					)}
 				</div>
@@ -342,7 +357,7 @@ const ZUpdateHotelDetailsForm2Wrapper = styled.div`
 	}
 
 	.calendar-container {
-		height: calc(100vh - 300px); // Adjust the value as needed
+		height: calc(100vh - 300px);
 		width: 90% !important;
 		max-width: 90%;
 		margin: 0 auto;
@@ -363,4 +378,26 @@ const ZUpdateHotelDetailsForm2Wrapper = styled.div`
 	button {
 		text-transform: capitalize !important;
 	}
+`;
+
+// Tabs used in step 3
+const TabsRow = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(120px, 1fr));
+	gap: 6px;
+	margin-bottom: 12px;
+`;
+
+const TopTab = styled.div`
+	cursor: pointer;
+	padding: 12px 8px;
+	text-align: center;
+	font-weight: ${(p) => (p.isActive ? "700" : "600")};
+	background: ${(p) => (p.isActive ? "white" : "#e9e9e9")};
+	border: 1px solid #d0d0d0;
+	border-bottom-width: ${(p) => (p.isActive ? "2px" : "1px")};
+	box-shadow: ${(p) =>
+		p.isActive ? "inset 5px 5px 5px rgba(0,0,0,0.08)" : "none"};
+	transition: all 0.2s ease;
+	border-radius: 6px;
 `;

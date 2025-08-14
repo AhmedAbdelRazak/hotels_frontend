@@ -11,6 +11,7 @@ import ZCustomInput from "./ZCustomInput";
 import ZCase0 from "./ZCase0";
 import ZCase1 from "./ZCase1";
 import ZCase2 from "./ZCase2";
+import ZOffersMonthly from "./ZOffersMonthly";
 
 const predefinedColors = [
 	"#1e90ff",
@@ -70,8 +71,11 @@ const ZHotelDetailsForm2 = ({
 		hotelDetails.hotelPhotos || []
 	);
 	const [photos, setPhotos] = useState([]); // Always starts with an empty array
-
 	const [geocoder, setGeocoder] = useState(null);
+
+	// NEW: sub-tabs inside Step 3
+	const [activePricingTab, setActivePricingTab] = useState("custom"); // "custom" | "offers" | "monthly"
+	const isArabic = chosenLanguage === "Arabic";
 
 	const getColorForPrice = useCallback((price, dateRange) => {
 		const key = `${price}-${dateRange}`;
@@ -91,8 +95,9 @@ const ZHotelDetailsForm2 = ({
 		});
 	}, [form, hotelDetails]);
 
+	// Safer: guard for calendarRef presence so we don't call getApi() when calendar is unmounted
 	useEffect(() => {
-		if (selectedDateRange[0] && selectedDateRange[1]) {
+		if (selectedDateRange[0] && selectedDateRange[1] && calendarRef.current) {
 			const calendarApi = calendarRef.current.getApi();
 			const tempEvent = {
 				title: "Selected",
@@ -152,7 +157,7 @@ const ZHotelDetailsForm2 = ({
 
 				setCurrentStep(currentStep + 1);
 			})
-			.catch((error) => {
+			.catch(() => {
 				message.error("Please fill in all required fields.");
 			});
 	};
@@ -219,7 +224,7 @@ const ZHotelDetailsForm2 = ({
 		const [start, end] = dates;
 		setSelectedDateRange([start, end]);
 
-		if (start && end) {
+		if (start && end && calendarRef.current) {
 			const adjustedEnd = new Date(end);
 			adjustedEnd.setDate(adjustedEnd.getDate() + 1);
 
@@ -242,6 +247,7 @@ const ZHotelDetailsForm2 = ({
 		}
 	};
 
+	// When entering Step 3 or when room/prices change, refresh calendar events.
 	useEffect(() => {
 		if (currentStep === 3 && calendarRef.current) {
 			const calendarApi = calendarRef.current.getApi();
@@ -255,8 +261,18 @@ const ZHotelDetailsForm2 = ({
 				);
 
 				if (room && room.pricingRate && room.pricingRate.length > 0) {
+					const displayName =
+						form.getFieldValue("displayName") ||
+						room.displayName ||
+						selectedRoomType ||
+						"";
+					const truncatedDisplayName =
+						displayName && displayName.length > 8
+							? displayName.slice(0, 8) + "..."
+							: displayName;
+
 					const pricingEvents = room.pricingRate.map((rate) => ({
-						title: `${room.displayName}: ${rate.price} SAR`,
+						title: `${truncatedDisplayName}: ${rate.price} SAR`,
 						start: rate.calendarDate,
 						end: rate.calendarDate,
 						allDay: true,
@@ -264,7 +280,7 @@ const ZHotelDetailsForm2 = ({
 							rate.color || getColorForPrice(rate.price, rate.calendarDate),
 					}));
 
-					pricingEvents.forEach((event) => calendarApi.addEvent(event)); // Add the events
+					pricingEvents.forEach((event) => calendarApi.addEvent(event));
 				}
 			}
 		}
@@ -334,29 +350,39 @@ const ZHotelDetailsForm2 = ({
 						/>
 					</>
 				);
-			case 3:
-				const pricingEvents =
+
+			case 3: {
+				// ----- Subtabs for Step 3 -----
+				const room =
 					selectedRoomType && hotelDetails.roomCountDetails
-						? hotelDetails.roomCountDetails
-								.find(
-									(room) =>
-										room.roomType ===
-										(selectedRoomType === "other"
-											? customRoomType
-											: selectedRoomType)
-								)
-								?.pricingRate?.map((rate) => ({
-									title: `${
-										(form.getFieldValue("displayName").length > 8
-											? form.getFieldValue("displayName").slice(0, 8) + "..."
-											: form.getFieldValue("displayName")) || selectedRoomType
-									}: ${rate.price} SAR`,
-									start: rate.calendarDate,
-									end: rate.calendarDate,
-									allDay: true,
-									backgroundColor: rate.color || getColorForPrice(rate.price),
-								})) || [] // Default to an empty array if no pricingRate is available
-						: [];
+						? hotelDetails.roomCountDetails.find(
+								(r) =>
+									r.roomType ===
+									(selectedRoomType === "other"
+										? customRoomType
+										: selectedRoomType)
+						  )
+						: null;
+
+				const displayNameValue =
+					form.getFieldValue("displayName") ||
+					room?.displayName ||
+					selectedRoomType ||
+					"";
+
+				// pricingEvents for the calendar view (custom tab)
+				const pricingEvents =
+					room?.pricingRate?.map((rate) => ({
+						title: `${
+							displayNameValue && displayNameValue.length > 8
+								? displayNameValue.slice(0, 8) + "..."
+								: displayNameValue
+						}: ${rate.price} SAR`,
+						start: rate.calendarDate,
+						end: rate.calendarDate,
+						allDay: true,
+						backgroundColor: rate.color || getColorForPrice(rate.price),
+					})) || [];
 
 				const handleCalendarSelect = (info) => {
 					const selectedStart = new Date(
@@ -391,13 +417,12 @@ const ZHotelDetailsForm2 = ({
 						return;
 					}
 
-					const roomType =
+					const rType =
 						selectedRoomType === "other" ? customRoomType : selectedRoomType;
-					const fullDisplayName = form.getFieldValue("displayName");
+					const fullDisplayName = displayNameValue;
 
 					const roomIndex = hotelDetails.roomCountDetails.findIndex(
-						(room) =>
-							room.roomType === roomType && room.displayName === fullDisplayName
+						(r) => r.roomType === rType && r.displayName === fullDisplayName
 					);
 
 					const newPricingRates = generateDateRangeArray(
@@ -405,7 +430,7 @@ const ZHotelDetailsForm2 = ({
 						selectedDateRange[1]
 					).map((date) => ({
 						calendarDate: date.toISOString().split("T")[0],
-						room_type: roomType,
+						room_type: rType,
 						price: pricingRate,
 						color: getColorForPrice(pricingRate, selectedDateRange.join("-")),
 					}));
@@ -421,7 +446,7 @@ const ZHotelDetailsForm2 = ({
 							existingRates = existingRates.filter(
 								(rate) =>
 									!newPricingRates.some(
-										(newRate) => newRate.calendarDate === rate.calendarDate
+										(nr) => nr.calendarDate === rate.calendarDate
 									)
 							);
 
@@ -431,7 +456,7 @@ const ZHotelDetailsForm2 = ({
 							];
 						} else {
 							updatedRoomCountDetails.push({
-								roomType,
+								roomType: rType,
 								displayName: fullDisplayName,
 								pricingRate: newPricingRates,
 							});
@@ -443,25 +468,32 @@ const ZHotelDetailsForm2 = ({
 						};
 					});
 
-					const calendarApi = calendarRef.current.getApi();
-					newPricingRates.forEach((rate) => {
-						const existingEvents = calendarApi
-							.getEvents()
-							.filter(
-								(event) =>
-									event.startStr === rate.calendarDate &&
-									event.title.includes(fullDisplayName)
-							);
-						existingEvents.forEach((event) => event.remove());
+					if (calendarRef.current) {
+						const calendarApi = calendarRef.current.getApi();
+						const truncatedDisplayName =
+							fullDisplayName && fullDisplayName.length > 8
+								? fullDisplayName.slice(0, 8) + "..."
+								: fullDisplayName;
 
-						calendarApi.addEvent({
-							title: `${fullDisplayName}: ${rate.price} SAR`,
-							start: rate.calendarDate,
-							end: rate.calendarDate,
-							allDay: true,
-							backgroundColor: rate.color,
+						newPricingRates.forEach((rate) => {
+							const existingEvents = calendarApi
+								.getEvents()
+								.filter(
+									(event) =>
+										event.startStr === rate.calendarDate &&
+										event.title.includes(truncatedDisplayName)
+								);
+							existingEvents.forEach((event) => event.remove());
+
+							calendarApi.addEvent({
+								title: `${truncatedDisplayName}: ${rate.price} SAR`,
+								start: rate.calendarDate,
+								end: rate.calendarDate,
+								allDay: true,
+								backgroundColor: rate.color,
+							});
 						});
-					});
+					}
 
 					handleCancelSelection();
 					message.success("Date range added successfully!");
@@ -472,139 +504,180 @@ const ZHotelDetailsForm2 = ({
 					setPricingRate("");
 					setPriceError(false);
 
-					const calendarApi = calendarRef.current.getApi();
-					const existingSelectedEvents = calendarApi
-						.getEvents()
-						.filter((event) => event.title === "Selected");
-					existingSelectedEvents.forEach((event) => event.remove());
+					if (calendarRef.current) {
+						const calendarApi = calendarRef.current.getApi();
+						const existingSelectedEvents = calendarApi
+							.getEvents()
+							.filter((event) => event.title === "Selected");
+						existingSelectedEvents.forEach((event) => event.remove());
+					}
 				};
 
 				return (
-					<div className='row'>
-						<div className='col-md-9'>
-							<FullCalendar
-								ref={calendarRef}
-								plugins={[dayGridPlugin, interactionPlugin]}
-								initialView='dayGridMonth'
-								events={pricingEvents}
-								selectable={true}
-								headerToolbar={{
-									left: "prev,next today",
-									center: "title",
-									right: "dayGridMonth",
-								}}
-								select={handleCalendarSelect}
-								selectAllow={() => true}
-							/>
-						</div>
-						<div className='col-md-3'>
-							<h4 style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-								{chosenLanguage === "Arabic"
-									? `تسعير الغرفة: ${form.getFieldValue("displayName")}`
-									: `Pricing for room: ${form.getFieldValue("displayName")}`}
-							</h4>
-							<label>
-								{chosenLanguage === "Arabic" ? "نطاق التاريخ" : "Date Range"}
-							</label>
-							<Form.Item
-								dir='ltr'
-								className='w-100'
-								name='dateRange'
-								rules={[
-									{ required: true, message: "Please select a date range" },
-								]}
+					<>
+						{/* Subtabs */}
+						<TabsRow>
+							<TopTab
+								isActive={activePricingTab === "custom"}
+								onClick={() => setActivePricingTab("custom")}
 							>
-								<DatePicker
-									selected={selectedDateRange[0]}
-									onChange={handleDatePickerChange}
-									startDate={selectedDateRange[0]}
-									endDate={selectedDateRange[1]}
-									className='w-100'
-									selectsRange
-									customInput={<ZCustomInput />}
-								/>
-							</Form.Item>
-							{selectedDateRange[0] && selectedDateRange[1] ? (
-								<>
-									<h4 style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
-										{chosenLanguage === "Arabic"
-											? `النطاق الزمني المحدد هو من ${selectedDateRange[0].toLocaleDateString(
-													"ar-EG"
-											  )} إلى ${selectedDateRange[1].toLocaleDateString(
-													"ar-EG"
-											  )}, هل ترغب في الإلغاء؟`
-											: `The selected date range is from ${selectedDateRange[0].toLocaleDateString()} to ${selectedDateRange[1].toLocaleDateString()}, would you like to cancel?`}
-										<label className='mx-3' style={{ color: "darkred" }}>
-											<input
-												type='radio'
-												name='cancel'
-												onClick={handleCancelSelection}
-											/>
-											{chosenLanguage === "Arabic" ? "نعم" : "Yes"}
-										</label>
-									</h4>
-									<div>
-										<label>
-											{chosenLanguage === "Arabic"
-												? "سعر النطاق:"
-												: "Price Range:"}
-										</label>
-										<Input
-											type='number'
-											value={pricingRate}
-											onChange={(e) => {
-												setPricingRate(e.target.value);
-												setPriceError(false);
-											}}
-											ref={priceInputRef}
-											placeholder={
-												chosenLanguage === "Arabic"
-													? "سعر النطاق"
-													: "Price Range"
-											}
-											style={{
-												width: "100%",
-												padding: "8px",
-												marginTop: "8px",
-												fontSize: "1rem",
-												border: "1px solid #d9d9d9",
-												borderRadius: "4px",
-												backgroundColor: "#fff",
-												transition: "all 0.3s",
-												boxSizing: "border-box",
-											}}
-										/>
-										{priceError && (
-											<div style={{ color: "red" }}>
-												{chosenLanguage === "Arabic"
-													? "الرجاء إدخال سعر النطاق"
-													: "Please enter the price range"}
-											</div>
-										)}
-									</div>
-									<div className='text-center mt-3'>
-										<Button
-											onClick={handleDateRangeSubmit}
-											className='btn btn-primary'
-										>
-											{chosenLanguage === "Arabic"
-												? "إضافة سعر النطاق"
-												: "Add Pricing Rate Range"}
-										</Button>
-									</div>
-								</>
-							) : (
-								<div className='text-center mt-3'>
-									<Button className='btn btn-primary' disabled>
-										{chosenLanguage === "Arabic"
-											? "الرجاء تحديد نطاق تاريخ"
-											: "Please select a date range"}
-									</Button>
+								{isArabic ? "تقويم مخصص" : "Custom Calendar"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "offers"}
+								onClick={() => setActivePricingTab("offers")}
+							>
+								{isArabic ? "العروض" : "Offers"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "monthly"}
+								onClick={() => setActivePricingTab("monthly")}
+							>
+								{isArabic ? "شهري" : "Monthly"}
+							</TopTab>
+						</TabsRow>
+
+						{activePricingTab === "custom" ? (
+							<div className='row'>
+								<div className='col-md-9'>
+									<FullCalendar
+										ref={calendarRef}
+										plugins={[dayGridPlugin, interactionPlugin]}
+										initialView='dayGridMonth'
+										events={pricingEvents}
+										selectable={true}
+										headerToolbar={{
+											left: "prev,next today",
+											center: "title",
+											right: "dayGridMonth",
+										}}
+										select={handleCalendarSelect}
+										selectAllow={() => true}
+									/>
 								</div>
-							)}
-						</div>
-					</div>
+								<div className='col-md-3'>
+									<h4 style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
+										{isArabic
+											? `تسعير الغرفة: ${displayNameValue}`
+											: `Pricing for room: ${displayNameValue}`}
+									</h4>
+									<label>{isArabic ? "نطاق التاريخ" : "Date Range"}</label>
+									<Form.Item
+										dir='ltr'
+										className='w-100'
+										name='dateRange'
+										rules={[
+											{ required: true, message: "Please select a date range" },
+										]}
+									>
+										<DatePicker
+											selected={selectedDateRange[0]}
+											onChange={handleDatePickerChange}
+											startDate={selectedDateRange[0]}
+											endDate={selectedDateRange[1]}
+											className='w-100'
+											selectsRange
+											customInput={<ZCustomInput />}
+										/>
+									</Form.Item>
+									{selectedDateRange[0] && selectedDateRange[1] ? (
+										<>
+											<h4 style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
+												{isArabic
+													? `النطاق الزمني المحدد هو من ${selectedDateRange[0].toLocaleDateString(
+															"ar-EG"
+													  )} إلى ${selectedDateRange[1].toLocaleDateString(
+															"ar-EG"
+													  )}, هل ترغب في الإلغاء؟`
+													: `The selected date range is from ${selectedDateRange[0].toLocaleDateString()} to ${selectedDateRange[1].toLocaleDateString()}, would you like to cancel?`}
+												<label className='mx-3' style={{ color: "darkred" }}>
+													<input
+														type='radio'
+														name='cancel'
+														onClick={handleCancelSelection}
+													/>
+													{isArabic ? "نعم" : "Yes"}
+												</label>
+											</h4>
+											<div>
+												<label>
+													{isArabic ? "سعر النطاق:" : "Price Range:"}
+												</label>
+												<Input
+													type='number'
+													value={pricingRate}
+													onChange={(e) => {
+														setPricingRate(e.target.value);
+														setPriceError(false);
+													}}
+													ref={priceInputRef}
+													placeholder={isArabic ? "سعر النطاق" : "Price Range"}
+													style={{
+														width: "100%",
+														padding: "8px",
+														marginTop: "8px",
+														fontSize: "1rem",
+														border: "1px solid #d9d9d9",
+														borderRadius: "4px",
+														backgroundColor: "#fff",
+														transition: "all 0.3s",
+														boxSizing: "border-box",
+													}}
+												/>
+												{priceError && (
+													<div style={{ color: "red" }}>
+														{isArabic
+															? "الرجاء إدخال سعر النطاق"
+															: "Please enter the price range"}
+													</div>
+												)}
+											</div>
+											<div className='text-center mt-3'>
+												<Button
+													onClick={handleDateRangeSubmit}
+													className='btn btn-primary'
+												>
+													{isArabic
+														? "إضافة سعر النطاق"
+														: "Add Pricing Rate Range"}
+												</Button>
+											</div>
+										</>
+									) : (
+										<div className='text-center mt-3'>
+											<Button className='btn btn-primary' disabled>
+												{isArabic
+													? "الرجاء تحديد نطاق تاريخ"
+													: "Please select a date range"}
+											</Button>
+										</div>
+									)}
+								</div>
+							</div>
+						) : activePricingTab === "offers" ? (
+							<ZOffersMonthly
+								mode='Offers'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								selectedRoomType={selectedRoomType}
+								customRoomType={customRoomType}
+								form={form}
+							/>
+						) : (
+							<ZOffersMonthly
+								mode='Monthly'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								selectedRoomType={selectedRoomType}
+								customRoomType={customRoomType}
+								form={form}
+							/>
+						)}
+					</>
 				);
+			}
 
 			default:
 				return null;
@@ -717,7 +790,7 @@ const ZHotelDetailsForm2Wrapper = styled.div`
 	}
 
 	.calendar-container {
-		height: calc(100vh - 300px); // Adjust the value as needed
+		height: calc(100vh - 300px);
 		width: 90% !important;
 		max-width: 90%;
 		margin: 0 auto;
@@ -738,4 +811,26 @@ const ZHotelDetailsForm2Wrapper = styled.div`
 	button {
 		text-transform: capitalize !important;
 	}
+`;
+
+// NEW: simple tab styles used inside Step 3
+const TabsRow = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(120px, 1fr));
+	gap: 6px;
+	margin-bottom: 12px;
+`;
+
+const TopTab = styled.div`
+	cursor: pointer;
+	padding: 12px 8px;
+	text-align: center;
+	font-weight: ${(p) => (p.isActive ? "700" : "600")};
+	background: ${(p) => (p.isActive ? "white" : "#e9e9e9")};
+	border: 1px solid #d0d0d0;
+	border-bottom-width: ${(p) => (p.isActive ? "2px" : "1px")};
+	box-shadow: ${(p) =>
+		p.isActive ? "inset 5px 5px 5px rgba(0,0,0,0.08)" : "none"};
+	transition: all 0.2s ease;
+	border-radius: 6px;
 `;

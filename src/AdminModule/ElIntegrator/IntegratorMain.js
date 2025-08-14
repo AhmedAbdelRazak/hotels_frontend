@@ -10,14 +10,41 @@ import { gettingHotelDetailsForAdmin, readUserId } from "../apiAdmin";
 const IntegratorMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
-	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState("");
-	const [getUser, setGetUser] = useState(null); // State to hold user details
+	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState([]); // ← array, not string
+	const [getUser, setGetUser] = useState(null);
 
-	const { user, token } = isAuthenticated(); // To retrieve user token
+	const { user, token } = isAuthenticated() || {};
 	const history = useHistory();
 
-	// Fetch user details
+	// ---- helpers ----
+	const extractHotels = (payload) => {
+		// If it's already an array
+		if (Array.isArray(payload)) return payload;
+
+		// Common shapes: {hotels: [...]}, {data: [...]}, {results: [...]}, {items: [...]}
+		const candidateKeys = [
+			"hotels",
+			"data",
+			"results",
+			"items",
+			"docs",
+			"list",
+		];
+		if (payload && typeof payload === "object") {
+			for (const k of candidateKeys) {
+				if (Array.isArray(payload[k])) return payload[k];
+			}
+			// Fallback: first array-valued property
+			const firstArray = Object.values(payload).find(Array.isArray);
+			if (Array.isArray(firstArray)) return firstArray;
+		}
+
+		return [];
+	};
+
+	// Fetch user details (guarded)
 	const gettingUserId = useCallback(() => {
+		if (!user?._id || !token) return;
 		readUserId(user._id, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error, "Error fetching user details");
@@ -25,7 +52,7 @@ const IntegratorMain = ({ chosenLanguage }) => {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [user?._id, token]);
 
 	// Determine if the user is a Super Admin
 	const isSuperAdmin =
@@ -35,58 +62,62 @@ const IntegratorMain = ({ chosenLanguage }) => {
 
 	// Validate user and handle access control
 	useEffect(() => {
-		if (getUser) {
-			// Check if activeUser is false
-			if (!getUser.activeUser) {
-				history.push("/");
-				return;
-			}
+		if (!getUser) return;
 
-			const accessTo = getUser.accessTo || [];
+		if (!getUser.activeUser) {
+			history.push("/");
+			return;
+		}
 
-			// Allow access if user is a superAdmin or has Integrator access
-			if (isSuperAdmin || accessTo.includes("Integrator")) {
-				return;
-			}
+		const accessTo = getUser.accessTo || [];
 
-			// Redirect based on the first valid route in accessTo
-			if (accessTo.includes("JannatTools")) {
-				history.push("/admin/jannatbooking-tools?tab=calculator");
-			} else if (accessTo.includes("CustomerService")) {
-				history.push("/admin/customer-service?tab=active-client-cases");
-			} else if (accessTo.includes("HotelsReservations")) {
-				history.push("/admin/all-reservations");
-			} else if (accessTo.includes("JannatBookingWebsite")) {
-				history.push("/admin/janat-website");
-			} else if (accessTo.includes("AdminDashboard")) {
-				history.push("/admin/dashboard");
-			} else {
-				history.push("/"); // Redirect to home if no valid route
-			}
+		if (isSuperAdmin || accessTo.includes("Integrator")) {
+			return;
+		}
+
+		if (accessTo.includes("JannatTools")) {
+			history.push("/admin/jannatbooking-tools?tab=calculator");
+		} else if (accessTo.includes("CustomerService")) {
+			history.push("/admin/customer-service?tab=active-client-cases");
+		} else if (accessTo.includes("HotelsReservations")) {
+			history.push("/admin/all-reservations");
+		} else if (accessTo.includes("JannatBookingWebsite")) {
+			history.push("/admin/janat-website");
+		} else if (accessTo.includes("AdminDashboard")) {
+			history.push("/admin/dashboard");
+		} else {
+			history.push("/");
 		}
 	}, [getUser, history, isSuperAdmin]);
 
-	// Fetch all hotel details for admin
+	// Fetch all hotel details for admin (guarded + normalized)
 	const adminAllHotelDetails = useCallback(() => {
-		gettingHotelDetailsForAdmin(user._id, token).then((data) => {
-			if (data && data.error) {
-				console.error(data.error, "Error getting all hotel details");
-			} else {
-				// Sort data alphabetically by hotelName before setting it in state
-				const sortedData = data.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
-				);
-				setAllHotelDetailsAdmin(sortedData);
-			}
-		});
-	}, [user._id, token]);
+		if (!user?._id || !token) return;
 
-	// Fetch user details and hotel data on component mount
+		gettingHotelDetailsForAdmin(user._id, token)
+			.then((data) => {
+				const hotels = extractHotels(data);
+
+				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
+					(a?.hotelName || "").localeCompare(b?.hotelName || "", undefined, {
+						sensitivity: "base",
+					})
+				);
+
+				setAllHotelDetailsAdmin(sorted);
+			})
+			.catch((err) => {
+				console.error("Error getting all hotel details", err);
+				setAllHotelDetailsAdmin([]);
+			});
+	}, [user?._id, token]);
+
+	// On mount
 	useEffect(() => {
 		gettingUserId();
 		adminAllHotelDetails();
 
-		if (window.innerWidth <= 1000) {
+		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 	}, [gettingUserId, adminAllHotelDetails]);
@@ -122,7 +153,8 @@ const IntegratorMain = ({ chosenLanguage }) => {
 				<div className='otherContentWrapper'>
 					<div className='container-wrapper'>
 						<div>
-							{allHotelDetailsAdmin && allHotelDetailsAdmin.length > 0 ? (
+							{Array.isArray(allHotelDetailsAdmin) &&
+							allHotelDetailsAdmin.length > 0 ? (
 								<ContentOfIntegrator
 									allHotelDetailsAdmin={allHotelDetailsAdmin}
 								/>

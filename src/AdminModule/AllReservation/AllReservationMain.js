@@ -9,7 +9,7 @@ import {
 	gettingHotelDetailsForAdmin,
 	readUserId,
 } from "../apiAdmin";
-import EnhancedContentTable from "./EnhancedContentTable"; // <-- We'll render this child
+import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 
@@ -18,23 +18,25 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 
-	// We store the "server" data in an object { data: [...], totalDocuments, scorecards }
+	// Server data
 	const [allReservationsForAdmin, setAllReservationsForAdmin] = useState({
 		data: [],
 		totalDocuments: 0,
 		scorecards: {},
 	});
-	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState("");
 
-	// After fetching from the server, we apply a second layer of filtering for user-based hotels (if not super admin).
+	// IMPORTANT: array, not string
+	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState([]);
+
+	// After-fetch, user-based filtering
 	const [filteredReservations, setFilteredReservations] = useState([]);
 
-	// Pagination & search states
+	// Pagination & search
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageSize, setPageSize] = useState(15);
 	const [searchTerm, setSearchTerm] = useState("");
 
-	// NEW: filterType to pass to server
+	// Server filter
 	const [filterType, setFilterType] = useState("");
 
 	// Password modal states
@@ -42,15 +44,37 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 
-	// Fetched user data
-	const [getUser, setGetUser] = useState("");
-	const { user, token } = isAuthenticated();
+	// User data (guarded)
+	const [getUser, setGetUser] = useState(null);
+	const { user, token } = isAuthenticated() || {};
 	const history = useHistory();
+
+	// --- helpers ---
+	const extractHotels = (payload) => {
+		if (Array.isArray(payload)) return payload;
+		const candidateKeys = [
+			"hotels",
+			"data",
+			"results",
+			"items",
+			"docs",
+			"list",
+		];
+		if (payload && typeof payload === "object") {
+			for (const k of candidateKeys) {
+				if (Array.isArray(payload[k])) return payload[k];
+			}
+			const firstArray = Object.values(payload).find(Array.isArray);
+			if (Array.isArray(firstArray)) return firstArray;
+		}
+		return [];
+	};
 
 	/**
 	 * 1) On mount, fetch user details.
 	 */
 	const gettingUserId = useCallback(() => {
+		if (!user?._id || !token) return;
 		readUserId(user._id, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error, "Error fetching user details");
@@ -58,12 +82,11 @@ const AllReservationMain = ({ chosenLanguage }) => {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [user?._id, token]);
 
 	useEffect(() => {
 		gettingUserId();
-		// Adjust layout for mobile devices
-		if (window.innerWidth <= 1000) {
+		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 	}, [gettingUserId]);
@@ -72,13 +95,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	 * 2) Determine if the user is a super admin.
 	 */
 	const isSuperAdmin =
-		!getUser.accessTo ||
-		getUser.accessTo.length === 0 ||
-		getUser.accessTo.includes("all");
+		!getUser?.accessTo ||
+		getUser?.accessTo.length === 0 ||
+		getUser?.accessTo.includes("all");
 
 	/**
-	 * 3) Basic access check – if the user is not active or does not have access to reservations,
-	 *    redirect them.
+	 * 3) Access checks
 	 */
 	useEffect(() => {
 		if (!getUser) return;
@@ -87,10 +109,8 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			return;
 		}
 		const accessTo = getUser.accessTo || [];
-		if (accessTo.includes("HotelsReservations") || isSuperAdmin) {
-			return;
-		}
-		// Redirect based on available modules
+		if (accessTo.includes("HotelsReservations") || isSuperAdmin) return;
+
 		if (accessTo.includes("JannatTools")) {
 			history.push("/admin/jannatbooking-tools?tab=calculator");
 		} else if (accessTo.includes("CustomerService")) {
@@ -107,7 +127,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [getUser, history, isSuperAdmin]);
 
 	/**
-	 * 4) Check if we can skip showing the password modal.
+	 * 4) Can skip password?
 	 */
 	const canSkipPassword = (usr) => {
 		if (!usr) return false;
@@ -124,17 +144,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	};
 
 	/**
-	 * 5) Show or hide the password modal based on localStorage or skip logic.
+	 * 5) Show/hide password modal
 	 */
 	useEffect(() => {
 		if (!getUser) return;
 		const reservationPw = localStorage.getItem("ReservationListVerified");
-		if (reservationPw) {
-			setIsPasswordVerified(true);
-			setIsModalVisible(false);
-			return;
-		}
-		if (canSkipPassword(getUser)) {
+		if (reservationPw || canSkipPassword(getUser)) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 			return;
@@ -143,7 +158,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [getUser]);
 
 	/**
-	 * 6) Handle the password verification.
+	 * 6) Handle password verification
 	 */
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_RSERVATION_LIST) {
@@ -156,54 +171,57 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		}
 	};
 
+	/**
+	 * Fetch hotels list (guarded + normalized + sorted)
+	 */
 	const adminAllHotelDetails = useCallback(() => {
-		gettingHotelDetailsForAdmin(user._id, token).then((data) => {
-			if (data && data.error) {
-				console.error(data.error, "Error getting all hotel details");
-			} else {
-				// Sort data alphabetically by hotelName before setting it in state
-				const sortedData = data.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
+		if (!user?._id || !token) return;
+		gettingHotelDetailsForAdmin(user._id, token)
+			.then((data) => {
+				const hotels = extractHotels(data);
+				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
+					(a?.hotelName || "").localeCompare(b?.hotelName || "", undefined, {
+						sensitivity: "base",
+					})
 				);
-				setAllHotelDetailsAdmin(sortedData);
-			}
-		});
-	}, [user._id, token]);
+				setAllHotelDetailsAdmin(sorted);
+			})
+			.catch((err) => {
+				console.error("Error getting all hotel details", err);
+				setAllHotelDetailsAdmin([]);
+			});
+	}, [user?._id, token]);
 
-	// Fetch hotels list on mount
 	useEffect(() => {
 		adminAllHotelDetails();
 	}, [adminAllHotelDetails]);
 
 	/**
-	 * 7) Fetch reservations from the server (server side pagination).
+	 * 7) Fetch reservations (server-side pagination)
 	 */
 	const fetchReservations = useCallback(() => {
-		// We pass filterType as well to let the server handle the filtering
+		if (!user?._id || !token) return;
 		getAllReservationForAdmin(user._id, token, {
 			page: currentPage,
 			limit: pageSize,
 			searchQuery: searchTerm,
-			filterType, // <-- important
+			filterType,
 		})
 			.then((resData) => {
 				if (resData && resData.error) {
 					console.error(resData.error, "Error getting reservations");
-					// Fallback: empty results
 					setAllReservationsForAdmin({
 						data: [],
 						totalDocuments: 0,
 						scorecards: {},
 					});
 				} else if (resData && resData.success) {
-					// We expect shape: { data, totalDocuments, scorecards, ... }
 					setAllReservationsForAdmin({
 						data: resData.data || [],
 						totalDocuments: resData.totalDocuments || 0,
 						scorecards: resData.scorecards || {},
 					});
 				} else {
-					// If no success flag or something, fallback
 					setAllReservationsForAdmin({
 						data: [],
 						totalDocuments: 0,
@@ -219,10 +237,8 @@ const AllReservationMain = ({ chosenLanguage }) => {
 					scorecards: {},
 				});
 			});
-	}, [user._id, token, currentPage, pageSize, searchTerm, filterType]);
+	}, [user?._id, token, currentPage, pageSize, searchTerm, filterType]);
 
-	// Whenever isPasswordVerified changes or any of our fetch dependencies change,
-	// re-fetch the data from the server
 	useEffect(() => {
 		if (isPasswordVerified) {
 			fetchReservations();
@@ -230,31 +246,25 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [isPasswordVerified, fetchReservations]);
 
 	/**
-	 * 8) After we fetch from the server, apply a second layer of filtering
-	 *    based on the user’s hotelsToSupport (for non-super-admin).
+	 * 8) Apply second-layer filtering (non-super-admin, role 1000)
 	 */
 	useEffect(() => {
-		const { data } = allReservationsForAdmin;
-		if (!data || !Array.isArray(data)) {
+		const { data } = allReservationsForAdmin || {};
+		if (!Array.isArray(data)) {
 			setFilteredReservations([]);
 			return;
 		}
 
 		let finalList = [...data];
-		// If not a super admin and role=1000, filter by hotelsToSupport
-		if (!isSuperAdmin && getUser.role === 1000) {
-			const hts = getUser.hotelsToSupport;
+
+		if (!isSuperAdmin && Number(getUser?.role) === 1000) {
+			const hts = getUser?.hotelsToSupport;
 			if (Array.isArray(hts) && hts.length > 0) {
-				// Only keep reservations for hotels in hts
-				const allowedIds = hts.map((hotel) => String(hotel._id));
+				const allowedIds = hts.map((hotel) => String(hotel?._id));
 				finalList = finalList.filter((r) => {
 					const hotelObj = r?.hotelId;
 					let hotelId = "";
-					if (
-						typeof hotelObj === "object" &&
-						hotelObj !== null &&
-						hotelObj._id
-					) {
+					if (hotelObj && typeof hotelObj === "object" && hotelObj._id) {
 						hotelId = String(hotelObj._id);
 					} else {
 						hotelId = String(hotelObj);
@@ -262,7 +272,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 					return allowedIds.includes(hotelId);
 				});
 			} else if (hts === "all") {
-				// Show all
+				// show all
 			} else {
 				finalList = [];
 			}
@@ -272,18 +282,16 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [allReservationsForAdmin, getUser, isSuperAdmin]);
 
 	/**
-	 * 9) Handle search: reset to page 1, then fetch
+	 * 9) Search handler (reset page -> triggers refetch via deps)
 	 */
 	const handleSearch = () => {
 		setCurrentPage(1);
-		// The useEffect with fetchReservations() will run automatically on next render
 	};
 
-	// NEW: This function is called from the child when a user clicks a filter button
+	// Filter button click (from child)
 	const handleFilterClickFromParent = useCallback((newFilter) => {
 		setFilterType(newFilter);
 		setCurrentPage(1);
-		// The useEffect that depends on [filterType, currentPage] will refetch
 	}, []);
 
 	return (
@@ -353,9 +361,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 								setSearchTerm={setSearchTerm}
 								handleSearch={handleSearch}
 								scorecardsObject={allReservationsForAdmin.scorecards}
-								// We pass fromPage for ScoreCards usage
 								fromPage='AllReservations'
-								// NEW: pass filter props
 								filterType={filterType}
 								setFilterType={setFilterType}
 								handleFilterClickFromParent={handleFilterClickFromParent}

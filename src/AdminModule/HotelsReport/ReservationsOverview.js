@@ -11,10 +11,9 @@ import {
 	Button,
 } from "antd";
 import Chart from "react-apexcharts";
-import dayjs from "dayjs"; // for date filtering
+import dayjs from "dayjs";
 
-// Import your components/api
-import EnhancedContentTable from "../AllReservation/EnhancedContentTable"; // <-- Adjust this import path
+import EnhancedContentTable from "../AllReservation/EnhancedContentTable";
 import {
 	getReservationsByDay,
 	getCheckinsByDay,
@@ -37,10 +36,11 @@ function parseGroupKeyDate(groupKey) {
 
 /** 2) Build unique year-month & year-quarter sets from the data */
 function buildMonthQuarterOptions(dataArray) {
+	const src = Array.isArray(dataArray) ? dataArray : [];
 	const monthSet = new Set();
 	const quarterSet = new Set();
 
-	dataArray.forEach((item) => {
+	src.forEach((item) => {
 		const d = parseGroupKeyDate(item.groupKey);
 		if (d.isValid()) {
 			const year = d.year();
@@ -66,17 +66,15 @@ function getMeasureValue(item, measure) {
 			return item.total_amount ?? 0;
 		case "commission":
 			return item.commission ?? 0;
-		default: // "count"
+		default:
 			return item.reservationsCount ?? 0;
 	}
 }
 
 /** 4) Sum over an array */
 function sumOfMeasure(dataArray, measure) {
-	return dataArray.reduce(
-		(acc, item) => acc + getMeasureValue(item, measure),
-		0
-	);
+	const src = Array.isArray(dataArray) ? dataArray : [];
+	return src.reduce((acc, item) => acc + getMeasureValue(item, measure), 0);
 }
 
 /** 5) Filter data by "all" | "month" | "quarter" */
@@ -86,13 +84,15 @@ function filterByRangeAndSelection(
 	monthSelected,
 	quarterSelected
 ) {
-	if (range === "all") return dataArray;
+	const src = Array.isArray(dataArray) ? dataArray : [];
+
+	if (range === "all") return src;
 
 	if (range === "month" && monthSelected) {
 		const [y, m] = monthSelected.split("-");
 		const year = Number(y);
 		const month = Number(m);
-		return dataArray.filter((item) => {
+		return src.filter((item) => {
 			const d = parseGroupKeyDate(item.groupKey);
 			return d.isValid() && d.year() === year && d.month() + 1 === month;
 		});
@@ -102,7 +102,7 @@ function filterByRangeAndSelection(
 		const [y, qStr] = quarterSelected.split("-Q");
 		const year = Number(y);
 		const qNum = Number(qStr);
-		return dataArray.filter((item) => {
+		return src.filter((item) => {
 			const d = parseGroupKeyDate(item.groupKey);
 			if (!d.isValid() || d.year() !== year) return false;
 			const mon = d.month() + 1;
@@ -110,27 +110,22 @@ function filterByRangeAndSelection(
 		});
 	}
 
-	return dataArray;
+	return src;
 }
 
 /** 6) Format numeric values for display (table/cards) */
 function formatForDisplay(value, measure) {
-	// If measure = "count", show integer
 	if (measure === "count") {
 		const intVal = Math.round(value);
 		return intVal.toLocaleString("en-US");
 	}
-	// Else show 2 decimals
 	return value.toLocaleString("en-US", {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});
 }
 
-/**
- * 7) Create a chart y-axis formatter.
- * If measure = count => round to int, else => 2 decimals.
- */
+/** 7) y-axis formatter */
 function createYAxisFormatter(measure) {
 	return (val) => {
 		if (measure === "count") {
@@ -144,14 +139,11 @@ function createYAxisFormatter(measure) {
 	};
 }
 
-/**
- * 8) Convert day-based array (groupKey = YYYY-MM-DD) into month-based array (groupKey = YYYY-MM).
- *    Used if the user selects "Month Over Month" chart mode.
- */
+/** 8) Convert daily array -> monthly buckets */
 function transformToMonthly(dataArray) {
-	// We'll aggregate multiple days in the same YYYY-MM bucket
+	const src = Array.isArray(dataArray) ? dataArray : [];
 	const monthlyMap = {};
-	for (const item of dataArray) {
+	for (const item of src) {
 		const d = parseGroupKeyDate(item.groupKey);
 		if (!d.isValid()) continue;
 		const monthKey = d.format("YYYY-MM");
@@ -168,28 +160,20 @@ function transformToMonthly(dataArray) {
 		monthlyMap[monthKey].total_amount += item.total_amount ?? 0;
 		monthlyMap[monthKey].commission += item.commission ?? 0;
 	}
-	// Convert to array, sort by groupKey (YYYY-MM ascending)
 	return Object.values(monthlyMap).sort((a, b) =>
 		a.groupKey.localeCompare(b.groupKey)
 	);
 }
 
-// ===== Helper for coloring statuses =====
 function randomColor() {
 	return "#" + Math.floor(Math.random() * 16777215).toString(16);
 }
 
-/**
- * Normalizes the status string so whether it's "Checked_out",
- * "checked_out", or "Checked Out", it will match the correct color.
- */
 function getStatusColor(status = "") {
-	// Normalize to lowercase and replace any spaces/hyphens with underscores
 	const normalizedStatus = status
 		.trim()
 		.toLowerCase()
 		.replace(/[\s-]+/g, "_");
-
 	const colorMapping = {
 		checked_out: "#66bb6a",
 		cancelled: "#f44336",
@@ -197,12 +181,25 @@ function getStatusColor(status = "") {
 		inhouse: "#9c27b0",
 		no_show: "#757575",
 	};
-
 	return colorMapping[normalizedStatus] || randomColor();
 }
 
+/** Normalize possible API shapes to an array of hotels */
+function extractHotels(payload) {
+	if (Array.isArray(payload)) return payload;
+	const candidateKeys = ["hotels", "data", "results", "items", "docs", "list"];
+	if (payload && typeof payload === "object") {
+		for (const k of candidateKeys) {
+			if (Array.isArray(payload[k])) return payload[k];
+		}
+		const firstArray = Object.values(payload).find(Array.isArray);
+		if (Array.isArray(firstArray)) return firstArray;
+	}
+	return [];
+}
+
 const ReservationsOverview = () => {
-	const { user, token } = isAuthenticated();
+	const { user, token } = isAuthenticated() || {};
 	const [loading, setLoading] = useState(false);
 
 	// Raw data
@@ -227,15 +224,13 @@ const ReservationsOverview = () => {
 	const [statusMonthOptions, setStatusMonthOptions] = useState([]);
 	const [statusQuarterOptions, setStatusQuarterOptions] = useState([]);
 
-	// "Reservations By Hotel" table
 	const [hotelMonthOptions, setHotelMonthOptions] = useState([]);
 	const [hotelQuarterOptions, setHotelQuarterOptions] = useState([]);
 
-	// "Top 5 Hotels" chart
 	const [topMonthOptions, setTopMonthOptions] = useState([]);
 	const [topQuarterOptions, setTopQuarterOptions] = useState([]);
 
-	// Measures & Ranges
+	// Measures & ranges
 	const [measureDay, setMeasureDay] = useState("count");
 	const [rangeDay, setRangeDay] = useState("month");
 	const [dayMonthSelected, setDayMonthSelected] = useState("");
@@ -256,13 +251,11 @@ const ReservationsOverview = () => {
 	const [statusMonthSelected, setStatusMonthSelected] = useState("");
 	const [statusQuarterSelected, setStatusQuarterSelected] = useState("");
 
-	// "Reservations By Hotel" table
 	const [measureByHotel, setMeasureByHotel] = useState("count");
 	const [rangeByHotel, setRangeByHotel] = useState("all");
 	const [hotelMonthSelected, setHotelMonthSelected] = useState("");
 	const [hotelQuarterSelected, setHotelQuarterSelected] = useState("");
 
-	// "Top 5 Hotels" chart
 	const [rangeTop, setRangeTop] = useState("all");
 	const [topMonthSelected, setTopMonthSelected] = useState("");
 	const [topQuarterSelected, setTopQuarterSelected] = useState("");
@@ -270,58 +263,66 @@ const ReservationsOverview = () => {
 	// Modal
 	const [modalVisible, setModalVisible] = useState(false);
 	const [modalLoading, setModalLoading] = useState(false);
-	const [modalData, setModalData] = useState([]); // array of reservations
+	const [modalData, setModalData] = useState({
+		data: [],
+		totalDocuments: 0,
+		scorecards: {},
+	});
 
-	// Additional state for EnhancedContentTable pagination
+	// Pagination for modal table
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageSize, setPageSize] = useState(50);
 
-	// Chart Mode toggles: "daily" vs "monthly" for each chart
-	const [dayChartMode, setDayChartMode] = useState("daily"); // Reservations By Day
-	const [checkinChartMode, setCheckinChartMode] = useState("daily"); // Check-ins
-	const [checkoutChartMode, setCheckoutChartMode] = useState("daily"); // Check-outs
+	// Chart modes
+	const [dayChartMode, setDayChartMode] = useState("daily");
+	const [checkinChartMode, setCheckinChartMode] = useState("daily");
+	const [checkoutChartMode, setCheckoutChartMode] = useState("daily");
 
-	// All hotels for the Admin
-	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState("");
+	// Hotels list (IMPORTANT: array)
+	const [allHotelDetailsAdmin, setAllHotelDetailsAdmin] = useState([]);
 
-	// Default to "all" selected
+	// Selection
 	const [selectedHotels, setSelectedHotels] = useState(["all"]);
 
-	// NEW STATE: Toggle exclude cancelled or not
+	// Global toggle to exclude cancelled
 	const [excludeCancelled, setExcludeCancelled] = useState(true);
 
-	// Search
+	// Search for modal table
 	const [searchTerm, setSearchTerm] = useState("");
 
+	// ---- Fetch hotels list (normalized) ----
 	const adminAllHotelDetails = useCallback(() => {
-		gettingHotelDetailsForAdmin(user._id, token).then((data) => {
-			if (data && data.error) {
-				console.error(data.error, "Error getting all hotel details");
-			} else {
-				// Sort data alphabetically by hotelName before setting it in state
-				const sortedData = data.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
+		if (!user?._id || !token) return;
+		gettingHotelDetailsForAdmin(user._id, token)
+			.then((data) => {
+				const hotels = extractHotels(data);
+				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
+					(a?.hotelName || "").localeCompare(b?.hotelName || "", undefined, {
+						sensitivity: "base",
+					})
 				);
-				setAllHotelDetailsAdmin(sortedData);
-			}
-		});
-	}, [user._id, token]);
+				setAllHotelDetailsAdmin(sorted);
+			})
+			.catch((err) => {
+				console.error("Error getting all hotel details", err);
+				setAllHotelDetailsAdmin([]);
+			});
+	}, [user?._id, token]);
 
-	// Fetch hotels list on mount
 	useEffect(() => {
 		adminAllHotelDetails();
 	}, [adminAllHotelDetails]);
 
-	// Whenever selectedHotels *or excludeCancelled* changes, re‐fetch the main data
+	// ---- Main reports fetch (re-run on selectedHotels/excludeCancelled) ----
 	useEffect(() => {
 		loadAllReportData();
-		// eslint-disable-next-line
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedHotels, excludeCancelled]);
 
 	function loadAllReportData() {
-		setLoading(true);
+		if (!user?._id || !token) return;
 
-		// Pass the excludeCancelled toggle in as an extra param object
+		setLoading(true);
 		const extraParams = { excludeCancelled };
 
 		Promise.all([
@@ -353,54 +354,56 @@ const ReservationsOverview = () => {
 					topHotelsData,
 				] = results;
 
-				setReservationsByDay(rByDay || []);
-				setCheckinsByDay(cByDay || []);
-				setCheckoutsByDay(coByDay || []);
-				setReservationsByBookingStatus(rByStatus || []);
-				setReservationsByHotelNames(rByHotelNames || []);
-				setTopHotels(topHotelsData || []);
+				setReservationsByDay(Array.isArray(rByDay) ? rByDay : []);
+				setCheckinsByDay(Array.isArray(cByDay) ? cByDay : []);
+				setCheckoutsByDay(Array.isArray(coByDay) ? coByDay : []);
+				setReservationsByBookingStatus(
+					Array.isArray(rByStatus) ? rByStatus : []
+				);
+				setReservationsByHotelNames(
+					Array.isArray(rByHotelNames) ? rByHotelNames : []
+				);
+				setTopHotels(Array.isArray(topHotelsData) ? topHotelsData : []);
 
-				// Build unique month/quarter sets
 				const { monthArray: dM, quarterArray: dQ } = buildMonthQuarterOptions(
-					rByDay || []
+					Array.isArray(rByDay) ? rByDay : []
 				);
 				setDayMonthOptions(dM);
 				setDayQuarterOptions(dQ);
 
 				const { monthArray: cM, quarterArray: cQ } = buildMonthQuarterOptions(
-					cByDay || []
+					Array.isArray(cByDay) ? cByDay : []
 				);
 				setCheckinMonthOptions(cM);
 				setCheckinQuarterOptions(cQ);
 
 				const { monthArray: coM, quarterArray: coQ } = buildMonthQuarterOptions(
-					coByDay || []
+					Array.isArray(coByDay) ? coByDay : []
 				);
 				setCheckoutMonthOptions(coM);
 				setCheckoutQuarterOptions(coQ);
 
 				const { monthArray: sM, quarterArray: sQ } = buildMonthQuarterOptions(
-					rByStatus || []
+					Array.isArray(rByStatus) ? rByStatus : []
 				);
 				setStatusMonthOptions(sM);
 				setStatusQuarterOptions(sQ);
 
 				const { monthArray: hM, quarterArray: hQ } = buildMonthQuarterOptions(
-					rByHotelNames || []
+					Array.isArray(rByHotelNames) ? rByHotelNames : []
 				);
 				setHotelMonthOptions(hM);
 				setHotelQuarterOptions(hQ);
 
 				const { monthArray: tM, quarterArray: tQ } = buildMonthQuarterOptions(
-					topHotelsData || []
+					Array.isArray(topHotelsData) ? topHotelsData : []
 				);
 				setTopMonthOptions(tM);
 				setTopQuarterOptions(tQ);
 
-				// Default to the current month if available
 				const currentMonth = dayjs().format("YYYY-MM");
 
-				// Reservations By Day
+				// Default selections
 				if (dM.includes(currentMonth)) {
 					setDayMonthSelected(currentMonth);
 					setRangeDay("month");
@@ -409,7 +412,6 @@ const ReservationsOverview = () => {
 					setRangeDay("month");
 				}
 
-				// Check-ins
 				if (cM.includes(currentMonth)) {
 					setCheckinMonthSelected(currentMonth);
 					setRangeCheckin("month");
@@ -418,7 +420,6 @@ const ReservationsOverview = () => {
 					setRangeCheckin("month");
 				}
 
-				// Check-outs
 				if (coM.includes(currentMonth)) {
 					setCheckoutMonthSelected(currentMonth);
 					setRangeCheckout("month");
@@ -434,25 +435,33 @@ const ReservationsOverview = () => {
 			.finally(() => setLoading(false));
 	}
 
-	/**
-	 * Helper to fetch reservations from the backend with dynamic query params,
-	 * then show them in the Modal.
-	 */
+	/** Fetch and show reservations in modal */
 	const fetchAndShowReservations = async (queryParamsObj) => {
 		try {
+			if (!user?._id || !token) return;
 			setModalLoading(true);
-			setModalVisible(true); // open the modal
+			setModalVisible(true);
 
 			const data = await getSpecificListOfReservations(user._id, token, {
 				...queryParamsObj,
-				// also pass selected hotels if needed for these specific lists
 				hotels: selectedHotels.includes("all")
 					? "all"
 					: selectedHotels.join(","),
-				// also respect the excludeCancelled toggle globally
 				excludeCancelled,
 			});
-			setModalData(data || []);
+
+			const normalized = {
+				data: Array.isArray(data?.data)
+					? data.data
+					: Array.isArray(data)
+					  ? data
+					  : [],
+				totalDocuments:
+					data?.totalDocuments || (Array.isArray(data) ? data.length : 0),
+				scorecards: data?.scorecards || {},
+			};
+
+			setModalData(normalized);
 			setCurrentPage(1);
 		} catch (err) {
 			console.error("Failed to fetch specific reservations", err);
@@ -462,7 +471,7 @@ const ReservationsOverview = () => {
 		}
 	};
 
-	// A) Reservations By Day
+	// --- Reservations By Day ---
 	const filteredDay = filterByRangeAndSelection(
 		reservationsByDay,
 		rangeDay,
@@ -472,7 +481,6 @@ const ReservationsOverview = () => {
 
 	const dayDataForChart =
 		dayChartMode === "monthly" ? transformToMonthly(filteredDay) : filteredDay;
-
 	const dayCategories = dayDataForChart.map((item) => item.groupKey);
 	const daySeriesData = dayDataForChart.map((item) =>
 		getMeasureValue(item, measureDay)
@@ -487,17 +495,16 @@ const ReservationsOverview = () => {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
 						if (idx >= 0) {
-							const clickedDate = dayCategories[idx]; // "YYYY-MM-DD" or "YYYY-MM"
+							const clickedDate = dayCategories[idx];
 							if (dayChartMode === "monthly") {
 								const dateObj = dayjs(clickedDate + "-01", "YYYY-MM-DD");
-								const monthName = dateObj.format("MMMM").toLowerCase(); // e.g. "december"
-								const year = dateObj.format("YYYY"); // e.g. "2024"
-								const monthString = `${monthName}-${year}`; // "december-2024"
+								const monthName = dateObj.format("MMMM").toLowerCase();
+								const year = dateObj.format("YYYY");
+								const monthString = `${monthName}-${year}`;
 								fetchAndShowReservations({
 									[`createdAtMonth_${monthString}`]: 1,
 								});
 							} else {
-								// daily mode => "YYYY-MM-DD"
 								fetchAndShowReservations({
 									[`createdAtDate_${clickedDate}`]: 1,
 								});
@@ -542,7 +549,6 @@ const ReservationsOverview = () => {
 		}
 	};
 
-	// B) Check-ins & Check-outs
 	// --- Check-ins ---
 	const filteredCheckins = filterByRangeAndSelection(
 		checkinsByDay,
@@ -579,9 +585,7 @@ const ReservationsOverview = () => {
 									[`checkinMonth_${monthString}`]: 1,
 								});
 							} else {
-								fetchAndShowReservations({
-									[`checkinDate_${clickedDate}`]: 1,
-								});
+								fetchAndShowReservations({ [`checkinDate_${clickedDate}`]: 1 });
 							}
 						}
 					},
@@ -703,7 +707,7 @@ const ReservationsOverview = () => {
 		}
 	};
 
-	// C) Booking Status (Pie) + Top 5 Hotels (Bar)
+	// --- Booking Status (Pie) ---
 	const filteredStatus = filterByRangeAndSelection(
 		reservationsByBookingStatus,
 		rangeBookingStatus,
@@ -716,7 +720,6 @@ const ReservationsOverview = () => {
 	const bookingStatusValues = filteredStatus.map((item) =>
 		getMeasureValue(item, measureBookingStatus)
 	);
-
 	const bookingStatusColors = bookingStatusLabels.map((label) =>
 		getStatusColor(label)
 	);
@@ -730,7 +733,7 @@ const ReservationsOverview = () => {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
 						if (idx >= 0) {
-							const clickedStatus = bookingStatusLabels[idx]; // e.g. "confirmed"
+							const clickedStatus = bookingStatusLabels[idx];
 							fetchAndShowReservations({
 								[`reservationstatus_${clickedStatus}`]: 1,
 							});
@@ -746,18 +749,13 @@ const ReservationsOverview = () => {
 				style: { fontSize: "16px" },
 			},
 			responsive: [
-				{
-					breakpoint: 768,
-					options: {
-						legend: { position: "bottom" },
-					},
-				},
+				{ breakpoint: 768, options: { legend: { position: "bottom" } } },
 			],
 		},
 		series: bookingStatusValues,
 	};
 
-	// Top 5 Hotels
+	// --- Top 5 Hotels ---
 	const filteredTopAll = filterByRangeAndSelection(
 		topHotels,
 		rangeTop,
@@ -768,7 +766,6 @@ const ReservationsOverview = () => {
 		(a, b) => (b.reservationsCount ?? 0) - (a.reservationsCount ?? 0)
 	);
 	const top5 = sortedTopAll.slice(0, 5);
-
 	const top5HotelNames = top5.map((item) => item.hotelName || "Unknown");
 	const top5Data = top5.map((item) => item.reservationsCount ?? 0);
 
@@ -796,7 +793,7 @@ const ReservationsOverview = () => {
 		},
 	};
 
-	// D) Reservations By Hotel (TABLE)
+	// --- Reservations By Hotel (Table) ---
 	const filteredByHotel = filterByRangeAndSelection(
 		reservationsByHotelNames,
 		rangeByHotel,
@@ -807,28 +804,15 @@ const ReservationsOverview = () => {
 		(a, b) => (b.reservationsCount ?? 0) - (a.reservationsCount ?? 0)
 	);
 
-	/**
-	 * We want the following behavior:
-	 *  - If "all" is currently selected and the user picks any other hotel,
-	 *    we remove "all" so they can select multiple.
-	 *  - If the user picks "all" while some hotels are selected, we remove those
-	 *    and keep only "all".
-	 *  - If the user clears everything, revert to ["all"].
-	 */
 	const handleHotelSelectChange = (value) => {
-		// If user picks "all" + something else in one shot, decide which to keep
 		if (value.length === 0) {
 			setSelectedHotels(["all"]);
 			return;
 		}
-
 		if (value.includes("all") && !selectedHotels.includes("all")) {
-			// That means "all" was newly selected => keep only "all"
 			setSelectedHotels(["all"]);
 			return;
 		}
-
-		// If the user has "all" in the old selection, but picks other hotels, remove "all"
 		if (
 			value.includes("all") &&
 			selectedHotels.includes("all") &&
@@ -838,17 +822,11 @@ const ReservationsOverview = () => {
 			setSelectedHotels(withoutAll);
 			return;
 		}
-
-		// Otherwise, normal multi select
 		setSelectedHotels(value);
 	};
 
-	const handleSearch = () => {
-		setCurrentPage(1);
-		// The useEffect with fetchReservations() will run automatically on next render
-	};
+	const handleSearch = () => setCurrentPage(1);
 
-	console.log(modalData, "modalDataaaaaaaaa");
 	return (
 		<ReservationsOverviewWrapper>
 			{loading ? (
@@ -865,17 +843,14 @@ const ReservationsOverview = () => {
 							onChange={handleHotelSelectChange}
 						>
 							<Option value='all'>All Hotels</Option>
-							{allHotelDetailsAdmin &&
-								allHotelDetailsAdmin.map((h, i) => {
-									return (
-										<Option key={i} value={h.hotelName}>
-											{h.hotelName}
-										</Option>
-									);
-								})}
+							{Array.isArray(allHotelDetailsAdmin) &&
+								allHotelDetailsAdmin.map((h, i) => (
+									<Option key={i} value={h?.hotelName}>
+										{h?.hotelName}
+									</Option>
+								))}
 						</Select>
 
-						{/* NEW BUTTON: Exclude/Include Cancelled */}
 						<Button
 							style={{ marginTop: 10 }}
 							onClick={() => setExcludeCancelled(!excludeCancelled)}
@@ -1274,12 +1249,7 @@ const ReservationsOverview = () => {
 									) : (
 										<Chart
 											options={topHotelsChartOptions}
-											series={[
-												{
-													name: "Reservations Count",
-													data: top5Data,
-												},
-											]}
+											series={[{ name: "Reservations Count", data: top5Data }]}
 											type='bar'
 											height={300}
 										/>
@@ -1288,7 +1258,7 @@ const ReservationsOverview = () => {
 							</div>
 						</Panel>
 
-						{/* ==================== PANEL 4: Reservations By Hotel (TABLE) ==================== */}
+						{/* ==================== PANEL 4 ==================== */}
 						<Panel header='Reservations By Hotel' key='4'>
 							<div className='panel-controls'>
 								<Radio.Group
@@ -1401,7 +1371,7 @@ const ReservationsOverview = () => {
 				</>
 			)}
 
-			{/* ===================== MODAL to display reservations list ===================== */}
+			{/* ===================== MODAL ===================== */}
 			<Modal
 				className='custom-reservations-modal'
 				title='Detailed Reservations List'
@@ -1413,24 +1383,20 @@ const ReservationsOverview = () => {
 			>
 				{modalLoading ? (
 					<Spin tip='Loading...' />
-				) : modalData.length === 0 ? (
+				) : modalData.data.length === 0 ? (
 					<p>No reservations found</p>
 				) : (
 					<EnhancedContentTable
-						// We pass only the subset after user-based filtering
-						// plus totalDocuments from the server for pagination
 						data={modalData.data}
 						totalDocuments={modalData.totalDocuments}
 						currentPage={currentPage}
 						pageSize={pageSize}
 						setCurrentPage={setCurrentPage}
 						setPageSize={setPageSize}
-						// For searching:
 						searchTerm={searchTerm}
 						setSearchTerm={setSearchTerm}
 						handleSearch={handleSearch}
 						scorecardsObject={modalData.scorecards}
-						// We pass fromPage for ScoreCards usage
 						fromPage='reports'
 					/>
 				)}
