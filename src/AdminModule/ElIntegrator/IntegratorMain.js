@@ -5,7 +5,7 @@ import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import ContentOfIntegrator from "./ContentOfIntegrator";
 import { isAuthenticated } from "../../auth";
-import { gettingHotelDetailsForAdmin, readUserId } from "../apiAdmin";
+import { gettingHotelDetailsForAdminAll, readUserId } from "../apiAdmin";
 
 const IntegratorMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -94,9 +94,9 @@ const IntegratorMain = ({ chosenLanguage }) => {
 	const adminAllHotelDetails = useCallback(() => {
 		if (!user?._id || !token) return;
 
-		gettingHotelDetailsForAdmin(user._id, token)
+		gettingHotelDetailsForAdminAll(user._id, token)
 			.then((data) => {
-				const hotels = extractHotels(data);
+				const hotels = extractHotels(data.hotels);
 
 				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
 					(a?.hotelName || "").localeCompare(b?.hotelName || "", undefined, {

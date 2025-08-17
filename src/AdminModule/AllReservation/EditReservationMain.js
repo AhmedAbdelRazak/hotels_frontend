@@ -18,7 +18,7 @@ import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
 import {
-	gettingHotelDetailsForAdmin,
+	gettingHotelDetailsForAdminAll,
 	updateSingleReservation,
 } from "../apiAdmin";
 import EditPricingModal from "../JannatTools/EditPricingModal";
@@ -181,9 +181,11 @@ const EditReservationMain = ({
 	const getAllHotels = useCallback(async () => {
 		setIsLoading(true);
 		try {
-			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.filter((h) => h.activateHotel === true);
+				const activeHotels = data.hotels.filter(
+					(h) => h.activateHotel === true
+				);
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);

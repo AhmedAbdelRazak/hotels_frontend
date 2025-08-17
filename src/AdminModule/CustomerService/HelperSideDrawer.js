@@ -14,7 +14,7 @@ import { EditOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "./utils";
 import { isAuthenticated } from "../../auth";
-import { gettingHotelDetailsForAdmin, updateSupportCase } from "../apiAdmin";
+import { gettingHotelDetailsForAdminAll, updateSupportCase } from "../apiAdmin";
 import socket from "../../socket";
 import EditPricingModal from "./EditPricingModal";
 
@@ -94,9 +94,9 @@ const HelperSideDrawer = ({
 
 	const getAllHotels = useCallback(async () => {
 		try {
-			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
-				const sortedHotels = data.sort((a, b) =>
+				const sortedHotels = data.hotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
 				setAllHotels(sortedHotels);

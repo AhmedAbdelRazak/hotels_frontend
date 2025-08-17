@@ -6,7 +6,7 @@ import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
 import {
 	getAllReservationForAdmin,
-	gettingHotelDetailsForAdmin,
+	gettingHotelDetailsForAdminAll,
 	readUserId,
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
@@ -176,9 +176,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	 */
 	const adminAllHotelDetails = useCallback(() => {
 		if (!user?._id || !token) return;
-		gettingHotelDetailsForAdmin(user._id, token)
+		gettingHotelDetailsForAdminAll(user._id, token)
 			.then((data) => {
-				const hotels = extractHotels(data);
+				const hotels = extractHotels(data.hotels);
 				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
 					(a?.hotelName || "").localeCompare(b?.hotelName || "", undefined, {
 						sensitivity: "base",

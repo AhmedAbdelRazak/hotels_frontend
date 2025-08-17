@@ -105,6 +105,18 @@ export const gettingHotelDetailsForAdmin = (userId, token, query = "") =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
+export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/all/hotel-details/admin/${userId}${
+			query ? "?" + query : ""
+		}`,
+		{
+			headers: { Authorization: `Bearer ${token}` },
+		}
+	)
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
+
 export const cloudinaryUpload1 = (userId, token, image) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/admin/uploadimages/${userId}`,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { message, DatePicker, Select, Button, Collapse } from "antd";
 import { isAuthenticated } from "../../auth";
-import { gettingHotelDetailsForAdmin } from "../apiAdmin";
+import { gettingHotelDetailsForAdminAll } from "../apiAdmin";
 import dayjs from "dayjs";
 import EquivalentHotels from "./EquivalentHotels";
 
@@ -28,12 +28,12 @@ const ReservationCalculator = () => {
 	// Fetch all hotels
 	const getAllHotels = useCallback(async () => {
 		try {
-			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
 				// Only keep hotels that are activateHotel === true
-				const activeHotels = data.filter(
-					(hotel) => hotel.activateHotel === true
-				);
+				const activeHotels =
+					data.hotels &&
+					data.hotels.filter((hotel) => hotel.activateHotel === true);
 				// Sort them by hotelName
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)

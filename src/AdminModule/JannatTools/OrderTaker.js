@@ -17,7 +17,7 @@ import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
 import {
 	createNewReservationClient,
-	gettingHotelDetailsForAdmin,
+	gettingHotelDetailsForAdminAll,
 } from "../apiAdmin";
 import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
@@ -88,10 +88,11 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
 		try {
-			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
 				// Only keep active hotels
-				const activeHotels = data.filter((h) => h.activateHotel === true);
+				const activeHotels =
+					data && data.hotels.filter((h) => h.activateHotel === true);
 				// Sort by name
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
@@ -666,28 +667,44 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 	// Submit form
 	const handleSubmit = async () => {
-		if (
-			!name ||
-			!email ||
-			!phone ||
-			!checkInDate ||
-			!checkOutDate ||
-			!selectedHotel ||
-			!selectedRooms.every(
-				(room) => room.roomType && room.displayName && room.count > 0
-			)
-		) {
-			message.error("Please fill in all required fields.");
+		// --- Basic field checks ---
+		if (!selectedHotel?._id) {
+			message.error("Please select a hotel.");
+			return;
+		}
+		if (!name || !email || !phone) {
+			message.error("Please fill in guest name, email, and phone.");
+			return;
+		}
+		if (!checkInDate || !checkOutDate) {
+			message.error("Please pick both check‑in and check‑out dates.");
+			return;
+		}
+		if (!dayjs(checkOutDate).isAfter(dayjs(checkInDate), "day")) {
+			message.error("Check‑out must be after check‑in.");
 			return;
 		}
 
-		// Ensure each selected room has some pricing
-		if (!selectedRooms.every((r) => r.pricingByDay.length > 0)) {
+		// --- Rooms validation ---
+		if (
+			!selectedRooms.length ||
+			!selectedRooms.every(
+				(r) => r.roomType && r.displayName && Number(r.count) > 0
+			)
+		) {
+			message.error("Please select at least one valid room type and count.");
+			return;
+		}
+		if (
+			!selectedRooms.every(
+				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0
+			)
+		) {
 			message.error("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
 
-		// Validate deposit input
+		// --- Deposit option validation ---
 		if (advancePaymentOption === "percentage") {
 			const p = safeParseFloat(advancePaymentPercentage, -1);
 			if (p < 1 || p > 100) {
@@ -705,46 +722,40 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			}
 		}
 
-		// Transform into the final format
+		// --- Transform rooms for API ---
 		const transformPickedRooms = (rooms) => {
 			return rooms.flatMap((room) =>
 				Array.from({ length: room.count }, () => {
-					// Summarize day‐by‐day:
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
-						// The final nightly cost user sees
-						price: day.totalPriceWithCommission,
+						price: safeParseFloat(day.totalPriceWithCommission), // nightly final
 						rootPrice: safeParseFloat(day.rootPrice),
 						commissionRate: safeParseFloat(day.commissionRate),
 						totalPriceWithCommission: safeParseFloat(
 							day.totalPriceWithCommission
 						),
-						/**
-						 * Key fix: capture the final "no‐commission" portion
-						 * that your code truly wants:
-						 */
+						// preserve the “no‑commission” portion your code expects
 						totalPriceWithoutCommission: safeParseFloat(
 							day.totalPriceWithoutCommission
 						),
 					}));
 
-					// Average out the day‐by‐day “price with comm”
-					const avg =
-						pricingDetails.reduce(
-							(acc, d) => acc + d.totalPriceWithCommission,
-							0
-						) / pricingDetails.length;
+					const totalWithComm = pricingDetails.reduce(
+						(acc, d) => acc + d.totalPriceWithCommission,
+						0
+					);
+					const avgNight =
+						pricingDetails.length > 0
+							? totalWithComm / pricingDetails.length
+							: 0;
 
 					return {
 						room_type: room.roomType.trim(),
 						displayName: room.displayName.trim(),
-						chosenPrice: avg.toFixed(2),
-						count: 1, // because we flattened by “count”
+						chosenPrice: avgNight.toFixed(2),
+						count: 1, // flattened entries
 						pricingByDay: pricingDetails,
-						totalPriceWithCommission: pricingDetails.reduce(
-							(acc, d) => acc + d.totalPriceWithCommission,
-							0
-						),
+						totalPriceWithCommission: totalWithComm,
 						hotelShouldGet: pricingDetails.reduce(
 							(acc, d) => acc + d.rootPrice,
 							0
@@ -756,11 +767,11 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 		const pickedRoomsType = transformPickedRooms(selectedRooms);
 
-		// The final reservation data
+		// --- Compose request payload ---
 		const reservationData = {
 			userId: user ? user._id : null,
 			hotelId: selectedHotel._id,
-			belongsTo: selectedHotel.belongsTo._id || "",
+			belongsTo: selectedHotel.belongsTo?._id || "",
 			hotel_name: selectedHotel.hotelName || "",
 			customerDetails: {
 				name,
@@ -772,19 +783,19 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				postalCode: "00000",
 				reservedBy: agentName,
 			},
-			total_rooms: selectedRooms.reduce((t, r) => t + r.count, 0),
-			total_guests: adults + children,
+			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),
+			total_guests: Number(adults || 0) + Number(children || 0),
 			adults,
 			children,
-			checkin_date: checkInDate.format("YYYY-MM-DD"),
-			checkout_date: checkOutDate.format("YYYY-MM-DD"),
+			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
+			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
 			days_of_residence: numberOfNights,
 			booking_source: "Jannat Employee",
 			pickedRoomsType,
-			total_amount: totalAmount, // Grand total
+			total_amount: Number(totalAmount.toFixed(2)), // Grand total
 			payment: "Not Paid",
 			paid_amount: 0,
-			commission: totalCommission,
+			commission: Number(totalCommission.toFixed(2)),
 			commissionPaid: false,
 			paymentDetails: {
 				cardNumber: "",
@@ -793,33 +804,39 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				cardHolderName: "",
 			},
 			sentFrom: "employee",
-			/**
-			 * The deposit object:
-			 * By default => commission + first-night rootPrice,
-			 * or if user picks percentage or SAR => we store that accordingly
-			 */
 			advancePayment: {
 				paymentPercentage:
 					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
-				finalAdvancePayment: finalDeposit.toFixed(2),
+				finalAdvancePayment: Number(finalDeposit.toFixed(2)).toFixed(2),
 			},
 		};
 
+		// --- Submit ---
 		try {
 			message.loading({ content: "Submitting...", key: "submit" });
 			const response = await createNewReservationClient(reservationData);
+
 			if (response?.message === "Reservation created successfully") {
+				// Keep these so "View Details" button can still render
+				setReservationCreated(true);
+				setSelectedReservation(response.data);
+
+				// Reset form to initial state for a fresh entry
+				clearAll();
+				// If you ALSO want to reset the selected hotel, uncomment the next line:
+				// setSelectedHotel(null);
+
 				message.success({
 					content: "Reservation created successfully!",
 					key: "submit",
 					duration: 2,
 				});
-				setReservationCreated(true);
-				setSelectedReservation(response.data);
+
+				// Keep your existing UX
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error({
-					content: response.message || "Error creating reservation",
+					content: response?.message || "Error creating reservation",
 					key: "submit",
 					duration: 2,
 				});
