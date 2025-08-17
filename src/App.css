@@ -16,6 +16,17 @@ body {
 	background-color: #f7f8fc;
 }
 
+.ant-modal-content {
+	z-index: 1000 !important;
+}
+
+.sc-gfHChp,
+.ccPAiA,
+.sc-hcewNo,
+.fVCsqq {
+	z-index: 999 !important;
+}
+
 :root {
 	/* Static Pages Colors */
 	--menu-color: #8d4109;

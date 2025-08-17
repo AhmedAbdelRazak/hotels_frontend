@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
-import { Spin, Modal, Select } from "antd";
+import { Spin, Modal, Select, Checkbox } from "antd";
 import moment from "moment";
 import { EditOutlined } from "@ant-design/icons";
 import {
@@ -13,7 +13,8 @@ import {
 } from "../apiAdmin";
 import { toast } from "react-toastify";
 import { EditReservationMain } from "./EditWholeReservation/EditReservationMain";
-import ReceiptPDF from "../NewReservation/ReceiptPDF"; // Adjust the path as needed
+import ReceiptPDF from "../NewReservation/ReceiptPDF";
+import ReceiptPDFB2B from "../NewReservation/ReceiptPDFB2B";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
@@ -80,19 +81,19 @@ const ContentSection = styled.div`
 	}
 `;
 
-// ... other styled components
-
 const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const pdfRef = useRef(null);
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
-	const [isModalVisible3, setIsModalVisible3] = useState(false);
+	const [isModalVisible3, setIsModalVisible3] = useState(false); // Receipt (ReceiptPDF)
+	const [isModalVisible5, setIsModalVisible5] = useState(false); // Ops Receipt (ReceiptPDFB2B)
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
+	const [sendEmail, setSendEmail] = useState(true);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -106,7 +107,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
 			return total + room.chosenPrice * room.count;
-		}, 0); // Start with 0 for the total
+		}, 0);
 	};
 
 	const calculateDaysBetweenDates = (startDate, endDate) => {
@@ -120,29 +121,22 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		return days > 0 ? days : 1; // Ensures a minimum of 1 day
 	};
 
-	// Calculate the number of days of residency
 	// eslint-disable-next-line
 	const daysOfResidence = calculateDaysBetweenDates(
 		reservation.checkin_date,
 		reservation.checkout_date
 	);
 
-	// Revised calculateReservationPeriod function
+	// Same as in MoreDetails
 	function calculateReservationPeriod(checkin, checkout, language) {
-		// Parse the checkin and checkout dates to ignore the time component
 		const checkinDate = moment(checkin).startOf("day");
 		const checkoutDate = moment(checkout).startOf("day");
-
-		// Calculate the duration in days
 		const days = checkoutDate.diff(checkinDate, "days") + 1;
-		// Calculate the nights as one less than the total days
 		const nights = days - 1;
 
-		// Define the text for "days" and "nights" based on the selected language
 		const daysText = language === "Arabic" ? "أيام" : "days";
 		const nightsText = language === "Arabic" ? "ليال" : "nights";
 
-		// Return the formatted string showing both days and nights
 		return `${days} ${daysText} / ${nights} ${nightsText}`;
 	}
 
@@ -156,9 +150,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			const updateData = {
 				reservation_status: selectedStatus,
 				hotelName: hotelDetails.hotelName,
+				sendEmail, // ✅ mirror MoreDetails
 			};
 
-			// If the selected status is 'early_checked_out', also update the checkout_date and related fields
 			if (selectedStatus === "early_checked_out") {
 				const newCheckoutDate = new Date();
 				const startDate = new Date(reservation.checkin_date);
@@ -168,11 +162,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.checkout_date = newCheckoutDate.toISOString();
 				updateData.days_of_residence = daysOfResidence;
 
-				// Calculate the new total amount
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
-					(total, room) => {
-						return total + room.count * parseFloat(room.chosenPrice);
-					},
+					(total, room) => total + room.count * parseFloat(room.chosenPrice),
 					0
 				);
 
@@ -186,8 +177,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				} else {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-
-					// Update local state or re-fetch reservation data if necessary
 					setReservation(response.reservation);
 				}
 			});
@@ -203,7 +192,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		if (window.confirm(confirmationMessage)) {
 			const updateData = { reservation_status: selectedStatus };
 
-			// If the selected status is 'early_checked_out', also update the checkout_date and related fields
 			if (selectedStatus === "early_checked_out") {
 				const newCheckoutDate = new Date();
 				const startDate = new Date(reservation.checkin_date);
@@ -213,7 +201,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.checkout_date = newCheckoutDate.toISOString();
 				updateData.days_of_residence = daysOfResidence;
 
-				// Calculate the new total amount
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
 					(total, room) => {
 						return total + room.count * parseFloat(room.chosenPrice);
@@ -231,8 +218,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				} else {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-
-					// Update local state or re-fetch reservation data if necessary
 					setReservation(response);
 				}
 			});
@@ -276,7 +261,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			if (data3 && data3.error) {
 				console.log(data3.error);
 			} else {
-				// Filter the rooms to only include those whose _id is in reservation.roomId
 				const filteredRooms = data3.filter((room) =>
 					reservation.roomId.includes(room._id)
 				);
@@ -296,7 +280,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
 
-			// Let's create a PDF and add our image into it
 			const pdf = new jsPDF({
 				orientation: "p",
 				unit: "pt",
@@ -306,17 +289,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			const pdfWidth = pdf.internal.pageSize.getWidth();
 			const pdfHeight = pdf.internal.pageSize.getHeight();
 
-			// Calculate the number of pages.
 			const imgHeight = (canvas.height * pdfWidth) / canvas.width;
 			let heightLeft = imgHeight;
 
 			let position = 0;
 
-			// Add image to the first page
 			pdf.addImage(imgData, "PNG", 0, position, pdfWidth, imgHeight);
 			heightLeft -= pdfHeight;
 
-			// Add new pages if the content overflows
 			while (heightLeft >= 0) {
 				position = heightLeft - imgHeight;
 				pdf.addPage();
@@ -343,7 +323,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			}
 		});
 
-		// Avoid division by zero
 		return totalDays > 0 ? totalRootPrice / totalDays : 0;
 	};
 
@@ -353,11 +332,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		return pickedRoomsType.reduce((total, room) => {
 			if (room.pricingByDay && room.pricingByDay.length > 0) {
 				const roomTotal = room.pricingByDay.reduce((dayTotal, day) => {
-					return dayTotal + parseFloat(day.rootPrice); // Sum rootPrice for all days
+					return dayTotal + parseFloat(day.rootPrice);
 				}, 0);
-				return total + roomTotal * room.count; // Multiply by roomCount
+				return total + roomTotal * room.count;
 			}
-			return total; // If no pricingByDay, just return total
+			return total;
 		}, 0);
 	};
 
@@ -373,6 +352,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				</div>
 			) : (
 				<div className='otherContentWrapper'>
+					{/* EDIT RESERVATION MODAL */}
 					<Modal
 						title={
 							chosenLanguage === "Arabic" ? "تعديل الحجز" : "Edit Reservation"
@@ -381,9 +361,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						onCancel={() => setIsModalVisible2(false)}
 						onOk={handleUpdateReservationStatus2}
 						footer={null}
-						width='84.5%' // Set the width to 80%
+						width='84.5%'
 						style={{
-							// If Arabic, align to the left, else align to the right
 							position: "absolute",
 							left: chosenLanguage === "Arabic" ? "1%" : "auto",
 							right: chosenLanguage === "Arabic" ? "auto" : "5%",
@@ -400,6 +379,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						)}
 					</Modal>
 
+					{/* UPDATE STATUS MODAL (matches MoreDetails incl. checkbox) */}
 					<Modal
 						title={
 							chosenLanguage === "Arabic"
@@ -415,9 +395,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					>
 						<Select
 							defaultValue={reservation && reservation.reservation_status}
-							style={{
-								width: "100%",
-							}}
+							style={{ width: "100%" }}
 							onChange={(value) => setSelectedStatus(value)}
 						>
 							<Select.Option value=''>Please Select</Select.Option>
@@ -438,8 +416,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								</Select.Option>
 							) : null}
 						</Select>
+
+						{/* Send email checkbox (new, mirrors MoreDetails) */}
+						<Checkbox
+							checked={sendEmail}
+							onChange={(e) => setSendEmail(e.target.checked)}
+							style={{ marginTop: "16px" }}
+						>
+							Send Email Notification to the Customer
+						</Checkbox>
 					</Modal>
 
+					{/* RELOCATE MODAL */}
 					<Modal
 						title={
 							chosenLanguage === "Arabic"
@@ -457,18 +445,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							defaultValue={
 								reservation && hotelDetails && hotelDetails.hotelName
 							}
-							style={{
-								width: "100%",
-								textTransform: "capitalize",
-							}}
+							style={{ width: "100%", textTransform: "capitalize" }}
 							onChange={(value) => setSelectedHotelDetails(JSON.parse(value))}
 						>
 							<Select.Option value=''>Please Select</Select.Option>
 							{relocationArray1.map((hotel) => (
 								<Select.Option
-									style={{
-										textTransform: "capitalize",
-									}}
+									style={{ textTransform: "capitalize" }}
 									key={hotel._id}
 									value={JSON.stringify(hotel)}
 								>
@@ -478,6 +461,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						</Select>
 					</Modal>
 
+					{/* PAYMENT LINK MODAL */}
 					<Modal
 						open={linkModalVisible}
 						onCancel={() => setLinkModalVisible(false)}
@@ -493,8 +477,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								marginTop: "50px",
 								marginBottom: "50px",
 								fontSize: "1rem",
-								cursor: "pointer", // Change the cursor to indicate clickable area
-								textAlign: "center", // Center align if desired
+								cursor: "pointer",
+								textAlign: "center",
 								fontWeight: "bold",
 								textDecoration: "underline",
 								color: "darkblue",
@@ -507,6 +491,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						</div>
 					</Modal>
 
+					{/* LANGUAGE TOGGLE */}
 					<div
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
@@ -526,6 +511,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					</div>
 
 					<div className='container-wrapper'>
+						{/* EDIT ACTION ENTRY */}
 						<h5
 							className='text-center mx-auto'
 							style={{
@@ -542,6 +528,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							{chosenLanguage === "Arabic" ? "تعديل الحجز" : "Edit Reservation"}
 						</h5>
 
+						{/* RELOCATE ENTRY (same condition you already had) */}
 						{relocationArray1 &&
 							relocationArray1.some(
 								(hotel) =>
@@ -567,17 +554,17 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								</h5>
 							)}
 
+						{/* RECEIPT (ReceiptPDF) */}
 						<Modal
 							title='Receipt Download'
 							open={isModalVisible3}
 							onCancel={() => setIsModalVisible3(false)}
 							onOk={() => setIsModalVisible3(false)}
 							footer={null}
-							width='84.5%' // Set the width to 80%
+							width='84.5%'
 							style={{
-								// If Arabic, align to the left, else align to the right
 								position: "absolute",
-								left: chosenLanguage === "Arabic" ? "1%" : "auto",
+								left: chosenLanguage === "Arabic" ? "15%" : "auto", // match MoreDetails
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}
@@ -605,6 +592,45 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							)}
 						</Modal>
 
+						{/* OPS RECEIPT (ReceiptPDFB2B) — NEW to match MoreDetails */}
+						<Modal
+							title='Ops Receipt'
+							open={isModalVisible5}
+							onCancel={() => setIsModalVisible5(false)}
+							onOk={() => setIsModalVisible5(false)}
+							footer={null}
+							width='84.5%'
+							style={{
+								position: "absolute",
+								left: chosenLanguage === "Arabic" ? "15%" : "auto", // match MoreDetails
+								right: chosenLanguage === "Arabic" ? "auto" : "5%",
+								top: "1%",
+							}}
+						>
+							<div className='text-center my-3 '>
+								<button
+									className='btn btn-info w-50'
+									style={{ fontWeight: "bold", fontSize: "1.1rem" }}
+									onClick={downloadPDF}
+								>
+									Print To PDF
+								</button>
+							</div>
+
+							{reservation && (
+								<div dir='ltr'>
+									<ReceiptPDFB2B
+										ref={pdfRef}
+										reservation={reservation}
+										hotelDetails={hotelDetails}
+										calculateReservationPeriod={calculateReservationPeriod}
+										getTotalAmountPerDay={getTotalAmountPerDay}
+									/>
+								</div>
+							)}
+						</Modal>
+
+						{/* HEADER */}
 						<Header>
 							<Section>
 								{/* Left side of the header */}
@@ -643,9 +669,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</button>
 											<button
 												className='mx-2 my-2'
-												onClick={() => setIsModalVisible3(true)}
+												onClick={() => setIsModalVisible5(true)}
 											>
-												كشف حساب
+												Operation Order
 											</button>
 											{linkGenerate ? (
 												<>
@@ -689,6 +715,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														border: "1px darkred solid",
 													}}
 													onClick={() => {
+														// Keeping your existing pattern in ReservationDetail
 														setLinkGenerated(
 															`${process.env.REACT_APP_MAIN_URL_JANNAT}/${
 																reservation._id
@@ -716,9 +743,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</button>
 											<button
 												className='mx-2'
-												onClick={() => setIsModalVisible3(true)}
+												onClick={() => setIsModalVisible5(true)}
 											>
-												Account Statement
+												Operation Order
 											</button>
 											{linkGenerate ? (
 												<>
@@ -785,7 +812,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									<div
 										className='col-md-3 mx-auto text-center'
 										style={{
-											// border: "1px solid black",
 											textAlign: chosenLanguage === "Arabic" ? "center" : "",
 											fontSize: "1.1rem",
 											fontWeight: "bold",
@@ -870,8 +896,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								</div>
 							</Section>
 						</Header>
+
 						<HorizontalLine />
+
 						<Content>
+							{/* LEFT COLUMN */}
 							<ContentSection>
 								<div
 									className='row'
@@ -978,16 +1007,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												"N/A"}
 										</div>
 									</div>
-									{/* <div className='col-md-4 mx-auto text-center mx-auto my-2'>
-										{chosenLanguage === "Arabic" ? "العنوان" : "Address"}
-										<div className='mx-2'>
-											{(reservation &&
-												reservation.customer_details &&
-												reservation.customer_details.nationality) ||
-												"N/A"}
-										</div>
-									</div> */}
 								</div>
+
 								{reservation &&
 								reservation.customer_details &&
 								reservation.customer_details.carLicensePlate ? (
@@ -1039,6 +1060,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 								)}
 							</ContentSection>
+
+							{/* MIDDLE COLUMN */}
 							<ContentSection>
 								<div
 									className='row mt-5'
@@ -1143,6 +1166,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									) : null}
 								</div>
 							</ContentSection>
+
+							{/* RIGHT COLUMN */}
 							<ContentSection>
 								<div
 									className='row'
@@ -1155,7 +1180,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									{reservation &&
 										reservation.pickedRoomsType.map((room, index) => (
 											<React.Fragment key={index}>
-												{/* You can add a date here if available */}
 												<div className='col-md-4 mt-2'>{/* Date */}</div>
 												<div className='col-md-4 mt-2'>{room.room_type}</div>
 												<div className='col-md-4 mt-2'>
@@ -1173,13 +1197,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												: "Total Amount"}
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{/* Calculation of total amount */}
-											{reservation &&
-												reservation.total_amount.toLocaleString()}{" "}
+											{reservation && reservation.total_amount.toLocaleString()}{" "}
 											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
 									</div>
 								</div>
+
 								<div className='mt-5'>
 									<div className='row' style={{ fontWeight: "bold" }}>
 										<div className='col-md-5 mx-auto text-center my-2'>
@@ -1260,6 +1283,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</div>
 										) : null}
 									</div>
+
 									<div className='my-3'>
 										<div className='row'>
 											<div className='col-md-5 mx-auto'>
@@ -1301,6 +1325,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</div>
 										</div>
 									</div>
+
 									<div className='my-3'>
 										<div className='row my-3'>
 											<div className='col-md-5 mx-auto'>
