@@ -1,3 +1,5 @@
+import axios from "axios";
+
 export const hotelAccount = (userId, token, accountId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
@@ -116,6 +118,21 @@ export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
 	)
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
+
+export const sendReservationConfirmationSMS = (reservationId, opts = {}) => {
+	const params = { notifyAdmins: opts.notifyAdmins ? "true" : "false" };
+	return axios
+		.post(
+			`${process.env.REACT_APP_API_URL}/reservations/${reservationId}/wa/confirmation`,
+			null,
+			{ params }
+		)
+		.then((res) => res.data)
+		.catch((err) => {
+			if (err?.response?.data) return err.response.data;
+			return { ok: false, message: "Network error" };
+		});
+};
 
 export const cloudinaryUpload1 = (userId, token, image) => {
 	return fetch(

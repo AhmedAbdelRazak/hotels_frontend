@@ -20,6 +20,7 @@ import { relocationArray1 } from "../../HotelModule/ReservationsFolder/Reservati
 import PaymentTrigger from "./PaymentTrigger";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
+import { sendReservationConfirmationSMS } from "../apiAdmin";
 
 const Wrapper = styled.div`
 	min-height: 750px;
@@ -966,7 +967,39 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 											>
 												Email
 											</button>
-											<button className='col-md-5'>SMS</button>
+											<button
+												className='col-md-5'
+												disabled={loading}
+												onClick={async () => {
+													try {
+														setLoading(true);
+														// You can send reservation._id OR reservation.confirmation_number
+														const resp = await sendReservationConfirmationSMS(
+															reservation._id /* or reservation.confirmation_number */,
+															{
+																notifyAdmins: true, // set true if you also want to re-notify owner/platform
+															}
+														);
+
+														if (resp?.ok) {
+															toast.success(
+																"WhatsApp confirmation queued successfully."
+															);
+														} else {
+															toast.error(
+																resp?.message ||
+																	"Failed to queue WhatsApp message."
+															);
+														}
+													} catch (e) {
+														toast.error("Failed to queue WhatsApp message.");
+													} finally {
+														setLoading(false);
+													}
+												}}
+											>
+												SMS
+											</button>
 										</div>
 									</div>
 								</div>
