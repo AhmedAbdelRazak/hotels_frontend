@@ -11,7 +11,7 @@
 		"@fullcalendar/list": "^6.1.13",
 		"@fullcalendar/react": "^6.1.13",
 		"@fullcalendar/timegrid": "^6.1.13",
-		"@paypal/react-paypal-js": "^8.2.0",
+		"@paypal/react-paypal-js": "^8.8.3",
 		"@react-google-maps/api": "^2.19.3",
 		"@react-pdf/renderer": "^3.1.14",
 		"@square/web-sdk": "^2.0.1",

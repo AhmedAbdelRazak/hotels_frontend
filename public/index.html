@@ -9,7 +9,7 @@
 		<meta name="theme-color" content="#000000" />
 		<meta
 			name="description"
-			content="The number 1 Property Management System that will facilitate your hotel reservations"
+			content="Best offers for Umrah and Haj hotels worldwide. At Jannat Booking, we have the best & most affordable rates in the market. Book your trip now for next ramadan to do Umrah and enjoy the islamic rituals"
 		/>
 		<link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
 		<link
@@ -31,6 +31,7 @@
 			type="text/css"
 			href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.6.0/slick-theme.min.css"
 		/>
+
 		<link
 			rel="stylesheet"
 			href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
@@ -51,11 +52,79 @@
 
 		<link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
-		<title>Hotel Property Management System (PMS)</title>
+		<!-- Google tag (gtag.js) -->
+		<script
+			async
+			src="https://www.googletagmanager.com/gtag/js?id=G-JLRSK1M1N8"
+		></script>
+		<script>
+			window.dataLayer = window.dataLayer || [];
+			function gtag() {
+				dataLayer.push(arguments);
+			}
+			gtag("js", new Date());
+
+			gtag("config", "G-JLRSK1M1N8");
+		</script>
+
+		<script>
+			!(function (f, b, e, v, n, t, s) {
+				if (f.fbq) return;
+				n = f.fbq = function () {
+					n.callMethod
+						? n.callMethod.apply(n, arguments)
+						: n.queue.push(arguments);
+				};
+				if (!f._fbq) f._fbq = n;
+				n.push = n;
+				n.loaded = !0;
+				n.version = "2.0";
+				n.queue = [];
+				t = b.createElement(e);
+				t.async = !0;
+				t.src = v;
+				s = b.getElementsByTagName(e)[0];
+				s.parentNode.insertBefore(t, s);
+			})(
+				window,
+				document,
+				"script",
+				"https://connect.facebook.net/en_US/fbevents.js"
+			);
+			fbq("init", "2176581586072732");
+			fbq("track", "PageView");
+		</script>
+		<noscript>
+			<img
+				height="1"
+				width="1"
+				src="https://www.facebook.com/tr?id=2176581586072732&ev=PageView&noscript=1"
+			/>
+		</noscript>
+
+		<script>
+			(function (h, o, t, j, a, r) {
+				h.hj =
+					h.hj ||
+					function () {
+						(h.hj.q = h.hj.q || []).push(arguments);
+					};
+				h._hjSettings = { hjid: 5281308, hjsv: 6 };
+				a = o.getElementsByTagName("head")[0];
+				r = o.createElement("script");
+				r.async = 1;
+				r.src = t + h._hjSettings.hjid + j + h._hjSettings.hjsv;
+				a.appendChild(r);
+			})(window, document, "https://static.hotjar.com/c/hotjar-", ".js?sv=");
+		</script>
+
+		<!-- End Facebook Pixel Code -->
+		<!-- Hotjar Tracking Code for https://jannatbooking.com -->
+
+		<title>Jannat Booking | Enjoy The Best Rates For Mecca Hotels</title>
 	</head>
 	<body>
 		<noscript>You need to enable JavaScript to run this app.</noscript>
 		<div id="root"></div>
-		<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 	</body>
 </html>
