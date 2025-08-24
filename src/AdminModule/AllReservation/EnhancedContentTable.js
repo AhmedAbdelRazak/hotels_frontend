@@ -28,28 +28,85 @@ const EnhancedContentTable = ({
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
-	// (Currently we artificially label #2944008828 as captured as well)
+	// (Keeps the same manual override you had)
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
+
+	/**
+	 * PayPal-aware payment summary (keeps your existing labels)
+	 * Returns { status, hint, isCaptured, paidOffline }
+	 */
+	const summarizePayment = (reservation) => {
+		const pd = reservation?.paypal_details || {};
+		const pmt = (reservation?.payment || "").toLowerCase();
+		const legacyCaptured = !!reservation?.payment_details?.captured;
+		const payOffline =
+			Number(reservation?.payment_details?.onsite_paid_amount || 0) > 0 ||
+			pmt === "paid offline";
+
+		// PayPal ledger signals
+		const capTotal = Number(pd?.captured_total_usd || 0);
+		const limitUsd = Number(
+			pd?.bounds && typeof pd.bounds.limit_usd === "number"
+				? pd.bounds.limit_usd
+				: 0
+		);
+		const pendingUsd = Number(pd?.pending_total_usd || 0);
+		const initialCompleted =
+			(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
+		const anyMitCompleted =
+			Array.isArray(pd?.mit) &&
+			pd.mit.some(
+				(c) => (c?.capture_status || "").toUpperCase() === "COMPLETED"
+			);
+
+		// Unify captured with PayPal + legacy
+		const isCaptured =
+			legacyCaptured ||
+			capTotal > 0 ||
+			initialCompleted ||
+			anyMitCompleted ||
+			pmt === "paid online";
+
+		const isNotPaid = pmt === "not paid" && !isCaptured && !payOffline;
+
+		let status = "Not Captured";
+		if (isCaptured) status = "Captured";
+		else if (payOffline) status = "Paid Offline";
+		else if (isNotPaid) status = "Not Paid";
+
+		// Build a helpful hint for tooltip (non-invasive)
+		let hint = "";
+		const pieces = [];
+		if (capTotal > 0) pieces.push(`captured $${capTotal.toFixed(2)}`);
+		if (limitUsd > 0) pieces.push(`limit $${limitUsd.toFixed(2)}`);
+		if (pendingUsd > 0) pieces.push(`pending $${pendingUsd.toFixed(2)}`);
+		if (pieces.length) hint = `PayPal: ${pieces.join(" / ")}`;
+
+		return { status, hint, isCaptured, paidOffline: payOffline };
+	};
 
 	const formattedReservations = useMemo(() => {
 		return data.map((reservation) => {
-			const {
-				customer_details = {},
-				hotelId = {},
-				payment_details = {},
-			} = reservation;
+			const { customer_details = {}, hotelId = {} } = reservation;
 
+			// Keep your manual override
+			const manualOverrideCaptured = capturedConfirmationNumbers.includes(
+				reservation.confirmation_number
+			);
+
+			const paypalAware = summarizePayment(reservation);
+
+			// Final captured decision honors both your manual override + PayPal-aware logic
 			const isCaptured =
-				payment_details.captured ||
-				capturedConfirmationNumbers.includes(reservation.confirmation_number);
+				manualOverrideCaptured || paypalAware.isCaptured || false;
 
-			// Payment status logic with "Paid Offline" as last sanity check before "Not Paid"
+			// Payment status with your same verbiage
 			let computedPaymentStatus;
 			if (isCaptured) {
 				computedPaymentStatus = "Captured";
-			} else if (payment_details?.onsite_paid_amount > 0) {
+			} else if (paypalAware.paidOffline) {
 				computedPaymentStatus = "Paid Offline";
-			} else if (reservation.payment === "not paid") {
+			} else if ((reservation.payment || "").toLowerCase() === "not paid") {
 				computedPaymentStatus = "Not Paid";
 			} else {
 				computedPaymentStatus = "Not Captured";
@@ -62,11 +119,13 @@ const EnhancedContentTable = ({
 				hotel_name: hotelId.hotelName || "Unknown Hotel",
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
+				// For tooltip on the payment cell
+				payment_status_hint: paypalAware.hint || "",
 			};
 		});
 	}, [data, capturedConfirmationNumbers]);
 
-	// ------------------ Sorting logic (unchanged) ------------------
+	// ------------------ Sorting logic ------------------
 	const [sortConfig, setSortConfig] = useState({
 		sortField: null,
 		direction: null,
@@ -77,27 +136,44 @@ const EnhancedContentTable = ({
 			return formattedReservations;
 		}
 		const { sortField, direction } = sortConfig;
-		const sorted = [...formattedReservations].sort((a, b) => {
-			let valA = a[sortField];
-			let valB = b[sortField];
 
-			// Handle date or numeric fields
-			if (sortField === "checkin_date" || sortField === "checkout_date") {
-				valA = new Date(valA).getTime();
-				valB = new Date(valB).getTime();
-			} else if (sortField === "total_amount") {
+		const toKey = (v) => {
+			if (v == null) return "";
+			return v;
+		};
+
+		const sorted = [...formattedReservations].sort((a, b) => {
+			let valA = toKey(a[sortField]);
+			let valB = toKey(b[sortField]);
+
+			// Dates
+			if (
+				sortField === "checkin_date" ||
+				sortField === "checkout_date" ||
+				sortField === "createdAt"
+			) {
+				valA = valA ? new Date(valA).getTime() : 0;
+				valB = valB ? new Date(valB).getTime() : 0;
+				return direction === "asc" ? valA - valB : valB - valA;
+			}
+
+			// Numbers
+			if (sortField === "total_amount") {
 				valA = Number(valA) || 0;
 				valB = Number(valB) || 0;
-			} else if (sortField === "confirmation_number") {
-				return direction === "asc"
-					? valA.localeCompare(valB)
-					: valB.localeCompare(valA);
-			} else if (sortField === "createdAt") {
-				valA = new Date(valA).getTime();
-				valB = new Date(valB).getTime();
+				return direction === "asc" ? valA - valB : valB - valA;
 			}
-			return direction === "asc" ? valA - valB : valB - valA;
+
+			// Strings (confirmation_number, names, statuses, etc.)
+			const aStr = String(valA);
+			const bStr = String(valB);
+			const cmp = aStr.localeCompare(bStr, undefined, {
+				numeric: true,
+				sensitivity: "base",
+			});
+			return direction === "asc" ? cmp : -cmp;
 		});
+
 		return sorted;
 	}, [formattedReservations, sortConfig]);
 
@@ -164,17 +240,6 @@ const EnhancedContentTable = ({
 		}
 	};
 
-	// ------------------ Search Box Submit ------------------
-	const onSearchSubmit = () => {
-		setSearchTerm(searchBoxValue);
-		handleSearch();
-	};
-	const onSearchKeyPress = (e) => {
-		if (e.key === "Enter") {
-			onSearchSubmit();
-		}
-	};
-
 	// ------------------ Helpers for dynamic background color ------------------
 	// Payment Status with background + text color
 	const getPaymentStatusStyles = (status = "") => {
@@ -191,7 +256,7 @@ const EnhancedContentTable = ({
 		if (s === "not captured") {
 			return { backgroundColor: "var(--background-accent-yellow)" };
 		}
-		// Default: Not Paid or anything else => background-light
+		// Default: Not Paid or anything else
 		return { backgroundColor: "var(--background-light)" };
 	};
 
@@ -222,7 +287,6 @@ const EnhancedContentTable = ({
 				color: "var(--button-font-color)",
 			};
 		}
-		// Otherwise, no override
 		return {};
 	};
 
@@ -307,9 +371,20 @@ const EnhancedContentTable = ({
 						style={{ width: 500, marginRight: 8 }}
 						value={searchBoxValue}
 						onChange={(e) => setSearchBoxValue(e.target.value)}
-						onKeyDown={onSearchKeyPress} // Press Enter to trigger search
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								setSearchTerm(searchBoxValue);
+								handleSearch();
+							}
+						}}
 					/>
-					<Button type='primary' onClick={onSearchSubmit}>
+					<Button
+						type='primary'
+						onClick={() => {
+							setSearchTerm(searchBoxValue);
+							handleSearch();
+						}}
+					>
 						Search
 					</Button>
 				</div>
@@ -507,8 +582,16 @@ const EnhancedContentTable = ({
 										)}
 									</td>
 
-									{/* Payment Status with background and text color */}
-									<td style={payStatusStyles}>{reservation.payment_status}</td>
+									{/* Payment Status with background and text color + PayPal tooltip */}
+									<td style={payStatusStyles}>
+										{reservation.payment_status_hint ? (
+											<Tooltip title={reservation.payment_status_hint}>
+												<span>{reservation.payment_status}</span>
+											</Tooltip>
+										) : (
+											reservation.payment_status
+										)}
+									</td>
 
 									<td>
 										{Number(reservation.total_amount || 0).toFixed(2)} SAR

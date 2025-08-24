@@ -695,73 +695,111 @@ export const createNewReservationClient = async (reservationData) => {
 		});
 };
 
-export const triggerPayment = (
-	userId,
-	token,
-	reservationId,
-	amountUSD,
-	paymentOption,
-	customUSD,
-	amountSAR
-) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/create-payment/${userId}`, {
-		method: "POST",
-		headers: {
-			Accept: "application/json",
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
-		},
-		body: JSON.stringify({
-			reservationId,
-			// The final USD amount to charge via Authorize.Net
-			amount: amountUSD,
-			paymentOption,
-			// If customAmount chosen, original custom USD typed by user
-			customUSD,
-			// The matching SAR amount for your own records
-			amountSAR,
-		}),
-	})
-		.then((response) => {
-			if (!response.ok) {
-				throw new Error(`HTTP error! Status: ${response.status}`);
-			}
-			return response.json();
-		})
-		.catch((err) => console.error("Error triggering payment:", err));
+const parseJSON = async (res) => {
+	const text = await res.text();
+	let data;
+	try {
+		data = text ? JSON.parse(text) : {};
+	} catch {
+		data = { message: text || null };
+	}
+	if (!res.ok) {
+		const err = new Error(data?.message || `API error (${res.status})`);
+		err.status = res.status;
+		err.response = data;
+		throw err;
+	}
+	return data;
 };
 
-export const emailSendForTriggeringPayment = (
-	userId,
+export const triggerPayment = (
+	userId, // kept for call-site compatibility; not used in route
 	token,
 	reservationId,
-	amountSAR
+	amountUSD, // number in USD
+	paymentOption, // 'depositOnly' | 'depositAndOneNight' | 'fullAmount' | 'customAmount'
+	customUSD, // original custom USD (optional)
+	amountSAR, // number in SAR (for your own ledger)
+	cmid = null // optional PayPal Client-Metadata-ID if you have it
 ) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/email-send/${userId}`, {
+	const url = `${process.env.REACT_APP_API_URL}/reservations/paypal/mit-charge`;
+	return fetch(url, {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
 			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
 		},
+		credentials: "omit",
 		body: JSON.stringify({
 			reservationId,
-			amountInSAR: amountSAR, // Correct key as expected by backend
+			usdAmount: Number(amountUSD),
+			sarAmount: Number(amountSAR),
+			...(cmid ? { cmid } : {}),
+			// keep human intent labels for audit/BI if you want to read them server-side
+			meta: {
+				paymentOption,
+				customUSD: customUSD != null ? Number(customUSD) : null,
+			},
 		}),
-	})
-		.then(async (response) => {
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(
-					data.message || `HTTP error! Status: ${response.status}`
-				);
-			}
-			return data;
-		})
-		.catch((err) => {
-			console.error("Error triggering payment:", err);
-			throw err; // Re-throw to handle it in the caller
+	}).then(parseJSON);
+};
+
+export const emailSendForTriggeringPayment = async (
+	userId,
+	token,
+	reservationId,
+	amountSAR,
+	amountUSD // optional but recommended
+) => {
+	const headers = {
+		Accept: "application/json",
+		"Content-Type": "application/json",
+		...(token ? { Authorization: `Bearer ${token}` } : {}),
+	};
+
+	// 1) Try new PayPal-namespaced route
+	try {
+		const urlNew = `${process.env.REACT_APP_API_URL}/reservations/paypal/send-capture-email/${userId}`;
+		const resNew = await fetch(urlNew, {
+			method: "POST",
+			headers,
+			credentials: "omit",
+			body: JSON.stringify({
+				reservationId,
+				amount: {
+					sar: Number(amountSAR),
+					...(amountUSD != null ? { usd: Number(amountUSD) } : {}),
+				},
+			}),
 		});
+		if (resNew.ok) return await parseJSON(resNew);
+		if (resNew.status !== 404) {
+			// server exists but returned an error → throw it
+			const data = await resNew.text();
+			throw new Error(data || `HTTP ${resNew.status}`);
+		}
+	} catch (e) {
+		// fall through to legacy if 404, otherwise keep trying
+		if (e?.message && !/404/.test(e.message)) {
+			// Non-404 errors should bubble up
+			throw e;
+		}
+	}
+
+	// 2) Fall back to legacy route (keeps your old email template)
+	const urlOld = `${process.env.REACT_APP_API_URL}/email-send/${userId}`;
+	const resOld = await fetch(urlOld, {
+		method: "POST",
+		headers,
+		credentials: "omit",
+		body: JSON.stringify({
+			reservationId,
+			amountInSAR: Number(amountSAR),
+		}),
+	});
+
+	return parseJSON(resOld);
 };
 
 export const readUserId = (userId, token) => {

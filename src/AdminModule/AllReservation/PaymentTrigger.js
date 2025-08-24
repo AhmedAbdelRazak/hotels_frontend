@@ -1,186 +1,199 @@
 // src/components/admin/PaymentTrigger.js
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { triggerPayment, emailSendForTriggeringPayment } from "../apiAdmin"; // Import the updated API function
+import { triggerPayment } from "../apiAdmin";
 import { Modal, Radio, Input, message } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { toast } from "react-toastify";
 
 const safeNumber = (val) => {
-	const parsed = Number(val);
-	return isNaN(parsed) ? 0 : parsed;
+	const n = Number(val);
+	return Number.isFinite(n) ? n : 0;
 };
+
+const toMoney = (n) => Number(n || 0).toFixed(2);
 
 const PaymentTrigger = ({ reservation }) => {
 	const { user, token } = isAuthenticated();
+
+	// UI state
 	const [loading, setLoading] = useState(false);
-	const [messageText, setMessageText] = useState("");
-	// For showing our options modal:
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedOption, setSelectedOption] = useState(null);
-	// For custom amount option:
 	const [customAmountUSD, setCustomAmountUSD] = useState("");
-	// For showing error message in the modal if needed:
 	const [modalError, setModalError] = useState("");
 
-	// For password confirmation modal:
+	// Password modal
 	const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
 	const [passwordInput, setPasswordInput] = useState("");
 	const [modalErrorPassword, setModalErrorPassword] = useState("");
 
-	// Import and configure Ant Design's message
+	// Antd message config
 	useEffect(() => {
-		message.config({
-			top: 100,
-			duration: 3,
-			maxCount: 3,
-		});
+		message.config({ top: 100, duration: 3, maxCount: 3 });
 	}, []);
 
-	// **Added: State Variables for Exchange Rates**
-	const [exchangeRateUSD, setExchangeRateUSD] = useState(0.2667); // Default value
-	// eslint-disable-next-line
-	const [exchangeRateEUR, setExchangeRateEUR] = useState(0.25597836); // Default value
-
-	// **Added: Fetch Exchange Rates from LocalStorage**
+	// Exchange rates from localStorage
+	const [exchangeRateUSD, setExchangeRateUSD] = useState(0.2667); // USD per 1 SAR
 	useEffect(() => {
 		const rates = JSON.parse(localStorage.getItem("rate"));
 		if (rates) {
 			setExchangeRateUSD(rates.SAR_USD || 0.2667);
-			setExchangeRateEUR(rates.SAR_EUR || 0.25597836);
+			// EUR not needed here
 		}
 	}, []);
 
-	// Check if customer has payment details (cardNumber)
-	const hasPaymentDetails =
-		reservation.customer_details && reservation.customer_details.cardNumber;
+	/* ------------------------- Reservation helpers ------------------------- */
 
-	// Check if a payment has already been captured
-	const isCaptured =
-		reservation.payment_details && reservation.payment_details.captured;
+	// PayPal readiness: vault token or an authorization present
+	const hasVault = !!reservation?.paypal_details?.vault_id;
+	const hasAuth =
+		!!reservation?.paypal_details?.initial?.authorization_id ||
+		!!reservation?.payment_details?.authorizationId;
 
-	// Calculate remaining amount if payment has been captured
-	const remainingAmount = isCaptured
-		? Number(reservation.total_amount) - Number(reservation.paid_amount)
-		: Number(reservation.total_amount);
+	const hasPaymentPath = hasVault || hasAuth;
 
-	// **Replaced sarToUsdRate with exchangeRateUSD**
-	// Convert remaining amount to USD
-	const remainingAmountUSD = (remainingAmount * exchangeRateUSD).toFixed(2);
+	// Guest already paid in SAR so far
+	const totalAmountSAR = safeNumber(reservation?.total_amount);
+	const paidAmountSAR = safeNumber(reservation?.paid_amount);
 
-	// Calculate nights (not crucial for final deposit but used in your code)
+	// Reservation remaining (SAR) & its USD equivalent
+	const reservationRemainingSAR = Math.max(0, totalAmountSAR - paidAmountSAR);
+	const reservationRemainingUSD = Number(
+		(reservationRemainingSAR * exchangeRateUSD).toFixed(2)
+	);
+
+	// PayPal ledger remaining (USD)
+	const limitUSD = safeNumber(reservation?.paypal_details?.bounds?.limit_usd);
+	const capturedUSD = safeNumber(
+		reservation?.paypal_details?.captured_total_usd
+	);
+	const pendingUSD = safeNumber(reservation?.paypal_details?.pending_total_usd);
+	const ledgerRemainingUSD = Math.max(0, limitUSD - capturedUSD - pendingUSD);
+
+	// Effective maximum we are allowed to capture right now (USD & SAR)
+	const allowedMaxUSD = Number(
+		Math.min(ledgerRemainingUSD, reservationRemainingUSD).toFixed(2)
+	);
+	const allowedMaxSAR = Number((allowedMaxUSD / exchangeRateUSD).toFixed(2));
+
+	// Anything to capture?
+	const captureDisabledGlobally = !hasPaymentPath || allowedMaxUSD <= 0;
+
+	// Nights (kept from your original code)
 	const calculateNights = (checkin, checkout) => {
 		const start = new Date(checkin);
 		const end = new Date(checkout);
 		let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 		return nights < 1 ? 1 : nights;
 	};
-
 	// eslint-disable-next-line
 	const nights = calculateNights(
 		reservation?.checkin_date,
 		reservation?.checkout_date
 	);
 
-	// Commission calculation (unchanged)
-	const computedCommissionPerNight = reservation.pickedRoomsType
+	// Commission calc (as in your original)
+	const computedCommissionPerNight = reservation?.pickedRoomsType
 		? reservation.pickedRoomsType.reduce((total, room) => {
 				let roomCommission = 0;
 				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					// difference = sum( day.price - day.rootPrice ) for each day
-					// multiplied by room.count
 					roomCommission =
 						room.pricingByDay.reduce((acc, day) => {
-							return acc + (Number(day.price) - Number(day.rootPrice));
-						}, 0) * Number(room.count);
+							return acc + (safeNumber(day.price) - safeNumber(day.rootPrice));
+						}, 0) * safeNumber(room.count);
 				}
 				return total + roomCommission;
 		  }, 0)
 		: 0;
-
 	const computedCommission = computedCommissionPerNight;
 
 	const computeOneNightCost = () => {
 		if (
-			!reservation.pickedRoomsType ||
+			!reservation?.pickedRoomsType ||
 			reservation.pickedRoomsType.length === 0
 		)
 			return 0;
-
 		return reservation.pickedRoomsType.reduce((total, room) => {
 			let firstDayRootPrice = 0;
-
 			if (room.pricingByDay && room.pricingByDay.length > 0) {
-				const firstDay = room.pricingByDay[0];
-				firstDayRootPrice = safeNumber(firstDay.rootPrice);
+				firstDayRootPrice = safeNumber(room.pricingByDay[0].rootPrice);
 			} else {
-				// Fallback to chosenPrice if pricingByDay is missing or invalid
 				firstDayRootPrice = safeNumber(room.chosenPrice);
 			}
-
-			// Multiply by the number of rooms (count)
 			return total + firstDayRootPrice * safeNumber(room.count);
 		}, 0);
 	};
-
-	// One-night cost calculation
 	const oneNightCost = computeOneNightCost();
 
-	// Full amount from reservation (in SAR)
-	const totalAmount = Number(reservation.total_amount) || 0;
-
-	// Option 1: Commission in SAR
+	// Option amounts (SAR)
 	const optionCommissionSAR = computedCommission;
-	// Option 2: Commission + One Night
 	const depositWithOneNight = computedCommission + oneNightCost;
-	// Option 3: Full Amount
-	const optionFullAmountSAR = totalAmount;
+	const optionFullAmountSAR = totalAmountSAR;
 
-	// **Replaced sarToUsdRate with exchangeRateUSD**
-	// Convert each SAR to USD
+	// Convert to USD
 	const option1_USD = (optionCommissionSAR * exchangeRateUSD).toFixed(2);
 	const option2_USD = (depositWithOneNight * exchangeRateUSD).toFixed(2);
 	const option3_USD = (optionFullAmountSAR * exchangeRateUSD).toFixed(2);
 
-	// Also store them as strings for display
 	const option1_SAR = optionCommissionSAR.toLocaleString();
 	const option2_SAR = depositWithOneNight.toLocaleString();
 	const option3_SAR = optionFullAmountSAR.toLocaleString();
 
-	// Decide which final USD + SAR amounts to charge
-	const getChargeAmount = () => {
-		let finalUSD = 0;
-		let finalSAR = 0;
+	// Decide final amounts
+	const getChargeAmount = useMemo(
+		() => () => {
+			let finalUSD = 0;
+			let finalSAR = 0;
 
-		if (selectedOption === "depositOnly") {
-			finalUSD = parseFloat(option1_USD);
-			finalSAR = optionCommissionSAR;
-		} else if (selectedOption === "depositAndOneNight") {
-			finalUSD = parseFloat(option2_USD);
-			finalSAR = depositWithOneNight;
-		} else if (selectedOption === "fullAmount") {
-			finalUSD = parseFloat(option3_USD);
-			finalSAR = optionFullAmountSAR;
-		} else if (selectedOption === "customAmount") {
-			// customAmountUSD is the user’s typed USD
-			finalUSD = parseFloat(customAmountUSD) || 0;
-			// Convert that custom USD back to SAR
-			finalSAR = finalUSD / exchangeRateUSD;
-		}
-		return { finalUSD, finalSAR };
+			if (selectedOption === "depositOnly") {
+				finalUSD = parseFloat(option1_USD);
+				finalSAR = optionCommissionSAR;
+			} else if (selectedOption === "depositAndOneNight") {
+				finalUSD = parseFloat(option2_USD);
+				finalSAR = depositWithOneNight;
+			} else if (selectedOption === "fullAmount") {
+				finalUSD = parseFloat(option3_USD);
+				finalSAR = optionFullAmountSAR;
+			} else if (selectedOption === "customAmount") {
+				finalUSD = parseFloat(customAmountUSD) || 0;
+				finalSAR = finalUSD / exchangeRateUSD;
+			}
+			// Clamp for safety on UI side (backend also guards)
+			if (finalUSD > allowedMaxUSD) {
+				finalUSD = allowedMaxUSD;
+				finalSAR = allowedMaxUSD / exchangeRateUSD;
+			}
+			return { finalUSD, finalSAR };
+		},
+		// deps:
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[
+			selectedOption,
+			customAmountUSD,
+			option1_USD,
+			option2_USD,
+			option3_USD,
+			optionCommissionSAR,
+			depositWithOneNight,
+			optionFullAmountSAR,
+			exchangeRateUSD,
+			allowedMaxUSD,
+		]
+	);
+
+	/* ----------------------------- Modal handlers ----------------------------- */
+
+	const openOptionsModal = () => {
+		setSelectedOption(null);
+		setCustomAmountUSD("");
+		setModalError("");
+		setIsModalVisible(true);
 	};
 
-	// **First Requirement: Disable the capture button if**
-	// - The user hasn't added his card details
-	// - OR the paid_amount is greater than or equal to the total_amount
-	const isDisabled =
-		!hasPaymentDetails ||
-		(Number(reservation.paid_amount) >= Number(reservation.total_amount) &&
-			reservation.payment_details.isCaptured);
-
 	const handlePaymentOptionConfirm = () => {
-		// Validate payment options selection
 		if (!selectedOption) {
 			setModalError("Please select a payment option.");
 			return;
@@ -189,140 +202,116 @@ const PaymentTrigger = ({ reservation }) => {
 			setModalError("Please enter a custom USD amount.");
 			return;
 		}
-
-		// Compute final amounts in USD & SAR
-		// eslint-disable-next-line
-		const { finalUSD, finalSAR } = getChargeAmount();
-
-		// If payment is captured, ensure not to exceed remainingAmount
-		if (isCaptured && finalSAR > remainingAmount) {
-			toast.error("You can't over charge the guest, Please try another amount");
+		const { finalUSD } = getChargeAmount();
+		if (finalUSD <= 0) {
+			setModalError("Please select a positive amount.");
 			return;
 		}
-
 		setModalError("");
-		// Open the password confirmation modal
 		setIsPasswordModalVisible(true);
 	};
 
 	const handlePasswordConfirm = async () => {
-		// Validate password input
 		if (!passwordInput) {
 			setModalErrorPassword("Please enter the confirmation password.");
 			return;
 		}
-
-		// Check if the entered password matches the environment variable
 		if (passwordInput !== process.env.REACT_APP_CONFIRM_PAYMENT) {
 			setModalErrorPassword("Incorrect password. Please try again.");
 			toast.error("Incorrect password. Please try again.");
 			return;
 		}
 
-		setModalErrorPassword("");
+		const { finalUSD, finalSAR } = getChargeAmount();
 
-		// Proceed with payment trigger
+		// Double-check limits at click time
+		if (finalUSD > allowedMaxUSD + 1e-9) {
+			toast.error(
+				`Amount exceeds the allowed maximum of $${allowedMaxUSD.toFixed(
+					2
+				)} USD (~${allowedMaxSAR.toFixed(2)} SAR).`
+			);
+			return;
+		}
+
 		try {
 			setLoading(true);
-			setMessageText("");
-
-			const { finalUSD, finalSAR } = getChargeAmount();
 			const reservationId = reservation._id;
+			const cmid = reservation?.paypal_details?.initial?.cmid || null;
 
-			// Fire the API call
-			const response = await triggerPayment(
-				user._id,
+			const resp = await triggerPayment(
+				user?._id,
 				token,
 				reservationId,
-				finalUSD, // amount in USD
+				finalUSD,
 				selectedOption,
 				selectedOption === "customAmount" ? customAmountUSD : null,
-				finalSAR // new argument: the SAR amount
+				finalSAR,
+				cmid
 			);
-			console.log(response, "response");
-			toast.success(response.message || "Payment captured successfully!");
 
+			toast.success(resp?.message || "Payment captured successfully!");
+
+			// Wait 1.5s, then close modal and refresh
 			setTimeout(() => {
+				setIsPasswordModalVisible(false);
+				setIsModalVisible(false);
+				setLoading(false);
 				window.location.reload(false);
 			}, 1500);
-		} catch (error) {
-			console.error(error);
-			toast.error(
-				"This customer was charged before, confirm with your admin Ahmed."
-			);
-		} finally {
+		} catch (err) {
+			console.error(err);
 			setLoading(false);
-			setIsPasswordModalVisible(false);
-		}
-	};
-
-	const openOptionsModal = () => {
-		setSelectedOption(null);
-		setCustomAmountUSD("");
-		setMessageText("");
-		setModalError("");
-		setIsModalVisible(true);
-	};
-
-	// **Updated Function: Handle Send Email Click**
-	const handleSendEmailClick = async (
-		reservationId,
-		confirmationNumber,
-		amountUSD,
-		amountSAR
-	) => {
-		try {
-			const response = await emailSendForTriggeringPayment(
-				user._id, // userId
-				token, // Bearer token
-				reservationId,
-				amountSAR
-			);
-
-			if (response.message === "Confirmation email sent successfully.") {
-				toast.success(
-					`Email successfully sent to ${reservation.customer_details.name}`
-				);
-			} else {
-				toast.error(response.message || "Failed to send confirmation email.");
-			}
-		} catch (error) {
 			toast.error(
-				error.message || "An unexpected error occurred while sending the email."
+				err?.message ||
+					"This customer was charged before, confirm with your admin Ahmed."
 			);
 		}
 	};
 
-	// **Determine if the Send Email button should be disabled**
+	/* ------------------------------- UI helpers ------------------------------- */
+
+	const isOption1Disabled =
+		parseFloat(option1_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
+	const isOption2Disabled =
+		parseFloat(option2_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
+	const isOption3Disabled =
+		parseFloat(option3_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
+
+	// Disable main button if no path or nothing to capture
+	const isDisabled = captureDisabledGlobally;
+
+	const handleCustomChange = (e) => {
+		const val = e.target.value;
+		if (!/^\d*\.?\d*$/.test(val)) return; // allow only numbers/decimal
+		const asNum = Number(val || 0);
+		const maxUSD = allowedMaxUSD;
+		if (asNum > maxUSD) {
+			toast.error(`Maximum allowable amount is $${maxUSD.toFixed(2)} USD`);
+			setCustomAmountUSD(maxUSD.toFixed(2));
+			return;
+		}
+		setCustomAmountUSD(val);
+	};
+
+	// Preview for footer / info panel
 	const { finalUSD, finalSAR } = getChargeAmount();
-	const isSendEmailDisabled =
-		!hasPaymentDetails ||
-		(Number(reservation.paid_amount) >= Number(reservation.total_amount) &&
-			reservation.payment_details.isCaptured) ||
-		!selectedOption ||
-		(selectedOption === "customAmount" && !customAmountUSD) ||
-		finalSAR > remainingAmount ||
-		finalUSD <= 0;
 
 	return (
 		<PaymentTriggerWrapper>
-			{/* No need for ToastContainer since you're using react-toastify */}
 			<h3>Trigger Payment</h3>
 			<p>This action will capture the payment for the reservation.</p>
-			<Button onClick={openOptionsModal} disabled={loading || isDisabled}>
-				{loading ? "Processing..." : "Capture Payment"}
+
+			<Button onClick={openOptionsModal} disabled={isDisabled}>
+				{isDisabled ? "Capture Unavailable" : "Capture Payment"}
 			</Button>
+
 			{isDisabled && (
 				<DisabledMessage>
-					{!hasPaymentDetails
-						? "Add payment details to capture payment."
-						: "The paid amount has already been captured."}
+					{hasPaymentPath
+						? "Nothing left to capture at this time."
+						: "No saved card or authorization found for this reservation."}
 				</DisabledMessage>
-			)}
-			{messageText && (
-				<Message success={messageText === "Payment captured successfully!"}>
-					{messageText}
-				</Message>
 			)}
 
 			{/* Payment Options Modal */}
@@ -333,125 +322,132 @@ const PaymentTrigger = ({ reservation }) => {
 				onCancel={() => setIsModalVisible(false)}
 				okText='Confirm'
 				cancelText='Cancel'
-				width={600} // Adjust width if needed to accommodate the new button
+				width={640}
 			>
+				{/* Remaining panel */}
+				<InfoPanel>
+					<div className='row'>
+						<strong>Remaining you can capture now:</strong>
+						<span>
+							${toMoney(allowedMaxUSD)} USD (~{toMoney(allowedMaxSAR)} SAR)
+						</span>
+					</div>
+					<div className='split'>
+						<div className='col'>
+							<div className='label'>
+								<InfoCircleOutlined /> PayPal Ledger
+							</div>
+							<ul>
+								<li>
+									Limit: <b>${toMoney(limitUSD)}</b>
+								</li>
+								<li>
+									Captured: <b>${toMoney(capturedUSD)}</b>
+								</li>
+								<li>
+									Pending: <b>${toMoney(pendingUSD)}</b>
+								</li>
+								<li className='em'>
+									Remaining: <b>${toMoney(ledgerRemainingUSD)}</b>
+								</li>
+							</ul>
+						</div>
+						<div className='col'>
+							<div className='label'>
+								<InfoCircleOutlined /> Reservation Balance
+							</div>
+							<ul>
+								<li>
+									Paid: <b>{toMoney(paidAmountSAR)} SAR</b>
+								</li>
+								<li>
+									Total: <b>{toMoney(totalAmountSAR)} SAR</b>
+								</li>
+								<li className='em'>
+									Remaining:{" "}
+									<b>
+										{toMoney(reservationRemainingSAR)} SAR (~$
+										{toMoney(reservationRemainingUSD)})
+									</b>
+								</li>
+							</ul>
+						</div>
+					</div>
+				</InfoPanel>
+
 				<Radio.Group
 					onChange={(e) => setSelectedOption(e.target.value)}
 					value={selectedOption}
 				>
-					<Radio
-						value='depositOnly'
-						disabled={isCaptured && optionCommissionSAR > remainingAmount}
-					>
-						Capture Commission Only: ${option1_USD} USD ({option1_SAR} SAR)
-						{isCaptured && optionCommissionSAR > remainingAmount && (
-							<span style={{ color: "red", marginLeft: "10px" }}>
-								(Exceeds remaining amount)
-							</span>
-						)}
+					<Radio value='depositOnly' disabled={isOption1Disabled}>
+						Commission Only: ${option1_USD} USD ({option1_SAR} SAR)
+						{isOption1Disabled && <Exceeded>(Exceeds allowed max)</Exceeded>}
 					</Radio>
 					<br />
 					<Radio
 						value='depositAndOneNight'
-						style={{ marginTop: "10px" }}
-						disabled={isCaptured && depositWithOneNight > remainingAmount}
+						style={{ marginTop: 10 }}
+						disabled={isOption2Disabled}
 					>
-						Capture Commission + 1 Night: ${option2_USD} USD ({option2_SAR} SAR)
-						{isCaptured && depositWithOneNight > remainingAmount && (
-							<span style={{ color: "red", marginLeft: "10px" }}>
-								(Exceeds remaining amount)
-							</span>
-						)}
+						Commission + 1 Night: ${option2_USD} USD ({option2_SAR} SAR)
+						{isOption2Disabled && <Exceeded>(Exceeds allowed max)</Exceeded>}
 					</Radio>
 					<br />
 					<Radio
 						value='fullAmount'
-						style={{ marginTop: "10px" }}
-						disabled={isCaptured && optionFullAmountSAR > remainingAmount}
+						style={{ marginTop: 10 }}
+						disabled={isOption3Disabled}
 					>
-						Capture Entire Amount: ${option3_USD} USD ({option3_SAR} SAR)
-						{isCaptured && optionFullAmountSAR > remainingAmount && (
-							<span style={{ color: "red", marginLeft: "10px" }}>
-								(Exceeds remaining amount)
-							</span>
-						)}
+						Entire Amount: ${option3_USD} USD ({option3_SAR} SAR)
+						{isOption3Disabled && <Exceeded>(Exceeds allowed max)</Exceeded>}
 					</Radio>
 					<br />
 					<Radio
 						value='customAmount'
-						style={{ marginTop: "10px" }}
-						disabled={isCaptured && remainingAmount <= 0}
+						style={{ marginTop: 10 }}
+						disabled={allowedMaxUSD <= 0}
 					>
-						<span style={{ fontSize: "18px", fontWeight: "bold" }}>
+						<span style={{ fontSize: 18, fontWeight: "bold" }}>
 							Custom Withdrawal Amount (USD)
 						</span>
-						{isCaptured && remainingAmount <= 0 && (
-							<span style={{ color: "red", marginLeft: "10px" }}>
-								(No remaining amount)
-							</span>
-						)}
 					</Radio>
 				</Radio.Group>
+
 				{selectedOption === "customAmount" && (
 					<CustomInput
-						placeholder={`Max ${remainingAmountUSD} USD`}
+						placeholder={`Max ${toMoney(allowedMaxUSD)} USD`}
 						value={customAmountUSD}
-						onChange={(e) => {
-							const value = e.target.value;
-							// Allow only numbers and decimal
-							if (/^\d*\.?\d*$/.test(value)) {
-								// Ensure the entered amount does not exceed remainingAmount in USD
-								if (isCaptured) {
-									const maxUSD = remainingAmount / exchangeRateUSD;
-									if (Number(value) > maxUSD) {
-										toast.error(
-											`Maximum allowable amount is ${maxUSD.toFixed(2)} USD`
-										);
-										setCustomAmountUSD(maxUSD.toFixed(2));
-										return;
-									}
-								}
-								setCustomAmountUSD(value);
-							}
-						}}
-						max={
-							isCaptured
-								? (remainingAmount / exchangeRateUSD).toFixed(2)
-								: undefined
-						}
+						onChange={handleCustomChange}
 					/>
 				)}
+
 				{modalError && <ModalError>{modalError}</ModalError>}
 
-				{/* **Send Email Button Inside Modal** */}
-				<SendEmailButton
-					onClick={() => {
-						handleSendEmailClick(
-							reservation._id,
-							reservation.confirmation_number,
-							finalUSD,
-							finalSAR
-						);
-					}}
-					disabled={isSendEmailDisabled} // Disabled until a valid amount is selected
-					aria-label='Send Email To Client To Confirm Payment'
-				>
-					Send Email To Client To Confirm Payment
-				</SendEmailButton>
+				{/* Live preview of current selection */}
+				{selectedOption && (
+					<SelectionPreview>
+						<div>
+							<span>Selected amount:&nbsp;</span>
+							<b>${toMoney(finalUSD)} USD</b>
+							<span>&nbsp;(~{toMoney(finalSAR)} SAR)</span>
+						</div>
+					</SelectionPreview>
+				)}
 			</Modal>
 
 			{/* Password Confirmation Modal */}
 			<Modal
 				title='Confirm Payment'
-				visible={isPasswordModalVisible}
+				open={isPasswordModalVisible}
 				onOk={handlePasswordConfirm}
 				onCancel={() => {
 					setIsPasswordModalVisible(false);
 					setPasswordInput("");
 					setModalErrorPassword("");
 				}}
-				okText='Confirm'
+				okText={loading ? "Processing..." : "Confirm"}
 				cancelText='Cancel'
+				confirmLoading={loading} // <-- spinner on Confirm
 			>
 				<p>Please enter your password to confirm the payment:</p>
 				<PasswordInput
@@ -459,6 +455,7 @@ const PaymentTrigger = ({ reservation }) => {
 					placeholder='Enter confirmation password'
 					value={passwordInput}
 					onChange={(e) => setPasswordInput(e.target.value)}
+					disabled={loading}
 				/>
 				{modalErrorPassword && <ModalError>{modalErrorPassword}</ModalError>}
 			</Modal>
@@ -468,50 +465,45 @@ const PaymentTrigger = ({ reservation }) => {
 
 export default PaymentTrigger;
 
-// Styled components
+/* ------------------------------- styled UI ------------------------------- */
+
 const PaymentTriggerWrapper = styled.div`
 	text-align: center;
 	padding: 20px;
-	border: 1px solid #ccc;
-	border-radius: 10px;
-	background-color: #f9f9f9;
-	box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-	position: relative; /* To position the send email button inside the modal */
+	border: 1px solid #e5e7eb;
+	border-radius: 12px;
+	background-color: #fafafa;
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 `;
 
 const Button = styled.button`
-	background-color: #007bff;
-	color: white;
+	background-color: #1677ff;
+	color: #fff;
 	padding: 10px 20px;
-	border: none;
-	border-radius: 5px;
+	border: 0;
+	border-radius: 8px;
 	cursor: pointer;
 	font-size: 16px;
-	margin-top: 10px;
+	margin-top: 8px;
+	transition: all 0.2s ease-in-out;
 
 	&:hover {
-		background-color: #0056b3;
+		background-color: #155bd6;
 	}
 	&:disabled {
-		background-color: #ccc;
+		background-color: #cbd5e1;
 		cursor: not-allowed;
 	}
 `;
 
-const Message = styled.p`
-	margin-top: 10px;
-	color: ${(props) => (props.success ? "green" : "red")};
-	font-weight: bold;
-`;
-
 const DisabledMessage = styled.p`
-	color: red;
+	color: #b91c1c;
 	font-size: 14px;
 	margin-top: 10px;
 `;
 
 const CustomInput = styled(Input)`
-	margin-top: 10px;
+	margin-top: 12px;
 	font-size: 18px;
 	font-weight: bold;
 	text-align: center;
@@ -524,31 +516,68 @@ const PasswordInput = styled(Input)`
 `;
 
 const ModalError = styled.p`
-	color: red;
+	color: #dc2626;
 	font-size: 14px;
 	margin-top: 10px;
 	text-align: center;
 `;
 
-// **New Styled Component: SendEmailButton**
-const SendEmailButton = styled.button`
-	width: 100%;
-	margin-top: 20px;
-	background-color: #28a745;
-	color: white;
-	padding: 12px 0;
-	border: none;
-	border-radius: 5px;
-	cursor: pointer;
-	font-size: 16px;
-	font-weight: bold;
-	box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+const Exceeded = styled.span`
+	color: #dc2626;
+	margin-left: 8px;
+	font-weight: 600;
+`;
 
-	&:hover {
-		background-color: #218838;
+const SelectionPreview = styled.div`
+	margin-top: 16px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: #f5faff;
+	border: 1px solid #e6f0ff;
+	text-align: center;
+	font-size: 15px;
+`;
+
+const InfoPanel = styled.div`
+	margin-bottom: 16px;
+	padding: 12px;
+	border-radius: 8px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+
+	.row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 15px;
+		margin-bottom: 8px;
 	}
-	&:disabled {
-		background-color: #ccc;
-		cursor: not-allowed;
+	.split {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+	}
+	.col {
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		padding: 10px;
+	}
+	.label {
+		font-weight: 600;
+		margin-bottom: 8px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	ul {
+		margin: 0;
+		padding-left: 16px;
+	}
+	li {
+		margin: 2px 0;
+	}
+	.em {
+		color: #111827;
 	}
 `;
