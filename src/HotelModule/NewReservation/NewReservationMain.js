@@ -1,3 +1,4 @@
+// src/HotelModule/NewReservation/NewReservationMain.js
 import React, { useCallback, useEffect, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
@@ -39,18 +40,18 @@ const NewReservationMain = () => {
 	const [confirmation_number, setConfirmationNumber] = useState("");
 	const [booking_source, setBookingSource] = useState("");
 	const [pickedHotelRooms, setPickedHotelRooms] = useState([]);
-	const [pickedRoomPricing, setPickedRoomPricing] = useState([]);
+	const [pickedRoomPricing, setPickedRoomPricing] = useState([]); // flattened like OrderTaker
 	const [allReservations, setAllReservations] = useState([]);
 	const [values, setValues] = useState("");
-	const [pickedRoomsType, setPickedRoomsType] = useState([]);
+	const [pickedRoomsType, setPickedRoomsType] = useState([]); // UI summary lines
 	const [total_amount, setTotal_Amount] = useState(0);
 	// eslint-disable-next-line
-	const [clickedMenu, setClickedMenu] = useState("heatmap");
+	const [clickedMenu, setClickedMenu] = useState("list");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchClicked, setSearchClicked] = useState(false);
 	const [searchedReservation, setSearchedReservation] = useState("");
 	const [roomInventory, setRoomInventory] = useState("");
-	const [activeTab, setActiveTab] = useState("heatmap");
+	const [activeTab, setActiveTab] = useState("list");
 	const [sendEmail, setSendEmail] = useState(false);
 	const [total_guests, setTotalGuests] = useState("");
 	const [allReservationsHeatMap, setAllReservationsHeatMap] = useState("");
@@ -60,6 +61,13 @@ const NewReservationMain = () => {
 	const [paidAmount, setPaidAmount] = useState("");
 	const [currentRoom, setCurrentRoom] = useState(null);
 	const [pricingByDay, setPricingByDay] = useState([]);
+	const [isBoss] = useBoss();
+
+	const [start_date, setStart_date] = useState("");
+	const [end_date, setEnd_date] = useState("");
+	const [days_of_residence, setDays_of_residence] = useState(0);
+
+	// ✅ ensure defined (fixes ESLint errors you saw)
 	const [customer_details, setCustomer_details] = useState({
 		name: "",
 		phone: "",
@@ -74,11 +82,6 @@ const NewReservationMain = () => {
 		carModel: "",
 		carYear: "",
 	});
-	const [isBoss] = useBoss();
-
-	const [start_date, setStart_date] = useState("");
-	const [end_date, setEnd_date] = useState("");
-	const [days_of_residence, setDays_of_residence] = useState(0);
 
 	const { user, token } = isAuthenticated();
 	const selectedHotelLocalStorage =
@@ -86,13 +89,10 @@ const NewReservationMain = () => {
 
 	const { languageToggle, chosenLanguage } = useCartContext();
 
-	// Inside your functional component
-	const history = useHistory(); // Initialize the history object
+	const history = useHistory();
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
-			setCollapsed(true);
-		}
+		if (window.innerWidth <= 1000) setCollapsed(true);
 
 		if (window.location.search.includes("reserveARoom")) {
 			setActiveTab("reserveARoom");
@@ -107,27 +107,21 @@ const NewReservationMain = () => {
 		} else if (window.location.search.includes("housingreport")) {
 			setActiveTab("housingreport");
 		} else {
-			setActiveTab("heatmap");
+			setActiveTab("list");
 		}
 		// eslint-disable-next-line
 	}, [activeTab]);
 
-	const disabledDate = (current) => {
-		// Can not select days before today and today
-		return current < moment();
-	};
+	const disabledDate = (current) => current < moment();
 
 	const formatDate = (date) => {
 		if (!date) return "";
-
 		const d = new Date(date);
 		let month = "" + (d.getMonth() + 1);
 		let day = "" + d.getDate();
 		let year = d.getFullYear();
-
 		if (month.length < 2) month = "0" + month;
 		if (day.length < 2) day = "0" + day;
-
 		return [year, month, day].join("-");
 	};
 
@@ -136,15 +130,9 @@ const NewReservationMain = () => {
 	const gettingHotelData = () => {
 		hotelAccount(user._id, token, user._id).then((data) => {
 			if (data && data.error) {
-				console.log("This is erroring");
-				console.log(data.error, "Error rendering");
+				console.log(data.error);
 			} else {
 				setValues(data);
-
-				// eslint-disable-next-line
-				const formattedStartDate = moment(formatDate(new Date(start_date)));
-				// eslint-disable-next-line
-				const formattedEndDate = moment(formatDate(new Date(end_date)));
 
 				const userId =
 					user.role === 2000
@@ -153,34 +141,32 @@ const NewReservationMain = () => {
 
 				const endDate = new Date();
 				const startDate = new Date();
-				startDate.setDate(endDate.getDate()); // Subtracting -1 days
+				startDate.setDate(endDate.getDate());
 				const heatMapStartDate = formatDate(startDate);
 
-				endDate.setDate(endDate.getDate() + 60); // Adding 60 days
+				endDate.setDate(endDate.getDate() + 60);
 				const heatMapEndDate = formatDate(endDate);
 
 				setStart_date_Map(moment(heatMapStartDate));
 				setEnd_date_Map(moment(heatMapEndDate));
 
-				const selectedHotel =
+				const selectedHotelLS =
 					JSON.parse(localStorage.getItem("selectedHotel")) || {};
-
-				if (!selectedHotel || !selectedHotel._id) {
+				if (!selectedHotelLS || !selectedHotelLS._id) {
 					console.log("No hotel selected");
 					return;
 				}
-
-				const hotelId = selectedHotel._id;
+				const hotelId = selectedHotelLS._id;
 
 				getHotelById(hotelId).then((data2) => {
 					if (data2 && data2.error) {
-						console.log(data2.error, "Error rendering");
+						console.log(data2.error);
 					} else {
 						if (data && data.name && data._id && data2) {
 							if (heatMapStartDate && heatMapEndDate) {
 								getHotelReservations(
 									hotelId,
-									user.role === 2000 ? user._id : selectedHotel.belongsTo._id,
+									user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
 									heatMapStartDate,
 									heatMapEndDate
 								).then((data3) => {
@@ -194,7 +180,7 @@ const NewReservationMain = () => {
 
 							getHotelReservations(
 								hotelId,
-								user.role === 2000 ? user._id : selectedHotel.belongsTo._id,
+								user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
 								heatMapStartDate,
 								heatMapEndDate
 							).then((data4) => {
@@ -207,9 +193,7 @@ const NewReservationMain = () => {
 								}
 							});
 
-							if (!hotelDetails) {
-								setHotelDetails(data2);
-							}
+							if (!hotelDetails) setHotelDetails(data2);
 
 							if (!hotelRooms || hotelRooms.length === 0) {
 								getHotelRooms(hotelId, userId).then((data3) => {
@@ -235,7 +219,6 @@ const NewReservationMain = () => {
 
 			const daysArray = [];
 			const currentDate = moment(startDate);
-
 			while (currentDate.isBefore(endDate)) {
 				const dateString = currentDate.format("YYYY-MM-DD");
 				const pricing = pricingRate.find(
@@ -247,7 +230,6 @@ const NewReservationMain = () => {
 				daysArray.push({ date: dateString, price });
 				currentDate.add(1, "day");
 			}
-
 			return daysArray;
 		},
 		[hotelDetails.roomCountDetails]
@@ -257,14 +239,12 @@ const NewReservationMain = () => {
 		if (start_date && end_date) {
 			const formattedStartDate = formatDate(start_date);
 			const formattedEndDate = formatDate(end_date);
-
 			getListOfRoomSummary(
 				formattedStartDate,
 				formattedEndDate,
 				hotelDetails._id
 			).then((data) => {
 				if (data && data.error) {
-					console.log(data.error, "Error rendering");
 				} else {
 					setRoomsSummary(data);
 				}
@@ -275,12 +255,10 @@ const NewReservationMain = () => {
 	};
 
 	const gettingSearchQuery = () => {
-		// Make sure to have searchQuery and searchClicked defined in your state
 		if (searchQuery && searchClicked) {
-			setLoading(true); // Assuming you have setLoading defined to control loading state
+			setLoading(true);
 			getReservationSearch(searchQuery, hotelDetails._id).then((data) => {
 				if (data && data.error) {
-					console.log(data.error, "Error rendering");
 					toast.error("No available value, please try again...");
 					setLoading(false);
 				} else if (data) {
@@ -298,7 +276,6 @@ const NewReservationMain = () => {
 					setConfirmationNumber(data.confirmation_number);
 					setPaymentStatus(data.payment_status);
 					setSearchedReservation(data);
-					console.log(data, "searchedReservation");
 					setLoading(false);
 				} else {
 					toast.error("Incorrect Confirmation #, Please try again...");
@@ -346,9 +323,7 @@ const NewReservationMain = () => {
 				})
 			);
 
-			if (selectedRooms.length > 0) {
-				setCurrentRoom(selectedRooms[0]);
-			}
+			if (selectedRooms.length > 0) setCurrentRoom(selectedRooms[0]);
 		}
 	}, [
 		searchedReservation,
@@ -362,75 +337,84 @@ const NewReservationMain = () => {
 		handlePreselectRooms();
 	}, [handlePreselectRooms]);
 
-	const calculatePickedRoomsType = () => {
-		const roomTypeCounts = new Map();
+	/* Grouped summary for reserveARoom path (unchanged) */
 
-		pickedHotelRooms.forEach((roomId) => {
-			const room = hotelRooms.find((room) => room._id === roomId);
-			const pricing = pickedRoomPricing.find(
-				(pricing) => pricing.roomId === roomId
-			);
-
-			if (room && pricing) {
-				const existing = roomTypeCounts.get(room.room_type) || {
-					count: 0,
-					chosenPrice: 0,
-					pricingByDay: [],
-				};
-				roomTypeCounts.set(room.room_type, {
-					room_type: room.room_type,
-					chosenPrice: pricing.chosenPrice,
-					count: existing.count + 1,
-					pricingByDay: pricing.pricingByDay,
-				});
-			}
-		});
-
-		return Array.from(roomTypeCounts.values());
-	};
+	const nights = Math.max((Number(days_of_residence) || 0) - 1, 0);
 
 	const calculateTotalAmountNoRooms = () => {
 		let total = 0;
 		pickedRoomsType.forEach((room) => {
-			const price = parseFloat(room.chosenPrice); // Convert string to float
-			const count = parseInt(room.count, 10) || 1; // Convert string to int, default to 1
-			total += price * count; // Multiply by count if available
+			const price = parseFloat(room.chosenPrice);
+			const count = parseInt(room.count, 10) || 1;
+			total += price * count;
 		});
-		return total * (days_of_residence - 1); // Multiply by days of residence
+		return total * nights;
 	};
 
 	const calculateTotalAmountWithRooms = () => {
 		let total = 0;
 		pickedRoomPricing.forEach((room) => {
-			console.log(room.chosenPrice, "room.chosenPrice");
-			const price = parseFloat(room.chosenPrice); // Convert string to float
-			total += price; // Add the price to the total
+			const price = parseFloat(room.chosenPrice);
+			total += price;
 		});
-		return total * (days_of_residence - 1); // Multiply by days of residence
+		return total * nights;
 	};
 
-	// Then, in your code where you are setting the `new_reservation` object:
+	/* Fallback transformer (if ever needed) from UI summary to API flattened (OrderTaker shape) */
+	const transformFromSummaryToApi = (summaryLines = []) => {
+		const out = [];
+		summaryLines.forEach((line) => {
+			if (!Array.isArray(line.pricingByDay) || line.pricingByDay.length === 0)
+				return;
+			const pricingDetails = line.pricingByDay.map((d) => {
+				const finalWithComm = safeParseFloat(d.totalPriceWithCommission, 0);
+				return {
+					date: d.date,
+					// IMPORTANT: align with OrderTaker — price = nightly final with commission
+					price: finalWithComm,
+					rootPrice: safeParseFloat(d.rootPrice, 0),
+					commissionRate: safeParseFloat(d.commissionRate, 10),
+					totalPriceWithCommission: finalWithComm,
+					totalPriceWithoutCommission: safeParseFloat(
+						d.totalPriceWithoutCommission,
+						0
+					),
+				};
+			});
+			const totalWithComm = pricingDetails.reduce(
+				(a, d) => a + d.totalPriceWithCommission,
+				0
+			);
+			const avgNight =
+				pricingDetails.length > 0 ? totalWithComm / pricingDetails.length : 0;
+			const hotelShouldGet = pricingDetails.reduce(
+				(a, d) => a + d.rootPrice,
+				0
+			);
+
+			for (let i = 0; i < (line.count || 1); i += 1) {
+				out.push({
+					room_type: line.room_type,
+					displayName: line.displayName,
+					chosenPrice: Number(avgNight).toFixed(2),
+					count: 1,
+					pricingByDay: pricingDetails,
+					totalPriceWithCommission: Number(totalWithComm.toFixed(2)),
+					hotelShouldGet: Number(hotelShouldGet.toFixed(2)),
+				});
+			}
+		});
+		return out;
+	};
 
 	const clickSubmit = () => {
-		if (!customer_details.name) {
-			return toast.error("Name is required");
-		}
-		if (!customer_details.phone) {
-			return toast.error("Phone is required");
-		}
-		if (!customer_details.passport) {
-			return toast.error("passport is required");
-		}
-		if (!customer_details.nationality) {
+		if (!customer_details.name) return toast.error("Name is required");
+		if (!customer_details.phone) return toast.error("Phone is required");
+		if (!customer_details.passport) return toast.error("passport is required");
+		if (!customer_details.nationality)
 			return toast.error("nationality is required");
-		}
-		if (!start_date) {
-			return toast.error("Check in Date is required");
-		}
-
-		if (!end_date) {
-			return toast.error("Check out Date is required");
-		}
+		if (!start_date) return toast.error("Check in Date is required");
+		if (!end_date) return toast.error("Check out Date is required");
 		if (
 			pickedHotelRooms &&
 			pickedHotelRooms.length <= 0 &&
@@ -438,10 +422,7 @@ const NewReservationMain = () => {
 		) {
 			return toast.error("Please Pick Up Rooms To Reserve");
 		}
-
-		if (!booking_source) {
-			return toast.error("Booking Source is required");
-		}
+		if (!booking_source) return toast.error("Booking Source is required");
 
 		if (
 			total_amount === 0 &&
@@ -458,34 +439,41 @@ const NewReservationMain = () => {
 			return toast.error("Room count must be greater than 0");
 		}
 
-		const selectedHotel =
+		const selectedHotelLS =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-
-		if (!selectedHotel || !selectedHotel._id) {
+		if (!selectedHotelLS || !selectedHotelLS._id) {
 			console.log("No hotel selected");
 			return;
 		}
 
-		const calculatedPickedRoomsType = calculatePickedRoomsType();
+		// eslint-disable-next-line
 		const total_amount_calculated = calculateTotalAmountNoRooms();
 		const total_amount_calculated_WithRooms = calculateTotalAmountWithRooms();
 
+		// === OrderTaker parity (for New Reservation path) ===
+		// Child ZReservationForm2 exports `pickedRoomPricing` already in transformPickedRooms shape.
+		// As a fallback, we can transform from summary lines.
+		const apiPickedRooms =
+			pickedRoomPricing && pickedRoomPricing.length > 0
+				? pickedRoomPricing
+				: transformFromSummaryToApi(pickedRoomsType);
+
 		const new_reservation = {
-			customer_details: customer_details,
+			customer_details,
 			calculateTotalAmountWithRooms: calculateTotalAmountWithRooms(),
 			checkin_date: start_date,
 			checkout_date: end_date,
-			days_of_residence: days_of_residence,
-			payment_status: payment_status,
+			days_of_residence,
+			payment_status,
 			total_amount:
 				Number(total_amount) !== 0
-					? Number(total_amount) * (Number(days_of_residence) - 1)
+					? Number(total_amount) * nights
 					: total_amount_calculated,
-			booking_source: booking_source,
+			booking_source,
 			belongsTo: hotelDetails.belongsTo._id,
 			hotelId: hotelDetails._id,
 			roomId: pickedHotelRooms,
-			sendEmail: sendEmail,
+			sendEmail,
 			booked_at:
 				searchedReservation && searchedReservation.booked_at
 					? searchedReservation.booked_at
@@ -494,23 +482,23 @@ const NewReservationMain = () => {
 				searchClicked && searchedReservation && searchedReservation.sub_total
 					? searchedReservation.sub_total
 					: total_amount !== 0
-					  ? total_amount * (days_of_residence - 1)
+					  ? total_amount * nights
 					  : total_amount_calculated
 					    ? total_amount_calculated
 					    : total_amount_calculated_WithRooms,
-			pickedRoomsPricing: pickedRoomPricing,
-			pickedRoomsType:
-				calculatedPickedRoomsType && calculatedPickedRoomsType.length > 0
-					? calculatedPickedRoomsType
-					: pickedRoomsType,
+
+			// === IMPORTANT: send flattened array in BOTH fields to avoid breaking older consumers ===
+			pickedRoomsPricing: apiPickedRooms, // identical to OrderTaker transform
+			pickedRoomsType: apiPickedRooms, // also identical
+
 			payment: payment_status,
 			reservation_status: pickedHotelRooms.length > 0 ? "InHouse" : "Confirmed",
 			total_rooms: pickedHotelRooms.length,
 			total_guests: total_guests ? total_guests : pickedHotelRooms.length,
-			booking_comment: booking_comment,
+			booking_comment,
 			comment: booking_comment,
 			hotelName: hotelDetails.hotelName,
-			bedNumber: bedNumber,
+			bedNumber,
 			paid_amount: paidAmount
 				? Number(paidAmount)
 				: searchedReservation.paid_amount
@@ -536,16 +524,13 @@ const NewReservationMain = () => {
 				if (data && data.error) {
 					console.log(data.error);
 				} else {
-					console.log("successful check in");
 					toast.success("Checkin Was Successfully Processed!");
-					setTimeout(() => {
-						window.location.reload(false);
-					}, 2000);
+					setTimeout(() => window.location.reload(false), 2000);
 				}
 			});
 		} else {
 			createNewReservation(
-				user.role === 2000 ? user._id : selectedHotel.belongsTo._id,
+				user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
 				hotelDetails._id,
 				token,
 				new_reservation
@@ -553,12 +538,8 @@ const NewReservationMain = () => {
 				if (data && data.error) {
 					console.log(data.error, "error create new reservation");
 				} else {
-					console.log("successful reservation");
 					toast.success("Reservation Was Successfully Booked!");
-
-					setTimeout(() => {
-						window.location.reload(false);
-					}, 2000);
+					setTimeout(() => window.location.reload(false), 2000);
 				}
 			});
 		}
@@ -566,7 +547,6 @@ const NewReservationMain = () => {
 
 	useEffect(() => {
 		gettingHotelData();
-
 		// eslint-disable-next-line
 	}, [start_date, end_date]);
 
@@ -580,20 +560,15 @@ const NewReservationMain = () => {
 			hotelDetails._id
 		).then((data) => {
 			if (data && data.error) {
-				console.log(data.error, "Error rendering");
 			} else {
 				setRoomInventory(data);
-				console.log(data, "roomInventory");
 			}
 		});
 	};
 
 	useEffect(() => {
 		gettingOverallRoomsSummary();
-
-		if (start_date && end_date) {
-			getRoomInventory();
-		}
+		if (start_date && end_date) getRoomInventory();
 		// eslint-disable-next-line
 	}, [start_date, end_date]);
 
@@ -638,11 +613,8 @@ const NewReservationMain = () => {
 							cursor: "pointer",
 						}}
 						onClick={() => {
-							if (chosenLanguage === "English") {
-								languageToggle("Arabic");
-							} else {
-								languageToggle("English");
-							}
+							if (chosenLanguage === "English") languageToggle("Arabic");
+							else languageToggle("English");
 						}}
 					>
 						{chosenLanguage === "English" ? "ARABIC" : "English"}
@@ -660,7 +632,7 @@ const NewReservationMain = () => {
 												? user._id
 												: selectedHotel.belongsTo._id
 										}/${selectedHotelLocalStorage._id}?heatmap`
-									); // Programmatically navigate
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -677,7 +649,7 @@ const NewReservationMain = () => {
 												? user._id
 												: selectedHotel.belongsTo._id
 										}/${selectedHotelLocalStorage._id}?reserveARoom`
-									); // Programmatically navigate
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic" ? "تسكين الغرف" : "Reserve A Room"}
@@ -693,7 +665,7 @@ const NewReservationMain = () => {
 												? user._id
 												: selectedHotel.belongsTo._id
 										}/${selectedHotelLocalStorage._id}?newReservation`
-									); // Programmatically navigate
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -711,7 +683,7 @@ const NewReservationMain = () => {
 												? user._id
 												: selectedHotel.belongsTo._id
 										}/${selectedHotelLocalStorage._id}?list`
-									); // Programmatically navigate
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -729,7 +701,7 @@ const NewReservationMain = () => {
 												? user._id
 												: selectedHotel.belongsTo._id
 										}/${selectedHotelLocalStorage._id}?housingreport`
-									); // Programmatically navigate
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -743,144 +715,131 @@ const NewReservationMain = () => {
 						{activeTab === "reserveARoom" ? (
 							<>
 								{loading ? (
-									<>
-										<div className='text-center my-5'>
-											<Spin size='large' />
-											<p>Loading Reservations...</p>
-										</div>
-									</>
+									<div className='text-center my-5'>
+										<Spin size='large' />
+										<p>Loading Reservations...</p>
+									</div>
 								) : (
 									<>
-										<>
-											{start_date_Map && end_date_Map ? (
-												<ZReservationForm
-													customer_details={customer_details}
-													setCustomer_details={setCustomer_details}
-													start_date={start_date}
-													setStart_date={setStart_date}
-													end_date={end_date}
-													setEnd_date={setEnd_date}
-													disabledDate={disabledDate}
-													days_of_residence={days_of_residence}
-													setDays_of_residence={setDays_of_residence}
-													chosenLanguage={chosenLanguage}
-													hotelDetails={hotelDetails}
-													hotelRooms={hotelRooms}
-													values={values}
-													clickSubmit={clickSubmit}
-													pickedHotelRooms={pickedHotelRooms}
-													setPickedHotelRooms={setPickedHotelRooms}
-													payment_status={payment_status}
-													setPaymentStatus={setPaymentStatus}
-													total_amount={total_amount}
-													setTotal_Amount={setTotal_Amount}
-													setPickedRoomPricing={setPickedRoomPricing}
-													pickedRoomPricing={pickedRoomPricing}
-													allReservations={allReservationsHeatMap}
-													setBookingComment={setBookingComment}
-													booking_comment={booking_comment}
-													setBookingSource={setBookingSource}
-													booking_source={booking_source}
-													setConfirmationNumber={setConfirmationNumber}
-													confirmation_number={confirmation_number}
-													searchQuery={searchQuery}
-													setSearchQuery={setSearchQuery}
-													searchClicked={searchClicked}
-													setSearchClicked={setSearchClicked}
-													searchedReservation={searchedReservation}
-													pickedRoomsType={pickedRoomsType}
-													setPickedRoomsType={setPickedRoomsType}
-													finalTotalByRoom={calculateTotalAmountWithRooms}
-													isBoss={isBoss}
-													start_date_Map={start_date_Map}
-													end_date_Map={end_date_Map}
-													bedNumber={bedNumber}
-													setBedNumber={setBedNumber}
-													currentRoom={currentRoom}
-													setCurrentRoom={setCurrentRoom}
-													pricingByDay={pricingByDay}
-													setPricingByDay={setPricingByDay}
-												/>
-											) : null}
-										</>
+										{start_date_Map && end_date_Map ? (
+											<ZReservationForm
+												customer_details={customer_details}
+												setCustomer_details={setCustomer_details}
+												start_date={start_date}
+												setStart_date={setStart_date}
+												end_date={end_date}
+												setEnd_date={setEnd_date}
+												disabledDate={disabledDate}
+												days_of_residence={days_of_residence}
+												setDays_of_residence={setDays_of_residence}
+												chosenLanguage={chosenLanguage}
+												hotelDetails={hotelDetails}
+												hotelRooms={hotelRooms}
+												values={values}
+												clickSubmit={clickSubmit}
+												pickedHotelRooms={pickedHotelRooms}
+												setPickedHotelRooms={setPickedHotelRooms}
+												payment_status={payment_status}
+												setPaymentStatus={setPaymentStatus}
+												total_amount={total_amount}
+												setTotal_Amount={setTotal_Amount}
+												setPickedRoomPricing={setPickedRoomPricing}
+												pickedRoomPricing={pickedRoomPricing}
+												allReservations={allReservationsHeatMap}
+												setBookingComment={setBookingComment}
+												booking_comment={booking_comment}
+												setBookingSource={setBookingSource}
+												booking_source={booking_source}
+												setConfirmationNumber={setConfirmationNumber}
+												confirmation_number={confirmation_number}
+												searchQuery={searchQuery}
+												setSearchQuery={setSearchQuery}
+												searchClicked={searchClicked}
+												setSearchClicked={setSearchClicked}
+												searchedReservation={searchedReservation}
+												pickedRoomsType={pickedRoomsType}
+												setPickedRoomsType={setPickedRoomsType}
+												finalTotalByRoom={calculateTotalAmountWithRooms}
+												isBoss={isBoss}
+												start_date_Map={start_date_Map}
+												end_date_Map={end_date_Map}
+												bedNumber={bedNumber}
+												setBedNumber={setBedNumber}
+												currentRoom={currentRoom}
+												setCurrentRoom={setCurrentRoom}
+												pricingByDay={pricingByDay}
+												setPricingByDay={setPricingByDay}
+											/>
+										) : null}
 									</>
 								)}
 							</>
 						) : activeTab === "housingreport" ? (
-							<>
-								<InHouseReport
-									hotelDetails={hotelDetails}
-									chosenLanguage={chosenLanguage}
-									isBoss={isBoss}
-								/>
-							</>
+							<InHouseReport
+								hotelDetails={hotelDetails}
+								chosenLanguage={chosenLanguage}
+								isBoss={isBoss}
+							/>
 						) : activeTab === "list" ? (
-							<>
-								{hotelDetails && hotelDetails._id ? (
-									<HotelRunnerReservationList
-										hotelDetails={hotelDetails}
-										chosenLanguage={chosenLanguage}
-										isBoss={isBoss}
-									/>
-								) : null}
-							</>
-						) : activeTab === "heatmap" ? (
-							<>
-								{allReservationsHeatMap ? (
-									<HotelHeatMap
-										hotelRooms={hotelRooms}
-										hotelDetails={hotelDetails}
-										start_date={start_date_Map}
-										end_date={end_date_Map}
-										allReservations={allReservationsHeatMap}
-										chosenLanguage={chosenLanguage}
-									/>
-								) : null}
-							</>
-						) : (
-							<>
-								<ZReservationForm2
-									customer_details={customer_details}
-									setCustomer_details={setCustomer_details}
-									start_date={start_date}
-									setStart_date={setStart_date}
-									end_date={end_date}
-									setEnd_date={setEnd_date}
-									disabledDate={disabledDate}
-									days_of_residence={days_of_residence}
-									setDays_of_residence={setDays_of_residence}
-									chosenLanguage={chosenLanguage}
-									clickSubmit2={clickSubmit}
-									payment_status={payment_status}
-									setPaymentStatus={setPaymentStatus}
-									total_amount={total_amount}
-									setTotal_Amount={setTotal_Amount}
-									setPickedRoomPricing={setPickedRoomPricing}
-									pickedRoomPricing={pickedRoomPricing}
-									allReservations={allReservations}
-									setBookingComment={setBookingComment}
-									booking_comment={booking_comment}
-									setBookingSource={setBookingSource}
-									booking_source={booking_source}
-									setConfirmationNumber={setConfirmationNumber}
-									confirmation_number={confirmation_number}
-									clickedMenu={clickedMenu}
-									roomsSummary={roomsSummary}
-									roomInventory={roomInventory}
-									pickedRoomsType={pickedRoomsType}
-									setPickedRoomsType={setPickedRoomsType}
+							hotelDetails && hotelDetails._id ? (
+								<HotelRunnerReservationList
 									hotelDetails={hotelDetails}
-									total_guests={total_guests}
-									setTotalGuests={setTotalGuests}
-									setSendEmail={setSendEmail}
-									sendEmail={sendEmail}
+									chosenLanguage={chosenLanguage}
 									isBoss={isBoss}
-									paymentStatus={payment_status}
-									paidAmount={paidAmount}
-									setPaidAmount={setPaidAmount}
-									setCurrentRoom={setCurrentRoom}
 								/>
-							</>
+							) : null
+						) : activeTab === "heatmap" ? (
+							allReservationsHeatMap ? (
+								<HotelHeatMap
+									hotelRooms={hotelRooms}
+									hotelDetails={hotelDetails}
+									start_date={start_date_Map}
+									end_date={end_date_Map}
+									allReservations={allReservationsHeatMap}
+									chosenLanguage={chosenLanguage}
+								/>
+							) : null
+						) : (
+							<ZReservationForm2
+								customer_details={customer_details}
+								setCustomer_details={setCustomer_details}
+								start_date={start_date}
+								setStart_date={setStart_date}
+								end_date={end_date}
+								setEnd_date={setEnd_date}
+								disabledDate={disabledDate}
+								days_of_residence={days_of_residence}
+								setDays_of_residence={setDays_of_residence}
+								chosenLanguage={chosenLanguage}
+								clickSubmit2={clickSubmit}
+								paymentStatus={payment_status}
+								setPaymentStatus={setPaymentStatus}
+								total_amount={total_amount}
+								setTotal_Amount={setTotal_Amount}
+								setPickedRoomPricing={setPickedRoomPricing}
+								pickedRoomPricing={pickedRoomPricing}
+								allReservations={allReservations}
+								setBookingComment={setBookingComment}
+								booking_comment={booking_comment}
+								setBookingSource={setBookingSource}
+								booking_source={booking_source}
+								setConfirmationNumber={setConfirmationNumber}
+								confirmation_number={confirmation_number}
+								clickedMenu={clickedMenu}
+								roomsSummary={roomsSummary}
+								roomInventory={roomInventory}
+								pickedRoomsType={pickedRoomsType}
+								setPickedRoomsType={setPickedRoomsType}
+								hotelDetails={hotelDetails}
+								total_guests={total_guests}
+								setTotalGuests={setTotalGuests}
+								setSendEmail={setSendEmail}
+								sendEmail={sendEmail}
+								isBoss={isBoss}
+								paidAmount={paidAmount}
+								setPaidAmount={setPaidAmount}
+								setCurrentRoom={setCurrentRoom}
+							/>
 						)}
 					</div>
 				</div>
@@ -891,15 +850,16 @@ const NewReservationMain = () => {
 
 export default NewReservationMain;
 
-//Make sure that the payment status is set correctly
-//Edit Page For Reservations
+/* Utilities for this file */
+function safeParseFloat(value, fallback = 0) {
+	const parsed = parseFloat(value);
+	return isNaN(parsed) ? fallback : parsed;
+}
 
 const NewReservationMainWrapper = styled.div`
 	overflow-x: hidden;
-	/* background: #ededed; */
 	margin-top: 46px;
 	min-height: 750px;
-	/* background-color: #f0f0f0; */
 
 	.grid-container-main {
 		display: grid;
@@ -908,16 +868,13 @@ const NewReservationMainWrapper = styled.div`
 	}
 
 	.container-wrapper {
-		/* border: 2px solid lightgrey; */
 		padding: 20px;
 		border-radius: 20px;
-		/* background: white; */
 		margin: 0px 10px;
 	}
 
 	.tab-grid {
 		display: flex;
-		/* Additional styling for grid layout */
 	}
 
 	h3 {
@@ -937,26 +894,22 @@ const NewReservationMainWrapper = styled.div`
 
 const Tab = styled.div`
 	cursor: pointer;
-	margin: 0 3px; /* 3px margin between tabs */
-	padding: 15px 5px; /* Adjust padding as needed */
-	font-weight: ${(props) => (props.isActive ? "bold" : "bold")};
-	background-color: ${(props) =>
-		props.isActive
-			? "transparent"
-			: "#e0e0e0"}; /* Light grey for unselected tabs */
+	margin: 0 3px;
+	padding: 15px 5px;
+	font-weight: bold;
+	background-color: ${(props) => (props.isActive ? "transparent" : "#e0e0e0")};
 	box-shadow: ${(props) =>
 		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
-	transition: all 0.3s ease; /* Smooth transition for changes */
-	min-width: 25px; /* Minimum width of the tab */
-	width: 100%; /* Full width within the container */
-	text-align: center; /* Center the text inside the tab */
-	/* Additional styling for tabs */
+	transition: all 0.3s ease;
+	min-width: 25px;
+	width: 100%;
+	text-align: center;
 	z-index: 100;
 	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "black" : "black")};
+	color: black;
 
 	@media (max-width: 1600px) {
 		font-size: 1rem;
-		padding: 10px 1px; /* Adjust padding as needed */
+		padding: 10px 1px;
 	}
 `;

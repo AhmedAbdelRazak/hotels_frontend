@@ -1044,7 +1044,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 								}
 								value={nationality}
 								onChange={(val) => setNationality(val)}
-								style={{ width: "100%" }}
+								style={{ width: "100%", zIndex: 9999 }}
 								disabled={!selectedHotel}
 							>
 								{countryListWithAbbreviations.map((c) => (
