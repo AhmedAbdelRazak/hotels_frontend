@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import styled from "styled-components";
 import {
 	Table,
@@ -147,7 +147,7 @@ const t9n = {
 	},
 };
 
-function brandOf(item, lang) {
+function brandOf(item) {
 	if (!item?.card_brand && !item?.card_last4 && !item?.card_exp) {
 		return "PayPal";
 	}
@@ -162,79 +162,7 @@ function brandOf(item, lang) {
 	return s || "CARD";
 }
 
-/* CardFields submit button (same logic as PaymentLink) */
-function CardFieldsSubmitButton({ disabled, label }) {
-	const ctx = usePayPalCardFields();
-	const cardFieldsForm = ctx?.cardFieldsForm;
-	const cardFields = ctx?.cardFields;
-	const [busy, setBusy] = useState(false);
-	const [ready, setReady] = useState(false);
-
-	useEffect(() => {
-		let cancelled = false;
-		let tries = 0;
-		const tick = () => {
-			if (cancelled) return;
-			const submitFn =
-				(cardFieldsForm && cardFieldsForm.submit) ||
-				(cardFields && cardFields.submit) ||
-				null;
-			const eligible =
-				(cardFieldsForm?.isEligible?.() ?? true) &&
-				(cardFields?.isEligible?.() ?? true);
-			setReady(typeof submitFn === "function" && eligible);
-			if ((!submitFn || !eligible) && tries < 60) {
-				tries += 1;
-				setTimeout(tick, 250);
-			}
-		};
-		tick();
-		return () => {
-			cancelled = true;
-		};
-	}, [cardFieldsForm, cardFields]);
-
-	const submit = async () => {
-		const submitFn =
-			(cardFieldsForm && cardFieldsForm.submit) ||
-			(cardFields && cardFields.submit) ||
-			null;
-		if (disabled || typeof submitFn !== "function") return;
-		setBusy(true);
-		try {
-			if (cardFieldsForm?.getState) {
-				const state = await cardFieldsForm.getState();
-				if (state && !state.isFormValid) {
-					toast.error(label?.error || "Card details are incomplete.");
-					setBusy(false);
-					return;
-				}
-			}
-			await submitFn(); // triggers 3‑D Secure if needed → then onApprove runs
-		} catch (e) {
-			// eslint-disable-next-line no-console
-			console.error("CardFields submit error:", e);
-			toast.error(label?.error || "Card operation failed.");
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	const isDisabled = disabled || !ready || busy;
-	return (
-		<PayCardButton
-			type='button'
-			onClick={submit}
-			disabled={isDisabled}
-			aria-disabled={isDisabled}
-			title={!ready ? "Initializing secure card fields..." : undefined}
-		>
-			{busy ? label?.processing || "Processing…" : label?.pay || "Save Card"}
-		</PayCardButton>
-	);
-}
-
-/* Modal for saving PayPal/Venmo/Card */
+/* --------------------- SaveMethodModal --------------------- */
 const SaveMethodModal = ({
 	open,
 	onClose,
@@ -251,7 +179,24 @@ const SaveMethodModal = ({
 	const [label, setLabel] = useState("");
 	const [makeDefault, setMakeDefault] = useState(true);
 
-	// Prepare PayPal SDK options (client token + env derived from server)
+	// ---- Single-toast helper (avoid double error noise) ----
+	const toastOnce = (() => {
+		let busy = false;
+		return (type, msg) => {
+			if (busy) return;
+			busy = true;
+			const reset = () => (busy = false);
+			if (type === "success") {
+				toast.success(msg);
+				reset();
+				return;
+			}
+			toast.error(msg);
+			setTimeout(reset, 400);
+		};
+	})();
+
+	// Prepare PayPal SDK options using server env + client token
 	useEffect(() => {
 		let cancelled = false;
 		async function init() {
@@ -261,10 +206,10 @@ const SaveMethodModal = ({
 				if (!resp.ok || !data?.clientToken)
 					throw new Error("Failed to init PayPal");
 
-				const node = (process.env.REACT_APP_NODE_ENV || "").toUpperCase();
-				const env = node === "PRODUCTION" ? "live" : "sandbox";
+				const envName =
+					String(data.env || "").toLowerCase() === "live" ? "live" : "sandbox";
 				const feClientId =
-					env === "live"
+					envName === "live"
 						? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
 						: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX;
 
@@ -275,15 +220,18 @@ const SaveMethodModal = ({
 					currency: "USD",
 					intent: "authorize",
 					commit: true,
+					// IMPORTANT: do NOT set 'vault' and do NOT force 'buyer-country' here.
 					"enable-funding": "paypal,venmo,card",
 					"disable-funding": "credit,paylater",
-					locale,
+					locale, // ar_EG or en_US as you do today
 				};
+				setScriptOptions(opts);
 				if (!cancelled) setScriptOptions(opts);
 			} catch (e) {
 				// eslint-disable-next-line no-console
 				console.error(e);
-				toast.error(
+				toastOnce(
+					"error",
 					isArabic ? "فشل تهيئة PayPal" : "Failed to initialize PayPal"
 				);
 			}
@@ -293,14 +241,10 @@ const SaveMethodModal = ({
 			cancelled = true;
 			setScriptOptions(null);
 		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open, locale, isArabic]);
 
-	/* Wallet (PayPal/Venmo) vaulting */
-	function createWalletSetupToken(_data, actions) {
-		if (!actions?.vault?.setup) throw new Error("Vaulting not supported");
-		return actions.vault.setup({ payment_source: { paypal: {} } });
-	}
-
+	/* Wallet (PayPal/Venmo) vaulting — client creates setup token, server exchanges it */
 	async function onWalletApprove(data) {
 		try {
 			const setup_token =
@@ -323,57 +267,120 @@ const SaveMethodModal = ({
 			);
 			const json = await resp.json();
 			if (!resp.ok) throw new Error(json?.message || "Failed to save wallet");
-			toast.success(
+			toastOnce(
+				"success",
 				isArabic ? "تم ربط حساب PayPal" : "PayPal account connected"
 			);
 			onSaved(Array.isArray(json.methods) ? json.methods : []);
 			onClose();
 		} catch (e) {
 			// eslint-disable-next-line no-console
-			console.error(e);
-			toast.error(isArabic ? "فشل ربط الحساب" : "Failed to connect PayPal");
+			console.error("Wallet vault error:", e);
+			toastOnce(
+				"error",
+				isArabic ? "فشل ربط الحساب" : "Failed to connect PayPal"
+			);
 		}
 	}
 
-	function onWalletError(err) {
-		// eslint-disable-next-line no-console
-		console.error("Wallet vault error:", err);
-		toast.error("PayPal wallet vaulting failed");
+	function createWalletSetupToken(_data, actions) {
+		if (!actions?.vault?.setup) throw new Error("Vaulting not supported");
+		return actions.vault.setup({ payment_source: { paypal: {} } });
 	}
 
-	/* Card Fields area — $50 AUTHORIZE with store_in_vault: ON_SUCCESS */
+	/* Shared order builder for card “save” flows (inline Card Fields and the hosted Card button) */
+	const MIN_AUTH_USD = "50.00";
+	const buildVaultOrder = () => ({
+		intent: "AUTHORIZE",
+		purchase_units: [
+			{
+				reference_id: "precheck",
+				amount: { currency_code: "USD", value: MIN_AUTH_USD },
+			},
+		],
+		application_context: {
+			brand_name: "Jannat Booking",
+			user_action: "PAY_NOW",
+			shipping_preference: "NO_SHIPPING",
+		},
+		payment_source: {
+			card: { attributes: { vault: { store_in_vault: "ON_SUCCESS" } } },
+		},
+	});
+
+	/* Inline Card Fields area — determine eligibility AFTER SDK resolves */
 	const CardFieldsArea = () => {
 		const [{ isResolved }] = usePayPalScriptReducer();
+		const ctx = usePayPalCardFields();
+		const cardFieldsForm = ctx?.cardFieldsForm;
+		const cardFields = ctx?.cardFields;
+		const [busy, setBusy] = useState(false);
+		const [ready, setReady] = useState(false);
+		const [cfEligible, setCfEligible] = useState(false);
 
-		const MIN_AUTH_USD = "50.00";
-
-		const createOrder = (data, actions) => {
-			if (!actions?.order?.create) {
-				// Card Fields build didn't expose order.create
-				throw new Error("Card Fields not eligible in this browser/region");
+		useEffect(() => {
+			if (!isResolved) return;
+			let eligible = false;
+			try {
+				eligible = !!window?.paypal?.CardFields?.isEligible?.();
+			} catch {
+				eligible = false;
 			}
-			return actions.order.create({
-				intent: "AUTHORIZE",
-				purchase_units: [
-					{
-						reference_id: "precheck",
-						amount: { currency_code: "USD", value: MIN_AUTH_USD },
-					},
-				],
-				application_context: {
-					brand_name: "Jannat Booking",
-					user_action: "PAY_NOW",
-					shipping_preference: "NO_SHIPPING",
-				},
-				payment_source: {
-					card: { attributes: { vault: { store_in_vault: "ON_SUCCESS" } } },
-				},
-			});
+			setCfEligible(eligible);
+		}, [isResolved]);
+
+		useEffect(() => {
+			if (!isResolved || !cfEligible) return;
+			let cancelled = false;
+			const checkReady = () => {
+				if (cancelled) return;
+				const submitFn =
+					(cardFieldsForm && cardFieldsForm.submit) ||
+					(cardFields && cardFields.submit) ||
+					null;
+				const eligible =
+					(cardFieldsForm?.isEligible?.() ?? true) &&
+					(cardFields?.isEligible?.() ?? true);
+				setReady(typeof submitFn === "function" && eligible);
+			};
+			checkReady();
+			return () => {
+				cancelled = true;
+			};
+		}, [isResolved, cfEligible, cardFieldsForm, cardFields]);
+
+		if (!isResolved) {
+			return (
+				<div style={{ textAlign: "center", padding: 12 }}>
+					<Spin />
+				</div>
+			);
+		}
+
+		if (!cfEligible) {
+			return (
+				<div style={{ marginTop: 10 }}>
+					<Alert
+						type='info'
+						showIcon
+						message={
+							isArabic
+								? "حقول البطاقة داخل الصفحة غير متاحة في منطقتك/حسابك. استخدم زر البطاقة أعلاه."
+								: "Inline card fields aren’t available in your region/account. Use the card button above."
+						}
+					/>
+				</div>
+			);
+		}
+
+		const createOrder = (_data, actions) => {
+			if (!actions?.order?.create)
+				throw new Error("Card Fields not eligible in this browser/region");
+			return actions.order.create(buildVaultOrder());
 		};
 
 		async function onApprove({ orderID }) {
 			try {
-				// Send only the order id; backend does: authorize → extract vault → void → save
 				const resp = await fetch(
 					`${API_BASE}/hotels/${hotelId}/paypal/owner/save-card`,
 					{
@@ -388,119 +395,154 @@ const SaveMethodModal = ({
 				);
 				const json = await resp.json();
 				if (!resp.ok) throw new Error(json?.message || "Failed to save card");
-				toast.success(isArabic ? "تم حفظ البطاقة" : "Card saved");
+				toastOnce("success", isArabic ? "تم حفظ البطاقة" : "Card saved");
 				onSaved(Array.isArray(json.methods) ? json.methods : []);
 				onClose();
 			} catch (e) {
 				// eslint-disable-next-line no-console
-				console.error(e);
-				toast.error(isArabic ? "فشل حفظ البطاقة" : "Failed to save card");
+				console.error("CardFields approve error:", e);
+				toastOnce(
+					"error",
+					isArabic ? "فشل حفظ البطاقة" : "Failed to save card"
+				);
 			}
-		}
-
-		function onError(e) {
-			// eslint-disable-next-line no-console
-			console.error("CardFields error:", e);
-			toast.error(isArabic ? "حدث خطأ في البطاقة" : "Card error");
-		}
-
-		if (!isResolved) {
-			return (
-				<div style={{ textAlign: "center", padding: 12 }}>
-					<Spin />
-				</div>
-			);
-		}
-
-		let supportsCardFields = false;
-		try {
-			supportsCardFields = !!window?.paypal?.CardFields;
-			if (
-				supportsCardFields &&
-				typeof window.paypal.CardFields.isEligible === "function"
-			) {
-				supportsCardFields = !!window.paypal.CardFields.isEligible();
-			}
-		} catch {
-			supportsCardFields = false;
 		}
 
 		return (
-			<>
-				{!supportsCardFields ? (
-					<div style={{ marginTop: 10 }}>
-						<Alert
-							type='info'
-							showIcon
-							message={
-								isArabic
-									? "حقول البطاقة داخل الصفحة غير متاحة — استخدم أزرار PayPal في الأعلى."
-									: "Inline card fields are not available — please use the PayPal buttons above."
-							}
-						/>
-					</div>
-				) : (
-					<CardBox dir={isArabic ? "rtl" : "ltr"}>
-						<CardTitle>
-							{isArabic ? "أو احفظ بطاقة" : "Or save a card"}
-						</CardTitle>
+			<CardBox dir={isArabic ? "rtl" : "ltr"}>
+				<CardTitle>{isArabic ? "أو احفظ بطاقة" : "Or save a card"}</CardTitle>
 
-						<PayPalCardFieldsProvider
-							createOrder={createOrder}
-							onApprove={onApprove}
-							onError={onError}
-						>
-							<PayPalCardFieldsForm>
-								<div className='field'>
-									<label>
-										{isArabic ? "اسم حامل البطاقة" : "Cardholder name"}
-									</label>
-									<div className='hosted'>
-										<PayPalNameField />
-									</div>
-								</div>
-
-								<div className='field'>
-									<label>{isArabic ? "رقم البطاقة" : "Card number"}</label>
-									<div className='hosted'>
-										<PayPalNumberField />
-									</div>
-								</div>
-
-								<Row>
-									<div className='field half'>
-										<label>{isArabic ? "تاريخ الانتهاء" : "Expiry date"}</label>
-										<div className='hosted'>
-											<PayPalExpiryField />
-										</div>
-									</div>
-									<div className='field half'>
-										<label>CVV</label>
-										<div className='hosted'>
-											<PayPalCVVField />
-										</div>
-									</div>
-								</Row>
-							</PayPalCardFieldsForm>
-
-							<div style={{ marginTop: 8 }}>
-								<CardFieldsSubmitButton
-									disabled={false}
-									label={{
-										pay: lang.saveCard,
-										processing: isArabic ? "جارٍ الحفظ…" : "Processing…",
-										error: isArabic
-											? "فشل حفظ البطاقة"
-											: "Card operation failed.",
-									}}
-								/>
+				<PayPalCardFieldsProvider
+					createOrder={createOrder}
+					onApprove={onApprove}
+					onError={(e) => {
+						// log only; avoid double toasts (submit/onApprove already handle UX)
+						// eslint-disable-next-line no-console
+						console.error("CardFields SDK error:", e);
+					}}
+				>
+					<PayPalCardFieldsForm>
+						<div className='field'>
+							<label>{isArabic ? "اسم حامل البطاقة" : "Cardholder name"}</label>
+							<div className='hosted'>
+								<PayPalNameField />
 							</div>
-						</PayPalCardFieldsProvider>
-					</CardBox>
-				)}
-			</>
+						</div>
+						<div className='field'>
+							<label>{isArabic ? "رقم البطاقة" : "Card number"}</label>
+							<div className='hosted'>
+								<PayPalNumberField />
+							</div>
+						</div>
+						<Row>
+							<div className='field half'>
+								<label>{isArabic ? "تاريخ الانتهاء" : "Expiry date"}</label>
+								<div className='hosted'>
+									<PayPalExpiryField />
+								</div>
+							</div>
+							<div className='field half'>
+								<label>CVV</label>
+								<div className='hosted'>
+									<PayPalCVVField />
+								</div>
+							</div>
+						</Row>
+					</PayPalCardFieldsForm>
+
+					<div style={{ marginTop: 8 }}>
+						<PayCardButton
+							type='button'
+							disabled={!ready || busy}
+							aria-disabled={!ready || busy}
+							onClick={async () => {
+								const submitFn =
+									(cardFieldsForm && cardFieldsForm.submit) ||
+									(cardFields && cardFields.submit) ||
+									null;
+								if (typeof submitFn !== "function") return;
+								setBusy(true);
+								try {
+									if (cardFieldsForm?.getState) {
+										const state = await cardFieldsForm.getState();
+										if (state && !state.isFormValid) {
+											toastOnce(
+												"error",
+												isArabic
+													? "بيانات البطاقة غير مكتملة."
+													: "Card details are incomplete."
+											);
+											setBusy(false);
+											return;
+										}
+									}
+									await submitFn(); // triggers 3‑D Secure if needed → then onApprove runs
+								} catch (e) {
+									// eslint-disable-next-line no-console
+									console.error("CardFields submit error:", e);
+									toastOnce(
+										"error",
+										isArabic ? "فشل عملية البطاقة" : "Card operation failed."
+									);
+								} finally {
+									setBusy(false);
+								}
+							}}
+							title={!ready ? "Initializing secure card fields..." : undefined}
+						>
+							{busy
+								? isArabic
+									? "جارٍ الحفظ…"
+									: "Processing…"
+								: lang.saveCard}
+						</PayCardButton>
+					</div>
+				</PayPalCardFieldsProvider>
+			</CardBox>
 		);
 	};
+
+	/* PayPal-hosted "Save a Card" button (no invalid label usage) */
+	const CardHostedButton = () => (
+		<PayPalButtons
+			fundingSource='card'
+			style={{ layout: "vertical" }} // <-- no 'label: "card"'
+			createOrder={(data, actions) => actions?.order?.create(buildVaultOrder())}
+			onApprove={async ({ orderID }) => {
+				try {
+					const resp = await fetch(
+						`${API_BASE}/hotels/${hotelId}/paypal/owner/save-card`,
+						{
+							method: "POST",
+							headers: authHeaders,
+							body: JSON.stringify({
+								order_id: orderID,
+								label: label || undefined,
+								setDefault: !!makeDefault,
+							}),
+						}
+					);
+					const json = await resp.json();
+					if (!resp.ok) throw new Error(json?.message || "Failed to save card");
+					toastOnce("success", isArabic ? "تم حفظ البطاقة" : "Card saved");
+					onSaved(Array.isArray(json.methods) ? json.methods : []);
+					onClose();
+				} catch (e) {
+					// eslint-disable-next-line no-console
+					console.error("Card hosted button error:", e);
+					toastOnce(
+						"error",
+						isArabic ? "فشل حفظ البطاقة" : "Failed to save card"
+					);
+				}
+			}}
+			onError={(e) => {
+				// log only; avoid duplicate toasts
+				// eslint-disable-next-line no-console
+				console.error("Card hosted button SDK error:", e);
+			}}
+		/>
+	);
 
 	return (
 		<Modal
@@ -520,26 +562,38 @@ const SaveMethodModal = ({
 						<Text type='secondary'>{lang.secure}</Text>
 					</div>
 
-					{/* Wallet vault buttons */}
+					{/* Wallet vault buttons (no invalid labels) */}
 					<ButtonsRow>
 						<PayPalButtons
 							fundingSource='paypal'
-							style={{ layout: "vertical", label: "paypal" }}
+							style={{ layout: "vertical" }} // <-- no 'label: "paypal"'
 							createVaultSetupToken={createWalletSetupToken}
 							onApprove={onWalletApprove}
-							onError={onWalletError}
+							onError={(e) => {
+								// eslint-disable-next-line no-console
+								console.error("PayPal button error:", e);
+							}}
 						/>
 						<PayPalButtons
 							fundingSource='venmo'
-							style={{ layout: "vertical", label: "venmo" }}
+							style={{ layout: "vertical" }} // <-- no 'label: "venmo"'
 							createVaultSetupToken={createWalletSetupToken}
 							onApprove={onWalletApprove}
-							onError={onWalletError}
+							onError={(e) => {
+								// eslint-disable-next-line no-console
+								console.error("Venmo button error:", e);
+							}}
 						/>
 					</ButtonsRow>
 
+					{/* EXTRA: PayPal-hosted Card save button (above the form) */}
+					<div style={{ marginTop: 12, maxWidth: 420, marginInline: "auto" }}>
+						<CardHostedButton />
+					</div>
+
 					<Divider plain>{lang.or}</Divider>
 
+					{/* Label + default toggle (form stays as-is) */}
 					<Form layout='vertical' autoComplete='off'>
 						<Form.Item label={lang.labelOptional}>
 							<Input
@@ -554,7 +608,7 @@ const SaveMethodModal = ({
 						</Form.Item>
 					</Form>
 
-					{/* Inline Card Fields area */}
+					{/* Inline Card Fields area with graceful fallback */}
 					<CardFieldsArea />
 
 					<div style={{ marginTop: 10 }}>
@@ -566,7 +620,7 @@ const SaveMethodModal = ({
 	);
 };
 
-/* Main component */
+/* --------------------- Main PaymentSettings --------------------- */
 const PaymentSettings = ({
 	setHotelDetails,
 	hotelDetails,
@@ -602,18 +656,18 @@ const PaymentSettings = ({
 	);
 
 	// Hotel id
-	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	const selectedHotel = JSON.parse(
+		localStorage.getItem("selectedHotel") || "{}"
+	);
 	const hotelId = hotelDetails?._id || selectedHotel?._id;
 
-	async function fetchMethods() {
+	const fetchMethods = useCallback(async () => {
 		if (!hotelId) return;
 		setMethodsLoading(true);
 		try {
 			const res = await fetch(
 				`${API_BASE}/hotels/${hotelId}/paypal/owner/methods`,
-				{
-					headers: authHeaders,
-				}
+				{ headers: authHeaders }
 			);
 			const data = await res.json();
 			if (res.ok) {
@@ -627,7 +681,7 @@ const PaymentSettings = ({
 		} finally {
 			setMethodsLoading(false);
 		}
-	}
+	}, [hotelId, authHeaders]);
 
 	async function setDefaultMethod(vaultId) {
 		try {
@@ -669,7 +723,7 @@ const PaymentSettings = ({
 
 	useEffect(() => {
 		if (hotelId) fetchMethods();
-	}, [hotelId]);
+	}, [hotelId, fetchMethods]);
 
 	// Wire accounts helpers
 	const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -711,28 +765,6 @@ const PaymentSettings = ({
 		form.setFieldsValue(record);
 		setIsEditModalVisible(true);
 	}
-
-	const swiftRequiredRule = ({ getFieldValue }) => ({
-		validator(_, value) {
-			const country = getFieldValue("accountCountry");
-			const isUS = String(country || "").toUpperCase() === "US";
-			if (isUS) return Promise.resolve();
-			if (!value)
-				return Promise.reject(new Error(`${lang.swiftCode} ${lang.req}`));
-			return Promise.resolve();
-		},
-	});
-
-	const routingRequiredRule = ({ getFieldValue }) => ({
-		validator(_, value) {
-			const country = getFieldValue("accountCountry");
-			const isUS = String(country || "").toUpperCase() === "US";
-			if (!isUS) return Promise.resolve();
-			if (!value)
-				return Promise.reject(new Error(`${lang.routingNumber} ${lang.req}`));
-			return Promise.resolve();
-		},
-	});
 
 	const columns = [
 		{ title: lang.accountName, dataIndex: "accountName", key: "accountName" },
@@ -816,7 +848,7 @@ const PaymentSettings = ({
 						grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4 }}
 						dataSource={methods}
 						renderItem={(item) => {
-							const brand = brandOf(item, lang);
+							const brand = brandOf(item);
 							const isWallet = !item.card_brand && !item.card_last4;
 							const last4 = isWallet ? null : item.card_last4 || "••••";
 							const exp = isWallet ? "" : item.card_exp || "";
@@ -981,7 +1013,7 @@ const PaymentSettings = ({
 							placeholder={lang.accountCountry}
 							optionFilterProp='children'
 							filterOption={(input, option) =>
-								String(option.children)
+								String(option?.children ?? "")
 									.toLowerCase()
 									.includes(input.toLowerCase())
 							}
@@ -1024,6 +1056,7 @@ const PaymentSettings = ({
 						<Input />
 					</Form.Item>
 
+					{/* Routing (US only) */}
 					<Form.Item shouldUpdate noStyle>
 						{({ getFieldValue }) => (
 							<Form.Item
@@ -1049,6 +1082,7 @@ const PaymentSettings = ({
 						)}
 					</Form.Item>
 
+					{/* SWIFT (non-US only) */}
 					<Form.Item shouldUpdate noStyle>
 						{({ getFieldValue }) => (
 							<Form.Item
@@ -1094,7 +1128,7 @@ const PaymentSettings = ({
 							placeholder={lang.bankHeadQuarterCountry}
 							optionFilterProp='children'
 							filterOption={(input, option) =>
-								String(option.children)
+								String(option?.children ?? "")
 									.toLowerCase()
 									.includes(input.toLowerCase())
 							}
@@ -1160,7 +1194,8 @@ const PaymentSettings = ({
 
 export default PaymentSettings;
 
-/* styled */
+/* --------------------- styled --------------------- */
+
 const Wrapper = styled.div`
 	padding: 20px;
 	.header {
@@ -1200,7 +1235,7 @@ const CardBox = styled.div`
 	margin: 0 auto 6px auto;
 	padding: 14px 14px 16px;
 	background: #fff;
-	border: 1px solid #e9eef3;
+	border: 1.25px solid #e9eef3;
 	border-radius: 12px;
 	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
 	.field {
