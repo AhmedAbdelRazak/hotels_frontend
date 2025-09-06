@@ -1,321 +1,361 @@
-import React, { useEffect, useState } from "react";
+/** @format */
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
-// import { Link } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
 import {
-	getBraintreeClientToken,
-	getHotelDetails,
 	hotelAccount,
-	pendingPaymentReservationList,
-	processPayment_Subscription,
-	updateSubscriptionCardFn,
-	currecyConversion,
-	processCommissionPayment,
-	gettingCommissionPaidReservations,
+	markCommissionPaid,
+	listCommissionCandidates,
+	currencyConversion,
+	getHotelById,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
-import { toast } from "react-toastify";
-import { useHistory } from "react-router-dom";
-import Subscription from "./Subscription";
-import PendingReservationPayments from "./PendingReservationPayments";
-import PaidCommission from "./PaidCommission";
+import {
+	Alert,
+	Button,
+	Checkbox,
+	Modal,
+	Space,
+	Spin,
+	Table,
+	Tooltip,
+	message,
+} from "antd";
+
+/* ───────── commission helpers (matches your MoreDetails logic) ───────── */
+const safeNumber = (val) => {
+	const n = Number(val);
+	return Number.isFinite(n) ? n : 0;
+};
+
+/** Sum ((price - rootPrice) per day) * room.count across pickedRoomsType */
+function computeCommissionFromPickedRooms(pickedRoomsType = []) {
+	if (!Array.isArray(pickedRoomsType) || pickedRoomsType.length === 0) return 0;
+
+	return pickedRoomsType.reduce((total, room) => {
+		const count = safeNumber(room?.count || 1);
+		const days = Array.isArray(room?.pricingByDay) ? room.pricingByDay : [];
+		if (!days.length) return total; // nothing to add if per-day prices are missing
+		const roomCommission =
+			days.reduce(
+				(acc, d) => acc + (safeNumber(d.price) - safeNumber(d.rootPrice)),
+				0
+			) * count;
+		return total + roomCommission;
+	}, 0);
+}
 
 const PaymentMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [hotelDetails, setHotelDetails] = useState("");
-	const [updateCardClicked, setUpdateCardClicked] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
-	const [activeTab, setActiveTab] = useState("subscription");
-	const [currentPage, setCurrentPage] = useState(1);
-	const [scoreCardObject, setScoreCardObject] = useState("");
-	const [scoreCardObject2, setScoreCardObject2] = useState("");
-	const [commissionPaidReservations, setCommissionPaidReservations] =
-		useState("");
-	const [data, setData] = useState({
-		loading: false,
-		success: false,
-		clientToken: null,
-		error: "",
-		instance: {},
-	});
-	const [pendingReservations, setPendingReservations] = useState("");
-
 	const { user, token } = isAuthenticated();
-	const { languageToggle, chosenLanguage } = useCartContext();
-	const history = useHistory(); // Initialize the history object
+	const { chosenLanguage } = useCartContext();
+	const isArabic = chosenLanguage === "Arabic";
 
-	useEffect(() => {
-		if (window.innerWidth <= 1000) {
-			setCollapsed(true);
-		}
-
-		if (window.location.search.includes("subscription")) {
-			setActiveTab("subscription");
-		} else if (window.location.search.includes("pending")) {
-			setActiveTab("pending");
-		} else if (window.location.search.includes("reports")) {
-			setActiveTab("reports");
-		} else {
-			setActiveTab("subscription");
-		}
-		// eslint-disable-next-line
-	}, [activeTab]);
-
-	const getToken = (userId, token) => {
-		setData({ ...data, loading: true });
-		getBraintreeClientToken(userId, token, user.storeCountry).then((data) => {
-			if (data.error) {
-				setData({ ...data, error: data.error });
-			} else {
-				setData({ ...data, clientToken: data.clientToken });
-				setData({ ...data, loading: false });
-			}
-		});
-	};
-
-	useEffect(() => {
-		getToken(user._id, token);
-
-		// eslint-disable-next-line
-	}, []);
-
-	console.log(scoreCardObject, "scorecardobjectttttttttt");
-
-	const aggregateScoreCardData = async (reservations) => {
-		let total = 0;
-		let total_amount = 0;
-		let commission_janat = 0;
-		let commission_affiliate = 0;
-
-		reservations.forEach((reservation) => {
-			total += 1;
-			total_amount += reservation.total_amount;
-
-			if (reservation.booking_source === "janat") {
-				commission_janat += reservation.total_amount * 0.1;
-			} else if (reservation.booking_source === "affiliate") {
-				commission_affiliate += reservation.total_amount * 0.1;
-			}
-		});
-
-		const total_commission_due =
-			(commission_janat + commission_affiliate) * 1.02;
-
-		// Convert the total commission due to USD
-		const total_amount_due_USD = await currecyConversion(
-			total_commission_due
-		).then((data) => {
-			if (data && data.amountInUSD) {
-				return data.amountInUSD;
-			} else {
-				console.error("Error converting currency");
-				return 0; // Return 0 if there was an error in conversion
-			}
-		});
-
-		return {
-			total,
-			total_amount,
-			commission_janat,
-			commission_affiliate,
-			total_amount_due_USD,
-		};
-	};
-
+	/* ─────────────────────────  DO NOT CHANGE (as requested)  ───────────────────────── */
 	const gettingHotelData = () => {
-		hotelAccount(user._id, token, user._id).then((data) => {
+		const selectedHotel =
+			JSON.parse(localStorage.getItem("selectedHotel")) || {};
+		const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+
+		// Fetching user account details
+		hotelAccount(user._id, token, userId).then((data) => {
 			if (data && data.error) {
 				console.log(data.error, "Error rendering");
 			} else {
-				getHotelDetails(data._id).then((data2) => {
+				// Fetching hotel details by hotelId
+				getHotelById(selectedHotel._id).then((data2) => {
 					if (data2 && data2.error) {
 						console.log(data2.error, "Error rendering");
 					} else {
-						if (data && data.name && data._id && data2 && data2.length > 0) {
-							setHotelDetails(data2[0]);
-
-							pendingPaymentReservationList(
-								currentPage,
-								400,
-								data2[0]._id
-							).then((data) => {
-								if (data && data.error) {
-									console.log(data.error, "error getting reservations");
-								} else {
-									setPendingReservations(data);
-									aggregateScoreCardData(data).then((aggregatedData) => {
-										setScoreCardObject(aggregatedData);
-									});
-								}
-							});
-
-							gettingCommissionPaidReservations(
-								currentPage,
-								400,
-								data2[0]._id
-							).then((data4) => {
-								if (data4 && data4.error) {
-									console.log(data4.error, "error getting reservations");
-								} else {
-									setCommissionPaidReservations(data4);
-									aggregateScoreCardData(data4).then((aggregatedData) => {
-										setScoreCardObject2(aggregatedData);
-									});
-								}
-							});
+						if (data && data.name && data._id && data2 && data2._id) {
+							setHotelDetails(data2);
 						}
 					}
 				});
 			}
 		});
 	};
+	/* ────────────────────────────────────────────────────────────────────────────────── */
 
 	useEffect(() => {
-		gettingHotelData();
-		// eslint-disable-next-line
+		if (window.innerWidth <= 1000) setCollapsed(true);
+		gettingHotelData(); // unchanged
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const updateSubscriptionCard = async () => {
-		const { nonce } = await data.instance.requestPaymentMethod();
-		updateSubscriptionCardFn(token, {
-			paymentMethodNonce: nonce,
-			paymentMethodToken: hotelDetails.subscriptionToken,
-			subscriptionId: hotelDetails.subscriptionId,
-		})
-			.then((response) => {
-				if (response.success) {
-					toast.success("Card updated successfully for your PRO subscription");
-					setTimeout(function () {
-						window.location.reload(false);
-					}, 4000);
-				} else {
-					toast.error("Failed to update card for your PRO subscription");
-					setTimeout(function () {
-						window.location.reload(false);
-					}, 4000);
-				}
-			})
-			.catch((error) => {
-				toast.error("Error updating card for your PRO subscription");
-				setTimeout(function () {
-					window.location.reload(false);
-				}, 4000);
-			});
-	};
+	/* ================================  Settlements (PayPal)  ================================ */
 
-	const buy_subscribe = () => {
-		console.log("clicked");
-		let nonce;
+	// Data
+	const [loading, setLoading] = useState(false);
+	const [loadError, setLoadError] = useState(null);
+	const [candidates, setCandidates] = useState([]); // reservations returned by listCommissionCandidates
+	const [selected, setSelected] = useState(() => new Set());
 
-		// eslint-disable-next-line
-		let getNonce = data.instance
-			.requestPaymentMethod()
-			.then((data) => {
-				nonce = data.nonce;
+	// USD preview for the selected commission
+	const [usdPreview, setUsdPreview] = useState("0.00");
 
-				const paymentData = {
-					paymentMethodNonce: nonce,
-					amount: 100,
-					email: user.email,
-					customerId: hotelDetails._id,
-					planId: "monthly_plan",
-					hotelId: hotelDetails._id,
-				};
+	const hotelId = useMemo(() => hotelDetails?._id || null, [hotelDetails?._id]);
 
-				processPayment_Subscription(token, paymentData)
-					.then((response) => {
-						if (
-							response.subscription &&
-							response.subscription.paymentMethodToken
-						) {
-							// empty cart
-							// create order
-							// console.log(response, "responsefromPayment");
-							// eslint-disable-next-line
-
-							toast.success(
-								"CONGRATULATIONS! You now subscribed to our XHOTEL PRO PLAN"
-							);
-
-							console.log(response.subscription, "response.subscription");
-
-							//Here you should update the hotelId
-
-							// setTimeout(function () {
-							// 	window.location.reload(false);
-							// }, 4000);
-						} else {
-							toast.error(
-								"Not Paid, Maybe insufficient credit, Please try another card"
-							);
-
-							setTimeout(function () {
-								window.location.reload(false);
-							}, 2000);
-						}
-					})
-					.catch((error) => {
-						setData({ loading: false });
-					});
-			})
-			.catch((error) => {
-				// console.log("dropin error: ", error);
-				setData({ ...data, error: error.message });
-			});
-	};
-
-	const buy = () => {
-		data.instance
-			.requestPaymentMethod()
-			.then((data) => {
-				const nonce = data.nonce;
-				const paymentData = {
-					paymentMethodNonce: nonce,
-					amount: Number(scoreCardObject.total_amount_due_USD).toFixed(2)
-						? Number(scoreCardObject.total_amount_due_USD).toFixed(2)
-						: 10,
-					email: user.email,
-					customerId: hotelDetails._id,
-					planId: "One Time Payment",
-					reservationIds:
-						pendingReservations && pendingReservations.map((i) => i._id),
-				};
-
-				return processCommissionPayment(paymentData);
-			})
-			.then((response) => {
-				// Directly check for a successful transaction indicator from your backend response
-				setTimeout(function () {
-					window.location.reload(false);
-				}, 4000);
-
-				toast.success("You have successfully paid Janat & Affiliate Share");
-			})
-			.catch((error) => {
-				// Handle errors from both requestPaymentMethod and processPayment
-				console.error("Payment processing error: ", error);
-				setData({ loading: false, error: error.message });
-				setTimeout(function () {
-					window.location.reload(false);
-				}, 4000);
-
-				toast.error(
-					"An error occurred during payment processing. Please try again."
+	// Fetch reservations after we have hotelId
+	const fetchCandidates = useCallback(
+		async (hid) => {
+			try {
+				setLoading(true);
+				setLoadError(null);
+				const resp = await listCommissionCandidates(
+					{ hotelId: hid, page: 1, pageSize: 400 },
+					{ token }
 				);
-			});
+				setCandidates(
+					Array.isArray(resp?.reservations) ? resp.reservations : []
+				);
+			} catch (e) {
+				console.error(e);
+				setLoadError(e?.message || "Failed to load settlements.");
+			} finally {
+				setLoading(false);
+			}
+		},
+		[token]
+	);
+
+	useEffect(() => {
+		if (hotelId) fetchCandidates(hotelId);
+	}, [hotelId, fetchCandidates]);
+
+	// Enrich + helpers (calculate commission using your rootPrice logic)
+	const enriched = useMemo(
+		() =>
+			(candidates || []).map((r) => {
+				const calcCommission = computeCommissionFromPickedRooms(
+					r?.pickedRoomsType
+				);
+				const paymentStatus =
+					r?.computed_payment_status ||
+					r?.payment_status || // fallback if backend placed it here
+					"—";
+				return {
+					...r,
+					_commissionSAR: calcCommission, // ← use calculated commission
+					_status: paymentStatus,
+				};
+			}),
+		[candidates]
+	);
+
+	const selectedCount = selected.size;
+	const selectedCommissionSAR = useMemo(
+		() =>
+			enriched
+				.filter((r) => selected.has(String(r._id)))
+				.reduce((acc, r) => acc + safeNumber(r?._commissionSAR), 0),
+		[selected, enriched]
+	);
+
+	// Convert SAR → USD (preview only)
+	useEffect(() => {
+		const doConvert = async () => {
+			try {
+				// Accept either array or single-number API shapes
+				const res = await currencyConversion([
+					Number(selectedCommissionSAR || 0),
+				]);
+				const usd =
+					Array.isArray(res) && res.length
+						? Number(res[0]?.amountInUSD || 0)
+						: Number(res?.amountInUSD || 0);
+				setUsdPreview(usd.toFixed(2));
+			} catch {
+				setUsdPreview("0.00");
+			}
+		};
+		doConvert();
+	}, [selectedCommissionSAR]);
+
+	// Stats / IDs per status (for tiles & bulk toggles)
+	const stats = useMemo(() => {
+		const all = enriched;
+		const paidOffline = all.filter((r) => r._status === "Paid Offline");
+		const notPaid = all.filter((r) => r._status === "Not Paid");
+		const sum = (arr, get) => arr.reduce((a, x) => a + safeNumber(get(x)), 0);
+
+		return {
+			counts: {
+				all: all.length,
+				paidOffline: paidOffline.length,
+				notPaid: notPaid.length,
+			},
+			totals: {
+				allTotalSAR: sum(all, (r) => r.total_amount),
+				allCommissionSAR: sum(all, (r) => r._commissionSAR), // ← calculated
+				paidOfflineTotalSAR: sum(paidOffline, (r) => r.total_amount),
+				paidOfflineCommissionSAR: sum(paidOffline, (r) => r._commissionSAR),
+				notPaidTotalSAR: sum(notPaid, (r) => r.total_amount),
+				notPaidCommissionSAR: sum(notPaid, (r) => r._commissionSAR),
+			},
+			ids: {
+				all: all.map((r) => String(r._id)),
+				paidOffline: paidOffline.map((r) => String(r._id)),
+				notPaid: notPaid.map((r) => String(r._id)),
+			},
+		};
+	}, [enriched]);
+
+	// Selection handlers
+	const onRowCheck = (id, checked) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (checked) next.add(String(id));
+			else next.delete(String(id));
+			return next;
+		});
+
+	const toggleBulk = (ids, checked) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			ids.forEach((id) =>
+				checked ? next.add(String(id)) : next.delete(String(id))
+			);
+			return next;
+		});
+
+	// Pay (mark commission paid)
+	const doMarkCommissionPaid = () => {
+		if (!hotelId) return;
+		const ids = Array.from(selected);
+		if (!ids.length) {
+			message.error(
+				isArabic ? "اختر حجوزات أولاً" : "Select reservations first."
+			);
+			return;
+		}
+
+		Modal.confirm({
+			title: isArabic ? "تأكيد دفع العمولة" : "Confirm Commission Payment",
+			content: (
+				<div>
+					<p style={{ marginBottom: 6 }}>
+						{isArabic ? "عدد الحجوزات:" : "Reservations:"} <b>{ids.length}</b>
+					</p>
+					<p style={{ marginBottom: 6 }}>
+						{isArabic ? "إجمالي العمولة (SAR):" : "Total commission (SAR):"}{" "}
+						<b>{Number(selectedCommissionSAR).toFixed(2)}</b>
+					</p>
+					<p>
+						USD ≈ <b>{usdPreview}</b>
+					</p>
+				</div>
+			),
+			okText: isArabic ? "تأكيد" : "Confirm",
+			cancelText: isArabic ? "إلغاء" : "Cancel",
+			onOk: async () => {
+				try {
+					await markCommissionPaid(
+						{
+							hotelId,
+							reservationIds: ids,
+							paidAt: new Date().toISOString(),
+							note: "Dashboard payout",
+						},
+						{ token }
+					);
+					message.success(
+						isArabic ? "تم التعليم كمدفوعة" : "Marked as commission paid."
+					);
+					setSelected(new Set());
+					await fetchCandidates(hotelId);
+				} catch (e) {
+					console.error(e);
+					message.error(
+						isArabic ? "تعذر إتمام العملية" : "Failed to mark as paid."
+					);
+				}
+			},
+		});
 	};
+
+	// Table columns
+	const columns = useMemo(
+		() => [
+			{
+				title: "",
+				key: "sel",
+				width: 48,
+				render: (_, r) => (
+					<Checkbox
+						checked={selected.has(String(r._id))}
+						onChange={(e) => onRowCheck(r._id, e.target.checked)}
+					/>
+				),
+			},
+			{
+				title: isArabic ? "رقم التأكيد" : "Confirmation",
+				dataIndex: "confirmation_number",
+				key: "confirmation_number",
+				width: 160,
+			},
+			{
+				title: isArabic ? "اسم الضيف" : "Guest",
+				key: "guest",
+				render: (_, r) => r?.customer_details?.name || "—",
+			},
+			{
+				title: isArabic ? "الحالة المالية" : "Payment Status",
+				dataIndex: "computed_payment_status",
+				key: "computed_payment_status",
+				width: 160,
+				render: (v, r) => (
+					<Tooltip title={r?.computed_payment_hint || ""}>
+						<span>{v || "—"}</span>
+					</Tooltip>
+				),
+			},
+			{
+				title: isArabic ? "الوصول" : "Check‑in",
+				dataIndex: "checkin_date",
+				key: "checkin_date",
+				width: 130,
+				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+			},
+			{
+				title: isArabic ? "المغادرة" : "Check‑out",
+				dataIndex: "checkout_date",
+				key: "checkout_date",
+				width: 130,
+				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+			},
+			{
+				title: isArabic ? "الإجمالي (SAR)" : "Total (SAR)",
+				dataIndex: "total_amount",
+				key: "total_amount",
+				align: "right",
+				width: 140,
+				render: (n) => Number(n || 0).toFixed(2),
+			},
+			{
+				title: isArabic ? "عمولة المنصة (SAR)" : "Commission (SAR)",
+				key: "commission",
+				align: "right",
+				width: 160,
+				render: (_, r) => Number(r?._commissionSAR || 0).toFixed(2), // ← calculated
+			},
+		],
+		[isArabic, selected]
+	);
 
 	return (
 		<PaymentMainWrapper
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+			dir={isArabic ? "rtl" : "ltr"}
 			show={collapsed}
-			isArabic={chosenLanguage === "Arabic"}
+			isArabic={isArabic}
 		>
 			<div className='grid-container-main'>
 				<div className='navcontent'>
-					{chosenLanguage === "Arabic" ? (
+					{isArabic ? (
 						<AdminNavbarArabic
 							fromPage='Payment'
 							AdminMenuStatus={AdminMenuStatus}
@@ -337,116 +377,306 @@ const PaymentMain = () => {
 				</div>
 
 				<div className='otherContentWrapper'>
-					<div style={{ background: "#8a8a8a", padding: "1px" }}>
-						<div className='my-2 tab-grid col-md-8'>
-							<Tab
-								isActive={activeTab === "subscription"}
-								onClick={() => {
-									setActiveTab("subscription");
-									history.push("/hotel-management-payment?subscription"); // Programmatically navigate
-								}}
-							>
-								{chosenLanguage === "Arabic" ? "Subscription" : "Subscription"}
-							</Tab>
-							<Tab
-								isActive={activeTab === "pending"}
-								onClick={() => {
-									setActiveTab("pending");
-									history.push("/hotel-management-payment?pending");
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "Pending Payments"
-									: "Pending Payments"}
-							</Tab>
-
-							<Tab
-								isActive={activeTab === "reports"}
-								onClick={() => {
-									setActiveTab("reports");
-									history.push("/hotel-management-payment?reports");
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "Paid Commission"
-									: "Paid Commission"}
-							</Tab>
-						</div>
-					</div>
-					<div
-						className='my-3'
-						style={{
-							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
-							fontWeight: "bold",
-							textDecoration: "underline",
-							cursor: "pointer",
-						}}
-						onClick={() => {
-							if (chosenLanguage === "English") {
-								languageToggle("Arabic");
-							} else {
-								languageToggle("English");
-							}
-						}}
-					>
-						{chosenLanguage === "English" ? "ARABIC" : "English"}
-					</div>
-
 					<div className='container-wrapper'>
-						{activeTab === "subscription" ? (
-							<>
-								{hotelDetails && hotelDetails._id ? (
-									<Subscription
-										user={user}
-										token={token}
-										updateSubscriptionCard={updateSubscriptionCard}
-										buy_subscribe={buy_subscribe}
-										setUpdateCardClicked={setUpdateCardClicked}
-										updateCardClicked={updateCardClicked}
-										data={data}
-										setData={setData}
-										chosenLanguage={chosenLanguage}
-										hotelDetails={hotelDetails}
-									/>
-								) : null}
-							</>
-						) : null}
+						{/* ───── Settlements UI ───── */}
+						{!hotelId ? (
+							<div style={{ marginTop: 12 }}>
+								<Alert
+									type='warning'
+									showIcon
+									message={isArabic ? "لا يوجد فندق محدد" : "No hotel selected"}
+								/>
+							</div>
+						) : (
+							<div style={{ marginTop: 16 }}>
+								<Grid>
+									{/* LEFT: Card details (from hotelDetails.ownerPaymentMethods if present) */}
+									<Left>
+										<LeftTitle>
+											{isArabic ? "تفاصيل البطاقة" : "Card Details"}
+										</LeftTitle>
+										{Array.isArray(hotelDetails?.ownerPaymentMethods) &&
+										hotelDetails.ownerPaymentMethods.length ? (
+											(() => {
+												const methods = hotelDetails.ownerPaymentMethods.filter(
+													(m) => m?.delete !== true
+												);
+												const def =
+													methods.find((m) => m.default) || methods[0] || null;
+												return def ? (
+													<CardBox>
+														<p style={{ margin: "0 0 6px 0", fontWeight: 700 }}>
+															{def.label || def.method_type || "CARD"}
+														</p>
+														<p style={{ margin: "0 0 6px 0" }}>
+															{def.method_type === "CARD"
+																? `${(
+																		def.card_brand || "Card"
+																  ).toUpperCase()} •••• ${
+																		def.card_last4 || "****"
+																  }`
+																: def.method_type === "PAYPAL"
+																  ? `PayPal ${
+																			def.paypal_email
+																				? `• ${def.paypal_email}`
+																				: ""
+																    }`
+																  : def.method_type === "VENMO"
+																    ? `Venmo ${
+																				def.venmo_username
+																					? `• @${def.venmo_username}`
+																					: ""
+																      }`
+																    : def.method_type}
+														</p>
+														<small style={{ color: "#64748b" }}>
+															{isArabic
+																? "طريقة التسوية الافتراضية"
+																: "Default settlement method"}
+														</small>
+													</CardBox>
+												) : (
+													<Alert
+														type='info'
+														showIcon
+														message={
+															isArabic
+																? "لم تُحفظ أي طريقة دفع بعد"
+																: "No owner payment method saved yet"
+														}
+													/>
+												);
+											})()
+										) : (
+											<Alert
+												type='info'
+												showIcon
+												message={
+													isArabic
+														? "لم تُحفظ أي طريقة دفع بعد"
+														: "No owner payment method saved yet"
+												}
+											/>
+										)}
+									</Left>
 
-						{activeTab === "reports" ? (
-							<>
-								{hotelDetails && hotelDetails._id ? (
-									<PaidCommission
-										allReservations={commissionPaidReservations}
-										setCurrentPage={setCurrentPage}
-										currentPage={currentPage}
-										totalRecords={commissionPaidReservations.length}
-										chosenLanguage={chosenLanguage}
-										hotelDetails={hotelDetails}
-										recordsPerPage={400}
-										scoreCardObject={scoreCardObject2}
-									/>
-								) : null}
-							</>
-						) : null}
+									{/* RIGHT: KPIs, quick-select blocks, action bar, table */}
+									<Right>
+										<SectionHeader>
+											{isArabic
+												? "التسويات والمدفوعات"
+												: "Settlements & Payments"}
+										</SectionHeader>
 
-						{activeTab === "pending" ? (
-							<>
-								{hotelDetails && hotelDetails._id ? (
-									<PendingReservationPayments
-										allReservations={pendingReservations}
-										setCurrentPage={setCurrentPage}
-										currentPage={currentPage}
-										totalRecords={pendingReservations.length}
-										chosenLanguage={chosenLanguage}
-										hotelDetails={hotelDetails}
-										recordsPerPage={400}
-										scoreCardObject={scoreCardObject}
-										data={data}
-										buy={buy}
-									/>
-								) : null}
-							</>
-						) : null}
+										{/* KPI tiles */}
+										<Tiles>
+											<Tile>
+												<TileLabel>
+													{isArabic ? "عدد الحجوزات" : "All Reservations"}
+												</TileLabel>
+												<TileValue>{stats.counts.all}</TileValue>
+											</Tile>
+											<Tile>
+												<TileLabel>
+													{isArabic
+														? "إجمالي المبالغ (SAR)"
+														: "Total Amount (SAR)"}
+												</TileLabel>
+												<TileValue>
+													{Number(stats.totals.allTotalSAR).toFixed(2)}
+												</TileValue>
+											</Tile>
+											<Tile>
+												<TileLabel>
+													{isArabic
+														? "عمولة المنصة (SAR)"
+														: "Platform Commission (SAR)"}
+												</TileLabel>
+												<TileValue>
+													{Number(stats.totals.allCommissionSAR).toFixed(2)}
+												</TileValue>
+											</Tile>
+										</Tiles>
+
+										{/* Quick-select blocks */}
+										<Blocks>
+											<Block tone='neutral'>
+												<BlockTitle>{isArabic ? "الكل" : "All"}</BlockTitle>
+												<KV>
+													<label>{isArabic ? "عدد:" : "Count:"}</label>
+													<span>{stats.counts.all}</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "مبالغ:" : "Totals:"}</label>
+													<span>
+														{Number(stats.totals.allTotalSAR).toFixed(2)} SAR
+													</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "عمولة:" : "Commission:"}</label>
+													<span>
+														{Number(stats.totals.allCommissionSAR).toFixed(2)}{" "}
+														SAR
+													</span>
+												</KV>
+												<Space size='small' style={{ marginTop: 6 }}>
+													<Checkbox
+														onChange={(e) =>
+															toggleBulk(stats.ids.all, e.target.checked)
+														}
+														checked={
+															stats.ids.all.every((id) => selected.has(id)) &&
+															stats.ids.all.length > 0
+														}
+													>
+														{isArabic ? "تحديد الكل" : "Select all"}
+													</Checkbox>
+												</Space>
+											</Block>
+
+											<Block tone='success'>
+												<BlockTitle>
+													{isArabic ? "مدفوعة للفندق" : "Paid Offline"}
+												</BlockTitle>
+												<KV>
+													<label>{isArabic ? "عدد:" : "Count:"}</label>
+													<span>{stats.counts.paidOffline}</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "مبالغ:" : "Totals:"}</label>
+													<span>
+														{Number(stats.totals.paidOfflineTotalSAR).toFixed(
+															2
+														)}{" "}
+														SAR
+													</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "عمولة:" : "Commission:"}</label>
+													<span>
+														{Number(
+															stats.totals.paidOfflineCommissionSAR
+														).toFixed(2)}{" "}
+														SAR
+													</span>
+												</KV>
+												<Space size='small' style={{ marginTop: 6 }}>
+													<Checkbox
+														onChange={(e) =>
+															toggleBulk(
+																stats.ids.paidOffline,
+																e.target.checked
+															)
+														}
+														checked={
+															stats.ids.paidOffline.every((id) =>
+																selected.has(id)
+															) && stats.ids.paidOffline.length > 0
+														}
+													>
+														{isArabic ? "تحديد" : "Select"}
+													</Checkbox>
+												</Space>
+											</Block>
+
+											<Block tone='warn'>
+												<BlockTitle>
+													{isArabic ? "غير مدفوعة" : "Not Paid"}
+												</BlockTitle>
+												<KV>
+													<label>{isArabic ? "عدد:" : "Count:"}</label>
+													<span>{stats.counts.notPaid}</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "مبالغ:" : "Totals:"}</label>
+													<span>
+														{Number(stats.totals.notPaidTotalSAR).toFixed(2)}{" "}
+														SAR
+													</span>
+												</KV>
+												<KV>
+													<label>{isArabic ? "عمولة:" : "Commission:"}</label>
+													<span>
+														{Number(stats.totals.notPaidCommissionSAR).toFixed(
+															2
+														)}{" "}
+														SAR
+													</span>
+												</KV>
+												<Space size='small' style={{ marginTop: 6 }}>
+													<Checkbox
+														onChange={(e) =>
+															toggleBulk(stats.ids.notPaid, e.target.checked)
+														}
+														checked={
+															stats.ids.notPaid.every((id) =>
+																selected.has(id)
+															) && stats.ids.notPaid.length > 0
+														}
+													>
+														{isArabic ? "تحديد" : "Select"}
+													</Checkbox>
+												</Space>
+											</Block>
+										</Blocks>
+
+										{/* Action bar */}
+										<ActionBar>
+											<div>
+												<strong>
+													{isArabic ? "محدد:" : "Selected:"} {selectedCount}
+												</strong>
+												<span style={{ marginInlineStart: 10 }}>
+													{isArabic ? "العمولة (SAR):" : "Commission (SAR):"}{" "}
+													<b>{Number(selectedCommissionSAR).toFixed(2)}</b>
+												</span>
+												<span style={{ marginInlineStart: 10 }}>
+													USD ≈ <b>{usdPreview}</b>
+												</span>
+											</div>
+											<Button
+												type='primary'
+												onClick={doMarkCommissionPaid}
+												disabled={selectedCount === 0}
+												style={{ minWidth: 120 }}
+											>
+												{isArabic ? "الدفع" : "Pay"}
+											</Button>
+										</ActionBar>
+
+										{/* Table */}
+										{loading ? (
+											<Centered>
+												<Spin />
+											</Centered>
+										) : loadError ? (
+											<Alert type='error' showIcon message={loadError} />
+										) : (
+											<Table
+												rowKey={(r) => r._id}
+												dataSource={enriched}
+												columns={columns}
+												size='small'
+												bordered
+												pagination={{ pageSize: 10 }}
+											/>
+										)}
+
+										{/* Bulk helpers */}
+										<div style={{ marginTop: 8 }}>
+											<Space size='middle' wrap>
+												<Button onClick={() => toggleBulk(stats.ids.all, true)}>
+													{isArabic ? "تحديد الكل" : "Select all"}
+												</Button>
+												<Button danger onClick={() => setSelected(new Set())}>
+													{isArabic ? "إلغاء التحديد" : "Clear selection"}
+												</Button>
+											</Space>
+										</div>
+									</Right>
+								</Grid>
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
@@ -456,15 +686,15 @@ const PaymentMain = () => {
 
 export default PaymentMain;
 
+/* ---------------- STYLES ---------------- */
 const PaymentMainWrapper = styled.div`
 	overflow-x: hidden;
-	/* background: #ededed; */
 	margin-top: 70px;
 	min-height: 715px;
 
 	.grid-container-main {
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "3% 96%" : "13% 85%")};
+		grid-template-columns: ${(props) => (props.show ? "5% 85%" : "15% 84%")};
 	}
 
 	text-align: ${(props) => (props.isArabic ? "right" : "")};
@@ -477,46 +707,116 @@ const PaymentMainWrapper = styled.div`
 		margin: 0px 10px;
 	}
 
-	.ulist {
-		list-style-type: none; /* Remove default bullets */
-	}
-
-	.ulist li {
-		padding-left: 1.5em; /* Add some padding to the left of list items */
-	}
-
-	.ulist li::before {
-		content: "✔︎"; /* Insert content before each li element */
-		padding-right: 0.5em; /* Add some padding to the right of the check mark */
-		color: green; /* Make the check mark green */
-	}
-	.tab-grid {
-		display: flex;
-		/* Additional styling for grid layout */
-	}
-
 	@media (max-width: 1400px) {
 		background: white;
 	}
 `;
 
-const Tab = styled.div`
-	cursor: pointer;
-	margin: 0 3px; /* 3px margin between tabs */
-	padding: 15px 5px; /* Adjust padding as needed */
-	font-weight: ${(props) => (props.isActive ? "bold" : "bold")};
-	background-color: ${(props) =>
-		props.isActive
-			? "transparent"
-			: "#bbbbbb"}; /* Light grey for unselected tabs */
-	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
-	transition: all 0.3s ease; /* Smooth transition for changes */
-	min-width: 25px; /* Minimum width of the tab */
-	width: 100%; /* Full width within the container */
-	text-align: center; /* Center the text inside the tab */
-	/* Additional styling for tabs */
-	z-index: 100;
-	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "white" : "black")};
+const Grid = styled.div`
+	display: grid;
+	grid-template-columns: 320px 1fr;
+	gap: 16px;
+	@media (max-width: 980px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const Left = styled.div``;
+const LeftTitle = styled.h4`
+	margin: 0 0 10px 0;
+	font-weight: 800;
+	color: #0f172a;
+`;
+const CardBox = styled.div`
+	background: #fff;
+	border: 1.25px solid #e9eef3;
+	border-radius: 12px;
+	padding: 14px;
+	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+`;
+
+const Right = styled.div``;
+const SectionHeader = styled.h3`
+	margin: 0 0 10px 0;
+	font-weight: 800;
+	color: #0f172a;
+`;
+
+const Tiles = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(140px, 1fr));
+	gap: 10px;
+	margin-bottom: 10px;
+	@media (max-width: 760px) {
+		grid-template-columns: 1fr;
+	}
+`;
+const Tile = styled.div`
+	background: #fff;
+	border: 1px solid #e9eef3;
+	border-radius: 12px;
+	padding: 10px 12px;
+`;
+const TileLabel = styled.div`
+	font-size: 12px;
+	color: #6b7280;
+	margin-bottom: 6px;
+`;
+const TileValue = styled.div`
+	font-size: 18px;
+	font-weight: 800;
+	color: #0f172a;
+`;
+
+const Blocks = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(160px, 1fr));
+	gap: 10px;
+	margin-bottom: 12px;
+	@media (max-width: 980px) {
+		grid-template-columns: 1fr;
+	}
+`;
+const Block = styled.div`
+	border: 1px solid
+		${({ tone }) =>
+			tone === "success" ? "#bbf7d0" : tone === "warn" ? "#fde68a" : "#e5e7eb"};
+	background: ${({ tone }) =>
+		tone === "success" ? "#f0fdf4" : tone === "warn" ? "#fffbeb" : "#fff"};
+	border-radius: 12px;
+	padding: 10px 12px;
+`;
+const BlockTitle = styled.h4`
+	margin: 0 0 6px 0;
+	font-weight: 800;
+	color: #0f172a;
+`;
+const KV = styled.p`
+	display: flex;
+	gap: 10px;
+	margin: 4px 0;
+	label {
+		color: #374151;
+		min-width: 110px;
+		font-weight: 600;
+	}
+	span {
+		color: #111827;
+	}
+`;
+
+const ActionBar = styled.div`
+	margin: 6px 0 10px;
+	padding: 8px 10px;
+	border: 1px solid #e5e7eb;
+	background: #f8fafc;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+`;
+
+const Centered = styled.div`
+	text-align: center;
+	padding: 18px 0;
 `;

@@ -1,447 +1,278 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import styled from "styled-components";
 import {
 	Table,
-	Button,
-	Modal,
-	Form,
-	Input,
-	Space,
-	Select,
-	Card as AntCard,
 	Tag,
-	List,
-	Popconfirm,
-	Tooltip,
-	Divider,
-	Switch,
-	Empty,
-	Typography,
-	Alert,
+	Space,
+	Button,
+	Input,
+	Checkbox,
+	message,
 	Spin,
+	Alert,
+	Tooltip,
+	Modal,
 } from "antd";
 import {
-	PlusOutlined,
-	EditOutlined,
-	DeleteOutlined,
-	CheckCircleTwoTone,
-	CreditCardOutlined,
-	ReloadOutlined,
-	StarFilled,
-	StarOutlined,
-	SafetyOutlined,
-} from "@ant-design/icons";
-import { toast } from "react-toastify";
-import {
 	PayPalScriptProvider,
-	PayPalButtons,
-	usePayPalScriptReducer,
 	PayPalCardFieldsProvider,
 	PayPalCardFieldsForm,
 	PayPalNameField,
 	PayPalNumberField,
 	PayPalExpiryField,
 	PayPalCVVField,
+	PayPalButtons,
 	usePayPalCardFields,
+	usePayPalScriptReducer,
 } from "@paypal/react-paypal-js";
-import { countryListWithAbbreviations } from "../../AdminModule/CustomerService/utils";
+
+import {
+	getOwnerPayPalClientToken,
+	createOwnerPayPalSetupToken,
+	saveOwnerVaultCard,
+	listOwnerPaymentMethods,
+	setOwnerDefaultPaymentMethod,
+	deactivateOwnerPaymentMethod,
+	activateOwnerPaymentMethod,
+	deleteOwnerPaymentMethod,
+} from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+import BankAccountData from "./BankAccountData";
 
-const { Option } = Select;
-const { Title, Text } = Typography;
-
-// API base like rest of the app
-const API_BASE = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
-
-/* i18n */
-const t9n = {
-	English: {
-		heading: "Payment Settings",
-		bankSection: "Wire Transfer Accounts",
-		addNewAccount: "Add New Account",
-		addAccountTitle: "Add New Payment Account",
-		updateAccountTitle: "Update Payment Account",
-		accountType: "Account Type",
-		accountCountry: "Business Country",
-		accountAddress: "Business Address",
-		accountCity: "Business City",
-		accountPostalCode: "Business Postal Code",
-		accountName: "Beneficiary / Business Name",
-		accountNumber: "Account Number",
-		routingNumber: "Routing Number (US)",
-		swiftCode: "SWIFT / BIC (non‑US)",
-		bankHeadQuarterCountry: "Bank HQ Country (optional)",
-		bankHeadQuarterAddress: "Bank HQ Address (optional)",
-		bankHeadQuarterCity: "Bank HQ City (optional)",
-		bankHeadQuarterPostalCode: "Bank HQ Postal Code (optional)",
-		bankName: "Bank Name",
-		accountNickName: "Account Nickname (optional)",
-		nameOfAccountOwner: "Full Name of Account Owner (optional)",
-		cancel: "Cancel",
-		addAccount: "Add Account",
-		updateAccount: "Update Account",
-		showDetails: "Show Details…",
-
-		methodsSection: "Saved Company Payment Methods",
-		addMethod: "Add Payment Method",
-		secure: "Secured by PayPal",
-		refresh: "Refresh",
-		noMethods: "No saved payment methods yet.",
-		defaultCard: "Default",
-		makeDefault: "Make default",
-		remove: "Remove",
-		loading: "Loading…",
-
-		addMethodTitle: "Add a Payment Method",
-		labelOptional: "Label (optional)",
-		or: "or",
-		close: "Close",
-		saveCard: "Save Card",
-
-		req: "is required",
-	},
-	Arabic: {
-		heading: "إعدادات الدفع",
-		bankSection: "حسابات التحويل البنكي",
-		addNewAccount: "إضافة حساب جديد",
-		addAccountTitle: "إضافة حساب دفع جديد",
-		updateAccountTitle: "تحديث حساب الدفع",
-		accountType: "نوع الحساب",
-		accountCountry: "بلد الشركة",
-		accountAddress: "عنوان الشركة",
-		accountCity: "مدينة الشركة",
-		accountPostalCode: "الرمز البريدي للشركة",
-		accountName: "اسم المستفيد / الشركة",
-		accountNumber: "رقم الحساب",
-		routingNumber: "رقم التوجيه (الولايات المتحدة)",
-		swiftCode: "رمز السويفت / BIC (لغير الولايات المتحدة)",
-		bankHeadQuarterCountry: "بلد المقر الرئيسي للبنك (اختياري)",
-		bankHeadQuarterAddress: "عنوان المقر الرئيسي للبنك (اختياري)",
-		bankHeadQuarterCity: "مدينة المقر الرئيسي للبنك (اختياري)",
-		bankHeadQuarterPostalCode: "الرمز البريدي لمقر البنك (اختياري)",
-		bankName: "اسم البنك",
-		accountNickName: "اسم مستعار للحساب (اختياري)",
-		nameOfAccountOwner: "الاسم الكامل لصاحب الحساب (اختياري)",
-		cancel: "إلغاء",
-		addAccount: "إضافة الحساب",
-		updateAccount: "تحديث الحساب",
-		showDetails: "عرض التفاصيل…",
-
-		methodsSection: "طرق الدفع المحفوظة للشركة",
-		addMethod: "إضافة طريقة دفع",
-		secure: "محمي بواسطة PayPal",
-		refresh: "تحديث",
-		noMethods: "لا توجد طرق دفع محفوظة بعد.",
-		defaultCard: "افتراضي",
-		makeDefault: "تعيين كافتراضي",
-		remove: "حذف",
-		loading: "جاري التحميل…",
-
-		addMethodTitle: "إضافة طريقة دفع",
-		labelOptional: "تسمية (اختياري)",
-		or: "أو",
-		close: "إغلاق",
-		saveCard: "حفظ البطاقة",
-
-		req: "مطلوب",
-	},
+const mapLocale = (isArabic) => (isArabic ? "ar_EG" : "en_US");
+const idSig = (s) => {
+	try {
+		const t = String(s || "");
+		let h = 0;
+		for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) >>> 0;
+		return h.toString(16).slice(0, 8);
+	} catch {
+		return "na";
+	}
 };
 
-function brandOf(item) {
-	if (!item?.card_brand && !item?.card_last4 && !item?.card_exp) {
-		return "PayPal";
-	}
-	const s = String(item.card_brand || "").toUpperCase();
-	if (/VISA/.test(s)) return "VISA";
-	if (/MASTERCARD|MC/.test(s)) return "Mastercard";
-	if (/AMEX|AMERICAN/.test(s)) return "AMEX";
-	if (/DISCOVER/.test(s)) return "Discover";
-	if (/JCB/.test(s)) return "JCB";
-	if (/MAESTRO/.test(s)) return "Maestro";
-	if (/UNIONPAY|CUP/.test(s)) return "UnionPay";
-	return s || "CARD";
+function extractSetupTokenFromApprove(data) {
+	return (
+		data?.vaultSetupToken ||
+		data?.vault_setup_token ||
+		data?.setupToken ||
+		data?.setup_token ||
+		data?.paymentToken ||
+		data?.payment_token ||
+		data?.token ||
+		data?.id ||
+		null
+	);
 }
 
-/* --------------------- SaveMethodModal --------------------- */
-const SaveMethodModal = ({
-	open,
-	onClose,
-	onSaved,
-	hotelId,
-	authHeaders,
-	chosenLanguage,
-}) => {
-	const lang = t9n[chosenLanguage] || t9n.English;
-	const isArabic = chosenLanguage === "Arabic";
-	const locale = isArabic ? "ar_EG" : "en_US";
+/* Submit for Card Fields */
+function SubmitOwnerCard({ allowInteract, labels }) {
+	const ctx = usePayPalCardFields();
+	const cardFieldsForm = ctx?.cardFieldsForm;
+	const cardFields = ctx?.cardFields;
 
-	const [scriptOptions, setScriptOptions] = useState(null);
-	const [label, setLabel] = useState("");
-	const [makeDefault, setMakeDefault] = useState(true);
+	const [busy, setBusy] = useState(false);
+	const [ready, setReady] = useState(false);
 
-	// ---- Single-toast helper (avoid double error noise) ----
-	const toastOnce = (() => {
-		let busy = false;
-		return (type, msg) => {
-			if (busy) return;
-			busy = true;
-			const reset = () => (busy = false);
-			if (type === "success") {
-				toast.success(msg);
-				reset();
-				return;
-			}
-			toast.error(msg);
-			setTimeout(reset, 400);
-		};
-	})();
-
-	// Prepare PayPal SDK options using server env + client token
 	useEffect(() => {
 		let cancelled = false;
-		async function init() {
-			try {
-				const resp = await fetch(`${API_BASE}/paypal/token-generated`);
-				const data = await resp.json();
-				if (!resp.ok || !data?.clientToken)
-					throw new Error("Failed to init PayPal");
-
-				const envName =
-					String(data.env || "").toLowerCase() === "live" ? "live" : "sandbox";
-				const feClientId =
-					envName === "live"
-						? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
-						: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX;
-
-				const opts = {
-					"client-id": feClientId || "",
-					"data-client-token": data.clientToken,
-					components: "buttons,card-fields",
-					currency: "USD",
-					intent: "authorize",
-					commit: true,
-					// IMPORTANT: do NOT set 'vault' and do NOT force 'buyer-country' here.
-					"enable-funding": "paypal,venmo,card",
-					"disable-funding": "credit,paylater",
-					locale, // ar_EG or en_US as you do today
-				};
-				setScriptOptions(opts);
-				if (!cancelled) setScriptOptions(opts);
-			} catch (e) {
-				// eslint-disable-next-line no-console
-				console.error(e);
-				toastOnce(
-					"error",
-					isArabic ? "فشل تهيئة PayPal" : "Failed to initialize PayPal"
-				);
+		let tries = 0;
+		const tick = () => {
+			if (cancelled) return;
+			const submitFn =
+				(cardFieldsForm && cardFieldsForm.submit) ||
+				(cardFields && cardFields.submit) ||
+				null;
+			const eligible =
+				(cardFieldsForm?.isEligible?.() ?? true) &&
+				(cardFields?.isEligible?.() ?? true);
+			setReady(typeof submitFn === "function" && eligible);
+			if ((!submitFn || !eligible) && tries < 60) {
+				tries += 1;
+				setTimeout(tick, 250);
 			}
-		}
-		if (open) init();
+		};
+		tick();
 		return () => {
 			cancelled = true;
-			setScriptOptions(null);
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [open, locale, isArabic]);
+	}, [cardFieldsForm, cardFields]);
 
-	/* Wallet (PayPal/Venmo) vaulting — client creates setup token, server exchanges it */
-	async function onWalletApprove(data) {
+	const submit = async () => {
+		const submitFn =
+			(cardFieldsForm && cardFieldsForm.submit) ||
+			(cardFields && cardFields.submit) ||
+			null;
+		if (!allowInteract || typeof submitFn !== "function") return;
+		setBusy(true);
 		try {
-			const setup_token =
-				data?.vault_token ||
-				data?.payment_token ||
-				data?.orderID ||
-				data?.billingToken;
-			if (!setup_token) throw new Error("Missing wallet setup token");
-			const resp = await fetch(
-				`${API_BASE}/hotels/${hotelId}/paypal/owner/save-card`,
-				{
-					method: "POST",
-					headers: authHeaders,
-					body: JSON.stringify({
-						setup_token,
-						label: label || "PayPal",
-						setDefault: !!makeDefault,
-					}),
+			if (cardFieldsForm?.getState) {
+				const state = await cardFieldsForm.getState();
+				if (state && !state.isFormValid) {
+					message.error(
+						labels?.incomplete || "Please complete your card details."
+					);
+					setBusy(false);
+					return;
 				}
-			);
-			const json = await resp.json();
-			if (!resp.ok) throw new Error(json?.message || "Failed to save wallet");
-			toastOnce(
-				"success",
-				isArabic ? "تم ربط حساب PayPal" : "PayPal account connected"
-			);
-			onSaved(Array.isArray(json.methods) ? json.methods : []);
-			onClose();
+			}
+			await submitFn(); // triggers SCA if needed → then onApprove runs
 		} catch (e) {
-			// eslint-disable-next-line no-console
-			console.error("Wallet vault error:", e);
-			toastOnce(
-				"error",
-				isArabic ? "فشل ربط الحساب" : "Failed to connect PayPal"
-			);
+			console.error("[Owner] CardFields submit error:", e);
+			message.error(labels?.failed || "Card save failed.");
+		} finally {
+			setBusy(false);
 		}
-	}
+	};
 
-	function createWalletSetupToken(_data, actions) {
-		if (!actions?.vault?.setup) throw new Error("Vaulting not supported");
-		return actions.vault.setup({ payment_source: { paypal: {} } });
-	}
+	const disabled = !allowInteract || !ready || busy;
+	return (
+		<PrimaryBtn
+			type='button'
+			onClick={submit}
+			disabled={disabled}
+			aria-disabled={disabled}
+		>
+			{busy ? labels?.processing || "Processing…" : labels?.save || "Save Card"}
+		</PrimaryBtn>
+	);
+}
 
-	/* Shared order builder for card “save” flows (inline Card Fields and the hosted Card button) */
-	const MIN_AUTH_USD = "50.00";
-	const buildVaultOrder = () => ({
-		intent: "AUTHORIZE",
-		purchase_units: [
-			{
-				reference_id: "precheck",
-				amount: { currency_code: "USD", value: MIN_AUTH_USD },
-			},
-		],
-		application_context: {
-			brand_name: "Jannat Booking",
-			user_action: "PAY_NOW",
-			shipping_preference: "NO_SHIPPING",
-		},
-		payment_source: {
-			card: { attributes: { vault: { store_in_vault: "ON_SUCCESS" } } },
-		},
-	});
+/* Inner area (ScriptProvider context) */
+function OwnerVaultArea({
+	isArabic,
+	allowInteract,
+	label,
+	setLabel,
+	setDefault,
+	setSetDefault,
+	onApproveSource, // (data, source) => void | Promise
+	onErrorVault,
+	createSetupTokenCard,
+	createSetupTokenPaypal,
+	createSetupTokenVenmo,
+}) {
+	const [{ isResolved, isRejected, options }] = usePayPalScriptReducer();
 
-	/* Inline Card Fields area — determine eligibility AFTER SDK resolves */
-	const CardFieldsArea = () => {
-		const [{ isResolved }] = usePayPalScriptReducer();
-		const ctx = usePayPalCardFields();
-		const cardFieldsForm = ctx?.cardFieldsForm;
-		const cardFields = ctx?.cardFields;
-		const [busy, setBusy] = useState(false);
-		const [ready, setReady] = useState(false);
-		const [cfEligible, setCfEligible] = useState(false);
-
-		useEffect(() => {
-			if (!isResolved) return;
-			let eligible = false;
-			try {
-				eligible = !!window?.paypal?.CardFields?.isEligible?.();
-			} catch {
-				eligible = false;
-			}
-			setCfEligible(eligible);
-		}, [isResolved]);
-
-		useEffect(() => {
-			if (!isResolved || !cfEligible) return;
-			let cancelled = false;
-			const checkReady = () => {
-				if (cancelled) return;
-				const submitFn =
-					(cardFieldsForm && cardFieldsForm.submit) ||
-					(cardFields && cardFields.submit) ||
-					null;
-				const eligible =
-					(cardFieldsForm?.isEligible?.() ?? true) &&
-					(cardFields?.isEligible?.() ?? true);
-				setReady(typeof submitFn === "function" && eligible);
-			};
-			checkReady();
-			return () => {
-				cancelled = true;
-			};
-		}, [isResolved, cfEligible, cardFieldsForm, cardFields]);
-
-		if (!isResolved) {
-			return (
-				<div style={{ textAlign: "center", padding: 12 }}>
-					<Spin />
-				</div>
-			);
-		}
-
-		if (!cfEligible) {
-			return (
-				<div style={{ marginTop: 10 }}>
-					<Alert
-						type='info'
-						showIcon
-						message={
-							isArabic
-								? "حقول البطاقة داخل الصفحة غير متاحة في منطقتك/حسابك. استخدم زر البطاقة أعلاه."
-								: "Inline card fields aren’t available in your region/account. Use the card button above."
-						}
-					/>
-				</div>
-			);
-		}
-
-		const createOrder = (_data, actions) => {
-			if (!actions?.order?.create)
-				throw new Error("Card Fields not eligible in this browser/region");
-			return actions.order.create(buildVaultOrder());
-		};
-
-		async function onApprove({ orderID }) {
-			try {
-				const resp = await fetch(
-					`${API_BASE}/hotels/${hotelId}/paypal/owner/save-card`,
-					{
-						method: "POST",
-						headers: authHeaders,
-						body: JSON.stringify({
-							order_id: orderID,
-							label: label || undefined,
-							setDefault: !!makeDefault,
-						}),
-					}
-				);
-				const json = await resp.json();
-				if (!resp.ok) throw new Error(json?.message || "Failed to save card");
-				toastOnce("success", isArabic ? "تم حفظ البطاقة" : "Card saved");
-				onSaved(Array.isArray(json.methods) ? json.methods : []);
-				onClose();
-			} catch (e) {
-				// eslint-disable-next-line no-console
-				console.error("CardFields approve error:", e);
-				toastOnce(
-					"error",
-					isArabic ? "فشل حفظ البطاقة" : "Failed to save card"
-				);
-			}
-		}
-
+	if (isRejected) {
+		try {
+			const u = new URL("https://www.paypal.com/sdk/js");
+			Object.entries(options || {}).forEach(([k, v]) => {
+				if (v != null && v !== "") u.searchParams.set(k, String(v));
+			});
+			console.log("[Owner][PP][script url]", u.toString(), { options });
+		} catch {}
 		return (
-			<CardBox dir={isArabic ? "rtl" : "ltr"}>
-				<CardTitle>{isArabic ? "أو احفظ بطاقة" : "Or save a card"}</CardTitle>
+			<Alert
+				type='error'
+				showIcon
+				message={
+					isArabic ? "تعذر تحميل بوابة الدفع" : "Payment module failed to load"
+				}
+				description={
+					isArabic
+						? "تحقق من الاتصال أو جرّب متصفح/شبكة مختلفة."
+						: "Check your internet or try another browser/network."
+				}
+			/>
+		);
+	}
+	if (!isResolved) return <Spin />;
+
+	return (
+		<>
+			{/* Wallet Buttons */}
+			<ButtonsBox>
+				{/* PayPal wallet button (auto‑hides if ineligible) */}
+				<PayPalButtons
+					fundingSource='paypal'
+					style={{ layout: "vertical", label: "paypal" }}
+					createVaultSetupToken={createSetupTokenPaypal}
+					onApprove={(data) => onApproveSource(data, "paypal")}
+					onError={onErrorVault}
+					disabled={!allowInteract}
+				/>
+				{/* Venmo button (will be hidden on most desktops / non‑US configs) */}
+				<PayPalButtons
+					fundingSource='venmo'
+					style={{ layout: "vertical", label: "venmo" }}
+					createVaultSetupToken={createSetupTokenVenmo}
+					onApprove={(data) => onApproveSource(data, "venmo")}
+					onError={onErrorVault}
+					disabled={!allowInteract}
+				/>
+			</ButtonsBox>
+
+			<BrandFootnote>
+				Powered by <b>PayPal</b>
+			</BrandFootnote>
+			<Divider />
+
+			{/* Card Fields */}
+			<CardBox aria-disabled={!allowInteract}>
+				<CardTitle>
+					{isArabic ? "إضافة بطاقة الفندق" : "Add Hotel Card"}
+				</CardTitle>
+
+				<FieldRow dir={isArabic ? "rtl" : "ltr"}>
+					<div className='field' style={{ flex: 1 }}>
+						<label>
+							{isArabic ? "اسم للبطاقة (اختياري)" : "Card label (optional)"}
+						</label>
+						<Input
+							placeholder={
+								isArabic ? "مثال: Visa رئيسية" : "e.g., Primary Visa"
+							}
+							maxLength={60}
+							value={label}
+							onChange={(e) => setLabel(e.target.value)}
+						/>
+					</div>
+					<div
+						className='field'
+						style={{ width: 220, display: "flex", alignItems: "end" }}
+					>
+						<Checkbox
+							checked={setDefault}
+							onChange={(e) => setSetDefault(e.target.checked)}
+						>
+							{isArabic ? "تعيين كافتراضي" : "Set as default"}
+						</Checkbox>
+					</div>
+				</FieldRow>
 
 				<PayPalCardFieldsProvider
-					createOrder={createOrder}
-					onApprove={onApprove}
-					onError={(e) => {
-						// log only; avoid double toasts (submit/onApprove already handle UX)
-						// eslint-disable-next-line no-console
-						console.error("CardFields SDK error:", e);
-					}}
+					createVaultSetupToken={createSetupTokenCard}
+					onApprove={(data) => onApproveSource(data, "card")}
+					onError={onErrorVault}
 				>
-					<PayPalCardFieldsForm>
-						<div className='field'>
+					<PayPalCardFieldsForm dir='ltr'>
+						<div className='field' dir='ltr'>
 							<label>{isArabic ? "اسم حامل البطاقة" : "Cardholder name"}</label>
 							<div className='hosted'>
 								<PayPalNameField />
 							</div>
 						</div>
-						<div className='field'>
+						<div className='field' dir='ltr'>
 							<label>{isArabic ? "رقم البطاقة" : "Card number"}</label>
 							<div className='hosted'>
 								<PayPalNumberField />
 							</div>
 						</div>
-						<Row>
-							<div className='field half'>
+						<Row dir='ltr'>
+							<div className='field half' dir='ltr'>
 								<label>{isArabic ? "تاريخ الانتهاء" : "Expiry date"}</label>
 								<div className='hosted'>
 									<PayPalExpiryField />
 								</div>
 							</div>
-							<div className='field half'>
+							<div className='field half' dir='ltr'>
 								<label>CVV</label>
 								<div className='hosted'>
 									<PayPalCVVField />
@@ -451,787 +282,709 @@ const SaveMethodModal = ({
 					</PayPalCardFieldsForm>
 
 					<div style={{ marginTop: 8 }}>
-						<PayCardButton
-							type='button'
-							disabled={!ready || busy}
-							aria-disabled={!ready || busy}
-							onClick={async () => {
-								const submitFn =
-									(cardFieldsForm && cardFieldsForm.submit) ||
-									(cardFields && cardFields.submit) ||
-									null;
-								if (typeof submitFn !== "function") return;
-								setBusy(true);
-								try {
-									if (cardFieldsForm?.getState) {
-										const state = await cardFieldsForm.getState();
-										if (state && !state.isFormValid) {
-											toastOnce(
-												"error",
-												isArabic
-													? "بيانات البطاقة غير مكتملة."
-													: "Card details are incomplete."
-											);
-											setBusy(false);
-											return;
-										}
-									}
-									await submitFn(); // triggers 3‑D Secure if needed → then onApprove runs
-								} catch (e) {
-									// eslint-disable-next-line no-console
-									console.error("CardFields submit error:", e);
-									toastOnce(
-										"error",
-										isArabic ? "فشل عملية البطاقة" : "Card operation failed."
-									);
-								} finally {
-									setBusy(false);
-								}
+						<SubmitOwnerCard
+							allowInteract={allowInteract}
+							labels={{
+								save: isArabic ? "حفظ البطاقة" : "Save Card",
+								processing: isArabic ? "جار المعالجة..." : "Processing…",
+								incomplete: isArabic
+									? "يرجى إكمال بيانات البطاقة."
+									: "Please complete your card details.",
+								failed: isArabic ? "فشل حفظ البطاقة" : "Card save failed.",
 							}}
-							title={!ready ? "Initializing secure card fields..." : undefined}
-						>
-							{busy
-								? isArabic
-									? "جارٍ الحفظ…"
-									: "Processing…"
-								: lang.saveCard}
-						</PayCardButton>
+						/>
 					</div>
 				</PayPalCardFieldsProvider>
 			</CardBox>
-		);
-	};
-
-	/* PayPal-hosted "Save a Card" button (no invalid label usage) */
-	const CardHostedButton = () => (
-		<PayPalButtons
-			fundingSource='card'
-			style={{ layout: "vertical" }} // <-- no 'label: "card"'
-			createOrder={(data, actions) => actions?.order?.create(buildVaultOrder())}
-			onApprove={async ({ orderID }) => {
-				try {
-					const resp = await fetch(
-						`${API_BASE}/hotels/${hotelId}/paypal/owner/save-card`,
-						{
-							method: "POST",
-							headers: authHeaders,
-							body: JSON.stringify({
-								order_id: orderID,
-								label: label || undefined,
-								setDefault: !!makeDefault,
-							}),
-						}
-					);
-					const json = await resp.json();
-					if (!resp.ok) throw new Error(json?.message || "Failed to save card");
-					toastOnce("success", isArabic ? "تم حفظ البطاقة" : "Card saved");
-					onSaved(Array.isArray(json.methods) ? json.methods : []);
-					onClose();
-				} catch (e) {
-					// eslint-disable-next-line no-console
-					console.error("Card hosted button error:", e);
-					toastOnce(
-						"error",
-						isArabic ? "فشل حفظ البطاقة" : "Failed to save card"
-					);
-				}
-			}}
-			onError={(e) => {
-				// log only; avoid duplicate toasts
-				// eslint-disable-next-line no-console
-				console.error("Card hosted button SDK error:", e);
-			}}
-		/>
+		</>
 	);
+}
 
+/* Save‑method modal (wraps OwnerVaultArea) */
+function SaveMethodModal({
+	open,
+	onClose,
+	paypalOptions,
+	isArabic,
+	allowInteract,
+	label,
+	setLabel,
+	setDefault,
+	setSetDefault,
+	onApproveSource, // must return true on success to auto-close
+	onErrorVault,
+	createSetupTokenCard,
+	createSetupTokenPaypal,
+	createSetupTokenVenmo,
+}) {
 	return (
 		<Modal
-			title={lang.addMethodTitle}
 			open={open}
 			onCancel={onClose}
 			footer={null}
 			destroyOnClose
+			title={isArabic ? "إضافة طريقة دفع" : "Add Payment Method"}
 		>
-			{!scriptOptions ? (
-				<div style={{ textAlign: "center", padding: 16 }}>
+			{!paypalOptions ? (
+				<Centered>
 					<Spin />
-				</div>
+				</Centered>
 			) : (
-				<PayPalScriptProvider options={scriptOptions}>
-					<div style={{ marginBottom: 10 }}>
-						<Text type='secondary'>{lang.secure}</Text>
-					</div>
-
-					{/* Wallet vault buttons (no invalid labels) */}
-					<ButtonsRow>
-						<PayPalButtons
-							fundingSource='paypal'
-							style={{ layout: "vertical" }} // <-- no 'label: "paypal"'
-							createVaultSetupToken={createWalletSetupToken}
-							onApprove={onWalletApprove}
-							onError={(e) => {
-								// eslint-disable-next-line no-console
-								console.error("PayPal button error:", e);
+				<ScriptShell>
+					<PayPalScriptProvider options={paypalOptions}>
+						<OwnerVaultArea
+							isArabic={isArabic}
+							allowInteract={allowInteract}
+							label={label}
+							setLabel={setLabel}
+							setDefault={setDefault}
+							setSetDefault={setSetDefault}
+							onApproveSource={async (data, src) => {
+								const ok = await onApproveSource(data, src);
+								if (ok) onClose();
 							}}
+							onErrorVault={onErrorVault}
+							createSetupTokenCard={createSetupTokenCard}
+							createSetupTokenPaypal={createSetupTokenPaypal}
+							createSetupTokenVenmo={createSetupTokenVenmo}
 						/>
-						<PayPalButtons
-							fundingSource='venmo'
-							style={{ layout: "vertical" }} // <-- no 'label: "venmo"'
-							createVaultSetupToken={createWalletSetupToken}
-							onApprove={onWalletApprove}
-							onError={(e) => {
-								// eslint-disable-next-line no-console
-								console.error("Venmo button error:", e);
-							}}
-						/>
-					</ButtonsRow>
-
-					{/* EXTRA: PayPal-hosted Card save button (above the form) */}
-					<div style={{ marginTop: 12, maxWidth: 420, marginInline: "auto" }}>
-						<CardHostedButton />
-					</div>
-
-					<Divider plain>{lang.or}</Divider>
-
-					{/* Label + default toggle (form stays as-is) */}
-					<Form layout='vertical' autoComplete='off'>
-						<Form.Item label={lang.labelOptional}>
-							<Input
-								placeholder='Finance - Corporate Visa'
-								value={label}
-								onChange={(e) => setLabel(e.target.value)}
-							/>
-						</Form.Item>
-						{/* Always English per request */}
-						<Form.Item label='Default Card'>
-							<Switch checked={makeDefault} onChange={setMakeDefault} />
-						</Form.Item>
-					</Form>
-
-					{/* Inline Card Fields area with graceful fallback */}
-					<CardFieldsArea />
-
-					<div style={{ marginTop: 10 }}>
-						<Button onClick={onClose}>{lang.close}</Button>
-					</div>
-				</PayPalScriptProvider>
+					</PayPalScriptProvider>
+				</ScriptShell>
 			)}
 		</Modal>
 	);
-};
+}
 
-/* --------------------- Main PaymentSettings --------------------- */
-const PaymentSettings = ({
+/* Manage modal */
+function ManageMethodModal({
+	isArabic,
+	open,
+	onClose,
+	method,
+	hotelId,
+	token,
+	refresh,
+}) {
+	if (!method) return null;
+	const doDefault = async () => {
+		try {
+			await setOwnerDefaultPaymentMethod(
+				{ hotelId, methodId: method._id },
+				{ token }
+			);
+			message.success(isArabic ? "تم التعيين كافتراضي" : "Set as default.");
+			await refresh();
+			onClose();
+		} catch (e) {
+			console.error("[Owner] set default error:", e);
+			message.error(
+				isArabic ? "تعذر التعيين كافتراضي" : "Failed to set default."
+			);
+		}
+	};
+	const doActivate = async () => {
+		try {
+			await activateOwnerPaymentMethod(
+				{ hotelId, methodId: method._id },
+				{ token }
+			);
+			message.success(isArabic ? "تم التفعيل" : "Activated.");
+			await refresh();
+			onClose();
+		} catch (e) {
+			console.error("[Owner] activate error:", e);
+			message.error(isArabic ? "تعذر التفعيل" : "Failed to activate.");
+		}
+	};
+	const doDeactivate = async () => {
+		try {
+			await deactivateOwnerPaymentMethod(
+				{ hotelId, methodId: method._id },
+				{ token }
+			);
+			message.success(isArabic ? "تم التعطيل" : "Deactivated.");
+			await refresh();
+			onClose();
+		} catch (e) {
+			console.error("[Owner] deactivate error:", e);
+			message.error(isArabic ? "تعذر التعطيل" : "Failed to deactivate.");
+		}
+	};
+	const doDelete = async () => {
+		Modal.confirm({
+			title: isArabic ? "احذف هذه الطريقة؟" : "Delete this method?",
+			content: isArabic
+				? "لن تظهر هذه البطاقة/المحفظة في القائمة بعد الآن"
+				: "This method will be deleted from the list.",
+			okText: isArabic ? "احذف" : "Delete",
+			cancelText: isArabic ? "إلغاء" : "Cancel",
+			onOk: async () => {
+				try {
+					await deleteOwnerPaymentMethod(
+						{ hotelId, methodId: method._id },
+						{ token }
+					);
+					message.success(isArabic ? "تم احذف" : "Deleted.");
+					await refresh();
+					onClose();
+				} catch (e) {
+					console.error("[Owner] delete error:", e);
+					message.error(isArabic ? "تعذر حذف" : "Failed to Delete.");
+				}
+			},
+		});
+	};
+
+	return (
+		<Modal
+			open={open}
+			onCancel={onClose}
+			footer={null}
+			title={isArabic ? "إدارة طريقة الدفع" : "Manage Payment Method"}
+		>
+			<p style={{ marginBottom: 6, fontWeight: 600 }}>{method.label || "—"}</p>
+			<div style={{ marginBottom: 8 }}>
+				<Tag color='geekblue'>{method.method_type || "CARD"}</Tag>
+				{method.default ? (
+					<Tag color='blue'>{isArabic ? "افتراضي" : "Default"}</Tag>
+				) : null}
+				{method.active ? (
+					<Tag color='green'>{isArabic ? "نشط" : "Active"}</Tag>
+				) : (
+					<Tag color='orange'>{isArabic ? "غير نشط" : "Inactive"}</Tag>
+				)}
+			</div>
+
+			<Space wrap>
+				<Button
+					type='primary'
+					disabled={method.default || method.delete}
+					onClick={doDefault}
+				>
+					{isArabic ? "تعيين كافتراضي" : "Set as Default"}
+				</Button>
+				<Button onClick={doActivate} disabled={method.active}>
+					{isArabic ? "تفعيل" : "Activate"}
+				</Button>
+				<Button danger onClick={doDeactivate} disabled={!method.active}>
+					{isArabic ? "تعطيل" : "Deactivate"}
+				</Button>
+				<Button danger onClick={doDelete}>
+					{isArabic ? "احذف" : "Delete"}
+				</Button>
+			</Space>
+		</Modal>
+	);
+}
+
+export default function PaymentSettings({
 	setHotelDetails,
 	hotelDetails,
-	submittingHotelDetails,
 	chosenLanguage,
-}) => {
-	const lang = t9n[chosenLanguage] || t9n.English;
-	const dir = chosenLanguage === "Arabic" ? "rtl" : "ltr";
-
-	// Wire accounts
-	const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-	const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-	const [editingAccount, setEditingAccount] = useState(null);
-	const [form] = Form.useForm();
-	const paymentSettingsData = hotelDetails?.paymentSettings || [];
-
-	// Methods list
-	const [methods, setMethods] = useState([]);
-	const [methodsLoading, setMethodsLoading] = useState(false);
-
-	// Add method modal
-	const [methodModalOpen, setMethodModalOpen] = useState(false);
-
-	// Auth headers
+	submittingHotelDetails,
+}) {
+	const isArabic = chosenLanguage === "Arabic";
+	const locale = mapLocale(isArabic);
+	const hotelId = hotelDetails?._id;
 	const { token } = isAuthenticated() || {};
-	const authHeaders = useMemo(
-		() => ({
-			Accept: "application/json",
-			"Content-Type": "application/json",
-			...(token ? { Authorization: `Bearer ${token}` } : {}),
-		}),
+
+	const [clientToken, setClientToken] = useState(null);
+	const [isLive, setIsLive] = useState(null);
+	const [tokenError, setTokenError] = useState(null);
+	const [reloadKey, setReloadKey] = useState(0);
+
+	const [methods, setMethods] = useState(
+		() => hotelDetails?.ownerPaymentMethods || []
+	);
+	const [label, setLabel] = useState("");
+	const [setDefault, setSetDefault] = useState(true);
+
+	// remember last setup token (any source)
+	const lastSetupTokenRef = useRef(null);
+
+	// manage modal
+	const [manageOpen, setManageOpen] = useState(false);
+	const [selectedMethod, setSelectedMethod] = useState(null);
+
+	// add method modal
+	const [addOpen, setAddOpen] = useState(false);
+
+	const allowInteract = !!hotelId;
+
+	const refreshFromServer = useCallback(async () => {
+		if (!hotelId) return;
+		try {
+			const data = await listOwnerPaymentMethods(hotelId, { token });
+			const arr = Array.isArray(data?.ownerPaymentMethods)
+				? data.ownerPaymentMethods
+				: [];
+			setMethods(arr);
+			if (typeof setHotelDetails === "function") {
+				setHotelDetails((prev) => ({
+					...(prev || {}),
+					ownerPaymentMethods: arr,
+				}));
+			}
+		} catch (e) {
+			console.error("[Owner] list methods error:", e);
+			message.error(isArabic ? "تعذر تحميل الطرق" : "Failed to load methods.");
+		}
+	}, [hotelId, setHotelDetails, isArabic, token]);
+
+	useEffect(() => {
+		setMethods(hotelDetails?.ownerPaymentMethods || []);
+	}, [hotelDetails?.ownerPaymentMethods]);
+
+	// Load client token once
+	useEffect(() => {
+		let mounted = true;
+		(async () => {
+			try {
+				const tok = await getOwnerPayPalClientToken({ debug: true });
+				const ct = tok?.clientToken;
+				let env = (tok?.env || "").toLowerCase();
+				if (!ct) throw new Error("Missing owner PayPal client token");
+				if (env !== "live" && env !== "sandbox") {
+					const node = (process.env.REACT_APP_NODE_ENV || "").toUpperCase();
+					env = node === "PRODUCTION" ? "live" : "sandbox";
+					console.warn(
+						"[Owner][PayPal] 'env' not returned by API. Falling back to",
+						env
+					);
+				}
+				if (mounted) {
+					setClientToken(ct);
+					setIsLive(env === "live");
+				}
+				const feClientId =
+					env === "live"
+						? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
+						: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX;
+				console.log(
+					"[Owner][PP][diag] FE clientIdSig:",
+					idSig(feClientId || "na"),
+					"BE clientIdSig:",
+					tok?.diag?.clientIdSig || "(n/a)",
+					"env:",
+					env,
+					"cached:",
+					!!tok?.cached
+				);
+			} catch (e) {
+				console.error("[Owner] PayPal init failed:", e);
+				setTokenError(e);
+				message.error(isArabic ? "فشل تهيئة PayPal" : "PayPal init failed.");
+			}
+		})();
+		return () => {
+			mounted = false;
+		};
+	}, [isArabic, reloadKey]);
+
+	useEffect(() => {
+		refreshFromServer();
+	}, [refreshFromServer]);
+
+	const reloadPayment = useCallback(() => {
+		setReloadKey((k) => k + 1);
+		setClientToken(null);
+		setIsLive(null);
+		setTokenError(null);
+	}, []);
+
+	const feClientId = useMemo(() => {
+		if (isLive == null) return "";
+		return (
+			(isLive
+				? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
+				: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX) || ""
+		);
+	}, [isLive]);
+
+	// IMPORTANT: vault:true so wallet + card tokenization works
+	const paypalOptions =
+		clientToken && isLive != null
+			? {
+					"client-id": feClientId,
+					"data-client-token": clientToken,
+					components: "buttons,card-fields",
+					currency: "USD",
+					intent: "authorize",
+					commit: true,
+					"enable-funding": "paypal,card,venmo",
+					"disable-funding": "credit,paylater",
+					vault: true,
+					locale,
+			  }
+			: null;
+
+	// Setup-token creators per source
+	const createSetupTokenCard = useCallback(async () => {
+		const id = await createOwnerPayPalSetupToken({
+			paymentSource: "card",
+			token,
+		});
+		lastSetupTokenRef.current = id;
+		return id;
+	}, [token]);
+
+	const createSetupTokenPaypal = useCallback(
+		(data, actions) => {
+			if (actions?.vaultSetupToken) {
+				return actions.vaultSetupToken().then((id) => {
+					lastSetupTokenRef.current = id;
+					return id;
+				});
+			}
+			// Fallback (rare)
+			return createOwnerPayPalSetupToken({
+				paymentSource: "paypal",
+				token,
+			}).then((id) => {
+				lastSetupTokenRef.current = id;
+				return id;
+			});
+		},
 		[token]
 	);
 
-	// Hotel id
-	const selectedHotel = JSON.parse(
-		localStorage.getItem("selectedHotel") || "{}"
+	const createSetupTokenVenmo = useCallback(
+		(data, actions) => {
+			if (actions?.vaultSetupToken) {
+				return actions.vaultSetupToken().then((id) => {
+					lastSetupTokenRef.current = id;
+					return id;
+				});
+			}
+			return createOwnerPayPalSetupToken({
+				paymentSource: "venmo",
+				token,
+			}).then((id) => {
+				lastSetupTokenRef.current = id;
+				return id;
+			});
+		},
+		[token]
 	);
-	const hotelId = hotelDetails?._id || selectedHotel?._id;
 
-	const fetchMethods = useCallback(async () => {
-		if (!hotelId) return;
-		setMethodsLoading(true);
-		try {
-			const res = await fetch(
-				`${API_BASE}/hotels/${hotelId}/paypal/owner/methods`,
-				{ headers: authHeaders }
-			);
-			const data = await res.json();
-			if (res.ok) {
-				const list = Array.isArray(data.methods) ? data.methods : [];
-				setMethods(list.filter((m) => m.active !== false));
-			} else {
-				toast.error(data?.message || "Failed to load saved methods");
-			}
-		} catch {
-			toast.error("Failed to load saved methods");
-		} finally {
-			setMethodsLoading(false);
-		}
-	}, [hotelId, authHeaders]);
-
-	async function setDefaultMethod(vaultId) {
-		try {
-			const res = await fetch(
-				`${API_BASE}/hotels/${hotelId}/paypal/owner/methods/${vaultId}/default`,
-				{ method: "POST", headers: authHeaders }
-			);
-			const data = await res.json();
-			if (res.ok) {
-				const list = Array.isArray(data.methods) ? data.methods : [];
-				setMethods(list.filter((m) => m.active !== false));
-				toast.success("Default updated");
-			} else {
-				toast.error(data?.message || "Failed to set default");
-			}
-		} catch {
-			toast.error("Failed to set default");
-		}
-	}
-
-	async function removeMethod(vaultId) {
-		try {
-			const res = await fetch(
-				`${API_BASE}/hotels/${hotelId}/paypal/owner/methods/${vaultId}`,
-				{ method: "DELETE", headers: authHeaders }
-			);
-			const data = await res.json();
-			if (res.ok) {
-				const list = Array.isArray(data.methods) ? data.methods : [];
-				setMethods(list.filter((m) => m.active !== false));
-				toast.success("Removed");
-			} else {
-				toast.error(data?.message || "Failed to remove");
-			}
-		} catch {
-			toast.error("Failed to remove");
-		}
-	}
-
-	useEffect(() => {
-		if (hotelId) fetchMethods();
-	}, [hotelId, fetchMethods]);
-
-	// Wire accounts helpers
-	const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
-	async function handleWireSubmit(values) {
-		let newPaymentSettings;
-		if (editingAccount) {
-			newPaymentSettings = paymentSettingsData.map((acc) =>
-				acc._id && editingAccount._id && acc._id === editingAccount._id
-					? { ...acc, ...values }
-					: acc
-			);
-			setEditingAccount(null);
-			setIsEditModalVisible(false);
-		} else {
-			newPaymentSettings = [...paymentSettingsData, values];
-			setIsAddModalVisible(false);
-		}
-
-		const updated = { ...hotelDetails, paymentSettings: newPaymentSettings };
-
-		if (!deepEqual(hotelDetails.paymentSettings, newPaymentSettings)) {
+	const onApproveSource = useCallback(
+		async (data, source) => {
 			try {
-				const resp = await submittingHotelDetails("paymentSettings", updated);
-				if (resp && resp._id) setHotelDetails(resp);
-				else setHotelDetails(updated);
-				toast.success("Bank account saved");
-			} catch (err) {
-				// eslint-disable-next-line no-console
-				console.error(err);
-				toast.error("Failed to save bank account");
+				const fromData = extractSetupTokenFromApprove(data);
+				const setupTokenId = fromData || lastSetupTokenRef.current || null;
+
+				if (!setupTokenId) {
+					message.error(
+						isArabic
+							? "تعذر الحصول على رمز التهيئة من PayPal"
+							: "Could not get setup token from PayPal"
+					);
+					return false;
+				}
+
+				const auto =
+					source === "paypal"
+						? "PayPal"
+						: source === "venmo"
+						  ? "Venmo"
+						  : "Card";
+				const save = await saveOwnerVaultCard(
+					{
+						hotelId,
+						setup_token: setupTokenId,
+						label: (label || "").trim() || auto,
+						setDefault,
+					},
+					{ token }
+				);
+
+				const arr = Array.isArray(save?.ownerPaymentMethods)
+					? save.ownerPaymentMethods
+					: [];
+				setMethods(arr);
+				if (typeof setHotelDetails === "function") {
+					setHotelDetails((prev) => ({
+						...(prev || {}),
+						ownerPaymentMethods: arr,
+					}));
+				}
+				setLabel("");
+				setSetDefault(true);
+				message.success(isArabic ? "تم الحفظ بنجاح" : "Saved successfully.");
+				return true;
+			} catch (e) {
+				console.error("[Owner] vault save error:", e);
+				message.error(isArabic ? "فشل حفظ الطريقة" : "Failed to save method.");
+				return false;
 			}
-		}
-		form.resetFields();
-	}
+		},
+		[hotelId, label, setDefault, setHotelDetails, isArabic, token]
+	);
 
-	function showEditModal(record) {
-		setEditingAccount(record);
-		form.setFieldsValue(record);
-		setIsEditModalVisible(true);
-	}
+	const onErrorVault = (e) => {
+		console.error("[Owner] PayPal vault error:", e);
+		message.error(isArabic ? "خطأ من PayPal" : "PayPal vault error.");
+	};
 
-	const columns = [
-		{ title: lang.accountName, dataIndex: "accountName", key: "accountName" },
-		{ title: lang.bankName, dataIndex: "bankName", key: "bankName" },
-		{
-			title: lang.accountCountry,
-			dataIndex: "accountCountry",
-			key: "accountCountry",
-			render: (code) => {
-				const found = countryListWithAbbreviations.find((c) => c.code === code);
-				return found ? `${found.name} (${found.code})` : code || "-";
+	// Only show non-deleted
+	const visibleMethods = useMemo(
+		() =>
+			Array.isArray(methods) ? methods.filter((m) => m?.delete !== true) : [],
+		[methods]
+	);
+
+	const columns = useMemo(
+		() => [
+			{
+				title: isArabic ? "النوع" : "Type",
+				dataIndex: "method_type",
+				key: "method_type",
+				render: (t) => <Tag color='geekblue'>{t || "CARD"}</Tag>,
 			},
-		},
-		{
-			title: lang.accountNumber,
-			dataIndex: "accountNumber",
-			key: "accountNumber",
-			render: (v) => (v ? `•••• ${String(v).slice(-4)}` : "-"),
-		},
-		{
-			title: "Actions",
-			key: "actions",
-			render: (text, record) => (
-				<Space>
-					<Button
-						type='link'
-						icon={<EditOutlined />}
-						onClick={() => showEditModal(record)}
+			{
+				title: isArabic ? "التسمية" : "Label",
+				dataIndex: "label",
+				key: "label",
+				render: (text, record) => (
+					<Space size='small'>
+						<span style={{ fontWeight: 600 }}>{text || "—"}</span>
+						{record.default ? (
+							<Tag color='blue'>{isArabic ? "افتراضي" : "Default"}</Tag>
+						) : null}
+						{!record.active ? (
+							<Tag color='orange'>{isArabic ? "غير نشط" : "Inactive"}</Tag>
+						) : null}
+					</Space>
+				),
+			},
+			{
+				title: isArabic ? "البطاقة/المحفظة" : "Card/Wallet",
+				key: "card",
+				render: (_, r) =>
+					r.method_type === "CARD" ? (
+						<span>
+							{(r.card_brand || "").toUpperCase() || "Card"} ••••{" "}
+							{r.card_last4 || "****"}
+						</span>
+					) : r.method_type === "PAYPAL" ? (
+						<span>PayPal {r.paypal_email ? `• ${r.paypal_email}` : ""}</span>
+					) : (
+						<span>
+							Venmo {r.venmo_username ? `• @${r.venmo_username}` : ""}
+						</span>
+					),
+			},
+			{
+				title: isArabic ? "الصلاحية" : "Expiry",
+				dataIndex: "card_exp",
+				key: "card_exp",
+				render: (v, r) => (r.method_type === "CARD" ? v || "—" : "—"),
+			},
+			{
+				title: isArabic ? "حالة الخزينة" : "Vault Status",
+				dataIndex: "vault_status",
+				key: "vault_status",
+				render: (s) => (
+					<Tag
+						color={String(s).toUpperCase() === "ACTIVE" ? "green" : "orange"}
 					>
-						{lang.showDetails}
-					</Button>
-				</Space>
-			),
-		},
-	];
-
-	return (
-		<Wrapper dir={dir} style={{ textAlign: dir === "rtl" ? "right" : "left" }}>
-			<div className='header'>
-				<h2>{lang.heading}</h2>
-			</div>
-
-			{/* Methods */}
-			<SectionCard>
-				<SectionHeader>
-					<Title level={4} style={{ margin: 0 }}>
-						<CreditCardOutlined style={{ marginInlineEnd: 8 }} />
-						{lang.methodsSection}
-					</Title>
-				</SectionHeader>
-
-				<ButtonsBar>
-					<Tooltip title={lang.secure}>
-						<SafetyOutlined />
-					</Tooltip>
-					<Button icon={<ReloadOutlined />} onClick={fetchMethods}>
-						{lang.refresh}
-					</Button>
-					<Button
-						type='primary'
-						icon={<PlusOutlined />}
-						onClick={() => setMethodModalOpen(true)}
-					>
-						{lang.addMethod}
-					</Button>
-				</ButtonsBar>
-
-				<Divider style={{ margin: "12px 0" }} />
-
-				{methodsLoading ? (
-					<div style={{ padding: 16 }}>
-						<Text>{lang.loading}</Text>
-					</div>
-				) : methods.length === 0 ? (
-					<Empty
-						description={<span>{lang.noMethods}</span>}
-						image={Empty.PRESENTED_IMAGE_SIMPLE}
-					/>
-				) : (
-					<List
-						grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4 }}
-						dataSource={methods}
-						renderItem={(item) => {
-							const brand = brandOf(item);
-							const isWallet = !item.card_brand && !item.card_last4;
-							const last4 = isWallet ? null : item.card_last4 || "••••";
-							const exp = isWallet ? "" : item.card_exp || "";
-							const isDefault = !!item.default;
-							return (
-								<List.Item>
-									<AntCard
-										size='small'
-										title={
-											<div
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: 8,
-												}}
-											>
-												<span style={{ fontWeight: 600 }}>{brand}</span>
-												{!isWallet && <span>• • • • {last4}</span>}
-												{isDefault ? (
-													<Tag
-														color='green'
-														icon={<CheckCircleTwoTone twoToneColor='#52c41a' />}
-													>
-														{lang.defaultCard}
-													</Tag>
-												) : null}
-											</div>
-										}
-										actions={[
-											isDefault ? (
-												<Tooltip title={lang.defaultCard} key='def'>
-													<StarFilled style={{ color: "#faad14" }} />
-												</Tooltip>
-											) : (
-												<Tooltip title={lang.makeDefault} key='mkdef'>
-													<StarOutlined
-														onClick={() => setDefaultMethod(item.vault_id)}
-													/>
-												</Tooltip>
-											),
-											<Popconfirm
-												key='rm'
-												title={lang.remove}
-												onConfirm={() => removeMethod(item.vault_id)}
-											>
-												<Tooltip title={lang.remove}>
-													<DeleteOutlined />
-												</Tooltip>
-											</Popconfirm>,
-										]}
-									>
-										<div
-											style={{
-												display: "flex",
-												justifyContent: "space-between",
-											}}
-										>
-											<div>
-												<div style={{ fontSize: 12, opacity: 0.7 }}>
-													{item.label || brand}
-												</div>
-												<div style={{ fontSize: 12, opacity: 0.7 }}>
-													{item.vault_status || "ACTIVE"}
-												</div>
-											</div>
-											{!isWallet && (
-												<div style={{ textAlign: "right" }}>
-													<div style={{ fontSize: 12, opacity: 0.7 }}>EXP</div>
-													<div style={{ fontWeight: 600 }}>{exp || "—"}</div>
-												</div>
-											)}
-										</div>
-									</AntCard>
-								</List.Item>
-							);
-						}}
-					/>
-				)}
-			</SectionCard>
-
-			{/* Wire accounts */}
-			<SectionCard style={{ marginTop: 24 }}>
-				<SectionHeader>
-					<Title level={4} style={{ margin: 0 }}>
-						{lang.bankSection}
-					</Title>
-					<Button
-						type='primary'
-						icon={<PlusOutlined />}
-						onClick={() => {
-							form.resetFields();
-							setEditingAccount(null);
-							setIsAddModalVisible(true);
-						}}
-					>
-						{lang.addNewAccount}
-					</Button>
-				</SectionHeader>
-
-				<Divider style={{ margin: "12px 0" }} />
-
-				<Table
-					dataSource={paymentSettingsData.map((item, index) => ({
-						key: item._id || index,
-						...item,
-					}))}
-					columns={columns}
-					pagination={false}
-				/>
-			</SectionCard>
-
-			{/* Add method modal */}
-			{methodModalOpen && (
-				<SaveMethodModal
-					open={methodModalOpen}
-					onClose={() => setMethodModalOpen(false)}
-					onSaved={(list) => setMethods(list.filter((m) => m.active !== false))}
-					hotelId={hotelId}
-					authHeaders={authHeaders}
-					chosenLanguage={chosenLanguage}
-				/>
-			)}
-
-			{/* Add / Edit wire account */}
-			<Modal
-				title={editingAccount ? lang.updateAccountTitle : lang.addAccountTitle}
-				open={isAddModalVisible || isEditModalVisible}
-				onCancel={() => {
-					if (isEditModalVisible) {
-						setIsEditModalVisible(false);
-						setEditingAccount(null);
-					}
-					if (isAddModalVisible) setIsAddModalVisible(false);
-					form.resetFields();
-				}}
-				footer={null}
-				destroyOnClose
-			>
-				<Form
-					form={form}
-					layout='vertical'
-					onFinish={handleWireSubmit}
-					style={{ textAlign: dir === "rtl" ? "right" : "left" }}
-				>
-					<Form.Item
-						name='accountType'
-						label={lang.accountType}
-						initialValue='Business'
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						name='accountCountry'
-						label={lang.accountCountry}
-						rules={[
-							{ required: true, message: `${lang.accountCountry} ${lang.req}` },
-						]}
-					>
-						<Select
-							showSearch
-							placeholder={lang.accountCountry}
-							optionFilterProp='children'
-							filterOption={(input, option) =>
-								String(option?.children ?? "")
-									.toLowerCase()
-									.includes(input.toLowerCase())
-							}
+						{s || "—"}
+					</Tag>
+				),
+			},
+			{
+				title: isArabic ? "أُضيفت" : "Added",
+				dataIndex: "vaulted_at",
+				key: "vaulted_at",
+				render: (d) => (d ? new Date(d).toLocaleString() : "—"),
+			},
+			{
+				title: isArabic ? "الإجراء" : "Action",
+				key: "action",
+				render: (_, r) => (
+					<Space>
+						<Button
+							size='small'
+							onClick={() => {
+								setSelectedMethod(r);
+								setManageOpen(true);
+							}}
 						>
-							{countryListWithAbbreviations.map((country) => (
-								<Option key={country.code} value={country.code}>
-									{country.name}
-								</Option>
-							))}
-						</Select>
-					</Form.Item>
-
-					<Form.Item
-						name='accountName'
-						label={lang.accountName}
-						rules={[
-							{ required: true, message: `${lang.accountName} ${lang.req}` },
-						]}
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						name='bankName'
-						label={lang.bankName}
-						rules={[
-							{ required: true, message: `${lang.bankName} ${lang.req}` },
-						]}
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						name='accountNumber'
-						label={lang.accountNumber}
-						rules={[
-							{ required: true, message: `${lang.accountNumber} ${lang.req}` },
-						]}
-					>
-						<Input />
-					</Form.Item>
-
-					{/* Routing (US only) */}
-					<Form.Item shouldUpdate noStyle>
-						{({ getFieldValue }) => (
-							<Form.Item
-								name='routingNumber'
-								label={lang.routingNumber}
-								rules={[
-									{
-										validator(_, value) {
-											const country = getFieldValue("accountCountry");
-											const isUS = String(country || "").toUpperCase() === "US";
-											if (!isUS) return Promise.resolve();
-											if (!value)
-												return Promise.reject(
-													new Error(`${lang.routingNumber} ${lang.req}`)
-												);
-											return Promise.resolve();
-										},
-									},
-								]}
-							>
-								<Input placeholder='For US accounts' />
-							</Form.Item>
-						)}
-					</Form.Item>
-
-					{/* SWIFT (non-US only) */}
-					<Form.Item shouldUpdate noStyle>
-						{({ getFieldValue }) => (
-							<Form.Item
-								name='swiftCode'
-								label={lang.swiftCode}
-								rules={[
-									{
-										validator(_, value) {
-											const country = getFieldValue("accountCountry");
-											const isUS = String(country || "").toUpperCase() === "US";
-											if (isUS) return Promise.resolve();
-											if (!value)
-												return Promise.reject(
-													new Error(`${lang.swiftCode} ${lang.req}`)
-												);
-											return Promise.resolve();
-										},
-									},
-								]}
-							>
-								<Input placeholder='For international wires' />
-							</Form.Item>
-						)}
-					</Form.Item>
-
-					<Form.Item name='accountAddress' label={lang.accountAddress}>
-						<Input />
-					</Form.Item>
-					<Form.Item name='accountCity' label={lang.accountCity}>
-						<Input />
-					</Form.Item>
-					<Form.Item name='accountPostalCode' label={lang.accountPostalCode}>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						name='bankHeadQuarterCountry'
-						label={lang.bankHeadQuarterCountry}
-					>
-						<Select
-							showSearch
-							allowClear
-							placeholder={lang.bankHeadQuarterCountry}
-							optionFilterProp='children'
-							filterOption={(input, option) =>
-								String(option?.children ?? "")
-									.toLowerCase()
-									.includes(input.toLowerCase())
-							}
-						>
-							{countryListWithAbbreviations.map((country) => (
-								<Option key={country.code} value={country.code}>
-									{country.name}
-								</Option>
-							))}
-						</Select>
-					</Form.Item>
-
-					<Form.Item
-						name='bankHeadQuarterAddress'
-						label={lang.bankHeadQuarterAddress}
-					>
-						<Input />
-					</Form.Item>
-					<Form.Item
-						name='bankHeadQuarterCity'
-						label={lang.bankHeadQuarterCity}
-					>
-						<Input />
-					</Form.Item>
-					<Form.Item
-						name='bankHeadQuarterPostalCode'
-						label={lang.bankHeadQuarterPostalCode}
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item name='nameOfAccountOwner' label={lang.nameOfAccountOwner}>
-						<Input />
-					</Form.Item>
-					<Form.Item name='accountNickName' label={lang.accountNickName}>
-						<Input />
-					</Form.Item>
-
-					<Form.Item>
-						<Space>
-							<Button type='primary' htmlType='submit'>
-								{editingAccount ? lang.updateAccount : lang.addAccount}
-							</Button>
+							{isArabic ? "إدارة" : "Manage"}
+						</Button>
+						<Tooltip title={isArabic ? "نسخ معرف الخزينة" : "Copy vault id"}>
 							<Button
+								size='small'
 								onClick={() => {
-									if (isEditModalVisible) {
-										setIsEditModalVisible(false);
-										setEditingAccount(null);
-									}
-									if (isAddModalVisible) setIsAddModalVisible(false);
-									form.resetFields();
+									navigator.clipboard?.writeText?.(r.vault_id || "");
+									message.success(isArabic ? "تم النسخ" : "Copied.");
 								}}
 							>
-								{lang.cancel}
+								{isArabic ? "نسخ" : "Copy"}
 							</Button>
-						</Space>
-					</Form.Item>
-				</Form>
-			</Modal>
+						</Tooltip>
+					</Space>
+				),
+			},
+		],
+		[isArabic]
+	);
+
+	if (!hotelId) {
+		return (
+			<Alert
+				type='warning'
+				showIcon
+				message={isArabic ? "لا يوجد فندق محدد" : "No hotel selected"}
+			/>
+		);
+	}
+
+	if (clientToken && isLive != null && !feClientId) {
+		return (
+			<Alert
+				type='error'
+				showIcon
+				message='Missing PayPal client-id on the frontend'
+				description={
+					isLive
+						? "Set REACT_APP_PAYPAL_CLIENT_ID_LIVE in your .env"
+						: "Set REACT_APP_PAYPAL_CLIENT_ID_SANDBOX in your .env"
+				}
+			/>
+		);
+	}
+
+	if (tokenError) {
+		return (
+			<Centered>
+				<Alert
+					type='error'
+					showIcon
+					message={
+						isArabic ? "فشل تهيئة PayPal" : "PayPal initialization failed"
+					}
+					description={
+						isArabic ? "يرجى المحاولة مرة أخرى." : "Please try again."
+					}
+				/>
+				<div style={{ marginTop: 10 }}>
+					<ReloadBtn onClick={reloadPayment}>
+						{isArabic ? "إعادة المحاولة" : "Try again"}
+					</ReloadBtn>
+				</div>
+			</Centered>
+		);
+	}
+
+	return (
+		<Wrapper>
+			{/* Header + actions for methods */}
+			<HeaderRow>
+				<h4 style={{ margin: 0 }}>
+					{isArabic ? "الطرق المحفوظة" : "Saved Methods"}
+				</h4>
+				<Space>
+					<Button onClick={refreshFromServer}>
+						{isArabic ? "تحديث" : "Refresh"}
+					</Button>
+					<Button type='primary' onClick={() => setAddOpen(true)}>
+						{isArabic ? "إضافة طريقة دفع" : "Add Payment Method"}
+					</Button>
+				</Space>
+			</HeaderRow>
+
+			<Table
+				rowKey={(r) => r._id || r.vault_id}
+				dataSource={visibleMethods}
+				columns={columns}
+				pagination={{ pageSize: 6 }}
+				size='middle'
+				bordered
+			/>
+
+			<ManageMethodModal
+				isArabic={isArabic}
+				open={manageOpen}
+				onClose={() => setManageOpen(false)}
+				method={selectedMethod}
+				hotelId={hotelId}
+				token={token}
+				refresh={refreshFromServer}
+			/>
+
+			{/* Bank accounts block (unchanged) */}
+			<Divider />
+			<div className='my-4'>
+				<BankAccountData
+					hotelDetails={hotelDetails}
+					setHotelDetails={setHotelDetails}
+					submittingHotelDetails={submittingHotelDetails}
+					chosenLanguage={chosenLanguage}
+				/>
+			</div>
+
+			{/* Add method modal (new) */}
+			<SaveMethodModal
+				open={addOpen}
+				onClose={() => setAddOpen(false)}
+				paypalOptions={paypalOptions}
+				isArabic={isArabic}
+				allowInteract={allowInteract}
+				label={label}
+				setLabel={setLabel}
+				setDefault={setDefault}
+				setSetDefault={setSetDefault}
+				onApproveSource={onApproveSource}
+				onErrorVault={onErrorVault}
+				createSetupTokenCard={createSetupTokenCard}
+				createSetupTokenPaypal={createSetupTokenPaypal}
+				createSetupTokenVenmo={createSetupTokenVenmo}
+			/>
 		</Wrapper>
 	);
-};
+}
 
-export default PaymentSettings;
-
-/* --------------------- styled --------------------- */
-
+/* styles */
 const Wrapper = styled.div`
-	padding: 20px;
-	.header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 18px;
-	}
+	width: 100%;
 `;
-const SectionCard = styled.div`
-	border: 1px solid #e8e8e8;
-	border-radius: 12px;
-	padding: 16px;
-	background: #fff;
-`;
-const SectionHeader = styled.div`
+const HeaderRow = styled.div`
 	display: flex;
+	align-items: center;
 	justify-content: space-between;
-	align-items: center;
+	margin: 8px 0 12px;
 `;
-const ButtonsBar = styled.div`
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-top: 8px;
+
+const ScriptShell = styled.div`
+	width: 100%;
+	margin-top: 6px;
 `;
-const ButtonsRow = styled.div`
+const ButtonsBox = styled.div`
 	width: 100%;
 	max-width: 420px;
 	margin: 0 auto;
 	display: grid;
 	gap: 10px;
 `;
+const BrandFootnote = styled.div`
+	text-align: center;
+	font-size: 12px;
+	color: #6b7280;
+	margin-top: 6px;
+	b {
+		color: #1f2937;
+	}
+`;
+const Divider = styled.hr`
+	max-width: 100%;
+	margin: 18px auto;
+	border: none;
+	border-top: 1px solid #eef2f6;
+`;
 const CardBox = styled.div`
 	width: 100%;
-	max-width: 520px;
+	max-width: 560px;
 	margin: 0 auto 6px auto;
 	padding: 14px 14px 16px;
 	background: #fff;
@@ -1261,12 +1014,22 @@ const CardBox = styled.div`
 			border-color 0.15s,
 			box-shadow 0.15s,
 			background 0.15s;
-		z-index: 0;
 	}
 	.hosted:focus-within {
 		border-color: #1677ff;
 		box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
 		background: #fff;
+	}
+	&[aria-disabled="true"] {
+		opacity: 0.6;
+		pointer-events: none;
+	}
+	@media (max-width: 560px) {
+		padding: 12px;
+		.hosted {
+			min-height: 40px;
+			line-height: 40px;
+		}
 	}
 `;
 const CardTitle = styled.h4`
@@ -1286,7 +1049,15 @@ const Row = styled.div`
 		flex-direction: column;
 	}
 `;
-const PayCardButton = styled.button`
+const FieldRow = styled.div`
+	display: flex;
+	gap: 10px;
+	margin-bottom: 8px;
+	@media (max-width: 560px) {
+		flex-direction: column;
+	}
+`;
+const PrimaryBtn = styled.button`
 	width: 100%;
 	margin-top: 8px;
 	height: 42px;
@@ -1307,4 +1078,18 @@ const PayCardButton = styled.button`
 	&:active {
 		transform: translateY(0.5px);
 	}
+`;
+const Centered = styled.div`
+	width: 100%;
+	text-align: center;
+	padding: 10px 0;
+`;
+const ReloadBtn = styled.button`
+	background: #0f172a;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	padding: 8px 14px;
+	font-weight: 700;
+	cursor: pointer;
 `;
