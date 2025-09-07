@@ -61,6 +61,8 @@ import PaymentMainFinance from "./Finance/Payment/PaymentMainFinance";
 import OwnerRoute from "./auth/OwnerRoute";
 import OwnerDashboardMain from "./OwnerContent/OwnerDashboardMain";
 import Navmenu from "./pages/Navmenu";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
 	const { languageToggle, chosenLanguage } = useCartContext();
@@ -118,6 +120,12 @@ function App() {
 					path='/client-payment/:reservationId/:guestname/:guestphone/:hotelname/:roomtype/:checkin/:checkout/:daysofresidence/:totalamount'
 					exact
 					component={ClientPayMain}
+				/>
+				<Route path='/auth/forgot-password' exact component={ForgotPassword} />
+				<Route
+					path='/auth/password/reset/:token'
+					exact
+					component={ResetPassword}
 				/>
 
 				{/* ============== Admin Routes ============== */}

@@ -470,7 +470,7 @@ const NewReservationMain = () => {
 					? Number(total_amount) * nights
 					: total_amount_calculated,
 			booking_source,
-			belongsTo: hotelDetails.belongsTo._id,
+			belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
 			hotelId: hotelDetails._id,
 			roomId: pickedHotelRooms,
 			sendEmail,
@@ -510,6 +510,8 @@ const NewReservationMain = () => {
 				searchedReservation.confirmation_number
 					? user
 					: "",
+
+			confirmation_number: confirmation_number,
 		};
 
 		if (

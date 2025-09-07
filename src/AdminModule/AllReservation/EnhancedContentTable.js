@@ -28,7 +28,6 @@ const EnhancedContentTable = ({
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
-	// (Keeps the same manual override you had)
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
 
 	/**
@@ -116,7 +115,7 @@ const EnhancedContentTable = ({
 				...reservation,
 				customer_name: customer_details.name || "N/A",
 				customer_phone: customer_details.phone || "N/A",
-				hotel_name: hotelId.hotelName || "Unknown Hotel",
+				hotel_name: hotelId?.hotelName || "Unknown Hotel",
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
 				// For tooltip on the payment cell
@@ -216,13 +215,42 @@ const EnhancedContentTable = ({
 		handleFilterClickFromParent("");
 	};
 
+	// ---- SAFER: Route to New Reservation with robust id extraction ----
+	const safeId = (maybeObj) => {
+		if (!maybeObj) return null;
+		if (typeof maybeObj === "object" && maybeObj._id)
+			return String(maybeObj._id);
+		return String(maybeObj);
+	};
+
 	const handleHotelClick = (record) => {
-		const hotelDetailsFinal = {
-			...record.hotelId,
-			belongsTo: record.belongsTo,
-		};
-		localStorage.setItem("selectedHotel", JSON.stringify(hotelDetailsFinal));
-		window.location.href = `/hotel-management/new-reservation/${record.belongsTo._id}/${record.hotelId._id}?list`;
+		const hotelId = safeId(record?.hotelId);
+		const belongsToId = safeId(record?.belongsTo);
+
+		if (!hotelId || !belongsToId) {
+			Modal.warning({
+				title: "Missing hotel reference",
+				content:
+					"This reservation has no linked hotel or owner reference. Please fix the data or open the reservation details for manual handling.",
+			});
+			return;
+		}
+
+		// Build a tolerant selectedHotel object for downstream pages
+		const selectedHotel =
+			record?.hotelId && typeof record.hotelId === "object"
+				? { ...record.hotelId, belongsTo: record.belongsTo }
+				: {
+						_id: hotelId,
+						hotelName: record?.hotel_name || "Unknown Hotel",
+						belongsTo: record?.belongsTo || belongsToId,
+				  };
+
+		try {
+			localStorage.setItem("selectedHotel", JSON.stringify(selectedHotel));
+		} catch (_) {} // ignore storage errors
+
+		window.location.href = `/hotel-management/new-reservation/${belongsToId}/${hotelId}?list`;
 	};
 
 	// ------------------ Server Pagination Controls ------------------
@@ -262,7 +290,7 @@ const EnhancedContentTable = ({
 
 	// Reservation Status with background + text color
 	const getReservationStatusStyles = (status = "") => {
-		const s = status.toLowerCase();
+		const s = (status || "").toLowerCase();
 		if (s === "confirmed") {
 			return { backgroundColor: "var(--background-light)", color: "inherit" };
 		}
@@ -272,7 +300,7 @@ const EnhancedContentTable = ({
 				color: "inherit",
 			};
 		}
-		if (s === "checked_out") {
+		if (s === "checked_out" || s === "early_checked_out") {
 			return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
 		}
 		if (s === "no_show") {
@@ -302,6 +330,7 @@ const EnhancedContentTable = ({
 
 			{fromPage === "reports" ? null : (
 				<FilterButtonContainer>
+					{/* Date-related */}
 					<FilterButton
 						onClick={() => onFilterClick("checkinToday")}
 						isActive={filterType === "checkinToday"}
@@ -314,6 +343,8 @@ const EnhancedContentTable = ({
 					>
 						Check-out Today
 					</FilterButton>
+
+					{/* Payment-related */}
 					<FilterButton
 						onClick={() => onFilterClick("notPaid")}
 						isActive={filterType === "notPaid"}
@@ -332,13 +363,44 @@ const EnhancedContentTable = ({
 					>
 						Captured
 					</FilterButton>
-					{/* "Paid Offline" filter button */}
 					<FilterButton
 						style={{ fontWeight: "bold" }}
 						onClick={() => onFilterClick("paidOffline")}
 						isActive={filterType === "paidOffline"}
 					>
 						Paid Offline
+					</FilterButton>
+
+					{/* Reservation status (NEW) */}
+					<FilterButton
+						onClick={() => onFilterClick("confirmed")}
+						isActive={filterType === "confirmed"}
+					>
+						Confirmed
+					</FilterButton>
+					<FilterButton
+						onClick={() => onFilterClick("inhouse")}
+						isActive={filterType === "inhouse"}
+					>
+						Inhouse
+					</FilterButton>
+					<FilterButton
+						onClick={() => onFilterClick("checked_out")}
+						isActive={filterType === "checked_out"}
+					>
+						Checked Out
+					</FilterButton>
+					<FilterButton
+						onClick={() => onFilterClick("early_checked_out")}
+						isActive={filterType === "early_checked_out"}
+					>
+						Early Check Out
+					</FilterButton>
+					<FilterButton
+						onClick={() => onFilterClick("no_show")}
+						isActive={filterType === "no_show"}
+					>
+						No Show
 					</FilterButton>
 					<FilterButton
 						onClick={() => onFilterClick("cancelled")}
@@ -534,7 +596,11 @@ const EnhancedContentTable = ({
 							);
 
 							return (
-								<tr key={reservation._id}>
+								<tr
+									key={
+										reservation._id || `${reservation.confirmation_number}-${i}`
+									}
+								>
 									<td>{i + 1}</td>
 									<td>
 										<Tooltip title={reservation.confirmation_number}>

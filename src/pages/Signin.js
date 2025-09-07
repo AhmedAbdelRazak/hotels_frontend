@@ -210,6 +210,15 @@ const Signin = ({ history }) => {
 						{t.signup}
 					</Link>
 				</SmallNote>
+				<SmallNote isRTL={isRTL} style={{ marginTop: "0.75rem" }}>
+					<Link
+						to='/auth/forgot-password'
+						className='cta'
+						dir={isRTL ? "rtl" : "ltr"}
+					>
+						{isRTL ? "هل نسيت كلمة المرور؟" : "Forgot your password?"}
+					</Link>
+				</SmallNote>
 			</Pane>
 		</Layout>
 	);
@@ -376,7 +385,7 @@ const Buttons = styled.div`
 
 const SmallNote = styled.p`
 	margin-top: 2rem;
-	font-size: 0.9rem;
+	font-size: 1.1rem;
 	text-align: ${(p) => (p.isRTL ? "right" : "left")};
 	.cta {
 		color: #ff8c21;
