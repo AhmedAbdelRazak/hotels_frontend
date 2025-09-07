@@ -1568,27 +1568,33 @@ export const currencyConversion = (amounts) => {
 		.catch((err) => console.log(err));
 };
 
-/** Get owner (admin-side) PayPal client token for Card Fields */
+const API = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
+const authHeaders = (token) =>
+	token ? { Authorization: `Bearer ${token}` } : {};
+
+/** Owner PayPal client token for Card Fields / Buttons */
 export async function getOwnerPayPalClientToken({
 	debug = false,
 	buyerCountry,
+	token,
 } = {}) {
 	const qs = new URLSearchParams();
 	if (debug) qs.set("dbg", "1");
 	if (buyerCountry) qs.set("bc", String(buyerCountry).toUpperCase());
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/token-generated${
-		qs.toString() ? `?${qs}` : ""
-	}`;
-	const res = await fetch(url, { method: "GET" });
+	const res = await fetch(
+		`${API}/paypal-owner/token-generated${qs.toString() ? `?${qs}` : ""}`,
+		{
+			method: "GET",
+			headers: { ...authHeaders(token) },
+		}
+	);
 	const json = await res.json();
-	if (!res.ok) {
-		const errMsg =
+	if (!res.ok)
+		throw new Error(
 			json?.error ||
-			json?.message ||
-			"Failed to fetch PayPal client token (owner)";
-		throw new Error(errMsg);
-	}
+				json?.message ||
+				"Failed to fetch PayPal client token (owner)"
+		);
 	const clientToken =
 		typeof json === "string"
 			? json
@@ -1600,218 +1606,146 @@ export async function getOwnerPayPalClientToken({
 	return { clientToken, env, diag: json?.diag, cached: !!json?.cached };
 }
 
-/** Soft delete owner method (hide from UI) */
-export async function softDeleteOwnerPaymentMethod(
-	{ hotelId, methodId },
-	opts = {}
-) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/delete`;
-	const { data } = await axios.post(
-		url,
-		{ hotelId, methodId },
-		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
-			withCredentials: false,
-		}
-	);
-	return data;
-}
-
-/** Create a PayPal Vault setup_token for 'card' | 'paypal' | 'venmo' */
+/** Create PayPal vault setup_token for 'card' | 'paypal' | 'venmo' */
 export async function createOwnerPayPalSetupToken({
 	paymentSource = "card",
 	token,
 } = {}) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/setup-token`;
-	const res = await fetch(url, {
+	const res = await fetch(`${API}/paypal-owner/setup-token`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			...(token ? { Authorization: `Bearer ${token}` } : {}),
-		},
+		headers: { "Content-Type": "application/json", ...authHeaders(token) },
 		body: JSON.stringify({
 			payment_source: String(paymentSource).toLowerCase(),
 		}),
 		credentials: "omit",
 	});
 	const json = await res.json();
-	if (!res.ok || !json?.id) {
-		const msg = json?.message || "Failed to create PayPal setup token";
-		const e = new Error(msg);
-		e.response = json;
-		throw e;
-	}
-	return json.id; // setup_token id
+	if (!res.ok || !json?.id)
+		throw new Error(json?.message || "Failed to create PayPal setup token");
+	return json.id;
 }
 
-/** Exchange setup_token -> vault & save on hotel (cards & wallets) */
+/** Exchange setup_token -> vault & save on hotel */
 export async function saveOwnerVaultCard(
 	{ hotelId, setup_token, label, setDefault },
-	opts = {}
+	{ token } = {}
 ) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/vault/exchange`;
 	const { data } = await axios.post(
-		url,
+		`${API}/paypal-owner/vault/exchange`,
 		{ hotelId, setup_token, label, setDefault: !!setDefault },
 		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
+			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			withCredentials: false,
 		}
 	);
 	return data; // { message, ownerPaymentMethods: [...] }
 }
 
-/** List stored owner payment methods (not deleted by default) */
-export async function listOwnerPaymentMethods(hotelId, opts = {}) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/${hotelId}`;
-	const { data } = await axios.get(url, {
-		headers: {
-			...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-		},
-		withCredentials: false,
-	});
+/** List stored owner payment methods (non-deleted by default) */
+export async function listOwnerPaymentMethods(hotelId, { token } = {}) {
+	const { data } = await axios.get(
+		`${API}/paypal-owner/payment-methods/${hotelId}`,
+		{
+			headers: { ...authHeaders(token) },
+			withCredentials: false,
+		}
+	);
 	return data;
 }
 
-/** Set default owner method */
 export async function setOwnerDefaultPaymentMethod(
 	{ hotelId, methodId, vault_id },
-	opts = {}
-) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/set-default`;
-	const { data } = await axios.post(
-		url,
-		{ hotelId, methodId, vault_id },
-		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
-			withCredentials: false,
-		}
-	);
-	return data;
-}
-
-/** Activate (soft) */
-export async function activateOwnerPaymentMethod(
-	{ hotelId, methodId },
-	opts = {}
-) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/activate`;
-	const { data } = await axios.post(
-		url,
-		{ hotelId, methodId },
-		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
-			withCredentials: false,
-		}
-	);
-	return data;
-}
-
-/** Deactivate (soft) */
-export async function deactivateOwnerPaymentMethod(
-	{ hotelId, methodId },
-	opts = {}
-) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/deactivate`;
-	const { data } = await axios.post(
-		url,
-		{ hotelId, methodId },
-		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
-			withCredentials: false,
-		}
-	);
-	return data;
-}
-
-/** Delete (hide) */
-export async function deleteOwnerPaymentMethod(
-	{ hotelId, methodId },
-	opts = {}
-) {
-	const base = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
-	const url = `${base}/paypal-owner/payment-methods/delete`;
-	const { data } = await axios.post(
-		url,
-		{ hotelId, methodId },
-		{
-			headers: {
-				"Content-Type": "application/json",
-				...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-			},
-			withCredentials: false,
-		}
-	);
-	return data;
-}
-
-const API = process.env.REACT_APP_API_URL;
-
-// Helper to add auth header when token is provided
-const authHeaders = (token) =>
-	token
-		? {
-				Authorization: `Bearer ${token}`,
-		  }
-		: {};
-
-// List reservations: checked-out family + ("Paid Offline" | "Not Paid")
-export async function listCommissionCandidates(
-	{
-		hotelId,
-		page = 1,
-		pageSize = 200,
-		checkoutFrom, // optional ISO
-		checkoutTo, // optional ISO
-	},
 	{ token } = {}
 ) {
-	const params = new URLSearchParams();
-	if (hotelId) params.set("hotelId", hotelId);
-	params.set("page", String(page));
-	params.set("pageSize", String(pageSize));
-	if (checkoutFrom) params.set("checkoutFrom", checkoutFrom);
-	if (checkoutTo) params.set("checkoutTo", checkoutTo);
-
-	const res = await fetch(
-		`${API}/paypal-owner/commission/candidates?${params.toString()}`,
+	const { data } = await axios.post(
+		`${API}/paypal-owner/payment-methods/set-default`,
+		{ hotelId, methodId, vault_id },
 		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
 	);
-	const json = await res.json();
-	if (!res.ok) throw json || new Error("Failed to fetch commission candidates");
-	return json;
+	return data;
+}
+export async function activateOwnerPaymentMethod(
+	{ hotelId, methodId },
+	{ token } = {}
+) {
+	const { data } = await axios.post(
+		`${API}/paypal-owner/payment-methods/activate`,
+		{ hotelId, methodId },
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+	);
+	return data;
+}
+export async function deactivateOwnerPaymentMethod(
+	{ hotelId, methodId },
+	{ token } = {}
+) {
+	const { data } = await axios.post(
+		`${API}/paypal-owner/payment-methods/deactivate`,
+		{ hotelId, methodId },
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+	);
+	return data;
+}
+export async function deleteOwnerPaymentMethod(
+	{ hotelId, methodId },
+	{ token } = {}
+) {
+	const { data } = await axios.post(
+		`${API}/paypal-owner/payment-methods/delete`,
+		{ hotelId, methodId },
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+	);
+	return data;
 }
 
-// Mark commission as paid for a batch of reservation IDs
+/** GET /paypal-owner/commissions (token optional) */
+export async function listHotelCommissions(params, { token } = {}) {
+	const qs = new URLSearchParams({
+		...params,
+		_ts: Date.now().toString(),
+	}).toString();
+	const res = await fetch(`${API}/paypal-owner/commissions?${qs}`, {
+		headers: { ...authHeaders(token) },
+		cache: "no-store",
+	});
+	if (!res.ok) throw new Error("Failed to list commissions");
+	return res.json();
+}
+
+/** GET /finance/overview (token optional) */
+export async function getHotelFinanceOverview(hotelId, { token } = {}) {
+	const qs = new URLSearchParams({
+		hotelId,
+		_ts: Date.now().toString(),
+	}).toString();
+	const res = await fetch(`${API}/finance/overview?${qs}`, {
+		headers: { ...authHeaders(token) },
+		cache: "no-store",
+	});
+	if (!res.ok) throw new Error("Failed to load finance overview");
+	return res.json();
+}
+
+/** POST /paypal-owner/commissions/charge — server captures USD and only then flips commission flags. */
+export async function chargeOwnerCommissions(body, { token } = {}) {
+	const res = await fetch(`${API}/paypal-owner/commissions/charge`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders(token) },
+		body: JSON.stringify(body),
+		credentials: "omit",
+	});
+	const json = await res.json();
+	if (!res.ok) throw new Error(json?.message || "Charge failed");
+	return json; // { ok, capture, batch, reservationsUpdated: [...] }
+}
+
+/** (If you still need it) POST /paypal-owner/commissions/mark-paid */
 export async function markCommissionPaid(payload, { token } = {}) {
-	const res = await fetch(`${API}/paypal-owner/commission/mark-paid`, {
+	const res = await fetch(`${API}/paypal-owner/commissions/mark-paid`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...authHeaders(token) },
 		body: JSON.stringify(payload),
 	});
-	const json = await res.json();
-	if (!res.ok) throw json || new Error("Failed to mark commission paid");
-	return json;
+	if (!res.ok) throw new Error("Failed to mark commission paid");
+	return res.json();
 }
