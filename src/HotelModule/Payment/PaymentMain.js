@@ -52,7 +52,67 @@ const n2 = (v) => Number(v || 0).toFixed(2);
 const isNum = (v) => Number.isFinite(Number(v));
 const SAR = (isAr) => (isAr ? "ريال" : "SAR");
 
+/* ---------- NEW: last note / last updated extractors (safe fallbacks) ---------- */
+// Uses grouped admin logs (field: "commission" | "transfer") when available,
+// otherwise falls back to legacy single-field logs, then to timestamps.
+const pickLastRelevantLog = (row, group) => {
+	const logs = Array.isArray(row?.adminChangeLog) ? row.adminChangeLog : [];
+	if (!logs.length) return null;
+
+	// Prefer grouped logs introduced in the admin backend update
+	const grouped = logs.filter(
+		(e) => e && typeof e === "object" && e.field === group && e.changes
+	);
+	if (grouped.length) {
+		// Prefer the most recent one that actually has a note
+		const withNote = [...grouped]
+			.reverse()
+			.find((e) => e?.note && String(e.note).trim());
+		return withNote || grouped[grouped.length - 1];
+	}
+
+	// Fallback: legacy single-field entries
+	const legacyFields =
+		group === "commission"
+			? ["commissionPaid", "commissionStatus", "commissionPaidAt"]
+			: ["moneyTransferredToHotel", "moneyTransferredAt"];
+
+	const legacy = [...logs]
+		.reverse()
+		.find((e) => legacyFields.includes(e?.field));
+	return legacy || null;
+};
+
+const getLastNoteAndDate = (row, group /* "commission" | "transfer" */) => {
+	const entry = pickLastRelevantLog(row, group);
+
+	// Note (prefer the entry note)
+	const note =
+		entry && entry.note && String(entry.note).trim()
+			? String(entry.note).trim()
+			: null;
+
+	// Date preference:
+	// 1) adminLastUpdatedAt  2) entry.at  3) group-specific timestamp  4) updatedAt  5) createdAt
+	const groupDate =
+		group === "commission" ? row?.commissionPaidAt : row?.moneyTransferredAt;
+
+	const when =
+		row?.adminLastUpdatedAt ||
+		entry?.at ||
+		groupDate ||
+		row?.updatedAt ||
+		row?.createdAt ||
+		null;
+
+	return {
+		note: note || "—",
+		date: when ? new Date(when).toLocaleDateString() : "—",
+	};
+};
+
 /* ========= Quick "Add Method" modal ========= */
+// (unchanged)
 function QuickAddMethodModal({
 	open,
 	onClose,
@@ -271,7 +331,6 @@ function QuickAddMethodModal({
 		</Modal>
 	);
 }
-
 /* ======================= Component ======================= */
 const PaymentMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -332,7 +391,7 @@ const PaymentMain = () => {
 		[token]
 	);
 
-	/* ---------- Tables (pending / paid commission) ---------- */
+	/* ---------- OFFLINE tables (pending / paid commission) ---------- */
 	const [pending, setPending] = useState({
 		rows: [],
 		total: 0,
@@ -359,22 +418,15 @@ const PaymentMain = () => {
 					{
 						hotelId: hid,
 						commissionPaid: 0,
-						paymentChannel: "all",
+						paymentChannel: "offline",
 						page,
 						pageSize,
 					},
 					{ token }
 				);
-				const offlineOnly = Array.isArray(resp?.reservations)
-					? resp.reservations.filter(
-							(r) =>
-								r?.computed_payment_channel === "offline" ||
-								r?.computed_payment_channel === "none"
-					  )
-					: [];
 				setPending({
-					rows: offlineOnly,
-					total: Number(offlineOnly.length),
+					rows: Array.isArray(resp?.reservations) ? resp.reservations : [],
+					total: Number(resp?.total || 0),
 					page: Number(resp?.page || page),
 					pageSize: Number(resp?.pageSize || pageSize),
 				});
@@ -397,22 +449,15 @@ const PaymentMain = () => {
 					{
 						hotelId: hid,
 						commissionPaid: 1,
-						paymentChannel: "all",
+						paymentChannel: "offline",
 						page,
 						pageSize,
 					},
 					{ token }
 				);
-				const offlineOnly = Array.isArray(resp?.reservations)
-					? resp.reservations.filter(
-							(r) =>
-								r?.computed_payment_channel === "offline" ||
-								r?.computed_payment_channel === "none"
-					  )
-					: [];
 				setPaid({
-					rows: offlineOnly,
-					total: Number(offlineOnly.length),
+					rows: Array.isArray(resp?.reservations) ? resp.reservations : [],
+					total: Number(resp?.total || 0),
 					page: Number(resp?.page || page),
 					pageSize: Number(resp?.pageSize || pageSize),
 				});
@@ -426,15 +471,102 @@ const PaymentMain = () => {
 		[token]
 	);
 
+	/* ---------- ONLINE tables (transfers due / completed) ---------- */
+	const [onlineDue, setOnlineDue] = useState({
+		rows: [],
+		total: 0,
+		page: 1,
+		pageSize: 10,
+	});
+	const [onlineSent, setOnlineSent] = useState({
+		rows: [],
+		total: 0,
+		page: 1,
+		pageSize: 10,
+	});
+	const [loadingOnlineDue, setLoadingOnlineDue] = useState(false);
+	const [loadingOnlineSent, setLoadingOnlineSent] = useState(false);
+	const [loadErrorOnline, setLoadErrorOnline] = useState(null);
+
+	const fetchOnlineDue = useCallback(
+		async (hid, page = 1, pageSize = 10) => {
+			try {
+				setLoadingOnlineDue(true);
+				setLoadErrorOnline(null);
+				const resp = await listHotelCommissions(
+					{
+						hotelId: hid,
+						paymentChannel: "online",
+						transferStatus: "not_transferred",
+						page,
+						pageSize,
+					},
+					{ token }
+				);
+				setOnlineDue({
+					rows: Array.isArray(resp?.reservations) ? resp.reservations : [],
+					total: Number(resp?.total || 0),
+					page: Number(resp?.page || page),
+					pageSize: Number(resp?.pageSize || pageSize),
+				});
+			} catch (e) {
+				console.error(e);
+				setLoadErrorOnline(e?.message || "Failed to load online (due) list.");
+			} finally {
+				setLoadingOnlineDue(false);
+			}
+		},
+		[token]
+	);
+
+	const fetchOnlineSent = useCallback(
+		async (hid, page = 1, pageSize = 10) => {
+			try {
+				setLoadingOnlineSent(true);
+				setLoadErrorOnline(null);
+				const resp = await listHotelCommissions(
+					{
+						hotelId: hid,
+						paymentChannel: "online",
+						transferStatus: "transferred",
+						page,
+						pageSize,
+					},
+					{ token }
+				);
+				setOnlineSent({
+					rows: Array.isArray(resp?.reservations) ? resp.reservations : [],
+					total: Number(resp?.total || 0),
+					page: Number(resp?.page || page),
+					pageSize: Number(resp?.pageSize || pageSize),
+				});
+			} catch (e) {
+				console.error(e);
+				setLoadErrorOnline(
+					e?.message || "Failed to load online (transferred) list."
+				);
+			} finally {
+				setLoadingOnlineSent(false);
+			}
+		},
+		[token]
+	);
+
 	useEffect(() => {
 		if (!hotelId) return;
 		fetchOverview(hotelId);
+
+		// offline buckets
 		fetchPending(hotelId, 1, pending.pageSize);
 		fetchPaid(hotelId, 1, paid.pageSize);
+
+		// online buckets
+		fetchOnlineDue(hotelId, 1, onlineDue.pageSize);
+		fetchOnlineSent(hotelId, 1, onlineSent.pageSize);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [hotelId]);
 
-	/* ---------- Selection + Pay modal ---------- */
+	/* ---------- Selection + Pay modal (offline only) ---------- */
 	const [selected, setSelected] = useState(() => new Set());
 	const selectedRows = useMemo(
 		() => pending.rows.filter((r) => selected.has(String(r._id))),
@@ -649,13 +781,14 @@ const PaymentMain = () => {
 			{
 				title: isArabic ? "اسم الضيف" : "Guest",
 				key: "guest",
+				width: 180,
 				render: (_, r) => r?.customer_details?.name || "—",
 			},
 			{
 				title: isArabic ? "تاريخ دفع العمولة" : "Commission Paid At",
 				dataIndex: "commissionPaidAt",
 				key: "paidAt",
-				width: 180,
+				width: 150,
 				render: (d) => (d ? new Date(d).toLocaleString() : "—"),
 			},
 			{
@@ -664,22 +797,154 @@ const PaymentMain = () => {
 					: `Commission (${SAR(isArabic)})`,
 				key: "comm2",
 				align: "right",
-				width: 160,
+				width: 80,
 				render: (_, r) => n2(r?.computed_commission_sar),
 			},
+
+			// NEW: Last Note / Updated (for already-paid commissions)
 			{
-				title: isArabic ? "العمولة (USD)" : "Commission (USD)",
-				key: "commUSD",
-				align: "right",
-				width: 150,
+				title: isArabic ? "آخر ملاحظة / آخر تحديث" : "Last Note / Updated",
+				key: "lastNotePaid",
+				width: 300,
 				render: (_, r) => {
-					const usd = r?.commissionData?.last?.usd?.amountForReservation;
-					return isNum(usd) ? n2(usd) : "—";
+					const { note, date } = getLastNoteAndDate(r, "commission");
+					return (
+						<div>
+							<div
+								style={{
+									fontWeight: 600,
+									maxWidth: 240,
+									whiteSpace: "nowrap",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								}}
+								title={note === "—" ? "" : note}
+							>
+								{note}
+							</div>
+							<small style={{ color: "#64748b" }}>{date}</small>
+						</div>
+					);
 				},
 			},
 		],
 		[isArabic]
 	);
+
+	// Online: keep Due columns unchanged, add a Notes column only for "Transferred" table
+	const onlineColsDue = useMemo(
+		() => [
+			{
+				title: isArabic ? "رقم التأكيد" : "Confirmation",
+				dataIndex: "confirmation_number",
+				key: "conf",
+				width: 150,
+			},
+			{
+				title: isArabic ? "اسم الضيف" : "Guest",
+				key: "guest",
+				render: (_, r) => r?.customer_details?.name || "—",
+			},
+			{
+				title: isArabic ? "الحالة المالية" : "Payment Status",
+				dataIndex: "computed_payment_status",
+				key: "fin",
+				width: 150,
+				render: (v) => (
+					<Tag color={v === "Captured" ? "green" : "orange"}>{v || "—"}</Tag>
+				),
+			},
+			{
+				title: isArabic ? "الوصول" : "Check‑in",
+				dataIndex: "checkin_date",
+				key: "in",
+				width: 120,
+				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+			},
+			{
+				title: isArabic ? "المغادرة" : "Check‑out",
+				dataIndex: "checkout_date",
+				key: "out",
+				width: 120,
+				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+			},
+			{
+				title: isArabic
+					? `الإجمالي (${SAR(isArabic)})`
+					: `Total (${SAR(isArabic)})`,
+				dataIndex: "total_amount",
+				align: "right",
+				width: 140,
+				render: (n) => n2(n),
+			},
+			{
+				title: isArabic
+					? `عمولة (${SAR(isArabic)})`
+					: `Commission (${SAR(isArabic)})`,
+				key: "comm3",
+				align: "right",
+				width: 150,
+				render: (_, r) => n2(r?.computed_commission_sar),
+			},
+			{
+				title: isArabic
+					? `تحويل للفندق (${SAR(isArabic)})`
+					: `Hotel Payout (${SAR(isArabic)})`,
+				key: "payout",
+				align: "right",
+				width: 170,
+				render: (_, r) => n2(r?.computed_online_payout_sar),
+			},
+			{
+				title: isArabic ? "تم التحويل؟" : "Transferred?",
+				key: "tf",
+				width: 130,
+				render: (_, r) =>
+					r?.moneyTransferredToHotel === true ? (
+						<Tag color='green'>{isArabic ? "نعم" : "Yes"}</Tag>
+					) : (
+						<Tag color='orange'>{isArabic ? "لا" : "No"}</Tag>
+					),
+			},
+		],
+		[isArabic]
+	);
+
+	const onlineColsSent = useMemo(
+		() => [
+			...onlineColsDue,
+			// NEW: Last Note / Updated (for already-transferred money)
+			{
+				title: isArabic ? "آخر ملاحظة / آخر تحديث" : "Last Note / Updated",
+				key: "lastNoteTf",
+				width: 300,
+				render: (_, r) => {
+					const { note, date } = getLastNoteAndDate(r, "transfer");
+					return (
+						<div>
+							<div
+								style={{
+									fontWeight: 600,
+									maxWidth: 240,
+									whiteSpace: "nowrap",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								}}
+								title={note === "—" ? "" : note}
+							>
+								{note}
+							</div>
+							<small style={{ color: "#64748b" }}>{date}</small>
+						</div>
+					);
+				},
+			},
+		],
+		[isArabic, onlineColsDue]
+	);
+
+	/* ---------- Simple 2-tab switcher ---------- */
+	const [activeTab, setActiveTab] = useState("offline"); // 'offline' | 'online'
 
 	/* ---------- Render ---------- */
 	return (
@@ -816,7 +1081,7 @@ const PaymentMain = () => {
 												: "Settlements & Payments"}
 										</SectionHeader>
 
-										{/* Score cards */}
+										{/* Score cards (unchanged) */}
 										<Blocks>
 											<Block tone='warn'>
 												<BlockTitle>
@@ -907,11 +1172,12 @@ const PaymentMain = () => {
 												)}
 											</Block>
 
+											{/* Online Due */}
 											<Block tone='neutral'>
 												<BlockTitle>
 													{isArabic
-														? "تحويلات مستحقة للفندق (مدفوعة أونلاين بالكامل)"
-														: "Transfers Due to Hotel (full online)"}
+														? "تحويلات مستحقة للفندق (مدفوعة أونلاين)"
+														: "Transfers Due to Hotel (paid online)"}
 												</BlockTitle>
 												{loadingOverview ? (
 													<Spin size='small' />
@@ -926,11 +1192,35 @@ const PaymentMain = () => {
 														<KV>
 															<label>
 																{isArabic
-																	? `المبالغ (${SAR(isArabic)}):`
-																	: `Totals (${SAR(isArabic)}):`}
+																	? `الإجمالي (جروس) (${SAR(isArabic)}):`
+																	: `Gross Totals (${SAR(isArabic)}):`}
 															</label>
 															<span>
 																{n2(overview?.transfersDueToHotel?.totalSAR)}{" "}
+																{SAR(isArabic)}
+															</span>
+														</KV>
+														<KV>
+															<label>
+																{isArabic
+																	? `إجمالي العمولة (${SAR(isArabic)}):`
+																	: `Commission Totals (${SAR(isArabic)}):`}
+															</label>
+															<span>
+																{n2(
+																	overview?.transfersDueToHotel?.commissionSAR
+																)}{" "}
+																{SAR(isArabic)}
+															</span>
+														</KV>
+														<KV>
+															<label>
+																{isArabic
+																	? `الإجمالي الصافي (${SAR(isArabic)}):`
+																	: `Net Totals (${SAR(isArabic)}):`}
+															</label>
+															<span>
+																{n2(overview?.transfersDueToHotel?.netSAR)}{" "}
 																{SAR(isArabic)}
 															</span>
 														</KV>
@@ -938,6 +1228,7 @@ const PaymentMain = () => {
 												)}
 											</Block>
 
+											{/* Online Completed */}
 											<Block tone='neutral'>
 												<BlockTitle>
 													{isArabic
@@ -958,12 +1249,39 @@ const PaymentMain = () => {
 														<KV>
 															<label>
 																{isArabic
-																	? `المبالغ (${SAR(isArabic)}):`
-																	: `Totals (${SAR(isArabic)}):`}
+																	? `الإجمالي (جروس) (${SAR(isArabic)}):`
+																	: `Gross Totals (${SAR(isArabic)}):`}
 															</label>
 															<span>
 																{n2(
 																	overview?.transfersCompletedToHotel?.totalSAR
+																)}{" "}
+																{SAR(isArabic)}
+															</span>
+														</KV>
+														<KV>
+															<label>
+																{isArabic
+																	? `إجمالي العمولة (${SAR(isArabic)}):`
+																	: `Commission Totals (${SAR(isArabic)}):`}
+															</label>
+															<span>
+																{n2(
+																	overview?.transfersCompletedToHotel
+																		?.commissionSAR
+																)}{" "}
+																{SAR(isArabic)}
+															</span>
+														</KV>
+														<KV>
+															<label>
+																{isArabic
+																	? `الإجمالي الصافي (${SAR(isArabic)}):`
+																	: `Net Totals (${SAR(isArabic)}):`}
+															</label>
+															<span>
+																{n2(
+																	overview?.transfersCompletedToHotel?.netSAR
 																)}{" "}
 																{SAR(isArabic)}
 															</span>
@@ -973,96 +1291,188 @@ const PaymentMain = () => {
 											</Block>
 										</Blocks>
 
-										{/* Action bar for pending offline commissions */}
-										<ActionBar>
-											<div>
-												<strong>
-													{isArabic ? "محدد:" : "Selected:"} {selected.size}
-												</strong>
-												<span style={{ marginInlineStart: 10 }}>
+										{/* ───────── Tabs ───────── */}
+										<TabsBar role='tablist'>
+											<TabBtn
+												type={activeTab === "offline" ? "primary" : "default"}
+												onClick={() => setActiveTab("offline")}
+												aria-selected={activeTab === "offline"}
+											>
+												{isArabic
+													? "قائمة المدفوعات داخل الفندق"
+													: "Paid Offline List"}
+											</TabBtn>
+											<TabBtn
+												type={activeTab === "online" ? "primary" : "default"}
+												onClick={() => setActiveTab("online")}
+												aria-selected={activeTab === "online"}
+											>
+												{isArabic
+													? "قائمة المدفوعات الأونلاين"
+													: "Paid Online List"}
+											</TabBtn>
+										</TabsBar>
+
+										{activeTab === "offline" ? (
+											<>
+												{/* Action bar for pending offline commissions */}
+												<ActionBar>
+													<div>
+														<strong>
+															{isArabic ? "محدد:" : "Selected:"} {selected.size}
+														</strong>
+														<span style={{ marginInlineStart: 10 }}>
+															{isArabic
+																? `العمولة (${SAR(isArabic)}):`
+																: `Commission (${SAR(isArabic)}):`}{" "}
+															<b>
+																{n2(commissionSelectedSAR)} {SAR(isArabic)}
+															</b>
+														</span>
+														<span style={{ marginInlineStart: 10 }}>
+															{isArabic ? "≈ بالدولار:" : "≈ USD:"}{" "}
+															<b>{usdPreview} USD</b>
+														</span>
+													</div>
+													<Space>
+														<Button onClick={selectAllPending}>
+															{isArabic ? "تحديد الكل" : "Select all"}
+														</Button>
+														<Button onClick={clearSel}>
+															{isArabic ? "مسح التحديد" : "Clear"}
+														</Button>
+														<Button
+															type='primary'
+															onClick={openConfirm}
+															disabled={selected.size === 0}
+														>
+															{isArabic ? "ادفع الآن" : "Pay Now"}
+														</Button>
+													</Space>
+												</ActionBar>
+
+												{/* Pending OFFLINE table */}
+												{loadingPending ? (
+													<Centered>
+														<Spin />
+													</Centered>
+												) : loadError ? (
+													<Alert type='error' showIcon message={loadError} />
+												) : (
+													<Table
+														rowKey={(r) => r._id}
+														dataSource={pending.rows}
+														columns={pendingCols}
+														size='small'
+														bordered
+														pagination={{
+															current: pending.page,
+															pageSize: pending.pageSize,
+															total: pending.total,
+															onChange: (p, ps) => fetchPending(hotelId, p, ps),
+															showTotal: (t) =>
+																isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
+														}}
+													/>
+												)}
+
+												{/* Paid OFFLINE table */}
+												<SectionHeader style={{ marginTop: 14 }}>
+													{isArabic ? "العمولات المدفوعة" : "Commission Paid"}
+												</SectionHeader>
+												{loadingPaid ? (
+													<Centered>
+														<Spin />
+													</Centered>
+												) : (
+													<Table
+														rowKey={(r) => r._id}
+														dataSource={paid.rows}
+														columns={paidCols}
+														size='small'
+														bordered
+														pagination={{
+															current: paid.page,
+															pageSize: paid.pageSize,
+															total: paid.total,
+															onChange: (p, ps) => fetchPaid(hotelId, p, ps),
+															showTotal: (t) =>
+																isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
+														}}
+													/>
+												)}
+											</>
+										) : (
+											<>
+												{/* ONLINE — Transfers Due to Hotel */}
+												<SectionHeader>
 													{isArabic
-														? `العمولة (${SAR(isArabic)}):`
-														: `Commission (${SAR(isArabic)}):`}{" "}
-													<b>
-														{n2(commissionSelectedSAR)} {SAR(isArabic)}
-													</b>
-												</span>
-												<span style={{ marginInlineStart: 10 }}>
-													{isArabic ? "≈ بالدولار:" : "≈ USD:"}{" "}
-													<b>{usdPreview} USD</b>
-												</span>
-											</div>
-											<Space>
-												<Button onClick={selectAllPending}>
-													{isArabic ? "تحديد الكل" : "Select all"}
-												</Button>
-												<Button onClick={clearSel}>
-													{isArabic ? "مسح التحديد" : "Clear"}
-												</Button>
-												<Button
-													type='primary'
-													onClick={openConfirm}
-													disabled={selected.size === 0}
-												>
-													{isArabic ? "ادفع الآن" : "Pay Now"}
-												</Button>
-											</Space>
-										</ActionBar>
+														? "تحويلات مستحقة للفندق"
+														: "Transfers Due to Hotel"}
+												</SectionHeader>
+												{loadingOnlineDue ? (
+													<Centered>
+														<Spin />
+													</Centered>
+												) : loadErrorOnline ? (
+													<Alert
+														type='error'
+														showIcon
+														message={loadErrorOnline}
+													/>
+												) : (
+													<Table
+														rowKey={(r) => r._id}
+														dataSource={onlineDue.rows}
+														columns={onlineColsDue}
+														size='small'
+														bordered
+														pagination={{
+															current: onlineDue.page,
+															pageSize: onlineDue.pageSize,
+															total: onlineDue.total,
+															onChange: (p, ps) =>
+																fetchOnlineDue(hotelId, p, ps),
+															showTotal: (t) =>
+																isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
+														}}
+													/>
+												)}
 
-										{/* Pending table */}
-										{loadingPending ? (
-											<Centered>
-												<Spin />
-											</Centered>
-										) : loadError ? (
-											<Alert type='error' showIcon message={loadError} />
-										) : (
-											<Table
-												rowKey={(r) => r._id}
-												dataSource={pending.rows}
-												columns={pendingCols}
-												size='small'
-												bordered
-												pagination={{
-													current: pending.page,
-													pageSize: pending.pageSize,
-													total: pending.total,
-													onChange: (p, ps) => fetchPending(hotelId, p, ps),
-													showTotal: (t) =>
-														isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
-												}}
-											/>
-										)}
-
-										{/* Paid table */}
-										<SectionHeader style={{ marginTop: 14 }}>
-											{isArabic ? "العمولات المدفوعة" : "Commission Paid"}
-										</SectionHeader>
-										{loadingPaid ? (
-											<Centered>
-												<Spin />
-											</Centered>
-										) : (
-											<Table
-												rowKey={(r) => r._id}
-												dataSource={paid.rows}
-												columns={paidCols}
-												size='small'
-												bordered
-												pagination={{
-													current: paid.page,
-													pageSize: paid.pageSize,
-													total: paid.total,
-													onChange: (p, ps) => fetchPaid(hotelId, p, ps),
-													showTotal: (t) =>
-														isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
-												}}
-											/>
+												{/* ONLINE — Transfers Completed to Hotel */}
+												<SectionHeader style={{ marginTop: 14 }}>
+													{isArabic
+														? "تحويلات مُسددة للفندق"
+														: "Transfers Completed to Hotel"}
+												</SectionHeader>
+												{loadingOnlineSent ? (
+													<Centered>
+														<Spin />
+													</Centered>
+												) : (
+													<Table
+														rowKey={(r) => r._id}
+														dataSource={onlineSent.rows}
+														columns={onlineColsSent}
+														size='small'
+														bordered
+														pagination={{
+															current: onlineSent.page,
+															pageSize: onlineSent.pageSize,
+															total: onlineSent.total,
+															onChange: (p, ps) =>
+																fetchOnlineSent(hotelId, p, ps),
+															showTotal: (t) =>
+																isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
+														}}
+													/>
+												)}
+											</>
 										)}
 									</Right>
 								</Grid>
 
-								{/* Confirm pay modal */}
+								{/* Confirm pay modal (offline commissions) */}
 								<Modal
 									open={confirmOpen}
 									onCancel={() => setConfirmOpen(false)}
@@ -1221,4 +1631,14 @@ const ActionBar = styled.div`
 const Centered = styled.div`
 	text-align: center;
 	padding: 18px 0;
+`;
+
+// Simple tab bar
+const TabsBar = styled.div`
+	display: inline-flex;
+	gap: 8px;
+	margin: 6px 0 10px;
+`;
+const TabBtn = styled(Button)`
+	border-radius: 999px !important;
 `;

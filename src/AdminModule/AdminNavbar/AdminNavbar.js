@@ -137,7 +137,14 @@ const items = [
 		null,
 		"divider2"
 	),
-	getItem("Payments", "sub18", <CreditCardOutlined />, null, null, "red-bg"),
+	getItem(
+		<Link to='/admin/payouts-report'>Payouts/ Payments</Link>,
+		"sub18",
+		<CreditCardOutlined />,
+		null,
+		null,
+		"red-bg"
+	),
 	getItem(
 		<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
 			Signout
@@ -207,7 +214,9 @@ const AdminNavbar = ({
 						                ? "sub10"
 						                : fromPage === "CouponManagement"
 						                  ? "sub12"
-						                  : "sub1"
+						                  : fromPage === "Payouts"
+						                    ? "sub18"
+						                    : "sub1"
 				}
 				defaultOpenKeys={[
 					"sub1",

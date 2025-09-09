@@ -1,5 +1,8 @@
 import axios from "axios";
 
+const authHeaders = (token) =>
+	token ? { Authorization: `Bearer ${token}` } : {};
+
 export const hotelAccount = (userId, token, accountId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
@@ -1162,3 +1165,135 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 			console.error("Error fetching specific list of reservations:", err)
 		);
 };
+
+export const currencyConversion = (amounts) => {
+	const saudimoney = amounts
+		.map((amount) => Number(amount).toFixed(2))
+		.join(",");
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/currencyapi-amounts/${saudimoney}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export async function chargeOwnerCommissions(body, { token } = {}) {
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/paypal-owner/commissions/charge`,
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...authHeaders(token) },
+			body: JSON.stringify(body),
+			credentials: "omit",
+		}
+	);
+	const json = await res.json();
+	if (!res.ok) throw new Error(json?.message || "Charge failed");
+	return json; // { ok, capture, batch, reservationsUpdated: [...] }
+}
+
+// ===== Admin payouts (platform-wide) =====
+export async function getAdminPayoutsOverview(params = {}, { token } = {}) {
+	const qs = new URLSearchParams({
+		...params,
+		_ts: Date.now().toString(),
+	}).toString();
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/admin-payouts/overview?${qs}`,
+		{
+			headers: { ...authHeaders(token) },
+			cache: "no-store",
+		}
+	);
+	if (!res.ok) throw new Error("Failed to load admin payouts overview");
+	return res.json();
+}
+
+export async function listAdminPayouts(params = {}, { token } = {}) {
+	const qs = new URLSearchParams({
+		...params,
+		_ts: Date.now().toString(),
+	}).toString();
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/admin-payouts/commissions?${qs}`,
+		{
+			headers: { ...authHeaders(token) },
+			cache: "no-store",
+		}
+	);
+	if (!res.ok) throw new Error("Failed to list admin payouts");
+	return res.json();
+}
+
+export async function listAdminHotelsLite({ token } = {}) {
+	const res = await fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/admin-payouts/hotels-lite?_ts=${Date.now()}`,
+		{
+			headers: { ...authHeaders(token) },
+			cache: "no-store",
+		}
+	);
+	if (!res.ok) throw new Error("Failed to list hotels");
+	return res.json(); // { count, hotels: [{ _id, hotelName }] }
+}
+
+/* ===== Admin reservation updates (audit-logged) ===== */
+export async function adminUpdateCommissionStatus(
+	{ reservationId, commissionPaid, note },
+	{ token } = {}
+) {
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/admin-payouts/commission-status`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", ...authHeaders(token) },
+			body: JSON.stringify({ reservationId, commissionPaid, note }),
+		}
+	);
+	const json = await res.json();
+	if (!res.ok)
+		throw new Error(json?.message || "Failed to update commission status");
+	return json;
+}
+export async function adminUpdateTransferStatus(
+	{ reservationId, moneyTransferredToHotel, note },
+	{ token } = {}
+) {
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/admin-payouts/transfer-status`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", ...authHeaders(token) },
+			body: JSON.stringify({ reservationId, moneyTransferredToHotel, note }),
+		}
+	);
+	const json = await res.json();
+	if (!res.ok)
+		throw new Error(json?.message || "Failed to update transfer status");
+	return json;
+}
+export async function adminUpdateReservationPayoutFlags(
+	payload,
+	{ token } = {}
+) {
+	const res = await fetch(
+		`${process.env.REACT_APP_API_URL}/admin-payouts/update-reservation`,
+		{
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", ...authHeaders(token) },
+			body: JSON.stringify(payload),
+		}
+	);
+	const json = await res.json();
+	if (!res.ok) throw new Error(json?.message || "Failed to update reservation");
+	return json;
+}

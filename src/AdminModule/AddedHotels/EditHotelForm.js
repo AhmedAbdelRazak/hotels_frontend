@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from "react";
+/** @format
+ * EditHotelForm – drop‑in replacement
+ */
+
+import React, { useState, useEffect, useMemo } from "react";
 import { Form, Input, Button, Typography, Select, Tabs, message } from "antd";
 import styled from "styled-components";
-import { toast } from "react-toastify";
-import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons";
 import axios from "axios";
+import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons";
+import { isAuthenticated } from "../../auth";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -12,135 +16,135 @@ const { TabPane } = Tabs;
 const EditHotelForm = ({
 	closeEditHotelModal,
 	hotelData,
-	updateHotelDetails,
-	gettingHotelData,
-	token,
-	userId,
-	currentUser, // e.g. from isAuthenticated() or passed in as prop
+	updateHotelDetails, // (hotelId, userId, token, hotelPayload)
+	token: tokenProp, // optional; will fallback to isAuthenticated()
+	userId: adminIdProp, // optional; will fallback to isAuthenticated()
+	refreshList, // optional callback to refresh table
+	gettingHotelData, // kept for back-compat; if provided, will be called
 }) => {
-	// ---- HOTEL FORM STATE & HOOKS ----
+	/* ==== Auth fallback ==== */
+	const auth = isAuthenticated?.();
+	const token = tokenProp || auth?.token || null;
+	const adminId = adminIdProp || auth?.user?._id || null;
+
+	/* ==== HOTEL FORM STATE ==== */
 	const [formHotel] = Form.useForm();
 	const [hotel, setHotel] = useState(hotelData);
 
-	// ---- USER ACCOUNT (belongsTo) FORM STATE & HOOKS ----
+	/* ==== OWNER (belongsTo) FORM STATE ==== */
 	const [formUser] = Form.useForm();
-	const [ownerUser, setOwnerUser] = useState(hotelData.belongsTo || {});
+	const belongsToId = useMemo(
+		() => hotelData?.belongsTo?._id || hotelData?.belongsTo || null,
+		[hotelData]
+	);
+	const initialOwner = useMemo(
+		() => ({
+			name: hotelData?.belongsTo?.name || "",
+			email: hotelData?.belongsTo?.email || "",
+			password: "",
+			password2: "",
+		}),
+		[hotelData]
+	);
 
-	// On mount or when hotelData changes, populate states & form fields
 	useEffect(() => {
 		setHotel(hotelData);
 		formHotel.setFieldsValue(hotelData);
+		formUser.setFieldsValue(initialOwner);
+	}, [hotelData, formHotel, formUser, initialOwner]);
 
-		setOwnerUser(hotelData.belongsTo || {});
-		formUser.setFieldsValue({
-			name: hotelData.belongsTo?.name || "",
-			email: hotelData.belongsTo?.email || "",
-			password: "",
-			password2: "",
-		});
-	}, [hotelData, formHotel, formUser]);
-
-	// ---- HANDLERS FOR HOTEL DETAILS UPDATE ----
+	/* =================== HOTEL: submit =================== */
 	const handleHotelChange = (fieldName) => (eventOrValue) => {
 		const value = eventOrValue?.target
 			? eventOrValue.target.value
 			: eventOrValue;
-		setHotel({ ...hotel, [fieldName]: value });
+		setHotel((h) => ({ ...h, [fieldName]: value }));
 	};
 
 	const handleSubmitHotel = async () => {
+		if (!token || !adminId) {
+			return message.error("Missing admin authentication");
+		}
 		try {
-			const response = await updateHotelDetails(
-				hotel._id,
-				userId,
-				token,
-				hotel
-			);
-			if (response.error) {
-				toast.error(response.error);
-			} else {
-				toast.success(`Hotel ${hotel.hotelName} was successfully updated`);
-				gettingHotelData();
-				closeEditHotelModal();
-				// If you want to force a reload after some time
-				window.setTimeout(() => {
-					window.location.reload();
-				}, 1500);
-			}
-		} catch (error) {
-			toast.error("Error updating hotel: " + error.message);
+			const res = await updateHotelDetails(hotel._id, adminId, token, hotel);
+			if (res?.error) throw new Error(res.error);
+			message.success(`Hotel “${hotel.hotelName}” updated`);
+			if (typeof refreshList === "function") refreshList();
+			if (typeof gettingHotelData === "function") gettingHotelData();
+			closeEditHotelModal?.();
+		} catch (e) {
+			message.error(e?.message || "Error updating hotel");
 		}
 	};
 
-	// ---- HANDLERS FOR BELONGSTO (OWNER) USER UPDATE ----
+	/* =================== OWNER: submit =================== */
 	const handleSubmitUser = async (values) => {
-		try {
-			const { name, email, password, password2 } = values;
-			console.log("Form values =>", values);
+		if (!belongsToId) {
+			return message.error("No owner user found on this property");
+		}
+		if (!token || !adminId) {
+			return message.error("Missing admin authentication");
+		}
 
+		const { name, email, password, password2 } = values;
+
+		// Send only changed fields
+		const updatePayload = {};
+		if (name && name !== initialOwner.name) updatePayload.name = name;
+		if (email && email !== initialOwner.email) updatePayload.email = email;
+
+		// Password optional — only send if present
+		if (password || password2) {
 			if (password !== password2) {
-				console.log("Passwords do not match =>", password, password2);
-				return message.error("Passwords do not match!");
+				return message.error("Passwords do not match");
 			}
+			updatePayload.password = password;
+		}
 
-			// "belongsToId" is the user we want to update
-			const belongsToId = hotelData?.belongsTo?._id || hotelData?.belongsTo;
-			if (!belongsToId) {
-				console.log("No valid belongsTo user found on this hotel!");
-				return message.error("No valid belongsTo user found on this hotel!");
-			}
+		if (Object.keys(updatePayload).length === 0) {
+			return message.info("Nothing to update");
+		}
 
-			// As an admin (role=1000), the route is:
-			//    PUT /user/:belongsToId/:adminId
-			// The first param is the user to update, the second param is the admin user ID
-			const adminId = currentUser?._id; // The currently logged-in admin making the request
+		try {
 			const url = `${process.env.REACT_APP_API_URL}/user/${belongsToId}/${adminId}`;
-
-			// Match the payload structure from TopNavbar for admin:
-			// { name, email, password, userId: belongsToId }
-			const payload = {
-				name,
-				email,
-				password,
-				userId: belongsToId,
-			};
-			console.log("Constructed payload =>", payload);
-			console.log("Final URL =>", url);
-
-			const config = {
+			// eslint-disable-next-line
+			const { data } = await axios.put(url, updatePayload, {
 				headers: {
 					Accept: "application/json",
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${token}`,
 				},
-			};
-			console.log("Request config =>", config);
+			});
 
-			// ---- Make the PUT request ----
-			console.log("About to call axios.put...");
-			const response = await axios.put(url, payload, config);
-			console.log("Server response =>", response.data);
+			// success
+			message.success("Owner account updated");
+			// Update local displayed owner fields
+			formUser.setFieldsValue({
+				...values,
+				password: "",
+				password2: "",
+			});
+			// Optionally refresh table/list
+			if (typeof refreshList === "function") refreshList();
 
-			message.success("Owner user updated successfully!");
-
-			// Optionally update local state or re-fetch hotel data
-			setOwnerUser((prev) => ({ ...prev, name, email }));
-		} catch (error) {
-			console.error("Error updating belongsTo user:", error);
-
-			// Additional logs of error/response for debugging:
-			if (error?.response) {
-				console.log("error.response.status =>", error.response.status);
-				console.log("error.response.data =>", error.response.data);
-			} else {
-				console.log(
-					"No server response, possible network error or early logic exit."
-				);
+			// Update in-memory hotelData (owner name/email shown in table)
+			if (hotel?.belongsTo) {
+				setHotel((h) => ({
+					...h,
+					belongsTo: {
+						...(typeof h.belongsTo === "object" ? h.belongsTo : {}),
+						name: updatePayload.name || h.belongsTo?.name,
+						email: updatePayload.email || h.belongsTo?.email,
+					},
+				}));
 			}
-
-			message.error(
-				error?.response?.data?.error || "Something went wrong updating user"
-			);
+		} catch (err) {
+			const apiMsg =
+				err?.response?.data?.error ||
+				err?.response?.data?.message ||
+				err?.message ||
+				"Update failed";
+			message.error(apiMsg);
 		}
 	};
 
@@ -162,7 +166,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelName}
+							value={hotel?.hotelName}
 							onChange={handleHotelChange("hotelName")}
 							placeholder='Hotel Name'
 						/>
@@ -174,7 +178,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelName_OtherLanguage}
+							value={hotel?.hotelName_OtherLanguage}
 							onChange={handleHotelChange("hotelName_OtherLanguage")}
 							placeholder='Hotel Name In Arabic'
 						/>
@@ -186,7 +190,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelCountry}
+							value={hotel?.hotelCountry}
 							onChange={handleHotelChange("hotelCountry")}
 							placeholder='Country'
 						/>
@@ -198,7 +202,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelState}
+							value={hotel?.hotelState}
 							onChange={handleHotelChange("hotelState")}
 							placeholder='State'
 						/>
@@ -206,7 +210,7 @@ const EditHotelForm = ({
 
 					<Form.Item label='City' name='hotelCity' rules={[{ required: true }]}>
 						<Input
-							value={hotel.hotelCity}
+							value={hotel?.hotelCity}
 							onChange={handleHotelChange("hotelCity")}
 							placeholder='City'
 						/>
@@ -214,7 +218,7 @@ const EditHotelForm = ({
 
 					<Form.Item label='Phone' name='phone' rules={[{ required: true }]}>
 						<Input
-							value={hotel.phone}
+							value={hotel?.phone}
 							onChange={handleHotelChange("phone")}
 							placeholder='Phone'
 						/>
@@ -226,7 +230,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelAddress}
+							value={hotel?.hotelAddress}
 							onChange={handleHotelChange("hotelAddress")}
 							placeholder='Address'
 						/>
@@ -247,7 +251,7 @@ const EditHotelForm = ({
 						]}
 					>
 						<Input
-							value={hotel.hotelRating}
+							value={hotel?.hotelRating}
 							onChange={handleHotelChange("hotelRating")}
 							placeholder='Add A Number From 1 to 5'
 							type='number'
@@ -260,7 +264,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.hotelFloors}
+							value={hotel?.hotelFloors}
 							onChange={handleHotelChange("hotelFloors")}
 							placeholder='Number of Floors'
 						/>
@@ -272,7 +276,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Input
-							value={hotel.commission}
+							value={hotel?.commission}
 							onChange={handleHotelChange("commission")}
 							placeholder='Commission: Only Numbers'
 						/>
@@ -284,7 +288,7 @@ const EditHotelForm = ({
 						rules={[{ required: true }]}
 					>
 						<Select
-							value={hotel.propertyType}
+							value={hotel?.propertyType}
 							onChange={(val) =>
 								handleHotelChange("propertyType")({ target: { value: val } })
 							}
@@ -304,19 +308,14 @@ const EditHotelForm = ({
 				</Form>
 			</TabPane>
 
-			{/* ====== TAB 2: USER ACCOUNT (BELONGSTO) DETAILS ====== */}
+			{/* ====== TAB 2: OWNER ACCOUNT ====== */}
 			<TabPane tab='Owner Account' key='2'>
 				<Form
 					form={formUser}
 					onFinish={handleSubmitUser}
 					layout='vertical'
 					style={{ marginTop: "1rem" }}
-					initialValues={{
-						name: ownerUser.name || "",
-						email: ownerUser.email || "",
-						password: "",
-						password2: "",
-					}}
+					initialValues={initialOwner}
 				>
 					<Title level={3}>Owner/Manager Account</Title>
 
@@ -335,6 +334,7 @@ const EditHotelForm = ({
 						name='email'
 						rules={[
 							{ required: true, message: "Please enter the owner's email" },
+							{ type: "email", message: "Invalid email address" },
 						]}
 					>
 						<Input prefix={<MailOutlined />} placeholder='Email' />
@@ -343,9 +343,21 @@ const EditHotelForm = ({
 					<Form.Item
 						label='Password'
 						name='password'
-						rules={[{ required: true, message: "Please enter a password" }]}
+						rules={[
+							({ getFieldValue }) => ({
+								validator(_, value) {
+									if (!value || value.length >= 6) return Promise.resolve();
+									return Promise.reject(
+										new Error("Password should be min 6 characters long")
+									);
+								},
+							}),
+						]}
 					>
-						<Input.Password prefix={<LockOutlined />} placeholder='Password' />
+						<Input.Password
+							prefix={<LockOutlined />}
+							placeholder='(leave empty to keep unchanged)'
+						/>
 					</Form.Item>
 
 					<Form.Item
@@ -353,16 +365,14 @@ const EditHotelForm = ({
 						name='password2'
 						dependencies={["password"]}
 						rules={[
-							{ required: true, message: "Please confirm your password" },
-							// Optional direct check:
-							// ({ getFieldValue }) => ({
-							//   validator(_, value) {
-							//     if (!value || getFieldValue('password') === value) {
-							//       return Promise.resolve();
-							//     }
-							//     return Promise.reject(new Error('Passwords do not match!'));
-							//   },
-							// }),
+							({ getFieldValue }) => ({
+								validator(_, value) {
+									const pwd = getFieldValue("password");
+									if (!pwd && !value) return Promise.resolve(); // both empty
+									if (pwd && value === pwd) return Promise.resolve();
+									return Promise.reject(new Error("Passwords do not match"));
+								},
+							}),
 						]}
 					>
 						<Input.Password
@@ -372,7 +382,11 @@ const EditHotelForm = ({
 					</Form.Item>
 
 					<Form.Item>
-						<StyledButton type='primary' htmlType='submit'>
+						<StyledButton
+							type='primary'
+							htmlType='submit'
+							disabled={!belongsToId}
+						>
 							Update Owner
 						</StyledButton>
 					</Form.Item>

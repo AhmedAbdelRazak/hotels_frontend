@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+/** @format */
+
+import React, { useState, useEffect, useMemo } from "react";
 import styled from "styled-components";
-import { Menu, Dropdown, Modal, Form, Input, message } from "antd";
+import { Menu, Dropdown } from "antd";
 import {
 	UserOutlined,
 	LogoutOutlined,
@@ -10,77 +12,87 @@ import {
 	SettingOutlined,
 	GlobalOutlined,
 	CalendarOutlined,
-	LockOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 import { useCartContext } from "../../cart_context";
 import DigitalClock from "./DigitalClock";
 import { isAuthenticated, signout } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
+import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
 
 const TopNavbar = ({ collapsed, roomCountDetails }) => {
-	const [dropdownVisible, setDropdownVisible] = useState(false);
-	const { languageToggle, chosenLanguage } = useCartContext();
-	const [hotelName, setHotelName] = useState("");
+	const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
+	const [accountModalOpen, setAccountModalOpen] = useState(false);
 
-	// Modal state
-	const [updateModalVisible, setUpdateModalVisible] = useState(false);
+	const { languageToggle, chosenLanguage } = useCartContext();
 
-	// Form instance from AntD
-	const [form] = Form.useForm();
+	const [hotelName, setHotelName] = useState("");
 
 	const location = useLocation();
 	const history = useHistory();
 
-	// Extract user & token
 	const { user, token } = isAuthenticated();
 
+	// Selected hotel context
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 	const hotelId = selectedHotel._id;
 
-	// If user.role === 2000 => user._id; otherwise => selectedHotel.belongsTo
 	const userId =
 		user.role === 2000
 			? user._id
 			: selectedHotel.belongsTo?._id || selectedHotel.belongsTo;
 
-	// userDetails (name, email) from either user or selectedHotel.belongsTo
+	// eslint-disable-next-line
 	const userDetails = user.role === 2000 ? user : selectedHotel.belongsTo;
 
-	// Display the hotel name if path has userId & hotelId
+	// Detect whether path contains both ids to show hotel name
 	useEffect(() => {
-		const pathContainsUserIdAndHotelId =
-			location.pathname.includes(userId) && location.pathname.includes(hotelId);
-		if (pathContainsUserIdAndHotelId) {
-			setHotelName(selectedHotel.hotelName);
-		} else {
-			setHotelName("");
-		}
+		const show =
+			userId &&
+			hotelId &&
+			location.pathname.includes(userId) &&
+			location.pathname.includes(hotelId);
+		setHotelName(show ? selectedHotel.hotelName : "");
 	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
-	// -- Handle Signout
+	/* ===== actions ===== */
+
 	const handleSignout = () => {
-		signout(() => {
-			history.push("/");
-		});
+		signout(() => history.push("/"));
 	};
 
-	// -- Profile Dropdown Menu Click
+	const openSelfUpdateModal = () => {
+		// For non-admin users only; admin keeps redirect behavior
+		if (user.role === 1000) return;
+		setAccountModalOpen(true);
+	};
+
 	const handleMenuClick = ({ key }) => {
-		if (key === "profile" && user.role === 2000) {
-			history.push("/hotel-management/main-dashboard");
-		} else if (key === "profile" && user.role === 1000) {
-			history.push("/admin/dashboard");
-		} else if (key === "logout") {
-			handleSignout();
-		} else if (key === "update") {
-			handleOpenUpdateAccountModal();
+		switch (key) {
+			case "profile":
+				if (user.role === 1000) {
+					history.push("/admin/dashboard"); // admin redirect (as-is)
+				} else {
+					openSelfUpdateModal(); // non-admin modal
+				}
+				break;
+			case "inbox":
+				// keep as-is or route where you want
+				break;
+			case "update":
+				if (user.role !== 1000) openSelfUpdateModal();
+				break;
+			case "logout":
+				handleSignout();
+				break;
+			default:
+				break;
 		}
-		setDropdownVisible(false);
+		setProfileMenuOpen(false);
 	};
 
-	const menu = (
+	// Build profile dropdown menu (hide "Update Account" for admin)
+	const profileMenu = (
 		<Menu onClick={handleMenuClick}>
 			<Menu.Item key='profile' icon={<UserOutlined />}>
 				Profile
@@ -88,16 +100,18 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			<Menu.Item key='inbox' icon={<MailOutlined />}>
 				Inbox
 			</Menu.Item>
-			<Menu.Item key='update' icon={<UserOutlined />}>
-				Update Account
-			</Menu.Item>
+			{user.role !== 1000 && (
+				<Menu.Item key='update' icon={<UserOutlined />}>
+					Update Account
+				</Menu.Item>
+			)}
 			<Menu.Item key='logout' icon={<LogoutOutlined />}>
 				Logout
 			</Menu.Item>
 		</Menu>
 	);
 
-	// -- Room Types Dropdown
+	// Room types dropdown
 	const handleRoomClick = ({ key }) => {
 		setRoomTypesDropdown(false);
 		window.location.href = `/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
@@ -115,113 +129,45 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		</Menu>
 	);
 
-	// -- Settings Icon Click
+	// Settings & chat
 	const handleSettingsClick = () => {
 		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
 		const userIdLocal = user._id;
 		const hotelIdLocal = selectedHotelLocal._id;
 
-		const pathContainsUserIdAndHotelId =
+		const ok =
 			location.pathname.includes(userIdLocal) &&
 			location.pathname.includes(hotelIdLocal);
 
-		if (pathContainsUserIdAndHotelId) {
+		if (ok) {
 			window.location.href = `/hotel-management/settings/${userIdLocal}/${hotelIdLocal}`;
 		}
 	};
 
-	// -- Chat Icon Click
 	const handleChatClick = () => {
 		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
 		const userIdLocal = user._id;
 		const hotelIdLocal = selectedHotelLocal._id;
 
-		const pathContainsUserIdAndHotelId =
+		const ok =
 			location.pathname.includes(userIdLocal) &&
 			location.pathname.includes(hotelIdLocal);
 
-		if (pathContainsUserIdAndHotelId) {
+		if (ok) {
 			window.location.href = `/hotel-management/customer-service/${userIdLocal}/${hotelIdLocal}`;
 		}
 	};
 
-	// -- Open Modal & Prefill Data
-	const handleOpenUpdateAccountModal = () => {
-		// Determine name/email from userDetails or user
-		const nameToUse =
-			userDetails && typeof userDetails === "object"
-				? userDetails.name || ""
-				: user.name || "";
+	// Target user for modal (self)
+	const targetUser = useMemo(() => {
+		// Non-admins: modal edits the logged-in user (self)
+		return { _id: user._id, name: user.name, email: user.email };
+	}, [user]);
 
-		const emailToUse =
-			userDetails && typeof userDetails === "object"
-				? userDetails.email || ""
-				: user.email || "";
-
-		// Set initial form values
-		form.setFieldsValue({
-			name: nameToUse,
-			email: emailToUse,
-			password: "",
-			password2: "",
-		});
-
-		setUpdateModalVisible(true);
-	};
-
-	// -- Close Modal
-	const handleCancelUpdateAccount = () => {
-		setUpdateModalVisible(false);
-	};
-
-	// -- onFinish Handler for Form
-	const handleUpdateAccount = async (values) => {
-		try {
-			const { name, email, password, password2 } = values;
-
-			// Check password match
-			if (password !== password2) {
-				message.error("Passwords do not match!");
-				return;
-			}
-
-			const payload = { name, email, password, userId };
-
-			// Construct URL based on role
-			let url = "";
-			if (user.role === 2000) {
-				// normal user => /user/:userId
-				url = `${process.env.REACT_APP_API_URL}/user/${user._id}`;
-			} else {
-				// admin => /user/:updatedUserId/:userId
-				const updatedUserId =
-					userDetails && userDetails._id ? userDetails._id : userDetails;
-				url = `${process.env.REACT_APP_API_URL}/user/${updatedUserId}/${user._id}`;
-			}
-
-			const config = {
-				headers: {
-					Accept: "application/json",
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${token}`,
-				},
-			};
-
-			// Make the PUT request (no unused variable)
-			await axios.put(url, payload, config);
-
-			message.success("User updated successfully!");
-			setUpdateModalVisible(false);
-			// Optionally refresh or update localStorage if needed
-		} catch (error) {
-			console.error("Error updating user:", error);
-			message.error(
-				error?.response?.data?.error || "Something went wrong updating user"
-			);
-		}
-	};
+	const roleLabel =
+		user.role === 1000 ? "Superadmin" : user.role === 2000 ? "Owner" : "User";
 
 	return (
 		<NavbarWrapper isArabic={chosenLanguage === "Arabic"}>
@@ -300,10 +246,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 				<ProfileMenu>
 					<Dropdown
-						overlay={menu}
+						overlay={profileMenu}
 						trigger={["click"]}
-						visible={dropdownVisible}
-						onVisibleChange={(flag) => setDropdownVisible(flag)}
+						open={profileMenuOpen}
+						onOpenChange={(flag) => setProfileMenuOpen(flag)}
 					>
 						<Profile>
 							<UserOutlined
@@ -315,90 +261,35 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							/>
 							<div>
 								<span>Hi {user.name?.split(" ")[0]}</span>
-								<small>Superadmin</small>
+								<small>{roleLabel}</small>
 							</div>
 						</Profile>
 					</Dropdown>
 				</ProfileMenu>
 			</RightSection>
 
-			{/* ===== MODAL FOR UPDATING ACCOUNT ===== */}
-			<Modal
-				title='Update Account'
-				visible={updateModalVisible}
-				// Instead of onOk={handleUpdateAccount}, we trigger form submit:
-				onOk={() => form.submit()}
-				onCancel={handleCancelUpdateAccount}
-				okText='Update'
-				cancelText='Cancel'
-			>
-				<Form
-					layout='vertical'
-					form={form}
-					onFinish={handleUpdateAccount}
-					// We'll explicitly set initialValues too, though we set them in handleOpenUpdateAccountModal
-					initialValues={{
-						name: "",
-						email: "",
-						password: "",
-						password2: "",
+			{/* ===== Account Update Modal (self) for non-admins ===== */}
+			{user.role !== 1000 && (
+				<UpdateAccountModal
+					open={accountModalOpen}
+					onClose={() => setAccountModalOpen(false)}
+					token={token}
+					targetUser={targetUser}
+					actingUser={user}
+					mode='self'
+					onUpdated={() => {
+						// No-op; UpdateAccountModal already patches localStorage user name/email.
+						// If you keep user context elsewhere, refresh it here.
 					}}
-				>
-					<Form.Item
-						name='name'
-						label='User Name (Manager/ Owner/ Agent)'
-						rules={[{ required: true, message: "Please enter your name" }]}
-					>
-						<Input prefix={<UserOutlined />} placeholder='Full Name' />
-					</Form.Item>
-
-					<Form.Item
-						name='email'
-						label='Email Address'
-						rules={[{ required: true, message: "Please enter your email" }]}
-					>
-						<Input prefix={<MailOutlined />} placeholder='Email' />
-					</Form.Item>
-
-					<Form.Item
-						name='password'
-						label='Password'
-						rules={[{ required: true, message: "Please enter a password" }]}
-					>
-						<Input.Password prefix={<LockOutlined />} placeholder='Password' />
-					</Form.Item>
-
-					<Form.Item
-						name='password2'
-						label='Confirm Password'
-						dependencies={["password"]}
-						rules={[
-							{ required: true, message: "Please confirm your password" },
-							// Or add direct field validation with antd:
-							// ({ getFieldValue }) => ({
-							//   validator(_, value) {
-							//     if (!value || getFieldValue('password') === value) {
-							//       return Promise.resolve();
-							//     }
-							//     return Promise.reject(new Error('Passwords do not match!'));
-							//   },
-							// }),
-						]}
-					>
-						<Input.Password
-							prefix={<LockOutlined />}
-							placeholder='Confirm Password'
-						/>
-					</Form.Item>
-				</Form>
-			</Modal>
+				/>
+			)}
 		</NavbarWrapper>
 	);
 };
 
 export default TopNavbar;
 
-// ======================== Styled Components ======================== //
+/* ======================== Styled Components ======================== */
 
 const NavbarWrapper = styled.div`
 	position: fixed;
@@ -461,7 +352,7 @@ const Icons = styled.div`
 	margin-right: ${(props) => (props.isArabic ? "" : "40px")} !important;
 
 	svg {
-		font-size: 23px; /* Icon font size */
+		font-size: 23px;
 		color: #fff;
 		cursor: pointer;
 	}
