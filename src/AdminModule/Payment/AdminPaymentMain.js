@@ -24,12 +24,16 @@ import {
 	currencyConversion,
 	chargeOwnerCommissions, // same capture endpoint (per hotel)
 	adminUpdateReservationPayoutFlags, // NEW
+	adminAutoReconcileHotel, // NEW
 } from "../apiAdmin";
 
 /* ---------------- helpers ---------------- */
 const n2 = (v) => Number(v || 0).toFixed(2);
 const isNum = (v) => Number.isFinite(Number(v));
 const SAR = (isAr) => (isAr ? "ريال" : "SAR");
+
+// Keep scroll.x wide enough to avoid squeezing columns
+const ONLINE_TABLE_X = 1840;
 
 /** Find the last relevant change (commission or transfer) and return {note, at} */
 function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
@@ -38,7 +42,6 @@ function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
 	const matches = (e) => {
 		const f = String(e?.field || "").toLowerCase();
 		if (kind === "commission") {
-			// grouped or legacy
 			return (
 				f === "commission" ||
 				f === "commissionpaid" ||
@@ -55,7 +58,6 @@ function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
 	};
 
 	let latest = null;
-	// Walk from end to start; prefer an entry that has a note
 	for (let i = logs.length - 1; i >= 0; i--) {
 		const e = logs[i];
 		if (!e || !matches(e)) continue;
@@ -63,7 +65,6 @@ function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
 		if (e.note) break;
 	}
 
-	// choose a date
 	const fallbackDate =
 		r?.adminLastUpdatedAt ||
 		(kind === "commission" ? r?.commissionPaidAt : r?.moneyTransferredAt) ||
@@ -72,11 +73,9 @@ function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
 
 	const at = latest?.at || fallbackDate;
 
-	// choose a note (prefer log note; fallback to auto MIT metadata if available)
 	let note = latest?.note || null;
 
 	if (!note && kind === "commission") {
-		// if paid via MIT, show a friendly auto note from commissionData
 		const last = r?.commissionData?.last;
 		if (last?.paypal?.status) {
 			const meth = last?.method?.type || "CARD";
@@ -314,12 +313,8 @@ const AdminPaymentMain = () => {
 	useEffect(() => {
 		const hid = selectedHotelId || undefined;
 		fetchOverview(hid);
-
-		// offline buckets
 		fetchPending(hid, 1, pending.pageSize);
 		fetchPaid(hid, 1, paid.pageSize);
-
-		// online buckets
 		fetchOnlineDue(hid, 1, onlineDue.pageSize);
 		fetchOnlineSent(hid, 1, onlineSent.pageSize);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -455,7 +450,6 @@ const AdminPaymentMain = () => {
 	const doSaveEdit = async () => {
 		if (!editRow?._id) return;
 
-		// Build a minimal payload with only changed fields
 		const payload = { reservationId: String(editRow._id) };
 		const prevCommissionPaid = !!editRow?.commissionPaid;
 		const prevTransferred = !!editRow?.moneyTransferredToHotel;
@@ -482,7 +476,6 @@ const AdminPaymentMain = () => {
 			payload.note = editNote.trim();
 		}
 
-		// include admin identity for accurate logs
 		if (user) {
 			payload.adminId = user._id;
 			payload.adminName = user.name;
@@ -517,18 +510,75 @@ const AdminPaymentMain = () => {
 		}
 	};
 
+	/* ---------- NEW: Auto Reconcile ---------- */
+	const [reconLoading, setReconLoading] = useState(false);
+	const doAutoReconcile = async () => {
+		if (!selectedHotelId) {
+			message.error(
+				isArabic
+					? "اختر فندقًا قبل المصالحة."
+					: "Select a hotel before reconciling."
+			);
+			return;
+		}
+		Modal.confirm({
+			title: isArabic ? "تأكيد المصالحة" : "Confirm Reconciliation",
+			content: isArabic
+				? "سيتم تسوية المدفوعات الأونلاين المستحقة مع عمولات المدفوعات داخل الفندق المتاحة حتى أقصى حد ممكن. هل تريد المتابعة؟"
+				: "We will net online payouts due to the hotel against offline commissions due from the hotel, as much as possible. Continue?",
+			okText: isArabic ? "متابعة" : "Proceed",
+			cancelText: isArabic ? "إلغاء" : "Cancel",
+			onOk: async () => {
+				try {
+					setReconLoading(true);
+					const resp = await adminAutoReconcileHotel(
+						{ hotelId: selectedHotelId },
+						{ token }
+					);
+					message.success(
+						(isArabic ? "تمت المصالحة" : "Reconciled") +
+							` • ${resp.batchKey} • ${n2(resp.settledSAR)} SAR` +
+							` • ${isArabic ? "محفظة الفندق" : "Hotel wallet"}=${n2(
+								resp.remainder?.hotel_wallet_sar || 0
+							)} ` +
+							`• ${isArabic ? "محفظة المنصة" : "Platform wallet"}=${n2(
+								resp.remainder?.platform_wallet_sar || 0
+							)}`
+					);
+
+					const hid = selectedHotelId || undefined;
+					await Promise.all([
+						fetchOverview(hid),
+						fetchPending(hid, pending.page, pending.pageSize),
+						fetchPaid(hid, paid.page, paid.pageSize),
+						fetchOnlineDue(hid, onlineDue.page, onlineDue.pageSize),
+						fetchOnlineSent(hid, onlineSent.page, onlineSent.pageSize),
+					]);
+				} catch (e) {
+					message.error(
+						(isArabic ? "فشل المصالحة: " : "Reconciliation failed: ") +
+							(e.message || "")
+					);
+				} finally {
+					setReconLoading(false);
+				}
+			},
+		});
+	};
+
 	/* ---------- Columns ---------- */
 	const hotelCol = useMemo(
 		() => ({
 			title: isArabic ? "الفندق" : "Hotel",
 			dataIndex: "hotelName",
 			key: "hotel",
-			width: 180,
+			width: 200,
+			ellipsis: true,
+			render: (name) => <span title={name || "—"}>{name || "—"}</span>,
 		}),
 		[isArabic]
 	);
 
-	// Shared action column (memoized)
 	const actionCol = useMemo(
 		() => ({
 			title: isArabic ? "إجراء" : "Actions",
@@ -544,7 +594,6 @@ const AdminPaymentMain = () => {
 		[isArabic, openEdit]
 	);
 
-	// -------- helpers for "Last note / Last updated" column --------
 	const lastNoteTitle = isArabic
 		? "آخر ملاحظة / آخر تحديث"
 		: "Last note / Last updated";
@@ -580,7 +629,7 @@ const AdminPaymentMain = () => {
 				render: (_, r) => (
 					<Checkbox
 						checked={selected.has(String(r._id))}
-						disabled={!selectedHotelId} // cannot select when "All Hotels"
+						disabled={!selectedHotelId}
 						onChange={(e) => onRowCheck(r._id, e.target.checked)}
 					/>
 				),
@@ -645,7 +694,7 @@ const AdminPaymentMain = () => {
 					: `Commission (${SAR(isArabic)})`,
 				key: "comm",
 				align: "right",
-				width: 160,
+				width: 165,
 				render: (_, r) => n2(r?.computed_commission_sar),
 			},
 			actionCol,
@@ -655,7 +704,7 @@ const AdminPaymentMain = () => {
 
 	const paidCols = useMemo(
 		() => [
-			lastNoteCommissionCol, // <<< NEW
+			lastNoteCommissionCol,
 			hotelCol,
 			{
 				title: isArabic ? "رقم التأكيد" : "Confirmation",
@@ -681,7 +730,7 @@ const AdminPaymentMain = () => {
 					: `Commission (${SAR(isArabic)})`,
 				key: "comm2",
 				align: "right",
-				width: 160,
+				width: 165,
 				render: (_, r) => n2(r?.computed_commission_sar),
 			},
 			actionCol,
@@ -689,26 +738,33 @@ const AdminPaymentMain = () => {
 		[isArabic, hotelCol, actionCol, lastNoteCommissionCol]
 	);
 
-	// Online columns: "Due" vs "Transferred" (the latter shows the last-note column)
 	const onlineColsDue = useMemo(
 		() => [
-			hotelCol,
+			hotelCol, // width 200
 			{
 				title: isArabic ? "رقم التأكيد" : "Confirmation",
 				dataIndex: "confirmation_number",
 				key: "conf",
-				width: 130,
+				width: 140,
+				ellipsis: true,
+				render: (v) => <span title={v || "—"}>{v || "—"}</span>,
 			},
 			{
 				title: isArabic ? "اسم الضيف" : "Guest",
 				key: "guest",
-				render: (_, r) => r?.customer_details?.name || "—",
+				width: 200,
+				ellipsis: true,
+				render: (_, r) => {
+					const name = r?.customer_details?.name || "—";
+					return <span title={name}>{name}</span>;
+				},
 			},
 			{
 				title: isArabic ? "الحالة المالية" : "Payment Status",
 				dataIndex: "computed_payment_status",
 				key: "fin",
-				width: 130,
+				width: 140,
+				align: "center",
 				render: (v) => (
 					<Tag color={v === "Captured" ? "green" : "orange"}>{v || "—"}</Tag>
 				),
@@ -717,14 +773,14 @@ const AdminPaymentMain = () => {
 				title: isArabic ? "الوصول" : "Check‑in",
 				dataIndex: "checkin_date",
 				key: "in",
-				width: 100,
+				width: 120,
 				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
 			},
 			{
 				title: isArabic ? "المغادرة" : "Check‑out",
 				dataIndex: "checkout_date",
 				key: "out",
-				width: 100,
+				width: 120,
 				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
 			},
 			{
@@ -742,7 +798,7 @@ const AdminPaymentMain = () => {
 					: `Commission (${SAR(isArabic)})`,
 				key: "comm3",
 				align: "right",
-				width: 130,
+				width: 165,
 				render: (_, r) => n2(r?.computed_commission_sar),
 			},
 			{
@@ -751,13 +807,14 @@ const AdminPaymentMain = () => {
 					: `Hotel Payout (${SAR(isArabic)})`,
 				key: "payout",
 				align: "right",
-				width: 140,
+				width: 160,
 				render: (_, r) => n2(r?.computed_online_payout_sar),
 			},
 			{
 				title: isArabic ? "تم التحويل؟" : "Transferred?",
 				key: "tf",
-				width: 100,
+				width: 110,
+				align: "center",
 				render: (_, r) =>
 					r?.moneyTransferredToHotel === true ? (
 						<Tag color='green'>{isArabic ? "نعم" : "Yes"}</Tag>
@@ -772,24 +829,32 @@ const AdminPaymentMain = () => {
 
 	const onlineColsSent = useMemo(
 		() => [
-			lastNoteTransferCol, // <<< NEW
-			hotelCol,
+			lastNoteTransferCol, // width 260
+			hotelCol, // width 200
 			{
 				title: isArabic ? "رقم التأكيد" : "Confirmation",
 				dataIndex: "confirmation_number",
 				key: "conf",
-				width: 130,
+				width: 140,
+				ellipsis: true,
+				render: (v) => <span title={v || "—"}>{v || "—"}</span>,
 			},
 			{
 				title: isArabic ? "اسم الضيف" : "Guest",
 				key: "guest",
-				render: (_, r) => r?.customer_details?.name || "—",
+				width: 200,
+				ellipsis: true,
+				render: (_, r) => {
+					const name = r?.customer_details?.name || "—";
+					return <span title={name}>{name}</span>;
+				},
 			},
 			{
 				title: isArabic ? "الحالة المالية" : "Payment Status",
 				dataIndex: "computed_payment_status",
 				key: "fin",
-				width: 130,
+				width: 140,
+				align: "center",
 				render: (v) => (
 					<Tag color={v === "Captured" ? "green" : "orange"}>{v || "—"}</Tag>
 				),
@@ -798,14 +863,14 @@ const AdminPaymentMain = () => {
 				title: isArabic ? "الوصول" : "Check‑in",
 				dataIndex: "checkin_date",
 				key: "in",
-				width: 100,
+				width: 120,
 				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
 			},
 			{
 				title: isArabic ? "المغادرة" : "Check‑out",
 				dataIndex: "checkout_date",
 				key: "out",
-				width: 100,
+				width: 120,
 				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
 			},
 			{
@@ -823,7 +888,7 @@ const AdminPaymentMain = () => {
 					: `Commission (${SAR(isArabic)})`,
 				key: "comm3",
 				align: "right",
-				width: 130,
+				width: 165,
 				render: (_, r) => n2(r?.computed_commission_sar),
 			},
 			{
@@ -832,13 +897,14 @@ const AdminPaymentMain = () => {
 					: `Hotel Payout (${SAR(isArabic)})`,
 				key: "payout",
 				align: "right",
-				width: 140,
+				width: 160,
 				render: (_, r) => n2(r?.computed_online_payout_sar),
 			},
 			{
 				title: isArabic ? "تم التحويل؟" : "Transferred?",
 				key: "tf",
-				width: 100,
+				width: 110,
+				align: "center",
 				render: (_, r) =>
 					r?.moneyTransferredToHotel === true ? (
 						<Tag color='green'>{isArabic ? "نعم" : "Yes"}</Tag>
@@ -884,7 +950,7 @@ const AdminPaymentMain = () => {
 									placeholder={isArabic ? "كل الفنادق" : "All Hotels"}
 									value={selectedHotelId || undefined}
 									onChange={(v) => {
-										setSelected(new Set()); // clear offline selections when hotel changes
+										setSelected(new Set());
 										setSelectedHotelId(v || "");
 									}}
 									optionFilterProp='label'
@@ -899,6 +965,15 @@ const AdminPaymentMain = () => {
 										})),
 									]}
 								/>
+								<Button
+									type='primary'
+									onClick={doAutoReconcile}
+									loading={reconLoading}
+									disabled={!selectedHotelId}
+									style={{ marginInlineStart: 8 }}
+								>
+									{isArabic ? "مصالحة تلقائية" : "Reconcile (Auto)"}
+								</Button>
 							</div>
 						</Header>
 
@@ -1111,7 +1186,6 @@ const AdminPaymentMain = () => {
 
 						{activeTab === "offline" ? (
 							<>
-								{/* Action bar: disabled unless a specific hotel is selected */}
 								<ActionBar>
 									<div>
 										<strong>
@@ -1150,7 +1224,6 @@ const AdminPaymentMain = () => {
 									</Space>
 								</ActionBar>
 
-								{/* Pending OFFLINE */}
 								{loadingPending ? (
 									<Centered>
 										<Spin />
@@ -1177,7 +1250,6 @@ const AdminPaymentMain = () => {
 									/>
 								)}
 
-								{/* Paid OFFLINE */}
 								<SectionHeader style={{ marginTop: 14 }}>
 									{isArabic ? "العمولات المدفوعة" : "Commission Paid"}
 								</SectionHeader>
@@ -1207,7 +1279,6 @@ const AdminPaymentMain = () => {
 							</>
 						) : (
 							<>
-								{/* ONLINE — Transfers Due */}
 								<SectionHeader>
 									{isArabic
 										? "تحويلات مستحقة للفنادق"
@@ -1226,6 +1297,7 @@ const AdminPaymentMain = () => {
 										columns={onlineColsDue}
 										size='small'
 										bordered
+										tableLayout='fixed'
 										pagination={{
 											current: onlineDue.page,
 											pageSize: onlineDue.pageSize,
@@ -1235,11 +1307,10 @@ const AdminPaymentMain = () => {
 											showTotal: (t) =>
 												isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
 										}}
-										scroll={{ x: 1100 }}
+										scroll={{ x: ONLINE_TABLE_X }}
 									/>
 								)}
 
-								{/* ONLINE — Transfers Completed */}
 								<SectionHeader style={{ marginTop: 14 }}>
 									{isArabic
 										? "تحويلات مُسددة للفنادق"
@@ -1256,6 +1327,7 @@ const AdminPaymentMain = () => {
 										columns={onlineColsSent}
 										size='small'
 										bordered
+										tableLayout='fixed'
 										pagination={{
 											current: onlineSent.page,
 											pageSize: onlineSent.pageSize,
@@ -1265,7 +1337,7 @@ const AdminPaymentMain = () => {
 											showTotal: (t) =>
 												isArabic ? `الإجمالي: ${t}` : `Total: ${t}`,
 										}}
-										scroll={{ x: 1100 }}
+										scroll={{ x: ONLINE_TABLE_X }}
 									/>
 								)}
 							</>
@@ -1381,7 +1453,6 @@ const AdminPaymentMainWrapper = styled.div`
 
 	.grid-container-main {
 		display: grid;
-		/* match your JanatWebsiteMain proportions */
 		grid-template-columns: ${(props) => (props.show ? "5% 75%" : "17% 75%")};
 	}
 

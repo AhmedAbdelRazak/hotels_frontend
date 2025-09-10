@@ -1297,3 +1297,28 @@ export async function adminUpdateReservationPayoutFlags(
 	if (!res.ok) throw new Error(json?.message || "Failed to update reservation");
 	return json;
 }
+
+export const adminAutoReconcileHotel = async (params, { token }) => {
+	// params must include { hotelId }
+	const res = await fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/admin-payouts/reconcile?hotelId=${encodeURIComponent(params.hotelId)}`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify({
+				note: params.note || "",
+				toleranceHalala: params.toleranceHalala || 5,
+			}),
+		}
+	);
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({}));
+		throw new Error(err?.message || "Failed to reconcile");
+	}
+	return res.json();
+};
