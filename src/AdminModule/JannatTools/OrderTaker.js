@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+	useState,
+	useEffect,
+	useCallback,
+	useRef,
+	useMemo,
+} from "react";
 import {
 	Form,
 	Input,
@@ -10,8 +16,11 @@ import {
 	Modal,
 	Descriptions,
 	Radio,
+	Tag,
+	Space,
+	Typography,
 } from "antd";
-import { EditOutlined } from "@ant-design/icons";
+import { EditOutlined, LockOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
@@ -21,8 +30,10 @@ import {
 } from "../apiAdmin";
 import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
+import PackagesModal from "./PackagesModal"; // expects: open, onClose, onApply, hotel
 
 const { Option } = Select;
+const { Text } = Typography;
 
 /** --------------------- Safe Parse Float --------------------- */
 const safeParseFloat = (value, fallback = 0) => {
@@ -53,7 +64,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	/** Advance Payment‐related state */
 	const [hotelCost, setHotelCost] = useState(0); // Base total for the hotel
 	const [oneNightCost, setOneNightCost] = useState(0); // Sum of first‐night “rootPrice” across all rooms
-	const [defaultDeposit, setDefaultDeposit] = useState(0); // commission + oneNight
+	const [defaultDeposit, setDefaultDeposit] = useState(0); // commission + oneNight (for non-package flow)
 	const [finalDeposit, setFinalDeposit] = useState(0);
 
 	// Radio options: "commission_plus_one_day", "percentage", or "sar"
@@ -76,6 +87,17 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	const [selectedReservation, setSelectedReservation] = useState("");
 
 	const { user, token } = isAuthenticated();
+
+	// Packages Modal + lock state
+	const [packagesOpen, setPackagesOpen] = useState(false);
+	const [packageLock, setPackageLock] = useState({
+		enabled: false,
+		roomId: "",
+		pkgId: "",
+		pkgType: "",
+		pkgName: "",
+		roomDisplayName: "",
+	});
 
 	// Keep track of previous values to detect changes
 	const prevValues = useRef({
@@ -382,7 +404,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				return room;
 			});
 
-			// Default deposit = sumCommission + sumOneNightCost
+			// Default deposit (non-package) = sumCommission + sumOneNightCost
 			const deposit = sumCommission + sumOneNightCost;
 
 			setSelectedRooms(updatedRooms);
@@ -406,9 +428,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	/**
 	 * Whenever checkInDate, checkOutDate, selectedRooms, or selectedHotel changes,
 	 * recalc totals if anything truly changed.
-	 *
-	 * If the date changed, we force a re-distribution of either DB pricing or
-	 * user’s manual total.
 	 */
 	useEffect(() => {
 		const prev = prevValues.current;
@@ -438,14 +457,16 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	]);
 
 	/**
-	 * Update finalDeposit whenever user changes:
-	 *   - advancePaymentOption,
-	 *   - advancePaymentPercentage,
-	 *   - advancePaymentSAR,
-	 *   - defaultDeposit,
-	 *   - totalAmount
+	 * Update finalDeposit.
+	 * - If a package/offer is active, deposit is exactly the TOTAL COMMISSION.
+	 * - Otherwise, keep your original logic.
 	 */
 	useEffect(() => {
+		if (packageLock.enabled) {
+			setFinalDeposit(totalCommission);
+			return;
+		}
+
 		if (advancePaymentOption === "commission_plus_one_day") {
 			setFinalDeposit(defaultDeposit);
 		} else if (advancePaymentOption === "percentage") {
@@ -463,6 +484,8 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		advancePaymentSAR,
 		defaultDeposit,
 		totalAmount,
+		packageLock.enabled,
+		totalCommission,
 	]);
 
 	/** ------------------------------ Handlers ------------------------------ */
@@ -607,6 +630,15 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		setAdvancePaymentOption("commission_plus_one_day");
 		setAdvancePaymentPercentage("");
 		setAdvancePaymentSAR("");
+
+		setPackageLock({
+			enabled: false,
+			roomId: "",
+			pkgId: "",
+			pkgType: "",
+			pkgName: "",
+			roomDisplayName: "",
+		});
 	};
 
 	// Automatically preserve # of nights if user changes "From date"
@@ -665,6 +697,115 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		setSelectedHotel(newHotel);
 	};
 
+	// ===== Packages & Offers (derived) =====
+	const availablePackagesCount = useMemo(() => {
+		if (!selectedHotel?.roomCountDetails?.length) return 0;
+		const now = new Date();
+		const isActiveOrUpcoming = (from, to) => {
+			const f = from ? new Date(from) : null;
+			const t = to ? new Date(to) : null;
+			if (t && !isNaN(t) && t < now) return false;
+			if (f && !isNaN(f) && f >= now) return true;
+			if (t && !isNaN(t) && t >= now) return true;
+			return false;
+		};
+		let total = 0;
+		selectedHotel.roomCountDetails.forEach((r) => {
+			const offers =
+				(r.offers || []).filter((o) =>
+					isActiveOrUpcoming(o.offerFrom || o.from, o.offerTo || o.to)
+				).length || 0;
+			const months =
+				(r.monthly || []).filter((m) =>
+					isActiveOrUpcoming(m.monthFrom || m.from, m.monthTo || m.to)
+				).length || 0;
+			total += offers + months;
+		});
+		return total;
+	}, [selectedHotel]);
+
+	const packageButtonLabel = useMemo(() => {
+		if (!selectedHotel) return "Select a hotel to see packages";
+		if (packageLock.enabled) {
+			return `Package selected: ${packageLock.pkgName} — ${packageLock.roomDisplayName} (dates locked)`;
+		}
+		if (availablePackagesCount > 0) {
+			return `Browse Packages & Offers (${availablePackagesCount} available)`;
+		}
+		return "No packages or monthly offers for this hotel";
+	}, [selectedHotel, availablePackagesCount, packageLock]);
+
+	const clearPackageSelection = () => {
+		setPackageLock({
+			enabled: false,
+			roomId: "",
+			pkgId: "",
+			pkgType: "",
+			pkgName: "",
+			roomDisplayName: "",
+		});
+		// Dates remain; admin can now change them; prices will auto‑recalc to DB rates when dates change
+	};
+
+	// ===== When admin confirms a package from the modal =====
+	// The modal returns: { room, deal, nights, start, end, count, pricingByDay, totals }
+	const handlePackageApply = ({
+		room,
+		deal,
+		nights,
+		start,
+		end,
+		count,
+		pricingByDay,
+	}) => {
+		if (!room || !deal || !pricingByDay?.length) return;
+
+		// Pre-populate one room entry using the exact nightly rows from the modal
+		const firstDay = pricingByDay[0] || {};
+		const manualTotal = pricingByDay.reduce(
+			(acc, d) => acc + safeParseFloat(d.totalPriceWithCommission),
+			0
+		);
+		const ratio =
+			manualTotal > 0
+				? pricingByDay.reduce(
+						(acc, d) =>
+							acc +
+							safeParseFloat(d.rootPrice) /
+								safeParseFloat(d.totalPriceWithCommission),
+						0
+				  ) / pricingByDay.length
+				: 0;
+
+		setSelectedRooms([
+			{
+				roomType: room.roomType,
+				displayName: room.displayName,
+				count: Number(count) > 0 ? Number(count) : 1,
+				pricingByDay: pricingByDay,
+				// keep these, so later date changes can fairly re-distribute
+				manualTotal: Number(manualTotal.toFixed(2)),
+				averageRootToTotalRatio: Number(ratio.toFixed(6)),
+				commissionRate: safeParseFloat(firstDay.commissionRate, 10), // keep one reference rate
+			},
+		]);
+
+		// Lock dates to package window
+		setCheckInDate(dayjs(start));
+		setCheckOutDate(dayjs(end));
+		setPackageLock({
+			enabled: true,
+			roomId: room._id,
+			pkgId: deal.id,
+			pkgType: deal.type,
+			pkgName: deal.name,
+			roomDisplayName: room.displayName,
+		});
+
+		setPackagesOpen(false);
+		// Totals auto-recalc via useEffect
+	};
+
 	// Submit form
 	const handleSubmit = async () => {
 		// --- Basic field checks ---
@@ -705,20 +846,22 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		}
 
 		// --- Deposit option validation ---
-		if (advancePaymentOption === "percentage") {
-			const p = safeParseFloat(advancePaymentPercentage, -1);
-			if (p < 1 || p > 100) {
-				message.error("Please enter a valid percentage between 1 and 100.");
-				return;
+		if (!packageLock.enabled) {
+			if (advancePaymentOption === "percentage") {
+				const p = safeParseFloat(advancePaymentPercentage, -1);
+				if (p < 1 || p > 100) {
+					message.error("Please enter a valid percentage between 1 and 100.");
+					return;
+				}
 			}
-		}
-		if (advancePaymentOption === "sar") {
-			const amt = safeParseFloat(advancePaymentSAR, -1);
-			if (amt < 1 || amt > totalAmount) {
-				message.error(
-					"Please enter a valid SAR amount between 1 and the total amount."
-				);
-				return;
+			if (advancePaymentOption === "sar") {
+				const amt = safeParseFloat(advancePaymentSAR, -1);
+				if (amt < 1 || amt > totalAmount) {
+					message.error(
+						"Please enter a valid SAR amount between 1 and the total amount."
+					);
+					return;
+				}
 			}
 		}
 
@@ -806,7 +949,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			sentFrom: "employee",
 			advancePayment: {
 				paymentPercentage:
-					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
+					packageLock.enabled || advancePaymentOption !== "percentage"
+						? ""
+						: advancePaymentPercentage,
 				finalAdvancePayment: Number(finalDeposit.toFixed(2)).toFixed(2),
 			},
 		};
@@ -896,6 +1041,33 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					</div>
 				</div>
 
+				{/* Packages & Offers CTA */}
+				{selectedHotel && (
+					<Form.Item>
+						<Space wrap>
+							<Button
+								onClick={() =>
+									availablePackagesCount > 0 ? setPackagesOpen(true) : null
+								}
+								disabled={availablePackagesCount === 0}
+								type={packageLock.enabled ? "primary" : "default"}
+							>
+								{packageButtonLabel}
+							</Button>
+							{packageLock.enabled && (
+								<Tag color='blue' style={{ marginLeft: 6 }}>
+									<LockOutlined /> Dates locked by package
+								</Tag>
+							)}
+							{packageLock.enabled && (
+								<Button type='link' onClick={clearPackageSelection}>
+									Clear package
+								</Button>
+							)}
+						</Space>
+					</Form.Item>
+				)}
+
 				{/* Check-in / Check-out DatePickers */}
 				<div className='row'>
 					<div className='col-md-6'>
@@ -903,7 +1075,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={!selectedHotel}
+								disabled={!selectedHotel || packageLock.enabled} // lock when package selected
 								disabledDate={disableCheckInDate}
 								value={checkInDate}
 								onChange={handleCheckInDateChange}
@@ -915,7 +1087,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={!selectedHotel || !checkInDate}
+								disabled={!selectedHotel || !checkInDate || packageLock.enabled} // lock when package selected
 								disabledDate={disableCheckOutDate}
 								value={checkOutDate}
 								onChange={handleCheckOutDateChange}
@@ -1084,14 +1256,23 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					<Radio.Group
 						onChange={(e) => setAdvancePaymentOption(e.target.value)}
 						value={advancePaymentOption}
+						disabled={packageLock.enabled} // deposit locked to commission for packages
 					>
 						<Radio value='commission_plus_one_day'>Commission + 1 Day</Radio>
 						<Radio value='percentage'>Percentage (%)</Radio>
 						<Radio value='sar'>SAR Amount</Radio>
 					</Radio.Group>
+					{packageLock.enabled && (
+						<div style={{ marginTop: 6 }}>
+							<Text type='secondary'>
+								<LockOutlined /> Package selected: deposit is locked to the
+								total commission ({totalCommission.toFixed(2)} SAR).
+							</Text>
+						</div>
+					)}
 				</Form.Item>
 
-				{advancePaymentOption === "percentage" && (
+				{advancePaymentOption === "percentage" && !packageLock.enabled && (
 					<Form.Item label='Deposit Payment Percentage' required>
 						<InputNumber
 							min={1}
@@ -1102,7 +1283,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 						/>
 					</Form.Item>
 				)}
-				{advancePaymentOption === "sar" && (
+				{advancePaymentOption === "sar" && !packageLock.enabled && (
 					<Form.Item label='Deposit Payment in SAR' required>
 						<InputNumber
 							min={1}
@@ -1126,8 +1307,13 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 						<Descriptions.Item label='Cost of One Night (First Night)'>
 							{oneNightCost.toFixed(2)} SAR
 						</Descriptions.Item>
-						<Descriptions.Item label='Total Deposit (Based on Option Above)'>
-							{finalDeposit.toFixed(2)} SAR
+						<Descriptions.Item label='Total Deposit'>
+							<span style={{ fontWeight: 700 }}>
+								{finalDeposit.toFixed(2)} SAR
+							</span>{" "}
+							{packageLock.enabled && (
+								<Text type='secondary'>(equals commission)</Text>
+							)}
 						</Descriptions.Item>
 						<Descriptions.Item label='Grand Total (Including Commission)'>
 							<span
@@ -1182,6 +1368,14 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				onClose={closeModal}
 				pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
 				onUpdate={handlePricingUpdate}
+			/>
+
+			{/* Packages & Offers Modal */}
+			<PackagesModal
+				open={packagesOpen}
+				onClose={() => setPackagesOpen(false)}
+				hotel={selectedHotel}
+				onApply={handlePackageApply}
 			/>
 
 			{/* Reservation Details Modal */}
