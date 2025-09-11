@@ -5,7 +5,7 @@ import styled from "styled-components";
 import { isAuthenticated, signup } from "../../auth";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.min.css";
-import { gettingHotelDetailsForAdmin } from "../apiAdmin";
+import { gettingHotelDetailsForAdminAll } from "../apiAdmin";
 import { Form, Select, message } from "antd";
 const { Option } = Select;
 
@@ -53,11 +53,12 @@ const EmployeeRegister = () => {
 
 	const getAllHotels = useCallback(async () => {
 		try {
-			const data = await gettingHotelDetailsForAdmin(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(user._id, token);
+
 			if (data && !data.error) {
-				const sortedHotels = data.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
-				);
+				const sortedHotels =
+					data &&
+					data.hotels.sort((a, b) => a.hotelName.localeCompare(b.hotelName));
 				setAllHotels(sortedHotels);
 			} else {
 				message.error("Failed to fetch hotels.");
