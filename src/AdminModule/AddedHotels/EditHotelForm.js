@@ -1,9 +1,18 @@
 /** @format
- * EditHotelForm – drop‑in replacement
+ * EditHotelForm – drop‑in replacement (AI toggle correctly bound + live label)
  */
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Form, Input, Button, Typography, Select, Tabs, message } from "antd";
+import {
+	Form,
+	Input,
+	Button,
+	Typography,
+	Select,
+	Tabs,
+	message,
+	Switch,
+} from "antd";
 import styled from "styled-components";
 import axios from "axios";
 import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons";
@@ -31,6 +40,9 @@ const EditHotelForm = ({
 	const [formHotel] = Form.useForm();
 	const [hotel, setHotel] = useState(hotelData);
 
+	/* Watch aiToRespond from the form (drives the dynamic label) */
+	const aiEnabled = Form.useWatch("aiToRespond", formHotel);
+
 	/* ==== OWNER (belongsTo) FORM STATE ==== */
 	const [formUser] = Form.useForm();
 	const belongsToId = useMemo(
@@ -49,9 +61,14 @@ const EditHotelForm = ({
 
 	useEffect(() => {
 		setHotel(hotelData);
-		formHotel.setFieldsValue(hotelData);
+		// Initialize & sync the form fields, coerce aiToRespond to boolean
+		formHotel.setFieldsValue({
+			...hotelData,
+			aiToRespond: !!hotelData?.aiToRespond,
+		});
 		formUser.setFieldsValue(initialOwner);
-	}, [hotelData, formHotel, formUser, initialOwner]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [hotelData]);
 
 	/* =================== HOTEL: submit =================== */
 	const handleHotelChange = (fieldName) => (eventOrValue) => {
@@ -66,7 +83,11 @@ const EditHotelForm = ({
 			return message.error("Missing admin authentication");
 		}
 		try {
-			const res = await updateHotelDetails(hotel._id, adminId, token, hotel);
+			// Read the toggle from the form to guarantee accuracy
+			const { aiToRespond } = formHotel.getFieldsValue(["aiToRespond"]);
+			const payload = { ...hotel, aiToRespond: !!aiToRespond };
+
+			const res = await updateHotelDetails(hotel._id, adminId, token, payload);
 			if (res?.error) throw new Error(res.error);
 			message.success(`Hotel “${hotel.hotelName}” updated`);
 			if (typeof refreshList === "function") refreshList();
@@ -88,12 +109,10 @@ const EditHotelForm = ({
 
 		const { name, email, password, password2 } = values;
 
-		// Send only changed fields
 		const updatePayload = {};
 		if (name && name !== initialOwner.name) updatePayload.name = name;
 		if (email && email !== initialOwner.email) updatePayload.email = email;
 
-		// Password optional — only send if present
 		if (password || password2) {
 			if (password !== password2) {
 				return message.error("Passwords do not match");
@@ -116,18 +135,14 @@ const EditHotelForm = ({
 				},
 			});
 
-			// success
 			message.success("Owner account updated");
-			// Update local displayed owner fields
 			formUser.setFieldsValue({
 				...values,
 				password: "",
 				password2: "",
 			});
-			// Optionally refresh table/list
 			if (typeof refreshList === "function") refreshList();
 
-			// Update in-memory hotelData (owner name/email shown in table)
 			if (hotel?.belongsTo) {
 				setHotel((h) => ({
 					...h,
@@ -157,6 +172,10 @@ const EditHotelForm = ({
 					onFinish={handleSubmitHotel}
 					layout='vertical'
 					style={{ marginTop: "1rem" }}
+					initialValues={{
+						...hotelData,
+						aiToRespond: !!hotelData?.aiToRespond, // pre-populate toggle
+					}}
 				>
 					<Title level={3}>Edit Property</Title>
 
@@ -300,6 +319,22 @@ const EditHotelForm = ({
 						</Select>
 					</Form.Item>
 
+					{/* ===== AI toggle (bound properly) ===== */}
+					<Form.Item label='AI to Respond'>
+						<AiToggleWrap>
+							{/* Bind the Switch as the direct child of a noStyle Form.Item */}
+							<Form.Item name='aiToRespond' valuePropName='checked' noStyle>
+								<Switch checkedChildren='On' unCheckedChildren='Off' />
+							</Form.Item>
+							<AiStateText enabled={!!aiEnabled}>
+								{aiEnabled
+									? "AI auto response is on"
+									: "AI auto response is off"}
+							</AiStateText>
+						</AiToggleWrap>
+					</Form.Item>
+					{/* ===== /AI toggle ===== */}
+
 					<Form.Item>
 						<StyledButton type='primary' htmlType='submit'>
 							Update Hotel
@@ -344,7 +379,7 @@ const EditHotelForm = ({
 						label='Password'
 						name='password'
 						rules={[
-							({ getFieldValue }) => ({
+							() => ({
 								validator(_, value) {
 									if (!value || value.length >= 6) return Promise.resolve();
 									return Promise.reject(
@@ -368,7 +403,7 @@ const EditHotelForm = ({
 							({ getFieldValue }) => ({
 								validator(_, value) {
 									const pwd = getFieldValue("password");
-									if (!pwd && !value) return Promise.resolve(); // both empty
+									if (!pwd && !value) return Promise.resolve();
 									if (pwd && value === pwd) return Promise.resolve();
 									return Promise.reject(new Error("Passwords do not match"));
 								},
@@ -397,6 +432,19 @@ const EditHotelForm = ({
 };
 
 export default EditHotelForm;
+
+/* ===== Styling additions for the AI switch (subtle, AntD-friendly) ===== */
+const AiToggleWrap = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 10px;
+`;
+
+const AiStateText = styled.span`
+	font-weight: 700;
+	letter-spacing: 0.1px;
+	color: ${(p) => (p.enabled ? "#52c41a" : "#6b7280")};
+`;
 
 const StyledButton = styled(Button)`
 	background-color: var(--button-bg-primary);

@@ -733,14 +733,19 @@ const MainHotelDashboardAdmin = () => {
 					footer={null}
 					destroyOnClose
 				>
-					<EditHotelForm
-						closeEditHotelModal={() => setEditVisible(false)}
-						hotelData={currentHotel}
-						updateHotelDetails={updateHotelDetails}
-						token={token}
-						userId={admin._id}
-						refreshList={fetchHotels}
-					/>
+					{/* Render the form only when data is ready to avoid first-render mismatches */}
+					{currentHotel ? (
+						<EditHotelForm
+							closeEditHotelModal={() => setEditVisible(false)}
+							hotelData={currentHotel}
+							updateHotelDetails={updateHotelDetails}
+							token={token}
+							userId={admin._id}
+							refreshList={fetchHotels}
+						/>
+					) : (
+						<Spin />
+					)}
 				</Modal>
 
 				{/* dynamic step‑specific modal */}
@@ -777,7 +782,7 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 	border: 1px solid var(--bd);
 	border-radius: 10px;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-	height: 100%; /* stretch in grid */
+	height: 100%;
 	.ant-card-body {
 		padding: 14px 16px;
 		display: flex;
@@ -791,7 +796,7 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 	.stat-texts {
 		display: flex;
 		flex-direction: column;
-		min-width: 0; /* enable ellipsis */
+		min-width: 0;
 	}
 	.stat-title {
 		font-size: 0.85rem;
@@ -990,7 +995,6 @@ const StatusSelect = styled(Select)`
 
 /* Compact, consistent row height & 2-line total per text cell (name+address / name+email) */
 const StyledTable = styled(Table)`
-	/* compact paddings */
 	.ant-table-thead > tr > th {
 		padding: 10px 12px;
 		white-space: nowrap;
@@ -1004,7 +1008,6 @@ const StyledTable = styled(Table)`
 		text-align: ${(p) => (p.isRTL ? "right" : "")} !important;
 	}
 
-	/* block to host two single-line rows */
 	.cell-block {
 		display: flex;
 		flex-direction: column;
@@ -1012,7 +1015,6 @@ const StyledTable = styled(Table)`
 		line-height: 1.3;
 	}
 
-	/* one-line ellipsis */
 	.ellip-1 {
 		display: block;
 		white-space: nowrap;
@@ -1020,20 +1022,17 @@ const StyledTable = styled(Table)`
 		text-overflow: ellipsis;
 	}
 
-	/* subtle secondary line */
 	.sub-line {
 		opacity: 0.85;
 		font-size: 12px;
 	}
 
-	/* hotel top line spacing for icon */
 	.hotel-line {
 		display: flex;
 		align-items: center;
 	}
 
-	/* prevent tall rows */
 	.compact-row td {
-		max-height: 48px; /* visually compact; content is already clamped */
+		max-height: 48px;
 	}
 `;
