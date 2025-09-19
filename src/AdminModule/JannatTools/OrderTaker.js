@@ -107,6 +107,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		selectedHotel: null,
 	});
 
+	/** --- NEW: Submit guard to prevent double clicks --- */
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const submittingRef = useRef(false);
+
 	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
 		try {
@@ -808,6 +812,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 	// Submit form
 	const handleSubmit = async () => {
+		// Prevent accidental double submit
+		if (submittingRef.current) return;
+
 		// --- Basic field checks ---
 		if (!selectedHotel?._id) {
 			message.error("Please select a hotel.");
@@ -958,6 +965,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 		// --- Submit ---
 		try {
+			// Lock submission immediately
+			submittingRef.current = true;
+			setIsSubmitting(true);
+
 			message.loading({ content: "Submitting...", key: "submit" });
 			const response = await createNewReservationClient(reservationData);
 
@@ -993,6 +1004,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				key: "submit",
 				duration: 2,
 			});
+		} finally {
+			// Always re-enable submission
+			submittingRef.current = false;
+			setIsSubmitting(false);
 		}
 	};
 
@@ -1335,8 +1350,14 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					</Descriptions>
 				</Form.Item>
 
-				<Button type='primary' onClick={handleSubmit}>
-					Submit
+				<Button
+					type='primary'
+					onClick={handleSubmit}
+					loading={isSubmitting}
+					disabled={isSubmitting}
+					aria-busy={isSubmitting}
+				>
+					{isSubmitting ? "Submitting..." : "Submit"}
 				</Button>
 			</Form>
 
