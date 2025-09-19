@@ -7,7 +7,7 @@ import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import ExportToExcelButton from "./ExportToExcelButton";
-import DateFilterModal from "./DateFilterModal"; // NEW modal component
+import DateFilterModal from "./DateFilterModal";
 
 const EnhancedContentTable = ({
 	data,
@@ -28,13 +28,15 @@ const EnhancedContentTable = ({
 	allHotelDetailsAdmin,
 
 	// NEW props
-	reservedByOptions = [], // array of lowercase names
+	reservedByOptions = [], // array of lowercase names (for super user view)
 	activeReservedBy = "", // lowercase or ""
 	onReservedByChange, // fn(lowercase or "")
 	dateFilter, // { type, from, to }
 	onDateFilterApply, // fn({type, from, to})
 	onClearDateFilter, // fn()
-	currentUserId, // used only for conditional rendering if needed in future
+	allowAllReservedBy = false, // super user id?
+	selfReservedBy = "", // lowercase current employee name
+	currentUserId, // not used here but passed through for future hooks
 }) => {
 	// ------------------ Search Box local state ------------------
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
@@ -42,10 +44,6 @@ const EnhancedContentTable = ({
 	// ------------------ Payment isCaptured flags, for display only ------------------
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
 
-	/**
-	 * PayPal-aware payment summary (keeps your existing labels)
-	 * Returns { status, hint, isCaptured, paidOffline }
-	 */
 	const summarizePayment = (reservation) => {
 		const pd = reservation?.paypal_details || {};
 		const pmt = (reservation?.payment || "").toLowerCase();
@@ -56,11 +54,10 @@ const EnhancedContentTable = ({
 
 		// PayPal ledger signals
 		const capTotal = Number(pd?.captured_total_usd || 0);
-		const limitUsd = Number(
-			pd?.bounds && typeof pd.bounds.limit_usd === "number"
-				? pd.bounds.limit_usd
-				: 0
-		);
+		const limitUsd =
+			typeof pd?.bounds?.limit_usd === "number"
+				? Number(pd.bounds.limit_usd)
+				: 0;
 		const pendingUsd = Number(pd?.pending_total_usd || 0);
 		const initialCompleted =
 			(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
@@ -70,7 +67,6 @@ const EnhancedContentTable = ({
 				(c) => (c?.capture_status || "").toUpperCase() === "COMPLETED"
 			);
 
-		// Unify captured with PayPal + legacy
 		const isCaptured =
 			legacyCaptured ||
 			capTotal > 0 ||
@@ -85,7 +81,6 @@ const EnhancedContentTable = ({
 		else if (payOffline) status = "Paid Offline";
 		else if (isNotPaid) status = "Not Paid";
 
-		// Build a helpful hint for tooltip (non-invasive)
 		let hint = "";
 		const pieces = [];
 		if (capTotal > 0) pieces.push(`captured $${capTotal.toFixed(2)}`);
@@ -100,18 +95,14 @@ const EnhancedContentTable = ({
 		return data.map((reservation) => {
 			const { customer_details = {}, hotelId = {} } = reservation;
 
-			// Keep your manual override
 			const manualOverrideCaptured = capturedConfirmationNumbers.includes(
 				reservation.confirmation_number
 			);
 
 			const paypalAware = summarizePayment(reservation);
-
-			// Final captured decision honors both your manual override + PayPal-aware logic
 			const isCaptured =
 				manualOverrideCaptured || paypalAware.isCaptured || false;
 
-			// Payment status with your same verbiage
 			let computedPaymentStatus;
 			if (isCaptured) {
 				computedPaymentStatus = "Captured";
@@ -130,7 +121,6 @@ const EnhancedContentTable = ({
 				hotel_name: hotelId?.hotelName || "Unknown Hotel",
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
-				// For tooltip on the payment cell
 				payment_status_hint: paypalAware.hint || "",
 			};
 		});
@@ -148,16 +138,12 @@ const EnhancedContentTable = ({
 		}
 		const { sortField, direction } = sortConfig;
 
-		const toKey = (v) => {
-			if (v == null) return "";
-			return v;
-		};
+		const toKey = (v) => (v == null ? "" : v);
 
 		const sorted = [...formattedReservations].sort((a, b) => {
 			let valA = toKey(a[sortField]);
 			let valB = toKey(b[sortField]);
 
-			// Dates
 			if (
 				sortField === "checkin_date" ||
 				sortField === "checkout_date" ||
@@ -168,14 +154,12 @@ const EnhancedContentTable = ({
 				return direction === "asc" ? valA - valB : valB - valA;
 			}
 
-			// Numbers
 			if (sortField === "total_amount") {
 				valA = Number(valA) || 0;
 				valB = Number(valB) || 0;
 				return direction === "asc" ? valA - valB : valB - valA;
 			}
 
-			// Strings (confirmation_number, names, statuses, etc.)
 			const aStr = String(valA);
 			const bStr = String(valB);
 			const cmp = aStr.localeCompare(bStr, undefined, {
@@ -225,9 +209,17 @@ const EnhancedContentTable = ({
 		setFilterType("");
 		setSortConfig({ sortField: null, direction: null });
 		handleFilterClickFromParent("");
-		// NEW: also clear reservedBy & date filter
-		if (onReservedByChange) onReservedByChange("");
-		if (onClearDateFilter) onClearDateFilter();
+
+		// ReservedBy behavior:
+		if (allowAllReservedBy) {
+			onReservedByChange && onReservedByChange(""); // clear to All
+		} else {
+			// enforce self
+			onReservedByChange && onReservedByChange(selfReservedBy);
+		}
+
+		// Date
+		onClearDateFilter && onClearDateFilter();
 	};
 
 	// ---- SAFER: Route to New Reservation with robust id extraction ----
@@ -251,7 +243,6 @@ const EnhancedContentTable = ({
 			return;
 		}
 
-		// Build a tolerant selectedHotel object for downstream pages
 		const selectedHotel =
 			record?.hotelId && typeof record.hotelId === "object"
 				? { ...record.hotelId, belongsTo: record.belongsTo }
@@ -263,24 +254,23 @@ const EnhancedContentTable = ({
 
 		try {
 			localStorage.setItem("selectedHotel", JSON.stringify(selectedHotel));
-		} catch (_) {} // ignore storage errors
+		} catch (_) {}
 
 		window.location.href = `/hotel-management/new-reservation/${belongsToId}/${hotelId}?list`;
 	};
 
 	// ------------------ Date Filter Modal ------------------
 	const [dateModalOpen, setDateModalOpen] = useState(false);
-
 	const openDateModal = () => setDateModalOpen(true);
 	const closeDateModal = () => setDateModalOpen(false);
 
 	const applyDateFilter = ({ type, from, to }) => {
-		if (onDateFilterApply) onDateFilterApply({ type, from, to });
+		onDateFilterApply && onDateFilterApply({ type, from, to });
 		setDateModalOpen(false);
 	};
 
 	const clearDateFilter = () => {
-		if (onClearDateFilter) onClearDateFilter();
+		onClearDateFilter && onClearDateFilter();
 		setDateModalOpen(false);
 	};
 
@@ -290,40 +280,51 @@ const EnhancedContentTable = ({
 
 	return (
 		<ContentTableWrapper>
-			{/* ScoreCards (from backend) */}
+			{/* ScoreCards */}
 			<ScoreCards
 				scorecardsObject={scorecardsObject}
 				totalReservations={sortedData.length}
 				fromPage={fromPage}
 			/>
 
-			{/* --- NEW: Reserved By filters (above the existing ones) --- */}
+			{/* Reserved By Filter Row */}
 			<ReservedByFilterContainer>
 				<ReservedByTitle>Reserved By:</ReservedByTitle>
-				<UserFilterButton
-					onClick={() => onReservedByChange && onReservedByChange("")}
-					isActive={reservedByActive("")}
-				>
-					All
-				</UserFilterButton>
-				{reservedByOptions.map((rb) => (
-					<UserFilterButton
-						key={rb}
-						isActive={reservedByActive(rb)}
-						onClick={() =>
-							onReservedByChange &&
-							onReservedByChange(reservedByActive(rb) ? "" : rb)
-						}
-					>
-						{/* Lowercase value displayed with capitalization */}
-						<span style={{ textTransform: "capitalize" }}>{rb}</span>
+
+				{allowAllReservedBy ? (
+					<>
+						<UserFilterButton
+							onClick={() => onReservedByChange && onReservedByChange("")}
+							isActive={reservedByActive("")}
+						>
+							All
+						</UserFilterButton>
+						{reservedByOptions.map((rb) => (
+							<UserFilterButton
+								key={rb}
+								isActive={reservedByActive(rb)}
+								onClick={() =>
+									onReservedByChange &&
+									onReservedByChange(reservedByActive(rb) ? "" : rb)
+								}
+							>
+								<span style={{ textTransform: "capitalize" }}>{rb}</span>
+							</UserFilterButton>
+						))}
+					</>
+				) : (
+					// Non-super: show only own name, fixed & active
+					<UserFilterButton isActive disabled>
+						<span style={{ textTransform: "capitalize" }}>
+							{selfReservedBy}
+						</span>
 					</UserFilterButton>
-				))}
+				)}
 			</ReservedByFilterContainer>
 
 			{fromPage === "reports" ? null : (
 				<FilterButtonContainer>
-					{/* NEW: single Date Filter button + clear */}
+					{/* Single Date Filter button + clear */}
 					<FilterButton onClick={openDateModal} title='Filter by date range'>
 						<CalendarOutlined style={{ marginRight: 6 }} />
 						Filter by Date
@@ -638,7 +639,7 @@ const EnhancedContentTable = ({
 										)}
 									</td>
 
-									{/* Payment Status with background and text color + PayPal tooltip */}
+									{/* Payment Status */}
 									<td style={payStatusStyles}>
 										{reservation.payment_status_hint ? (
 											<Tooltip title={reservation.payment_status_hint}>
@@ -698,11 +699,7 @@ const EnhancedContentTable = ({
 				onCancel={handleModalClose}
 				className='float-right'
 				width='84%'
-				style={{
-					position: "absolute",
-					left: "15.4%",
-					top: "1%",
-				}}
+				style={{ position: "absolute", left: "15.4%", top: "1%" }}
 				footer={[
 					<Button key='close' onClick={handleModalClose}>
 						Close
@@ -726,7 +723,7 @@ const EnhancedContentTable = ({
 				) : null}
 			</Modal>
 
-			{/* NEW: Date Filter Modal */}
+			{/* Date Filter Modal */}
 			<DateFilterModal
 				open={dateModalOpen}
 				onClose={closeDateModal}
@@ -776,7 +773,7 @@ const FilterButton = styled(Button)`
 `;
 
 const UserFilterButton = styled(FilterButton)`
-	text-transform: capitalize; /* capitalize employee names visually */
+	text-transform: capitalize;
 `;
 
 const TableWrapper = styled.div`
@@ -838,7 +835,7 @@ const PaginationWrapper = styled.div`
 	}
 `;
 
-// Background styles (unchanged)
+// Background styles
 const getPaymentStatusStyles = (status = "") => {
 	const s = status.toLowerCase();
 	if (s === "captured") {
@@ -853,7 +850,6 @@ const getPaymentStatusStyles = (status = "") => {
 	if (s === "not captured") {
 		return { backgroundColor: "var(--background-accent-yellow)" };
 	}
-	// Default: Not Paid or anything else
 	return { backgroundColor: "var(--background-light)" };
 };
 
@@ -872,10 +868,7 @@ const getReservationStatusStyles = (status = "") => {
 		return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
 	}
 	if (s === "no_show") {
-		return {
-			backgroundColor: "var(--accent-color-orange)",
-			color: "inherit",
-		};
+		return { backgroundColor: "var(--accent-color-orange)", color: "inherit" };
 	}
 	if (s === "cancelled") {
 		return {

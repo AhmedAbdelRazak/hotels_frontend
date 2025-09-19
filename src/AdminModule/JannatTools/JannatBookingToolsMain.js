@@ -22,13 +22,14 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 
 	const [activeTab, setActiveTab] = useState("calculator");
-	const [getUser, setGetUser] = useState("");
-	const { user, token } = isAuthenticated();
+	const [getUser, setGetUser] = useState(null);
+	const { user, token } = isAuthenticated() || {};
 	const location = useLocation();
 	const history = useHistory();
 
 	// Fetch user details
 	const gettingUserId = useCallback(() => {
+		if (!user?._id || !token) return;
 		readUserId(user._id, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error);
@@ -36,13 +37,12 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [user?._id, token]);
 
 	// 1) On mount, fetch user and set layout
 	useEffect(() => {
 		gettingUserId();
-
-		if (window.innerWidth <= 1000) {
+		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 	}, [gettingUserId]);
@@ -60,25 +60,25 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		// If the user has both 'hotelsToSupport' and 'accessTo' (and they're non-empty),
 		// we skip the password check entirely.
 		const hasHotelsToSupport =
-			Array.isArray(getUser.hotelsToSupport) &&
-			getUser.hotelsToSupport.length > 0;
+			(Array.isArray(getUser.hotelsToSupport) &&
+				getUser.hotelsToSupport.length > 0) ||
+			getUser.hotelsToSupport === "all";
 		const hasAccessTo =
 			Array.isArray(getUser.accessTo) && getUser.accessTo.length > 0;
 
 		// Check if user is allowed "JannatTools" => skip password
-		const includesJannatTools = getUser.accessTo?.includes("JannatTools");
+		const includesJannatTools = Array.isArray(getUser.accessTo)
+			? getUser.accessTo.includes("JannatTools")
+			: false;
 
-		if (hasHotelsToSupport && hasAccessTo) {
-			// Or if they have JannatTools specifically
-			if (includesJannatTools) {
-				setIsPasswordVerified(true);
-				setIsModalVisible(false);
-				localStorage.setItem("ToolsVerified", "true");
-				return;
-			}
+		if (hasHotelsToSupport && hasAccessTo && includesJannatTools) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			localStorage.setItem("ToolsVerified", "true");
+			return;
 		}
 
-		//  Otherwise, check localStorage
+		// Otherwise, check localStorage
 		const toolsPasswordVerified = localStorage.getItem("ToolsVerified");
 		if (toolsPasswordVerified) {
 			setIsPasswordVerified(true);
@@ -128,9 +128,9 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 
 	// isSuperAdmin logic
 	const isSuperAdmin =
-		!getUser.accessTo ||
-		getUser.accessTo.length === 0 ||
-		getUser.accessTo.includes("all");
+		!getUser?.accessTo ||
+		getUser?.accessTo.length === 0 ||
+		getUser?.accessTo.includes("all");
 
 	// Handle password verification
 	const handlePasswordVerification = () => {
@@ -272,7 +272,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 									<OrderTaker getUser={getUser} isSuperAdmin={isSuperAdmin} />
 								</div>
 							)}
-							{activeTab === "addEmployee" && (
+							{isSuperAdmin && activeTab === "addEmployee" && (
 								<div>
 									<h3>Register a New Employee</h3>
 									<EmployeeRegister
@@ -281,13 +281,13 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 									/>
 								</div>
 							)}
-							{activeTab === "updateEmployee" && (
+							{isSuperAdmin && activeTab === "updateEmployee" && (
 								<div>
 									<h3>Update an Employee</h3>
 									<p>Create a new component for employee update</p>
 								</div>
 							)}
-							{activeTab === "uncompleted" && (
+							{isSuperAdmin && activeTab === "uncompleted" && (
 								<div>
 									<UncompletedReservations />
 								</div>

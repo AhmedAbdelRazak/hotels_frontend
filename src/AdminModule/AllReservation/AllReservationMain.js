@@ -9,7 +9,7 @@ import {
 	getAllReservationForAdmin,
 	gettingHotelDetailsForAdminAll,
 	readUserId,
-	distinctReservedByList, // NEW
+	distinctReservedByList,
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
@@ -43,11 +43,11 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	// Server filter
 	const [filterType, setFilterType] = useState("");
 
-	// NEW: reservedBy list (lowercase from backend) and active selection (lowercase or "")
-	const [reservedByOptions, setReservedByOptions] = useState([]);
-	const [activeReservedBy, setActiveReservedBy] = useState("");
+	// Reserved-by filters
+	const [reservedByOptions, setReservedByOptions] = useState([]); // lowercase list
+	const [activeReservedBy, setActiveReservedBy] = useState(""); // lowercase or ""
 
-	// NEW: date filter { type: 'checkin'|'checkout'|'created'|'' , from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+	// Single date modal filter { type: 'checkin'|'checkout'|'created'|'' , from, to }
 	const [dateFilter, setDateFilter] = useState({ type: "", from: "", to: "" });
 
 	// Password modal states
@@ -55,9 +55,11 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 
-	// User data (guarded)
+	// Current employee/user fetched from backend (not from isAuthenticated().user)
 	const [getUser, setGetUser] = useState(null);
-	const { user, token } = isAuthenticated() || {};
+
+	// Auth token still via isAuthenticated()
+	const { user: authUser, token } = isAuthenticated() || {};
 	const history = useHistory();
 
 	// --- helpers ---
@@ -81,38 +83,34 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		return [];
 	};
 
-	/**
-	 * 1) On mount, fetch user details.
-	 */
-	const gettingUserId = useCallback(() => {
-		if (!user?._id || !token) return;
-		readUserId(user._id, token).then((data) => {
+	/** 1) On mount, fetch employee details (readUserId) BEFORE anything else. */
+	const loadCurrentUser = useCallback(() => {
+		if (!authUser?._id || !token) return;
+		readUserId(authUser._id, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error, "Error fetching user details");
 			} else {
 				setGetUser(data);
 			}
 		});
-	}, [user?._id, token]);
+	}, [authUser?._id, token]);
 
 	useEffect(() => {
-		gettingUserId();
+		loadCurrentUser();
 		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
-	}, [gettingUserId]);
+	}, [loadCurrentUser]);
 
-	/**
-	 * 2) Determine if the user is a super admin.
-	 */
+	/** 2) Determine if super admin (based on fetched user, not auth payload). */
 	const isSuperAdmin =
 		!getUser?.accessTo ||
 		getUser?.accessTo.length === 0 ||
 		getUser?.accessTo.includes("all");
 
-	/**
-	 * 3) Access checks
-	 */
+	const allowAllReservedBy = getUser?._id === SUPER_USER_ID;
+
+	/** 3) Access checks (uses getUser) */
 	useEffect(() => {
 		if (!getUser) return;
 		if (!getUser.activeUser) {
@@ -137,9 +135,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		}
 	}, [getUser, history, isSuperAdmin]);
 
-	/**
-	 * 4) Can skip password?
-	 */
+	/** 4) Can skip password? */
 	const canSkipPassword = (usr) => {
 		if (!usr) return false;
 		const { accessTo = [], hotelsToSupport } = usr;
@@ -154,9 +150,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		return hasReservationsAccess && hasHotels;
 	};
 
-	/**
-	 * 5) Show/hide password modal
-	 */
+	/** 5) Show/hide password modal (after getUser is known) */
 	useEffect(() => {
 		if (!getUser) return;
 		const reservationPw = localStorage.getItem("ReservationListVerified");
@@ -168,9 +162,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		setIsModalVisible(true);
 	}, [getUser]);
 
-	/**
-	 * 6) Handle password verification
-	 */
+	/** 6) Password verification */
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_RSERVATION_LIST) {
 			setIsPasswordVerified(true);
@@ -182,12 +174,23 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		}
 	};
 
-	/**
-	 * Fetch hotels list (guarded + normalized + sorted)
-	 */
+	/** 7) After we know getUser -> set initial reservedBy behavior */
+	useEffect(() => {
+		if (!getUser) return;
+		const selfLower = (getUser?.name || "").trim().toLowerCase();
+		// If not super user id => force self filter; else allow All (empty).
+		if (getUser._id !== SUPER_USER_ID) {
+			setActiveReservedBy(selfLower);
+		} else {
+			setActiveReservedBy(""); // All
+		}
+		// eslint-disable-next-line
+	}, [getUser?._id]); // run once when employee id arrives
+
+	/** Fetch hotels list (uses getUser._id + token) */
 	const adminAllHotelDetails = useCallback(() => {
-		if (!user?._id || !token) return;
-		gettingHotelDetailsForAdminAll(user._id, token)
+		if (!getUser?._id || !token) return;
+		gettingHotelDetailsForAdminAll(getUser._id, token)
 			.then((data) => {
 				const hotels = extractHotels(data.hotels);
 				const sorted = [...hotels].filter(Boolean).sort((a, b) =>
@@ -201,54 +204,41 @@ const AllReservationMain = ({ chosenLanguage }) => {
 				console.error("Error getting all hotel details", err);
 				setAllHotelDetailsAdmin([]);
 			});
-	}, [user?._id, token]);
+	}, [getUser?._id, token]);
 
 	useEffect(() => {
+		if (!getUser) return;
 		adminAllHotelDetails();
-	}, [adminAllHotelDetails]);
+	}, [getUser, adminAllHotelDetails]);
 
-	/**
-	 * 7) Fetch reservedBy list (lowercase). Enforce visibility rule.
-	 */
+	/** 8) Fetch reservedBy list (lowercase). For super user show all; for others we will display only their own in the child. */
 	const fetchReservedByOptions = useCallback(() => {
-		if (!user?._id || !token) return;
-		distinctReservedByList(user._id, token)
+		if (!getUser?._id || !token) return;
+		distinctReservedByList(getUser._id, token)
 			.then((list) => {
 				const arr = Array.isArray(list) ? list : [];
-				if (user?._id === SUPER_USER_ID) {
-					setReservedByOptions(arr);
-				} else {
-					const myNameLower = (user?.name || "").trim().toLowerCase();
-					if (arr.includes(myNameLower)) {
-						setReservedByOptions([myNameLower]);
-					} else {
-						setReservedByOptions([]);
-					}
-				}
+				setReservedByOptions(arr);
 			})
 			.catch((err) => {
 				console.error("Error fetching reservedBy list:", err);
 				setReservedByOptions([]);
 			});
-	}, [user?._id, token, user?.name]);
+	}, [getUser?._id, token]);
 
 	useEffect(() => {
-		if (isPasswordVerified) {
+		if (isPasswordVerified && getUser) {
 			fetchReservedByOptions();
 		}
-	}, [isPasswordVerified, fetchReservedByOptions]);
+	}, [isPasswordVerified, getUser, fetchReservedByOptions]);
 
-	/**
-	 * 8) Fetch reservations (server-side pagination + new filters)
-	 */
+	/** 9) Fetch reservations (server-side, uses activeReservedBy + dateFilter). */
 	const fetchReservations = useCallback(() => {
-		if (!user?._id || !token) return;
+		if (!getUser?._id || !token) return;
 
 		// Build date params from dateFilter
 		const dateParams = {};
 		if (dateFilter?.type && dateFilter?.from) {
 			const t = dateFilter.type;
-			// Pass ranges (server accepts from/to inclusively)
 			if (t === "checkin") {
 				dateParams.checkinFrom = dateFilter.from;
 				if (dateFilter.to) dateParams.checkinTo = dateFilter.to;
@@ -261,12 +251,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			}
 		}
 
-		getAllReservationForAdmin(user._id, token, {
+		getAllReservationForAdmin(getUser._id, token, {
 			page: currentPage,
 			limit: pageSize,
 			searchQuery: searchTerm,
 			filterType,
-			reservedBy: activeReservedBy, // "" means All
+			reservedBy: activeReservedBy, // "" means All (only possible for super user id)
 			...dateParams,
 		})
 			.then((resData) => {
@@ -300,7 +290,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 				});
 			});
 	}, [
-		user?._id,
+		getUser?._id,
 		token,
 		currentPage,
 		pageSize,
@@ -313,14 +303,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	]);
 
 	useEffect(() => {
-		if (isPasswordVerified) {
+		if (isPasswordVerified && getUser) {
 			fetchReservations();
 		}
-	}, [isPasswordVerified, fetchReservations]);
+	}, [isPasswordVerified, getUser, fetchReservations]);
 
-	/**
-	 * 9) After-fetch filtering (non-super-admin, role 1000)
-	 */
+	/** 10) After-fetch filtering (non-super-admin, role 1000) */
 	useEffect(() => {
 		const { data } = allReservationsForAdmin || {};
 		if (!Array.isArray(data)) {
@@ -354,26 +342,26 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		setFilteredReservations(finalList);
 	}, [allReservationsForAdmin, getUser, isSuperAdmin]);
 
-	/**
-	 * 10) Search handler (reset page -> triggers refetch via deps)
-	 */
+	/** Search handler (reset page -> triggers refetch via deps) */
 	const handleSearch = () => {
 		setCurrentPage(1);
 	};
 
-	// NEW: reservedBy change handler (reset to page 1)
+	// ReservedBy change handler (server refetch)
 	const handleReservedByChange = (value /* lowercase or "" for All */) => {
-		setActiveReservedBy(value || "");
+		// For normal employees, ignore attempts to clear (enforce own name)
+		if (!allowAllReservedBy) {
+			const selfLower = (getUser?.name || "").trim().toLowerCase();
+			setActiveReservedBy(selfLower);
+		} else {
+			setActiveReservedBy(value || "");
+		}
 		setCurrentPage(1);
 	};
 
-	// NEW: date filter apply/clear
+	// Date filter apply/clear
 	const handleDateFilterApply = ({ type, from, to }) => {
-		setDateFilter({
-			type: type || "",
-			from: from || "",
-			to: to || "",
-		});
+		setDateFilter({ type: type || "", from: from || "", to: to || "" });
 		setCurrentPage(1);
 	};
 	const handleDateFilterClear = () => {
@@ -417,7 +405,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			</Modal>
 
 			{/* Main Content */}
-			{isPasswordVerified && (
+			{isPasswordVerified && getUser && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
 						{chosenLanguage === "Arabic" ? (
@@ -466,7 +454,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 								dateFilter={dateFilter}
 								onDateFilterApply={handleDateFilterApply}
 								onClearDateFilter={handleDateFilterClear}
-								currentUserId={user?._id}
+								allowAllReservedBy={allowAllReservedBy}
+								selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
+								currentUserId={getUser?._id}
 							/>
 						</div>
 					</div>

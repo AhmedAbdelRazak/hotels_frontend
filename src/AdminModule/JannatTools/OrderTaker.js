@@ -27,6 +27,7 @@ import { isAuthenticated } from "../../auth";
 import {
 	createNewReservationClient,
 	gettingHotelDetailsForAdminAll,
+	readUserId,
 } from "../apiAdmin";
 import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
@@ -35,13 +36,39 @@ import PackagesModal from "./PackagesModal"; // expects: open, onClose, onApply,
 const { Option } = Select;
 const { Text } = Typography;
 
+const SUPER_USER_ID = "6553f1c6d06c5cea2f98a838";
+
 /** --------------------- Safe Parse Float --------------------- */
 const safeParseFloat = (value, fallback = 0) => {
 	const parsed = parseFloat(value);
 	return isNaN(parsed) ? fallback : parsed;
 };
 
-const OrderTaker = ({ getUser, isSuperAdmin }) => {
+const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
+	/** -------------- Employee identity from readUserId -------------- */
+	const { user: authUser, token } = isAuthenticated() || {};
+	const [localUser, setLocalUser] = useState(parentUser || null);
+
+	// Sync from parent when available
+	useEffect(() => {
+		if (parentUser && parentUser._id && parentUser !== localUser) {
+			setLocalUser(parentUser);
+		}
+	}, [parentUser, localUser]);
+
+	// Fallback fetch if parent not ready
+	useEffect(() => {
+		if (!localUser && authUser?._id && token) {
+			readUserId(authUser._id, token).then((data) => {
+				if (data && !data.error) setLocalUser(data);
+			});
+		}
+	}, [localUser, authUser?._id, token]);
+
+	const effectiveUser = localUser;
+	const effectiveUserId = effectiveUser?._id || null;
+	const canEditAgentName = effectiveUserId === SUPER_USER_ID;
+
 	/** -------------- State Variables -------------- */
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
@@ -86,8 +113,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 
-	const { user, token } = isAuthenticated();
-
 	// Packages Modal + lock state
 	const [packagesOpen, setPackagesOpen] = useState(false);
 	const [packageLock, setPackageLock] = useState({
@@ -113,15 +138,17 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
+		if (!effectiveUserId || !token) return;
 		try {
-			const data = await gettingHotelDetailsForAdminAll(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(effectiveUserId, token);
 			if (data && !data.error) {
 				// Only keep active hotels
-				const activeHotels =
-					data && data.hotels.filter((h) => h.activateHotel === true);
+				const activeHotels = (data.hotels || []).filter(
+					(h) => h.activateHotel === true
+				);
 				// Sort by name
 				const sortedHotels = activeHotels.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
+					(a?.hotelName || "").localeCompare(b?.hotelName || "")
 				);
 
 				// Super admin sees all
@@ -129,17 +156,18 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					setAllHotels(sortedHotels);
 				} else {
 					// For normal user, check userHotelsToSupport
-					const userHotelsToSupport = getUser?.hotelsToSupport;
+					const userHotelsToSupport = effectiveUser?.hotelsToSupport;
 					if (
 						!userHotelsToSupport ||
 						userHotelsToSupport === "all" ||
-						userHotelsToSupport.length === 0
+						(Array.isArray(userHotelsToSupport) &&
+							userHotelsToSupport.length === 0)
 					) {
 						// Show all
 						setAllHotels(sortedHotels);
 					} else {
 						// Filter
-						const allowedIds = userHotelsToSupport.map((h) => h._id);
+						const allowedIds = (userHotelsToSupport || []).map((h) => h?._id);
 						const filtered = sortedHotels.filter((h) =>
 							allowedIds.includes(h._id)
 						);
@@ -153,13 +181,14 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			console.error("Error fetching hotels:", error);
 			message.error("An error occurred while fetching hotels.");
 		}
-	}, [user._id, token, getUser, isSuperAdmin]);
+	}, [effectiveUserId, token, isSuperAdmin, effectiveUser]);
 
+	// Initialize Agent Name & load hotels once identity known (fix deps warning)
 	useEffect(() => {
-		setAgentName(user?.name || "");
+		if (!effectiveUser) return;
+		setAgentName((effectiveUser?.name || "").trim());
 		getAllHotels();
-		// eslint-disable-next-line
-	}, [getAllHotels]);
+	}, [effectiveUser, getAllHotels]);
 
 	/**
 	 * Return an array of day‐by‐day pricing from `startDate` to `endDate - 1`.
@@ -167,7 +196,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	 */
 	const calculatePricingByDay = useCallback(
 		(
-			pricingRate = [], // from DB
+			pricingRate = [],
 			startDate,
 			endDate,
 			basePrice,
@@ -175,7 +204,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			commissionRate
 		) => {
 			const start = dayjs(startDate).startOf("day");
-			// endDate is exclusive if we’re counting nights (subtract 1 day).
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
 
 			const dateArray = [];
@@ -186,7 +214,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					(r) => r.calendarDate === formattedDate
 				);
 
-				// If that date has a special override:
 				const price = rateForDate
 					? safeParseFloat(rateForDate.price, basePrice)
 					: basePrice;
@@ -201,7 +228,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					date: formattedDate,
 					price,
 					rootPrice,
-					// store numeric "10" => means 10%
 					commissionRate: dayCommission,
 				});
 				currentDate = currentDate.add(1, "day");
@@ -215,8 +241,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	 * For each day, compute:
 	 *   totalPriceWithCommission = price + (rootPrice * (commissionRate/100))
 	 *   totalPriceWithoutCommission = price
-	 *
-	 * We'll ensure `commissionRate` is at least 10 if DB or override is missing.
 	 */
 	const calculatePricingByDayWithCommission = useCallback(
 		(
@@ -227,7 +251,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			defaultCost,
 			rawCommission
 		) => {
-			// Force fallback of 10 if rawCommission is 0 or not provided
 			const baseCommission = rawCommission > 0 ? rawCommission : 10;
 
 			const noCommissionArray = calculatePricingByDay(
@@ -247,7 +270,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				return {
 					...day,
 					totalPriceWithCommission,
-					// This is key: store day.price in totalPriceWithoutCommission
 					totalPriceWithoutCommission: safeParseFloat(day.price),
 				};
 			});
@@ -255,23 +277,13 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		[calculatePricingByDay]
 	);
 
-	/**
-	 * If a user manually set a total (room.manualTotal), we re-distribute that total
-	 * across the new date range. We also use the old averageRootToTotalRatio to keep
-	 * rootPrice and commission “proportional” to what the user had.
-	 *
-	 * We also preserve `room.commissionRate` if it exists, otherwise default to 10.
-	 */
 	const redistributeManualTotal = (room, newNights, newStart, newEnd) => {
 		if (!room.manualTotal || !room.averageRootToTotalRatio) {
-			// No manual override to preserve
 			return null;
 		}
 
 		const newDailyFinalPrice = safeParseFloat(room.manualTotal, 0) / newNights;
 		const ratio = safeParseFloat(room.averageRootToTotalRatio, 0);
-		// If the user never set a commissionRate on the room object,
-		// fallback to 10
 		const fallbackRate = room.commissionRate || 10;
 
 		const dayArray = [];
@@ -284,22 +296,18 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 			dayArray.push({
 				date: dateStr,
-				price: dailyRoot, // "price" = base no-comm portion
+				price: dailyRoot,
 				rootPrice: dailyRoot,
-				commissionRate: fallbackRate, // keep the stored rate or default 10
+				commissionRate: fallbackRate,
 				totalPriceWithCommission: newDailyFinalPrice,
-				totalPriceWithoutCommission: dailyRoot, // same as "price"
+				totalPriceWithoutCommission: dailyRoot,
 			});
 			current = current.add(1, "day");
 		}
 		return dayArray;
 	};
 
-	/**
-	 * Recalculate all relevant totals whenever called:
-	 *  - If the user had a manual override, we re‐distribute it (if the date range changed).
-	 *  - Otherwise, do normal DB or existing day‐by‐day logic.
-	 */
+	/** ------------------ Recalculate totals ------------------ */
 	const calculateTotals = useCallback(
 		(rooms = selectedRooms, forceRecalcFromDb = false) => {
 			if (!selectedHotel || !checkInDate || !checkOutDate) {
@@ -310,24 +318,21 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			const startDate = dayjs(checkInDate).startOf("day");
 			const endDate = dayjs(checkOutDate).startOf("day");
 			let nights = endDate.diff(startDate, "day");
-			if (nights < 1) nights = 1; // at least 1 night
+			if (nights < 1) nights = 1;
 
-			let sumHotelCost = 0; // total rootPrice
-			let sumGrandTotal = 0; // total with commission
-			let sumCommission = 0; // total commission
-			let sumOneNightCost = 0; // sum of rootPrice from first day for each room
+			let sumHotelCost = 0;
+			let sumGrandTotal = 0;
+			let sumCommission = 0;
+			let sumOneNightCost = 0;
 
 			const updatedRooms = rooms.map((room) => {
 				if (!room.roomType || !room.displayName) {
 					return room;
 				}
 
-				// 1) If user has a "manualTotal" and the date changed, re-distribute
 				const userWantsManualOverride =
 					room.manualTotal && room.averageRootToTotalRatio;
 
-				// 2) If no user override or if user never edited,
-				//    do the old logic if forced or if length mismatch
 				const oldLength = room.pricingByDay ? room.pricingByDay.length : 0;
 				const lengthMismatch = oldLength !== nights;
 
@@ -343,14 +348,12 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					}
 				} else if (!userWantsManualOverride) {
 					if (forceRecalcFromDb || lengthMismatch) {
-						// Find the DB record for this room
 						const matched = selectedHotel?.roomCountDetails?.find(
 							(r) =>
 								r.roomType?.trim() === room.roomType.trim() &&
 								r.displayName?.trim() === room.displayName.trim()
 						);
 						if (!matched) {
-							console.warn("No matching room found for", room);
 							return room;
 						}
 
@@ -373,9 +376,8 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					}
 				}
 
-				// Summation
 				if (!room.pricingByDay || room.pricingByDay.length === 0) {
-					return room; // skip if something's off
+					return room;
 				}
 
 				const roomTotalRoot = room.pricingByDay.reduce(
@@ -394,12 +396,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					);
 				}, 0);
 
-				// multiply by the # of identical “count” rooms
 				sumHotelCost += roomTotalRoot * room.count;
 				sumGrandTotal += roomTotalWithComm * room.count;
 				sumCommission += roomTotalCommission * room.count;
 
-				// For the first day’s root price only:
 				if (room.pricingByDay[0]) {
 					sumOneNightCost +=
 						safeParseFloat(room.pricingByDay[0].rootPrice) * room.count;
@@ -408,7 +408,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				return room;
 			});
 
-			// Default deposit (non-package) = sumCommission + sumOneNightCost
 			const deposit = sumCommission + sumOneNightCost;
 
 			setSelectedRooms(updatedRooms);
@@ -429,10 +428,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		]
 	);
 
-	/**
-	 * Whenever checkInDate, checkOutDate, selectedRooms, or selectedHotel changes,
-	 * recalc totals if anything truly changed.
-	 */
 	useEffect(() => {
 		const prev = prevValues.current;
 		const dateChanged =
@@ -643,6 +638,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			pkgName: "",
 			roomDisplayName: "",
 		});
+
+		// Reset Agent Name to current employee if identity is known
+		if (effectiveUser) setAgentName((effectiveUser.name || "").trim());
 	};
 
 	// Automatically preserve # of nights if user changes "From date"
@@ -748,11 +746,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			pkgName: "",
 			roomDisplayName: "",
 		});
-		// Dates remain; admin can now change them; prices will auto‑recalc to DB rates when dates change
 	};
 
-	// ===== When admin confirms a package from the modal =====
-	// The modal returns: { room, deal, nights, start, end, count, pricingByDay, totals }
+	// When admin confirms a package from the modal
 	const handlePackageApply = ({
 		room,
 		deal,
@@ -764,7 +760,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 	}) => {
 		if (!room || !deal || !pricingByDay?.length) return;
 
-		// Pre-populate one room entry using the exact nightly rows from the modal
 		const firstDay = pricingByDay[0] || {};
 		const manualTotal = pricingByDay.reduce(
 			(acc, d) => acc + safeParseFloat(d.totalPriceWithCommission),
@@ -787,14 +782,12 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				displayName: room.displayName,
 				count: Number(count) > 0 ? Number(count) : 1,
 				pricingByDay: pricingByDay,
-				// keep these, so later date changes can fairly re-distribute
 				manualTotal: Number(manualTotal.toFixed(2)),
 				averageRootToTotalRatio: Number(ratio.toFixed(6)),
-				commissionRate: safeParseFloat(firstDay.commissionRate, 10), // keep one reference rate
+				commissionRate: safeParseFloat(firstDay.commissionRate, 10),
 			},
 		]);
 
-		// Lock dates to package window
 		setCheckInDate(dayjs(start));
 		setCheckOutDate(dayjs(end));
 		setPackageLock({
@@ -807,12 +800,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 		});
 
 		setPackagesOpen(false);
-		// Totals auto-recalc via useEffect
 	};
 
 	// Submit form
 	const handleSubmit = async () => {
-		// Prevent accidental double submit
 		if (submittingRef.current) return;
 
 		// --- Basic field checks ---
@@ -919,7 +910,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 		// --- Compose request payload ---
 		const reservationData = {
-			userId: user ? user._id : null,
+			userId: effectiveUserId,
 			hotelId: selectedHotel._id,
 			belongsTo: selectedHotel.belongsTo?._id || "",
 			hotel_name: selectedHotel.hotelName || "",
@@ -932,7 +923,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				nationality,
 				postalCode: "00000",
 				reservedBy: agentName,
-				reservedById: user && user._id ? user._id : "6553f1c6d06c5cea2f98a838",
+				reservedById: effectiveUserId || SUPER_USER_ID,
 			},
 			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),
 			total_guests: Number(adults || 0) + Number(children || 0),
@@ -966,7 +957,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 
 		// --- Submit ---
 		try {
-			// Lock submission immediately
 			submittingRef.current = true;
 			setIsSubmitting(true);
 
@@ -974,14 +964,10 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 			const response = await createNewReservationClient(reservationData);
 
 			if (response?.message === "Reservation created successfully") {
-				// Keep these so "View Details" button can still render
 				setReservationCreated(true);
 				setSelectedReservation(response.data);
 
-				// Reset form to initial state for a fresh entry
 				clearAll();
-				// If you ALSO want to reset the selected hotel, uncomment the next line:
-				// setSelectedHotel(null);
 
 				message.success({
 					content: "Reservation created successfully!",
@@ -989,7 +975,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					duration: 2,
 				});
 
-				// Keep your existing UX
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error({
@@ -1006,7 +991,6 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				duration: 2,
 			});
 		} finally {
-			// Always re-enable submission
 			submittingRef.current = false;
 			setIsSubmitting(false);
 		}
@@ -1052,6 +1036,8 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 								value={agentName}
 								onChange={(e) => setAgentName(e.target.value)}
 								placeholder='Enter agent name'
+								disabled={!canEditAgentName}
+								prefix={!canEditAgentName ? <LockOutlined /> : <EditOutlined />}
 							/>
 						</Form.Item>
 					</div>
@@ -1091,7 +1077,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={!selectedHotel || packageLock.enabled} // lock when package selected
+								disabled={!selectedHotel || packageLock.enabled}
 								disabledDate={disableCheckInDate}
 								value={checkInDate}
 								onChange={handleCheckInDateChange}
@@ -1103,7 +1089,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={!selectedHotel || !checkInDate || packageLock.enabled} // lock when package selected
+								disabled={!selectedHotel || !checkInDate || packageLock.enabled}
 								disabledDate={disableCheckOutDate}
 								value={checkOutDate}
 								onChange={handleCheckOutDateChange}
@@ -1228,7 +1214,9 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 								placeholder='Select Nationality'
 								optionFilterProp='children'
 								filterOption={(input, option) =>
-									option.children.toLowerCase().includes(input.toLowerCase())
+									String(option.children)
+										.toLowerCase()
+										.includes(String(input).toLowerCase())
 								}
 								value={nationality}
 								onChange={(val) => setNationality(val)}
@@ -1272,7 +1260,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 					<Radio.Group
 						onChange={(e) => setAdvancePaymentOption(e.target.value)}
 						value={advancePaymentOption}
-						disabled={packageLock.enabled} // deposit locked to commission for packages
+						disabled={packageLock.enabled}
 					>
 						<Radio value='commission_plus_one_day'>Commission + 1 Day</Radio>
 						<Radio value='percentage'>Percentage (%)</Radio>
