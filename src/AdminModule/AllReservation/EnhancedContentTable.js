@@ -1,10 +1,13 @@
+// EnhancedContentTable.jsx
 import React, { useState, useMemo } from "react";
 import styled from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
+import { CalendarOutlined } from "@ant-design/icons";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import ExportToExcelButton from "./ExportToExcelButton";
+import DateFilterModal from "./DateFilterModal"; // NEW modal component
 
 const EnhancedContentTable = ({
 	data,
@@ -23,6 +26,15 @@ const EnhancedContentTable = ({
 	setFilterType,
 	handleFilterClickFromParent,
 	allHotelDetailsAdmin,
+
+	// NEW props
+	reservedByOptions = [], // array of lowercase names
+	activeReservedBy = "", // lowercase or ""
+	onReservedByChange, // fn(lowercase or "")
+	dateFilter, // { type, from, to }
+	onDateFilterApply, // fn({type, from, to})
+	onClearDateFilter, // fn()
+	currentUserId, // used only for conditional rendering if needed in future
 }) => {
 	// ------------------ Search Box local state ------------------
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
@@ -213,6 +225,9 @@ const EnhancedContentTable = ({
 		setFilterType("");
 		setSortConfig({ sortField: null, direction: null });
 		handleFilterClickFromParent("");
+		// NEW: also clear reservedBy & date filter
+		if (onReservedByChange) onReservedByChange("");
+		if (onClearDateFilter) onClearDateFilter();
 	};
 
 	// ---- SAFER: Route to New Reservation with robust id extraction ----
@@ -253,72 +268,26 @@ const EnhancedContentTable = ({
 		window.location.href = `/hotel-management/new-reservation/${belongsToId}/${hotelId}?list`;
 	};
 
-	// ------------------ Server Pagination Controls ------------------
-	const totalPages = Math.ceil(totalDocuments / pageSize);
+	// ------------------ Date Filter Modal ------------------
+	const [dateModalOpen, setDateModalOpen] = useState(false);
 
-	const handlePrevPage = () => {
-		if (currentPage > 1) {
-			setCurrentPage(currentPage - 1);
-		}
+	const openDateModal = () => setDateModalOpen(true);
+	const closeDateModal = () => setDateModalOpen(false);
+
+	const applyDateFilter = ({ type, from, to }) => {
+		if (onDateFilterApply) onDateFilterApply({ type, from, to });
+		setDateModalOpen(false);
 	};
 
-	const handleNextPage = () => {
-		if (currentPage < totalPages) {
-			setCurrentPage(currentPage + 1);
-		}
-	};
-
-	// ------------------ Helpers for dynamic background color ------------------
-	// Payment Status with background + text color
-	const getPaymentStatusStyles = (status = "") => {
-		const s = status.toLowerCase();
-		if (s === "captured") {
-			return { backgroundColor: "var(--badge-bg-green)" };
-		}
-		if (s === "paid offline") {
-			return {
-				backgroundColor: "var(--accent-color-dark-green)",
-				color: "#fff",
-			};
-		}
-		if (s === "not captured") {
-			return { backgroundColor: "var(--background-accent-yellow)" };
-		}
-		// Default: Not Paid or anything else
-		return { backgroundColor: "var(--background-light)" };
-	};
-
-	// Reservation Status with background + text color
-	const getReservationStatusStyles = (status = "") => {
-		const s = (status || "").toLowerCase();
-		if (s === "confirmed") {
-			return { backgroundColor: "var(--background-light)", color: "inherit" };
-		}
-		if (s === "inhouse") {
-			return {
-				backgroundColor: "var(--background-accent-yellow)",
-				color: "inherit",
-			};
-		}
-		if (s === "checked_out" || s === "early_checked_out") {
-			return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
-		}
-		if (s === "no_show") {
-			return {
-				backgroundColor: "var(--accent-color-orange)",
-				color: "inherit",
-			};
-		}
-		if (s === "cancelled") {
-			return {
-				backgroundColor: "var(--badge-bg-red)",
-				color: "var(--button-font-color)",
-			};
-		}
-		return {};
+	const clearDateFilter = () => {
+		if (onClearDateFilter) onClearDateFilter();
+		setDateModalOpen(false);
 	};
 
 	// ------------------ Render ------------------
+	const totalPages = Math.ceil(totalDocuments / pageSize);
+	const reservedByActive = (val) => (activeReservedBy || "") === (val || "");
+
 	return (
 		<ContentTableWrapper>
 			{/* ScoreCards (from backend) */}
@@ -328,21 +297,42 @@ const EnhancedContentTable = ({
 				fromPage={fromPage}
 			/>
 
+			{/* --- NEW: Reserved By filters (above the existing ones) --- */}
+			<ReservedByFilterContainer>
+				<ReservedByTitle>Reserved By:</ReservedByTitle>
+				<UserFilterButton
+					onClick={() => onReservedByChange && onReservedByChange("")}
+					isActive={reservedByActive("")}
+				>
+					All
+				</UserFilterButton>
+				{reservedByOptions.map((rb) => (
+					<UserFilterButton
+						key={rb}
+						isActive={reservedByActive(rb)}
+						onClick={() =>
+							onReservedByChange &&
+							onReservedByChange(reservedByActive(rb) ? "" : rb)
+						}
+					>
+						{/* Lowercase value displayed with capitalization */}
+						<span style={{ textTransform: "capitalize" }}>{rb}</span>
+					</UserFilterButton>
+				))}
+			</ReservedByFilterContainer>
+
 			{fromPage === "reports" ? null : (
 				<FilterButtonContainer>
-					{/* Date-related */}
-					<FilterButton
-						onClick={() => onFilterClick("checkinToday")}
-						isActive={filterType === "checkinToday"}
-					>
-						Check-in Today
+					{/* NEW: single Date Filter button + clear */}
+					<FilterButton onClick={openDateModal} title='Filter by date range'>
+						<CalendarOutlined style={{ marginRight: 6 }} />
+						Filter by Date
 					</FilterButton>
-					<FilterButton
-						onClick={() => onFilterClick("checkoutToday")}
-						isActive={filterType === "checkoutToday"}
-					>
-						Check-out Today
-					</FilterButton>
+					{dateFilter?.type ? (
+						<FilterButton onClick={clearDateFilter} isActive>
+							Clear Date Filter
+						</FilterButton>
+					) : null}
 
 					{/* Payment-related */}
 					<FilterButton
@@ -371,7 +361,7 @@ const EnhancedContentTable = ({
 						Paid Offline
 					</FilterButton>
 
-					{/* Reservation status (NEW) */}
+					{/* Reservation status */}
 					<FilterButton
 						onClick={() => onFilterClick("confirmed")}
 						isActive={filterType === "confirmed"}
@@ -683,13 +673,21 @@ const EnhancedContentTable = ({
 
 			{/* Server Pagination Controls */}
 			<PaginationWrapper>
-				<Button onClick={handlePrevPage} disabled={currentPage <= 1}>
+				<Button
+					onClick={() => currentPage > 1 && setCurrentPage(currentPage - 1)}
+					disabled={currentPage <= 1}
+				>
 					Prev
 				</Button>
 				<span style={{ margin: "0 8px" }}>
 					Page {currentPage} of {totalPages}
 				</span>
-				<Button onClick={handleNextPage} disabled={currentPage >= totalPages}>
+				<Button
+					onClick={() =>
+						currentPage < totalPages && setCurrentPage(currentPage + 1)
+					}
+					disabled={currentPage >= totalPages}
+				>
 					Next
 				</Button>
 			</PaginationWrapper>
@@ -727,6 +725,17 @@ const EnhancedContentTable = ({
 					)
 				) : null}
 			</Modal>
+
+			{/* NEW: Date Filter Modal */}
+			<DateFilterModal
+				open={dateModalOpen}
+				onClose={closeDateModal}
+				onApply={applyDateFilter}
+				onClear={clearDateFilter}
+				initialType={dateFilter?.type || ""}
+				initialFrom={dateFilter?.from || ""}
+				initialTo={dateFilter?.to || ""}
+			/>
 		</ContentTableWrapper>
 	);
 };
@@ -738,8 +747,22 @@ const ContentTableWrapper = styled.div`
 	padding: 20px;
 `;
 
+const ReservedByFilterContainer = styled.div`
+	margin: 12px 0 8px 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 30px;
+`;
+
+const ReservedByTitle = styled.span`
+	font-weight: 600;
+	margin-right: 6px;
+`;
+
 const FilterButtonContainer = styled.div`
-	margin: 16px 0;
+	margin: 12px 0 16px 0;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
@@ -750,6 +773,10 @@ const FilterButton = styled(Button)`
 	background-color: ${(props) => (props.isActive ? "#d4edda" : "initial")};
 	color: ${(props) => (props.isActive ? "#155724" : "initial")};
 	border-color: ${(props) => (props.isActive ? "#c3e6cb" : "initial")};
+`;
+
+const UserFilterButton = styled(FilterButton)`
+	text-transform: capitalize; /* capitalize employee names visually */
 `;
 
 const TableWrapper = styled.div`
@@ -810,3 +837,51 @@ const PaginationWrapper = styled.div`
 		margin-right: 8px;
 	}
 `;
+
+// Background styles (unchanged)
+const getPaymentStatusStyles = (status = "") => {
+	const s = status.toLowerCase();
+	if (s === "captured") {
+		return { backgroundColor: "var(--badge-bg-green)" };
+	}
+	if (s === "paid offline") {
+		return {
+			backgroundColor: "var(--accent-color-dark-green)",
+			color: "#fff",
+		};
+	}
+	if (s === "not captured") {
+		return { backgroundColor: "var(--background-accent-yellow)" };
+	}
+	// Default: Not Paid or anything else
+	return { backgroundColor: "var(--background-light)" };
+};
+
+const getReservationStatusStyles = (status = "") => {
+	const s = (status || "").toLowerCase();
+	if (s === "confirmed") {
+		return { backgroundColor: "var(--background-light)", color: "inherit" };
+	}
+	if (s === "inhouse") {
+		return {
+			backgroundColor: "var(--background-accent-yellow)",
+			color: "inherit",
+		};
+	}
+	if (s === "checked_out" || s === "early_checked_out") {
+		return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
+	}
+	if (s === "no_show") {
+		return {
+			backgroundColor: "var(--accent-color-orange)",
+			color: "inherit",
+		};
+	}
+	if (s === "cancelled") {
+		return {
+			backgroundColor: "var(--badge-bg-red)",
+			color: "var(--button-font-color)",
+		};
+	}
+	return {};
+};

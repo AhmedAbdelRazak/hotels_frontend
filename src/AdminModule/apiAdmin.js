@@ -595,19 +595,57 @@ export const expediaData = (accountId, belongsTo, file, userId, token) => {
 export const getAllReservationForAdmin = (
 	userId,
 	token,
-	{ page = 1, limit = 100, searchQuery = "", filterType = "" }
+	{
+		page = 1,
+		limit = 100,
+		searchQuery = "",
+		filterType = "",
+
+		// NEW optional filters (all strings, ISO "YYYY-MM-DD")
+		reservedBy = "",
+
+		checkinDate = "",
+		checkinFrom = "",
+		checkinTo = "",
+
+		checkoutDate = "",
+		checkoutFrom = "",
+		checkoutTo = "",
+
+		createdDate = "",
+		createdFrom = "",
+		createdTo = "",
+	} = {}
 ) => {
 	const params = new URLSearchParams({
 		page,
 		limit,
 	});
 
-	if (searchQuery.trim()) {
-		params.set("searchQuery", searchQuery);
+	if (searchQuery.trim()) params.set("searchQuery", searchQuery);
+	if (filterType.trim()) params.set("filterType", filterType);
+
+	// NEW: reservedBy (exact, case-insensitive on server)
+	if (reservedBy && reservedBy.trim()) {
+		params.set("reservedBy", reservedBy.trim());
 	}
-	if (filterType.trim()) {
-		params.set("filterType", filterType);
-	}
+
+	// NEW: date filters (single day OR ranges). We pass only what exists.
+	const setIf = (key, val) => {
+		if (val && String(val).trim()) params.set(key, String(val).trim());
+	};
+
+	setIf("checkinDate", checkinDate);
+	setIf("checkinFrom", checkinFrom);
+	setIf("checkinTo", checkinTo);
+
+	setIf("checkoutDate", checkoutDate);
+	setIf("checkoutFrom", checkoutFrom);
+	setIf("checkoutTo", checkoutTo);
+
+	setIf("createdDate", createdDate);
+	setIf("createdFrom", createdFrom);
+	setIf("createdTo", createdTo);
 
 	return fetch(
 		`${
@@ -888,6 +926,25 @@ function buildQueryString(params) {
 		)
 		.join("&");
 }
+
+export const distinctReservedByList = (userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/reserved-by-list/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+	})
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) =>
+			console.error("Error fetching reservationsByDay data:", err)
+		);
+};
 
 /* ========================================================================
 	 1) Reservations By Day

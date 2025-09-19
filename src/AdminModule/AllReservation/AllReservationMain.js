@@ -1,3 +1,4 @@
+// AllReservationMain.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import { useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
@@ -8,10 +9,13 @@ import {
 	getAllReservationForAdmin,
 	gettingHotelDetailsForAdminAll,
 	readUserId,
+	distinctReservedByList, // NEW
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+
+const SUPER_USER_ID = "6553f1c6d06c5cea2f98a838";
 
 const AllReservationMain = ({ chosenLanguage }) => {
 	// Local UI states
@@ -38,6 +42,13 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 	// Server filter
 	const [filterType, setFilterType] = useState("");
+
+	// NEW: reservedBy list (lowercase from backend) and active selection (lowercase or "")
+	const [reservedByOptions, setReservedByOptions] = useState([]);
+	const [activeReservedBy, setActiveReservedBy] = useState("");
+
+	// NEW: date filter { type: 'checkin'|'checkout'|'created'|'' , from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+	const [dateFilter, setDateFilter] = useState({ type: "", from: "", to: "" });
 
 	// Password modal states
 	const [isModalVisible, setIsModalVisible] = useState(false);
@@ -197,15 +208,66 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [adminAllHotelDetails]);
 
 	/**
-	 * 7) Fetch reservations (server-side pagination)
+	 * 7) Fetch reservedBy list (lowercase). Enforce visibility rule.
+	 */
+	const fetchReservedByOptions = useCallback(() => {
+		if (!user?._id || !token) return;
+		distinctReservedByList(user._id, token)
+			.then((list) => {
+				const arr = Array.isArray(list) ? list : [];
+				if (user?._id === SUPER_USER_ID) {
+					setReservedByOptions(arr);
+				} else {
+					const myNameLower = (user?.name || "").trim().toLowerCase();
+					if (arr.includes(myNameLower)) {
+						setReservedByOptions([myNameLower]);
+					} else {
+						setReservedByOptions([]);
+					}
+				}
+			})
+			.catch((err) => {
+				console.error("Error fetching reservedBy list:", err);
+				setReservedByOptions([]);
+			});
+	}, [user?._id, token, user?.name]);
+
+	useEffect(() => {
+		if (isPasswordVerified) {
+			fetchReservedByOptions();
+		}
+	}, [isPasswordVerified, fetchReservedByOptions]);
+
+	/**
+	 * 8) Fetch reservations (server-side pagination + new filters)
 	 */
 	const fetchReservations = useCallback(() => {
 		if (!user?._id || !token) return;
+
+		// Build date params from dateFilter
+		const dateParams = {};
+		if (dateFilter?.type && dateFilter?.from) {
+			const t = dateFilter.type;
+			// Pass ranges (server accepts from/to inclusively)
+			if (t === "checkin") {
+				dateParams.checkinFrom = dateFilter.from;
+				if (dateFilter.to) dateParams.checkinTo = dateFilter.to;
+			} else if (t === "checkout") {
+				dateParams.checkoutFrom = dateFilter.from;
+				if (dateFilter.to) dateParams.checkoutTo = dateFilter.to;
+			} else if (t === "created") {
+				dateParams.createdFrom = dateFilter.from;
+				if (dateFilter.to) dateParams.createdTo = dateFilter.to;
+			}
+		}
+
 		getAllReservationForAdmin(user._id, token, {
 			page: currentPage,
 			limit: pageSize,
 			searchQuery: searchTerm,
 			filterType,
+			reservedBy: activeReservedBy, // "" means All
+			...dateParams,
 		})
 			.then((resData) => {
 				if (resData && resData.error) {
@@ -237,7 +299,18 @@ const AllReservationMain = ({ chosenLanguage }) => {
 					scorecards: {},
 				});
 			});
-	}, [user?._id, token, currentPage, pageSize, searchTerm, filterType]);
+	}, [
+		user?._id,
+		token,
+		currentPage,
+		pageSize,
+		searchTerm,
+		filterType,
+		activeReservedBy,
+		dateFilter?.type,
+		dateFilter?.from,
+		dateFilter?.to,
+	]);
 
 	useEffect(() => {
 		if (isPasswordVerified) {
@@ -246,7 +319,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [isPasswordVerified, fetchReservations]);
 
 	/**
-	 * 8) Apply second-layer filtering (non-super-admin, role 1000)
+	 * 9) After-fetch filtering (non-super-admin, role 1000)
 	 */
 	useEffect(() => {
 		const { data } = allReservationsForAdmin || {};
@@ -282,9 +355,29 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [allReservationsForAdmin, getUser, isSuperAdmin]);
 
 	/**
-	 * 9) Search handler (reset page -> triggers refetch via deps)
+	 * 10) Search handler (reset page -> triggers refetch via deps)
 	 */
 	const handleSearch = () => {
+		setCurrentPage(1);
+	};
+
+	// NEW: reservedBy change handler (reset to page 1)
+	const handleReservedByChange = (value /* lowercase or "" for All */) => {
+		setActiveReservedBy(value || "");
+		setCurrentPage(1);
+	};
+
+	// NEW: date filter apply/clear
+	const handleDateFilterApply = ({ type, from, to }) => {
+		setDateFilter({
+			type: type || "",
+			from: from || "",
+			to: to || "",
+		});
+		setCurrentPage(1);
+	};
+	const handleDateFilterClear = () => {
+		setDateFilter({ type: "", from: "", to: "" });
 		setCurrentPage(1);
 	};
 
@@ -366,6 +459,14 @@ const AllReservationMain = ({ chosenLanguage }) => {
 								setFilterType={setFilterType}
 								handleFilterClickFromParent={handleFilterClickFromParent}
 								allHotelDetailsAdmin={allHotelDetailsAdmin}
+								// NEW props
+								reservedByOptions={reservedByOptions}
+								activeReservedBy={activeReservedBy}
+								onReservedByChange={handleReservedByChange}
+								dateFilter={dateFilter}
+								onDateFilterApply={handleDateFilterApply}
+								onClearDateFilter={handleDateFilterClear}
+								currentUserId={user?._id}
 							/>
 						</div>
 					</div>

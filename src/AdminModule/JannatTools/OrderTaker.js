@@ -932,6 +932,7 @@ const OrderTaker = ({ getUser, isSuperAdmin }) => {
 				nationality,
 				postalCode: "00000",
 				reservedBy: agentName,
+				reservedById: user && user._id ? user._id : "6553f1c6d06c5cea2f98a838",
 			},
 			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),
 			total_guests: Number(adults || 0) + Number(children || 0),
