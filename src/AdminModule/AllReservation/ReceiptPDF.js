@@ -1,464 +1,452 @@
-import { Input, Modal } from "antd";
-import React, { forwardRef, useState } from "react";
+import React, { forwardRef, useMemo, useState } from "react";
 import styled from "styled-components";
-import { updateSingleReservation } from "../../HotelModule/apiAdmin";
+import UpdatePDF from "./UpdatePDF"; // Unified editing modal
+import { updateSingleReservation } from "../apiAdmin";
 
-const ReceiptPDF = forwardRef(
-	(
-		{
-			reservation,
-			hotelDetails,
-			calculateReservationPeriod,
-			getTotalAmountPerDay,
-		},
-		ref
-	) => {
-		const bookingDate = new Date(reservation?.createdAt).toLocaleDateString();
+/**
+ * ReceiptPDF (drop-in)
+ * - Click any editable field to open one Update modal.
+ * - Supports Not Captured (credit/ debit) as authorized amount (treated as paid until captured).
+ * - Validates amounts and updates DB via updateSingleReservation.
+ */
+const ReceiptPDF = forwardRef(function ReceiptPDF(
+	{ reservation, hotelDetails },
+	ref
+) {
+	const [localResv, setLocalResv] = useState(reservation);
+	const [updateOpen, setUpdateOpen] = useState(false);
+	const [saving, setSaving] = useState(false);
 
-		const [supplierName, setSupplierName] = useState(
-			(reservation?.supplierData && reservation.supplierData.supplierName) ||
-				hotelDetails?.belongsTo?.name ||
-				"N/A"
-		);
-		// State for the editable supplier booking no in supplier-info
-		const [supplierBookingNo, setSupplierBookingNo] = useState(
-			(reservation?.supplierData &&
-				reservation.supplierData.suppliedBookingNo) ||
-				reservation?.confirmation_number ||
-				"N/A"
-		);
-		const [isModalVisible, setIsModalVisible] = useState(false);
-		const [tempSupplierName, setTempSupplierName] = useState(supplierName);
-		// New state and modal flag for editing Supplier Booking No
-		const [isBookingNoModalVisible, setIsBookingNoModalVisible] =
-			useState(false);
-		const [tempSupplierBookingNo, setTempSupplierBookingNo] =
-			useState(supplierBookingNo);
+	// ---- helpers ----
+	const safeNumber = (value) => {
+		const num = Number(value);
+		return Number.isNaN(num) ? 0 : num;
+	};
 
-		// Calculate the number of nights between check-in and check-out
-		const calculateNights = (checkin, checkout) => {
-			const start = new Date(checkin);
-			const end = new Date(checkout);
-			let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-			return nights < 1 ? 1 : nights;
+	const bookingDate = useMemo(
+		() =>
+			new Date(
+				localResv?.createdAt || reservation?.createdAt || Date.now()
+			).toLocaleDateString(),
+		[localResv, reservation]
+	);
+
+	const hasCardNumber =
+		localResv?.customer_details?.cardNumber &&
+		localResv.customer_details.cardNumber.trim() !== "";
+
+	const totalAmount = safeNumber(localResv?.total_amount);
+
+	// Treat paid_amount as the online/authorized bucket:
+	// - Paid Online -> captured
+	// - Not Captured (credit/ debit) -> authorized amount
+	const paidAmountAuthorized = safeNumber(localResv?.paid_amount);
+
+	// Onsite paid amount (POS/cash)
+	const paidAmountOffline = safeNumber(
+		localResv?.payment_details?.onsite_paid_amount
+	);
+
+	const paymentStatus = (localResv?.payment || "").toLowerCase();
+	const isNotCapturedStatus =
+		paymentStatus === "credit/ debit" ||
+		paymentStatus === "credit/debit" ||
+		paymentStatus === "credit / debit" ||
+		paymentStatus === "not captured";
+
+	const totalPaid = paidAmountAuthorized + paidAmountOffline;
+
+	const toCents = (n) => Math.round(Number(n || 0) * 100);
+
+	const isFullyPaid =
+		toCents(totalPaid) >= toCents(totalAmount) && totalPaid > 0;
+
+	const isNotPaid = toCents(totalPaid) === 0 && paymentStatus === "not paid";
+
+	const depositPercentage =
+		totalAmount > 0 ? ((totalPaid / totalAmount) * 100).toFixed(0) : 0;
+
+	const calculateNights = (checkin, checkout) => {
+		const start = new Date(checkin);
+		const end = new Date(checkout);
+		let nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+		return nights < 1 ? 1 : nights;
+	};
+
+	const nights = calculateNights(
+		localResv?.checkin_date,
+		localResv?.checkout_date
+	);
+
+	const openUpdateModal = () => setUpdateOpen(true);
+
+	// Initial values for the Update modal
+	const modalInitials = {
+		supplierName:
+			(localResv?.supplierData && localResv.supplierData.supplierName) ||
+			hotelDetails?.belongsTo?.name ||
+			"",
+		supplierBookingNo:
+			(localResv?.supplierData && localResv.supplierData.suppliedBookingNo) ||
+			localResv?.confirmation_number ||
+			"",
+		bookingNo: localResv?.confirmation_number || "",
+		bookingSource: localResv?.booking_source || "",
+		paymentStatus: (localResv?.payment || "").toLowerCase() || "",
+
+		guestName: localResv?.customer_details?.name || "",
+		guestEmail: localResv?.customer_details?.email || "",
+		guestPhone: localResv?.customer_details?.phone || "",
+		nationality: localResv?.customer_details?.nationality || "",
+		passport: localResv?.customer_details?.passport || "",
+		reservedBy: localResv?.customer_details?.reservedBy || "",
+
+		// Prefill for Not Captured
+		paidAmount: safeNumber(localResv?.paid_amount),
+	};
+
+	// Persist changes
+	const handleSave = async (vals) => {
+		// Build base update payload
+		const updateData = {
+			supplierData: {
+				supplierName: (vals.supplierName || "").trim(),
+				suppliedBookingNo: (vals.supplierBookingNo || "").trim(),
+			},
+			booking_source: (vals.bookingSource || "").trim(),
+			payment: (vals.paymentStatus || "").toLowerCase(),
+			customerDetails: {
+				name: (vals.guestName || "").trim(),
+				email: (vals.guestEmail || "").trim(),
+				phone: (vals.guestPhone || "").trim(),
+				passport: (vals.passport || "").trim(),
+				nationality: (vals.nationality || "").trim(),
+				reservedBy: (vals.reservedBy || "").trim(),
+			},
+			// Avoid auto emails from tiny edits; toggle if you like
+			sendEmail: false,
 		};
 
-		// Calculate nights once (assuming all room bookings have same checkin/checkout)
-		const nights = calculateNights(
-			reservation?.checkin_date,
-			reservation?.checkout_date
-		);
-
-		// Utility function to safely parse numbers and handle NaN
-		const safeNumber = (value) => {
-			const num = Number(value);
-			return isNaN(num) ? 0 : num;
-		};
-
-		// eslint-disable-next-line
-		function computeTotalCommission() {
-			if (!reservation.pickedRoomsType) return 0;
-
-			return reservation.pickedRoomsType.reduce((total, room) => {
-				if (!room.pricingByDay || room.pricingByDay.length === 0) return total;
-
-				room.pricingByDay.forEach((day) => {
-					const rootPrice = safeNumber(day.rootPrice);
-					const commissionRate = safeNumber(day.commissionRate) / 100; // percentage to decimal
-					const totalPriceWithoutCommission = safeNumber(
-						day.totalPriceWithoutCommission
-					);
-
-					// Commission per day
-					const commission =
-						rootPrice * commissionRate +
-						(totalPriceWithoutCommission - rootPrice);
-					const count = safeNumber(room.count);
-
-					total += commission * count;
-				});
-
-				return total;
-			}, 0);
+		// Apply paid/authorized amounts if provided and valid
+		const amount = Number(vals.paidAmount || 0);
+		if (
+			(vals.paymentStatus === "paid online" ||
+				vals.paymentStatus === "paid offline" ||
+				vals.paymentStatus === "credit/ debit") &&
+			Number.isFinite(amount) &&
+			amount >= 0
+		) {
+			if (vals.paymentStatus === "paid online") {
+				updateData.paid_amount = amount;
+			} else if (vals.paymentStatus === "paid offline") {
+				updateData.payment_details = {
+					...(localResv?.payment_details || {}),
+					onsite_paid_amount: amount,
+				};
+			} else if (vals.paymentStatus === "credit/ debit") {
+				// Treat as authorized (paid) amount
+				updateData.paid_amount = amount;
+			}
 		}
 
-		// eslint-disable-next-line
-		const totalCommission = computeTotalCommission();
+		setSaving(true);
+		try {
+			const resp = await updateSingleReservation(localResv._id, updateData);
+			const updated = resp?.reservation || resp?.updatedReservation || resp;
 
-		// eslint-disable-next-line
-		function computeOneNightCost() {
-			if (
-				!reservation.pickedRoomsType ||
-				reservation.pickedRoomsType.length === 0
-			)
-				return 0;
+			if (updated && updated._id) {
+				setLocalResv(updated);
+			} else {
+				// Merge locally so the PDF reflects changes instantly
+				setLocalResv((prev) => ({
+					...prev,
+					supplierData: updateData.supplierData,
+					booking_source: updateData.booking_source,
+					payment: updateData.payment,
+					paid_amount:
+						typeof updateData.paid_amount === "number"
+							? updateData.paid_amount
+							: prev?.paid_amount,
+					payment_details: updateData.payment_details
+						? {
+								...(prev?.payment_details || {}),
+								...updateData.payment_details,
+						  }
+						: prev?.payment_details,
+					customer_details: {
+						...prev?.customer_details,
+						...updateData.customerDetails,
+					},
+				}));
+			}
 
-			return reservation.pickedRoomsType.reduce((total, room) => {
-				let firstDayRootPrice = 0;
-
-				if (room.pricingByDay && room.pricingByDay.length > 0) {
-					const firstDay = room.pricingByDay[0];
-					firstDayRootPrice = safeNumber(firstDay.rootPrice);
-				} else {
-					// Fallback to chosenPrice if pricingByDay is missing or invalid
-					firstDayRootPrice = safeNumber(room.chosenPrice);
-				}
-
-				// Multiply by the number of rooms (count)
-				return total + firstDayRootPrice * safeNumber(room.count);
-			}, 0);
+			setUpdateOpen(false);
+		} finally {
+			setSaving(false);
 		}
+	};
 
-		// eslint-disable-next-line
-		const oneNightCost = computeOneNightCost();
+	const Clickable = ({ children, onClick }) => (
+		<span
+			onClick={onClick}
+			style={{
+				cursor: "pointer",
+			}}
+			title='Click to edit'
+		>
+			{children}
+		</span>
+	);
 
-		// eslint-disable-next-line
-		const oldFinalDeposit = totalCommission + oneNightCost;
-
-		const totalAmount = safeNumber(reservation.total_amount);
-		const paidAmount = safeNumber(reservation.paid_amount);
-
-		// --- NEW Logic For Final Deposit & Deposit Percentage ---
-		// If user has a card, deposit = paid_amount, depositPercentage = (paid_amount / total_amount)*100
-		// Otherwise, if user has no card, we consider it 0 or "Not Paid".
-		const hasCardNumber =
-			reservation?.customer_details?.cardNumber &&
-			reservation.customer_details.cardNumber.trim() !== "";
-
-		const finalDeposit = hasCardNumber ? paidAmount : 0;
-
-		const depositPercentage =
-			hasCardNumber && totalAmount !== 0
-				? ((finalDeposit / totalAmount) * 100).toFixed(0)
-				: 0;
-		// -------------------------------------------------------
-
-		const isNotPaid = reservation.payment === "not paid" || !hasCardNumber;
-
-		const isFullyPaid =
-			safeNumber(reservation.paid_amount).toFixed(0) ===
-			safeNumber(reservation.total_amount).toFixed(0);
-
-		// Handle Modal actions for Supplier Name
-		const showModal = () => {
-			setTempSupplierName(supplierName); // Set the temp state when modal opens
-			setIsModalVisible(true);
-		};
-
-		const handleOk = () => {
-			setSupplierName(tempSupplierName);
-			setIsModalVisible(false);
-			// Update reservation with new supplierData; sendEmail is always false
-			const updateData = {
-				supplierData: {
-					supplierName: tempSupplierName,
-					suppliedBookingNo: supplierBookingNo, // keep current value
-				},
-				sendEmail: false,
-			};
-			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-				}
-			});
-		};
-
-		const handleCancel = () => {
-			setIsModalVisible(false);
-		};
-
-		// Handle modal actions for Supplier Booking No
-		const showBookingNoModal = () => {
-			setTempSupplierBookingNo(supplierBookingNo);
-			setIsBookingNoModalVisible(true);
-		};
-
-		const handleBookingNoOk = () => {
-			setSupplierBookingNo(tempSupplierBookingNo);
-			setIsBookingNoModalVisible(false);
-			// Update reservation with new supplierData; sendEmail is always false
-			const updateData = {
-				supplierData: {
-					supplierName: supplierName, // keep current value
-					suppliedBookingNo: tempSupplierBookingNo,
-				},
-				sendEmail: false,
-			};
-			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-				}
-			});
-		};
-
-		const handleBookingNoCancel = () => {
-			setIsBookingNoModalVisible(false);
-		};
-
-		return (
-			<ReceiptPDFWrapper ref={ref}>
-				{/* Header */}
-				<div className='header1'>
-					<div className='left'></div>
-					<div className='center logo'>
-						JANNAT <span>Booking.com</span>
-					</div>
-					<div className='right'>Booking Receipt</div>
+	return (
+		<ReceiptPDFWrapper ref={ref}>
+			{/* Header */}
+			<div className='header1'>
+				<div className='left'></div>
+				<div className='center logo'>
+					JANNAT <span>Booking.com</span>
 				</div>
-				<div className='header2'>
-					<div className='hotel-name'>
-						Hotel: {hotelDetails && hotelDetails.hotelName}
+				<div className='right'>Booking Receipt</div>
+			</div>
+
+			<div className='header2'>
+				<div className='hotel-name'>
+					Hotel: {hotelDetails?.hotelName || "N/A"}
+				</div>
+			</div>
+
+			<div className='header3'>
+				<div className='booking-info'>
+					<div>
+						<strong>Booking No:</strong>{" "}
+						<Clickable onClick={openUpdateModal}>
+							{localResv?.confirmation_number}
+							{localResv?.supplierData?.suppliedBookingNo &&
+							localResv?.supplierData?.suppliedBookingNo !==
+								localResv?.confirmation_number
+								? ` / ${localResv?.supplierData?.suppliedBookingNo}`
+								: ""}
+						</Clickable>
+					</div>
+					<div>
+						<strong>Booking Date:</strong> {bookingDate}
+					</div>
+				</div>
+			</div>
+
+			{/* Guest & Payment Details */}
+			<div className='info-boxes'>
+				<div className='info-box'>
+					<strong>Guest Name</strong>
+					<div>
+						<Clickable onClick={openUpdateModal}>
+							{localResv?.customer_details?.name || "N/A"}
+						</Clickable>
+					</div>
+					<div>
+						<Clickable onClick={openUpdateModal}>
+							{localResv?.customer_details?.nationality || "N/A"}
+						</Clickable>
 					</div>
 				</div>
 
-				<div className='header3'>
-					<div className='booking-info'>
-						<div>
-							<strong>Booking No:</strong>{" "}
-							{reservation && reservation.confirmation_number}{" "}
-							{reservation &&
-							reservation.confirmation_number === supplierBookingNo
-								? null
-								: `/ ${supplierBookingNo}`}
-						</div>
-						<div>
-							<strong>Booking Date:</strong> {bookingDate}
-						</div>
-					</div>
-				</div>
+				<div className='info-box'>
+					<strong>
+						{paidAmountOffline > 0
+							? "Paid Offline"
+							: isFullyPaid
+							  ? "Paid Amount"
+							  : isNotPaid
+							    ? "Not Paid"
+							    : isNotCapturedStatus
+							      ? "Authorized (Not Captured)"
+							      : `${depositPercentage}% Deposit`}
+					</strong>
 
-				{/* Guest & Payment Details */}
-				<div className='info-boxes'>
-					<div className='info-box'>
-						<strong>Guest Name</strong>
-						<div>{reservation?.customer_details?.name || "N/A"}</div>
-						<div>{reservation?.customer_details?.nationality || "N/A"}</div>
-					</div>
-					<div className='info-box'>
-						<strong>
-							{reservation?.payment_details?.onsite_paid_amount &&
-							reservation?.payment_details?.onsite_paid_amount > 0
-								? "Paid Offline"
-								: isFullyPaid
-								  ? "Paid Amount"
-								  : isNotPaid
-								    ? "Not Paid"
-								    : `${depositPercentage}% Deposit`}
-						</strong>
-						<div>
-							{reservation?.payment_details?.onsite_paid_amount &&
-							reservation?.payment_details?.onsite_paid_amount > 0 ? (
-								<>
-									{Number(
-										(reservation?.payment_details?.onsite_paid_amount /
-											reservation?.total_amount) *
-											100
-									).toFixed(2)}
-									%
-								</>
+					<div>
+						<Clickable onClick={openUpdateModal}>
+							{paidAmountOffline > 0 ? (
+								<>{Number((totalPaid / totalAmount) * 100).toFixed(2)}%</>
 							) : isFullyPaid ? (
-								`${paidAmount.toFixed(2)} SAR`
+								`${totalPaid.toFixed(2)} SAR`
 							) : isNotPaid ? (
 								"Not Paid"
+							) : isNotCapturedStatus ? (
+								`${paidAmountAuthorized.toFixed(2)} SAR`
 							) : (
 								`${depositPercentage}% Deposit`
 							)}
-						</div>
+						</Clickable>
 					</div>
 				</div>
+			</div>
 
-				{/* Supplier Info */}
-				<div className='supplier-info mt-2'>
-					<div onClick={showModal} className='editable-supplier'>
-						<strong>Supplied By:</strong> {supplierName}
-					</div>
-					<div>
-						<strong>Supplier Booking No:</strong>{" "}
-						<span onClick={showBookingNoModal} style={{ cursor: "pointer" }}>
-							{supplierBookingNo}
-						</span>
-					</div>
+			{/* Supplier Info */}
+			<div className='supplier-info mt-2'>
+				<div className='editable-supplier'>
+					<strong>Supplied By:</strong>{" "}
+					<Clickable onClick={openUpdateModal}>
+						{(localResv?.supplierData && localResv.supplierData.supplierName) ||
+							hotelDetails?.belongsTo?.name ||
+							"N/A"}
+					</Clickable>
+				</div>
+				<div>
+					<strong>Supplier Booking No:</strong>{" "}
+					<Clickable onClick={openUpdateModal}>
+						{(localResv?.supplierData &&
+							localResv.supplierData.suppliedBookingNo) ||
+							localResv?.confirmation_number ||
+							"N/A"}
+					</Clickable>
+				</div>
+			</div>
+
+			{/* Reservation Details */}
+			<table className='details-table'>
+				<thead>
+					<tr>
+						<th>Check In</th>
+						<th>Check Out</th>
+						<th>Booking Status</th>
+						<th>Guests</th>
+						<th>Booking Source</th>
+						<th>Payment Method</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>{new Date(localResv?.checkin_date).toLocaleDateString()}</td>
+						<td>{new Date(localResv?.checkout_date).toLocaleDateString()}</td>
+						<td>{localResv?.reservation_status || "Confirmed"}</td>
+						<td>{localResv?.total_guests}</td>
+						<td>
+							<Clickable onClick={openUpdateModal}>
+								{localResv?.booking_source || "Jannatbooking.com"}
+							</Clickable>
+						</td>
+						<td>
+							<Clickable onClick={openUpdateModal}>
+								{paidAmountOffline > 0
+									? "Paid Offline"
+									: isFullyPaid
+									  ? "Paid in Full"
+									  : isNotPaid
+									    ? "Not Paid"
+									    : isNotCapturedStatus
+									      ? "Authorized (Not Captured)"
+									      : `${depositPercentage}% Deposit`}
+							</Clickable>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			{/* Room Details */}
+			<table className='room-details-table'>
+				<thead>
+					<tr>
+						<th>Hotel</th>
+						<th>Room Type</th>
+						<th>Qty</th>
+						<th>Extras</th>
+						<th>Nights</th>
+						<th>Rate</th>
+						<th>Total</th>
+					</tr>
+				</thead>
+				<tbody>
+					{localResv?.pickedRoomsType?.map((room, index) => {
+						const chosenPrice = safeNumber(room.chosenPrice);
+						const firstDay = room.pricingByDay && room.pricingByDay[0];
+						const rootPrice = firstDay ? safeNumber(firstDay.rootPrice) : 0;
+						const rate = chosenPrice > 0 ? chosenPrice : rootPrice;
+						const totalPrice = rate * safeNumber(room.count) * nights;
+
+						return (
+							<tr key={index}>
+								<td>{hotelDetails?.hotelName || "N/A"}</td>
+								<td>{room.displayName || "N/A"}</td>
+								<td>{room.count}</td>
+								<td>N/T</td>
+								<td>{nights}</td>
+								<td>{rate > 0 ? `${rate} SAR` : "N/A"}</td>
+								<td>
+									{totalPrice > 0 ? `${totalPrice.toFixed(2)} SAR` : "N/A"}
+								</td>
+							</tr>
+						);
+					})}
+				</tbody>
+			</table>
+
+			{/* Payment Summary */}
+			<div className='summary'>
+				<div>
+					<strong>Net Accommodation Charge:</strong> {totalAmount.toFixed(2)}{" "}
+					SAR
 				</div>
 
-				{/* Reservation Details */}
-				<table className='details-table'>
-					<thead>
-						<tr>
-							<th>Check In</th>
-							<th>Check Out</th>
-							<th>Booking Status</th>
-							<th>Guests</th>
-							<th>Booking Source</th>
-							<th>Payment Method</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td>
-								{new Date(reservation?.checkin_date).toLocaleDateString()}
-							</td>
-							<td>
-								{new Date(reservation?.checkout_date).toLocaleDateString()}
-							</td>
-							<td>{reservation?.reservation_status || "Confirmed"}</td>
-							<td>{reservation?.total_guests}</td>
-							<td>{reservation?.booking_source || "Jannatbooking.com"}</td>
-							<td>
-								{isFullyPaid
-									? "Paid in Full"
-									: isNotPaid
-									  ? "Not Paid"
-									  : `${depositPercentage}% Deposit`}
-							</td>
-						</tr>
-					</tbody>
-				</table>
-
-				{/* Room Details */}
-				<table className='room-details-table'>
-					<thead>
-						<tr>
-							<th>Hotel</th>
-							<th>Room Type</th>
-							<th>Qty</th>
-							<th>Extras</th>
-							<th>Nights</th>
-							<th>Rate</th>
-							<th>Total</th>
-						</tr>
-					</thead>
-					<tbody>
-						{reservation?.pickedRoomsType?.map((room, index) => {
-							const chosenPrice = safeNumber(room.chosenPrice);
-							const firstDay = room.pricingByDay && room.pricingByDay[0];
-							const rootPrice = firstDay ? safeNumber(firstDay.rootPrice) : 0;
-
-							// Determine the rate to display
-							const rate = chosenPrice > 0 ? chosenPrice : rootPrice;
-
-							// Calculate total price: rate * count * nights
-							const totalPrice = rate * safeNumber(room.count) * nights;
-
-							return (
-								<tr key={index}>
-									<td>{hotelDetails?.hotelName || "N/A"}</td>
-									<td>{room.displayName || "N/A"}</td>
-									<td>{room.count}</td>
-									<td>N/T</td>
-									<td>{nights}</td>
-									<td>{rate > 0 ? `${rate} SAR` : "N/A"}</td>
-									<td>
-										{totalPrice > 0 ? `${totalPrice.toFixed(2)} SAR` : "N/A"}{" "}
-									</td>
-								</tr>
-							);
-						})}
-					</tbody>
-				</table>
-
-				{/* Payment Summary */}
-				<div className='summary'>
+				{isFullyPaid ? (
 					<div>
-						<strong>Net Accommodation Charge:</strong> {totalAmount.toFixed(2)}{" "}
+						<strong>Paid Amount:</strong> {totalPaid.toFixed(2)} SAR
+					</div>
+				) : paidAmountOffline > 0 && paidAmountAuthorized === 0 ? (
+					<div>
+						<strong>Paid Amount Onsite:</strong> {paidAmountOffline.toFixed(2)}{" "}
 						SAR
 					</div>
-					{isFullyPaid ? (
-						<div>
-							<strong>Paid Amount:</strong> {paidAmount.toFixed(2)} SAR
-						</div>
-					) : reservation?.payment_details?.onsite_paid_amount ||
-					  reservation?.payment_details?.onsite_paid_amount > 0 ? (
-						<div>
-							<strong>Paid Amount Onsite:</strong>{" "}
-							{Number(reservation?.payment_details?.onsite_paid_amount).toFixed(
-								2
-							)}{" "}
-							SAR
-						</div>
-					) : reservation?.payment_details?.onsite_paid_amount ||
-					  reservation?.payment_details?.onsite_paid_amount > 0 ? (
-						<div>
-							<strong>Payment Status:</strong>{" "}
-							{reservation?.payment_details?.onsite_paid_amount ===
-							reservation?.total_amount
-								? "Fully Paid Onsite"
-								: "Deposit Paid Onsite"}
-						</div>
-					) : isNotPaid ? (
-						<div>
-							<strong>Payment Status:</strong> Not Paid
-						</div>
-					) : (
-						<>
-							<div>
-								<strong>Final Deposit ({depositPercentage}% of Total):</strong>{" "}
-								{finalDeposit.toFixed(2)} SAR
-							</div>
-						</>
-					)}
+				) : isNotPaid ? (
 					<div>
-						<strong>Total To Be Collected:</strong>{" "}
-						{reservation?.payment_details?.onsite_paid_amount &&
-						reservation?.payment_details?.onsite_paid_amount > 0 ? (
-							<>
-								{Number(
-									Number(totalAmount) -
-										Number(reservation?.payment_details?.onsite_paid_amount)
-								).toFixed(2)}
-							</>
-						) : isNotPaid ? (
-							(Number(totalAmount) - paidAmount).toFixed(2)
-						) : (
-							(Number(totalAmount) - paidAmount).toFixed(2)
-						)}{" "}
-						SAR
+						<strong>Payment Status:</strong> Not Paid
 					</div>
-				</div>
+				) : isNotCapturedStatus && paidAmountAuthorized > 0 ? (
+					<div>
+						<strong>Authorized (Not Captured):</strong>{" "}
+						{paidAmountAuthorized.toFixed(2)} SAR
+					</div>
+				) : paidAmountAuthorized > 0 ? (
+					<div>
+						<strong>Deposit:</strong> {paidAmountAuthorized.toFixed(2)} SAR
+					</div>
+				) : null}
 
-				{/* Footer */}
-				<div className='footer'>
-					Many Thanks for staying with us at{" "}
-					<strong>{hotelDetails?.hotelName || "N/A"}</strong> Hotel.
-					<br />
-					For better rates next time, please check{" "}
-					<a href='https://jannatbooking.com'>jannatbooking.com</a>
-				</div>
+				{(() => {
+					const remaining = Math.max(
+						0,
+						Number((totalAmount - totalPaid).toFixed(2))
+					);
+					return (
+						<div>
+							<strong>Total To Be Collected:</strong> {remaining.toFixed(2)} SAR
+						</div>
+					);
+				})()}
+			</div>
 
-				{/* Editable Modal for Supplier Name */}
-				<Modal
-					title='Edit Supplier'
-					open={isModalVisible}
-					onOk={handleOk}
-					onCancel={handleCancel}
-					okText='Save'
-					cancelText='Cancel'
-				>
-					<Input
-						value={tempSupplierName}
-						onChange={(e) => setTempSupplierName(e.target.value)}
-						placeholder='Enter Supplier Name'
-					/>
-				</Modal>
+			{/* Footer */}
+			<div className='footer'>
+				Many Thanks for staying with us at{" "}
+				<strong>{hotelDetails?.hotelName || "N/A"}</strong> Hotel.
+				<br />
+				For better rates next time, please check{" "}
+				<a href='https://jannatbooking.com'>jannatbooking.com</a>
+			</div>
 
-				{/* Editable Modal for Supplier Booking No */}
-				<Modal
-					title='Edit Supplier Booking No'
-					open={isBookingNoModalVisible}
-					onOk={handleBookingNoOk}
-					onCancel={handleBookingNoCancel}
-					okText='Save'
-					cancelText='Cancel'
-				>
-					<Input
-						value={tempSupplierBookingNo}
-						onChange={(e) => setTempSupplierBookingNo(e.target.value)}
-						placeholder='Enter Supplier Booking No'
-					/>
-				</Modal>
-			</ReceiptPDFWrapper>
-		);
-	}
-);
+			{/* Unified Update Modal */}
+			<UpdatePDF
+				open={updateOpen}
+				loading={saving}
+				initialValues={modalInitials}
+				totalAmount={totalAmount}
+				currentPaidOnline={paidAmountAuthorized}
+				currentPaidOffline={paidAmountOffline}
+				onCancel={() => setUpdateOpen(false)}
+				onSave={handleSave}
+			/>
+		</ReceiptPDFWrapper>
+	);
+});
 
 export default ReceiptPDF;
 
@@ -471,7 +459,6 @@ const ReceiptPDFWrapper = styled.div`
 	margin: auto;
 	text-transform: capitalize;
 
-	/* Header Styling */
 	.header1 {
 		display: flex;
 		align-items: center;
@@ -494,7 +481,7 @@ const ReceiptPDFWrapper = styled.div`
 		font-weight: bold;
 		padding-right: 7px;
 		align-self: flex-end;
-		padding-top: 35px; /* Extra top padding */
+		padding-top: 35px;
 	}
 
 	.header2,
@@ -524,18 +511,18 @@ const ReceiptPDFWrapper = styled.div`
 		display: flex;
 		justify-content: space-between;
 		margin-top: 20px;
+		gap: 16px;
 	}
 	.info-box {
 		border: 1px solid #000;
 		padding: 10px;
 		width: 48%;
 		text-align: center;
+		word-break: break-word;
 	}
-	.supplier-info {
-		.editable-supplier {
-			cursor: pointer;
-			font-style: italic;
-		}
+	.supplier-info .editable-supplier {
+		cursor: pointer;
+		font-style: italic;
 	}
 
 	table {
@@ -559,6 +546,7 @@ const ReceiptPDFWrapper = styled.div`
 		background-color: rgb(243, 195, 146);
 		color: #fff;
 	}
+
 	.summary {
 		border: 1px solid #000;
 		padding: 10px;
@@ -568,6 +556,7 @@ const ReceiptPDFWrapper = styled.div`
 		text-align: center;
 		margin-top: 30px;
 	}
+
 	a {
 		color: #007bff;
 		text-decoration: none;

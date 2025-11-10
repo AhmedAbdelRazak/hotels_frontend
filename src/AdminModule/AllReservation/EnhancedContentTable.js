@@ -1,4 +1,4 @@
-// EnhancedContentTable.jsx
+// client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
 import React, { useState, useMemo } from "react";
 import styled from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
@@ -27,10 +27,17 @@ const EnhancedContentTable = ({
 	handleFilterClickFromParent,
 	allHotelDetailsAdmin,
 
-	// NEW props
+	// Reserved By (existing)
 	reservedByOptions = [], // array of lowercase names (for super user view)
 	activeReservedBy = "", // lowercase or ""
 	onReservedByChange, // fn(lowercase or "")
+
+	// NEW: Booking Source
+	bookingSourceOptions = [], // array of lowercase booking_source values
+	activeBookingSource = "", // lowercase or ""
+	onBookingSourceChange, // fn(lowercase or "")
+
+	// Date filter controls
 	dateFilter, // { type, from, to }
 	onDateFilterApply, // fn({type, from, to})
 	onClearDateFilter, // fn()
@@ -218,6 +225,9 @@ const EnhancedContentTable = ({
 			onReservedByChange && onReservedByChange(selfReservedBy);
 		}
 
+		// Booking Source (always allow All)
+		onBookingSourceChange && onBookingSourceChange("");
+
 		// Date
 		onClearDateFilter && onClearDateFilter();
 	};
@@ -277,6 +287,8 @@ const EnhancedContentTable = ({
 	// ------------------ Render ------------------
 	const totalPages = Math.ceil(totalDocuments / pageSize);
 	const reservedByActive = (val) => (activeReservedBy || "") === (val || "");
+	const bookingSourceActive = (val) =>
+		(activeBookingSource || "") === (val || "");
 
 	return (
 		<ContentTableWrapper>
@@ -320,6 +332,29 @@ const EnhancedContentTable = ({
 						</span>
 					</UserFilterButton>
 				)}
+			</ReservedByFilterContainer>
+
+			{/* NEW: Booking Source Filter Row */}
+			<ReservedByFilterContainer>
+				<ReservedByTitle>Booking Source:</ReservedByTitle>
+				<UserFilterButton
+					onClick={() => onBookingSourceChange && onBookingSourceChange("")}
+					isActive={bookingSourceActive("")}
+				>
+					All
+				</UserFilterButton>
+				{bookingSourceOptions.map((bs) => (
+					<UserFilterButton
+						key={bs}
+						isActive={bookingSourceActive(bs)}
+						onClick={() =>
+							onBookingSourceChange &&
+							onBookingSourceChange(bookingSourceActive(bs) ? "" : bs)
+						}
+					>
+						<span style={{ textTransform: "capitalize" }}>{bs}</span>
+					</UserFilterButton>
+				))}
 			</ReservedByFilterContainer>
 
 			{fromPage === "reports" ? null : (
@@ -540,6 +575,21 @@ const EnhancedContentTable = ({
 										: ""}
 								</HeaderLabel>
 							</th>
+
+							{/* NEW: Booking Source column */}
+							<th>
+								<HeaderLabel
+									onClick={() => handleSortLabelClick("booking_source")}
+								>
+									Booking Source
+									{sortConfig.sortField === "booking_source"
+										? sortConfig.direction === "asc"
+											? " ▲"
+											: " ▼"
+										: ""}
+								</HeaderLabel>
+							</th>
+
 							<th>
 								<HeaderLabel
 									onClick={() => handleSortLabelClick("payment_status")}
@@ -637,6 +687,11 @@ const EnhancedContentTable = ({
 										{new Date(reservation.checkout_date).toLocaleDateString(
 											"en-US"
 										)}
+									</td>
+
+									{/* NEW: Booking Source value */}
+									<td style={{ textTransform: "capitalize" }}>
+										{reservation.booking_source || ""}
 									</td>
 
 									{/* Payment Status */}

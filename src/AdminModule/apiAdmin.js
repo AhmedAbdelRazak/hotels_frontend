@@ -601,8 +601,9 @@ export const getAllReservationForAdmin = (
 		searchQuery = "",
 		filterType = "",
 
-		// NEW optional filters (all strings, ISO "YYYY-MM-DD")
+		// NEW optional filters
 		reservedBy = "",
+		bookingSource = "",
 
 		checkinDate = "",
 		checkinFrom = "",
@@ -625,12 +626,17 @@ export const getAllReservationForAdmin = (
 	if (searchQuery.trim()) params.set("searchQuery", searchQuery);
 	if (filterType.trim()) params.set("filterType", filterType);
 
-	// NEW: reservedBy (exact, case-insensitive on server)
+	// reservedBy (exact, case-insensitive on server)
 	if (reservedBy && reservedBy.trim()) {
 		params.set("reservedBy", reservedBy.trim());
 	}
 
-	// NEW: date filters (single day OR ranges). We pass only what exists.
+	// NEW: bookingSource (exact, case-insensitive on server)
+	if (bookingSource && bookingSource.trim()) {
+		params.set("bookingSource", bookingSource.trim());
+	}
+
+	// date filters
 	const setIf = (key, val) => {
 		if (val && String(val).trim()) params.set(key, String(val).trim());
 	};
@@ -666,6 +672,31 @@ export const getAllReservationForAdmin = (
 			return response.json();
 		})
 		.catch((err) => console.error("Error fetching reservations:", err));
+};
+
+export const distinctBookingSources = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/distinct-booking-sources/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((res) => {
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			return res.json();
+		})
+		.then((json) => {
+			// Return array directly (backend returns { success, data: [] })
+			return Array.isArray(json?.data) ? json.data : [];
+		})
+		.catch((err) => {
+			console.error("Error fetching booking sources:", err);
+			return [];
+		});
 };
 
 export const getUncompletedReservations = (userId, token) => {

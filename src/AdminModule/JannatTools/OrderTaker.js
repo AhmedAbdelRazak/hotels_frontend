@@ -44,6 +44,14 @@ const safeParseFloat = (value, fallback = 0) => {
 	return isNaN(parsed) ? fallback : parsed;
 };
 
+/** Treat as "external" if NOT 'manual' and NOT 'Jannat Employee' */
+const isExternalSource = (src) => {
+	const s = String(src || "")
+		.trim()
+		.toLowerCase();
+	return !!s && s !== "manual" && s !== "jannat employee";
+};
+
 const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	/** -------------- Employee identity from readUserId -------------- */
 	const { user: authUser, token } = isAuthenticated() || {};
@@ -83,15 +91,23 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	const [agentName, setAgentName] = useState("");
 	const [phone, setPhone] = useState("");
 
+	// NEW: Booking Source & External Confirmation #
+	const [bookingSource, setBookingSource] = useState("Jannat Employee");
+	const [confirmationNumber, setConfirmationNumber] = useState("");
+
+	// NEW: Payment Status & Amount
+	const [paymentStatus, setPaymentStatus] = useState("not paid"); // 'not paid' | 'credit/ debit' | 'paid online' | 'paid offline'
+	const [paidAmount, setPaidAmount] = useState(0);
+
 	// Grand Total (including commission):
 	const [totalAmount, setTotalAmount] = useState(0);
 	const [totalCommission, setTotalCommission] = useState(0);
 	const [numberOfNights, setNumberOfNights] = useState(0);
 
 	/** Advance Payment‐related state */
-	const [hotelCost, setHotelCost] = useState(0); // Base total for the hotel
-	const [oneNightCost, setOneNightCost] = useState(0); // Sum of first‐night “rootPrice” across all rooms
-	const [defaultDeposit, setDefaultDeposit] = useState(0); // commission + oneNight (for non-package flow)
+	const [hotelCost, setHotelCost] = useState(0);
+	const [oneNightCost, setOneNightCost] = useState(0);
+	const [defaultDeposit, setDefaultDeposit] = useState(0);
 	const [finalDeposit, setFinalDeposit] = useState(0);
 
 	// Radio options: "commission_plus_one_day", "percentage", or "sar"
@@ -132,7 +148,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		selectedHotel: null,
 	});
 
-	/** --- NEW: Submit guard to prevent double clicks --- */
+	/** --- Submit guard to prevent double clicks --- */
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const submittingRef = useRef(false);
 
@@ -178,12 +194,13 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				message.error("Failed to fetch hotels.");
 			}
 		} catch (error) {
+			// eslint-disable-next-line no-console
 			console.error("Error fetching hotels:", error);
 			message.error("An error occurred while fetching hotels.");
 		}
 	}, [effectiveUserId, token, isSuperAdmin, effectiveUser]);
 
-	// Initialize Agent Name & load hotels once identity known (fix deps warning)
+	// Initialize Agent Name & load hotels once identity known
 	useEffect(() => {
 		if (!effectiveUser) return;
 		setAgentName((effectiveUser?.name || "").trim());
@@ -458,7 +475,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	/**
 	 * Update finalDeposit.
 	 * - If a package/offer is active, deposit is exactly the TOTAL COMMISSION.
-	 * - Otherwise, keep your original logic.
+	 * - Otherwise, keep original logic.
 	 */
 	useEffect(() => {
 		if (packageLock.enabled) {
@@ -618,6 +635,12 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		setNationality("");
 		setPhone("");
 
+		setBookingSource("Jannat Employee");
+		setConfirmationNumber("");
+
+		setPaymentStatus("not paid");
+		setPaidAmount(0);
+
 		setTotalAmount(0);
 		setTotalCommission(0);
 		setNumberOfNights(0);
@@ -650,7 +673,6 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			return;
 		}
 		const newDate = dayjs(value);
-		// If we already have from + to, preserve old difference
 		if (checkInDate && checkOutDate) {
 			const oldNights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
 			if (oldNights > 0) {
@@ -737,7 +759,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		return "No packages or monthly offers for this hotel";
 	}, [selectedHotel, availablePackagesCount, packageLock]);
 
-	const clearPackageSelection = () => {
+	const clearPackageSelection = useCallback(() => {
 		setPackageLock({
 			enabled: false,
 			roomId: "",
@@ -746,7 +768,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			pkgName: "",
 			roomDisplayName: "",
 		});
-	};
+	}, []);
 
 	// When admin confirms a package from the modal
 	const handlePackageApply = ({
@@ -863,6 +885,34 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			}
 		}
 
+		// --- Payment validation (ENHANCED for 'credit/ debit') ---
+		const normalizedStatus = String(paymentStatus || "").toLowerCase();
+		const amountNumber = safeParseFloat(paidAmount, 0);
+
+		if (
+			normalizedStatus === "paid online" ||
+			normalizedStatus === "paid offline"
+		) {
+			if (amountNumber <= 0) {
+				message.error("Please enter a paid amount greater than 0.");
+				return;
+			}
+			if (amountNumber > Number(totalAmount || 0)) {
+				message.error("Paid amount cannot exceed the total amount.");
+				return;
+			}
+		} else if (normalizedStatus === "credit/ debit") {
+			// Authorized (Not Captured) -> allow 0, but never > total
+			if (amountNumber < 0) {
+				message.error("Authorized amount cannot be negative.");
+				return;
+			}
+			if (amountNumber > Number(totalAmount || 0)) {
+				message.error("Authorized amount cannot exceed the total amount.");
+				return;
+			}
+		}
+
 		// --- Transform rooms for API ---
 		const transformPickedRooms = (rooms) => {
 			return rooms.flatMap((room) =>
@@ -908,6 +958,26 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 		const pickedRoomsType = transformPickedRooms(selectedRooms);
 
+		// --- Payment mapping for create (ENHANCED to handle 'credit/ debit') ---
+		let paymentField = "not paid";
+		let paid_amount = 0;
+		let onsite_paid_amount = 0;
+
+		if (normalizedStatus === "paid online") {
+			paymentField = "paid online";
+			paid_amount = amountNumber;
+			onsite_paid_amount = 0;
+		} else if (normalizedStatus === "paid offline") {
+			paymentField = "paid offline";
+			paid_amount = 0;
+			onsite_paid_amount = amountNumber;
+		} else if (normalizedStatus === "credit/ debit") {
+			// Not Captured (authorized) – store the authorized amount as paid_amount
+			paymentField = "credit/ debit";
+			paid_amount = amountNumber; // considered paid (authorized) but not captured yet
+			onsite_paid_amount = 0;
+		}
+
 		// --- Compose request payload ---
 		const reservationData = {
 			userId: effectiveUserId,
@@ -932,11 +1002,15 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
 			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
 			days_of_residence: numberOfNights,
-			booking_source: "Jannat Employee",
+			booking_source: bookingSource || "Jannat Employee",
+			// external confirmation number goes to the canonical field if external source
+			confirmation_number: isExternalSource(bookingSource)
+				? String(confirmationNumber || "").trim()
+				: "",
 			pickedRoomsType,
 			total_amount: Number(totalAmount.toFixed(2)), // Grand total
-			payment: "Not Paid",
-			paid_amount: 0,
+			payment: paymentField, // now includes 'credit/ debit'
+			paid_amount, // online paid OR authorized amount if 'credit/ debit'
 			commission: Number(totalCommission.toFixed(2)),
 			commissionPaid: false,
 			paymentDetails: {
@@ -944,6 +1018,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				cardExpiryDate: "",
 				cardCVV: "",
 				cardHolderName: "",
+				onsite_paid_amount, // offline paid
 			},
 			sentFrom: "employee",
 			advancePayment: {
@@ -984,6 +1059,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				});
 			}
 		} catch (error) {
+			// eslint-disable-next-line no-console
 			console.error("Error creating reservation", error);
 			message.error({
 				content: "An error occurred while creating the reservation.",
@@ -999,6 +1075,13 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	// View Details modal
 	const showDetailsModal = () => setIsModalVisible2(true);
 	const handleModalClose = () => setIsModalVisible2(false);
+
+	// paid amount display after creation (either offline/onsite or online/authorized)
+	const createdPaidDisplay = Number(
+		(selectedReservation?.payment_details?.onsite_paid_amount ?? 0) ||
+			(selectedReservation?.paid_amount ?? 0) ||
+			0
+	);
 
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
@@ -1043,32 +1126,32 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					</div>
 				</div>
 
-				{/* Packages & Offers CTA */}
-				{selectedHotel && (
-					<Form.Item>
-						<Space wrap>
-							<Button
-								onClick={() =>
-									availablePackagesCount > 0 ? setPackagesOpen(true) : null
-								}
-								disabled={availablePackagesCount === 0}
-								type={packageLock.enabled ? "primary" : "default"}
-							>
-								{packageButtonLabel}
+				{/* Packages & Offers CTA (visible even when disabled) */}
+				<Form.Item>
+					<Space wrap>
+						<Button
+							onClick={() =>
+								availablePackagesCount > 0 ? setPackagesOpen(true) : null
+							}
+							disabled={availablePackagesCount === 0}
+							type={packageLock.enabled ? "primary" : "default"}
+						>
+							{packageButtonLabel}
+						</Button>
+
+						{packageLock.enabled && (
+							<Tag color='blue' style={{ marginLeft: 6 }}>
+								<LockOutlined /> Dates locked by package
+							</Tag>
+						)}
+
+						{packageLock.enabled && (
+							<Button type='link' onClick={clearPackageSelection}>
+								Clear package
 							</Button>
-							{packageLock.enabled && (
-								<Tag color='blue' style={{ marginLeft: 6 }}>
-									<LockOutlined /> Dates locked by package
-								</Tag>
-							)}
-							{packageLock.enabled && (
-								<Button type='link' onClick={clearPackageSelection}>
-									Clear package
-								</Button>
-							)}
-						</Space>
-					</Form.Item>
-				)}
+						)}
+					</Space>
+				</Form.Item>
 
 				{/* Check-in / Check-out DatePickers */}
 				<div className='row'>
@@ -1178,6 +1261,93 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					Add Another Room
 				</Button>
 
+				{/* Booking Source & External Confirmation # */}
+				<div className='row mt-3'>
+					<div className='col-md-6'>
+						<Form.Item label='Booking Source' required>
+							<Select
+								style={{ zIndex: 1000 }}
+								value={bookingSource}
+								onChange={(val) => setBookingSource(val)}
+								placeholder='Select booking source'
+							>
+								<Option value='Jannat Employee'>Jannat Employee</Option>
+								<Option value='affiliate'>Affiliate</Option>
+								<Option value='manual'>Manual Reservation</Option>
+								<Option value='booking.com'>Booking.com</Option>
+								<Option value='trivago'>Trivago</Option>
+								<Option value='expedia'>Expedia</Option>
+								<Option value='hotel.com'>Hotel.com</Option>
+								<Option value='airbnb'>Airbnb</Option>
+							</Select>
+						</Form.Item>
+					</div>
+
+					{isExternalSource(bookingSource) && (
+						<div className='col-md-6'>
+							<Form.Item label='External Confirmation #'>
+								<Input
+									value={confirmationNumber}
+									onChange={(e) => setConfirmationNumber(e.target.value)}
+									placeholder='Enter external confirmation number'
+								/>
+							</Form.Item>
+						</div>
+					)}
+				</div>
+
+				{/* Payment Status & Amount */}
+				<div className='row'>
+					<div className='col-md-6'>
+						<Form.Item label='Payment Status' required>
+							<Select
+								value={paymentStatus}
+								onChange={(val) => {
+									setPaymentStatus(val);
+									// reset amount on status change
+									setPaidAmount(0);
+								}}
+							>
+								<Option value='not paid'>Not Paid</Option>
+								<Option value='credit/ debit'>Not Captured</Option>
+								<Option value='paid online'>Paid Online</Option>
+								<Option value='paid offline'>Paid Offline</Option>
+							</Select>
+						</Form.Item>
+					</div>
+
+					{(paymentStatus === "paid online" ||
+						paymentStatus === "paid offline" ||
+						paymentStatus === "credit/ debit") && (
+						<div className='col-md-6'>
+							<Form.Item
+								label={
+									paymentStatus === "paid offline"
+										? "Onsite Paid Amount (SAR)"
+										: paymentStatus === "credit/ debit"
+										  ? "Authorized Amount (SAR)"
+										  : "Paid Amount (SAR)"
+								}
+								required
+							>
+								<InputNumber
+									min={0}
+									step={0.01}
+									style={{ width: "100%" }}
+									value={paidAmount}
+									onChange={(v) => setPaidAmount(v)}
+									placeholder='0.00'
+								/>
+								<div style={{ marginTop: 4 }}>
+									<Text type='secondary'>
+										Must be ≤ {Number(totalAmount || 0).toFixed(2)} SAR
+									</Text>
+								</div>
+							</Form.Item>
+						</div>
+					)}
+				</div>
+
 				{/* Customer Details */}
 				<div className='row my-3'>
 					<div className='col-md-4'>
@@ -1207,30 +1377,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							/>
 						</Form.Item>
 					</div>
-					<div className='col-md-6'>
-						<Form.Item label='Nationality' required>
-							<Select
-								showSearch
-								placeholder='Select Nationality'
-								optionFilterProp='children'
-								filterOption={(input, option) =>
-									String(option.children)
-										.toLowerCase()
-										.includes(String(input).toLowerCase())
-								}
-								value={nationality}
-								onChange={(val) => setNationality(val)}
-								style={{ width: "100%", zIndex: 9999 }}
-								disabled={!selectedHotel}
-							>
-								{countryListWithAbbreviations.map((c) => (
-									<Option key={c.code} value={c.code}>
-										{c.name}
-									</Option>
-								))}
-							</Select>
-						</Form.Item>
-					</div>
+
 					<div className='col-md-3 w-100'>
 						<Form.Item label='Adults' required>
 							<InputNumber
@@ -1251,6 +1398,30 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								onChange={(val) => setChildren(val)}
 								disabled={!selectedHotel}
 							/>
+						</Form.Item>
+					</div>
+					<div className='col-md-6'>
+						<Form.Item label='Nationality' required>
+							<Select
+								showSearch
+								placeholder='Select Nationality'
+								optionFilterProp='children'
+								filterOption={(input, option) =>
+									String(option?.children ?? "")
+										.toLowerCase()
+										.includes(String(input).toLowerCase())
+								}
+								value={nationality}
+								onChange={(val) => setNationality(val)}
+								style={{ width: "100%", zIndex: 9999 }}
+								disabled={!selectedHotel}
+							>
+								{countryListWithAbbreviations.map((c) => (
+									<Option key={c.code} value={c.code}>
+										{c.name}
+									</Option>
+								))}
+							</Select>
 						</Form.Item>
 					</div>
 				</div>
@@ -1331,7 +1502,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							</span>
 						</Descriptions.Item>
 						<Descriptions.Item label='Paid Amount'>
-							{selectedReservation?.payment_details?.paid_amount || 0} SAR
+							{createdPaidDisplay} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Number of Nights'>
 							{numberOfNights}

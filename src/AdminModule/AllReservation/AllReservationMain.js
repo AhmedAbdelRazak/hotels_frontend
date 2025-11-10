@@ -1,4 +1,4 @@
-// AllReservationMain.jsx
+// client/src/AdminModule/AllReservation/AllReservationMain.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import { useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
@@ -10,6 +10,7 @@ import {
 	gettingHotelDetailsForAdminAll,
 	readUserId,
 	distinctReservedByList,
+	distinctBookingSources, // <-- NEW
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
@@ -46,6 +47,10 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	// Reserved-by filters
 	const [reservedByOptions, setReservedByOptions] = useState([]); // lowercase list
 	const [activeReservedBy, setActiveReservedBy] = useState(""); // lowercase or ""
+
+	// NEW: Booking source filters
+	const [bookingSourceOptions, setBookingSourceOptions] = useState([]); // lowercase list
+	const [activeBookingSource, setActiveBookingSource] = useState(""); // lowercase or ""
 
 	// Single date modal filter { type: 'checkin'|'checkout'|'created'|'' , from, to }
 	const [dateFilter, setDateFilter] = useState({ type: "", from: "", to: "" });
@@ -185,7 +190,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			setActiveReservedBy(""); // All
 		}
 		// eslint-disable-next-line
-	}, [getUser?._id]); // run once when employee id arrives
+	}, [getUser?._id]);
 
 	/** Fetch hotels list (uses getUser._id + token) */
 	const adminAllHotelDetails = useCallback(() => {
@@ -211,7 +216,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		adminAllHotelDetails();
 	}, [getUser, adminAllHotelDetails]);
 
-	/** 8) Fetch reservedBy list (lowercase). For super user show all; for others we will display only their own in the child. */
+	/** 8) Fetch reservedBy list (lowercase). */
 	const fetchReservedByOptions = useCallback(() => {
 		if (!getUser?._id || !token) return;
 		distinctReservedByList(getUser._id, token)
@@ -225,13 +230,33 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			});
 	}, [getUser?._id, token]);
 
+	/** NEW: Fetch bookingSource list (lowercase, dynamic, no hard-code) */
+	const fetchBookingSourceOptions = useCallback(() => {
+		if (!getUser?._id || !token) return;
+		distinctBookingSources(getUser._id, token)
+			.then((arr) => {
+				const list = Array.isArray(arr) ? arr : [];
+				setBookingSourceOptions(list);
+			})
+			.catch((err) => {
+				console.error("Error fetching booking sources:", err);
+				setBookingSourceOptions([]);
+			});
+	}, [getUser?._id, token]);
+
 	useEffect(() => {
 		if (isPasswordVerified && getUser) {
 			fetchReservedByOptions();
+			fetchBookingSourceOptions(); // NEW
 		}
-	}, [isPasswordVerified, getUser, fetchReservedByOptions]);
+	}, [
+		isPasswordVerified,
+		getUser,
+		fetchReservedByOptions,
+		fetchBookingSourceOptions,
+	]);
 
-	/** 9) Fetch reservations (server-side, uses activeReservedBy + dateFilter). */
+	/** 9) Fetch reservations (server-side, uses activeReservedBy + dateFilter + bookingSource). */
 	const fetchReservations = useCallback(() => {
 		if (!getUser?._id || !token) return;
 
@@ -256,7 +281,8 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			limit: pageSize,
 			searchQuery: searchTerm,
 			filterType,
-			reservedBy: activeReservedBy, // "" means All (only possible for super user id)
+			reservedBy: activeReservedBy, // "" means All (super user id only)
+			bookingSource: activeBookingSource, // NEW
 			...dateParams,
 		})
 			.then((resData) => {
@@ -297,6 +323,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		searchTerm,
 		filterType,
 		activeReservedBy,
+		activeBookingSource, // NEW
 		dateFilter?.type,
 		dateFilter?.from,
 		dateFilter?.to,
@@ -356,6 +383,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		} else {
 			setActiveReservedBy(value || "");
 		}
+		setCurrentPage(1);
+	};
+
+	// NEW: Booking Source change handler (server refetch)
+	const handleBookingSourceChange = (value /* lowercase or "" for All */) => {
+		setActiveBookingSource(value || "");
 		setCurrentPage(1);
 	};
 
@@ -447,13 +480,19 @@ const AllReservationMain = ({ chosenLanguage }) => {
 								setFilterType={setFilterType}
 								handleFilterClickFromParent={handleFilterClickFromParent}
 								allHotelDetailsAdmin={allHotelDetailsAdmin}
-								// NEW props
+								// Reserved By (existing)
 								reservedByOptions={reservedByOptions}
 								activeReservedBy={activeReservedBy}
 								onReservedByChange={handleReservedByChange}
+								// NEW: Booking Source filter props
+								bookingSourceOptions={bookingSourceOptions}
+								activeBookingSource={activeBookingSource}
+								onBookingSourceChange={handleBookingSourceChange}
+								// Date filters
 								dateFilter={dateFilter}
 								onDateFilterApply={handleDateFilterApply}
 								onClearDateFilter={handleDateFilterClear}
+								// ReservedBy permissions
 								allowAllReservedBy={allowAllReservedBy}
 								selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
 								currentUserId={getUser?._id}

@@ -1268,8 +1268,8 @@ const EditReservationMain = ({
 			<Modal
 				title='Password Verification'
 				open={verifyPasswordModalVisible}
-				closable={false}
-				maskClosable={false}
+				closable={true}
+				// maskClosable={false}
 				keyboard={false}
 				footer={[
 					<Button key='ok' type='primary' onClick={handleVerifyPasswordSubmit}>
