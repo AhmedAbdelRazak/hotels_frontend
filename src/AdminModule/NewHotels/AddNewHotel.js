@@ -321,12 +321,13 @@ export default AddNewHotel;
 const AddNewHotelWrapper = styled.div`
 	overflow-x: hidden;
 	/* background: #ededed; */
-	margin-top: 10px;
+	margin-top: 0;
 	min-height: 715px;
 
 	.grid-container-main {
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "5% 85%" : "17% 80%")};
+		grid-template-columns: ${(props) =>
+			props.show ? "70px 1fr" : "285px 1fr"};
 	}
 
 	.container-wrapper {
@@ -334,7 +335,7 @@ const AddNewHotelWrapper = styled.div`
 		padding: 20px;
 		border-radius: 20px;
 		background: white;
-		margin: 0px 10px;
+		margin: 20px 10px;
 	}
 
 	@media (max-width: 1400px) {

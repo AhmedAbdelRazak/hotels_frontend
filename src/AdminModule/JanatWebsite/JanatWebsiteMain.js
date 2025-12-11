@@ -355,12 +355,13 @@ export default JanatWebsiteMain;
 
 const JanatWebsiteMainWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 20px;
+	margin-top: 0;
 	min-height: 715px;
 
 	.grid-container-main {
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "5% 75%" : "17% 75%")};
+		grid-template-columns: ${(props) =>
+			props.show ? "70px 1fr" : "285px 1fr"};
 	}
 
 	.container-wrapper {
@@ -368,7 +369,7 @@ const JanatWebsiteMainWrapper = styled.div`
 		padding: 20px;
 		border-radius: 20px;
 		background: white;
-		margin: 0px 10px;
+		margin: 20px 10px;
 	}
 
 	h3 {

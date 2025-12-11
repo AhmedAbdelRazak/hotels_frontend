@@ -90,6 +90,8 @@ const safeNumber = (val) => {
 	return isNaN(parsed) ? 0 : parsed;
 };
 
+const formatNumber = (val) => Number(val || 0).toLocaleString();
+
 const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const pdfRef = useRef(null);
 	// eslint-disable-next-line
@@ -727,7 +729,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 											</div>
 											<h4 className='mx-2'>
 												{reservation
-													? reservation.total_amount.toLocaleString()
+													? formatNumber(reservation.total_amount)
 													: 0}{" "}
 												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 											</h4>
@@ -1302,7 +1304,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 												<div className='col-md-4 mt-2'>{/* Date */}</div>
 												<div className='col-md-4 mt-2'>{room.room_type}</div>
 												<div className='col-md-4 mt-2'>
-													{room.chosenPrice.toLocaleString() * room.count}{" "}
+													{formatNumber(room.chosenPrice * room.count)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</div>
 											</React.Fragment>
@@ -1342,7 +1344,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 											{chosenLanguage === "Arabic" ? "عمولة" : "Commission"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{computedCommission.toLocaleString()}{" "}
+											{formatNumber(computedCommission)}{" "}
 											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
 									</div>
@@ -1355,7 +1357,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 												: "One Night Cost"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{oneNightCost.toLocaleString()}{" "}
+											{formatNumber(oneNightCost)}{" "}
 											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
 									</div>
@@ -1368,7 +1370,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 												: "Final Deposit"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{finalDeposit.toLocaleString()}{" "}
+											{formatNumber(finalDeposit)}{" "}
 											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 										</div>
 									</div>
@@ -1385,7 +1387,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 										<div className='col-md-5 mx-auto'>
 											<h3>
-												{reservation.total_amount.toLocaleString()}{" "}
+													{formatNumber(reservation.total_amount)}{" "}
 												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 											</h3>
 										</div>

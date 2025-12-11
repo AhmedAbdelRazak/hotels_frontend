@@ -178,20 +178,21 @@ const AdminNavbar = ({
 		<AdminNavbarWrapper
 			show={collapsed}
 			show2={clickedOn}
-			style={{
-				width: 285,
-			}}
 		>
-			<Button
-				type='primary'
-				onClick={toggleCollapsed}
-				style={{
-					marginBottom: 8,
-					textAlign: "center",
-				}}
-			>
-				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-			</Button>
+			<NavHeader>
+				<div className='logo'>
+					<img
+						src='https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png'
+						alt='XHotel Logo'
+					/>
+				</div>
+				<Button
+					type='text'
+					shape='circle'
+					onClick={toggleCollapsed}
+					icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+				/>
+			</NavHeader>
 			<Menu
 				defaultSelectedKeys={
 					fromPage === "AdminDasboard"
@@ -255,16 +256,25 @@ const AdminNavbar = ({
 export default AdminNavbar;
 
 const AdminNavbarWrapper = styled.div`
-	margin-bottom: 15px;
+	width: ${(props) => (props.show ? "70px" : "285px")};
+	margin-bottom: 0;
 	background: ${(props) => (props.show ? "" : "#1e1e2d")};
-	top: 0px !important;
-	z-index: 20000;
-	overflow: auto;
-	position: absolute;
-	padding: 0px !important;
+	top: 0;
+	left: 0;
+	z-index: 1500; /* stays behind app modals */
+	overflow: hidden;
+	position: fixed;
+	height: 100vh;
+	padding: 0 !important;
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid #0d1220;
 
 	ul {
-		height: 90vh !important;
+		flex: 1 1 auto;
+		height: auto !important;
+		overflow-y: auto;
+		scrollbar-width: thin;
 	}
 
 	.logoClass {
@@ -283,7 +293,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.ant-menu.ant-menu-inline-collapsed {
-		min-height: 850px;
+		min-height: 0;
 		/* position: fixed; */
 	}
 
@@ -351,6 +361,35 @@ const AdminNavbarWrapper = styled.div`
 
 		button {
 			margin-top: 5px !important;
+		}
+	}
+`;
+
+const NavHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 12px;
+	background: #0f1726;
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	border-bottom: 1px solid #1f2937;
+
+	.logo img {
+		height: 40px;
+		object-fit: contain;
+		display: block;
+	}
+
+	button {
+		color: #fff;
+	}
+
+	@media (max-width: 1200px) {
+		padding: 8px 10px;
+		.logo img {
+			height: 34px;
 		}
 	}
 `;

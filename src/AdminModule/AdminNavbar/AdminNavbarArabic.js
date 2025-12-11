@@ -259,16 +259,26 @@ const AdminNavbarArabic = ({
 export default AdminNavbarArabic;
 
 const AdminNavbarWrapper = styled.div`
-	margin-bottom: 15px;
+	width: ${(props) => (props.show ? "70px" : "285px")};
+	margin-bottom: 0;
 	background: ${(props) => (props.show ? "" : "#1e1e2d")};
-	top: 70px !important;
-	z-index: 20000;
-	overflow: auto;
-	position: absolute;
-	padding: 0px !important;
+	top: 0;
+	left: auto;
+	right: 0;
+	z-index: 1500;
+	overflow: hidden;
+	position: fixed;
+	height: 100vh;
+	padding: 0 !important;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid #0d1220;
 
 	ul {
-		height: 90vh !important;
+		flex: 1 1 auto;
+		height: auto !important;
+		overflow-y: auto;
+		scrollbar-width: thin;
 	}
 
 	.logoClass {
@@ -292,8 +302,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.ant-menu.ant-menu-inline-collapsed {
-		min-height: 850px;
-		/* position: fixed; */
+		min-height: 0;
 	}
 
 	.ant-menu.ant-menu-dark,

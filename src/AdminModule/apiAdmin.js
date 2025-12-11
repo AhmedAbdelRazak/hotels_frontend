@@ -1254,6 +1254,143 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 		);
 };
 
+export const getHotelOccupancyCalendar = (
+	userId,
+	token,
+	{
+		hotelId,
+		month,
+		includeCancelled = false,
+		start,
+		end,
+		display = "roomType",
+	} = {}
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required for occupancy view"));
+	}
+
+	const params = new URLSearchParams({ hotelId });
+	if (month) params.set("month", month);
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+	if (display) params.set("display", display);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching hotel occupancy map:", err);
+			throw err;
+		});
+};
+
+export const getHotelOccupancyWarnings = (
+	userId,
+	token,
+	{
+		hotelId,
+		month,
+		includeCancelled = false,
+		start,
+		end,
+		display = "roomType",
+	} = {}
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required for occupancy warnings"));
+	}
+
+	const params = new URLSearchParams({ hotelId });
+	if (month) params.set("month", month);
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+	if (display) params.set("display", display);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-warnings/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching hotel occupancy warnings:", err);
+			throw err;
+		});
+};
+
+export const getHotelOccupancyDayReservations = (
+	userId,
+	token,
+	{
+		hotelId,
+		date,
+		roomKey,
+		roomLabel,
+		includeCancelled = false,
+		display = "roomType",
+	} = {}
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required for day reservations"));
+	}
+	if (!date) {
+		return Promise.reject(new Error("date (YYYY-MM-DD) is required"));
+	}
+
+	const params = new URLSearchParams({ hotelId, date });
+	if (roomKey) params.set("roomKey", roomKey);
+	if (roomLabel) params.set("roomLabel", roomLabel);
+	if (includeCancelled) params.set("includeCancelled", "true");
+	if (display) params.set("display", display);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-day-reservations/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching day reservations for occupancy:", err);
+			throw err;
+		});
+};
+
 export const currencyConversion = (amounts) => {
 	const saudimoney = amounts
 		.map((amount) => Number(amount).toFixed(2))
