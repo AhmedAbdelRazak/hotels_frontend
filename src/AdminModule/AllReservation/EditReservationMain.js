@@ -860,7 +860,7 @@ const EditReservationMain = ({
 
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
-			<Form layout='vertical'>
+			<Form layout='vertical' onFinish={handleSubmit}>
 				<Button
 					type='primary'
 					danger
@@ -869,6 +869,30 @@ const EditReservationMain = ({
 				>
 					Clear All
 				</Button>
+
+				<div
+					style={{
+						position: "sticky",
+						top: 0,
+						zIndex: 5,
+						background: "#fff",
+						padding: "8px 0",
+						display: "flex",
+						justifyContent: "flex-end",
+						gap: 8,
+						borderBottom: "1px solid #f0f0f0",
+					}}
+				>
+					<Button
+						type='primary'
+						onClick={handleSubmit}
+						htmlType='submit'
+						disabled={isLoading}
+						loading={isLoading}
+					>
+						Save Changes
+					</Button>
+				</div>
 
 				{isLoading && (
 					<div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -910,6 +934,7 @@ const EditReservationMain = ({
 								value={selectedHotel?._id}
 								onChange={handleHotelChange}
 								disabled={isLoading}
+								getPopupContainer={(trigger) => trigger.parentNode}
 							>
 								{allHotels.map((ht) => (
 									<Option key={ht._id} value={ht._id}>
@@ -968,6 +993,7 @@ const EditReservationMain = ({
 								}
 								onChange={(val) => handleRoomSelectionChange(val, index)}
 								disabled={isLoading || !selectedHotel}
+								getPopupContainer={(trigger) => trigger.parentNode}
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((d) => {
@@ -1198,6 +1224,7 @@ const EditReservationMain = ({
 				<Button
 					type='primary'
 					onClick={handleSubmit}
+					htmlType='submit'
 					disabled={isLoading}
 					loading={isLoading}
 				>

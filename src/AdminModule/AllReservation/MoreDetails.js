@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
 import { Spin, Modal, Select, Checkbox } from "antd";
@@ -21,6 +21,16 @@ import PaymentTrigger from "./PaymentTrigger";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
 import { sendReservationConfirmationSMS } from "../apiAdmin";
+
+const ModalZFix = createGlobalStyle`
+	.edit-reservation-modal .ant-modal,
+	.edit-reservation-modal .ant-modal-wrap {
+		z-index: 6001 !important;
+	}
+	.edit-reservation-modal .ant-modal-mask {
+		z-index: 6000 !important;
+	}
+`;
 
 const Wrapper = styled.div`
 	min-height: 750px;
@@ -440,6 +450,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			isArabic={chosenLanguage === "Arabic"}
 		>
+			<ModalZFix />
 			{loading ? (
 				<div className='text-center my-5'>
 					<Spin size='large' />
@@ -448,21 +459,23 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			) : (
 				<div className='otherContentWrapper'>
 					<Modal
-						title={
-							chosenLanguage === "Arabic" ? "تعديل الحجز" : "Edit Reservation"
-						}
+						title={chosenLanguage === "Arabic" ? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632" : "Edit Reservation"}
 						open={isModalVisible2}
 						onCancel={() => setIsModalVisible2(false)}
 						onOk={handleUpdateReservationStatus2}
 						footer={null}
-						width='84.5%' // Set the width to 80%
-						style={{
-							// If Arabic, align to the left, else align to the right
-							position: "absolute",
-							left: chosenLanguage === "Arabic" ? "15%" : "auto",
-							right: chosenLanguage === "Arabic" ? "auto" : "5%",
-							top: "1%",
-						}}
+						width='90%'
+						centered
+						destroyOnClose
+						forceRender
+						zIndex={12000}
+						maskClosable={false}
+						maskStyle={{ zIndex: 11999 }}
+						style={{ top: 20 }}
+						bodyStyle={{ maxHeight: "82vh", overflowY: "auto" }}
+						wrapClassName='edit-reservation-modal'
+						rootClassName='edit-reservation-modal'
+						getContainer={() => document.body}
 					>
 						{reservation && (
 							<EditReservationMain
@@ -612,7 +625,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 							}}
 						>
 							<EditOutlined />
-							{chosenLanguage === "Arabic" ? "تعديل الحجز" : "Edit Reservation"}
+							{chosenLanguage === "Arabic" ? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632" : "Edit Reservation"}
 						</h5>
 
 						{relocationArray1 &&
