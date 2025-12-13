@@ -48,7 +48,7 @@ const WarningsModal = ({ open, onClose, warnings = [], loading }) => {
 			footer={null}
 			title='Occupancy Warnings'
 			width={700}
-			bodyStyle={{ paddingTop: 8 }}
+			styles={{ body: { paddingTop: 8 } }}
 			destroyOnClose
 		>
 			<Table

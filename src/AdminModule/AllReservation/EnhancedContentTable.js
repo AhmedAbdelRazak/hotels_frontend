@@ -44,6 +44,7 @@ const EnhancedContentTable = ({
 	allowAllReservedBy = false, // super user id?
 	selfReservedBy = "", // lowercase current employee name
 	currentUserId, // not used here but passed through for future hooks
+	onReservationUpdated = () => {},
 }) => {
 	// ------------------ Search Box local state ------------------
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
@@ -190,6 +191,17 @@ const EnhancedContentTable = ({
 	const handleModalClose = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
+	};
+
+	const handleReservationUpdated = (updated) => {
+		if (updated) {
+			setSelectedReservation((prev) =>
+				prev ? { ...prev, ...updated } : updated
+			);
+		}
+		if (onReservationUpdated) {
+			onReservationUpdated(updated);
+		}
 	};
 
 	// ------------------ Filter Button Handlers ------------------
@@ -768,6 +780,7 @@ const EnhancedContentTable = ({
 							hotelDetails={selectedReservation.hotelId}
 							reservation={selectedReservation}
 							setReservation={setSelectedReservation}
+							onReservationUpdated={handleReservationUpdated}
 						/>
 					) : (
 						<ReservationDetail

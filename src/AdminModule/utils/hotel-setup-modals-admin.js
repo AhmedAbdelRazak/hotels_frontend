@@ -224,7 +224,7 @@ export const RoomTypesModalAdmin = ({
 			}
 			okText={language === "Arabic" ? "حفظ" : "Save"}
 			confirmLoading={saving}
-			bodyStyle={{ padding: 0, maxHeight: "80vh", overflowY: "auto" }}
+			styles={{ body: { padding: 0, maxHeight: "80vh", overflowY: "auto" } }}
 		>
 			{saving ? (
 				<Spin style={{ width: "100%", margin: "3rem 0" }} />

@@ -262,6 +262,11 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			open={visible}
 			onCancel={onClose}
 			width='65%'
+			zIndex={25000}
+			styles={{
+				mask: { zIndex: 24999 },
+			}}
+			rootClassName='edit-pricing-modal'
 			footer={[
 				<Button key='cancel' onClick={onClose}>
 					Cancel

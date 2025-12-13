@@ -20,6 +20,19 @@ body {
 	z-index: 1000 !important;
 }
 
+.ant-picker-dropdown {
+	z-index: 20000 !important;
+}
+
+.edit-pricing-modal .ant-modal,
+.edit-pricing-modal .ant-modal-wrap {
+	z-index: 25000 !important;
+}
+
+.edit-pricing-modal .ant-modal-mask {
+	z-index: 24999 !important;
+}
+
 .sc-gfHChp,
 .ccPAiA,
 .sc-hcewNo,

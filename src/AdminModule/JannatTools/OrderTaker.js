@@ -12,6 +12,7 @@ import {
 	Select,
 	DatePicker,
 	message,
+	notification,
 	InputNumber,
 	Modal,
 	Descriptions,
@@ -82,6 +83,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 	]);
 	const [name, setName] = useState("");
+	const [nickName, setNickName] = useState("");
 	const [email, setEmail] = useState("");
 	const [checkInDate, setCheckInDate] = useState(null);
 	const [checkOutDate, setCheckOutDate] = useState(null);
@@ -634,6 +636,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		setChildren(0);
 		setNationality("");
 		setPhone("");
+		setNickName("");
 
 		setBookingSource("Jannat Employee");
 		setConfirmationNumber("");
@@ -979,22 +982,24 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		}
 
 		// --- Compose request payload ---
-		const reservationData = {
-			userId: effectiveUserId,
-			hotelId: selectedHotel._id,
-			belongsTo: selectedHotel.belongsTo?._id || "",
-			hotel_name: selectedHotel.hotelName || "",
-			customerDetails: {
-				name,
-				email,
-				phone,
-				passport: "Not Provided",
-				passportExpiry: "1/1/2027",
-				nationality,
-				postalCode: "00000",
-				reservedBy: agentName,
-				reservedById: effectiveUserId || SUPER_USER_ID,
-			},
+	const reservationData = {
+		userId: effectiveUserId,
+		hotelId: selectedHotel._id,
+		belongsTo: selectedHotel.belongsTo?._id || "",
+		hotel_name: selectedHotel.hotelName || "",
+		customerDetails: {
+			name,
+			nickName,
+			email,
+			phone,
+			passport: "Not Provided",
+			passportExpiry: "1/1/2027",
+			nationality,
+			postalCode: "00000",
+			reservedBy: agentName,
+			reservedById: effectiveUserId || SUPER_USER_ID,
+			confirmation_number2: String(confirmationNumber || "").trim(),
+		},
 			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),
 			total_guests: Number(adults || 0) + Number(children || 0),
 			adults,
@@ -1045,9 +1050,23 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				clearAll();
 
 				message.success({
-					content: "Reservation created successfully!",
+					content: `Reservation created successfully${
+						response?.data?.confirmation_number
+							? ` (Confirmation #${response.data.confirmation_number})`
+							: ""
+					}!`,
 					key: "submit",
 					duration: 2,
+				});
+				notification.success({
+					message: "Reservation saved",
+					description: `Confirmation ${
+						response?.data?.confirmation_number
+							? `#${response.data.confirmation_number}`
+							: ""
+					} has been saved. No need to re-submit.`,
+					placement: "topRight",
+					duration: 6,
 				});
 
 				window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1277,6 +1296,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								<Option value='booking.com'>Booking.com</Option>
 								<Option value='trivago'>Trivago</Option>
 								<Option value='expedia'>Expedia</Option>
+								<Option value='agoda'>Agoda</Option>
 								<Option value='hotel.com'>Hotel.com</Option>
 								<Option value='airbnb'>Airbnb</Option>
 							</Select>
@@ -1356,6 +1376,15 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 								placeholder='Enter guest name'
+							/>
+						</Form.Item>
+					</div>
+					<div className='col-md-4'>
+						<Form.Item label='Nickname (optional)'>
+							<Input
+								value={nickName}
+								onChange={(e) => setNickName(e.target.value)}
+								placeholder='Enter nickname'
 							/>
 						</Form.Item>
 					</div>

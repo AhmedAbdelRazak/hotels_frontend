@@ -90,6 +90,9 @@ const HotelsInventoryMap = () => {
 	const defaultHijriEnd = supportsHijri
 		? nowHijri.clone().endOf("iMonth")
 		: null;
+	const pickerPopupStyle = { zIndex: 20010 };
+	const pickerContainerGetter = (trigger) =>
+		(trigger && trigger.parentNode) || document.body;
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
@@ -373,6 +376,27 @@ const HotelsInventoryMap = () => {
 		]
 	);
 
+	const handleReservationUpdated = useCallback(
+		(updated) => {
+			if (updated) {
+				setSelectedReservation(updated);
+			}
+			if (dayDetailsOpen && dayDetails?.date) {
+				fetchDayDetails({
+					date: dayDetails.date,
+					roomType: { key: dayDetails.roomKey, label: dayDetails.roomLabel },
+				});
+			}
+		},
+		[
+			dayDetails?.date,
+			dayDetails?.roomKey,
+			dayDetails?.roomLabel,
+			dayDetailsOpen,
+			fetchDayDetails,
+		]
+	);
+
 	return (
 		<Wrapper>
 			<ModalZFix />
@@ -465,6 +489,8 @@ const HotelsInventoryMap = () => {
 								value={monthValue}
 								onChange={onMonthChange}
 								allowClear={false}
+								getPopupContainer={pickerContainerGetter}
+								popupStyle={pickerPopupStyle}
 							/>
 							<Button
 								size='small'
@@ -813,9 +839,11 @@ const HotelsInventoryMap = () => {
 				}}
 				footer={null}
 				width='95%'
-				bodyStyle={{ padding: 12 }}
 				style={{ top: 20, zIndex: 3000 }}
-				maskStyle={{ backdropFilter: "blur(1px)", zIndex: 2999 }}
+				styles={{
+					body: { padding: 12 },
+					mask: { backdropFilter: "blur(1px)", zIndex: 2999 },
+				}}
 				zIndex={3000}
 				wrapClassName='day-details-modal'
 			>
@@ -969,8 +997,10 @@ const HotelsInventoryMap = () => {
 				className='float-right'
 				width='95%'
 				style={{ position: "absolute", left: "2.5%", top: "2%", zIndex: 3000 }}
-				bodyStyle={{ padding: 0 }}
-				maskStyle={{ backdropFilter: "blur(1px)", zIndex: 2999 }}
+				styles={{
+					body: { padding: 0 },
+					mask: { backdropFilter: "blur(1px)", zIndex: 2999 },
+				}}
 				zIndex={3000}
 				wrapClassName='reservation-details-modal'
 			>
@@ -995,6 +1025,7 @@ const HotelsInventoryMap = () => {
 								payment_details: selectedReservation.payment_details || {},
 							}}
 							setReservation={setSelectedReservation}
+							onReservationUpdated={handleReservationUpdated}
 						/>
 					) : (
 						<ReservationDetail

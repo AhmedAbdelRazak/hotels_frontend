@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+﻿import React, { useEffect, useState, useRef } from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -45,6 +45,7 @@ const Header = styled.div`
 	height: 170px;
 	background-color: #f2f2f2;
 	padding: 0 16px;
+
 	h4,
 	h3 {
 		font-weight: bold;
@@ -83,13 +84,18 @@ const ContentSection = styled.div`
 
 	&:first-child,
 	&:last-child {
-		flex: 0 0 30%;
+		flex: 0 0 33%;
 	}
 
 	&:nth-child(2) {
-		flex: 0 0 40%;
+		flex: 0 0 37%;
 		border-right: 1px solid #ddd;
 		border-left: 1px solid #ddd;
+	}
+
+	h4,
+	h3 {
+		font-size: 1.4rem;
 	}
 `;
 
@@ -101,8 +107,17 @@ const safeNumber = (val) => {
 };
 
 const formatNumber = (val) => Number(val || 0).toLocaleString();
+const formatDisplayDate = (date, locale) => {
+	if (!date) return "N/A";
+	return moment(date).locale(locale).format("MMM DD, YYYY");
+};
 
-const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
+const MoreDetails = ({
+	reservation,
+	setReservation,
+	hotelDetails,
+	onReservationUpdated = () => {},
+}) => {
 	const pdfRef = useRef(null);
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
@@ -124,6 +139,22 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
+	const localeCode = chosenLanguage === "Arabic" ? "ar" : "en";
+	const formattedCheckin = formatDisplayDate(
+		reservation?.checkin_date,
+		localeCode
+	);
+	const formattedCheckout = formatDisplayDate(
+		reservation?.checkout_date,
+		localeCode
+	);
+	const customerFullName =
+		reservation?.customer_details?.fullName ||
+		reservation?.customer_details?.name ||
+		"";
+	const customerNickName = reservation?.customer_details?.nickName || "";
+	const secondaryConfirmation =
+		reservation?.customer_details?.confirmation_number2 || "";
 
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
@@ -207,7 +238,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				} else {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(response.reservation);
+					setReservation(response?.reservation || response);
+					onReservationUpdated(response?.reservation || response);
 				}
 			});
 		}
@@ -252,7 +284,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 					setIsModalVisible(false);
 
 					// Update local state or re-fetch reservation data if necessary
-					setReservation(response);
+					setReservation(response?.reservation || response);
+					onReservationUpdated(response?.reservation || response);
 				}
 			});
 		}
@@ -282,6 +315,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				} else {
 					toast.success("Reservation was successfully relocated");
 					setIsModalVisible4(false);
+					onReservationUpdated(response?.reservation || response);
 					setTimeout(() => {
 						window.location.reload(false);
 					}, 1500);
@@ -459,20 +493,26 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			) : (
 				<div className='otherContentWrapper'>
 					<Modal
-						title={chosenLanguage === "Arabic" ? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632" : "Edit Reservation"}
+						title={
+							chosenLanguage === "Arabic"
+								? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632"
+								: "Edit Reservation"
+						}
 						open={isModalVisible2}
 						onCancel={() => setIsModalVisible2(false)}
 						onOk={handleUpdateReservationStatus2}
 						footer={null}
-						width='90%'
+						width='95%'
 						centered
 						destroyOnClose
 						forceRender
 						zIndex={12000}
 						maskClosable={false}
-						maskStyle={{ zIndex: 11999 }}
 						style={{ top: 20 }}
-						bodyStyle={{ maxHeight: "82vh", overflowY: "auto" }}
+						styles={{
+							mask: { zIndex: 11999 },
+							body: { maxHeight: "82vh", overflowY: "auto" },
+						}}
 						wrapClassName='edit-reservation-modal'
 						rootClassName='edit-reservation-modal'
 						getContainer={() => document.body}
@@ -483,6 +523,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 								setReservation={setReservation}
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
+								onReservationUpdated={onReservationUpdated}
 							/>
 						)}
 					</Modal>
@@ -625,7 +666,9 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 							}}
 						>
 							<EditOutlined />
-							{chosenLanguage === "Arabic" ? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632" : "Edit Reservation"}
+							{chosenLanguage === "Arabic"
+								? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632"
+								: "Edit Reservation"}
 						</h5>
 
 						{relocationArray1 &&
@@ -754,6 +797,17 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 													reservation.customer_details &&
 													reservation.confirmation_number}
 											</h3>
+											{secondaryConfirmation ? (
+												<div
+													style={{
+														fontSize: "1.1rem",
+														color: "black",
+														marginTop: "4px",
+													}}
+												>
+													Confirmation #2: {secondaryConfirmation}
+												</div>
+											) : null}
 										</div>
 									</div>
 
@@ -958,10 +1012,13 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 								<div className='row'>
 									<div className='col-md-12'>
 										<h3 style={{ fontSize: "2.5rem" }}>
-											{reservation &&
-												reservation.customer_details &&
-												reservation.customer_details.name}
+											{customerFullName || "N/A"}
 										</h3>
+										{customerNickName && (
+											<div style={{ fontSize: "1.3rem", marginTop: "4px" }}>
+												{customerNickName}
+											</div>
+										)}
 										<div className='row  my-2'>
 											<button
 												className='col-md-5'
@@ -1027,25 +1084,21 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									className='row'
 									style={{ fontSize: "17px", fontWeight: "bold" }}
 								>
-									<div className='col-md-5'>
+									<div className='col-md-4'>
 										{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
 										<div style={{ border: "1px solid black", padding: "3px" }}>
-											{moment(reservation && reservation.checkin_date)
-												.locale(chosenLanguage === "Arabic" ? "ar" : "en")
-												.format("DD/MM/YYYY")}
+											{formattedCheckin}
 										</div>
 									</div>
-									<div className='col-md-5'>
+									<div className='col-md-4'>
 										{chosenLanguage === "Arabic"
 											? "تاريخ المغادرة"
 											: "Check-out"}
 										<div style={{ border: "1px solid black", padding: "3px" }}>
-											{moment(reservation && reservation.checkout_date)
-												.locale(chosenLanguage === "Arabic" ? "ar" : "en")
-												.format("DD/MM/YYYY")}
+											{formattedCheckout}
 										</div>
 									</div>
-									<div className='col-md-5 mx-auto mt-3'>
+									<div className='col-md-4 mx-auto'>
 										{chosenLanguage === "Arabic"
 											? "فترة الحجز"
 											: "Reservation Period"}
@@ -1119,8 +1172,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 									<div className='col-md-12 mx-auto text-center mx-auto my-2'>
 										{chosenLanguage === "Arabic"
-											? "تاريخ الميلاد"
-											: "Date Of Birth"}
+											? "Passport Expiry"
+											: "Passport Expiry"}
 										<div className='mx-2'>
 											{(reservation &&
 												reservation.customer_details &&
@@ -1400,7 +1453,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 										<div className='col-md-5 mx-auto'>
 											<h3>
-													{formatNumber(reservation.total_amount)}{" "}
+												{formatNumber(reservation.total_amount)}{" "}
 												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 											</h3>
 										</div>

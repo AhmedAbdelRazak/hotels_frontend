@@ -234,7 +234,7 @@ const PackagesModal = ({
 			destroyOnClose
 			// keep the modal above everything and its dropdowns inside:
 			zIndex={20000}
-			maskStyle={{ zIndex: 19999 }}
+			styles={{ mask: { zIndex: 19999 } }}
 		>
 			{/* Room selector */}
 			<div style={{ marginBottom: 10 }}>

@@ -1,12 +1,12 @@
-/*  utils/hotel‑setup‑modals.js
- *  One file – handles the six progress‑step modals used by
+/*  utils/hotelâ€‘setupâ€‘modals.js
+ *  One file â€“ handles the six progressâ€‘step modals used by
  *  MainHotelDashboard.
- *  – Step #2 (room types & pricing) keeps the legacy ZCase1 / ZCase2
- *    components untouched but fixes all race‑conditions by using a
+ *  â€“ StepÂ #2 (room types & pricing) keeps the legacy ZCase1 / ZCase2
+ *    components untouched but fixes all raceâ€‘conditions by using a
  *    mutable ref for the draft instead of React state.
- *  – Photos, location and bank‑details modals persist the same way.
- *  – Everything is written back with updateHotelDetails().
- *  ─────────────────────────────────────────────────────────────── */
+ *  â€“ Photos, location and bankâ€‘details modals persist the same way.
+ *  â€“ Everything is written back with updateHotelDetails().
+ *  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 import React, { useRef, useState } from "react";
 import { Modal, Form, message, Spin, Button } from "antd";
@@ -17,7 +17,7 @@ import ZCase0 from "../HotelSettings/ZCase0";
 import PaymentSettings from "../HotelSettings/PaymentSettings";
 import { updateHotelDetails } from "../apiAdmin";
 
-/* ─────────── static dictionaries ─────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ static dictionaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 const roomTypes = [
 	{ value: "standardRooms", label: "Standard Rooms" },
@@ -107,7 +107,7 @@ const getRoomColor = (rt) => roomColors[rt] || "#003366";
 
 const stripMyKey = ({ myKey, ...rest }) => rest;
 
-/* ════════════════════  STEP #2 – Room‑types modal  ═══════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•  STEPÂ #2Â â€“Â Roomâ€‘types modal  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 export const RoomTypesModal = ({
 	open,
@@ -119,7 +119,7 @@ export const RoomTypesModal = ({
 	refreshCard, // reload cards after save
 }) => {
 	const draftRef = useRef(structuredClone(hotelDoc)); // mutable draft
-	const [photoTick, setPhotoTick] = useState(0); // forces photo re‑render
+	const [photoTick, setPhotoTick] = useState(0); // forces photo reâ€‘render
 	const [saving, setSaving] = useState(false);
 
 	// controlled form inside the modal
@@ -128,7 +128,7 @@ export const RoomTypesModal = ({
 	const [roomTypeSelected, setRoomTypeSelected] = useState(false);
 	const [customRoomType, setCustomRoomType] = useState("");
 
-	/* helper – patch draft without re‑render */
+	/* helper â€“ patch draft without reâ€‘render */
 	const patchDraft = (patcher) => {
 		draftRef.current =
 			typeof patcher === "function" ? patcher(draftRef.current) : patcher;
@@ -164,7 +164,7 @@ export const RoomTypesModal = ({
 		setPhotoTick((x) => x + 1);
 	};
 
-	/* ───────────── persist to backend ───────────── */
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ persist to backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 	const handleSave = async () => {
 		try {
 			const vals = await form.validateFields();
@@ -208,7 +208,7 @@ export const RoomTypesModal = ({
 			if (!cleaned.length) {
 				message.error(
 					language === "Arabic"
-						? "يجب إضافة غرفة واحدة على الأقل"
+						? "ÙŠØ¬Ø¨ Ø¥Ø¶Ø§ÙØ© ØºØ±ÙØ© ÙˆØ§Ø­Ø¯Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„"
 						: "Add at least one room"
 				);
 				return;
@@ -230,7 +230,7 @@ export const RoomTypesModal = ({
 			);
 			if (resp?.error) throw new Error(resp.error);
 
-			message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+			message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
 			refreshCard();
 			onClose();
 		} catch (err) {
@@ -240,7 +240,7 @@ export const RoomTypesModal = ({
 		}
 	};
 
-	/* ─────────────── render ─────────────── */
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 	return (
 		<Modal
 			open={open}
@@ -248,18 +248,18 @@ export const RoomTypesModal = ({
 			onOk={handleSave}
 			confirmLoading={saving}
 			width={1000}
-			okText={language === "Arabic" ? "حفظ" : "Save"}
+			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
 			title={
-				language === "Arabic" ? "أنواع الغرف والسعر" : "Room types & pricing"
+				language === "Arabic" ? "Ø£Ù†ÙˆØ§Ø¹ Ø§Ù„ØºØ±Ù ÙˆØ§Ù„Ø³Ø¹Ø±" : "Room types & pricing"
 			}
-			bodyStyle={{ padding: 0, maxHeight: "80vh", overflowY: "auto" }}
+			styles={{ body: { padding: 0, maxHeight: "80vh", overflowY: "auto" } }}
 			destroyOnClose
 		>
 			{saving ? (
 				<Spin style={{ width: "100%", margin: "3rem 0" }} />
 			) : (
 				<Form form={form} layout='vertical' style={{ padding: "1.5rem" }}>
-					{/* ZCase1 – room core data */}
+					{/* ZCase1 â€“ room core data */}
 					<ZCase1
 						hotelDetails={draftRef.current}
 						setHotelDetails={patchDraft}
@@ -278,7 +278,7 @@ export const RoomTypesModal = ({
 						getRoomColor={getRoomColor}
 					/>
 
-					{/* ZCase2 – room photos */}
+					{/* ZCase2 â€“ room photos */}
 					{roomTypeSelected && (
 						<div style={{ marginTop: 32 }} key={photoTick /* force refresh */}>
 							<ZCase2
@@ -297,17 +297,17 @@ export const RoomTypesModal = ({
 	);
 };
 
-/* ════════════════ Remaining step‑modals (unchanged logic) ═════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• Remaining stepâ€‘modals (unchanged logic) â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 export const InfoModal = ({ open, onClose, language }) => (
 	<Modal
 		open={open}
 		onCancel={onClose}
 		footer={null}
-		title={language === "Arabic" ? "معلومات" : "Info"}
+		title={language === "Arabic" ? "Ù…Ø¹Ù„ÙˆÙ…Ø§Øª" : "Info"}
 	>
 		{language === "Arabic"
-			? "طلب التسجيل قيد المراجعة."
+			? "Ø·Ù„Ø¨ Ø§Ù„ØªØ³Ø¬ÙŠÙ„ Ù‚ÙŠØ¯ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©."
 			: "Your registration request is under review."}
 	</Modal>
 );
@@ -328,7 +328,7 @@ export const HotelPhotosModal = ({
 		if (!draft.hotelPhotos?.length) {
 			message.error(
 				language === "Arabic"
-					? "أضف صورة واحدة على الأقل"
+					? "Ø£Ø¶Ù ØµÙˆØ±Ø© ÙˆØ§Ø­Ø¯Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„"
 					: "Upload at least one photo"
 			);
 			return;
@@ -340,7 +340,7 @@ export const HotelPhotosModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -354,8 +354,8 @@ export const HotelPhotosModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "صور الفندق" : "Hotel photos"}
-			okText={language === "Arabic" ? "حفظ" : "Save"}
+			title={language === "Arabic" ? "ØµÙˆØ± Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel photos"}
+			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
 			width={900}
 			destroyOnClose
 		>
@@ -389,7 +389,7 @@ export const LocationModal = ({
 	const persist = () => {
 		if (!draft.location?.coordinates || draft.location.coordinates[0] === 0) {
 			message.error(
-				language === "Arabic" ? "حدد موقع الفندق" : "Pick hotel location"
+				language === "Arabic" ? "Ø­Ø¯Ø¯ Ù…ÙˆÙ‚Ø¹ Ø§Ù„ÙÙ†Ø¯Ù‚" : "Pick hotel location"
 			);
 			return;
 		}
@@ -400,7 +400,7 @@ export const LocationModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -414,10 +414,10 @@ export const LocationModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "موقع الفندق" : "Hotel location"}
-			okText={language === "Arabic" ? "حفظ" : "Save"}
+			title={language === "Arabic" ? "Ù…ÙˆÙ‚Ø¹ Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel location"}
+			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
 			width={1000}
-			bodyStyle={{ padding: 0, maxHeight: "80vh", overflowY: "auto" }}
+			styles={{ body: { padding: 0, maxHeight: "80vh", overflowY: "auto" } }}
 			destroyOnClose
 		>
 			<ZCase0
@@ -459,7 +459,7 @@ export const CompleteDataModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -473,8 +473,8 @@ export const CompleteDataModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "بيانات الفندق" : "Hotel data"}
-			okText={language === "Arabic" ? "حفظ" : "Save"}
+			title={language === "Arabic" ? "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel data"}
+			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
 			width={1000}
 			destroyOnClose
 		>
@@ -517,7 +517,7 @@ export const BankDetailsModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "تم الحفظ" : "Saved");
+				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -532,7 +532,7 @@ export const BankDetailsModal = ({
 			footer={null}
 			width={800}
 			destroyOnClose
-			title={language === "Arabic" ? "البيانات البنكية" : "Bank details"}
+			title={language === "Arabic" ? "Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¨Ù†ÙƒÙŠØ©" : "Bank details"}
 		>
 			<PaymentSettings
 				hotelDetails={draft}
@@ -542,14 +542,14 @@ export const BankDetailsModal = ({
 			/>
 			<div style={{ textAlign: "center", marginTop: 24 }}>
 				<Button type='primary' loading={saving} onClick={persist}>
-					{language === "Arabic" ? "حفظ" : "Save"}
+					{language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
 				</Button>
 			</div>
 		</Modal>
 	);
 };
 
-/* ═══════════════════════  export registry  ═══════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•  export registry  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 export const STEP_MODAL_REGISTRY = {
 	0: InfoModal, // Registration request
@@ -559,3 +559,4 @@ export const STEP_MODAL_REGISTRY = {
 	4: CompleteDataModal, // Complete hotel data
 	5: BankDetailsModal, // Bank details
 };
+

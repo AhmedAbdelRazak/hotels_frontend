@@ -71,21 +71,41 @@ const resolveDailyRootPrice = (matchedRate, defaultCost) => {
 	return 0;
 };
 
+const isExternalSource = (src) => {
+	const s = String(src || "")
+		.trim()
+		.toLowerCase();
+	return !!s && s !== "manual" && s !== "jannat employee";
+};
+
 // Client-side password (note: visible in bundle; server-side check is safer)
 const PASSWORD_FOR_PAID_AMOUNT =
 	process.env.REACT_APP_MANUAL_PAID_AMOUNT || "secret123";
+const bookingSourceOptions = [
+	"Jannat Employee",
+	"affiliate",
+	"manual",
+	"booking.com",
+	"trivago",
+	"expedia",
+	"agoda",
+	"hotel.com",
+	"airbnb",
+];
 
 const EditReservationMain = ({
 	reservation,
 	setReservation,
 	chosenLanguage,
 	hotelDetails,
+	onReservationUpdated = () => {},
 }) => {
 	// ---------------- State ----------------
 	const [selectedRooms, setSelectedRooms] = useState([
 		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 	]);
 	const [name, setName] = useState("");
+	const [nickName, setNickName] = useState("");
 	const [email, setEmail] = useState("");
 	const [checkInDate, setCheckInDate] = useState(null);
 	const [checkOutDate, setCheckOutDate] = useState(null);
@@ -95,6 +115,8 @@ const EditReservationMain = ({
 	const [agentName, setAgentName] = useState("");
 	const [phone, setPhone] = useState("");
 	const [comment, setComment] = useState("");
+	const [bookingSource, setBookingSource] = useState("Jannat Employee");
+	const [confirmationNumber2, setConfirmationNumber2] = useState("");
 
 	// Totals
 	const [hotelCost, setHotelCost] = useState(0);
@@ -133,6 +155,9 @@ const EditReservationMain = ({
 	const [tempPaidAmount, setTempPaidAmount] = useState(
 		reservation?.payment_details?.onsite_paid_amount || 0
 	);
+	const pickerPopupStyle = { zIndex: 20010 };
+	const pickerContainerGetter = (trigger) =>
+		(trigger && trigger.parentNode) || document.body;
 
 	useEffect(() => {
 		setTempPaidAmount(reservation?.payment_details?.onsite_paid_amount || 0);
@@ -226,11 +251,16 @@ const EditReservationMain = ({
 	useEffect(() => {
 		if (!reservation) return;
 		setName(reservation.customer_details?.name || "");
+		setNickName(reservation.customer_details?.nickName || "");
 		setEmail(reservation.customer_details?.email || "");
 		setPhone(reservation.customer_details?.phone || "");
 		setNationality(reservation.customer_details?.nationality || "");
 		setAdults(reservation.adults || 1);
 		setChildren(reservation.children || 0);
+		setBookingSource(reservation.booking_source || "Jannat Employee");
+		setConfirmationNumber2(
+			reservation.customer_details?.confirmation_number2 || ""
+		);
 		setCheckInDate(
 			reservation.checkin_date ? dayjs(reservation.checkin_date) : null
 		);
@@ -658,6 +688,7 @@ const EditReservationMain = ({
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 		]);
 		setName("");
+		setNickName("");
 		setEmail("");
 		setCheckInDate(null);
 		setCheckOutDate(null);
@@ -666,6 +697,8 @@ const EditReservationMain = ({
 		setNationality("");
 		setPhone("");
 		setComment("");
+		setBookingSource("Jannat Employee");
+		setConfirmationNumber2("");
 
 		setHotelCost(0);
 		setTotalAmount(0);
@@ -784,6 +817,7 @@ const EditReservationMain = ({
 			hotel_name: selectedHotel.hotelName || "",
 			customerDetails: {
 				name,
+				nickName,
 				email,
 				phone,
 				passport: reservation.customer_details?.passport || "Not Provided",
@@ -792,6 +826,7 @@ const EditReservationMain = ({
 				nationality,
 				postalCode: reservation.customer_details?.postalCode || "00000",
 				reservedBy: agentName,
+				confirmation_number2: String(confirmationNumber2 || "").trim(),
 			},
 			total_rooms: selectedRooms.reduce((t, r) => t + r.count, 0),
 			total_guests: adults + children,
@@ -800,7 +835,7 @@ const EditReservationMain = ({
 			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
 			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
 			days_of_residence: numberOfNights,
-			booking_source: reservation.booking_source || "Jannat Employee",
+			booking_source: bookingSource || "Jannat Employee",
 			pickedRoomsType,
 			total_amount: totalAmount,
 			payment: reservation.payment || "not paid",
@@ -833,11 +868,13 @@ const EditReservationMain = ({
 			if (response?.message === "Reservation updated successfully") {
 				message.success("Reservation updated successfully!");
 				setReservationCreated(true);
-				setReservation(response.reservation);
+				if (response.reservation) {
+					setReservation(response.reservation);
+					onReservationUpdated(response.reservation);
+				} else {
+					onReservationUpdated(response);
+				}
 				window.scrollTo({ top: 0, behavior: "smooth" });
-				setTimeout(() => {
-					window.location.reload(false);
-				}, 1500);
 			} else {
 				message.error(response?.message || "Error updating reservation.");
 			}
@@ -859,7 +896,14 @@ const EditReservationMain = ({
 	);
 
 	return (
-		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
+		<div
+			style={{
+				padding: "24px",
+				maxWidth: "1200px",
+				width: "100%",
+				margin: "0 auto",
+			}}
+		>
 			<Form layout='vertical' onFinish={handleSubmit}>
 				<Button
 					type='primary'
@@ -956,6 +1000,36 @@ const EditReservationMain = ({
 					</div>
 
 					<div className='col-md-6'>
+						<Form.Item label='Booking Source'>
+							<Select
+								placeholder='Select booking source'
+								value={bookingSource}
+								onChange={(val) => setBookingSource(val)}
+								disabled={isLoading}
+								getPopupContainer={(trigger) => trigger.parentNode}
+							>
+								{bookingSourceOptions.map((opt) => (
+									<Option key={opt} value={opt}>
+										{opt}
+									</Option>
+								))}
+							</Select>
+						</Form.Item>
+					</div>
+					{isExternalSource(bookingSource) && (
+						<div className='col-md-6'>
+							<Form.Item label='External Confirmation # (optional)'>
+								<Input
+									value={confirmationNumber2}
+									onChange={(e) => setConfirmationNumber2(e.target.value)}
+									disabled={isLoading}
+									placeholder='Enter platform confirmation #'
+								/>
+							</Form.Item>
+						</div>
+					)}
+
+					<div className='col-md-6'>
 						<Form.Item label='Check-in Date' required>
 							<DatePicker
 								className='w-100'
@@ -964,6 +1038,8 @@ const EditReservationMain = ({
 								disabledDate={disableCheckInDate}
 								value={checkInDate}
 								onChange={handleCheckInDateChange}
+								getPopupContainer={pickerContainerGetter}
+								popupStyle={pickerPopupStyle}
 							/>
 						</Form.Item>
 					</div>
@@ -976,6 +1052,8 @@ const EditReservationMain = ({
 								disabledDate={disableCheckOutDate}
 								value={checkOutDate}
 								onChange={handleCheckOutDateChange}
+								getPopupContainer={pickerContainerGetter}
+								popupStyle={pickerPopupStyle}
 							/>
 						</Form.Item>
 					</div>
@@ -1064,7 +1142,7 @@ const EditReservationMain = ({
 
 				{/* Guest / reservation fields */}
 				<div className='row my-3'>
-					<div className='col-md-4'>
+					<div className='col-md-3'>
 						<Form.Item label='Guest Name'>
 							<Input
 								value={name}
@@ -1073,7 +1151,16 @@ const EditReservationMain = ({
 							/>
 						</Form.Item>
 					</div>
-					<div className='col-md-4'>
+					<div className='col-md-3'>
+						<Form.Item label='Nickname (optional)'>
+							<Input
+								value={nickName}
+								onChange={(e) => setNickName(e.target.value)}
+								disabled={isLoading}
+							/>
+						</Form.Item>
+					</div>
+					<div className='col-md-3'>
 						<Form.Item label='Email'>
 							<Input
 								value={email}
@@ -1082,7 +1169,7 @@ const EditReservationMain = ({
 							/>
 						</Form.Item>
 					</div>
-					<div className='col-md-4'>
+					<div className='col-md-3'>
 						<Form.Item label='Phone'>
 							<Input
 								value={phone}
@@ -1287,6 +1374,7 @@ const EditReservationMain = ({
 							hotelDetails={selectedHotel}
 							reservation={selectedReservation}
 							setReservation={setSelectedReservation}
+							onReservationUpdated={onReservationUpdated}
 						/>
 					)}
 			</Modal>
