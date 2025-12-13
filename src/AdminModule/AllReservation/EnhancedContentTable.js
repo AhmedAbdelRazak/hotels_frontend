@@ -194,14 +194,20 @@ const EnhancedContentTable = ({
 	};
 
 	const handleReservationUpdated = (updated) => {
-		if (updated) {
-			setSelectedReservation((prev) =>
-				prev ? { ...prev, ...updated } : updated
-			);
-		}
-		if (onReservationUpdated) {
-			onReservationUpdated(updated);
-		}
+		if (!updated) return;
+		setSelectedReservation((prev) => {
+			const merged = prev ? { ...prev, ...updated } : updated;
+			if (
+				prev?.hotelId &&
+				(!merged.hotelId ||
+					typeof merged.hotelId !== "object" ||
+					!merged.hotelId.hotelName)
+			) {
+				merged.hotelId = prev.hotelId;
+			}
+			return merged;
+		});
+		onReservationUpdated(updated);
 	};
 
 	// ------------------ Filter Button Handlers ------------------
@@ -774,20 +780,18 @@ const EnhancedContentTable = ({
 				]}
 			>
 				{selectedReservation && selectedReservation.hotelId ? (
-					selectedReservation.hotelId.hotelName ? (
-						<MoreDetails
-							selectedReservation={selectedReservation}
-							hotelDetails={selectedReservation.hotelId}
-							reservation={selectedReservation}
-							setReservation={setSelectedReservation}
-							onReservationUpdated={handleReservationUpdated}
-						/>
-					) : (
-						<ReservationDetail
-							reservation={selectedReservation}
-							hotelDetails={selectedReservation.hotelId}
-						/>
-					)
+					<MoreDetails
+						selectedReservation={selectedReservation}
+						hotelDetails={selectedReservation.hotelId}
+						reservation={selectedReservation}
+						setReservation={setSelectedReservation}
+						onReservationUpdated={handleReservationUpdated}
+					/>
+				) : selectedReservation ? (
+					<ReservationDetail
+						reservation={selectedReservation}
+						hotelDetails={selectedReservation.hotelId}
+					/>
 				) : null}
 			</Modal>
 

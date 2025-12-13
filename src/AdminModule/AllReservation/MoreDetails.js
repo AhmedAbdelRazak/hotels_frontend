@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -236,10 +236,12 @@ const MoreDetails = ({
 					console.error(response.error);
 					toast.error("An error occurred while updating the status");
 				} else {
+					const updated = response?.reservation || response;
+					const merged = { ...reservation, ...updated };
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(response?.reservation || response);
-					onReservationUpdated(response?.reservation || response);
+					setReservation(merged);
+					onReservationUpdated(merged);
 				}
 			});
 		}
@@ -280,12 +282,14 @@ const MoreDetails = ({
 					console.error(response.error);
 					toast.error("An error occurred while updating the status");
 				} else {
+					const updated = response?.reservation || response;
+					const merged = { ...reservation, ...updated };
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
 
 					// Update local state or re-fetch reservation data if necessary
-					setReservation(response?.reservation || response);
-					onReservationUpdated(response?.reservation || response);
+					setReservation(merged);
+					onReservationUpdated(merged);
 				}
 			});
 		}

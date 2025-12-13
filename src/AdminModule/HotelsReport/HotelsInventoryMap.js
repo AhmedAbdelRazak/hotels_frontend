@@ -379,7 +379,18 @@ const HotelsInventoryMap = () => {
 	const handleReservationUpdated = useCallback(
 		(updated) => {
 			if (updated) {
-				setSelectedReservation(updated);
+				setSelectedReservation((prev) => {
+					const merged = prev ? { ...prev, ...updated } : updated;
+					if (
+						prev?.hotelId &&
+						(!merged.hotelId ||
+							typeof merged.hotelId !== "object" ||
+							!merged.hotelId.hotelName)
+					) {
+						merged.hotelId = prev.hotelId;
+					}
+					return merged;
+				});
 			}
 			if (dayDetailsOpen && dayDetails?.date) {
 				fetchDayDetails({
@@ -1005,34 +1016,32 @@ const HotelsInventoryMap = () => {
 				wrapClassName='reservation-details-modal'
 			>
 				{selectedReservation && selectedReservation.hotelId ? (
-					selectedReservation.hotelId.hotelName ? (
-						<MoreDetails
-							selectedReservation={{
-								...selectedReservation,
-								total_amount: selectedReservation.total_amount ?? 0,
-								paid_amount: selectedReservation.paid_amount ?? 0,
-								pickedRoomsType: selectedReservation.pickedRoomsType || [],
-								customer_details: selectedReservation.customer_details || {},
-								payment_details: selectedReservation.payment_details || {},
-							}}
-							hotelDetails={selectedReservation.hotelId}
-							reservation={{
-								...selectedReservation,
-								total_amount: selectedReservation.total_amount ?? 0,
-								paid_amount: selectedReservation.paid_amount ?? 0,
-								pickedRoomsType: selectedReservation.pickedRoomsType || [],
-								customer_details: selectedReservation.customer_details || {},
-								payment_details: selectedReservation.payment_details || {},
-							}}
-							setReservation={setSelectedReservation}
-							onReservationUpdated={handleReservationUpdated}
-						/>
-					) : (
-						<ReservationDetail
-							reservation={selectedReservation}
-							hotelDetails={selectedReservation.hotelId}
-						/>
-					)
+					<MoreDetails
+						selectedReservation={{
+							...selectedReservation,
+							total_amount: selectedReservation.total_amount ?? 0,
+							paid_amount: selectedReservation.paid_amount ?? 0,
+							pickedRoomsType: selectedReservation.pickedRoomsType || [],
+							customer_details: selectedReservation.customer_details || {},
+							payment_details: selectedReservation.payment_details || {},
+						}}
+						hotelDetails={selectedReservation.hotelId}
+						reservation={{
+							...selectedReservation,
+							total_amount: selectedReservation.total_amount ?? 0,
+							paid_amount: selectedReservation.paid_amount ?? 0,
+							pickedRoomsType: selectedReservation.pickedRoomsType || [],
+							customer_details: selectedReservation.customer_details || {},
+							payment_details: selectedReservation.payment_details || {},
+						}}
+						setReservation={setSelectedReservation}
+						onReservationUpdated={handleReservationUpdated}
+					/>
+				) : selectedReservation ? (
+					<ReservationDetail
+						reservation={selectedReservation}
+						hotelDetails={selectedReservation.hotelId}
+					/>
 				) : null}
 			</Modal>
 		</Wrapper>

@@ -868,12 +868,15 @@ const EditReservationMain = ({
 			if (response?.message === "Reservation updated successfully") {
 				message.success("Reservation updated successfully!");
 				setReservationCreated(true);
-				if (response.reservation) {
-					setReservation(response.reservation);
-					onReservationUpdated(response.reservation);
-				} else {
-					onReservationUpdated(response);
-				}
+				const incoming = response?.reservation || response || {};
+				const mergedReservation = {
+					...reservation,
+					...incoming,
+					hotelId: incoming.hotelId || reservation.hotelId,
+					belongsTo: incoming.belongsTo || reservation.belongsTo,
+				};
+				setReservation(mergedReservation);
+				onReservationUpdated(mergedReservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error(response?.message || "Error updating reservation.");
