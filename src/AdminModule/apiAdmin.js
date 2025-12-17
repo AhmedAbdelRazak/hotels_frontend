@@ -1264,6 +1264,7 @@ export const getHotelOccupancyCalendar = (
 		start,
 		end,
 		display = "roomType",
+		paymentStatuses,
 	} = {}
 ) => {
 	if (!hotelId) {
@@ -1276,6 +1277,9 @@ export const getHotelOccupancyCalendar = (
 	if (end) params.set("end", end);
 	if (includeCancelled) params.set("includeCancelled", "true");
 	if (display) params.set("display", display);
+	if (paymentStatuses?.length) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy/${userId}?${params.toString()}`,
@@ -1309,6 +1313,7 @@ export const getHotelOccupancyWarnings = (
 		start,
 		end,
 		display = "roomType",
+		paymentStatuses,
 	} = {}
 ) => {
 	if (!hotelId) {
@@ -1321,6 +1326,9 @@ export const getHotelOccupancyWarnings = (
 	if (end) params.set("end", end);
 	if (includeCancelled) params.set("includeCancelled", "true");
 	if (display) params.set("display", display);
+	if (paymentStatuses?.length) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-warnings/${userId}?${params.toString()}`,
@@ -1354,6 +1362,7 @@ export const getHotelOccupancyDayReservations = (
 		roomLabel,
 		includeCancelled = false,
 		display = "roomType",
+		paymentStatuses,
 	} = {}
 ) => {
 	if (!hotelId) {
@@ -1368,6 +1377,9 @@ export const getHotelOccupancyDayReservations = (
 	if (roomLabel) params.set("roomLabel", roomLabel);
 	if (includeCancelled) params.set("includeCancelled", "true");
 	if (display) params.set("display", display);
+	if (paymentStatuses?.length) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-day-reservations/${userId}?${params.toString()}`,

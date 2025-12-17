@@ -142,7 +142,7 @@ const EditReservationMain = ({
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
-	const [sendEmail, setSendEmail] = useState(true);
+	const [sendEmail, setSendEmail] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 
 	const { user, token } = isAuthenticated();
@@ -161,6 +161,10 @@ const EditReservationMain = ({
 
 	useEffect(() => {
 		setTempPaidAmount(reservation?.payment_details?.onsite_paid_amount || 0);
+	}, [reservation]);
+
+	useEffect(() => {
+		setSendEmail(false);
 	}, [reservation]);
 
 	const handleOpenPaidAmountEdit = () => {

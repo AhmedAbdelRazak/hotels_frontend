@@ -28,12 +28,32 @@ import WarningsModal from "./WarningsModal";
 
 const { Option } = Select;
 
+const ModalZFix = createGlobalStyle`
+	.day-details-modal .ant-modal,
+	.reservation-details-modal .ant-modal {
+		z-index: 4001 !important;
+	}
+	.day-details-modal .ant-modal-mask,
+	.reservation-details-modal .ant-modal-mask {
+		z-index: 4000 !important;
+	}
+`;
+
 const heatColor = (rate = 0) => {
-	const clamped = Math.min(Math.max(rate, 0), 1);
-	const start = [230, 245, 241]; // very light mint
+	const clamped = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	const start = [230, 245, 241]; // light mint
 	const end = [0, 140, 115]; // deep teal
 	const mix = start.map((s, i) => Math.round(s + (end[i] - s) * clamped));
 	return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
+};
+
+const getReadableCellColors = (rate = 0) => {
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	const isDark = r >= 0.62;
+	return {
+		text: isDark ? "#ffffff" : "#1f1f1f",
+		muted: isDark ? "rgba(255,255,255,0.85)" : "#666",
+	};
 };
 
 const extractHotels = (payload) => {
@@ -58,27 +78,131 @@ const hijriMonthsEn = [
 	"Dhul-Hijjah",
 ];
 
+const PAYMENT_STATUS_OPTIONS = [
+	"Not Paid",
+	"Not Captured",
+	"Captured",
+	"Paid Offline",
+];
+
 const shortLabel = (label = "") => {
-	const words = label.split(/\s+/).filter(Boolean);
-	return words.slice(0, 3).join(" ");
+	const words = String(label || "")
+		.split(/\s+/)
+		.filter(Boolean);
+	return words.slice(0, 6).join(" ");
+};
+
+// ---------- Room sorting + header helpers ----------
+const normLower = (v) => String(v || "").toLowerCase();
+
+const isSharedRoom = (rt = {}) => {
+	const label = normLower(rt.label);
+	const roomType = normLower(rt.roomType);
+	return (
+		label.includes("shared") ||
+		label.includes("women only") ||
+		label.includes("men only") ||
+		roomType === "individualbed"
+	);
+};
+
+const detectBedCount = (rt = {}) => {
+	const label = String(rt.label || "");
+	const lower = label.toLowerCase();
+
+	// Digits: "7 Beds", "5 bed"
+	const digitMatch = lower.match(/(\d+)\s*(?:beds?|bed)\b/);
+	if (digitMatch) {
+		const n = parseInt(digitMatch[1], 10);
+		return Number.isFinite(n) ? n : null;
+	}
+
+	// Words
+	if (/\bsingle\b/.test(lower)) return 1;
+	if (/\bdouble\b/.test(lower)) return 2;
+	if (/\btriple\b/.test(lower)) return 3;
+	if (/\bquad\b|\bquadruple\b/.test(lower)) return 4;
+	if (/\bquintuple\b|\bpentuple\b/.test(lower)) return 5;
+	if (/\bsextuple\b/.test(lower)) return 6;
+	if (/\bseptuple\b/.test(lower)) return 7;
+	if (/\boctuple\b/.test(lower)) return 8;
+
+	return null;
+};
+
+const roomSortRank = (rt = {}) => {
+	// Shared always last
+	if (isSharedRoom(rt)) return 1000;
+
+	const beds = detectBedCount(rt);
+	if (beds != null) return beds; // 1..8
+
+	// Unknown types after known but before shared
+	const label = normLower(rt.label);
+	if (label.includes("family")) return 50;
+	return 80;
+};
+
+const roomHeaderMain = (rt = {}) => {
+	if (isSharedRoom(rt)) return "Shared";
+	const beds = detectBedCount(rt);
+
+	if (beds === 1) return "Single";
+	if (beds === 2) return "Double";
+	if (beds === 3) return "Triple";
+	if (beds === 4) return "Quad";
+	if (beds && beds >= 5) return `Family ${beds} Beds`;
+
+	// Fallback (rare)
+	return shortLabel(rt.label) || "Room";
+};
+
+const roomHeaderSub = (rt = {}) => {
+	const label = String(rt.label || "").trim();
+	if (!label) return "";
+
+	const beds = detectBedCount(rt);
+	const parts = label
+		.split("–")
+		.map((p) => p.trim())
+		.filter(Boolean);
+
+	if (parts.length >= 2) {
+		const left = parts[0];
+		const right = parts.slice(1).join(" – ").trim();
+
+		const rightHasBeds =
+			beds != null && new RegExp(`\\b${beds}\\s*beds?\\b`, "i").test(right);
+
+		if (rightHasBeds) {
+			let remainder = right
+				.replace(new RegExp(`\\b${beds}\\s*beds?\\b`, "i"), "")
+				.replace(/^[\s\-–—:]+/, "")
+				.trim();
+			if (remainder) return `${left} • ${remainder}`;
+			return left;
+		}
+
+		return right || left;
+	}
+
+	// Hyphen fallback
+	const hy = label
+		.split("-")
+		.map((p) => p.trim())
+		.filter(Boolean);
+	if (hy.length >= 2) return hy.slice(1).join(" - ").trim();
+
+	return "";
 };
 
 const HotelsInventoryMap = () => {
-	const ModalZFix = createGlobalStyle`
-		.day-details-modal .ant-modal,
-		.reservation-details-modal .ant-modal {
-			z-index: 4001 !important;
-		}
-		.day-details-modal .ant-modal-mask,
-		.reservation-details-modal .ant-modal-mask {
-			z-index: 4000 !important;
-		}
-	`;
-
 	const { user, token } = isAuthenticated() || {};
+
 	const supportsHijri =
 		typeof moment.fn?.iMonth === "function" &&
 		typeof moment.fn?.iYear === "function";
+
 	const nowHijri = supportsHijri ? moment() : null;
 	const defaultHijriMonth = supportsHijri ? nowHijri.iMonth() : 0;
 	const defaultHijriYear = supportsHijri
@@ -90,103 +214,55 @@ const HotelsInventoryMap = () => {
 	const defaultHijriEnd = supportsHijri
 		? nowHijri.clone().endOf("iMonth")
 		: null;
+
 	const pickerPopupStyle = { zIndex: 20010 };
 	const pickerContainerGetter = (trigger) =>
 		(trigger && trigger.parentNode) || document.body;
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
+
 	const [monthValue, setMonthValue] = useState(() =>
 		defaultHijriStart
 			? dayjs(defaultHijriStart.toDate())
 			: dayjs().startOf("month")
 	);
+
 	const [calendarType, setCalendarType] = useState(
 		defaultHijriStart ? "hijri" : "gregorian"
-	); // gregorian | hijri
+	);
 	const [hijriMonth, setHijriMonth] = useState(defaultHijriMonth);
 	const [hijriYear, setHijriYear] = useState(defaultHijriYear);
+
 	const [rangeOverride, setRangeOverride] = useState(() =>
 		defaultHijriStart
 			? {
-					start: defaultHijriStart.toISOString(),
-					end: defaultHijriEnd?.toISOString(),
+					start: dayjs(defaultHijriStart.toDate()).format("YYYY-MM-DD"),
+					end: dayjs(defaultHijriEnd?.toDate()).format("YYYY-MM-DD"),
 					label: `${hijriMonthsEn[defaultHijriMonth]} ${defaultHijriYear}`,
 			  }
 			: null
-	); // {start,end,label}
+	);
+
 	const [includeCancelled, setIncludeCancelled] = useState(false);
-	const [displayMode, setDisplayMode] = useState("displayName"); // roomType | displayName
+	const [paymentStatuses, setPaymentStatuses] = useState([]);
+	const [displayMode, setDisplayMode] = useState("displayName");
 
 	const [data, setData] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+
 	const [warningsModalOpen, setWarningsModalOpen] = useState(false);
 	const [warningsLoading, setWarningsLoading] = useState(false);
 	const [warningsData, setWarningsData] = useState([]);
+
 	const [dayDetailsOpen, setDayDetailsOpen] = useState(false);
 	const [dayDetailsLoading, setDayDetailsLoading] = useState(false);
 	const [dayDetails, setDayDetails] = useState(null);
 	const [dayDetailsError, setDayDetailsError] = useState("");
+
 	const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
-
-	const getPaymentStatusStyles = (status = "") => {
-		const s = status.toLowerCase();
-		if (s === "captured") return { backgroundColor: "var(--badge-bg-green)" };
-		if (s === "paid offline")
-			return { backgroundColor: "var(--accent-color-dark-green)", color: "#fff" };
-		if (s === "not captured")
-			return { backgroundColor: "var(--background-accent-yellow)" };
-		return { backgroundColor: "var(--background-light)" };
-	};
-
-	const getReservationStatusStyles = (status = "") => {
-		const s = (status || "").toLowerCase();
-		if (s === "confirmed")
-			return { backgroundColor: "var(--background-light)", color: "inherit" };
-		if (s === "inhouse")
-			return {
-				backgroundColor: "var(--background-accent-yellow)",
-				color: "inherit",
-			};
-		if (s === "checked_out" || s === "early_checked_out")
-			return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
-		if (s === "no_show")
-			return { backgroundColor: "var(--accent-color-orange)", color: "inherit" };
-		if (s === "cancelled")
-			return {
-				backgroundColor: "var(--badge-bg-red)",
-				color: "var(--button-font-color)",
-			};
-		return {};
-	};
-
-	const sortedHotels = useMemo(() => {
-		const hotels = Array.isArray(allHotels) ? allHotels : [];
-		return hotels
-			.map((h) => ({
-				_id: h?._id,
-				hotelName: h?.hotelName || "",
-			}))
-			.filter((h) => h._id && h.hotelName)
-			.sort((a, b) =>
-				a.hotelName.localeCompare(b.hotelName, undefined, {
-					sensitivity: "base",
-				})
-			);
-	}, [allHotels]);
-
-	const roomTypes = data?.roomTypes || [];
-	const days = data?.days || [];
-	const summary = data?.summary || {};
-	const hijriAvailable = supportsHijri;
-	const paymentBreakdown = summary?.paymentBreakdown || [];
-	const totalAmount = summary?.totalAmount || 0;
-	const totalRoomsAll = summary?.totalRoomsAll || summary?.totalRooms || 0; // capacity units (rooms or beds)
-	const totalPhysicalRooms = summary?.totalPhysicalRooms || 0; // raw room count before beds multiplication
-	const capacityRoomNights =
-		(summary.availableRoomNights || 0) + (summary.soldRoomNights || 0);
 
 	const formatInt = (val = 0) => Number(val || 0).toLocaleString("en-US");
 	const formatCurrency = (val = 0) =>
@@ -195,30 +271,166 @@ const HotelsInventoryMap = () => {
 			maximumFractionDigits: 2,
 		});
 
-	const paymentLabel = (status, label) => {
-		if (label) return label;
-		const normalized = String(status || "").toLowerCase();
-		if (normalized === "paid online") return "Paid Online";
-		if (normalized === "paid offline") return "Paid Offline";
-		if (normalized === "not paid") return "Not Paid";
-		if (normalized === "credit / debit") return "Credit / Debit";
-		return "Not Captured";
+	const sortedHotels = useMemo(() => {
+		const hotels = Array.isArray(allHotels) ? allHotels : [];
+		return hotels
+			.map((h) => ({ _id: h?._id, hotelName: h?.hotelName || "" }))
+			.filter((h) => h._id && h.hotelName)
+			.sort((a, b) =>
+				a.hotelName.localeCompare(b.hotelName, undefined, {
+					sensitivity: "base",
+				})
+			);
+	}, [allHotels]);
+
+	const days = data?.days || [];
+	const summary = data?.summary || {};
+
+	// ✅ Sort room types in requested order (1..7, shared last, derived after non-derived in same rank)
+	const roomTypes = useMemo(() => {
+		const rawRoomTypes = data?.roomTypes || [];
+		const list = Array.isArray(rawRoomTypes) ? [...rawRoomTypes] : [];
+		list.sort((a, b) => {
+			const ra = roomSortRank(a);
+			const rb = roomSortRank(b);
+			if (ra !== rb) return ra - rb;
+
+			// keep derived after normal if same category
+			const da = !!a?.derived;
+			const db = !!b?.derived;
+			if (da !== db) return da ? 1 : -1;
+
+			return String(a?.label || "").localeCompare(
+				String(b?.label || ""),
+				undefined,
+				{
+					sensitivity: "base",
+				}
+			);
+		});
+		return list;
+	}, [data?.roomTypes]);
+
+	const derivedRoomTypes = useMemo(
+		() => roomTypes.filter((rt) => !!rt?.derived),
+		[roomTypes]
+	);
+
+	const derivedCount = derivedRoomTypes.length;
+	const derivedTooltip = useMemo(() => {
+		if (!derivedCount) return "";
+		return derivedRoomTypes.map((rt) => rt.label || rt.key).join(", ");
+	}, [derivedCount, derivedRoomTypes]);
+
+	const hijriAvailable = supportsHijri;
+
+	const capacityRoomNights =
+		Number(summary.capacityRoomNights) ||
+		Number(summary.availableRoomNights) ||
+		0;
+	const occupiedRoomNights =
+		Number(summary.occupiedRoomNights) || Number(summary.soldRoomNights) || 0;
+	const remainingRoomNights =
+		typeof summary.remainingRoomNights === "number"
+			? Number(summary.remainingRoomNights)
+			: Math.max(capacityRoomNights - occupiedRoomNights, 0);
+
+	const bookedRoomNights =
+		typeof summary.bookedRoomNights === "number"
+			? summary.bookedRoomNights
+			: null;
+
+	const totalRoomsAll =
+		Number(summary.totalRoomsAll) || Number(summary.totalRooms) || 0;
+	const totalPhysicalRooms = Number(summary.totalPhysicalRooms) || 0;
+
+	const totalAmount = Number(summary.totalAmount) || 0;
+	const paymentBreakdown = Array.isArray(summary.paymentBreakdown)
+		? summary.paymentBreakdown
+		: [];
+
+	const monthLabel = useMemo(() => {
+		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
+		return `Gregorian: ${monthValue.format("MMMM YYYY")}`;
+	}, [monthValue, rangeOverride]);
+
+	const firstWarning = summary?.warnings?.[0];
+
+	// ✅ Make columns dynamic width depending on how many room types exist
+	const colWidth = useMemo(() => {
+		const n = roomTypes.length;
+		if (n <= 3) return 200;
+		if (n <= 4) return 185;
+		if (n <= 6) return 160;
+		if (n <= 8) return 145;
+		if (n <= 10) return 130;
+		if (n <= 12) return 118;
+		if (n <= 15) return 110;
+		return 105;
+	}, [roomTypes.length]);
+
+	// Build occupancyByType in same sorted order, plus derived flag
+	const occupancyByTypeSorted = useMemo(() => {
+		const arr = Array.isArray(summary?.occupancyByType)
+			? summary.occupancyByType
+			: [];
+		const map = new Map(arr.map((x) => [x.key, x]));
+		const out = roomTypes
+			.map((rt) => {
+				const it = map.get(rt.key);
+				if (!it) return null;
+				return {
+					...it,
+					label: rt.label || it.label,
+					color: rt.color || it.color,
+					derived: !!rt.derived,
+				};
+			})
+			.filter(Boolean);
+
+		// In case backend returned a key not present in roomTypes (rare), append it.
+		arr.forEach((it) => {
+			if (!map.has(it.key)) return;
+			const exists = out.some((x) => x.key === it.key);
+			if (!exists) out.push(it);
+		});
+
+		return out;
+	}, [roomTypes, summary?.occupancyByType]);
+
+	const getPaymentStatusStyles = (status = "") => {
+		const s = String(status || "").toLowerCase();
+		if (s === "captured") return { backgroundColor: "var(--badge-bg-green)" };
+		if (s === "paid offline")
+			return {
+				backgroundColor: "var(--accent-color-dark-green)",
+				color: "#fff",
+			};
+		if (s === "not captured")
+			return { backgroundColor: "var(--background-accent-yellow)" };
+		if (s === "not paid")
+			return { backgroundColor: "var(--badge-bg-red)", color: "#fff" };
+		return { backgroundColor: "var(--background-light)" };
 	};
 
-	const reservationPaymentStatus = (reservation = {}) => {
-		const paymentRaw = String(reservation.payment || "").toLowerCase();
-		const onsitePaid =
-			Number(reservation?.payment_details?.onsite_paid_amount || 0) > 0;
-		const captured =
-			reservation?.payment_details?.captured === true ||
-			paymentRaw === "paid online";
-
-		if (captured) return "Captured";
-		if (paymentRaw === "paid offline" || onsitePaid) return "Paid Offline";
-		if (paymentRaw === "not paid") return "Not Paid";
-		return "Not Captured";
+	const getReservationStatusStyles = (status = "") => {
+		const s = String(status || "").toLowerCase();
+		if (s === "confirmed")
+			return { backgroundColor: "var(--background-light)" };
+		if (s === "inhouse")
+			return { backgroundColor: "var(--background-accent-yellow)" };
+		if (s === "checked_out" || s === "early_checked_out")
+			return { backgroundColor: "var(--badge-bg-green)" };
+		if (s === "no_show")
+			return { backgroundColor: "var(--accent-color-orange)" };
+		if (s === "cancelled")
+			return { backgroundColor: "var(--badge-bg-red)", color: "#fff" };
+		return {};
 	};
 
+	const paymentLabel = (status, label) => label || status || "-";
+
+	// ------------------ Load hotels ------------------
 	const loadHotels = useCallback(() => {
 		if (!user?._id || !token) return;
 		gettingHotelDetailsForAdmin(user._id, token)
@@ -230,18 +442,22 @@ const HotelsInventoryMap = () => {
 		loadHotels();
 	}, [loadHotels]);
 
+	// ------------------ Fetch occupancy ------------------
 	const fetchOccupancy = useCallback(async () => {
 		if (!user?._id || !token || !selectedHotelId) return;
+
 		setLoading(true);
 		setError("");
+
 		try {
 			const payload = await getHotelOccupancyCalendar(user._id, token, {
 				hotelId: selectedHotelId,
 				month: rangeOverride ? null : monthValue.format("YYYY-MM"),
-				start: rangeOverride?.start,
-				end: rangeOverride?.end,
+				start: rangeOverride?.start || null,
+				end: rangeOverride?.end || null,
 				includeCancelled,
 				display: displayMode,
+				paymentStatuses,
 			});
 			setData(payload);
 		} catch (err) {
@@ -258,6 +474,7 @@ const HotelsInventoryMap = () => {
 		selectedHotelId,
 		token,
 		user?._id,
+		paymentStatuses,
 	]);
 
 	useEffect(() => {
@@ -276,36 +493,36 @@ const HotelsInventoryMap = () => {
 
 		const hStart = moment().iYear(nextYear).iMonth(nextMonth).startOf("iMonth");
 		const hEnd = moment().iYear(nextYear).iMonth(nextMonth).endOf("iMonth");
+
 		setHijriMonth(nextMonth);
 		setHijriYear(nextYear);
+
 		setRangeOverride({
-			start: hStart.toISOString(),
-			end: hEnd.toISOString(),
+			start: dayjs(hStart.toDate()).format("YYYY-MM-DD"),
+			end: dayjs(hEnd.toDate()).format("YYYY-MM-DD"),
 			label: `${hijriMonthsEn[nextMonth]} ${nextYear}`,
 		});
+
 		setMonthValue(dayjs(hStart.toDate()));
 	};
 
-	const monthLabel = useMemo(() => {
-		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
-		return `Gregorian: ${monthValue.format("MMMM YYYY")}`;
-	}, [monthValue, rangeOverride]);
-	const firstWarning = summary?.warnings?.[0];
-
+	// ------------------ Warnings ------------------
 	const fetchWarnings = useCallback(async () => {
 		if (!user?._id || !token || !selectedHotelId) return;
+
 		setWarningsLoading(true);
 		try {
 			const payload = await getHotelOccupancyWarnings(user._id, token, {
 				hotelId: selectedHotelId,
 				month: rangeOverride ? null : monthValue.format("YYYY-MM"),
-				start: rangeOverride?.start,
-				end: rangeOverride?.end,
+				start: rangeOverride?.start || null,
+				end: rangeOverride?.end || null,
 				includeCancelled,
 				display: displayMode,
+				paymentStatuses,
 			});
 			setWarningsData(payload?.warnings || []);
-		} catch (err) {
+		} catch {
 			setWarningsData([]);
 		} finally {
 			setWarningsLoading(false);
@@ -318,20 +535,22 @@ const HotelsInventoryMap = () => {
 		selectedHotelId,
 		token,
 		user?._id,
+		paymentStatuses,
 	]);
 
 	useEffect(() => {
-		if (warningsModalOpen) {
-			fetchWarnings();
-		}
+		if (warningsModalOpen) fetchWarnings();
 	}, [fetchWarnings, warningsModalOpen]);
 
+	// ------------------ Day details ------------------
 	const fetchDayDetails = useCallback(
-		async ({ date, roomType }) => {
+		async ({ date, roomType } = {}) => {
 			if (!user?._id || !token || !selectedHotelId || !date) return;
+
 			setDayDetailsOpen(true);
 			setDayDetailsLoading(true);
 			setDayDetailsError("");
+
 			try {
 				const payload = await getHotelOccupancyDayReservations(
 					user._id,
@@ -339,25 +558,16 @@ const HotelsInventoryMap = () => {
 					{
 						hotelId: selectedHotelId,
 						date,
-						roomKey: roomType?.key,
-						roomLabel: roomType?.label,
+						roomKey: roomType?.key || null,
+						roomLabel: roomType?.label || null,
 						includeCancelled,
 						display: displayMode,
+						paymentStatuses,
 					}
 				);
 				setDayDetails(payload);
 			} catch (err) {
-				setDayDetails({
-					date,
-					roomKey: roomType?.key || null,
-					roomLabel: roomType?.label || roomType?.key || "All room types",
-					hotel: data?.hotel,
-					capacity: roomType?.totalRooms ?? totalRoomsAll ?? 0,
-					booked: 0,
-					overbooked: false,
-					overage: 0,
-					reservations: [],
-				});
+				setDayDetails(null);
 				setDayDetailsError(
 					err?.message || "Failed to load reservations for this day."
 				);
@@ -366,12 +576,11 @@ const HotelsInventoryMap = () => {
 			}
 		},
 		[
-			data?.hotel,
 			displayMode,
 			includeCancelled,
+			paymentStatuses,
 			selectedHotelId,
 			token,
-			totalRoomsAll,
 			user?._id,
 		]
 	);
@@ -392,12 +601,18 @@ const HotelsInventoryMap = () => {
 					return merged;
 				});
 			}
+
 			if (dayDetailsOpen && dayDetails?.date) {
 				fetchDayDetails({
 					date: dayDetails.date,
-					roomType: { key: dayDetails.roomKey, label: dayDetails.roomLabel },
+					roomType: dayDetails.roomKey
+						? { key: dayDetails.roomKey, label: dayDetails.roomLabel }
+						: null,
 				});
 			}
+
+			fetchOccupancy();
+			if (warningsModalOpen) fetchWarnings();
 		},
 		[
 			dayDetails?.date,
@@ -405,12 +620,28 @@ const HotelsInventoryMap = () => {
 			dayDetails?.roomLabel,
 			dayDetailsOpen,
 			fetchDayDetails,
+			fetchOccupancy,
+			fetchWarnings,
+			warningsModalOpen,
 		]
 	);
+
+	// ------------------ Payment filter buttons ------------------
+	const togglePaymentStatus = (status) => {
+		setPaymentStatuses((prev) => {
+			const set = new Set(prev || []);
+			if (set.has(status)) set.delete(status);
+			else set.add(status);
+			return PAYMENT_STATUS_OPTIONS.filter((s) => set.has(s));
+		});
+	};
+
+	const paymentAllActive = paymentStatuses.length === 0;
 
 	return (
 		<Wrapper>
 			<ModalZFix />
+
 			<ControlBar>
 				<div className='control'>
 					<label>Hotel</label>
@@ -422,9 +653,9 @@ const HotelsInventoryMap = () => {
 						placeholder='Select a hotel'
 						optionFilterProp='children'
 						filterOption={(input, option) =>
-							(option?.children || "")
+							String(option?.children || "")
 								.toLowerCase()
-								.includes(input.toLowerCase())
+								.includes(String(input || "").toLowerCase())
 						}
 					>
 						{sortedHotels.map((h) => (
@@ -458,39 +689,43 @@ const HotelsInventoryMap = () => {
 
 				<div className='control month-picker'>
 					<label>{calendarType === "hijri" ? "Hijri Month" : "Month"}</label>
+
 					{calendarType === "hijri" && moment.fn?.iMonth ? (
 						<div className='hijri-controls'>
-							<Select
-								value={hijriMonth}
-								onChange={(v) => onHijriChange(Number(v), hijriYear)}
-								style={{ minWidth: 150 }}
-							>
-								{hijriMonthsEn.map((m, idx) => (
-									<Option key={m} value={idx}>
-										{m}
-									</Option>
-								))}
-							</Select>
-							<Select
-								value={hijriYear}
-								onChange={(v) => onHijriChange(hijriMonth, Number(v))}
-								style={{ width: 110 }}
-							>
-								{Array.from({ length: 6 }).map((_, idx) => {
-									const base = moment().iYear();
-									const y = base - 1 + idx;
-									return (
-										<Option key={y} value={y}>
-											{y}
+							<div className='hijri-row'>
+								<Select
+									value={hijriMonth}
+									onChange={(v) => onHijriChange(Number(v), hijriYear)}
+									style={{ minWidth: 170 }}
+								>
+									{hijriMonthsEn.map((m, idx) => (
+										<Option key={m} value={idx}>
+											{m}
 										</Option>
-									);
-								})}
-							</Select>
+									))}
+								</Select>
+
+								<Select
+									value={hijriYear}
+									onChange={(v) => onHijriChange(hijriMonth, Number(v))}
+									style={{ width: 120 }}
+								>
+									{Array.from({ length: 6 }).map((_, idx) => {
+										const base = moment().iYear();
+										const y = base - 1 + idx;
+										return (
+											<Option key={y} value={y}>
+												{y}
+											</Option>
+										);
+									})}
+								</Select>
+							</div>
+
 							{rangeOverride?.start && (
-								<span className='muted'>
-									{dayjs(rangeOverride.start).format("YYYY-MM-DD")} -{" "}
-									{dayjs(rangeOverride.end).format("YYYY-MM-DD")}
-								</span>
+								<div className='muted'>
+									{rangeOverride.start} - {rangeOverride.end}
+								</div>
 							)}
 						</div>
 					) : (
@@ -505,13 +740,13 @@ const HotelsInventoryMap = () => {
 							/>
 							<Button
 								size='small'
-								onClick={() => setMonthValue(monthValue.subtract(1, "month"))}
+								onClick={() => setMonthValue((m) => m.subtract(1, "month"))}
 							>
 								Prev
 							</Button>
 							<Button
 								size='small'
-								onClick={() => setMonthValue(monthValue.add(1, "month"))}
+								onClick={() => setMonthValue((m) => m.add(1, "month"))}
 							>
 								Next
 							</Button>
@@ -524,7 +759,7 @@ const HotelsInventoryMap = () => {
 					<Select
 						value={displayMode}
 						onChange={(v) => setDisplayMode(v)}
-						style={{ minWidth: 160 }}
+						style={{ minWidth: 180 }}
 					>
 						<Option value='displayName'>Display name (default)</Option>
 						<Option value='roomType'>Room type (grouped)</Option>
@@ -540,6 +775,40 @@ const HotelsInventoryMap = () => {
 					<span>Include cancelled / no-show</span>
 				</SwitchRow>
 			</ControlBar>
+
+			{/* Payment filter row */}
+			<PaymentStatusBar>
+				<div className='label'>Payment status</div>
+
+				<div className='buttons'>
+					<StatusButton
+						size='small'
+						onClick={() => setPaymentStatuses([])}
+						isActive={paymentAllActive}
+					>
+						All
+					</StatusButton>
+
+					{PAYMENT_STATUS_OPTIONS.map((status) => (
+						<StatusButton
+							key={status}
+							size='small'
+							onClick={() => togglePaymentStatus(status)}
+							isActive={paymentStatuses.includes(status)}
+						>
+							{status}
+						</StatusButton>
+					))}
+
+					{!paymentAllActive && (
+						<Button size='small' onClick={() => setPaymentStatuses([])}>
+							Clear
+						</Button>
+					)}
+				</div>
+
+				<div className='hint muted'>Tip: you can select multiple statuses.</div>
+			</PaymentStatusBar>
 
 			{error && (
 				<Alert
@@ -562,27 +831,40 @@ const HotelsInventoryMap = () => {
 			) : (
 				<>
 					<SummaryGrid>
-						<Card size='small' title='Average Occupancy'>
+						<Card size='small' title='Average Occupancy (capped)'>
 							<Progress
-								percent={Math.round((summary.averageOccupancyRate || 0) * 100)}
+								percent={Math.round(
+									(Number(summary.averageOccupancyRate || 0) || 0) * 100
+								)}
 								status='active'
 								strokeColor='#007f6b'
 							/>
+							<div className='muted' style={{ marginTop: 6 }}>
+								Occupied = min(booked, capacity) per day / room.
+							</div>
 						</Card>
+
 						<Card size='small' title='Room Nights'>
 							<div className='metric'>
-								<span>Sold</span>
-								<b>{formatInt(summary.soldRoomNights || 0)}</b>
+								<span>Occupied</span>
+								<b>{formatInt(occupiedRoomNights)}</b>
 							</div>
 							<div className='metric'>
-								<span>Available</span>
-								<b>{formatInt(summary.availableRoomNights || 0)}</b>
+								<span>Remaining</span>
+								<b>{formatInt(remainingRoomNights)}</b>
 							</div>
 							<div className='metric muted'>
 								<span>Capacity</span>
 								<b>{formatInt(capacityRoomNights)}</b>
 							</div>
+							{typeof bookedRoomNights === "number" && (
+								<div className='metric muted'>
+									<span>Booked (raw)</span>
+									<b>{formatInt(bookedRoomNights)}</b>
+								</div>
+							)}
 						</Card>
+
 						<Card size='small' title='Room Counts'>
 							<div className='metric'>
 								<span>Inventory units</span>
@@ -593,20 +875,56 @@ const HotelsInventoryMap = () => {
 								<b>{formatInt(totalPhysicalRooms)}</b>
 							</div>
 						</Card>
+
+						<Card size='small' title='Inventory mapping'>
+							{derivedCount ? (
+								<>
+									<Tag color='orange'>Unmapped types: {derivedCount}</Tag>
+									<div className='muted' style={{ marginTop: 6 }}>
+										These types exist in reservations but not HotelDetails
+										inventory.
+									</div>
+									<Tooltip title={derivedTooltip}>
+										<div className='muted' style={{ marginTop: 6 }}>
+											View list
+										</div>
+									</Tooltip>
+								</>
+							) : (
+								<>
+									<Tag color='green'>All mapped</Tag>
+									<div className='muted' style={{ marginTop: 6 }}>
+										All reservation room labels matched HotelDetails inventory.
+									</div>
+								</>
+							)}
+						</Card>
+
 						<Card size='small' title='Total Amount (SAR)'>
 							<div className='metric'>
 								<span>Gross</span>
 								<b>{formatCurrency(totalAmount)}</b>
 							</div>
 						</Card>
+
 						<Card size='small' title='Peak Day'>
 							<div className='metric'>
 								<span>{summary?.peakDay?.date || "n/a"}</span>
 								<b>
-									{Math.round((summary?.peakDay?.occupancyRate || 0) * 100)}%
+									{Math.round(
+										(Number(summary?.peakDay?.occupancyRate || 0) || 0) * 100
+									)}
+									%
 								</b>
 							</div>
+							{typeof summary?.peakDay?.booked === "number" && (
+								<div className='muted' style={{ marginTop: 6 }}>
+									Booked {formatInt(summary.peakDay.booked)} / Capacity{" "}
+									{formatInt(summary.peakDay.capacity || 0)}
+								</div>
+							)}
 						</Card>
+
 						<Card
 							size='small'
 							title='Warnings'
@@ -618,7 +936,7 @@ const HotelsInventoryMap = () => {
 									<Tag color='red'>Overbooked</Tag> {firstWarning.date} -{" "}
 									{firstWarning.roomType} ({firstWarning.booked}/
 									{firstWarning.capacity})
-									{summary.warnings.length > 1 && (
+									{summary.warnings?.length > 1 && (
 										<span className='muted'>
 											{" "}
 											+{summary.warnings.length - 1} more
@@ -631,22 +949,53 @@ const HotelsInventoryMap = () => {
 						</Card>
 					</SummaryGrid>
 
-					<Card size='small' title='Occupancy by room type'>
+					<Card
+						size='small'
+						title={
+							<TitleWithFlag>
+								<span>Occupancy by room type</span>
+								{derivedCount ? (
+									<Tooltip title={derivedTooltip}>
+										<span className='flag'>Unmapped: {derivedCount}</span>
+									</Tooltip>
+								) : null}
+							</TitleWithFlag>
+						}
+					>
 						<TypeGrid>
-							{(summary.occupancyByType || []).map((item) => (
+							{occupancyByTypeSorted.map((item) => (
 								<div key={item.key} className='type-card'>
 									<div className='type-title'>
 										<Tooltip title={item.label}>
-											{shortLabel(item.label)}
+											<span className='type-main'>
+												{roomHeaderMain({ label: item.label })}
+											</span>
 										</Tooltip>
+										{item.derived ? (
+											<Tooltip title='This column is derived from reservations (not in HotelDetails inventory).'>
+												<span className='derived-pill'>Derived</span>
+											</Tooltip>
+										) : null}
 									</div>
+
+									<div className='type-sub muted'>
+										{roomHeaderSub({ label: item.label })}
+									</div>
+
 									<Progress
-										percent={Math.round((item.occupancyRate || 0) * 100)}
+										percent={Math.round(
+											(Number(item.occupancyRate || 0) || 0) * 100
+										)}
 										strokeColor={item.color || "#008c73"}
 										size='small'
 									/>
+
 									<div className='type-meta muted'>
-										{item.occupiedNights}/{item.capacityNights} nights used
+										{formatInt(item.occupiedNights || 0)}/
+										{formatInt(item.capacityNights || 0)} occupied nights
+										{typeof item.bookedNights === "number" && (
+											<> | booked {formatInt(item.bookedNights)}</>
+										)}
 									</div>
 								</div>
 							))}
@@ -660,7 +1009,15 @@ const HotelsInventoryMap = () => {
 								<div className='card-title-text'>
 									Day-over-day occupancy | {data?.hotel?.hotelName || ""} |{" "}
 									{monthLabel}
+									{derivedCount ? (
+										<Tooltip title={derivedTooltip}>
+											<span className='inline-flag'>
+												Unmapped: {derivedCount}
+											</span>
+										</Tooltip>
+									) : null}
 								</div>
+
 								<Legend>
 									<div className='legend-swatch'>
 										<span className='swatch low' /> <span>0-30%</span>
@@ -676,128 +1033,279 @@ const HotelsInventoryMap = () => {
 						}
 						extra={
 							<span className='muted'>
-								Cells show occupied / total & available; deeper green = fuller.
+								Cells show booked/capacity, availability, and occupancy%.
 							</span>
 						}
 					>
-						<TableWrapper>
+						<TableWrapper
+							style={{
+								"--col-w": `${colWidth}px`,
+								"--date-col-w": "130px",
+								"--total-col-w": "120px",
+							}}
+						>
 							<table>
 								<thead>
 									<tr>
-										<th style={{ width: 110 }}>Date</th>
-										{roomTypes.map((rt) => (
-											<th key={rt.key}>
-												<Tooltip title={rt.label}>
-													<span className='truncate'>
-														{shortLabel(rt.label)}
-													</span>
-												</Tooltip>
-											</th>
-										))}
-										<th>Total</th>
+										<th className='sticky-left date-th'>
+											Date
+										</th>
+
+										{roomTypes.map((rt) => {
+											const main = roomHeaderMain(rt);
+											const sub = roomHeaderSub(rt);
+											return (
+												<th key={rt.key} className='room-th'>
+													<div className='th-inner'>
+														<Tooltip title={rt.label}>
+															<div className='th-main'>{main}</div>
+														</Tooltip>
+														{sub ? <div className='th-sub'>{sub}</div> : null}
+														{rt.derived ? (
+															<Tooltip title='Derived from reservations (not found in HotelDetails inventory).'>
+																<span className='derived-flag'>Derived</span>
+															</Tooltip>
+														) : null}
+													</div>
+												</th>
+											);
+										})}
+
+										<th className='sticky-right total-th'>Total</th>
 									</tr>
 								</thead>
+
 								<tbody>
-									{days.map((day) => (
-										<tr key={day.date}>
-											<td className='sticky'>
-												{hijriAvailable && (
-													<div className='hijri-date'>
-														{moment(day.date)
-															.locale("en")
-															.format("iD iMMMM iYYYY")}
+									{days.map((day) => {
+										const totals = day?.totals || {};
+										const totalCapacity = Number(totals.capacity ?? 0) || 0;
+										const totalBooked = Number(totals.booked ?? 0) || 0;
+										const totalOccupied = Number(totals.occupied ?? 0) || 0;
+										const totalAvail = Number(totals.available ?? 0) || 0;
+
+										const totalOccRate =
+											typeof totals.occupancyRate === "number"
+												? Number(totals.occupancyRate)
+												: totalCapacity
+												  ? totalOccupied / totalCapacity
+												  : 0;
+
+										const totalBg = heatColor(totalOccRate);
+										const totalColors = getReadableCellColors(totalOccRate);
+
+										return (
+											<tr key={day.date}>
+												<td className='sticky-left date-td'>
+													{hijriAvailable && (
+														<div className='hijri-date'>
+															{moment(day.date)
+																.locale("en")
+																.format("iD iMMMM iYYYY")}
+														</div>
+													)}
+													<div className='greg-date'>{day.date}</div>
+												</td>
+
+												{roomTypes.map((rt) => {
+													const cell = day?.rooms?.[rt.key] || {};
+													const capacity =
+														Number(cell.capacity ?? rt.totalRooms ?? 0) || 0;
+													const booked = Number(cell.booked || 0) || 0;
+
+													const occupied =
+														typeof cell.occupied === "number"
+															? Number(cell.occupied)
+															: Math.min(booked, capacity);
+
+													const available =
+														typeof cell.available === "number"
+															? Number(cell.available)
+															: Math.max(capacity - occupied, 0);
+
+													const occRate =
+														typeof cell.occupancyRate === "number"
+															? Number(cell.occupancyRate)
+															: capacity
+															  ? occupied / capacity
+															  : 0;
+
+													const isOver =
+														Boolean(cell.overbooked) || booked > capacity;
+													const overage =
+														typeof cell.overage === "number"
+															? Number(cell.overage)
+															: Math.max(booked - capacity, 0);
+
+													const bg = heatColor(occRate);
+													const colors = getReadableCellColors(occRate);
+
+													return (
+														<td
+															key={`${day.date}-${rt.key}`}
+															className='cell clickable'
+															style={{
+																backgroundColor: bg,
+																color: colors.text,
+															}}
+															onClick={() =>
+																fetchDayDetails({
+																	date: day.date,
+																	roomType: rt,
+																})
+															}
+														>
+															<div className='cell-top'>
+																<span className='numbers'>
+																	{formatInt(booked)}/{formatInt(capacity)}
+																</span>
+																{isOver ? (
+																	<span className='over-pill'>
+																		+{formatInt(overage)}
+																	</span>
+																) : null}
+															</div>
+
+															<div className='cell-bottom'>
+																<span
+																	className='muted'
+																	style={{ color: colors.muted }}
+																>
+																	Avail {formatInt(available)}
+																</span>
+
+																<span className='percent'>
+																	{Math.round(occRate * 100)}%
+																</span>
+															</div>
+														</td>
+													);
+												})}
+
+												<td
+													className='sticky-right cell total clickable'
+													style={{
+														backgroundColor: totalBg,
+														color: totalColors.text,
+													}}
+													onClick={() => fetchDayDetails({ date: day.date })}
+												>
+													<div className='cell-top'>
+														<span className='numbers'>
+															{formatInt(totalBooked)}/
+															{formatInt(totalCapacity)}
+														</span>
 													</div>
-												)}
-												<div>{day.date}</div>
+													<div className='cell-bottom'>
+														<span
+															className='muted'
+															style={{ color: totalColors.muted }}
+														>
+															Avail {formatInt(totalAvail)}
+														</span>
+														<span className='percent'>
+															{Math.round(totalOccRate * 100)}%
+														</span>
+													</div>
+												</td>
+											</tr>
+										);
+									})}
+
+									{/* ✅ Month total row */}
+									{data?.summary?.occupancyByType?.length ? (
+										<tr className='month-total-row'>
+											<td className='sticky-left date-td month-total-left'>
+												<div className='month-total-title'>Month total</div>
+												<div className='muted'>{monthLabel}</div>
 											</td>
+
 											{roomTypes.map((rt) => {
-												const cell = day.rooms?.[rt.key] || {
-													occupied: 0,
-													available: rt.totalRooms,
-													occupancyRate: 0,
-													booked: 0,
-												};
-												const bookedDisplay =
-													cell.booked ?? cell.occupied ?? 0;
-												const availDisplay = Math.max(
-													rt.totalRooms - (cell.booked ?? 0),
-													0
-												);
-												const bg = heatColor(cell.occupancyRate);
-												const textColor =
-													cell.occupancyRate > 0.7 ? "#ffffff" : "#2a2a2a";
-												const subColor =
-													cell.occupancyRate > 0.7 ? "#e8f5f1" : "#777";
+												const it =
+													occupancyByTypeSorted.find((x) => x.key === rt.key) ||
+													{};
+												const capN = Number(it.capacityNights || 0);
+												const bookedN = Number(it.bookedNights || 0);
+												const occN = Number(it.occupiedNights || 0);
+
+												const occRate =
+													typeof it.occupancyRate === "number"
+														? Number(it.occupancyRate)
+														: capN
+														  ? occN / capN
+														  : 0;
+
+												const availN = Math.max(capN - occN, 0);
+												const bg = heatColor(occRate);
+												const colors = getReadableCellColors(occRate);
+
+												const over = bookedN > capN && capN > 0;
+												const overBy = over ? Math.max(bookedN - capN, 0) : 0;
+
 												return (
 													<td
-														key={`${day.date}-${rt.key}`}
-														style={{ backgroundColor: bg }}
-														className='clickable-cell'
-														onClick={() =>
-															fetchDayDetails({ date: day.date, roomType: rt })
-														}
+														key={`month-total-${rt.key}`}
+														className='cell month-total-cell'
+														style={{ backgroundColor: bg, color: colors.text }}
 													>
 														<div className='cell-top'>
-															<span>
-																{bookedDisplay}/{rt.totalRooms}
+															<span className='numbers'>
+																{formatInt(bookedN)}/{formatInt(capN)}
 															</span>
-															{cell.overbooked && (
-																<Tag color='red' size='small'>
-																	Over
-																</Tag>
-															)}
+															{over ? (
+																<span className='over-pill'>
+																	+{formatInt(overBy)}
+																</span>
+															) : null}
 														</div>
-														<div
-															className='cell-bottom'
-															style={{ color: textColor }}
-														>
+														<div className='cell-bottom'>
 															<span
 																className='muted'
-																style={{ color: subColor }}
+																style={{ color: colors.muted }}
 															>
-																Avail {availDisplay}
+																Avail {formatInt(availN)}
 															</span>
-															<Tooltip
-																title={`${Math.round(
-																	(cell.occupancyRate || 0) * 100
-																)}% booked`}
-															>
-																<span className='percent'>
-																	{Math.round((cell.occupancyRate || 0) * 100)}%
-																</span>
-															</Tooltip>
+															<span className='percent'>
+																{Math.round(occRate * 100)}%
+															</span>
 														</div>
 													</td>
 												);
 											})}
-											<td
-												className='total-col clickable-cell'
-												onClick={() => fetchDayDetails({ date: day.date })}
-											>
-												<div className='cell-top'>
-													{roomTypes.reduce(
-														(sum, rt) =>
-															sum + (day.rooms?.[rt.key]?.booked ?? 0),
-														0
-													)}
-													/{summary.totalRooms || 0}
-												</div>
-												<div className='cell-bottom muted'>
-													Avail{" "}
-													{Math.max(
-														(summary.totalRooms || 0) -
-															roomTypes.reduce(
-																(sum, rt) =>
-																	sum +
-																	(day.rooms?.[rt.key]?.booked ?? 0),
-																0
-															),
-														0
-													)}
-												</div>
-											</td>
+
+											{(() => {
+												const cap = Number(summary.capacityRoomNights || 0);
+												const booked = Number(summary.bookedRoomNights || 0);
+												const occ = Number(summary.occupiedRoomNights || 0);
+												const occRate = cap ? occ / cap : 0;
+												const bg = heatColor(occRate);
+												const colors = getReadableCellColors(occRate);
+
+												return (
+													<td
+														className='sticky-right cell total month-total-cell'
+														style={{ backgroundColor: bg, color: colors.text }}
+													>
+														<div className='cell-top'>
+															<span className='numbers'>
+																{formatInt(booked)}/{formatInt(cap)}
+															</span>
+														</div>
+														<div className='cell-bottom'>
+															<span
+																className='muted'
+																style={{ color: colors.muted }}
+															>
+																Avail {formatInt(Math.max(cap - occ, 0))}
+															</span>
+															<span className='percent'>
+																{Math.round(occRate * 100)}%
+															</span>
+														</div>
+													</td>
+												);
+											})()}
 										</tr>
-									))}
+									) : null}
 								</tbody>
 							</table>
 						</TableWrapper>
@@ -839,6 +1347,8 @@ const HotelsInventoryMap = () => {
 					</Card>
 				</>
 			)}
+
+			{/* Day details modal */}
 			<Modal
 				title={`Reservations on ${dayDetails?.date || "selected day"}${
 					dayDetails?.roomLabel ? ` | ${dayDetails.roomLabel}` : ""
@@ -871,6 +1381,7 @@ const HotelsInventoryMap = () => {
 								style={{ marginBottom: 8 }}
 							/>
 						)}
+
 						{dayDetails && (
 							<DetailsSummary>
 								<div>
@@ -881,16 +1392,19 @@ const HotelsInventoryMap = () => {
 											"Selected hotel"}
 									</div>
 								</div>
+
 								<div>
 									<div className='label'>Date</div>
 									<div className='value'>{dayDetails?.date || "n/a"}</div>
 								</div>
+
 								<div>
 									<div className='label'>Room</div>
 									<div className='value'>
 										{dayDetails?.roomLabel || "All room types"}
 									</div>
 								</div>
+
 								<div>
 									<div className='label'>Booked / Capacity</div>
 									<div className='value'>
@@ -905,6 +1419,7 @@ const HotelsInventoryMap = () => {
 								</div>
 							</DetailsSummary>
 						)}
+
 						{dayDetails?.reservations?.length ? (
 							<DetailTableWrapper>
 								<DetailTable>
@@ -937,19 +1452,23 @@ const HotelsInventoryMap = () => {
 												.map((rb) => formatInt(rb?.count || 0))
 												.join(", ");
 
+											const paymentStatus =
+												res?.payment_status || "Not Captured";
+											const paymentHint = res?.payment_status_hint || "";
+
 											return (
 												<tr
-													key={
-														res?._id ||
-														res?.confirmation_number ||
-														`${res?.date || ""}-${idx}`
-													}
+													key={res?._id || res?.confirmation_number || `${idx}`}
 												>
 													<td>{idx + 1}</td>
 													<td>{res?.confirmation_number || "N/A"}</td>
 													<td>{res?.customer_details?.name || "N/A"}</td>
 													<td>{res?.customer_details?.phone || "N/A"}</td>
-													<td style={getReservationStatusStyles(res?.reservation_status)}>
+													<td
+														style={getReservationStatusStyles(
+															res?.reservation_status
+														)}
+													>
 														{res?.reservation_status || "N/A"}
 													</td>
 													<td>
@@ -965,8 +1484,14 @@ const HotelsInventoryMap = () => {
 													<td>{roomLabelString || "-"}</td>
 													<td>{roomCountString || "-"}</td>
 													<td>{res?.booking_source || "-"}</td>
-													<td style={getPaymentStatusStyles(reservationPaymentStatus(res))}>
-														{reservationPaymentStatus(res)}
+													<td style={getPaymentStatusStyles(paymentStatus)}>
+														{paymentHint ? (
+															<Tooltip title={paymentHint}>
+																<span>{paymentStatus}</span>
+															</Tooltip>
+														) : (
+															paymentStatus
+														)}
 													</td>
 													<td>{formatCurrency(res?.total_amount || 0)}</td>
 													<td>
@@ -992,12 +1517,15 @@ const HotelsInventoryMap = () => {
 					</>
 				)}
 			</Modal>
+
 			<WarningsModal
 				open={warningsModalOpen}
 				onClose={() => setWarningsModalOpen(false)}
 				warnings={warningsData.length ? warningsData : summary?.warnings || []}
 				loading={warningsLoading}
 			/>
+
+			{/* Reservation details modal */}
 			<Modal
 				open={detailsModalOpen}
 				onCancel={() => {
@@ -1050,6 +1578,8 @@ const HotelsInventoryMap = () => {
 
 export default HotelsInventoryMap;
 
+/* ------------------ styles ------------------ */
+
 const Wrapper = styled.div`
 	display: flex;
 	flex-direction: column;
@@ -1087,7 +1617,7 @@ const ControlBar = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 	gap: 12px;
-	align-items: center;
+	align-items: end;
 
 	.control {
 		display: flex;
@@ -1095,13 +1625,64 @@ const ControlBar = styled.div`
 		gap: 6px;
 	}
 
-	.month-picker .month-actions,
-	.hijri-controls {
+	.month-picker .month-actions {
 		display: flex;
 		gap: 6px;
 		flex-wrap: wrap;
 		align-items: center;
 	}
+
+	.hijri-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.hijri-row {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+		flex-wrap: nowrap;
+	}
+
+	@media (max-width: 768px) {
+		.hijri-row {
+			flex-wrap: wrap;
+		}
+	}
+`;
+
+const PaymentStatusBar = styled.div`
+	border: 1px solid #f0f0f0;
+	border-radius: 10px;
+	padding: 10px 12px;
+	background: #fcfcfc;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	.label {
+		font-weight: 600;
+		color: #333;
+	}
+
+	.buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+	}
+
+	.hint {
+		margin-top: 2px;
+	}
+`;
+
+const StatusButton = styled(Button)`
+	font-size: 12px;
+	border-color: ${(p) => (p.isActive ? "#0f7e6b" : "initial")};
+	background-color: ${(p) => (p.isActive ? "#dff3ef" : "initial")};
+	color: ${(p) => (p.isActive ? "#0a5a4c" : "initial")};
 `;
 
 const SwitchRow = styled.div`
@@ -1117,6 +1698,21 @@ const SummaryGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 	gap: 10px;
+`;
+
+const TitleWithFlag = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 10px;
+
+	.flag {
+		font-size: 11px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: #fff7e6;
+		border: 1px solid #ffd591;
+		color: #ad6800;
+	}
 `;
 
 const Legend = styled.div`
@@ -1159,89 +1755,198 @@ const HeaderRow = styled.div`
 
 	.card-title-text {
 		font-weight: 600;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	.inline-flag {
+		font-size: 11px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: #fff7e6;
+		border: 1px solid #ffd591;
+		color: #ad6800;
 	}
 `;
 
 const TableWrapper = styled.div`
-	overflow-x: auto;
+	width: 100%;
+	overflow: auto;
+	/* max-height: 760px; */
+	border: 1px solid #f0f0f0;
+	border-radius: 10px;
+
+	/* dynamic column width */
+	--col-w: 145px;
+	--date-col-w: 130px;
+	--total-col-w: 120px;
 
 	table {
 		width: 100%;
-		table-layout: fixed;
-		border-collapse: collapse;
+		min-width: 100%;
+		border-collapse: separate;
+		border-spacing: 0;
 		font-size: 12px;
+		table-layout: fixed;
 	}
 
 	th,
 	td {
-		border: 1px solid #f0f0f0;
-		padding: 6px 4px;
+		border-right: 1px solid #f0f0f0;
+		border-bottom: 1px solid #f0f0f0;
+		padding: 8px 8px;
 		text-align: center;
-		min-width: 90px;
-		max-width: 140px;
-		word-break: break-word;
-		white-space: normal;
+		min-width: var(--col-w);
+		width: var(--col-w);
+		max-width: var(--col-w);
+		font-variant-numeric: tabular-nums;
 	}
 
-	th {
+	thead th {
+		position: sticky;
+		top: 0;
 		background: #f6f8f8;
-		font-weight: 600;
+		z-index: 5;
 	}
 
-	.truncate {
-		display: inline-block;
-		max-width: 120px;
+	.date-th,
+	.date-td {
+		min-width: var(--date-col-w);
+		width: var(--date-col-w);
+		max-width: var(--date-col-w);
+		text-align: left;
+		background: #fff;
+	}
+
+	.sticky-left {
+		position: sticky;
+		left: 0;
+		z-index: 6;
+		box-shadow: 6px 0 12px rgba(0, 0, 0, 0.03);
+	}
+
+	.total-th,
+	.total {
+		min-width: var(--total-col-w);
+		width: var(--total-col-w);
+		max-width: var(--total-col-w);
+		font-weight: 700;
+	}
+
+	.sticky-right {
+		position: sticky;
+		right: 0;
+		z-index: 6;
+		box-shadow: -6px 0 12px rgba(0, 0, 0, 0.03);
+	}
+
+	.room-th .th-inner {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		align-items: center;
+		justify-content: center;
+		line-height: 1.15;
+	}
+
+	.th-main {
+		font-weight: 700;
+		max-width: calc(var(--col-w) - 16px);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
-	.sticky {
-		position: sticky;
-		left: 0;
-		background: #fff;
-		z-index: 1;
-		min-width: 110px;
+	.th-sub {
+		font-size: 11px;
+		color: #666;
+		max-width: calc(var(--col-w) - 16px);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
-	.cell-top {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
+	.derived-flag {
+		font-size: 10px;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: #fff7e6;
+		border: 1px solid #ffd591;
+		color: #ad6800;
+	}
+
+	.hijri-date {
+		font-weight: 800;
+		color: #234f45;
+	}
+
+	.greg-date {
+		color: #444;
 		font-weight: 600;
+		margin-top: 2px;
 	}
 
-	.cell-bottom {
-		display: flex;
-		justify-content: space-between;
-		margin-top: 4px;
+	.cell {
+		cursor: default;
 	}
 
-	.percent {
-		font-weight: 600;
-	}
-
-	.total-col {
-		background: #eef3f2;
-		font-weight: 600;
-	}
-
-	.clickable-cell {
+	.clickable {
 		cursor: pointer;
 		transition:
 			box-shadow 0.12s ease,
 			transform 0.12s ease;
 	}
 
-	.clickable-cell:hover {
+	.clickable:hover {
 		box-shadow: inset 0 0 0 1px #0f7e6b;
 		transform: translateY(-1px);
 	}
 
-	.hijri-date {
+	.cell-top {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		font-weight: 800;
+	}
+
+	.numbers {
+		font-size: 13px;
+	}
+
+	.over-pill {
+		font-size: 10px;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: rgba(255, 77, 79, 0.14);
+		border: 1px solid rgba(255, 77, 79, 0.35);
+		color: rgba(255, 77, 79, 1);
+		font-weight: 800;
+	}
+
+	.cell-bottom {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 8px;
+		gap: 10px;
+	}
+
+	.percent {
+		font-weight: 900;
+	}
+
+	.month-total-row td {
 		font-weight: 700;
-		color: #234f45;
+	}
+
+	.month-total-left {
+		background: #fff;
+	}
+
+	.month-total-title {
+		font-weight: 900;
 	}
 `;
 
@@ -1277,19 +1982,42 @@ const BreakdownTable = styled.div`
 
 const TypeGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 	gap: 12px;
+	width: 100%;
 
 	.type-card {
-		padding: 8px 10px;
+		padding: 10px 12px;
 		border: 1px solid #f0f0f0;
-		border-radius: 8px;
+		border-radius: 10px;
 		background: #fcfcfc;
+		min-width: 0;
 	}
 
 	.type-title {
-		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
 		margin-bottom: 4px;
+	}
+
+	.type-main {
+		font-weight: 800;
+	}
+
+	.type-sub {
+		margin-bottom: 8px;
+	}
+
+	.derived-pill {
+		font-size: 10px;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: #fff7e6;
+		border: 1px solid #ffd591;
+		color: #ad6800;
+		white-space: nowrap;
 	}
 
 	.type-meta {

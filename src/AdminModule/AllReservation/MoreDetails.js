@@ -24,11 +24,25 @@ import { sendReservationConfirmationSMS } from "../apiAdmin";
 
 const ModalZFix = createGlobalStyle`
 	.edit-reservation-modal .ant-modal,
-	.edit-reservation-modal .ant-modal-wrap {
-		z-index: 6001 !important;
+	.status-update-modal .ant-modal,
+	.relocate-reservation-modal .ant-modal,
+	.receipt-modal .ant-modal,
+	.edit-reservation-modal .ant-modal-wrap,
+	.status-update-modal .ant-modal-wrap,
+	.relocate-reservation-modal .ant-modal-wrap,
+	.receipt-modal .ant-modal-wrap {
+		z-index: 12050 !important;
 	}
-	.edit-reservation-modal .ant-modal-mask {
-		z-index: 6000 !important;
+	.edit-reservation-modal .ant-modal-mask,
+	.status-update-modal .ant-modal-mask,
+	.relocate-reservation-modal .ant-modal-mask,
+	.receipt-modal .ant-modal-mask {
+		z-index: 12049 !important;
+	}
+
+	/* Ensure selects inside status modal render above everything */
+	.status-update-modal .ant-select-dropdown {
+		z-index: 13060 !important;
 	}
 `;
 
@@ -129,7 +143,7 @@ const MoreDetails = ({
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
-	const [sendEmail, setSendEmail] = useState(true);
+	const [sendEmail, setSendEmail] = useState(false);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -155,6 +169,12 @@ const MoreDetails = ({
 	const customerNickName = reservation?.customer_details?.nickName || "";
 	const secondaryConfirmation =
 		reservation?.customer_details?.confirmation_number2 || "";
+
+	useEffect(() => {
+		if (isModalVisible) {
+			setSendEmail(false);
+		}
+	}, [isModalVisible]);
 
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
@@ -544,6 +564,11 @@ const MoreDetails = ({
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
+						zIndex={12020}
+						styles={{ mask: { zIndex: 12019 } }}
+						getContainer={() => document.body}
+						wrapClassName='status-update-modal'
+						rootClassName='status-update-modal'
 					>
 						<Select
 							defaultValue={reservation && reservation.reservation_status}
@@ -551,6 +576,13 @@ const MoreDetails = ({
 								width: "100%",
 							}}
 							onChange={(value) => setSelectedStatus(value)}
+							dropdownStyle={{ zIndex: 13050 }}
+							getPopupContainer={(trigger) =>
+								(trigger && trigger.parentNode) ||
+								document.querySelector(".status-update-modal") ||
+								document.body
+							}
+							dropdownMatchSelectWidth={false}
 						>
 							<Select.Option value=''>Please Select</Select.Option>
 							<Select.Option value='cancelled'>Cancelled</Select.Option>
@@ -583,6 +615,11 @@ const MoreDetails = ({
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
+						zIndex={12018}
+						styles={{ mask: { zIndex: 12017 } }}
+						getContainer={() => document.body}
+						wrapClassName='relocate-reservation-modal'
+						rootClassName='relocate-reservation-modal'
 					>
 						<Select
 							defaultValue={
@@ -714,6 +751,11 @@ const MoreDetails = ({
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}
+							zIndex={12012}
+							styles={{ mask: { zIndex: 12011 } }}
+							getContainer={() => document.body}
+							wrapClassName='receipt-modal'
+							rootClassName='receipt-modal'
 						>
 							<div className='text-center my-3 '>
 								<button
@@ -752,6 +794,11 @@ const MoreDetails = ({
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}
+							zIndex={12012}
+							styles={{ mask: { zIndex: 12011 } }}
+							getContainer={() => document.body}
+							wrapClassName='receipt-modal'
+							rootClassName='receipt-modal'
 						>
 							<div className='text-center my-3 '>
 								<button
