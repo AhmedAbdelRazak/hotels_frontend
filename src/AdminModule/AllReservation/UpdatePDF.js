@@ -195,6 +195,11 @@ const UpdatePDF = ({
 		<Modal
 			title='Update Reservation (Receipt Fields)'
 			open={open}
+			rootClassName='update-pdf-modal'
+			wrapClassName='update-pdf-modal'
+			zIndex={13020}
+			styles={{ mask: { zIndex: 13019 } }}
+			getContainer={() => document.body}
 			onOk={handleOk}
 			okText={loading ? "Saving..." : "Save"}
 			confirmLoading={loading}

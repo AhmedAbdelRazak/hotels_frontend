@@ -40,9 +40,20 @@ const ModalZFix = createGlobalStyle`
 		z-index: 12049 !important;
 	}
 
-	/* Ensure selects inside status modal render above everything */
+	.update-pdf-modal .ant-modal,
+	.update-pdf-modal .ant-modal-wrap {
+		z-index: 13020 !important;
+	}
+	.update-pdf-modal .ant-modal-mask {
+		z-index: 13019 !important;
+	}
+
+	/* Ensure selects inside status/Update modals render above everything */
 	.status-update-modal .ant-select-dropdown {
 		z-index: 13060 !important;
+	}
+	.update-pdf-modal .ant-select-dropdown {
+		z-index: 13030 !important;
 	}
 `;
 
