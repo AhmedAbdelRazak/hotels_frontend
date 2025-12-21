@@ -1,5 +1,5 @@
 // eslint-disable-next-line
-import React, { useEffect, useState } from "react";
+import React from "react";
 import styled from "styled-components";
 import { Redirect, Link } from "react-router-dom";
 import {
@@ -18,7 +18,6 @@ import {
 	TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Menu } from "antd";
-import LastAddedLogoImage from "./LastAddedLogoImage";
 import { useCartContext } from "../../cart_context";
 import { signout } from "../../auth";
 import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
@@ -41,23 +40,6 @@ const handleSignout = (history) => {
 };
 
 const items = [
-	getItem(
-		<div className='logoClass'></div>,
-		"StoreLogo",
-		<LastAddedLogoImage />
-	),
-	getItem(
-		<div className='logoClass '></div>,
-		"StoreLogo",
-		<div
-			className='logoClass no-background'
-			style={{
-				width: "100%",
-			}}
-		>
-			<hr />
-		</div>
-	),
 	getItem(
 		<Link to='/admin/dashboard'>لوحة التحكم الرئيسية</Link>,
 		"sub1",
@@ -166,7 +148,6 @@ const AdminNavbarArabic = ({
 	collapsed,
 	setCollapsed,
 }) => {
-	const [clickedOn, setClickedOn] = useState(false);
 	const { chosenLanguage } = useCartContext();
 
 	const toggleCollapsed = () => {
@@ -175,34 +156,52 @@ const AdminNavbarArabic = ({
 	};
 
 	const history = useHistory();
+	const isMobile = () =>
+		typeof window !== "undefined" && window.innerWidth <= 992;
+
+	const closeMenuOnMobile = () => {
+		if (!isMobile()) return;
+		setCollapsed(true);
+		setAdminMenuStatus(false);
+	};
 
 	return (
-		<AdminNavbarWrapper
-			show={collapsed}
-			show2={clickedOn}
-			style={{
-				width: 285,
-			}}
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-		>
-			<Button
+		<>
+			<MobileToggleButton
 				type='primary'
+				shape='circle'
+				aria-label={collapsed ? "Open menu" : "Close menu"}
 				onClick={toggleCollapsed}
-				style={{
-					marginBottom: 8,
-					textAlign: "center",
-					marginLeft: chosenLanguage === "Arabic" ? 200 : 5,
-					marginTop: chosenLanguage === "Arabic" ? 10 : 10,
-				}}
+				$visible={collapsed}
 			>
 				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-			</Button>
-			<Menu
+			</MobileToggleButton>
+			<MobileBackdrop onClick={toggleCollapsed} $visible={!collapsed} />
+			<AdminNavbarWrapper
+				show={collapsed}
 				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-				defaultSelectedKeys={
-					fromPage === "AdminDasboard"
-						? "sub1"
-						: fromPage === "OverallReports"
+			>
+				<NavHeader $rtl={chosenLanguage === "Arabic"}>
+					<div className='logo'>
+						<img
+							src='https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png'
+							alt='XHotel Logo'
+						/>
+					</div>
+					<Button
+						type='text'
+						shape='circle'
+						aria-label={collapsed ? "Open menu" : "Close menu"}
+						onClick={toggleCollapsed}
+						icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+					/>
+				</NavHeader>
+				<Menu
+					dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+					defaultSelectedKeys={
+						fromPage === "AdminDasboard"
+							? "sub1"
+							: fromPage === "OverallReports"
 						  ? "sub2"
 						  : fromPage === "StoreSettings"
 						    ? "sub3"
@@ -219,40 +218,36 @@ const AdminNavbarArabic = ({
 						              : fromPage === "WebsiteManagement"
 						                ? "sub10"
 						                : fromPage === "CouponManagement"
-						                  ? "sub12"
-						                  : "sub1"
-				}
-				defaultOpenKeys={[
-					"sub1",
-
-					// fromPage === "AddGender" ||
-					// fromPage === "UpdateGender" ||
-					// fromPage === "DeleteGender"
-					// 	? "sub2"
-					// 	: null,
-
-					// "sub4",
-
-					// "sub6",
-				]}
-				mode='inline'
-				theme='dark'
-				inlineCollapsed={collapsed}
-				items={items}
-				onClick={(e) => {
-					if (e.key === "signout") {
-						handleSignout(history);
+							? "sub12"
+							: "sub1"
 					}
+					defaultOpenKeys={[
+						"sub1",
 
-					if (e.key === "StoreLogo") {
-						setClickedOn(true);
-					} else {
-						setClickedOn(false);
-					}
-					return <Redirect to={e.key} />;
-				}}
-			/>
-		</AdminNavbarWrapper>
+						// fromPage === "AddGender" ||
+						// fromPage === "UpdateGender" ||
+						// fromPage === "DeleteGender"
+						// 	? "sub2"
+						// 	: null,
+
+						// "sub4",
+
+						// "sub6",
+					]}
+					mode='inline'
+					theme='dark'
+					inlineCollapsed={collapsed}
+					items={items}
+					onClick={(e) => {
+						if (e.key === "signout") {
+							handleSignout(history);
+						}
+						closeMenuOnMobile();
+						return <Redirect to={e.key} />;
+					}}
+				/>
+			</AdminNavbarWrapper>
+		</>
 	);
 };
 
@@ -261,7 +256,7 @@ export default AdminNavbarArabic;
 const AdminNavbarWrapper = styled.div`
 	width: ${(props) => (props.show ? "70px" : "285px")};
 	margin-bottom: 0;
-	background: ${(props) => (props.show ? "" : "#1e1e2d")};
+	background: #1e1e2d;
 	top: 0;
 	left: auto;
 	right: 0;
@@ -273,20 +268,14 @@ const AdminNavbarWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	border-left: 1px solid #0d1220;
+	transition: width 0.2s ease, transform 0.25s ease;
+	will-change: transform;
 
 	ul {
 		flex: 1 1 auto;
 		height: auto !important;
 		overflow-y: auto;
 		scrollbar-width: thin;
-	}
-
-	.logoClass {
-		display: ${(props) => (props.show ? "none " : "block")} !important;
-	}
-
-	img {
-		margin-right: 50px;
 	}
 
 	li {
@@ -296,17 +285,13 @@ const AdminNavbarWrapper = styled.div`
 		text-align: right;
 	}
 
-	hr {
-		color: white !important;
-		background: white !important;
-	}
-
 	.ant-menu.ant-menu-inline-collapsed {
 		min-height: 0;
 	}
 
 	.ant-menu.ant-menu-dark,
-	.ant-menu.ant-menu-dark {
+	.ant-menu.ant-menu-dark .ant-menu-sub,
+	.ant-menu.ant-menu-dark .ant-menu-sub {
 		color: rgba(255, 255, 255, 0.65);
 		background: #1e1e2d;
 	}
@@ -336,8 +321,6 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 1650px) {
-		background: ${(props) => (props.show ? "" : "transparent")};
-
 		ul {
 			width: 250px;
 			padding: 0px !important;
@@ -349,21 +332,80 @@ const AdminNavbarWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 1200px) {
-		width: ${(props) => (props.show ? "20%" : "60%")} !important;
+	@media (max-width: 992px) {
+		width: min(86vw, 320px);
+		transform: translateX(${(props) => (props.show ? "110%" : "0")});
+		box-shadow: ${(props) =>
+			props.show ? "none" : "-18px 0 40px rgba(0, 0, 0, 0.35)"};
 
 		ul {
-			display: ${(props) => (props.show ? "none" : "")};
 			margin-top: 0px !important;
 			top: 0px !important;
 		}
 
-		.ant-menu.ant-menu-dark {
-			/* position: fixed; */
+		li {
+			margin-bottom: 8px;
 		}
+	}
+`;
 
-		button {
-			margin-top: 5px !important;
+const NavHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 12px;
+	background: #0f1726;
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	border-bottom: 1px solid #1f2937;
+	flex-direction: ${(props) => (props.$rtl ? "row-reverse" : "row")};
+
+	.logo img {
+		height: 40px;
+		object-fit: contain;
+		display: block;
+	}
+
+	button {
+		color: #fff;
+	}
+
+	@media (max-width: 1200px) {
+		padding: 8px 10px;
+		.logo img {
+			height: 34px;
 		}
+	}
+`;
+
+const MobileToggleButton = styled(Button)`
+	display: none;
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	z-index: 1601;
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+	opacity: ${(props) => (props.$visible ? 1 : 0)};
+	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
+	transition: opacity 0.2s ease;
+
+	@media (max-width: 992px) {
+		display: inline-flex;
+	}
+`;
+
+const MobileBackdrop = styled.div`
+	display: none;
+	position: fixed;
+	inset: 0;
+	background: rgba(15, 23, 38, 0.45);
+	z-index: 1490;
+	opacity: ${(props) => (props.$visible ? 1 : 0)};
+	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
+	transition: opacity 0.2s ease;
+
+	@media (max-width: 992px) {
+		display: block;
 	}
 `;

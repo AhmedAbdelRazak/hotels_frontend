@@ -1453,8 +1453,20 @@ const AdminPaymentMainWrapper = styled.div`
 
 	.grid-container-main {
 		display: grid;
-		grid-template-columns: ${(props) =>
-			props.show ? "70px 1fr" : "285px 1fr"};
+		grid-template-columns: ${(props) => {
+			const nav = props.show ? "70px" : "285px";
+			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
+		}};
+		grid-template-areas: ${(props) =>
+			props.dir === "rtl" ? "'content nav'" : "'nav content'"};
+	}
+
+	.navcontent {
+		grid-area: nav;
+	}
+
+	.otherContentWrapper {
+		grid-area: content;
 	}
 
 	.container-wrapper {
@@ -1467,6 +1479,13 @@ const AdminPaymentMainWrapper = styled.div`
 
 	@media (max-width: 1400px) {
 		background: white;
+	}
+
+	@media (max-width: 992px) {
+		.grid-container-main {
+			grid-template-columns: 1fr;
+			grid-template-areas: "nav" "content";
+		}
 	}
 `;
 
