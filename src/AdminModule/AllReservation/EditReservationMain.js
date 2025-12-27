@@ -5,6 +5,7 @@ import React, {
 	useRef,
 	useMemo,
 } from "react";
+import { createGlobalStyle } from "styled-components";
 import {
 	Form,
 	Input,
@@ -108,6 +109,15 @@ const bookingSourceOptions = [
 ];
 
 const NESTED_MODAL_Z = 14050;
+const NestedModalZFix = createGlobalStyle`
+	.edit-reservation-nested-modal .ant-modal,
+	.edit-reservation-nested-modal .ant-modal-wrap {
+		z-index: ${NESTED_MODAL_Z} !important;
+	}
+	.edit-reservation-nested-modal .ant-modal-mask {
+		z-index: ${NESTED_MODAL_Z - 1} !important;
+	}
+`;
 
 const EditReservationMain = ({
 	reservation,
@@ -926,6 +936,7 @@ const EditReservationMain = ({
 				margin: "0 auto",
 			}}
 		>
+			<NestedModalZFix />
 			<Form layout='vertical' onFinish={handleSubmit}>
 				<Button
 					type='primary'
@@ -1384,6 +1395,7 @@ const EditReservationMain = ({
 				zIndex={NESTED_MODAL_Z}
 				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
 				getContainer={() => document.body}
+				rootClassName='edit-reservation-nested-modal'
 				footer={[
 					<Button key='close' onClick={() => setIsModalVisible2(false)}>
 						Close
@@ -1415,6 +1427,7 @@ const EditReservationMain = ({
 				zIndex={NESTED_MODAL_Z}
 				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
 				getContainer={() => document.body}
+				rootClassName='edit-reservation-nested-modal'
 				footer={[
 					<Button key='ok' type='primary' onClick={handleVerifyPasswordSubmit}>
 						OK
@@ -1439,6 +1452,7 @@ const EditReservationMain = ({
 				zIndex={NESTED_MODAL_Z}
 				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
 				getContainer={() => document.body}
+				rootClassName='edit-reservation-nested-modal'
 			>
 				<p>Please enter the new paid amount below:</p>
 				<InputNumber
