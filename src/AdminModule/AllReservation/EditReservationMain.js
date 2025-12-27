@@ -197,6 +197,16 @@ const EditReservationMain = ({
 		setVerifyPasswordInput("");
 	};
 
+	const handleVerifyPasswordCancel = () => {
+		setVerifyPasswordModalVisible(false);
+		setVerifyPasswordInput("");
+	};
+
+	const handlePaidAmountCancel = () => {
+		setPaidAmountModalVisible(false);
+		setTempPaidAmount(reservation?.payment_details?.onsite_paid_amount || 0);
+	};
+
 	const handleVerifyPasswordSubmit = () => {
 		if (verifyPasswordInput.trim() === PASSWORD_FOR_PAID_AMOUNT) {
 			setVerifyPasswordModalVisible(false);
@@ -1422,8 +1432,9 @@ const EditReservationMain = ({
 				title='Password Verification'
 				open={verifyPasswordModalVisible}
 				closable={true}
-				// maskClosable={false}
-				keyboard={false}
+				maskClosable={true}
+				keyboard={true}
+				onCancel={handleVerifyPasswordCancel}
 				zIndex={NESTED_MODAL_Z}
 				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
 				getContainer={() => document.body}
@@ -1446,7 +1457,7 @@ const EditReservationMain = ({
 			<Modal
 				title='Update Paid Amount'
 				open={paidAmountModalVisible}
-				onCancel={() => setPaidAmountModalVisible(false)}
+				onCancel={handlePaidAmountCancel}
 				onOk={handlePaidAmountUpdate}
 				confirmLoading={isLoading}
 				zIndex={NESTED_MODAL_Z}
