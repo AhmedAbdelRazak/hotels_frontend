@@ -15,7 +15,11 @@ const resolvePopupContainer = (triggerNode) => {
 	if (!triggerNode) {
 		return document.body;
 	}
-	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+	return (
+		triggerNode.closest(".ant-modal-content, .ant-drawer-content") ||
+		triggerNode.parentNode ||
+		document.body
+	);
 };
 
 /**

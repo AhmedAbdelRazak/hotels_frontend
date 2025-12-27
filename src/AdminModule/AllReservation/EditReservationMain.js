@@ -40,7 +40,11 @@ const resolvePopupContainer = (triggerNode) => {
 	if (!triggerNode) {
 		return document.body;
 	}
-	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+	return (
+		triggerNode.closest(".ant-modal-content, .ant-drawer-content") ||
+		triggerNode.parentNode ||
+		document.body
+	);
 };
 
 /** --------------------- Utils --------------------- */
@@ -103,7 +107,7 @@ const bookingSourceOptions = [
 	"airbnb",
 ];
 
-const NESTED_MODAL_Z = 12100;
+const NESTED_MODAL_Z = 14050;
 
 const EditReservationMain = ({
 	reservation,
