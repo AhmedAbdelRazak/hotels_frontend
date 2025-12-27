@@ -107,6 +107,8 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	// Persist changes
 	const handleSave = async (vals) => {
+		const paymentStatus = (vals.paymentStatus || "").toLowerCase();
+
 		// Build base update payload
 		const updateData = {
 			supplierData: {
@@ -114,7 +116,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				suppliedBookingNo: (vals.supplierBookingNo || "").trim(),
 			},
 			booking_source: (vals.bookingSource || "").trim(),
-			payment: (vals.paymentStatus || "").toLowerCase(),
+			payment: paymentStatus,
 			customerDetails: {
 				name: (vals.guestName || "").trim(),
 				email: (vals.guestEmail || "").trim(),
@@ -130,23 +132,29 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 		// Apply paid/authorized amounts if provided and valid
 		const amount = Number(vals.paidAmount || 0);
 		if (
-			(vals.paymentStatus === "paid online" ||
-				vals.paymentStatus === "paid offline" ||
-				vals.paymentStatus === "credit/ debit") &&
+			(paymentStatus === "paid online" ||
+				paymentStatus === "paid offline" ||
+				paymentStatus === "credit/ debit") &&
 			Number.isFinite(amount) &&
 			amount >= 0
 		) {
-			if (vals.paymentStatus === "paid online") {
+			if (paymentStatus === "paid online") {
 				updateData.paid_amount = amount;
-			} else if (vals.paymentStatus === "paid offline") {
+			} else if (paymentStatus === "paid offline") {
 				updateData.payment_details = {
 					...(localResv?.payment_details || {}),
 					onsite_paid_amount: amount,
 				};
-			} else if (vals.paymentStatus === "credit/ debit") {
+			} else if (paymentStatus === "credit/ debit") {
 				// Treat as authorized (paid) amount
 				updateData.paid_amount = amount;
 			}
+		} else if (paymentStatus === "not paid") {
+			updateData.paid_amount = 0;
+			updateData.payment_details = {
+				...(localResv?.payment_details || {}),
+				onsite_paid_amount: 0,
+			};
 		}
 
 		setSaving(true);

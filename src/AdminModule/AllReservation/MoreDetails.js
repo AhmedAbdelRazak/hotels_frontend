@@ -57,6 +57,16 @@ const ModalZFix = createGlobalStyle`
 	}
 `;
 
+const resolvePopupContainer = (triggerNode) => {
+	if (typeof document === "undefined") {
+		return triggerNode || null;
+	}
+	if (!triggerNode) {
+		return document.body;
+	}
+	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+};
+
 const Wrapper = styled.div`
 	min-height: 750px;
 	margin-top: 30px;
@@ -588,11 +598,7 @@ const MoreDetails = ({
 							}}
 							onChange={(value) => setSelectedStatus(value)}
 							dropdownStyle={{ zIndex: 13050 }}
-							getPopupContainer={(trigger) =>
-								(trigger && trigger.parentNode) ||
-								document.querySelector(".status-update-modal") ||
-								document.body
-							}
+							getPopupContainer={resolvePopupContainer}
 							dropdownMatchSelectWidth={false}
 						>
 							<Select.Option value=''>Please Select</Select.Option>
@@ -641,6 +647,7 @@ const MoreDetails = ({
 								textTransform: "capitalize",
 							}}
 							onChange={(value) => setSelectedHotelDetails(JSON.parse(value))}
+							getPopupContainer={resolvePopupContainer}
 						>
 							<Select.Option value=''>Please Select</Select.Option>
 							{relocationArray1.map((hotel) => (

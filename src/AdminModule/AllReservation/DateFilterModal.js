@@ -3,6 +3,16 @@ import React, { useEffect, useState } from "react";
 import { Modal, Tabs, DatePicker, Space, Button } from "antd";
 import dayjs from "dayjs";
 
+const resolvePopupContainer = (triggerNode) => {
+	if (typeof document === "undefined") {
+		return triggerNode || null;
+	}
+	if (!triggerNode) {
+		return document.body;
+	}
+	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+};
+
 const TAB_KEYS = {
 	CHECKIN: "checkin",
 	CHECKOUT: "checkout",
@@ -102,6 +112,7 @@ const DateFilterModal = ({
 						format='YYYY-MM-DD'
 						value={fromVal}
 						onChange={handleFromChange}
+						getPopupContainer={resolvePopupContainer}
 					/>
 				</div>
 				<div>
@@ -112,6 +123,7 @@ const DateFilterModal = ({
 						value={toVal}
 						onChange={handleToChange}
 						disabledDate={disabledToDate}
+						getPopupContainer={resolvePopupContainer}
 					/>
 				</div>
 			</Space>

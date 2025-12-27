@@ -10,6 +10,16 @@ import {
 	message,
 } from "antd";
 
+const resolvePopupContainer = (triggerNode) => {
+	if (typeof document === "undefined") {
+		return triggerNode || null;
+	}
+	if (!triggerNode) {
+		return document.body;
+	}
+	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+};
+
 /**
  * UpdatePDF (modal)
  * - Adds robust "Not Captured" (credit/ debit) handling.
@@ -251,6 +261,7 @@ const UpdatePDF = ({
 								options={paymentOptions}
 								placeholder='Select payment status'
 								onChange={handlePaymentChange}
+								getPopupContainer={resolvePopupContainer}
 							/>
 						</Form.Item>
 					</Col>

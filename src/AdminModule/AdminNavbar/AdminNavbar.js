@@ -257,7 +257,7 @@ const AdminNavbarWrapper = styled.div`
 	background: #1e1e2d;
 	top: 0;
 	left: 0;
-	z-index: 1500; /* stays behind app modals */
+	z-index: 900; /* stays behind app modals */
 	overflow: hidden;
 	position: fixed;
 	height: 100vh;
@@ -385,7 +385,7 @@ const MobileToggleButton = styled(Button)`
 	position: fixed;
 	top: 12px;
 	left: 12px;
-	z-index: 1601;
+	z-index: 910;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 	opacity: ${(props) => (props.$visible ? 1 : 0)};
 	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
@@ -401,7 +401,7 @@ const MobileBackdrop = styled.div`
 	position: fixed;
 	inset: 0;
 	background: rgba(15, 23, 38, 0.45);
-	z-index: 1490;
+	z-index: 890;
 	opacity: ${(props) => (props.$visible ? 1 : 0)};
 	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
 	transition: opacity 0.2s ease;

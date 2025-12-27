@@ -8,6 +8,15 @@ import { getExportToExcelList } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 
 const { Option } = Select;
+const resolvePopupContainer = (triggerNode) => {
+	if (typeof document === "undefined") {
+		return triggerNode || null;
+	}
+	if (!triggerNode) {
+		return document.body;
+	}
+	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+};
 
 /**
  * @param {Array} allHotelDetailsAdmin - Array of hotels { _id, hotelName }.
@@ -246,6 +255,7 @@ const ExportToExcelButton = ({
 						value={fromDate}
 						onChange={(val) => setFromDate(val)}
 						format='YYYY-MM-DD'
+						getPopupContainer={resolvePopupContainer}
 					/>
 					<strong>To:</strong>{" "}
 					<DatePicker
@@ -253,6 +263,7 @@ const ExportToExcelButton = ({
 						value={toDate}
 						onChange={(val) => setToDate(val)}
 						format='YYYY-MM-DD'
+						getPopupContainer={resolvePopupContainer}
 					/>
 				</div>
 
@@ -265,6 +276,7 @@ const ExportToExcelButton = ({
 						placeholder='Please select hotels'
 						value={selectedHotels}
 						onChange={handleHotelSelectChange}
+						getPopupContainer={resolvePopupContainer}
 					>
 						<Option value='all'>All Hotels</Option>
 						{allHotelDetailsAdmin &&
@@ -283,6 +295,7 @@ const ExportToExcelButton = ({
 						style={{ width: "100%", marginTop: 8 }}
 						value={filterType}
 						onChange={(val) => setFilterType(val)}
+						getPopupContainer={resolvePopupContainer}
 					>
 						{filterOptions.map((opt) => (
 							<Option key={opt.value} value={opt.value}>

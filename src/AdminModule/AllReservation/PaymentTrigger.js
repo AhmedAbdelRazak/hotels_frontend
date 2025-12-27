@@ -14,6 +14,8 @@ const safeNumber = (val) => {
 };
 
 const toMoney = (n) => Number(n || 0).toFixed(2);
+const PAYMENT_MODAL_Z = 12110;
+const PAYMENT_CONFIRM_MODAL_Z = 12120;
 
 const PaymentTrigger = ({ reservation }) => {
 	const { user, token } = isAuthenticated();
@@ -323,6 +325,9 @@ const PaymentTrigger = ({ reservation }) => {
 				okText='Confirm'
 				cancelText='Cancel'
 				width={640}
+				zIndex={PAYMENT_MODAL_Z}
+				styles={{ mask: { zIndex: PAYMENT_MODAL_Z - 1 } }}
+				getContainer={() => document.body}
 			>
 				{/* Remaining panel */}
 				<InfoPanel>
@@ -448,6 +453,9 @@ const PaymentTrigger = ({ reservation }) => {
 				okText={loading ? "Processing..." : "Confirm"}
 				cancelText='Cancel'
 				confirmLoading={loading} // <-- spinner on Confirm
+				zIndex={PAYMENT_CONFIRM_MODAL_Z}
+				styles={{ mask: { zIndex: PAYMENT_CONFIRM_MODAL_Z - 1 } }}
+				getContainer={() => document.body}
 			>
 				<p>Please enter your password to confirm the payment:</p>
 				<PasswordInput

@@ -33,6 +33,16 @@ import MoreDetails from "../AllReservation/MoreDetails";
 
 const { Option } = Select;
 
+const resolvePopupContainer = (triggerNode) => {
+	if (typeof document === "undefined") {
+		return triggerNode || null;
+	}
+	if (!triggerNode) {
+		return document.body;
+	}
+	return triggerNode.closest(".ant-modal, .ant-drawer") || document.body;
+};
+
 /** --------------------- Utils --------------------- */
 const safeParseFloat = (val, fallback = 0) => {
 	const n = parseFloat(val);
@@ -92,6 +102,8 @@ const bookingSourceOptions = [
 	"hotel.com",
 	"airbnb",
 ];
+
+const NESTED_MODAL_Z = 12100;
 
 const EditReservationMain = ({
 	reservation,
@@ -156,8 +168,7 @@ const EditReservationMain = ({
 		reservation?.payment_details?.onsite_paid_amount || 0
 	);
 	const pickerPopupStyle = { zIndex: 20010 };
-	const pickerContainerGetter = (trigger) =>
-		(trigger && trigger.parentNode) || document.body;
+	const pickerContainerGetter = (trigger) => resolvePopupContainer(trigger);
 
 	useEffect(() => {
 		setTempPaidAmount(reservation?.payment_details?.onsite_paid_amount || 0);
@@ -985,7 +996,7 @@ const EditReservationMain = ({
 								value={selectedHotel?._id}
 								onChange={handleHotelChange}
 								disabled={isLoading}
-								getPopupContainer={(trigger) => trigger.parentNode}
+								getPopupContainer={resolvePopupContainer}
 							>
 								{allHotels.map((ht) => (
 									<Option key={ht._id} value={ht._id}>
@@ -1013,7 +1024,7 @@ const EditReservationMain = ({
 								value={bookingSource}
 								onChange={(val) => setBookingSource(val)}
 								disabled={isLoading}
-								getPopupContainer={(trigger) => trigger.parentNode}
+								getPopupContainer={resolvePopupContainer}
 							>
 								{bookingSourceOptions.map((opt) => (
 									<Option key={opt} value={opt}>
@@ -1078,7 +1089,7 @@ const EditReservationMain = ({
 								}
 								onChange={(val) => handleRoomSelectionChange(val, index)}
 								disabled={isLoading || !selectedHotel}
-								getPopupContainer={(trigger) => trigger.parentNode}
+								getPopupContainer={resolvePopupContainer}
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((d) => {
@@ -1202,6 +1213,7 @@ const EditReservationMain = ({
 								onChange={(val) => setNationality(val)}
 								style={{ width: "100%" }}
 								disabled={isLoading}
+								getPopupContainer={resolvePopupContainer}
 							>
 								{countryListWithAbbreviations.map((c) => (
 									<Option key={c.code} value={c.code}>
@@ -1365,6 +1377,9 @@ const EditReservationMain = ({
 				onCancel={() => setIsModalVisible2(false)}
 				className='float-right'
 				width='84%'
+				zIndex={NESTED_MODAL_Z}
+				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
+				getContainer={() => document.body}
 				footer={[
 					<Button key='close' onClick={() => setIsModalVisible2(false)}>
 						Close
@@ -1393,6 +1408,9 @@ const EditReservationMain = ({
 				closable={true}
 				// maskClosable={false}
 				keyboard={false}
+				zIndex={NESTED_MODAL_Z}
+				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
+				getContainer={() => document.body}
 				footer={[
 					<Button key='ok' type='primary' onClick={handleVerifyPasswordSubmit}>
 						OK
@@ -1414,6 +1432,9 @@ const EditReservationMain = ({
 				onCancel={() => setPaidAmountModalVisible(false)}
 				onOk={handlePaidAmountUpdate}
 				confirmLoading={isLoading}
+				zIndex={NESTED_MODAL_Z}
+				styles={{ mask: { zIndex: NESTED_MODAL_Z - 1 } }}
+				getContainer={() => document.body}
 			>
 				<p>Please enter the new paid amount below:</p>
 				<InputNumber
