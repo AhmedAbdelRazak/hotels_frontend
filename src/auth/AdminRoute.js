@@ -16,12 +16,18 @@ const resolvePopupContainer = (triggerNode) => {
 	return container || document.body;
 };
 
+// Keep admin overlays above the fixed sidebar (z-index 1500).
+const ADMIN_Z_INDEX_BASE = 2000;
+
 const AdminRoute = ({ component: Component, ...rest }) => (
 	<Route
 		{...rest}
 		render={(props) =>
 			isAuthenticated() && isAuthenticated().user.role === 1000 ? (
-				<ConfigProvider getPopupContainer={resolvePopupContainer}>
+				<ConfigProvider
+					getPopupContainer={resolvePopupContainer}
+					theme={{ token: { zIndexPopupBase: ADMIN_Z_INDEX_BASE } }}
+				>
 					<Component {...props} />
 				</ConfigProvider>
 			) : (
