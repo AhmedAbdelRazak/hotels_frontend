@@ -16,7 +16,7 @@ import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 
-const SUPER_USER_ID = "6553f1c6d06c5cea2f98a838";
+const SUPER_USER_IDS = ["6553f1c6d06c5cea2f98a838", "6969d80da28c78c6280171df"];
 
 const AllReservationMain = ({ chosenLanguage }) => {
 	// Local UI states
@@ -113,7 +113,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		getUser?.accessTo.length === 0 ||
 		getUser?.accessTo.includes("all");
 
-	const allowAllReservedBy = getUser?._id === SUPER_USER_ID;
+	const allowAllReservedBy = SUPER_USER_IDS.includes(getUser?._id);
 
 	/** 3) Access checks (uses getUser) */
 	useEffect(() => {
@@ -183,8 +183,8 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	useEffect(() => {
 		if (!getUser) return;
 		const selfLower = (getUser?.name || "").trim().toLowerCase();
-		// If not super user id => force self filter; else allow All (empty).
-		if (getUser._id !== SUPER_USER_ID) {
+		// If not a super user id => force self filter; else allow All (empty).
+		if (!SUPER_USER_IDS.includes(getUser._id)) {
 			setActiveReservedBy(selfLower);
 		} else {
 			setActiveReservedBy(""); // All
