@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { DatePicker, Spin } from "antd";
 import HotelOverviewReservation from "./HotelOverviewReservation";
-import moment from "moment";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { toast } from "react-toastify";
 import {
 	agodaData,
@@ -12,6 +13,55 @@ import {
 	janatData,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+
+dayjs.extend(utc);
+
+const normalizeNumber = (value, fallback = 0) => {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatMoney = (value) => normalizeNumber(value, 0).toLocaleString();
+
+const summarizePayment = (reservation, paymentOverride = "") => {
+	const paymentModeRaw =
+		(paymentOverride ||
+			reservation?.payment ||
+			reservation?.payment_status ||
+			reservation?.financeStatus ||
+			"") + "";
+	const paymentMode = paymentModeRaw.toLowerCase().trim();
+	const pd = reservation?.paypal_details || {};
+	const legacyCaptured = !!reservation?.payment_details?.captured;
+	const payOffline =
+		normalizeNumber(reservation?.payment_details?.onsite_paid_amount, 0) > 0 ||
+		paymentMode === "paid offline";
+	const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
+	const initialCompleted =
+		(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
+	const anyMitCompleted =
+		Array.isArray(pd?.mit) &&
+		pd.mit.some((c) => (c?.capture_status || "").toUpperCase() === "COMPLETED");
+
+	const isCaptured =
+		legacyCaptured ||
+		capTotal > 0 ||
+		initialCompleted ||
+		anyMitCompleted ||
+		paymentMode === "paid online" ||
+		paymentMode === "captured" ||
+		paymentMode === "credit/ debit" ||
+		paymentMode === "credit/debit";
+
+	const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
+
+	let status = "Not Captured";
+	if (isCaptured) status = "Captured";
+	else if (payOffline) status = "Paid Offline";
+	else if (isNotPaid) status = "Not Paid";
+
+	return { status, isCaptured, paidOffline: payOffline, paymentMode };
+};
 
 const ZReservationForm = ({
 	customer_details,
@@ -39,6 +89,7 @@ const ZReservationForm = ({
 	booking_comment,
 	setBookingSource,
 	booking_source,
+	todaysCheckins,
 	payment_status,
 	setConfirmationNumber,
 	confirmation_number,
@@ -89,21 +140,41 @@ const ZReservationForm = ({
 		};
 	}, []);
 
-	const toMoment = (value) => {
+	const toDayjs = (value) => {
 		if (!value) return null;
-		if (moment.isMoment(value)) return value;
-		const parsed = moment(value);
+		if (dayjs.isDayjs(value)) return value;
+		const parsed = dayjs(value);
 		return parsed.isValid() ? parsed : null;
 	};
 
 	const todaysReservations = useMemo(() => {
+		if (Array.isArray(todaysCheckins)) return todaysCheckins;
 		if (!Array.isArray(allReservations)) return [];
-		const today = moment();
+
+		const todayLocal = dayjs().format("YYYY-MM-DD");
+		const todayUtc = dayjs().utc().format("YYYY-MM-DD");
+
 		return allReservations.filter((reservation) => {
-			const checkin = moment(reservation.checkin_date);
-			return checkin.isValid() && checkin.isSame(today, "day");
+			const rawCheckin =
+				reservation.checkin_date || reservation.checkinDate || "";
+			const checkin = dayjs(rawCheckin);
+			if (!checkin.isValid()) return false;
+
+			const status = (reservation.reservation_status || "").toLowerCase();
+			if (
+				status.includes("checked_out") ||
+				status.includes("cancelled") ||
+				status.includes("canceled") ||
+				status.includes("no_show")
+			) {
+				return false;
+			}
+
+			const checkinLocal = checkin.format("YYYY-MM-DD");
+			const checkinUtc = checkin.utc().format("YYYY-MM-DD");
+			return checkinLocal === todayLocal || checkinUtc === todayUtc;
 		});
-	}, [allReservations]);
+	}, [allReservations, todaysCheckins]);
 
 	const populateFromReservation = (reservation) => {
 		if (!reservation) return;
@@ -114,25 +185,25 @@ const ZReservationForm = ({
 		}));
 
 		const checkinDate = reservation.checkin_date
-			? moment(reservation.checkin_date)
+			? dayjs(reservation.checkin_date)
 			: null;
 		const checkoutDate = reservation.checkout_date
-			? moment(reservation.checkout_date)
+			? dayjs(reservation.checkout_date)
 			: null;
 
 		setStart_date(
 			checkinDate && checkinDate.isValid()
-				? checkinDate.clone().startOf("day").toISOString()
+				? checkinDate.startOf("day").toISOString()
 				: null
 		);
 		setEnd_date(
 			checkoutDate && checkoutDate.isValid()
-				? checkoutDate.clone().startOf("day").toISOString()
+				? checkoutDate.startOf("day").toISOString()
 				: null
 		);
 
 		if (checkinDate && checkoutDate) {
-			const duration = checkoutDate.diff(checkinDate, "days");
+			const duration = checkoutDate.diff(checkinDate, "day");
 			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
 		} else {
 			setDays_of_residence(0);
@@ -170,16 +241,13 @@ const ZReservationForm = ({
 	};
 
 	const onStartDateChange = (value) => {
-		const dateAtMidnight = value ? value.clone().startOf("day").toDate() : null;
+		const dateAtMidnight = value ? value.startOf("day") : null;
 
 		setStart_date(dateAtMidnight ? dateAtMidnight.toISOString() : null);
 
 		if (dateAtMidnight && end_date) {
-			const adjustedEndDate = moment(end_date).startOf("day").toDate();
-			const duration = moment(adjustedEndDate).diff(
-				moment(dateAtMidnight),
-				"days"
-			);
+			const adjustedEndDate = dayjs(end_date).startOf("day");
+			const duration = adjustedEndDate.diff(dateAtMidnight, "day");
 			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
 		} else {
 			setDays_of_residence(0);
@@ -187,16 +255,13 @@ const ZReservationForm = ({
 	};
 
 	const onEndDateChange = (date) => {
-		const adjustedEndDate = date ? date.clone().startOf("day").toDate() : null;
+		const adjustedEndDate = date ? date.startOf("day") : null;
 
 		setEnd_date(adjustedEndDate ? adjustedEndDate.toISOString() : null);
 
 		if (adjustedEndDate && start_date) {
-			const adjustedStartDate = moment(start_date).startOf("day").toDate();
-			const duration = moment(adjustedEndDate).diff(
-				moment(adjustedStartDate),
-				"days"
-			);
+			const adjustedStartDate = dayjs(start_date).startOf("day");
+			const duration = adjustedEndDate.diff(adjustedStartDate, "day");
 			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
 		} else {
 			setDays_of_residence(0);
@@ -205,8 +270,52 @@ const ZReservationForm = ({
 
 	const disabledEndDate = (current) => {
 		if (!start_date) return false;
-		return current && current < moment(start_date).startOf("day");
+		return current && current.isBefore(dayjs(start_date).startOf("day"), "day");
 	};
+
+	const displayPickedRoomsType =
+		Array.isArray(pickedRoomsType) && pickedRoomsType.length > 0
+			? pickedRoomsType
+			: searchedReservation &&
+			    Array.isArray(searchedReservation.pickedRoomsType)
+			  ? searchedReservation.pickedRoomsType
+			  : [];
+
+	const paymentSummary = useMemo(
+		() => summarizePayment(searchedReservation, payment_status),
+		[searchedReservation, payment_status]
+	);
+
+	const totalAmountValue = useMemo(() => {
+		if (searchedReservation && searchedReservation.confirmation_number) {
+			return normalizeNumber(searchedReservation.total_amount, 0);
+		}
+		if (typeof finalTotalByRoom === "function") {
+			return normalizeNumber(finalTotalByRoom(), 0);
+		}
+		return normalizeNumber(finalTotalByRoom, 0);
+	}, [searchedReservation, finalTotalByRoom]);
+
+	const paidOnline = normalizeNumber(searchedReservation?.paid_amount, 0);
+	const paidOffline = normalizeNumber(
+		searchedReservation?.payment_details?.onsite_paid_amount,
+		0
+	);
+	const totalPaid = paidOnline + paidOffline;
+	const isCreditDebit =
+		paymentSummary.paymentMode === "credit/ debit" ||
+		paymentSummary.paymentMode === "credit/debit";
+	const assumePaidInFull =
+		isCreditDebit || (paymentSummary.isCaptured && totalPaid === 0);
+	const amountDue = assumePaidInFull
+		? 0
+		: Math.max(totalAmountValue - totalPaid, 0);
+
+	const displayPaymentLabel = searchedReservation
+		? searchedReservation.payment === payment_status
+			? payment_status
+			: searchedReservation.payment || payment_status
+		: payment_status;
 
 	const handleTaskeenClicked = () => {
 		if (!customer_details.name) {
@@ -355,7 +464,38 @@ const ZReservationForm = ({
 
 					<div className='row'>
 						<div className='col-md-8 mx-auto'>
-							<div className='my-3'>
+							<div className='my-1'>
+								<label style={{ fontWeight: "bold" }}>
+									{chosenLanguage === "Arabic"
+										? "حجوزات الوصول اليوم (حسب اسم الضيف)"
+										: "Today's Check-ins"}
+								</label>
+								<select
+									className='form-control'
+									value={selectedTodayReservationId}
+									onChange={handleTodayReservationChange}
+								>
+									<option value=''>
+										{chosenLanguage === "Arabic"
+											? "اختر الحجز"
+											: "Select a reservation"}
+									</option>
+									{todaysReservations.map((reservation) => {
+										const name = reservation.customer_details?.name || "Guest";
+										const nickName = reservation.customer_details?.nickName;
+										const label =
+											nickName && nickName !== name
+												? `${name} | ${nickName}`
+												: name;
+										return (
+											<option key={reservation._id} value={reservation._id}>
+												{label}
+											</option>
+										);
+									})}
+								</select>
+							</div>
+							<div className='my-4'>
 								<div className='row'>
 									<div className='col-md-9 my-auto'>
 										<input
@@ -387,37 +527,6 @@ const ZReservationForm = ({
 										</button>
 									</div>
 								</div>
-							</div>
-							<div className='my-3'>
-								<label style={{ fontWeight: "bold" }}>
-									{chosenLanguage === "Arabic"
-										? "OU,O-OªOýOO¦ OU,U^OæU^U, OU,USU^U."
-										: "Today's Check-ins"}
-								</label>
-								<select
-									className='form-control'
-									value={selectedTodayReservationId}
-									onChange={handleTodayReservationChange}
-								>
-									<option value=''>
-										{chosenLanguage === "Arabic"
-											? "OOrO¦Oñ OU,O-OªOý"
-											: "Select a reservation"}
-									</option>
-									{todaysReservations.map((reservation) => {
-										const name = reservation.customer_details?.name || "Guest";
-										const nickName = reservation.customer_details?.nickName;
-										const label =
-											nickName && nickName !== name
-												? `${name} | ${nickName}`
-												: name;
-										return (
-											<option key={reservation._id} value={reservation._id}>
-												{label}
-											</option>
-										);
-									})}
-								</select>
 							</div>
 
 							<div className='row'>
@@ -732,7 +841,8 @@ const ZReservationForm = ({
 										inputReadOnly
 										size='small'
 										showToday={true}
-										value={toMoment(start_date)}
+										format='YYYY-MM-DD'
+										value={toDayjs(start_date)}
 										placeholder='Please pick the desired schedule checkin date'
 										style={{
 											height: "auto",
@@ -766,7 +876,8 @@ const ZReservationForm = ({
 										inputReadOnly
 										size='small'
 										showToday={true}
-										value={toMoment(end_date)}
+										format='YYYY-MM-DD'
+										value={toDayjs(end_date)}
 										placeholder='Please pick the desired schedule checkout date'
 										style={{
 											height: "auto",
@@ -943,11 +1054,7 @@ const ZReservationForm = ({
 										textTransform: "uppercase",
 									}}
 								>
-									{searchedReservation.payment === payment_status
-										? payment_status
-										: searchedReservation.payment
-										  ? searchedReservation.payment
-										  : payment_status}
+									{displayPaymentLabel || ""}
 								</div>
 								<div className='col-md-6 my-2'>
 									{chosenLanguage === "Arabic" ? "حالة الحجز" : "Status"}
@@ -964,38 +1071,24 @@ const ZReservationForm = ({
 								{chosenLanguage === "Arabic"
 									? "المبلغ الإجمالي"
 									: "Total Amount:"}{" "}
-								{searchedReservation && searchedReservation.confirmation_number
-									? searchedReservation.total_amount.toLocaleString()
-									: finalTotalByRoom()
-									  ? finalTotalByRoom()
-									  : 0}{" "}
+								{formatMoney(totalAmountValue)}{" "}
 								{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 							</h4>
-							{searchedReservation &&
-							Number(searchedReservation.paid_amount) > 0 ? (
+							{totalPaid > 0 ? (
 								<h4 className='my-4 text-center' style={{ color: "#006ad1" }}>
 									{chosenLanguage === "Arabic"
 										? "المبلغ المودع"
 										: "Deposited Amount:"}{" "}
-									{searchedReservation &&
-										Number(
-											searchedReservation.paid_amount
-										).toLocaleString()}{" "}
+									{formatMoney(totalPaid)}{" "}
 									{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 								</h4>
 							) : null}
-							{searchedReservation &&
-							Number(searchedReservation.paid_amount) > 0 &&
-							searchedReservation.confirmation_number &&
-							searchedReservation.total_amount ? (
+							{totalAmountValue > 0 ? (
 								<h4 className='my-4 text-center' style={{ color: "darkgreen" }}>
 									{chosenLanguage === "Arabic"
 										? "المبلغ المستحق"
 										: "Amount Due:"}{" "}
-									{Number(
-										Number(searchedReservation.total_amount) -
-											Number(searchedReservation.paid_amount)
-									).toLocaleString()}{" "}
+									{formatMoney(amountDue)}{" "}
 									{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 								</h4>
 							) : null}
@@ -1016,9 +1109,7 @@ const ZReservationForm = ({
 								{customer_details.name &&
 								start_date &&
 								end_date &&
-								searchedReservation &&
-								searchedReservation.pickedRoomsType &&
-								searchedReservation.pickedRoomsType.length > 0 ? (
+								displayPickedRoomsType.length > 0 ? (
 									<>
 										<div className='total-amount my-3'>
 											{chosenLanguage === "Arabic" ? (
@@ -1058,9 +1149,7 @@ const ZReservationForm = ({
 
 											{chosenLanguage === "Arabic" ? (
 												<div className='room-list my-3'>
-													{searchedReservation &&
-														searchedReservation.pickedRoomsType &&
-														searchedReservation.pickedRoomsType.map(
+													{displayPickedRoomsType.map(
 															(room, index) => (
 																<div
 																	key={index}
@@ -1081,8 +1170,7 @@ const ZReservationForm = ({
 												</div>
 											) : (
 												<div className='room-list my-3'>
-													{searchedReservation &&
-														searchedReservation.pickedRoomsType.map(
+													{displayPickedRoomsType.map(
 															(room, index) => (
 																<div
 																	key={index}
@@ -1114,9 +1202,7 @@ const ZReservationForm = ({
 									{customer_details.name &&
 									start_date &&
 									end_date &&
-									searchedReservation &&
-									searchedReservation.pickedRoomsType &&
-									searchedReservation.pickedRoomsType.length > 0 ? (
+									displayPickedRoomsType.length > 0 ? (
 										<div
 											style={{
 												borderLeft: "1px white solid",
@@ -1125,9 +1211,7 @@ const ZReservationForm = ({
 												overflow: "auto",
 											}}
 										>
-											{searchedReservation &&
-												searchedReservation.pickedRoomsType &&
-												searchedReservation.pickedRoomsType.map(
+											{displayPickedRoomsType.map(
 													(room, index) => (
 														<div key={index} className='inner-grid'>
 															{index === 0 ? (
@@ -1445,6 +1529,7 @@ const ZReservationForm = ({
 								pickedRoomsType={pickedRoomsType}
 								setPickedRoomsType={setPickedRoomsType}
 								searchedReservation={searchedReservation}
+								setSearchedReservation={setSearchedReservation}
 								start_date_Map={start_date_Map}
 								end_date_Map={end_date_Map}
 								bedNumber={bedNumber}

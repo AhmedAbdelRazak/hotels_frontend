@@ -19,6 +19,9 @@ const HotelOverviewReservation = ({
 	allReservations,
 	chosenLanguage,
 	searchedReservation,
+	pickedRoomsType,
+	setPickedRoomsType,
+	setSearchedReservation,
 	start_date_Map,
 	end_date_Map,
 	bedNumber,
@@ -40,6 +43,40 @@ const HotelOverviewReservation = ({
 	const [selectedAvailability, setSelectedAvailability] = useState(null);
 	const [selectedFloor, setSelectedFloor] = useState(null);
 	const [selectedRoomStatus, setSelectedRoomStatus] = useState(null);
+	const [totalToDistribute, setTotalToDistribute] = useState("");
+
+	const normalizeNumber = (value, fallback = 0) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : fallback;
+	};
+
+	const getStayNights = () => {
+		if (!start_date || !end_date) return 0;
+		const start = moment(start_date).startOf("day");
+		const end = moment(end_date).startOf("day");
+		const diff = end.diff(start, "days");
+		return diff > 0 ? diff : 0;
+	};
+
+	const buildDayRow = (date, price, template = {}) => ({
+		...template,
+		date,
+		price,
+		totalPriceWithCommission: price,
+		totalPriceWithoutCommission: price,
+	});
+
+	const buildPricingByNightly = (nightlyPrice, nightsCount, template = {}) => {
+		if (!start_date || !nightsCount) return [];
+		const start = moment(start_date).startOf("day");
+		return Array.from({ length: nightsCount }, (_, idx) =>
+			buildDayRow(
+				start.clone().add(idx, "day").format("YYYY-MM-DD"),
+				nightlyPrice,
+				template
+			)
+		);
+	};
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -170,26 +207,86 @@ const HotelOverviewReservation = ({
 		if (!room) return;
 		setCurrentRoom(room);
 
-		const { room_type, display_name } = room;
+		const { room_type } = room;
+		const displayName = room.display_name || room.displayName;
+		const nightsCount = Math.max(getStayNights(), 1);
 
 		// Check if the searched reservation has pricing information
 		if (searchedReservation && searchedReservation.pickedRoomsType) {
 			const roomTypeDetails = searchedReservation.pickedRoomsType.find(
-				(r) => r.room_type === room_type && r.displayName === display_name
+				(r) => r.room_type === room_type && r.displayName === displayName
 			);
 
-			if (roomTypeDetails && roomTypeDetails.pricingByDay) {
+			if (
+				roomTypeDetails &&
+				Array.isArray(roomTypeDetails.pricingByDay) &&
+				roomTypeDetails.pricingByDay.length > 0
+			) {
 				setPricingByDay(
-					roomTypeDetails.pricingByDay.map((day) => ({
-						date: day.date,
-						price: parseFloat(day.price) || 0, // Ensure price is a number
-					}))
+					roomTypeDetails.pricingByDay.map((day) => {
+						const safeDay = day || {};
+						const rawPrice =
+							safeDay.price ??
+							safeDay.totalPriceWithCommission ??
+							safeDay.totalPriceWithoutCommission ??
+							0;
+						const normalizedPrice = Number(rawPrice);
+						return {
+							...safeDay,
+							price: Number.isFinite(normalizedPrice) ? normalizedPrice : 0,
+						};
+					})
 				);
+			} else if (
+				roomTypeDetails &&
+				Number(roomTypeDetails.chosenPrice) > 0 &&
+				nightsCount > 0
+			) {
+				const nightlyPrice = normalizeNumber(roomTypeDetails.chosenPrice, 0);
+				setPricingByDay(buildPricingByNightly(nightlyPrice, nightsCount));
+			} else if (
+				searchedReservation &&
+				Number(searchedReservation.total_amount) > 0 &&
+				nightsCount > 0
+			) {
+				const roomCountFromTypes = Array.isArray(
+					searchedReservation.pickedRoomsType
+				)
+					? searchedReservation.pickedRoomsType.reduce(
+							(sum, r) => sum + (Number(r.count) || 1),
+							0
+					  )
+					: 0;
+				const totalRooms =
+					Number(searchedReservation.total_rooms) ||
+					roomCountFromTypes ||
+					1;
+				const perNight =
+					normalizeNumber(searchedReservation.total_amount, 0) /
+					nightsCount /
+					totalRooms;
+				setPricingByDay(buildPricingByNightly(perNight, nightsCount));
 			} else {
-				generatePricingTable(room_type, display_name, start_date, end_date);
+				const generated = generatePricingTable(
+					room_type,
+					displayName,
+					start_date,
+					end_date
+				);
+				if (!generated || generated.length === 0) {
+					setPricingByDay(buildPricingByNightly(0, nightsCount));
+				}
 			}
 		} else {
-			generatePricingTable(room_type, display_name, start_date, end_date);
+			const generated = generatePricingTable(
+				room_type,
+				displayName,
+				start_date,
+				end_date
+			);
+			if (!generated || generated.length === 0) {
+				setPricingByDay(buildPricingByNightly(0, nightsCount));
+			}
 		}
 
 		setIsModalVisible(true);
@@ -205,7 +302,7 @@ const HotelOverviewReservation = ({
 
 			if (!roomDetails) {
 				console.warn("No matching room details found");
-				return;
+				return [];
 			}
 
 			const pricingRate = roomDetails.pricingRate || [];
@@ -222,21 +319,76 @@ const HotelOverviewReservation = ({
 				const price = pricing
 					? parseFloat(pricing.price)
 					: parseFloat(basePrice);
-				daysArray.push({ date: dateString, price });
+				daysArray.push({
+					date: dateString,
+					price,
+					totalPriceWithCommission: price,
+					totalPriceWithoutCommission: price,
+				});
 				currentDate.add(1, "day");
 			}
 
 			setPricingByDay(daysArray);
+			return daysArray;
 		},
 		[hotelDetails.roomCountDetails, setPricingByDay]
 	);
 
 	const handleInheritPrices = () => {
-		if (inheritedPrice) {
-			setPricingByDay((prev) =>
-				prev.map((day) => ({ ...day, price: parseFloat(inheritedPrice) }))
+		const nextPrice = Number(inheritedPrice);
+		if (
+			inheritedPrice === null ||
+			inheritedPrice === "" ||
+			!Number.isFinite(nextPrice) ||
+			nextPrice < 0
+		) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى إدخال سعر صالح"
+					: "Please enter a valid price."
 			);
+			return;
 		}
+		if (!pricingByDay || pricingByDay.length === 0) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "لا توجد بيانات تسعير لتحديثها"
+					: "No pricing data to update."
+			);
+			return;
+		}
+		setPricingByDay((prev) =>
+			prev.map((day) => buildDayRow(day.date, nextPrice, day))
+		);
+	};
+
+	const handleDistributeTotal = () => {
+		if (totalToDistribute === null || totalToDistribute === "") {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى إدخال إجمالي صالح"
+					: "Please enter a valid total amount."
+			);
+			return;
+		}
+		const total = normalizeNumber(totalToDistribute, NaN);
+		if (!Number.isFinite(total) || total < 0) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى إدخال إجمالي صالح"
+					: "Please enter a valid total amount."
+			);
+			return;
+		}
+		const nightsCount = pricingByDay.length || Math.max(getStayNights(), 1);
+		const perNight = nightsCount > 0 ? total / nightsCount : total;
+
+		setPricingByDay((prev) => {
+			if (prev.length > 0) {
+				return prev.map((day) => buildDayRow(day.date, perNight, day));
+			}
+			return buildPricingByNightly(perNight, nightsCount);
+		});
 	};
 
 	const handleOk = () => {
@@ -248,21 +400,134 @@ const HotelOverviewReservation = ({
 			return;
 		}
 
-		const chosenPrice =
-			pricingByDay.reduce((acc, day) => acc + day.price, 0) /
-			pricingByDay.length;
+		if (!pricingByDay || pricingByDay.length === 0) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى التأكد من التسعير قبل المتابعة"
+					: "Please confirm pricing before continuing."
+			);
+			return;
+		}
+
+		const nightlyTotal = pricingByDay.reduce(
+			(acc, day) => acc + (Number(day.price) || 0),
+			0
+		);
+		const chosenPrice = nightlyTotal / pricingByDay.length;
 
 		const finalChosenPrice =
 			currentRoom.room_type === "individualBed"
 				? chosenPrice * selectedBeds.length
 				: chosenPrice;
 
+		const pricingSnapshot = pricingByDay.map((day) => ({ ...day }));
+
+		if (setPickedRoomsType && Array.isArray(pickedRoomsType)) {
+			const currentDisplayName =
+				currentRoom.display_name || currentRoom.displayName;
+			const totalWithComm = pricingSnapshot.reduce(
+				(acc, day) =>
+					acc +
+					normalizeNumber(
+						day.totalPriceWithCommission ?? day.price,
+						0
+					),
+				0
+			);
+			const hotelShouldGet = pricingSnapshot.reduce(
+				(acc, day) => acc + normalizeNumber(day.rootPrice, 0),
+				0
+			);
+			const hasRootPrice = pricingSnapshot.some(
+				(day) => day.rootPrice !== undefined
+			);
+
+			setPickedRoomsType((prev) => {
+				if (!Array.isArray(prev)) return prev;
+				const next = [...prev];
+				const idx = next.findIndex(
+					(line) =>
+						line.room_type === currentRoom.room_type &&
+						line.displayName === currentDisplayName
+				);
+				if (idx === -1) return prev;
+
+				const updatedLine = {
+					...next[idx],
+					pricingByDay: pricingSnapshot,
+					chosenPrice: Number(chosenPrice.toFixed(2)),
+				};
+
+				if (Number.isFinite(totalWithComm) && totalWithComm > 0) {
+					updatedLine.totalPriceWithCommission = Number(
+						totalWithComm.toFixed(2)
+					);
+				}
+				if (hasRootPrice) {
+					updatedLine.hotelShouldGet = Number(hotelShouldGet.toFixed(2));
+				}
+
+				next[idx] = updatedLine;
+				return next;
+			});
+
+			if (setSearchedReservation && searchedReservation) {
+				const updatedRooms = Array.isArray(pickedRoomsType)
+					? pickedRoomsType.map((line) => {
+							if (
+								line.room_type === currentRoom.room_type &&
+								line.displayName === currentDisplayName
+							) {
+								return {
+									...line,
+									pricingByDay: pricingSnapshot,
+									chosenPrice: Number(chosenPrice.toFixed(2)),
+									totalPriceWithCommission: Number(totalWithComm.toFixed(2)),
+									hotelShouldGet: hasRootPrice
+										? Number(hotelShouldGet.toFixed(2))
+										: line.hotelShouldGet,
+								};
+							}
+							return line;
+					  })
+					: [];
+
+				const stayNights = Math.max(getStayNights(), 1);
+				const updatedTotalAmount = updatedRooms.reduce((sum, room) => {
+					const count = Number(room.count) || 1;
+					if (Array.isArray(room.pricingByDay) && room.pricingByDay.length > 0) {
+						const roomTotal = room.pricingByDay.reduce(
+							(acc, day) =>
+								acc +
+								normalizeNumber(
+									day.totalPriceWithCommission ?? day.price,
+									0
+								),
+							0
+						);
+						return sum + roomTotal * count;
+					}
+					const nightly = normalizeNumber(room.chosenPrice, 0);
+					return sum + nightly * stayNights * count;
+				}, 0);
+
+				setSearchedReservation({
+					...searchedReservation,
+					pickedRoomsType: updatedRooms,
+					total_amount:
+						updatedTotalAmount > 0
+							? Number(updatedTotalAmount.toFixed(2))
+							: searchedReservation.total_amount,
+				});
+			}
+		}
+
 		setPickedRoomPricing([
 			...pickedRoomPricing,
 			{
 				roomId: currentRoom._id,
 				chosenPrice: finalChosenPrice,
-				pricingByDay,
+				pricingByDay: pricingSnapshot,
 			},
 		]);
 
@@ -289,6 +554,7 @@ const HotelOverviewReservation = ({
 		setCurrentRoom(null);
 		setPricingByDay([]);
 		setInheritedPrice("");
+		setTotalToDistribute("");
 		setSelectedBeds([]);
 		setBookedBeds([]);
 		setTotalAmountPerBed(0);
@@ -328,14 +594,26 @@ const HotelOverviewReservation = ({
 					min={0}
 					value={record.price}
 					onChange={(value) => {
-						const updatedPricingByDay = [...pricingByDay];
-						updatedPricingByDay[index].price = value;
-						setPricingByDay(updatedPricingByDay);
+						const nextPrice = normalizeNumber(value, 0);
+						setPricingByDay((prev) =>
+							prev.map((day, idx) =>
+								idx === index ? buildDayRow(day.date, nextPrice, day) : day
+							)
+						);
 					}}
 				/>
 			),
 		},
 	];
+
+	useEffect(() => {
+		if (!isModalVisible) return;
+		const total = pricingByDay.reduce(
+			(acc, day) => acc + normalizeNumber(day.price, 0),
+			0
+		);
+		setTotalToDistribute(Number(total.toFixed(2)));
+	}, [pricingByDay, isModalVisible]);
 
 	const handleFilterChange = (filterType, value) => {
 		if (filterType === "availability") {
@@ -364,7 +642,9 @@ const HotelOverviewReservation = ({
 			(selectedAvailability === "vacant" &&
 				!isRoomBooked(room._id, room.room_type, room.bedsNumber));
 		const isRoomTypeMatch =
-			selectedRoomType === null || room.room_type === selectedRoomType;
+			selectedRoomType === null ||
+			room.display_name === selectedRoomType ||
+			room.displayName === selectedRoomType;
 		const isFloorMatch = selectedFloor === null || room.floor === selectedFloor;
 		const isRoomStatusMatch =
 			selectedRoomStatus === null ||
@@ -381,9 +661,14 @@ const HotelOverviewReservation = ({
 	const distinctRoomTypesWithColors =
 		hotelRooms &&
 		hotelRooms.reduce((accumulator, room) => {
-			if (!accumulator.some((item) => item.room_type === room.room_type)) {
+			const displayName = room.display_name || room.displayName;
+			if (!displayName) return accumulator;
+
+			if (
+				!accumulator.some((item) => item.displayName === displayName)
+			) {
 				accumulator.push({
-					room_type: room.room_type,
+					displayName,
 					roomColorCode: room.roomColorCode,
 				});
 			}
@@ -628,10 +913,50 @@ const HotelOverviewReservation = ({
 						onOk={handleOk}
 						onCancel={handleCancel}
 					>
+						<div
+							style={{ marginBottom: "10px" }}
+							dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+						>
+							<label style={{ fontWeight: "bold", display: "block" }}>
+								{chosenLanguage === "Arabic"
+									? "المبلغ الإجمالي"
+									: "Total Amount"}
+							</label>
+							<InputNumber
+								value={totalToDistribute}
+								onChange={(value) =>
+									setTotalToDistribute(value ?? "")
+								}
+								min={0}
+								style={{ width: "100%", marginBottom: "8px" }}
+							/>
+							<button
+								onClick={handleDistributeTotal}
+								className='btn btn-primary my-1 p-1 w-50'
+							>
+								{chosenLanguage === "Arabic"
+									? "توزيع الإجمالي"
+									: "Distribute Total"}
+							</button>
+						</div>
+
+						<div
+							style={{ marginBottom: "10px" }}
+							dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+						>
+							<label style={{ fontWeight: "bold", display: "block" }}>
+								{chosenLanguage === "Arabic"
+									? "سعر الليلة"
+									: "Nightly Price"}
+							</label>
 						<InputNumber
 							value={inheritedPrice}
 							onChange={(value) => setInheritedPrice(value)}
-							placeholder='Enter new price to inherit'
+							placeholder={
+								chosenLanguage === "Arabic"
+									? "أدخل سعر الليلة"
+									: "Enter nightly price"
+							}
 							style={{ width: "100%", marginBottom: "10px" }}
 						/>
 						<div>
@@ -639,8 +964,11 @@ const HotelOverviewReservation = ({
 								onClick={handleInheritPrices}
 								className='btn btn-success my-2 p-1 w-50'
 							>
-								Inherit New Prices
+								{chosenLanguage === "Arabic"
+									? "تطبيق سعر الليلة"
+									: "Apply Nightly Price"}
 							</button>
+						</div>
 						</div>
 
 						{currentRoom?.room_type === "individualBed" && (

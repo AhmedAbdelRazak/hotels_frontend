@@ -73,10 +73,20 @@ const FilterComponent = ({
 		setDateString(dateString); // Update temporary date string state
 	};
 
+	const safeReservationObject =
+		reservationObject && typeof reservationObject === "object"
+			? reservationObject
+			: {};
+
+	const getCount = (value) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : 0;
+	};
+
 	// Define filter labels in both English and Arabic
 	const filterLabels = {
 		All: chosenLanguage === "Arabic" ? "إختيار الكل" : "All",
-		"New Reservation":
+		"Today's New Reservations":
 			chosenLanguage === "Arabic" ? "حجز جديد" : "New Reservation",
 		Cancelations: chosenLanguage === "Arabic" ? "الإلغاءات" : "Cancelations",
 		"Today's Arrivals":
@@ -110,16 +120,13 @@ const FilterComponent = ({
 
 	// Map filter names to their corresponding keys in reservationObject for count display
 	const filterCounts = {
-		"New Reservation": reservationObject.newReservations,
-		Cancelations: reservationObject.cancellations || 0,
-		"Today's Arrivals": reservationObject.todayArrival || 0,
-		"Today's Departures": reservationObject.departureToday || 0,
-		"In House": reservationObject.inHouse || 0,
-		"Incomplete reservations": reservationObject.inComplete || 0,
-		All:
-			(reservationObject.allReservations &&
-				reservationObject.allReservations.toLocaleString()) ||
-			0,
+		"Today's New Reservations": getCount(safeReservationObject.newReservations),
+		Cancelations: getCount(safeReservationObject.cancellations),
+		"Today's Arrivals": getCount(safeReservationObject.todayArrival),
+		"Today's Departures": getCount(safeReservationObject.departureToday),
+		"In House": getCount(safeReservationObject.inHouse),
+		"Incomplete reservations": getCount(safeReservationObject.inComplete),
+		All: getCount(safeReservationObject.allReservations),
 	};
 
 	console.log(filterCounts, "filterCounts");

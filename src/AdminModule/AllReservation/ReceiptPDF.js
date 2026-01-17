@@ -31,10 +31,6 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 		[localResv, reservation]
 	);
 
-	const hasCardNumber =
-		localResv?.customer_details?.cardNumber &&
-		localResv.customer_details.cardNumber.trim() !== "";
-
 	const totalAmount = safeNumber(localResv?.total_amount);
 
 	// Treat paid_amount as the online/authorized bucket:

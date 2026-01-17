@@ -14,16 +14,16 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 		: 0;
 
 	// 2) Decide which translations to use
-	const translations = {
+		const translations = {
 		English: {
-			title: "Available Room Today",
+			title: "Available Units Today",
 			subLabelAvailable: "Available",
-			subLabelUsed: "Used",
+			subLabelUsed: "Occupied",
 		},
 		Arabic: {
-			title: "الغرف المتاحة اليوم",
-			subLabelAvailable: "متاحة",
-			subLabelUsed: "مشغولة",
+			title: "الوحدات المتاحة اليوم",
+			subLabelAvailable: "متاح",
+			subLabelUsed: "مشغول",
 		},
 	};
 	const { title, subLabelAvailable, subLabelUsed } =
@@ -111,3 +111,4 @@ const CardTitle = styled.div`
 	font-size: 16px;
 	color: #888;
 `;
+

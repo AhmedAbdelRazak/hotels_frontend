@@ -18,6 +18,7 @@ import {
 	updateSingleReservation,
 	gettingRoomInventory,
 	getHotelById,
+	getTodaysCheckins,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
@@ -42,6 +43,7 @@ const NewReservationMain = () => {
 	const [pickedHotelRooms, setPickedHotelRooms] = useState([]);
 	const [pickedRoomPricing, setPickedRoomPricing] = useState([]); // flattened like OrderTaker
 	const [allReservations, setAllReservations] = useState([]);
+	const [todaysCheckins, setTodaysCheckins] = useState(null);
 	const [values, setValues] = useState("");
 	const [pickedRoomsType, setPickedRoomsType] = useState([]); // UI summary lines
 	const [total_amount, setTotal_Amount] = useState(0);
@@ -163,10 +165,15 @@ const NewReservationMain = () => {
 						console.log(data2.error);
 					} else {
 						if (data && data.name && data._id && data2) {
+							const belongsToId =
+								user.role === 2000
+									? user._id
+									: selectedHotelLS.belongsTo._id;
+
 							if (heatMapStartDate && heatMapEndDate) {
 								getHotelReservations(
 									hotelId,
-									user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
+									belongsToId,
 									heatMapStartDate,
 									heatMapEndDate
 								).then((data3) => {
@@ -176,11 +183,20 @@ const NewReservationMain = () => {
 										setAllReservations(data3 && data3.length > 0 ? data3 : []);
 									}
 								});
+
+								getTodaysCheckins(hotelId, belongsToId).then((todayData) => {
+									if (todayData && todayData.error) {
+										console.log(todayData.error);
+										setTodaysCheckins([]);
+									} else {
+										setTodaysCheckins(Array.isArray(todayData) ? todayData : []);
+									}
+								});
 							}
 
 							getHotelReservations(
 								hotelId,
-								user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
+								belongsToId,
 								heatMapStartDate,
 								heatMapEndDate
 							).then((data4) => {
@@ -822,6 +838,7 @@ const NewReservationMain = () => {
 												setPickedRoomsType={setPickedRoomsType}
 												finalTotalByRoom={calculateTotalAmountWithRooms}
 												isBoss={isBoss}
+												todaysCheckins={todaysCheckins}
 												start_date_Map={start_date_Map}
 												end_date_Map={end_date_Map}
 												bedNumber={bedNumber}

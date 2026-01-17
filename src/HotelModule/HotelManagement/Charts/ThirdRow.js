@@ -73,37 +73,38 @@ const ThirdRow = ({
 	// 4) Build columns for the Rooms table
 	const columns = [
 		{
-			title: chosenLanguage === "Arabic" ? "النوع" : "Type",
+			title: chosenLanguage === "Arabic" ? "اسم الغرفة" : "Room Name",
 			dataIndex: "type",
 			key: "type",
 		},
 		{
-			title: chosenLanguage === "Arabic" ? "مباعة" : "Sold",
+			title: chosenLanguage === "Arabic" ? "محجوز اليوم" : "Booked Today",
 			dataIndex: "sold",
 			key: "sold",
 		},
 		{
-			title: chosenLanguage === "Arabic" ? "متاحة" : "Available",
+			title: chosenLanguage === "Arabic" ? "متاح اليوم" : "Available Today",
 			dataIndex: "available",
 			key: "available",
 		},
 		{
 			title:
-				chosenLanguage === "Arabic" ? "الحجوزات في 7 أيام" : "Booking Next 7",
+				chosenLanguage === "Arabic"
+					? "أعلى إشغال (7 أيام قادمة)"
+					: "Peak Booked (Next 7 Days)",
 			dataIndex: "bookingNext7",
 			key: "bookingNext7",
 		},
 		{
 			title:
 				chosenLanguage === "Arabic"
-					? "التوفر في 7 أيام"
-					: "Availability Next 7",
+					? "أقل المتاح (7 أيام قادمة)"
+					: "Min Available (Next 7 Days)",
 			dataIndex: "availabilityNext7",
 			key: "availabilityNext7",
 		},
 		{
-			title:
-				chosenLanguage === "Arabic" ? "إجمالي الغرف في الفندق" : "Total Rooms",
+			title: chosenLanguage === "Arabic" ? "إجمالي الوحدات" : "Total Units",
 			dataIndex: "total",
 			key: "total",
 		},
@@ -114,7 +115,7 @@ const ThirdRow = ({
 			{/* Left => Rooms Table */}
 			<TableWrapper>
 				<TableTitle>
-					{chosenLanguage === "Arabic" ? "الغرف" : "Rooms"}
+					{chosenLanguage === "Arabic" ? "ملخص الغرف" : "Room Summary"}
 				</TableTitle>
 				<StyledTable
 					dataSource={roomsTable}
@@ -247,3 +248,4 @@ const LegendDot = styled.div`
 	background-color: ${(props) => props.color};
 	margin-right: 8px;
 `;
+

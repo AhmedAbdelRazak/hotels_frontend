@@ -15,6 +15,10 @@ const HotelMapFilters = ({
 	selectedRoomStatus,
 	fromComponent,
 }) => {
+	const roomOptions = Array.isArray(distinctRoomTypesWithColors)
+		? distinctRoomTypesWithColors
+		: [];
+
 	const handleAvailabilityChange = (value) => {
 		handleFilterChange("availability", value === "all" ? null : value);
 	};
@@ -52,15 +56,22 @@ const HotelMapFilters = ({
 			<FiltersContainer>
 				<StyledSelect
 					className='filter-select'
-					placeholder='Room Type'
+					placeholder={
+						chosenLanguage === "Arabic" ? "اسم الغرفة" : "Room Name"
+					}
 					onChange={handleRoomTypeChange}
 					value={selectedRoomType}
 					style={{ width: "200px" }}
 					dir={chosenLanguage === "Arabic" ? "ltr" : "ltr"}
 				>
-					<Select.Option value='all'>All</Select.Option>
-					{distinctRoomTypesWithColors.map((room) => (
-						<Select.Option key={room.room_type} value={room.room_type}>
+					<Select.Option value='all'>
+						{chosenLanguage === "Arabic" ? "الكل" : "All"}
+					</Select.Option>
+					{roomOptions.map((room) => {
+						const displayName =
+							room.displayName || room.display_name || room.room_type;
+						return (
+							<Select.Option key={displayName} value={displayName}>
 							<div
 								style={{
 									display: "flex",
@@ -77,30 +88,41 @@ const HotelMapFilters = ({
 										marginRight: "5px",
 									}}
 								></div>
-								{room.room_type}
+								{displayName}
 							</div>
 						</Select.Option>
-					))}
+						);
+					})}
 				</StyledSelect>
 				<StyledSelect
 					className='filter-select'
-					placeholder='Availability'
+					placeholder={
+						chosenLanguage === "Arabic" ? "التوفر" : "Availability"
+					}
 					onChange={handleAvailabilityChange}
 					value={selectedAvailability}
 					style={{ width: "140px" }}
 				>
-					<Select.Option value='all'>All</Select.Option>
-					<Select.Option value='occupied'>Occupied</Select.Option>
-					<Select.Option value='vacant'>Vacant</Select.Option>
+					<Select.Option value='all'>
+						{chosenLanguage === "Arabic" ? "الكل" : "All"}
+					</Select.Option>
+					<Select.Option value='occupied'>
+						{chosenLanguage === "Arabic" ? "مشغولة" : "Occupied"}
+					</Select.Option>
+					<Select.Option value='vacant'>
+						{chosenLanguage === "Arabic" ? "متاحة" : "Vacant"}
+					</Select.Option>
 				</StyledSelect>
 				<StyledSelect
 					className='filter-select'
-					placeholder='Floor'
+					placeholder={chosenLanguage === "Arabic" ? "الطابق" : "Floor"}
 					onChange={handleFloorChange}
 					value={selectedFloor}
 					style={{ width: "140px" }}
 				>
-					<Select.Option value='all'>All</Select.Option>
+					<Select.Option value='all'>
+						{chosenLanguage === "Arabic" ? "الكل" : "All"}
+					</Select.Option>
 					{floors.map((floor) => (
 						<Select.Option key={floor} value={floor}>
 							{floor}
@@ -109,17 +131,25 @@ const HotelMapFilters = ({
 				</StyledSelect>
 				<StyledSelect
 					className='filter-select'
-					placeholder='Room Status'
+					placeholder={
+						chosenLanguage === "Arabic" ? "حالة الغرفة" : "Room Status"
+					}
 					onChange={handleRoomStatusChange}
 					value={selectedRoomStatus}
 					style={{ width: "140px" }}
 				>
-					<Select.Option value='all'>All</Select.Option>
-					<Select.Option value='clean'>Clean</Select.Option>
-					<Select.Option value='dirty'>Dirty</Select.Option>
+					<Select.Option value='all'>
+						{chosenLanguage === "Arabic" ? "الكل" : "All"}
+					</Select.Option>
+					<Select.Option value='clean'>
+						{chosenLanguage === "Arabic" ? "نظيفة" : "Clean"}
+					</Select.Option>
+					<Select.Option value='dirty'>
+						{chosenLanguage === "Arabic" ? "متسخة" : "Dirty"}
+					</Select.Option>
 				</StyledSelect>
 				<StyledButton icon={<ReloadOutlined />} onClick={handleResetFilters}>
-					Reset
+					{chosenLanguage === "Arabic" ? "إعادة ضبط" : "Reset"}
 				</StyledButton>
 			</FiltersContainer>
 		</Wrapper>

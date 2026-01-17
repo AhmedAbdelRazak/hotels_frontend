@@ -173,6 +173,19 @@ export const getHotelReservations = (hotelId, userId, startdate, enddate) => {
 		.catch((err) => console.log(err));
 };
 
+export const getTodaysCheckins = (hotelId, userId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/checkins-today/${hotelId}/${userId}`,
+		{
+			method: "GET",
+		}
+	)
+		.then((response) => {
+			return response.json();
+		})
+		.catch((err) => console.log(err));
+};
+
 export const getListOfRoomSummary = (checkinDate, checkoutDate, hotelId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/room/${checkinDate}/${checkoutDate}/${hotelId}`,

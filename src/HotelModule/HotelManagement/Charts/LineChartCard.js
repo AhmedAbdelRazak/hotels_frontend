@@ -3,24 +3,62 @@ import styled from "styled-components";
 import { Card } from "antd";
 import Chart from "react-apexcharts";
 
-const LineChartCard = ({ chosenLanguage }) => {
+const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 	const translations = {
 		English: {
-			title: "Reservation Statistic",
-			subtitle: "Day over day summary",
+			title: "Check-in/Check-out Trend",
+			subtitle: "Last 7 days",
 			checkIn: "Check In",
 			checkOut: "Check Out",
 		},
 		Arabic: {
-			title: "إحصائيات الحجز",
-			subtitle: "ملخص يومي",
-			checkIn: "تسجيل دخول",
-			checkOut: "تسجيل خروج",
+			title: "اتجاه الوصول والمغادرة",
+			subtitle: "آخر 7 أيام",
+			checkIn: "تسجيل الوصول",
+			checkOut: "تسجيل المغادرة",
 		},
 	};
 
 	const { title, subtitle, checkIn, checkOut } =
 		translations[chosenLanguage] || translations.English;
+
+	const toNumber = (value) => {
+		const num = Number(value);
+		return Number.isFinite(num) ? num : 0;
+	};
+
+	const buildFallbackCategories = () => {
+		const days = [];
+		const today = new Date();
+		for (let i = 6; i >= 0; i -= 1) {
+			const d = new Date(today);
+			d.setDate(d.getDate() - i);
+			days.push(d.toISOString().slice(0, 10));
+		}
+		return days;
+	};
+
+	const rawCategories = Array.isArray(bookingLine?.categories)
+		? bookingLine.categories
+		: [];
+	const categories =
+		rawCategories.length > 0 ? rawCategories : buildFallbackCategories();
+
+	const normalizeSeries = (data, length) => {
+		const arr = Array.isArray(data) ? data.map(toNumber) : [];
+		if (length <= 0) return arr;
+		if (arr.length >= length) return arr.slice(0, length);
+		return arr.concat(new Array(length - arr.length).fill(0));
+	};
+
+	const checkInData = normalizeSeries(bookingLine?.checkIn, categories.length);
+	const checkOutData = normalizeSeries(
+		bookingLine?.checkOut,
+		categories.length
+	);
+
+	const totalCheckIn = checkInData.reduce((sum, value) => sum + value, 0);
+	const totalCheckOut = checkOutData.reduce((sum, value) => sum + value, 0);
 
 	const chartOptions = {
 		chart: {
@@ -30,20 +68,7 @@ const LineChartCard = ({ chosenLanguage }) => {
 			},
 		},
 		xaxis: {
-			categories: [
-				"01",
-				"02",
-				"03",
-				"04",
-				"05",
-				"06",
-				"07",
-				"08",
-				"09",
-				"10",
-				"11",
-				"12",
-			],
+			categories,
 		},
 		stroke: {
 			curve: "smooth",
@@ -71,11 +96,11 @@ const LineChartCard = ({ chosenLanguage }) => {
 	const chartSeries = [
 		{
 			name: checkIn,
-			data: [400, 430, 448, 470, 540, 580, 690, 1100, 1200, 1380],
+			data: checkInData,
 		},
 		{
 			name: checkOut,
-			data: [200, 330, 548, 670, 540, 480, 690, 900, 1100, 1000],
+			data: checkOutData,
 		},
 	];
 
@@ -89,10 +114,16 @@ const LineChartCard = ({ chosenLanguage }) => {
 					</div>
 					<Stats>
 						<StatItem>
-							<StatNumber className='mx-2'>549</StatNumber> {checkIn}
+							<StatNumber className='mx-2'>
+								{totalCheckIn.toLocaleString()}
+							</StatNumber>{" "}
+							{checkIn}
 						</StatItem>
 						<StatItem>
-							<StatNumber className='mx-2'>327</StatNumber> {checkOut}
+							<StatNumber className='mx-2'>
+								{totalCheckOut.toLocaleString()}
+							</StatNumber>{" "}
+							{checkOut}
 						</StatItem>
 					</Stats>
 				</HeaderContent>

@@ -122,7 +122,10 @@ const AdminDashboard = ({ chosenLanguage }) => {
 					/>
 				</ChartsWrapper>
 				<LineChartWrapper>
-					<LineChartCard chosenLanguage={chosenLanguage} />
+					<LineChartCard
+						chosenLanguage={chosenLanguage}
+						bookingLine={adminDashboardReport?.fifthRow?.bookingLine}
+					/>
 				</LineChartWrapper>
 			</ChartsGrid>
 		</DashboardWrapper>

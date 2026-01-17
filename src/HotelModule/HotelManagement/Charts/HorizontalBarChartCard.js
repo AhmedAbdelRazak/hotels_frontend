@@ -3,24 +3,34 @@ import styled from "styled-components";
 import { Card } from "antd";
 import Chart from "react-apexcharts";
 
-const HorizontalBarChartCard = ({ chosenLanguage }) => {
+const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 	const translations = {
 		English: {
-			title: "Booked Room Today",
+			title: "Check-ins Today",
 			pending: "Pending",
 			done: "Done",
 			finish: "Finish",
 		},
 		Arabic: {
-			title: "الغرف المحجوزة اليوم",
+			title: "تسجيلات الوصول اليوم",
 			pending: "معلق",
 			done: "تم",
-			finish: "منتهي",
+			finish: "مكتمل",
 		},
 	};
 
 	const { title, pending, done, finish } =
 		translations[chosenLanguage] || translations.English;
+
+	const pendingCount = Number.isFinite(Number(DonutChartCard.pending))
+		? Number(DonutChartCard.pending)
+		: 0;
+	const doneCount = Number.isFinite(Number(DonutChartCard.done))
+		? Number(DonutChartCard.done)
+		: 0;
+	const finishCount = Number.isFinite(Number(DonutChartCard.finish))
+		? Number(DonutChartCard.finish)
+		: 0;
 
 	const barChartOptions = {
 		chart: {
@@ -81,7 +91,7 @@ const HorizontalBarChartCard = ({ chosenLanguage }) => {
 
 	const barChartSeries = [
 		{
-			data: [234, 65, 763],
+			data: [pendingCount, doneCount, finishCount],
 		},
 	];
 
@@ -107,7 +117,7 @@ const HorizontalBarChartCard = ({ chosenLanguage }) => {
 							/>
 							<LegendText>{pending}</LegendText>
 						</LegendLabel>
-						<LegendValue>234</LegendValue>
+						<LegendValue>{pendingCount}</LegendValue>
 					</LegendItem>
 					<LegendItem>
 						<LegendLabel>
@@ -118,7 +128,7 @@ const HorizontalBarChartCard = ({ chosenLanguage }) => {
 							/>
 							<LegendText>{done}</LegendText>
 						</LegendLabel>
-						<LegendValue>65</LegendValue>
+						<LegendValue>{doneCount}</LegendValue>
 					</LegendItem>
 					<LegendItem>
 						<LegendLabel>
@@ -129,7 +139,7 @@ const HorizontalBarChartCard = ({ chosenLanguage }) => {
 							/>
 							<LegendText>{finish}</LegendText>
 						</LegendLabel>
-						<LegendValue>763</LegendValue>
+						<LegendValue>{finishCount}</LegendValue>
 					</LegendItem>
 				</Legend>
 			</StyledCard>
@@ -193,3 +203,5 @@ const LegendValue = styled.span`
 	margin-top: 2px;
 	text-align: center;
 `;
+
+

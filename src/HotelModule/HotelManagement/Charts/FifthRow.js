@@ -98,7 +98,9 @@ const FifthRow = ({
 			<ChartCardLarge>
 				<ChartHeader>
 					<ChartTitle>
-						{chosenLanguage === "Arabic" ? "الحجوزات" : "Booking"}
+						{chosenLanguage === "Arabic"
+							? "الوصول مقابل المغادرة"
+							: "Check-ins vs Check-outs"}
 					</ChartTitle>
 					<ChartSubtitle>
 						{chosenLanguage === "Arabic"

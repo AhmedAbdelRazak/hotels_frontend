@@ -48,14 +48,14 @@ const FourthRow = ({
 	const chartTitles =
 		chosenLanguage === "Arabic"
 			? {
-					topChannels: "أفضل القنوات",
-					roomNights: "ليالي الغرف حسب النوع",
-					roomRevenue: "إيرادات الغرف حسب النوع",
+					topChannels: "أهم قنوات الحجز",
+					roomNights: "ليالي الغرف حسب اسم الغرفة",
+					roomRevenue: "إيراد الغرف حسب اسم الغرفة",
 			  }
 			: {
-					topChannels: "Top Channels",
-					roomNights: "Room Nights by Room Types",
-					roomRevenue: "Room Revenue by Room Types",
+					topChannels: "Top Booking Channels",
+					roomNights: "Room Nights by Room Name",
+					roomRevenue: "Room Revenue by Room Name",
 			  };
 
 	// ---------- 3) Build chart data for “topChannels” ----------
@@ -247,3 +247,4 @@ const ChartTitle = styled.h2`
 	font-weight: bold;
 	align-self: flex-start;
 `;
+
