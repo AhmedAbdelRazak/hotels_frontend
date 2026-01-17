@@ -22,6 +22,7 @@ import {
 	getHotelOccupancyCalendar,
 	getHotelOccupancyDayReservations,
 	getHotelOccupancyWarnings,
+	getBookingSourcePaymentSummary,
 	gettingHotelDetailsForAdmin,
 } from "../apiAdmin";
 import WarningsModal from "./WarningsModal";
@@ -249,6 +250,7 @@ const HotelsInventoryMap = () => {
 	const [displayMode, setDisplayMode] = useState("displayName");
 
 	const [data, setData] = useState(null);
+	const [bookingSourceSummary, setBookingSourceSummary] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
@@ -348,6 +350,33 @@ const HotelsInventoryMap = () => {
 	const paymentBreakdown = Array.isArray(summary.paymentBreakdown)
 		? summary.paymentBreakdown
 		: [];
+	const bookingSourceMatrix = bookingSourceSummary || {};
+	const bookingSourceStatusesRaw = Array.isArray(bookingSourceMatrix.statuses)
+		? bookingSourceMatrix.statuses
+		: [];
+	const bookingSourceStatusOrder = [
+		"Captured",
+		"Paid Offline",
+		"Not Captured",
+		"Not Paid",
+	];
+	const bookingSourceStatuses = bookingSourceStatusesRaw.length
+		? [
+				...bookingSourceStatusOrder.filter((status) =>
+					bookingSourceStatusesRaw.includes(status)
+				),
+				...bookingSourceStatusesRaw.filter(
+					(status) => !bookingSourceStatusOrder.includes(status)
+				),
+		  ]
+		: bookingSourceStatusOrder;
+	const bookingSourceRows = Array.isArray(bookingSourceMatrix.rows)
+		? bookingSourceMatrix.rows
+		: [];
+	const bookingSourceColumnTotals = bookingSourceMatrix.columnTotals || {};
+	const bookingSourceOverallTotal = Number(
+		bookingSourceMatrix.overallTotal || 0
+	);
 
 	const monthLabel = useMemo(() => {
 		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
@@ -450,19 +479,46 @@ const HotelsInventoryMap = () => {
 		setError("");
 
 		try {
-			const payload = await getHotelOccupancyCalendar(user._id, token, {
-				hotelId: selectedHotelId,
-				month: rangeOverride ? null : monthValue.format("YYYY-MM"),
-				start: rangeOverride?.start || null,
-				end: rangeOverride?.end || null,
-				includeCancelled,
-				display: displayMode,
-				paymentStatuses,
-			});
-			setData(payload);
+			const [occupancyResult, bookingSourceResult] = await Promise.allSettled([
+				getHotelOccupancyCalendar(user._id, token, {
+					hotelId: selectedHotelId,
+					month: rangeOverride ? null : monthValue.format("YYYY-MM"),
+					start: rangeOverride?.start || null,
+					end: rangeOverride?.end || null,
+					includeCancelled,
+					display: displayMode,
+					paymentStatuses,
+				}),
+				getBookingSourcePaymentSummary(user._id, token, {
+					hotelId: selectedHotelId,
+					month: rangeOverride ? null : monthValue.format("YYYY-MM"),
+					start: rangeOverride?.start || null,
+					end: rangeOverride?.end || null,
+					includeCancelled,
+					paymentStatuses,
+				}),
+			]);
+
+			if (occupancyResult.status === "fulfilled") {
+				setData(occupancyResult.value);
+			} else {
+				setError(
+					occupancyResult.reason?.message || "Failed to load occupancy"
+				);
+				setData(null);
+			}
+
+			if (bookingSourceResult.status === "fulfilled") {
+				setBookingSourceSummary(
+					bookingSourceResult.value?.data || bookingSourceResult.value || null
+				);
+			} else {
+				setBookingSourceSummary(null);
+			}
 		} catch (err) {
 			setError(err?.message || "Failed to load occupancy");
 			setData(null);
+			setBookingSourceSummary(null);
 		} finally {
 			setLoading(false);
 		}
@@ -1312,38 +1368,97 @@ const HotelsInventoryMap = () => {
 					</Card>
 
 					<Card size='small' title='Payment status breakdown'>
-						<BreakdownTable>
-							<table>
-								<thead>
-									<tr>
-										<th>Status</th>
-										<th>Reservations</th>
-										<th>Total amount (SAR)</th>
-										<th>Paid amount</th>
-										<th>Onsite paid</th>
-									</tr>
-								</thead>
-								<tbody>
-									{paymentBreakdown.length ? (
-										paymentBreakdown.map((pmt) => (
-											<tr key={pmt.status}>
-												<td>{paymentLabel(pmt.status, pmt.label)}</td>
-												<td>{formatInt(pmt.count)}</td>
-												<td>{formatCurrency(pmt.totalAmount)}</td>
-												<td>{formatCurrency(pmt.paidAmount)}</td>
-												<td>{formatCurrency(pmt.onsitePaidAmount)}</td>
-											</tr>
-										))
-									) : (
+						<BreakdownTablesRow>
+							<BreakdownTable>
+								<div className='table-title'>Booking source totals (SAR)</div>
+								<table>
+									<thead>
 										<tr>
-											<td colSpan={5} className='empty'>
-												No payment data in this range
-											</td>
+											<th>Booking source</th>
+											{bookingSourceStatuses.map((status) => (
+												<th key={status}>{status}</th>
+											))}
+											<th>Total (SAR)</th>
 										</tr>
-									)}
-								</tbody>
-							</table>
-						</BreakdownTable>
+									</thead>
+									<tbody>
+										{bookingSourceRows.length ? (
+											bookingSourceRows.map((row) => (
+												<tr key={row.booking_source || "Unknown"}>
+													<td>{row.booking_source || "Unknown"}</td>
+													{bookingSourceStatuses.map((status) => (
+														<td key={`${row.booking_source}-${status}`}>
+															{formatCurrency(
+																row?.totalsByStatus?.[status] || 0
+															)}
+														</td>
+													))}
+													<td>{formatCurrency(row.rowTotal || 0)}</td>
+												</tr>
+											))
+										) : (
+											<tr>
+												<td
+													colSpan={bookingSourceStatuses.length + 2}
+													className='empty'
+												>
+													No booking source data in this range
+												</td>
+											</tr>
+										)}
+									</tbody>
+									{bookingSourceRows.length ? (
+										<tfoot>
+											<tr className='totals'>
+												<td>Total</td>
+												{bookingSourceStatuses.map((status) => (
+													<td key={`total-${status}`}>
+														{formatCurrency(
+															bookingSourceColumnTotals?.[status] || 0
+														)}
+													</td>
+												))}
+												<td>{formatCurrency(bookingSourceOverallTotal)}</td>
+											</tr>
+										</tfoot>
+									) : null}
+								</table>
+							</BreakdownTable>
+
+							<BreakdownTable>
+								<div className='table-title'>Payment status totals</div>
+								<table>
+									<thead>
+										<tr>
+											<th>Status</th>
+											<th>Reservations</th>
+											<th>Total amount (SAR)</th>
+											<th>Paid amount</th>
+											<th>Onsite paid</th>
+										</tr>
+									</thead>
+									<tbody>
+										{paymentBreakdown.length ? (
+											paymentBreakdown.map((pmt) => (
+												<tr key={pmt.status}>
+													<td>{paymentLabel(pmt.status, pmt.label)}</td>
+													<td>{formatInt(pmt.count)}</td>
+													<td>{formatCurrency(pmt.totalAmount)}</td>
+													<td>{formatCurrency(pmt.paidAmount)}</td>
+													<td>{formatCurrency(pmt.onsitePaidAmount)}</td>
+												</tr>
+											))
+										) : (
+											<tr>
+												<td colSpan={5} className='empty'>
+													No payment data in this range
+												</td>
+											</tr>
+										)}
+									</tbody>
+								</table>
+							</BreakdownTable>
+						</BreakdownTablesRow>
 					</Card>
 				</>
 			)}
@@ -1955,6 +2070,12 @@ const BreakdownTable = styled.div`
 	display: inline-block;
 	min-width: 420px;
 	max-width: 100%;
+	flex: 1 1 420px;
+
+	.table-title {
+		font-weight: 600;
+		margin-bottom: 6px;
+	}
 
 	table {
 		width: 100%;
@@ -1974,10 +2095,23 @@ const BreakdownTable = styled.div`
 		font-weight: 600;
 	}
 
+	tfoot td,
+	.totals td {
+		font-weight: 700;
+		background: #fafafa;
+	}
+
 	.empty {
 		text-align: center;
 		color: #777;
 	}
+`;
+
+const BreakdownTablesRow = styled.div`
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	align-items: flex-start;
 `;
 
 const TypeGrid = styled.div`

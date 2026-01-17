@@ -21,6 +21,7 @@ import {
 	getReservationsByBookingStatus,
 	getReservationsByHotelNames,
 	getTopHotelsByReservations,
+	getBookingSourcePaymentSummary,
 	getSpecificListOfReservations,
 	gettingHotelDetailsForAdmin,
 } from "../apiAdmin";
@@ -210,6 +211,8 @@ const ReservationsOverview = () => {
 		useState([]);
 	const [reservationsByHotelNames, setReservationsByHotelNames] = useState([]);
 	const [topHotels, setTopHotels] = useState([]);
+	const [bookingSourcePaymentSummary, setBookingSourcePaymentSummary] =
+		useState(null);
 
 	// Month/Quarter Options
 	const [dayMonthOptions, setDayMonthOptions] = useState([]);
@@ -343,6 +346,10 @@ const ReservationsOverview = () => {
 				selectedHotels,
 				extraParams
 			),
+			getBookingSourcePaymentSummary(user._id, token, {
+				selectedHotels,
+				excludeCancelled,
+			}),
 		])
 			.then((results) => {
 				const [
@@ -352,6 +359,7 @@ const ReservationsOverview = () => {
 					rByStatus,
 					rByHotelNames,
 					topHotelsData,
+					bookingSourceSummaryData,
 				] = results;
 
 				setReservationsByDay(Array.isArray(rByDay) ? rByDay : []);
@@ -364,6 +372,9 @@ const ReservationsOverview = () => {
 					Array.isArray(rByHotelNames) ? rByHotelNames : []
 				);
 				setTopHotels(Array.isArray(topHotelsData) ? topHotelsData : []);
+				setBookingSourcePaymentSummary(
+					bookingSourceSummaryData?.data || bookingSourceSummaryData || null
+				);
 
 				const { monthArray: dM, quarterArray: dQ } = buildMonthQuarterOptions(
 					Array.isArray(rByDay) ? rByDay : []
@@ -802,6 +813,34 @@ const ReservationsOverview = () => {
 	);
 	const sortedByHotel = [...filteredByHotel].sort(
 		(a, b) => (b.reservationsCount ?? 0) - (a.reservationsCount ?? 0)
+	);
+
+	const bookingSourceMatrix = bookingSourcePaymentSummary || {};
+	const bookingSourceStatusesRaw = Array.isArray(bookingSourceMatrix.statuses)
+		? bookingSourceMatrix.statuses
+		: [];
+	const bookingSourceStatusOrder = [
+		"Captured",
+		"Paid Offline",
+		"Not Captured",
+		"Not Paid",
+	];
+	const bookingSourceStatuses = bookingSourceStatusesRaw.length
+		? [
+				...bookingSourceStatusOrder.filter((status) =>
+					bookingSourceStatusesRaw.includes(status)
+				),
+				...bookingSourceStatusesRaw.filter(
+					(status) => !bookingSourceStatusOrder.includes(status)
+				),
+		  ]
+		: bookingSourceStatusOrder;
+	const bookingSourceRows = Array.isArray(bookingSourceMatrix.rows)
+		? bookingSourceMatrix.rows
+		: [];
+	const bookingSourceColumnTotals = bookingSourceMatrix.columnTotals || {};
+	const bookingSourceOverallTotal = Number(
+		bookingSourceMatrix.overallTotal || 0
 	);
 
 	const handleHotelSelectChange = (value) => {
@@ -1367,6 +1406,61 @@ const ReservationsOverview = () => {
 								)}
 							</div>
 						</Panel>
+
+						{/* ==================== PANEL 5 ==================== */}
+						<Panel header='Booking Source vs Payment Status' key='5'>
+							<div className='table-container container'>
+								{bookingSourceRows.length === 0 ? (
+									<p>No data found</p>
+								) : (
+									<SummaryTable>
+										<thead>
+											<tr>
+												<th>Booking source</th>
+												{bookingSourceStatuses.map((status) => (
+													<th key={status}>{status}</th>
+												))}
+												<th>Total (SAR)</th>
+											</tr>
+										</thead>
+										<tbody>
+											{bookingSourceRows.map((row) => (
+												<tr key={row.booking_source || "Unknown"}>
+													<td>{row.booking_source || "Unknown"}</td>
+													{bookingSourceStatuses.map((status) => (
+														<td key={`${row.booking_source}-${status}`}>
+															{formatForDisplay(
+																row?.totalsByStatus?.[status] || 0,
+																"total"
+															)}
+														</td>
+													))}
+													<td>
+														{formatForDisplay(row.rowTotal || 0, "total")}
+													</td>
+												</tr>
+											))}
+										</tbody>
+										<tfoot>
+											<tr>
+												<td>Total</td>
+												{bookingSourceStatuses.map((status) => (
+													<td key={`total-${status}`}>
+														{formatForDisplay(
+															bookingSourceColumnTotals?.[status] || 0,
+															"total"
+														)}
+													</td>
+												))}
+												<td>
+													{formatForDisplay(bookingSourceOverallTotal, "total")}
+												</td>
+											</tr>
+										</tfoot>
+									</SummaryTable>
+								)}
+							</div>
+						</Panel>
 					</Collapse>
 				</>
 			)}
@@ -1484,5 +1578,29 @@ const ReservationsOverviewWrapper = styled.div`
 	}
 	.custom-reservations-modal .ant-modal {
 		z-index: 9999 !important;
+	}
+`;
+
+const SummaryTable = styled.table`
+	width: 100%;
+	border-collapse: collapse;
+
+	th,
+	td {
+		padding: 6px 8px;
+		text-align: left;
+		white-space: nowrap;
+		border: 1px solid #f0f0f0;
+		font-size: 12px;
+	}
+
+	th {
+		background-color: #fafafa;
+		font-weight: 600;
+	}
+
+	tfoot td {
+		font-weight: 700;
+		background-color: #f6f8f8;
 	}
 `;

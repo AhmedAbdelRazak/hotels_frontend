@@ -1200,7 +1200,64 @@ export const getTopHotelsByReservations = (
 };
 
 /* ========================================================================
-	 8) getSpecificListOfReservations (already takes queryParamsObj)
+	 8) Booking Source x Payment Status summary
+	 ======================================================================== */
+export const getBookingSourcePaymentSummary = (
+	userId,
+	token,
+	{
+		selectedHotels = [],
+		hotelId,
+		start,
+		end,
+		month,
+		includeCancelled,
+		excludeCancelled,
+		paymentStatuses,
+	} = {}
+) => {
+	const params = new URLSearchParams();
+
+	if (hotelId) params.set("hotelId", hotelId);
+	if (!hotelId && selectedHotels?.length && !selectedHotels.includes("all")) {
+		params.set("hotels", selectedHotels.join(","));
+	}
+	if (month) params.set("month", month);
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+	if (excludeCancelled) params.set("excludeCancelled", "true");
+	if (paymentStatuses?.length) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+
+	const query = params.toString();
+	const suffix = query ? `?${query}` : "";
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/booking-source-payment-summary/${userId}${suffix}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching booking source summary data:", err);
+			return { success: false, data: null };
+		});
+};
+
+/* ========================================================================
+	 9) getSpecificListOfReservations (already takes queryParamsObj)
 	 ======================================================================== */
 export const getSpecificListOfReservations = (
 	userId,

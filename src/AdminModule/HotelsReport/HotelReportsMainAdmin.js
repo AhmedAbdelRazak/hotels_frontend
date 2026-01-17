@@ -214,7 +214,6 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 export default HotelReportsMainAdmin;
 
 /* ---------------------------------- STYLES ---------------------------------- */
-
 const HotelReportsMainWrapper = styled.div`
 	margin-top: 0;
 	min-height: 715px;
