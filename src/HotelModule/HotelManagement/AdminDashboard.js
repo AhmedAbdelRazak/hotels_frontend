@@ -13,6 +13,39 @@ const AdminDashboard = ({ chosenLanguage }) => {
 
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
+	const emptyReport = {
+		firstRow: {
+			arrivals: 0,
+			departures: 0,
+			inHouse: 0,
+			booking: 0,
+			overAllBookings: 0,
+			tomorrowArrivals: 0,
+		},
+		secondRow: {
+			cancellations: 0,
+			noShow: 0,
+			occupancy: { booked: 0, available: 0, overallRoomsCount: 0 },
+			latestCheckouts: [],
+			upcomingCheckins: [],
+		},
+		thirdRow: {
+			roomsTable: [],
+			housekeeping: { clean: 0, cleaning: 0, dirty: 0 },
+		},
+		fourthRow: {
+			topChannels: [],
+			roomNightsByType: [],
+			roomRevenueByType: [],
+		},
+		fifthRow: {
+			bookingLine: { categories: [], checkIn: [], checkOut: [] },
+			visitorsLine: { categories: [], yesterday: [], today: [] },
+		},
+		donutChartCard: { availableRooms: 0, totalRooms: 0 },
+		horizontalBarChartCard: { pending: 0, done: 0, finish: 0 },
+	};
+
 	// eslint-disable-next-line
 	const translations = {
 		English: {
@@ -31,16 +64,25 @@ const AdminDashboard = ({ chosenLanguage }) => {
 
 	// Fetch the admin dashboard figures
 	const adminDashboardFigures = () => {
+		if (!selectedHotel?._id) {
+			setAdminDashboardReport(emptyReport);
+			return;
+		}
+
 		gettingAdminDashboardFigures(selectedHotel._id)
 			.then((res) => {
-				if (res && res.success) {
-					// The final data from your backend is in res.data
+				if (res?.data) {
 					setAdminDashboardReport(res.data);
-				} else {
-					console.error("Error fetching admin dashboard report.");
+					return;
 				}
+
+				console.error("Error fetching admin dashboard report.");
+				setAdminDashboardReport(emptyReport);
 			})
-			.catch((err) => console.error(err));
+			.catch((err) => {
+				console.error(err);
+				setAdminDashboardReport(emptyReport);
+			});
 	};
 
 	useEffect(() => {

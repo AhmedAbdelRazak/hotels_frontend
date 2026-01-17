@@ -6,6 +6,12 @@ import Chart from "react-apexcharts";
 const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 	// 1) Extract data
 	const { availableRooms = 0, totalRooms = 0 } = DonutChartCard;
+	const availableRoomsSafe = Number.isFinite(Number(availableRooms))
+		? Number(availableRooms)
+		: 0;
+	const totalRoomsSafe = Number.isFinite(Number(totalRooms))
+		? Number(totalRooms)
+		: 0;
 
 	// 2) Decide which translations to use
 	const translations = {
@@ -24,7 +30,7 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 		translations[chosenLanguage] || translations.English;
 
 	// 3) Donut chart setup
-	const usedRooms = Math.max(totalRooms - availableRooms, 0);
+	const usedRooms = Math.max(totalRoomsSafe - availableRoomsSafe, 0);
 
 	const pieChartOptions = {
 		chart: {
@@ -48,7 +54,7 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 		},
 	};
 
-	const pieChartSeries = [availableRooms, usedRooms];
+	const pieChartSeries = [availableRoomsSafe, usedRooms];
 
 	return (
 		<CardContainer>
@@ -62,9 +68,9 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 					/>
 				</ChartWrapper>
 				<CardContent>
-					<CountText>{availableRooms}</CountText>
+					<CountText>{availableRoomsSafe}</CountText>
 					<CardTitle>
-						{title} ({availableRooms} / {totalRooms})
+						{title} ({availableRoomsSafe} / {totalRoomsSafe})
 					</CardTitle>
 				</CardContent>
 			</StyledCard>

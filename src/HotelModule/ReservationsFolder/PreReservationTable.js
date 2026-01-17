@@ -35,6 +35,12 @@ const PreReservationTable = ({
 
 	console.log(allPreReservations, "allPreReservations");
 
+	const formatMoney = (value) => {
+		const parsed = Number(value);
+		if (!Number.isFinite(parsed)) return "0";
+		return parsed.toLocaleString();
+	};
+
 	// Define showDetailsModal before it's used and memoize it to prevent unnecessary re-renders
 	const showDetailsModal = useCallback((reservation) => {
 		setSelectedReservation(reservation);
@@ -308,8 +314,7 @@ const PreReservationTable = ({
 				dataIndex: "total_amount",
 				width: 110,
 				key: "total_amount",
-				render: (total_amount) =>
-					`${total_amount && total_amount.toLocaleString()} SAR`,
+				render: (total_amount) => `${formatMoney(total_amount)} SAR`,
 			},
 			// Removed the "details" column from columns2 to avoid dependency on showDetailsModal
 		],
@@ -592,7 +597,7 @@ const PreReservationTable = ({
 											"No Room"
 										)}
 									</td>
-									<td>{`${reservation.total_amount.toLocaleString()} SAR`}</td>
+									<td>{`${formatMoney(reservation.total_amount)} SAR`}</td>
 									<td>
 										<Button onClick={() => showDetailsModal(reservation)}>
 											{chosenLanguage === "Arabic"

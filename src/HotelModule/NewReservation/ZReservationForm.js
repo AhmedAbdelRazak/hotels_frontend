@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { DatePicker, Spin } from "antd";
 import HotelOverviewReservation from "./HotelOverviewReservation";
@@ -48,6 +48,7 @@ const ZReservationForm = ({
 	searchClicked,
 	setSearchClicked,
 	searchedReservation,
+	setSearchedReservation,
 	pickedRoomsType,
 	setPickedRoomsType,
 	finalTotalByRoom,
@@ -64,6 +65,8 @@ const ZReservationForm = ({
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
 	const [taskeenClicked, setTaskeenClicked] = useState(false);
+	const [selectedTodayReservationId, setSelectedTodayReservationId] =
+		useState("");
 
 	const [isFixed, setIsFixed] = useState(false);
 
@@ -85,6 +88,86 @@ const ZReservationForm = ({
 			window.removeEventListener("scroll", handleScroll);
 		};
 	}, []);
+
+	const toMoment = (value) => {
+		if (!value) return null;
+		if (moment.isMoment(value)) return value;
+		const parsed = moment(value);
+		return parsed.isValid() ? parsed : null;
+	};
+
+	const todaysReservations = useMemo(() => {
+		if (!Array.isArray(allReservations)) return [];
+		const today = moment();
+		return allReservations.filter((reservation) => {
+			const checkin = moment(reservation.checkin_date);
+			return checkin.isValid() && checkin.isSame(today, "day");
+		});
+	}, [allReservations]);
+
+	const populateFromReservation = (reservation) => {
+		if (!reservation) return;
+
+		setCustomer_details((prev) => ({
+			...prev,
+			...(reservation.customer_details || {}),
+		}));
+
+		const checkinDate = reservation.checkin_date
+			? moment(reservation.checkin_date)
+			: null;
+		const checkoutDate = reservation.checkout_date
+			? moment(reservation.checkout_date)
+			: null;
+
+		setStart_date(
+			checkinDate && checkinDate.isValid()
+				? checkinDate.clone().startOf("day").toISOString()
+				: null
+		);
+		setEnd_date(
+			checkoutDate && checkoutDate.isValid()
+				? checkoutDate.clone().startOf("day").toISOString()
+				: null
+		);
+
+		if (checkinDate && checkoutDate) {
+			const duration = checkoutDate.diff(checkinDate, "days");
+			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
+		} else {
+			setDays_of_residence(0);
+		}
+
+		setBookingSource(reservation.booking_source || "");
+		setBookingComment(reservation.comment || "");
+		setConfirmationNumber(reservation.confirmation_number || "");
+		setPaymentStatus(
+			reservation.payment ||
+				reservation.payment_status ||
+				reservation.financeStatus ||
+				""
+		);
+		setPickedRoomsType(
+			Array.isArray(reservation.pickedRoomsType)
+				? reservation.pickedRoomsType
+				: []
+		);
+
+		setSearchClicked(false);
+		setSearchedReservation(reservation);
+	};
+
+	const handleTodayReservationChange = (event) => {
+		const reservationId = event.target.value;
+		setSelectedTodayReservationId(reservationId);
+
+		if (!reservationId) return;
+
+		const selectedReservation = todaysReservations.find(
+			(reservation) => reservation._id === reservationId
+		);
+		populateFromReservation(selectedReservation);
+	};
 
 	const onStartDateChange = (value) => {
 		const dateAtMidnight = value ? value.clone().startOf("day").toDate() : null;
@@ -121,6 +204,7 @@ const ZReservationForm = ({
 	};
 
 	const disabledEndDate = (current) => {
+		if (!start_date) return false;
 		return current && current < moment(start_date).startOf("day");
 	};
 
@@ -303,6 +387,37 @@ const ZReservationForm = ({
 										</button>
 									</div>
 								</div>
+							</div>
+							<div className='my-3'>
+								<label style={{ fontWeight: "bold" }}>
+									{chosenLanguage === "Arabic"
+										? "OU,O-OªOýOO¦ OU,U^OæU^U, OU,USU^U."
+										: "Today's Check-ins"}
+								</label>
+								<select
+									className='form-control'
+									value={selectedTodayReservationId}
+									onChange={handleTodayReservationChange}
+								>
+									<option value=''>
+										{chosenLanguage === "Arabic"
+											? "OOrO¦Oñ OU,O-OªOý"
+											: "Select a reservation"}
+									</option>
+									{todaysReservations.map((reservation) => {
+										const name = reservation.customer_details?.name || "Guest";
+										const nickName = reservation.customer_details?.nickName;
+										const label =
+											nickName && nickName !== name
+												? `${name} | ${nickName}`
+												: name;
+										return (
+											<option key={reservation._id} value={reservation._id}>
+												{label}
+											</option>
+										);
+									})}
+								</select>
 							</div>
 
 							<div className='row'>
@@ -617,6 +732,7 @@ const ZReservationForm = ({
 										inputReadOnly
 										size='small'
 										showToday={true}
+										value={toMoment(start_date)}
 										placeholder='Please pick the desired schedule checkin date'
 										style={{
 											height: "auto",
@@ -650,6 +766,7 @@ const ZReservationForm = ({
 										inputReadOnly
 										size='small'
 										showToday={true}
+										value={toMoment(end_date)}
 										placeholder='Please pick the desired schedule checkout date'
 										style={{
 											height: "auto",

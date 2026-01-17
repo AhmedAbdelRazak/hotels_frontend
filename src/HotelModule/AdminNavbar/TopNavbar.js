@@ -120,9 +120,14 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const menuRoomTypes = (
 		<Menu onClick={handleRoomClick}>
 			{roomCountDetails && roomCountDetails.length > 0 ? (
-				roomCountDetails.map((room) => (
-					<Menu.Item key={room._id}>{room.displayName}</Menu.Item>
-				))
+				roomCountDetails.map((room, index) => {
+					const key =
+						room?._id ||
+						room?.roomType ||
+						room?.displayName ||
+						String(index);
+					return <Menu.Item key={key}>{room.displayName}</Menu.Item>;
+				})
 			) : (
 				<Menu.Item disabled>No rooms available</Menu.Item>
 			)}

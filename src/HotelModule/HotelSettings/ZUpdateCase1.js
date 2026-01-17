@@ -44,6 +44,43 @@ const ZUpdateCase1 = ({
 	const [formArabic] = Form.useForm();
 
 	const { user } = isAuthenticated();
+	const currentRoomType =
+		form.getFieldValue("roomType") || existingRoomDetails?.roomType;
+
+	const getSelectedRoomId = () =>
+		form.getFieldValue("_id") || existingRoomDetails?._id;
+
+	const updateRoomCountDetails = (roomId, updates) => {
+		if (!roomId) return;
+		setHotelDetails((prevDetails) => {
+			const updatedRoomCountDetails = Array.isArray(
+				prevDetails.roomCountDetails
+			)
+				? [...prevDetails.roomCountDetails]
+				: [];
+
+			const existingRoomIndex = updatedRoomCountDetails.findIndex(
+				(room) => room._id === roomId
+			);
+
+			if (existingRoomIndex > -1) {
+				updatedRoomCountDetails[existingRoomIndex] = {
+					...updatedRoomCountDetails[existingRoomIndex],
+					...updates,
+				};
+			} else {
+				updatedRoomCountDetails.push({
+					_id: roomId,
+					...updates,
+				});
+			}
+
+			return {
+				...prevDetails,
+				roomCountDetails: updatedRoomCountDetails,
+			};
+		});
+	};
 
 	console.log(existingRoomDetails, "existingRoomDetails");
 	// Prepopulate fields based on selectedRoomType
@@ -51,6 +88,7 @@ const ZUpdateCase1 = ({
 		window.scrollTo({ top: 90, behavior: "smooth" });
 		if (roomTypeSelected && existingRoomDetails) {
 			form.setFieldsValue({
+				_id: existingRoomDetails._id || "",
 				displayName: existingRoomDetails.displayName || "",
 				displayName_OtherLanguage:
 					existingRoomDetails.displayName_OtherLanguage || "",
@@ -496,33 +534,17 @@ const ZUpdateCase1 = ({
 						value={form.getFieldValue("roomType")}
 						style={{ textAlign: chosenLanguage === "Arabic" ? "right" : "" }}
 						onChange={(value) => {
+							const selectedRoomId = getSelectedRoomId();
+
+							form.setFieldsValue({ roomType: value });
 							if (value === "other") {
+								setCustomRoomType("");
 								form.setFieldsValue({ customRoomType: "" });
 							}
 							setRoomTypeSelected(true);
-							setSelectedRoomType(value);
-							const roomType = value === "other" ? customRoomType : value;
 
-							const roomCountDetailsArray = Array.isArray(
-								hotelDetails.roomCountDetails
-							)
-								? hotelDetails.roomCountDetails
-								: [];
-
-							const existingRoomDetails =
-								roomCountDetailsArray.find(
-									(room) => room.roomType === roomType
-								) || {};
-
-							if (fromPage === "Updating") {
-								form.setFieldsValue({
-									displayName: existingRoomDetails.displayName || "",
-									roomCount: existingRoomDetails.count || 0,
-									basePrice: existingRoomDetails.price?.basePrice || 0,
-									description: existingRoomDetails.description || "",
-									amenities: existingRoomDetails.amenities || [],
-									activeRoom: existingRoomDetails.activeRoom || false,
-								});
+							if (value !== "other") {
+								updateRoomCountDetails(selectedRoomId, { roomType: value });
 							}
 						}}
 					>
@@ -564,7 +586,18 @@ const ZUpdateCase1 = ({
 					>
 						<Input
 							value={customRoomType}
-							onChange={(e) => setCustomRoomType(e.target.value)}
+							onChange={(e) => {
+								const nextValue = e.target.value;
+								setCustomRoomType(nextValue);
+								form.setFieldsValue({ customRoomType: nextValue });
+
+								if (form.getFieldValue("roomType") === "other") {
+									const selectedRoomId = getSelectedRoomId();
+									updateRoomCountDetails(selectedRoomId, {
+										roomType: nextValue,
+									});
+								}
+							}}
 						/>
 					</Form.Item>
 				)}
@@ -677,8 +710,7 @@ const ZUpdateCase1 = ({
 								</Form.Item>
 							</div>
 
-							{existingRoomDetails &&
-							existingRoomDetails.roomType === "individualBed" ? (
+							{currentRoomType === "individualBed" ? (
 								<div className='col-md-4'>
 									<Form.Item
 										name='bedsCount'
@@ -733,8 +765,7 @@ const ZUpdateCase1 = ({
 								</div>
 							) : null}
 
-							{existingRoomDetails &&
-							existingRoomDetails.roomType === "individualBed" ? (
+							{currentRoomType === "individualBed" ? (
 								<div className='col-md-4'>
 									<Form.Item
 										name='roomForGender'

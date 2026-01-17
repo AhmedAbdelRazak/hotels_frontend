@@ -514,13 +514,71 @@ const NewReservationMain = () => {
 			confirmation_number: confirmation_number,
 		};
 
-		if (
-			searchQuery &&
-			searchedReservation &&
-			searchedReservation.confirmation_number
-		) {
+		if (searchedReservation && searchedReservation._id) {
+			const mergedCustomerDetails = {
+				...(searchedReservation.customer_details || {}),
+				...customer_details,
+			};
+
+			const existingPickedRoomsType =
+				Array.isArray(searchedReservation.pickedRoomsType) &&
+				searchedReservation.pickedRoomsType.length > 0
+					? searchedReservation.pickedRoomsType
+					: apiPickedRooms;
+
+			const existingPickedRoomsPricing =
+				Array.isArray(searchedReservation.pickedRoomsPricing) &&
+				searchedReservation.pickedRoomsPricing.length > 0
+					? searchedReservation.pickedRoomsPricing
+					: existingPickedRoomsType;
+
+			const updatePayload = {
+				customer_details: mergedCustomerDetails,
+				checkin_date: start_date,
+				checkout_date: end_date,
+				days_of_residence,
+				payment_status,
+				payment: payment_status,
+				booking_source,
+				belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
+				hotelId: hotelDetails._id,
+				roomId: pickedHotelRooms,
+				sendEmail,
+				booked_at: searchedReservation.booked_at || new Date(),
+				reservation_status:
+					pickedHotelRooms.length > 0
+						? "InHouse"
+						: searchedReservation.reservation_status || "Confirmed",
+				total_rooms:
+					pickedHotelRooms.length ||
+					searchedReservation.total_rooms ||
+					0,
+				total_guests: total_guests
+					? total_guests
+					: searchedReservation.total_guests || pickedHotelRooms.length,
+				booking_comment,
+				comment: booking_comment,
+				hotelName: hotelDetails.hotelName,
+				bedNumber,
+				paid_amount: paidAmount
+					? Number(paidAmount)
+					: searchedReservation.paid_amount || 0,
+				confirmation_number: searchedReservation.confirmation_number,
+				pickedRoomsType: existingPickedRoomsType,
+				pickedRoomsPricing: existingPickedRoomsPricing,
+				total_amount:
+					typeof searchedReservation.total_amount === "number"
+						? searchedReservation.total_amount
+						: new_reservation.total_amount,
+				sub_total:
+					typeof searchedReservation.sub_total === "number"
+						? searchedReservation.sub_total
+						: new_reservation.sub_total,
+				housedBy: user,
+			};
+
 			updateSingleReservation(searchedReservation._id, {
-				...new_reservation,
+				...updatePayload,
 				inhouse_date: new Date(),
 			}).then((data) => {
 				if (data && data.error) {
@@ -759,6 +817,7 @@ const NewReservationMain = () => {
 												searchClicked={searchClicked}
 												setSearchClicked={setSearchClicked}
 												searchedReservation={searchedReservation}
+												setSearchedReservation={setSearchedReservation}
 												pickedRoomsType={pickedRoomsType}
 												setPickedRoomsType={setPickedRoomsType}
 												finalTotalByRoom={calculateTotalAmountWithRooms}

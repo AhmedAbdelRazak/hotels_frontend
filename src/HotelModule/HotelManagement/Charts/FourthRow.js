@@ -6,12 +6,43 @@ const FourthRow = ({
 	chosenLanguage = "English",
 	adminDashboardReport = {},
 }) => {
+	const toSafeLabel = (value, fallback) => {
+		if (value === null || value === undefined) return fallback;
+		const text = String(value).trim();
+		return text ? text : fallback;
+	};
+
+	const toSafeNumber = (value) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : 0;
+	};
+
+	const normalizeItems = (items, labelKey, fallbackPrefix) => {
+		if (!Array.isArray(items)) return [];
+		return items.map((item, index) => ({
+			label: toSafeLabel(item?.[labelKey], `${fallbackPrefix} ${index + 1}`),
+			value: toSafeNumber(item?.value),
+			fillColor: item?.fillColor,
+		}));
+	};
 	// 1) Safely extract from the “fourthRow” data
 	const {
 		topChannels = [],
 		roomNightsByType = [],
 		roomRevenueByType = [],
 	} = adminDashboardReport;
+
+	const normalizedTopChannels = normalizeItems(topChannels, "name", "Channel");
+	const normalizedRoomNights = normalizeItems(
+		roomNightsByType,
+		"type",
+		"Room Type"
+	);
+	const normalizedRoomRevenue = normalizeItems(
+		roomRevenueByType,
+		"type",
+		"Room Type"
+	);
 
 	// 2) Translate chart titles as needed
 	const chartTitles =
@@ -29,9 +60,9 @@ const FourthRow = ({
 
 	// ---------- 3) Build chart data for “topChannels” ----------
 	// e.g. topChannels = [ { name: "jannat employee", value: 86, fillColor: "#4285F4" }, ... ]
-	const topChannelsCategories = topChannels.map((item) => item.name);
-	const topChannelsSeriesData = topChannels.map((item) => ({
-		x: item.name,
+	const topChannelsCategories = normalizedTopChannels.map((item) => item.label);
+	const topChannelsSeriesData = normalizedTopChannels.map((item) => ({
+		x: item.label,
 		y: item.value,
 		fillColor: item.fillColor || "#4285F4",
 	}));
@@ -70,9 +101,9 @@ const FourthRow = ({
 
 	// ---------- 4) Build chart data for “roomNightsByType” ----------
 	// e.g. roomNightsByType = [ { type: "Quad Rooms", value: 713, fillColor: "#E74C3C" }, ... ]
-	const roomNightsCategories = roomNightsByType.map((item) => item.type);
-	const roomNightsSeriesData = roomNightsByType.map((item) => ({
-		x: item.type,
+	const roomNightsCategories = normalizedRoomNights.map((item) => item.label);
+	const roomNightsSeriesData = normalizedRoomNights.map((item) => ({
+		x: item.label,
 		y: item.value,
 		fillColor: item.fillColor || "#E74C3C",
 	}));
@@ -111,9 +142,9 @@ const FourthRow = ({
 
 	// ---------- 5) Build chart data for “roomRevenueByType” ----------
 	// e.g. roomRevenueByType = [ { type: "Quad Rooms", value: 103806.1, fillColor: "#FF7373" }, ... ]
-	const roomRevenueCategories = roomRevenueByType.map((item) => item.type);
-	const roomRevenueSeriesData = roomRevenueByType.map((item) => ({
-		x: item.type,
+	const roomRevenueCategories = normalizedRoomRevenue.map((item) => item.label);
+	const roomRevenueSeriesData = normalizedRoomRevenue.map((item) => ({
+		x: item.label,
 		y: item.value,
 		fillColor: item.fillColor || "#FF7373",
 	}));
