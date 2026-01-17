@@ -97,7 +97,7 @@ const items = [
 	getItem("CRM", "sub14", <CustomerServiceOutlined />, null, null, "black-bg"),
 	getItem("POS & Products", "sub15", <ShopOutlined />, null, null, "black-bg"),
 	getItem(
-		"Financials",
+		<Link to='/admin/expenses-financials'>Financials</Link>,
 		"sub16",
 		<DollarCircleOutlined />,
 		null,
@@ -173,10 +173,7 @@ const AdminNavbar = ({
 			>
 				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
 			</MobileToggleButton>
-			<MobileBackdrop
-				onClick={toggleCollapsed}
-				$visible={!collapsed}
-			/>
+			<MobileBackdrop onClick={toggleCollapsed} $visible={!collapsed} />
 			<AdminNavbarWrapper show={collapsed}>
 				<NavHeader>
 					<div className='logo'>
@@ -193,57 +190,59 @@ const AdminNavbar = ({
 						icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
 					/>
 				</NavHeader>
-			<Menu
-				defaultSelectedKeys={
-					fromPage === "AdminDasboard"
-						? "sub1"
-						: fromPage === "CustomerService"
-						  ? "sub2"
-						  : fromPage === "ElIntegrator"
-						    ? "sub3"
-						    : fromPage === "AllReservations"
-						      ? "sub4"
-						      : fromPage === "StoreBilling"
-						        ? "sub5"
-						        : fromPage === "Tools"
-						          ? "sub6"
-						          : fromPage === "AdminReports"
-						            ? "sub7"
-						            : fromPage === "AddProducts"
-						              ? "sub8"
-						              : fromPage === "JanatWebsite"
-						                ? "sub10"
-						                : fromPage === "CouponManagement"
-						                  ? "sub12"
-						                  : fromPage === "Payouts"
-						                    ? "sub18"
-						                    : "sub1"
-				}
-				defaultOpenKeys={[
-					"sub1",
-
-					// fromPage === "AddGender" ||
-					// fromPage === "UpdateGender" ||
-					// fromPage === "DeleteGender"
-					// 	? "sub2"
-					// 	: null,
-
-					// "sub4",
-
-					// "sub6",
-				]}
-				mode='inline'
-				theme='dark'
-				inlineCollapsed={collapsed}
-				items={items}
-				onClick={(e) => {
-					if (e.key === "signout") {
-						handleSignout(history);
+				<Menu
+					defaultSelectedKeys={
+						fromPage === "AdminDasboard"
+							? "sub1"
+							: fromPage === "CustomerService"
+							  ? "sub2"
+							  : fromPage === "ElIntegrator"
+							    ? "sub3"
+							    : fromPage === "AllReservations"
+							      ? "sub4"
+							      : fromPage === "StoreBilling"
+							        ? "sub5"
+							        : fromPage === "Tools"
+							          ? "sub6"
+							          : fromPage === "AdminReports"
+							            ? "sub7"
+							            : fromPage === "AddProducts"
+							              ? "sub8"
+							              : fromPage === "JanatWebsite"
+							                ? "sub10"
+							                : fromPage === "CouponManagement"
+							                  ? "sub12"
+							                  : fromPage === "Payouts"
+							                    ? "sub18"
+							                    : fromPage === "Financials"
+							                      ? "sub16"
+							                      : "sub1"
 					}
-					closeMenuOnMobile();
-					return <Redirect to={e.key} />;
-				}}
-			/>
+					defaultOpenKeys={[
+						"sub1",
+
+						// fromPage === "AddGender" ||
+						// fromPage === "UpdateGender" ||
+						// fromPage === "DeleteGender"
+						// 	? "sub2"
+						// 	: null,
+
+						// "sub4",
+
+						// "sub6",
+					]}
+					mode='inline'
+					theme='dark'
+					inlineCollapsed={collapsed}
+					items={items}
+					onClick={(e) => {
+						if (e.key === "signout") {
+							handleSignout(history);
+						}
+						closeMenuOnMobile();
+						return <Redirect to={e.key} />;
+					}}
+				/>
 			</AdminNavbarWrapper>
 		</>
 	);
@@ -265,7 +264,9 @@ const AdminNavbarWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	border-right: 1px solid #0d1220;
-	transition: width 0.2s ease, transform 0.25s ease;
+	transition:
+		width 0.2s ease,
+		transform 0.25s ease;
 	will-change: transform;
 
 	ul {

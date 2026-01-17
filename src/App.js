@@ -64,6 +64,7 @@ import Navmenu from "./pages/Navmenu";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminPaymentMain from "./AdminModule/Payment/AdminPaymentMain";
+import FinancialMain from "./AdminModule/Financials/FinancialMain";
 
 function App() {
 	const { languageToggle, chosenLanguage } = useCartContext();
@@ -174,6 +175,12 @@ function App() {
 					path='/admin/overall-hotel-reports'
 					exact
 					component={HotelReportsMainAdmin}
+				/>
+
+				<AdminRoute
+					path='/admin/expenses-financials'
+					exact
+					component={FinancialMain}
 				/>
 
 				<AdminRoute

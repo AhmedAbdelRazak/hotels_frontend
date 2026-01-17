@@ -1339,7 +1339,9 @@ export const getHotelOccupancyCalendar = (
 	}
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy/${userId}?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/adminreports/hotel-occupancy/${userId}?${params.toString()}`,
 		{
 			method: "GET",
 			headers: {
@@ -1374,7 +1376,9 @@ export const getHotelOccupancyWarnings = (
 	} = {}
 ) => {
 	if (!hotelId) {
-		return Promise.reject(new Error("hotelId is required for occupancy warnings"));
+		return Promise.reject(
+			new Error("hotelId is required for occupancy warnings")
+		);
 	}
 
 	const params = new URLSearchParams({ hotelId });
@@ -1388,7 +1392,9 @@ export const getHotelOccupancyWarnings = (
 	}
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-warnings/${userId}?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/adminreports/hotel-occupancy-warnings/${userId}?${params.toString()}`,
 		{
 			method: "GET",
 			headers: {
@@ -1423,7 +1429,9 @@ export const getHotelOccupancyDayReservations = (
 	} = {}
 ) => {
 	if (!hotelId) {
-		return Promise.reject(new Error("hotelId is required for day reservations"));
+		return Promise.reject(
+			new Error("hotelId is required for day reservations")
+		);
 	}
 	if (!date) {
 		return Promise.reject(new Error("date (YYYY-MM-DD) is required"));
@@ -1439,7 +1447,9 @@ export const getHotelOccupancyDayReservations = (
 	}
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/adminreports/hotel-occupancy-day-reservations/${userId}?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/adminreports/hotel-occupancy-day-reservations/${userId}?${params.toString()}`,
 		{
 			method: "GET",
 			headers: {
@@ -1615,4 +1625,117 @@ export const adminAutoReconcileHotel = async (params, { token }) => {
 		throw new Error(err?.message || "Failed to reconcile");
 	}
 	return res.json();
+};
+
+export const createExpense = (userId, token, expense) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/expenses/create/${userId}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(expense),
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const listExpenses = (userId, token, { hotelId } = {}) => {
+	const params = new URLSearchParams();
+	if (hotelId) params.set("hotelId", hotelId);
+	const query = params.toString();
+	const suffix = query ? `?${query}` : "";
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/expenses/list/${userId}${suffix}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const listExpenseHotels = (userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/expenses/hotels/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getFinancialReport = (
+	userId,
+	token,
+	{ hotelId, year, excludeCancelled, paymentStatuses } = {}
+) => {
+	const params = new URLSearchParams();
+	if (hotelId) params.set("hotelId", hotelId);
+	if (year) params.set("year", year);
+	if (excludeCancelled !== undefined)
+		params.set("excludeCancelled", excludeCancelled);
+	if (paymentStatuses) {
+		const statusList = Array.isArray(paymentStatuses)
+			? paymentStatuses.filter(Boolean)
+			: [paymentStatuses];
+		if (statusList.length) {
+			params.set("paymentStatuses", statusList.join(","));
+		}
+	}
+	const query = params.toString();
+	const suffix = query ? `?${query}` : "";
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/expenses/financial-report/${userId}${suffix}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateExpense = (expenseId, userId, token, expense) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/expenses/${expenseId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(expense),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const deleteExpense = (expenseId, userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/expenses/${expenseId}/${userId}`,
+		{
+			method: "DELETE",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
 };
