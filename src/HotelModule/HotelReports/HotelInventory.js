@@ -4,6 +4,7 @@ import { Alert, Button, DatePicker, Modal, Select, Spin, Switch } from "antd";
 import dayjs from "dayjs";
 import { useParams } from "react-router-dom";
 import moment from "moment-hijri";
+import * as XLSX from "xlsx";
 import {
 	getHotelInventoryCalendar,
 	getHotelInventoryDayReservations,
@@ -80,10 +81,10 @@ const HotelInventory = ({ chosenLanguage }) => {
 	const [monthValue, setMonthValue] = useState(() =>
 		defaultHijriStart
 			? dayjs(defaultHijriStart.toDate())
-			: dayjs().startOf("month")
+			: dayjs().startOf("month"),
 	);
 	const [calendarType, setCalendarType] = useState(
-		defaultHijriStart ? "hijri" : "gregorian"
+		defaultHijriStart ? "hijri" : "gregorian",
 	);
 	const [hijriMonth, setHijriMonth] = useState(defaultHijriMonth);
 	const [hijriYear, setHijriYear] = useState(defaultHijriYear);
@@ -93,7 +94,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 					start: dayjs(defaultHijriStart.toDate()).format("YYYY-MM-DD"),
 					end: dayjs(defaultHijriEnd?.toDate()).format("YYYY-MM-DD"),
 			  }
-			: null
+			: null,
 	);
 	const [includeCancelled, setIncludeCancelled] = useState(false);
 	const [data, setData] = useState(null);
@@ -109,35 +110,68 @@ const HotelInventory = ({ chosenLanguage }) => {
 	const labels = useMemo(() => {
 		if (chosenLanguage === "Arabic") {
 			return {
-				title: "\u062a\u0642\u0631\u064a\u0631\u0020\u0625\u0634\u063a\u0627\u0644\u0020\u0627\u0644\u0641\u0646\u062f\u0642",
-				selectedHotel: "\u0627\u0644\u0641\u0646\u062f\u0642\u0020\u0627\u0644\u0645\u062d\u062f\u062f",
+				title:
+					"\u062a\u0642\u0631\u064a\u0631\u0020\u0625\u0634\u063a\u0627\u0644\u0020\u0627\u0644\u0641\u0646\u062f\u0642",
+				selectedHotel:
+					"\u0627\u0644\u0641\u0646\u062f\u0642\u0020\u0627\u0644\u0645\u062d\u062f\u062f",
 				calendar: "\u0627\u0644\u062a\u0642\u0648\u064a\u0645",
 				gregorian: "\u0645\u064a\u0644\u0627\u062f\u064a",
 				hijri: "\u0647\u062c\u0631\u064a",
 				month: "\u0627\u0644\u0634\u0647\u0631",
-				hijriMonth: "\u0627\u0644\u0634\u0647\u0631\u0020\u0627\u0644\u0647\u062c\u0631\u064a",
-				includeCancelled: "\u062a\u0636\u0645\u064a\u0646\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u0644\u063a\u0627\u0629",
-				totalUnits: "\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u0648\u062d\u062f\u0627\u062a",
-				totalRooms: "\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u063a\u0631\u0641",
-				occupiedRoomNights: "\u0644\u064a\u0627\u0644\u064a\u0020\u0627\u0644\u063a\u0631\u0641\u0020\u0627\u0644\u0645\u0634\u063a\u0648\u0644\u0629",
-				occupancyRate: "\u0646\u0633\u0628\u0629\u0020\u0627\u0644\u0625\u0634\u063a\u0627\u0644",
+				hijriMonth:
+					"\u0627\u0644\u0634\u0647\u0631\u0020\u0627\u0644\u0647\u062c\u0631\u064a",
+				includeCancelled:
+					"\u062a\u0636\u0645\u064a\u0646\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u0644\u063a\u0627\u0629",
+				totalUnits:
+					"\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u0648\u062d\u062f\u0627\u062a",
+				totalRooms:
+					"\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u063a\u0631\u0641",
+				occupiedRoomNights:
+					"\u0644\u064a\u0627\u0644\u064a\u0020\u0627\u0644\u063a\u0631\u0641\u0020\u0627\u0644\u0645\u0634\u063a\u0648\u0644\u0629",
+				occupancyRate:
+					"\u0646\u0633\u0628\u0629\u0020\u0627\u0644\u0625\u0634\u063a\u0627\u0644",
 				date: "\u0627\u0644\u062a\u0627\u0631\u064a\u062e",
 				total: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
-				reservationsOn: "\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0628\u062a\u0627\u0631\u064a\u062e",
-				dayDetails: "\u062a\u0641\u0627\u0635\u064a\u0644\u0020\u0627\u0644\u064a\u0648\u0645",
+				reservationsOn:
+					"\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0628\u062a\u0627\u0631\u064a\u062e",
+				dayDetails:
+					"\u062a\u0641\u0627\u0635\u064a\u0644\u0020\u0627\u0644\u064a\u0648\u0645",
 				hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 				capacity: "\u0627\u0644\u0633\u0639\u0629",
 				occupied: "\u0645\u0634\u063a\u0648\u0644",
-				noReservations: "\u0644\u0627\u0020\u062a\u0648\u062c\u062f\u0020\u062d\u062c\u0648\u0632\u0627\u062a\u002e",
+				noReservations:
+					"\u0644\u0627\u0020\u062a\u0648\u062c\u062f\u0020\u062d\u062c\u0648\u0632\u0627\u062a\u002e",
 				prev: "\u0627\u0644\u0633\u0627\u0628\u0642",
 				next: "\u0627\u0644\u062a\u0627\u0644\u064a",
 				notAvailable: "\u063a\u064a\u0631\u0020\u0645\u062a\u0627\u062d",
 				na: "\u063a\u064a\u0631\u0020\u0645\u062a\u0627\u062d",
-				legend: "\u0645\u0641\u062a\u0627\u062d\u0020\u0627\u0644\u0623\u0644\u0648\u0627\u0646",
+				legend:
+					"\u0645\u0641\u062a\u0627\u062d\u0020\u0627\u0644\u0623\u0644\u0648\u0627\u0646",
 				legendLow: "0-30% \u0645\u0646\u062e\u0641\u0636",
 				legendMid: "30-70% \u0645\u062a\u0648\u0633\u0637",
 				legendHigh: "70-100% \u0645\u0631\u062a\u0641\u0639",
 				derived: "Derived",
+				to: "\u0625\u0644\u0649",
+				exportExcel:
+					"\u062a\u0635\u062f\u064a\u0631\u0020\u0625\u0643\u0633\u0644",
+				exportDate:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u064a\u0648\u0645\u0020(\u0645\u064a\u0644\u0627\u062f\u064a)",
+				exportHijriDate:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u064a\u0648\u0645\u0020(\u0647\u062c\u0631\u064a)",
+				exportGuestName:
+					"\u0627\u0633\u0645\u0020\u0627\u0644\u0636\u064a\u0641",
+				exportConfirmation:
+					"\u0631\u0642\u0645\u0020\u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+				exportCheckin:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0648\u0635\u0648\u0644\u0020(\u0645\u064a\u0644\u0627\u062f\u064a)",
+				exportCheckinHijri:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0648\u0635\u0648\u0644\u0020(\u0647\u062c\u0631\u064a)",
+				exportCheckout:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u0020(\u0645\u064a\u0644\u0627\u062f\u064a)",
+				exportCheckoutHijri:
+					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u0020(\u0647\u062c\u0631\u064a)",
+				exportStatus: "\u0627\u0644\u062d\u0627\u0644\u0629",
+				exportRooms: "\u0627\u0644\u063a\u0631\u0641",
 			};
 		}
 		return {
@@ -170,11 +204,27 @@ const HotelInventory = ({ chosenLanguage }) => {
 			legendMid: "30-70% Medium",
 			legendHigh: "70-100% High",
 			derived: "Derived",
+			to: "to",
+			exportExcel: "Export Excel",
+			exportDate: "Selected Date (Gregorian)",
+			exportHijriDate: "Selected Date (Hijri)",
+			exportGuestName: "Guest Name",
+			exportConfirmation: "Confirmation #",
+			exportCheckin: "Check-in (Gregorian)",
+			exportCheckinHijri: "Check-in (Hijri)",
+			exportCheckout: "Check-out (Gregorian)",
+			exportCheckoutHijri: "Check-out (Hijri)",
+			exportStatus: "Status",
+			exportRooms: "Rooms",
 		};
 	}, [chosenLanguage]);
 
 	const range = useMemo(() => {
-		if (calendarType === "hijri" && rangeOverride?.start && rangeOverride?.end) {
+		if (
+			calendarType === "hijri" &&
+			rangeOverride?.start &&
+			rangeOverride?.end
+		) {
 			return { start: rangeOverride.start, end: rangeOverride.end };
 		}
 		const start = monthValue.startOf("month").format("YYYY-MM-DD");
@@ -184,20 +234,18 @@ const HotelInventory = ({ chosenLanguage }) => {
 
 	const roomTypes = useMemo(
 		() => (Array.isArray(data?.roomTypes) ? data.roomTypes : []),
-		[data?.roomTypes]
+		[data?.roomTypes],
 	);
 
 	const days = useMemo(
 		() => (Array.isArray(data?.days) ? data.days : []),
-		[data?.days]
+		[data?.days],
 	);
 
 	const summary = data?.summary || {};
-	const totalUnits = Number(
-		summary.totalUnits ?? summary.totalRoomsAll ?? 0
-	);
+	const totalUnits = Number(summary.totalUnits ?? summary.totalRoomsAll ?? 0);
 	const totalRooms = Number(
-		summary.totalRooms ?? summary.totalPhysicalRooms ?? 0
+		summary.totalRooms ?? summary.totalPhysicalRooms ?? 0,
 	);
 
 	const onHijriChange = useCallback(
@@ -207,10 +255,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 				.iYear(nextYear)
 				.iMonth(nextMonth)
 				.startOf("iMonth");
-			const hEnd = moment()
-				.iYear(nextYear)
-				.iMonth(nextMonth)
-				.endOf("iMonth");
+			const hEnd = moment().iYear(nextYear).iMonth(nextMonth).endOf("iMonth");
 
 			setHijriMonth(nextMonth);
 			setHijriYear(nextYear);
@@ -219,7 +264,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 				end: dayjs(hEnd.toDate()).format("YYYY-MM-DD"),
 			});
 		},
-		[supportsHijri]
+		[supportsHijri],
 	);
 
 	const onMonthChange = (value) => {
@@ -274,6 +319,15 @@ const HotelInventory = ({ chosenLanguage }) => {
 		setDayModalOpen(true);
 	};
 
+	const openTotalDetails = (date) => {
+		setDaySelection({
+			date,
+			roomKey: null,
+			roomLabel: labels.total,
+		});
+		setDayModalOpen(true);
+	};
+
 	const fetchDayDetails = useCallback(() => {
 		if (!hotelId || !daySelection?.date) return;
 		setDayDetailsLoading(true);
@@ -301,7 +355,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 	const formatHijriDate = useCallback(
 		(dateStr) => {
 			if (!supportsHijri || !dateStr) return "";
-			const m = moment(dateStr, "YYYY-MM-DD", true);
+			const m = moment(dateStr);
 			if (!m.isValid()) return "";
 			const monthIndex = m.iMonth();
 			const monthLabel =
@@ -310,8 +364,100 @@ const HotelInventory = ({ chosenLanguage }) => {
 				] || "";
 			return `${m.iDate()} ${monthLabel} ${m.iYear()}`;
 		},
-		[chosenLanguage, supportsHijri]
+		[chosenLanguage, supportsHijri],
 	);
+
+	const modalDir = chosenLanguage === "Arabic" ? "rtl" : "ltr";
+
+	const handleExport = () => {
+		if (!dayDetails || !Array.isArray(dayDetails.reservations)) return;
+		if (!dayDetails.reservations.length) return;
+
+		const rows = dayDetails.reservations.map((reservation) => {
+			const guestName = reservation.customer_details?.name || "";
+			const confirmation = reservation.confirmation_number || "";
+			const checkinDate = reservation.checkin_date
+				? dayjs(reservation.checkin_date).format("YYYY-MM-DD")
+				: "";
+			const checkoutDate = reservation.checkout_date
+				? dayjs(reservation.checkout_date).format("YYYY-MM-DD")
+				: "";
+			const checkinHijri = formatHijriDate(reservation.checkin_date);
+			const checkoutHijri = formatHijriDate(reservation.checkout_date);
+			const status = reservation.reservation_status || "";
+			const roomIds = Array.isArray(reservation.roomId)
+				? reservation.roomId
+				: [];
+			const roomLabels = roomIds
+				.map((room) => room?.display_name || room?.room_type || "")
+				.filter(Boolean);
+			const pickedRooms = Array.isArray(reservation.pickedRoomsType)
+				? reservation.pickedRoomsType
+						.map(
+							(item) =>
+								item?.displayName ||
+								item?.display_name ||
+								item?.room_type ||
+								item?.roomType ||
+								"",
+						)
+						.filter(Boolean)
+				: [];
+			const rooms = Array.from(new Set([...roomLabels, ...pickedRooms])).join(
+				", ",
+			);
+			return {
+				[labels.exportGuestName]: guestName,
+				[labels.exportConfirmation]: confirmation,
+				[labels.exportCheckinHijri]: checkinHijri,
+				[labels.exportCheckoutHijri]: checkoutHijri,
+				[labels.exportCheckin]: checkinDate,
+				[labels.exportCheckout]: checkoutDate,
+				[labels.exportStatus]: status,
+				[labels.exportRooms]: rooms,
+			};
+		});
+
+		const headers = [
+			labels.exportGuestName,
+			labels.exportConfirmation,
+			labels.exportCheckinHijri,
+			labels.exportCheckoutHijri,
+			labels.exportCheckin,
+			labels.exportCheckout,
+			labels.exportStatus,
+			labels.exportRooms,
+		];
+
+		const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+		worksheet["!cols"] = headers.map((header) => ({
+			wch: Math.max(14, header.length + 2),
+		}));
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, worksheet, "Reservations");
+
+		const fileDate =
+			daySelection?.date || dayDetails?.date || dayjs().format("YYYY-MM-DD");
+		XLSX.writeFile(workbook, `hotel-inventory-${fileDate}.xlsx`);
+	};
+
+	const modalTitle = useMemo(() => {
+		if (!daySelection) return labels.dayDetails;
+		const hijriTitle = formatHijriDate(daySelection.date);
+		return (
+			<ModalTitle dir={modalDir}>
+				<div className='modal-main'>
+					{labels.reservationsOn} {daySelection.date}
+					{daySelection.roomLabel ? ` | ${daySelection.roomLabel}` : ""}
+				</div>
+				{supportsHijri && hijriTitle && (
+					<div className='modal-sub'>
+						{labels.hijri}: {hijriTitle}
+					</div>
+				)}
+			</ModalTitle>
+		);
+	}, [daySelection, formatHijriDate, labels, modalDir, supportsHijri]);
 
 	useEffect(() => {
 		if (!dayModalOpen) return;
@@ -393,9 +539,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 								<Button
 									size='small'
 									onClick={() =>
-										setMonthValue((current) =>
-											current.subtract(1, "month")
-										)
+										setMonthValue((current) => current.subtract(1, "month"))
 									}
 								>
 									{labels.prev}
@@ -523,11 +667,15 @@ const HotelInventory = ({ chosenLanguage }) => {
 														style={{
 															backgroundColor: heatColor(rate),
 															color: getReadableText(rate),
-															borderColor: cell.overbooked ? "#d7191c" : "#d0d7e5",
+															borderColor: cell.overbooked
+																? "#d7191c"
+																: "#d0d7e5",
 														}}
 													>
 														{rt.derived && (
-															<span className='derived-badge'>{labels.derived}</span>
+															<span className='derived-badge'>
+																{labels.derived}
+															</span>
 														)}
 														<div className='cell-main'>
 															{formatInt(occupied)}/{formatInt(capacity)}
@@ -548,20 +696,25 @@ const HotelInventory = ({ chosenLanguage }) => {
 												totalCapacity > 0 ? totalOccupied / totalCapacity : 0;
 											return (
 												<td>
-													<div className='total-cell'>
-														<span className='total-main'>
-															{formatInt(totalOccupied)}/
-															{formatInt(totalCapacity)}
-														</span>
-														<span
-															className='total-rate'
-															style={{ color: getRateTone(totalRate) }}
-														>
-															{totalCapacity > 0
-																? `${(totalRate * 100).toFixed(0)}%`
-																: labels.notAvailable}
-														</span>
-													</div>
+													<TotalButton
+														type='button'
+														onClick={() => openTotalDetails(day.date)}
+													>
+														<div className='total-cell'>
+															<span className='total-main'>
+																{formatInt(totalOccupied)}/
+																{formatInt(totalCapacity)}
+															</span>
+															<span
+																className='total-rate'
+																style={{ color: getRateTone(totalRate) }}
+															>
+																{totalCapacity > 0
+																	? `${(totalRate * 100).toFixed(0)}%`
+																	: labels.notAvailable}
+															</span>
+														</div>
+													</TotalButton>
 												</td>
 											);
 										})()}
@@ -577,13 +730,10 @@ const HotelInventory = ({ chosenLanguage }) => {
 				open={dayModalOpen}
 				onCancel={() => setDayModalOpen(false)}
 				onOk={() => setDayModalOpen(false)}
-				title={
-					daySelection
-						? `${labels.reservationsOn} ${daySelection.date}${
-								daySelection.roomLabel ? ` | ${daySelection.roomLabel}` : ""
-						  }`
-						: labels.dayDetails
-				}
+				title={modalTitle}
+				width={820}
+				style={{ maxWidth: "92vw" }}
+				styles={{ body: { padding: "18px 28px 22px" } }}
 			>
 				{dayDetailsLoading && (
 					<LoadingRow>
@@ -592,7 +742,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 				)}
 				{dayDetailsError && <Alert type='error' message={dayDetailsError} />}
 				{!dayDetailsLoading && dayDetails && (
-					<div>
+					<ModalBody dir={modalDir}>
 						<DetailHeader>
 							<div>
 								<strong>{labels.hotel}</strong>
@@ -607,34 +757,67 @@ const HotelInventory = ({ chosenLanguage }) => {
 								<span>{formatInt(dayDetails.occupied || 0)}</span>
 							</div>
 						</DetailHeader>
+						<ExportRow $rtl={modalDir === "rtl"}>
+							<Button
+								size='small'
+								onClick={handleExport}
+								disabled={!dayDetails?.reservations?.length}
+							>
+								{labels.exportExcel}
+							</Button>
+						</ExportRow>
 						<ReservationList>
 							{Array.isArray(dayDetails.reservations) &&
 							dayDetails.reservations.length > 0 ? (
-								dayDetails.reservations.map((reservation) => (
-									<div key={reservation._id} className='card'>
-										<div className='row'>
-											<strong>{reservation.customer_details?.name || "Guest"}</strong>
-											<span>{reservation.confirmation_number}</span>
+								dayDetails.reservations.map((reservation) => {
+									const checkinDate = reservation.checkin_date
+										? dayjs(reservation.checkin_date).format("YYYY-MM-DD")
+										: labels.na;
+									const checkoutDate = reservation.checkout_date
+										? dayjs(reservation.checkout_date).format("YYYY-MM-DD")
+										: labels.na;
+									const hijriCheckin = formatHijriDate(
+										reservation.checkin_date,
+									);
+									const hijriCheckout = formatHijriDate(
+										reservation.checkout_date,
+									);
+									const hijriRangeSeparator = ` ${labels.to} `;
+									const hijriRange =
+										supportsHijri && (hijriCheckin || hijriCheckout)
+											? `${labels.hijri}: ${
+													hijriCheckin || labels.na
+											  }${hijriRangeSeparator}${hijriCheckout || labels.na}`
+											: "";
+									return (
+										<div key={reservation._id} className='card'>
+											<div className='row'>
+												<strong>
+													{reservation.customer_details?.name || "Guest"}
+												</strong>
+												<span>{reservation.confirmation_number}</span>
+											</div>
+											<div className='row'>
+												<span>
+													{checkinDate} {" -> "} {checkoutDate}
+												</span>
+												<span>
+													{reservation.reservation_status || "status"}
+												</span>
+											</div>
+											{hijriRange && (
+												<div className='row row-sub'>
+													<span className='hijri-range'>{hijriRange}</span>
+												</div>
+											)}
 										</div>
-										<div className='row'>
-											<span>
-												{reservation.checkin_date
-													? dayjs(reservation.checkin_date).format("YYYY-MM-DD")
-													: labels.na}
-												{" -> "}
-												{reservation.checkout_date
-													? dayjs(reservation.checkout_date).format("YYYY-MM-DD")
-													: labels.na}
-											</span>
-											<span>{reservation.reservation_status || "status"}</span>
-										</div>
-									</div>
-								))
+									);
+								})
 							) : (
 								<div className='empty'>{labels.noReservations}</div>
 							)}
 						</ReservationList>
-					</div>
+					</ModalBody>
 				)}
 			</Modal>
 		</InventoryWrapper>
@@ -736,7 +919,8 @@ const SummaryCard = styled.div`
 `;
 
 const TableWrapper = styled.div`
-	overflow-x: auto;
+	max-height: 80vh;
+	overflow: auto;
 	border: 1px solid #e2e6ef;
 	border-radius: 12px;
 
@@ -758,6 +942,14 @@ const TableWrapper = styled.div`
 		background: #f7f9fc;
 		font-size: 0.8rem;
 		color: #2f3a4c;
+		position: sticky;
+		top: 0;
+		z-index: 2;
+	}
+
+	th:first-child {
+		left: 0;
+		z-index: 3;
 	}
 
 	.date-cell {
@@ -839,7 +1031,9 @@ const CellButton = styled.button`
 	background: #ffffff;
 	position: relative;
 	overflow: hidden;
-	transition: transform 0.15s ease, box-shadow 0.15s ease;
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease;
 
 	&:hover {
 		transform: translateY(-1px);
@@ -871,6 +1065,23 @@ const CellButton = styled.button`
 	}
 `;
 
+const TotalButton = styled.button`
+	width: 100%;
+	border: 1px solid #d0d7e5;
+	border-radius: 8px;
+	padding: 6px;
+	cursor: pointer;
+	background: #ffffff;
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease;
+
+	&:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+	}
+`;
+
 const LoadingRow = styled.div`
 	display: flex;
 	justify-content: center;
@@ -878,6 +1089,10 @@ const LoadingRow = styled.div`
 `;
 
 const DetailHeader = styled.div`
+	background: #f6f8fb;
+	border: 1px solid #e2e6ef;
+	border-radius: 12px;
+	padding: 10px 12px;
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 	gap: 10px;
@@ -900,6 +1115,17 @@ const DetailHeader = styled.div`
 	}
 `;
 
+const ModalBody = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+`;
+
+const ExportRow = styled.div`
+	display: flex;
+	justify-content: ${(props) => (props.$rtl ? "flex-start" : "flex-end")};
+`;
+
 const ReservationList = styled.div`
 	display: flex;
 	flex-direction: column;
@@ -908,7 +1134,7 @@ const ReservationList = styled.div`
 	.card {
 		border: 1px solid #e2e6ef;
 		border-radius: 10px;
-		padding: 10px;
+		padding: 12px 18px;
 		background: #fafbff;
 	}
 
@@ -916,6 +1142,16 @@ const ReservationList = styled.div`
 		display: flex;
 		justify-content: space-between;
 		font-size: 0.85rem;
+		gap: 12px;
+	}
+
+	.row-sub {
+		font-size: 0.78rem;
+		color: #6b7280;
+	}
+
+	.hijri-range {
+		font-weight: 600;
 	}
 
 	.empty {
@@ -924,4 +1160,17 @@ const ReservationList = styled.div`
 	}
 `;
 
+const ModalTitle = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
 
+	.modal-main {
+		font-weight: 600;
+	}
+
+	.modal-sub {
+		font-size: 0.85rem;
+		color: #5c5c5c;
+	}
+`;
