@@ -37,43 +37,84 @@ const HotelHeatMap = ({
 		};
 	}, []);
 
-	const isRoomBooked = (roomId, roomType, bedsNumber) => {
-		if (!start_date || !end_date) return false;
+	const normalizeDate = (value) => {
+		if (!value) return null;
+		const parsed = moment(value);
+		return parsed.isValid() ? parsed.startOf("day") : null;
+	};
 
-		const startDate = moment(start_date);
-		const endDate = moment(end_date);
+	const getReservationRoomIds = (reservation) => {
+		if (!reservation || !Array.isArray(reservation.roomId)) return [];
+		return reservation.roomId
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string") return room;
+				if (typeof room === "object" && room._id) return room._id;
+				return room;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+	};
+
+	const reservationHasRoom = (reservation, roomId) => {
+		if (!roomId) return false;
+		const ids = getReservationRoomIds(reservation);
+		return ids.includes(String(roomId));
+	};
+
+	const isReservationActive = (reservation) => {
+		const status = String(reservation?.reservation_status || "").toLowerCase();
+		if (!status) return true;
+		if (status.includes("cancel")) return false;
+		if (status.includes("no_show") || status.includes("no show")) return false;
+		if (
+			status.includes("checked_out") ||
+			status.includes("checkedout") ||
+			status.includes("early_checked_out") ||
+			status.includes("closed")
+		)
+			return false;
+		return true;
+	};
+
+	const hasOverlap = (reservation, rangeStart, rangeEnd) => {
+		if (!rangeStart || !rangeEnd) return false;
+		const reservationStart = normalizeDate(reservation?.checkin_date);
+		const reservationEnd = normalizeDate(reservation?.checkout_date);
+		if (!reservationStart || !reservationEnd) return false;
+		return rangeStart.isBefore(reservationEnd) && rangeEnd.isAfter(reservationStart);
+	};
+
+	const isRoomBooked = (roomId, roomType, bedsNumber) => {
+		const rangeStart = normalizeDate(start_date);
+		const rangeEnd = normalizeDate(end_date);
+		if (!rangeStart || !rangeEnd) return { isBooked: false, bookedBedsTemp: [] };
 
 		if (roomType === "individualBed") {
 			const bookedBedsTemp = [];
-			const isBooked = allReservations.some((reservation) => {
-				const reservationStart = moment(reservation.checkin_date);
-				const reservationEnd = moment(reservation.checkout_date);
-
-				const overlap =
-					startDate.isBefore(reservationEnd) &&
-					endDate.isAfter(reservationStart);
-
-				if (overlap) {
-					const bookedBeds = reservation.bedNumber || [];
-					bookedBedsTemp.push(...bookedBeds);
-					const allBedsBooked = bedsNumber.every((bed) =>
-						bookedBeds.includes(bed)
-					);
-					return allBedsBooked;
-				}
-
-				return false;
+			const isBooked = (allReservations || []).some((reservation) => {
+				if (!isReservationActive(reservation)) return false;
+				if (!hasOverlap(reservation, rangeStart, rangeEnd)) return false;
+				const reservationRoomIds = getReservationRoomIds(reservation);
+				const matchesRoom = reservationRoomIds.includes(String(roomId));
+				if (!matchesRoom && reservationRoomIds.length > 0) return false;
+				const bookedBeds = Array.isArray(reservation.bedNumber)
+					? reservation.bedNumber
+					: [];
+				bookedBedsTemp.push(...bookedBeds);
+				const allBedsBooked =
+					Array.isArray(bedsNumber) &&
+					bedsNumber.length > 0 &&
+					bedsNumber.every((bed) => bookedBeds.includes(bed));
+				return allBedsBooked;
 			});
 			return { isBooked, bookedBedsTemp };
 		} else {
-			const isBooked = allReservations.some((reservation) => {
-				const reservationStart = moment(reservation.checkin_date);
-				const reservationEnd = moment(reservation.checkout_date);
-
+			const isBooked = (allReservations || []).some((reservation) => {
+				if (!isReservationActive(reservation)) return false;
 				return (
-					startDate.isBefore(reservationEnd) &&
-					endDate.isAfter(reservationStart) &&
-					reservation.roomId.some((room) => room._id === roomId)
+					hasOverlap(reservation, rangeStart, rangeEnd) &&
+					reservationHasRoom(reservation, roomId)
 				);
 			});
 			return { isBooked, bookedBedsTemp: [] };

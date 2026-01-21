@@ -62,6 +62,7 @@ const HotelSettingsMain = () => {
 		_id: "",
 		room_number: "",
 		room_type: "",
+		display_name: "",
 		room_features: [
 			{
 				bedSize: "",
@@ -88,6 +89,31 @@ const HotelSettingsMain = () => {
 	const [baseFloor, setBaseFloor] = useState("");
 	const [roomsAlreadyExists, setRoomsAlreadyExists] = useState(false);
 	const [finalStepModal, setFinalStepModal] = useState(false);
+
+	const normalizeDisplayName = (value) =>
+		String(value || "").trim().toLowerCase();
+	const getRoomDisplayKey = (displayName, roomType) => {
+		const displayKey = normalizeDisplayName(displayName);
+		if (displayKey) return displayKey;
+		return normalizeDisplayName(roomType);
+	};
+	const resolveRoomDetails = (displayName, roomType) => {
+		const roomDetails = Array.isArray(hotelDetails?.roomCountDetails)
+			? hotelDetails.roomCountDetails
+			: [];
+		const displayKey = getRoomDisplayKey(displayName, roomType);
+		if (displayKey) {
+			const matchByDisplay = roomDetails.find(
+				(detail) =>
+					getRoomDisplayKey(detail.displayName, detail.roomType) === displayKey
+			);
+			if (matchByDisplay) return matchByDisplay;
+		}
+		if (roomType) {
+			return roomDetails.find((detail) => detail.roomType === roomType) || null;
+		}
+		return null;
+	};
 
 	useEffect(() => {
 		const searchParams = new URLSearchParams(window.location.search);
@@ -267,15 +293,11 @@ const HotelSettingsMain = () => {
 	};
 
 	const aggregateRoomDataForFloor = (floor, rooms) => {
-		const roomTypes = Object.keys(defaultHotelDetails.roomCountDetails).filter(
-			(rt) => !rt.includes("Price")
-		);
 		const filteredRooms = rooms.filter((room) => room.floor === floor);
-
-		return roomTypes.reduce((acc, type) => {
-			acc[type] = filteredRooms.filter(
-				(room) => room.room_type === type
-			).length;
+		return filteredRooms.reduce((acc, room) => {
+			const key = getRoomDisplayKey(room.display_name, room.room_type);
+			if (!key) return acc;
+			acc[key] = (acc[key] || 0) + 1;
 			return acc;
 		}, {});
 	};
@@ -343,21 +365,23 @@ const HotelSettingsMain = () => {
 			new Map(hotelRooms.map((room) => [room["room_number"], room])).values()
 		);
 
-		// Add roomColorCode based on room_type and displayName from roomCountDetails or roomTypeColors
+		// Add roomColorCode based on display_name mapping from roomCountDetails
 		const roomsWithColor = uniqueRooms.map((room) => {
-			// Find the corresponding room details in hotelDetails.roomCountDetails
-			const roomDetails = hotelDetails.roomCountDetails.find(
-				(detail) =>
-					detail.roomType === room.room_type &&
-					detail.displayName === room.display_name
+			const roomDetails = resolveRoomDetails(
+				room.display_name,
+				room.room_type
 			);
-
-			// Set roomColorCode based on found room details or fallback to roomTypeColors or default to black
-			const roomColorCode =
-				roomDetails?.roomColor || roomTypeColors[room.room_type] || "#000";
+			const resolvedRoomType = roomDetails?.roomType || room.room_type;
+			const resolvedDisplayName =
+				roomDetails?.displayName || room.display_name || "";
+			const roomColorCode = roomDetails
+				? roomDetails.roomColor || room.roomColorCode || "#000"
+				: room.roomColorCode || roomTypeColors[resolvedRoomType] || "#000";
 
 			return {
 				...room,
+				room_type: resolvedRoomType,
+				display_name: resolvedDisplayName,
 				roomColorCode,
 			};
 		});

@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Tooltip, Spin } from "antd";
 import FloorsModal from "./FloorsModal";
 import ZSingleRoomModal from "./ZSingleRoomModal";
 import ZInheritRoomsModal from "./ZInheritRoomsModal";
 import { toast } from "react-toastify";
+
+const normalizeDisplayName = (value) =>
+	String(value || "")
+		.trim()
+		.toLowerCase();
 
 const HotelOverview = ({
 	hotelRooms,
@@ -34,19 +39,19 @@ const HotelOverview = ({
 	const { hotelFloors, parkingLot, hotelName } = hotelDetails;
 	const floors = Array.from(
 		{ length: hotelFloors },
-		(_, index) => index + 1 // Ascending order
+		(_, index) => index + 1, // Ascending order
 	);
 
 	const [hideAddRooms, setHideAddRooms] = useState(false);
 
 	const applyInheritance = (baseFloorNumber) => {
 		const baseFloorRooms = hotelRooms.filter(
-			(room) => Number(room.floor) === Number(baseFloorNumber)
+			(room) => Number(room.floor) === Number(baseFloorNumber),
 		);
 
 		if (baseFloorRooms.length === 0) {
 			toast.error(
-				`No rooms found on floor ${baseFloorNumber} to inherit from.`
+				`No rooms found on floor ${baseFloorNumber} to inherit from.`,
 			);
 			return;
 		}
@@ -58,7 +63,7 @@ const HotelOverview = ({
 
 			return baseFloorRooms.map((room) => {
 				const newRoomNumber = `${floorNumber}${room.room_number.substring(
-					room.room_number.length - 2
+					room.room_number.length - 2,
 				)}`;
 
 				const newRoom = {
@@ -71,7 +76,7 @@ const HotelOverview = ({
 				if (room.room_type === "individualBed") {
 					newRoom.bedsNumber = Array.from(
 						{ length: room.bedsNumber.length },
-						(_, i) => `${newRoomNumber}${String.fromCharCode(97 + i)}`
+						(_, i) => `${newRoomNumber}${String.fromCharCode(97 + i)}`,
 					);
 					newRoom.individualBeds = true;
 				}
@@ -82,18 +87,63 @@ const HotelOverview = ({
 
 		setHotelRooms(newHotelRooms);
 		toast.success(
-			`All floors updated based on floor ${baseFloorNumber} structure.`
+			`All floors updated based on floor ${baseFloorNumber} structure.`,
 		);
 	};
 
 	// Ensure roomCountDetails is treated as an array
-	const roomCountDetails = Array.isArray(hotelDetails.roomCountDetails)
-		? hotelDetails.roomCountDetails
-		: [];
+	const roomCountDetails = useMemo(
+		() =>
+			Array.isArray(hotelDetails.roomCountDetails)
+				? hotelDetails.roomCountDetails
+				: [],
+		[hotelDetails.roomCountDetails],
+	);
+
+	const roomDetailsByDisplayName = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			const key = normalizeDisplayName(detail.displayName || detail.roomType);
+			if (!key) return;
+			if (!map.has(key)) {
+				map.set(key, detail);
+			}
+		});
+		return map;
+	}, [roomCountDetails]);
+	const roomDetailsByType = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			if (!detail.roomType || map.has(detail.roomType)) return;
+			map.set(detail.roomType, detail);
+		});
+		return map;
+	}, [roomCountDetails]);
+
+	const getRoomDisplayInfo = (room) => {
+		const displayName = room?.display_name || room?.displayName || "";
+		const detailByDisplay = displayName
+			? roomDetailsByDisplayName.get(normalizeDisplayName(displayName))
+			: null;
+		const roomType = room?.room_type || "";
+		const detailByType =
+			!detailByDisplay && roomType ? roomDetailsByType.get(roomType) : null;
+		const detail = detailByDisplay || detailByType;
+		const resolvedRoomType = detail?.roomType || roomType;
+		const typeLabel = resolvedRoomType
+			? resolvedRoomType.replace(/([A-Z])/g, " $1").trim()
+			: "Room";
+		const resolvedColor = detail?.roomColor || room?.roomColorCode;
+		return {
+			displayName: displayName || detail?.displayName || typeLabel,
+			roomType: resolvedRoomType,
+			color: resolvedColor || (!detail && roomTypeColors[roomType]) || "#000",
+		};
+	};
 
 	// Get room types count where count > 0
 	const roomTypesCount = roomCountDetails.filter(
-		(details) => details.count > 0
+		(details) => details.count > 0,
 	).length;
 
 	console.log(hotelRooms, "hotelRooms");
@@ -165,10 +215,7 @@ const HotelOverview = ({
 								style={{
 									width: "20px",
 									height: "20px",
-									backgroundColor:
-										details.roomColor ||
-										roomTypeColors[details.roomType] ||
-										"#ddd",
+									backgroundColor: details.roomColor || "#ddd",
 									margin: "0 auto",
 									marginBottom: "5px",
 								}}
@@ -212,39 +259,45 @@ const HotelOverview = ({
 								{hotelRooms &&
 									hotelRooms
 										.filter((room) => room.floor === floor)
-										.map((room, idx) => (
-											<Tooltip
-												title={
-													<div
-														style={{ textAlign: "center", color: "darkgrey" }}
-													>
-														<div>Room #: {room.room_number}</div>
-														<div style={{ textTransform: "capitalize" }}>
-															Room Type: {room.room_type}
+										.map((room, idx) => {
+											const roomInfo = getRoomDisplayInfo(room);
+											return (
+												<Tooltip
+													title={
+														<div
+															style={{ textAlign: "center", color: "darkgrey" }}
+														>
+															<div>Room #: {room.room_number}</div>
+															<div style={{ textTransform: "capitalize" }}>
+																Display Name: {roomInfo.displayName}
+															</div>
+															<div style={{ textTransform: "capitalize" }}>
+																Room Type: {roomInfo.roomType || "N/A"}
+															</div>
+															<div>
+																Occupied: {room.isOccupied ? "Yes" : "No"}
+															</div>
+															<div>Clean: {room.cleanRoom ? "Yes" : "No"}</div>
 														</div>
-														<div>
-															Occupied: {room.isOccupied ? "Yes" : "No"}
-														</div>
-														<div>Clean: {room.cleanRoom ? "Yes" : "No"}</div>
-													</div>
-												}
-												key={idx}
-												overlayStyle={{ zIndex: 100000000 }}
-												color='white'
-											>
-												<RoomSquare
+													}
 													key={idx}
-													color={room.roomColorCode}
-													onClick={() => {
-														setClickedRoom(room);
-														setClickedFloor(floor);
-														setModalVisible2(true);
-													}}
+													overlayStyle={{ zIndex: 100000000 }}
+													color='white'
 												>
-													{room.room_number}
-												</RoomSquare>
-											</Tooltip>
-										))}
+													<RoomSquare
+														key={idx}
+														color={roomInfo.color}
+														onClick={() => {
+															setClickedRoom(room);
+															setClickedFloor(floor);
+															setModalVisible2(true);
+														}}
+													>
+														{room.room_number}
+													</RoomSquare>
+												</Tooltip>
+											);
+										})}
 							</div>
 							<span
 								className='mx-2'

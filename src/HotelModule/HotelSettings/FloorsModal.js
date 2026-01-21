@@ -1,10 +1,17 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import styled from "styled-components";
 import { Modal } from "antd";
 import ZInputFieldRoomsPFloor from "./ZInputFieldRoomsPFloor";
-import { roomTypeColors } from "../../AdminModule/NewHotels/Assets";
 import { toast } from "react-toastify";
 import { isAuthenticated } from "../../auth";
+
+const normalizeDisplayName = (value) =>
+	String(value || "").trim().toLowerCase();
+const getRoomDisplayKey = (displayName, roomType) => {
+	const displayKey = normalizeDisplayName(displayName);
+	if (displayKey) return displayKey;
+	return normalizeDisplayName(roomType);
+};
 
 const FloorsModal = ({
 	modalVisible,
@@ -22,6 +29,18 @@ const FloorsModal = ({
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
 	const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+	const roomDetailsByKey = useMemo(() => {
+		const map = new Map();
+		const details = Array.isArray(hotelDetails?.roomCountDetails)
+			? hotelDetails.roomCountDetails
+			: [];
+		details.forEach((detail) => {
+			const key = getRoomDisplayKey(detail.displayName, detail.roomType);
+			if (!key) return;
+			map.set(key, detail);
+		});
+		return map;
+	}, [hotelDetails?.roomCountDetails]);
 	// Prepopulate the floorDetails based on existing rooms data
 	useEffect(() => {
 		if (rooms && rooms.length > 0) {
@@ -29,7 +48,7 @@ const FloorsModal = ({
 
 			rooms.forEach((room) => {
 				if (room.floor === clickedFloor) {
-					const key = `${room.room_type}_${room.display_name}`;
+					const key = getRoomDisplayKey(room.display_name, room.room_type);
 					if (newFloorDetails.roomCountDetails[key]) {
 						newFloorDetails.roomCountDetails[key] += 1;
 					} else {
@@ -59,13 +78,15 @@ const FloorsModal = ({
 	const handleRoomCountChange = (key, value) => {
 		const newRoomCount = Number(value);
 
-		const maxRoomCount =
-			hotelDetails.roomCountDetails.find(
-				(detail) => `${detail.roomType}_${detail.displayName}` === key
-			)?.count || 0;
+		const roomDetails = roomDetailsByKey.get(key);
+		const maxRoomCount = roomDetails?.count || 0;
 
 		if (newRoomCount > maxRoomCount) {
-			toast.error(`Cannot add more than ${maxRoomCount} rooms for ${key}.`);
+			toast.error(
+				`Cannot add more than ${maxRoomCount} rooms for ${
+					roomDetails?.displayName || key
+				}.`
+			);
 			return;
 		}
 
@@ -86,14 +107,11 @@ const FloorsModal = ({
 
 		roomTypes.forEach((key) => {
 			const count = floorDetails.roomCountDetails[key];
-			const roomDetails = hotelDetails.roomCountDetails.find(
-				(detail) => `${detail.roomType}_${detail.displayName}` === key
-			);
+			const roomDetails = roomDetailsByKey.get(key);
 
 			if (!roomDetails) return;
 
-			const roomColor =
-				roomDetails.roomColor || roomTypeColors[roomDetails.roomType] || "#000";
+			const roomColor = roomDetails.roomColor || "#000";
 			const amenities = roomDetails.amenities || [];
 
 			for (let i = 0; i < count; i++) {
@@ -144,7 +162,10 @@ const FloorsModal = ({
 					{hotelDetails.roomCountDetails
 						.filter((details) => details.count > 0)
 						.map((details, i) => {
-							const key = `${details.roomType}_${details.displayName}`;
+							const key = getRoomDisplayKey(
+								details.displayName,
+								details.roomType
+							);
 							return (
 								<ZInputFieldRoomsPFloor
 									key={i}

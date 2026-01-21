@@ -199,6 +199,52 @@ export const getListOfRoomSummary = (checkinDate, checkoutDate, hotelId) => {
 		.catch((err) => console.log(err));
 };
 
+export const getHotelInventoryCalendar = (
+	hotelId,
+	{ start, end, includeCancelled = false } = {}
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required"));
+	}
+	const params = new URLSearchParams();
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/calendar?${params.toString()}`,
+		{
+			method: "GET",
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getHotelInventoryDayReservations = (
+	hotelId,
+	{ date, roomKey, includeCancelled = false } = {}
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required"));
+	}
+	if (!date) {
+		return Promise.reject(new Error("date is required"));
+	}
+	const params = new URLSearchParams({ date });
+	if (roomKey) params.set("roomKey", roomKey);
+	if (includeCancelled) params.set("includeCancelled", "true");
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/day?${params.toString()}`,
+		{
+			method: "GET",
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getReservationSearch = (searchQuery, hotelId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/search/${searchQuery}/${hotelId}`,

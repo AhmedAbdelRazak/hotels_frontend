@@ -31,9 +31,28 @@ const ZSingleRoomModal = ({
 		}
 	}, [clickedRoom]);
 
-	const roomTypes = hotelDetails.roomCountDetails
-		.filter((detail) => detail.count > 0)
-		.map((detail) => detail.roomType);
+	const normalizeDisplayName = (value) =>
+		String(value || "").trim().toLowerCase();
+	const getDisplayKey = (displayName, roomType) => {
+		const key = normalizeDisplayName(displayName);
+		return key || normalizeDisplayName(roomType);
+	};
+	const roomDetails = Array.isArray(hotelDetails?.roomCountDetails)
+		? hotelDetails.roomCountDetails.filter((detail) => detail.count > 0)
+		: [];
+	const roomDisplayOptions = roomDetails.map((detail) => ({
+		key: getDisplayKey(detail.displayName, detail.roomType),
+		displayName:
+			detail.displayName || detail.roomType.replace(/([A-Z])/g, " $1").trim(),
+		roomType: detail.roomType,
+		roomColor: detail.roomColor || roomTypeColors[detail.roomType] || "#000",
+	}));
+	const selectedDisplayKey = getDisplayKey(
+		clickedRoom.display_name ||
+			roomDetails.find((detail) => detail.roomType === clickedRoom.room_type)
+				?.displayName,
+		clickedRoom.room_type
+	);
 
 	const updatingSingleRoom = () => {
 		// Update the bedsNumber array and individualBeds flag if the room type is individualBed
@@ -141,33 +160,45 @@ const ZSingleRoomModal = ({
 								textAlign: "center",
 							}}
 						>
-							Room Type
+							Display Name
 						</label>
 						<select
 							style={{ textTransform: "capitalize" }}
-							value={clickedRoom.room_type}
+							value={selectedDisplayKey}
 							onChange={(e) => {
-								const newRoomType = e.target.value;
+								const newKey = e.target.value;
+								const matchedDetail = roomDetails.find(
+									(detail) =>
+										getDisplayKey(detail.displayName, detail.roomType) === newKey
+								);
+								const newRoomType =
+									matchedDetail?.roomType || clickedRoom.room_type;
 								const newColorCode =
-									hotelDetails.roomCountDetails.find(
-										(detail) => detail.roomType === newRoomType
-									)?.roomColor ||
-									roomTypeColors[newRoomType] ||
+									matchedDetail?.roomColor ||
+									clickedRoom.roomColorCode ||
+									(!matchedDetail && roomTypeColors[newRoomType]) ||
 									"#000";
 								setClickedRoom({
 									...clickedRoom,
+									display_name: matchedDetail?.displayName || clickedRoom.display_name,
 									room_type: newRoomType,
 									roomColorCode: newColorCode,
 								});
 							}}
 						>
 							<option value=''>Please Select</option>
-							{roomTypes.map((type, i) => (
-								<option key={i} value={type}>
-									{type}
+							{roomDisplayOptions.map((option, i) => (
+								<option key={i} value={option.key}>
+									{option.displayName}
 								</option>
 							))}
 						</select>
+						<div style={{ fontSize: "11px", marginTop: "6px" }}>
+							Room Type:{" "}
+							<span style={{ textTransform: "capitalize" }}>
+								{clickedRoom.room_type || "N/A"}
+							</span>
+						</div>
 					</div>
 
 					{clickedRoom && clickedRoom.room_type === "individualBed" && (

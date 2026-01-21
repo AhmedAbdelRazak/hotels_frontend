@@ -226,11 +226,11 @@ const HotelsInventoryMap = () => {
 	const [monthValue, setMonthValue] = useState(() =>
 		defaultHijriStart
 			? dayjs(defaultHijriStart.toDate())
-			: dayjs().startOf("month")
+			: dayjs().startOf("month"),
 	);
 
 	const [calendarType, setCalendarType] = useState(
-		defaultHijriStart ? "hijri" : "gregorian"
+		defaultHijriStart ? "hijri" : "gregorian",
 	);
 	const [hijriMonth, setHijriMonth] = useState(defaultHijriMonth);
 	const [hijriYear, setHijriYear] = useState(defaultHijriYear);
@@ -242,7 +242,7 @@ const HotelsInventoryMap = () => {
 					end: dayjs(defaultHijriEnd?.toDate()).format("YYYY-MM-DD"),
 					label: `${hijriMonthsEn[defaultHijriMonth]} ${defaultHijriYear}`,
 			  }
-			: null
+			: null,
 	);
 
 	const [includeCancelled, setIncludeCancelled] = useState(false);
@@ -281,7 +281,7 @@ const HotelsInventoryMap = () => {
 			.sort((a, b) =>
 				a.hotelName.localeCompare(b.hotelName, undefined, {
 					sensitivity: "base",
-				})
+				}),
 			);
 	}, [allHotels]);
 
@@ -307,7 +307,7 @@ const HotelsInventoryMap = () => {
 				undefined,
 				{
 					sensitivity: "base",
-				}
+				},
 			);
 		});
 		return list;
@@ -315,7 +315,7 @@ const HotelsInventoryMap = () => {
 
 	const derivedRoomTypes = useMemo(
 		() => roomTypes.filter((rt) => !!rt?.derived),
-		[roomTypes]
+		[roomTypes],
 	);
 
 	const derivedCount = derivedRoomTypes.length;
@@ -363,10 +363,10 @@ const HotelsInventoryMap = () => {
 	const bookingSourceStatuses = bookingSourceStatusesRaw.length
 		? [
 				...bookingSourceStatusOrder.filter((status) =>
-					bookingSourceStatusesRaw.includes(status)
+					bookingSourceStatusesRaw.includes(status),
 				),
 				...bookingSourceStatusesRaw.filter(
-					(status) => !bookingSourceStatusOrder.includes(status)
+					(status) => !bookingSourceStatusOrder.includes(status),
 				),
 		  ]
 		: bookingSourceStatusOrder;
@@ -375,7 +375,7 @@ const HotelsInventoryMap = () => {
 		: [];
 	const bookingSourceColumnTotals = bookingSourceMatrix.columnTotals || {};
 	const bookingSourceOverallTotal = Number(
-		bookingSourceMatrix.overallTotal || 0
+		bookingSourceMatrix.overallTotal || 0,
 	);
 
 	const monthLabel = useMemo(() => {
@@ -502,15 +502,13 @@ const HotelsInventoryMap = () => {
 			if (occupancyResult.status === "fulfilled") {
 				setData(occupancyResult.value);
 			} else {
-				setError(
-					occupancyResult.reason?.message || "Failed to load occupancy"
-				);
+				setError(occupancyResult.reason?.message || "Failed to load occupancy");
 				setData(null);
 			}
 
 			if (bookingSourceResult.status === "fulfilled") {
 				setBookingSourceSummary(
-					bookingSourceResult.value?.data || bookingSourceResult.value || null
+					bookingSourceResult.value?.data || bookingSourceResult.value || null,
 				);
 			} else {
 				setBookingSourceSummary(null);
@@ -619,13 +617,13 @@ const HotelsInventoryMap = () => {
 						includeCancelled,
 						display: displayMode,
 						paymentStatuses,
-					}
+					},
 				);
 				setDayDetails(payload);
 			} catch (err) {
 				setDayDetails(null);
 				setDayDetailsError(
-					err?.message || "Failed to load reservations for this day."
+					err?.message || "Failed to load reservations for this day.",
 				);
 			} finally {
 				setDayDetailsLoading(false);
@@ -638,7 +636,7 @@ const HotelsInventoryMap = () => {
 			selectedHotelId,
 			token,
 			user?._id,
-		]
+		],
 	);
 
 	const handleReservationUpdated = useCallback(
@@ -679,7 +677,7 @@ const HotelsInventoryMap = () => {
 			fetchOccupancy,
 			fetchWarnings,
 			warningsModalOpen,
-		]
+		],
 	);
 
 	// ------------------ Payment filter buttons ------------------
@@ -890,7 +888,7 @@ const HotelsInventoryMap = () => {
 						<Card size='small' title='Average Occupancy (capped)'>
 							<Progress
 								percent={Math.round(
-									(Number(summary.averageOccupancyRate || 0) || 0) * 100
+									(Number(summary.averageOccupancyRate || 0) || 0) * 100,
 								)}
 								status='active'
 								strokeColor='#007f6b'
@@ -968,7 +966,7 @@ const HotelsInventoryMap = () => {
 								<span>{summary?.peakDay?.date || "n/a"}</span>
 								<b>
 									{Math.round(
-										(Number(summary?.peakDay?.occupancyRate || 0) || 0) * 100
+										(Number(summary?.peakDay?.occupancyRate || 0) || 0) * 100,
 									)}
 									%
 								</b>
@@ -1040,7 +1038,7 @@ const HotelsInventoryMap = () => {
 
 									<Progress
 										percent={Math.round(
-											(Number(item.occupancyRate || 0) || 0) * 100
+											(Number(item.occupancyRate || 0) || 0) * 100,
 										)}
 										strokeColor={item.color || "#008c73"}
 										size='small'
@@ -1103,9 +1101,7 @@ const HotelsInventoryMap = () => {
 							<table>
 								<thead>
 									<tr>
-										<th className='sticky-left date-th'>
-											Date
-										</th>
+										<th className='sticky-left date-th'>Date</th>
 
 										{roomTypes.map((rt) => {
 											const main = roomHeaderMain(rt);
@@ -1389,7 +1385,7 @@ const HotelsInventoryMap = () => {
 													{bookingSourceStatuses.map((status) => (
 														<td key={`${row.booking_source}-${status}`}>
 															{formatCurrency(
-																row?.totalsByStatus?.[status] || 0
+																row?.totalsByStatus?.[status] || 0,
 															)}
 														</td>
 													))}
@@ -1414,7 +1410,7 @@ const HotelsInventoryMap = () => {
 												{bookingSourceStatuses.map((status) => (
 													<td key={`total-${status}`}>
 														{formatCurrency(
-															bookingSourceColumnTotals?.[status] || 0
+															bookingSourceColumnTotals?.[status] || 0,
 														)}
 													</td>
 												))}
@@ -1581,7 +1577,7 @@ const HotelsInventoryMap = () => {
 													<td>{res?.customer_details?.phone || "N/A"}</td>
 													<td
 														style={getReservationStatusStyles(
-															res?.reservation_status
+															res?.reservation_status,
 														)}
 													>
 														{res?.reservation_status || "N/A"}

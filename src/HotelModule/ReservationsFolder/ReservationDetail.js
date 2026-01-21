@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -104,6 +104,71 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
 
+	const normalizeNumber = useCallback((value, fallback = 0) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : fallback;
+	}, []);
+
+	const formatMoney = useCallback(
+		(value) => normalizeNumber(value, 0).toLocaleString(),
+		[normalizeNumber]
+	);
+
+	const summarizePayment = useCallback((reservationData, paymentOverride = "") => {
+		const paymentModeRaw =
+			(paymentOverride ||
+				reservationData?.payment ||
+				reservationData?.payment_status ||
+				reservationData?.financeStatus ||
+				"") + "";
+		const paymentMode = paymentModeRaw.toLowerCase().trim();
+		const pd = reservationData?.paypal_details || {};
+		const legacyCaptured = !!reservationData?.payment_details?.captured;
+		const payOffline =
+			normalizeNumber(reservationData?.payment_details?.onsite_paid_amount, 0) >
+				0 || paymentMode === "paid offline";
+		const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
+		const initialCompleted =
+			(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
+		const anyMitCompleted =
+			Array.isArray(pd?.mit) &&
+			pd.mit.some(
+				(c) => (c?.capture_status || "").toUpperCase() === "COMPLETED"
+			);
+
+		const isCaptured =
+			legacyCaptured ||
+			capTotal > 0 ||
+			initialCompleted ||
+			anyMitCompleted ||
+			paymentMode === "paid online" ||
+			paymentMode === "captured" ||
+			paymentMode === "credit/ debit" ||
+			paymentMode === "credit/debit";
+
+		const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
+
+		let status = "Not Captured";
+		if (isCaptured) status = "Captured";
+		else if (payOffline) status = "Paid Offline";
+		else if (isNotPaid) status = "Not Paid";
+
+		return { status, isCaptured, paidOffline: payOffline, paymentMode };
+	}, [normalizeNumber]);
+
+	const getReservationRoomIds = useCallback((roomIdValue) => {
+		if (!Array.isArray(roomIdValue)) return [];
+		return roomIdValue
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string") return room;
+				if (typeof room === "object" && room._id) return room._id;
+				return room;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+	}, []);
+
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
 			return total + room.chosenPrice * room.count;
@@ -126,6 +191,31 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation.checkin_date,
 		reservation.checkout_date
 	);
+
+	const paymentSummary = useMemo(
+		() => summarizePayment(reservation),
+		[reservation, summarizePayment]
+	);
+	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
+	const paidOnline = normalizeNumber(reservation?.paid_amount, 0);
+	const paidOffline = normalizeNumber(
+		reservation?.payment_details?.onsite_paid_amount,
+		0
+	);
+	const totalPaid = paidOnline + paidOffline;
+	const isCreditDebit =
+		paymentSummary.paymentMode === "credit/ debit" ||
+		paymentSummary.paymentMode === "credit/debit";
+	const assumePaidInFull =
+		isCreditDebit || (paymentSummary.isCaptured && totalPaid === 0);
+	const amountDue = assumePaidInFull
+		? 0
+		: Math.max(totalAmountValue - totalPaid, 0);
+	const displayPaymentLabel =
+		reservation?.payment ||
+		reservation?.payment_status ||
+		reservation?.financeStatus ||
+		"";
 
 	// Same as in MoreDetails
 	function calculateReservationPeriod(checkin, checkout, language) {
@@ -256,25 +346,50 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		}
 	};
 
-	const getHotelRoomsDetails = () => {
-		getHotelRooms(reservation.hotelId, user._id).then((data3) => {
+	const roomIdValue = reservation?.roomId;
+	const hotelIdValue = reservation?.hotelId;
+
+	const getHotelRoomsDetails = useCallback(() => {
+		if (!hotelIdValue || !user?._id) return;
+		getHotelRooms(hotelIdValue, user._id).then((data3) => {
 			if (data3 && data3.error) {
 				console.log(data3.error);
 			} else {
-				const filteredRooms = data3.filter((room) =>
-					reservation.roomId.includes(room._id)
-				);
+				const roomIds = getReservationRoomIds(roomIdValue);
+				const filteredRooms = Array.isArray(data3)
+					? data3.filter((room) => roomIds.includes(String(room._id)))
+					: [];
 				setChosenRooms(filteredRooms);
 			}
 		});
-	};
+	}, [getReservationRoomIds, hotelIdValue, roomIdValue, user?._id]);
 
 	useEffect(() => {
-		if (reservation && reservation.roomId && reservation.roomId.length > 0) {
+		if (Array.isArray(roomIdValue) && roomIdValue.length > 0) {
 			getHotelRoomsDetails();
+		} else {
+			setChosenRooms([]);
 		}
-		// eslint-disable-next-line
-	}, []);
+	}, [roomIdValue, getHotelRoomsDetails]);
+
+	const roomTableRows = useMemo(() => {
+		const fromDetails = Array.isArray(reservation?.roomDetails)
+			? reservation.roomDetails.filter(Boolean)
+			: [];
+		if (fromDetails.length > 0) return fromDetails;
+
+		const fromChosen = Array.isArray(chosenRooms)
+			? chosenRooms.filter(Boolean)
+			: [];
+		if (fromChosen.length > 0) return fromChosen;
+
+		const fromRoomId = Array.isArray(reservation?.roomId)
+			? reservation.roomId.filter(
+					(room) => room && typeof room === "object" && room.room_number
+			  )
+			: [];
+		return fromRoomId;
+	}, [reservation, chosenRooms]);
 
 	const downloadPDF = () => {
 		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
@@ -1125,7 +1240,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<div>{reservation && reservation.comment}</div>
 									</div>
 
-									{chosenRooms && chosenRooms.length > 0 ? (
+									{roomTableRows && roomTableRows.length > 0 ? (
 										<div className='table-responsive'>
 											<table
 												className='table table-bordered table-hover mx-auto'
@@ -1152,16 +1267,36 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													</tr>
 												</thead>
 												<tbody>
-													{chosenRooms.map((room, index) => (
+													{roomTableRows.map((room, index) => (
 														<tr key={index}>
 															<td style={{ textTransform: "capitalize" }}>
-																{room.room_type}
+																{room.room_type || room.roomType || "N/A"}
 															</td>
-															<td>{room.room_number}</td>
+															<td>{room.room_number || "N/A"}</td>
 														</tr>
 													))}
 												</tbody>
 											</table>
+										</div>
+									) : (
+										<div
+											className='mx-auto'
+											style={{ marginTop: "10px", fontWeight: "bold" }}
+										>
+											{chosenLanguage === "Arabic" ? "No Room" : "No Room"}
+										</div>
+									)}
+									{reservation?.bedNumber &&
+									Array.isArray(reservation.bedNumber) &&
+									reservation.bedNumber.length > 0 ? (
+										<div
+											className='mx-auto mt-2'
+											style={{ fontWeight: "bold", textAlign: "center" }}
+										>
+											{chosenLanguage === "Arabic"
+												? "الأسرّة"
+												: "Beds"}{" "}
+											: {reservation.bedNumber.join(", ")}
 										</div>
 									) : null}
 								</div>
@@ -1231,37 +1366,85 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<div className='col-md-5 mx-auto'>
 											<h4>
 												{chosenLanguage === "Arabic"
-													? "الإجمالى"
+													? "إجمالي المبلغ"
 													: "Total Amount"}
 											</h4>
 										</div>
 										<div className='col-md-5 mx-auto'>
 											<h3>
-												{reservation.total_amount.toLocaleString()}{" "}
-												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+												{formatMoney(totalAmountValue)} SAR
 											</h3>
 										</div>
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{displayPaymentLabel ? (
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "طريقة الدفع"
+														: "Payment"}
+												</h6>
+											</div>
+										) : null}
+										{displayPaymentLabel ? (
+											<div className='col-md-5 mx-auto'>
+												<h5 style={{ textTransform: "uppercase" }}>
+													{displayPaymentLabel}
+												</h5>
+											</div>
+										) : null}
+
+										{totalPaid > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
-														? "المبلغ المودع"
+														? "المبلغ المدفوع"
 														: "Deposited Amount"}
 												</h4>
 											</div>
 										) : null}
-
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalPaid > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3>
-													{reservation.paid_amount.toLocaleString()}{" "}
-													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+													{formatMoney(totalPaid)} SAR
 												</h3>
 											</div>
 										) : null}
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{paidOnline > 0 ? (
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "مدفوع إلكترونياً"
+														: "Paid Online"}
+												</h6>
+											</div>
+										) : null}
+										{paidOnline > 0 ? (
+											<div className='col-md-5 mx-auto'>
+												<h5>
+													{formatMoney(paidOnline)} SAR
+												</h5>
+											</div>
+										) : null}
+
+										{paidOffline > 0 ? (
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "مدفوع نقداً"
+														: "Paid Offline"}
+												</h6>
+											</div>
+										) : null}
+										{paidOffline > 0 ? (
+											<div className='col-md-5 mx-auto'>
+												<h5>
+													{formatMoney(paidOffline)} SAR
+												</h5>
+											</div>
+										) : null}
+
+										{totalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
@@ -1270,21 +1453,27 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												</h4>
 											</div>
 										) : null}
-
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3 style={{ color: "darkgreen" }}>
-													{Number(
-														Number(reservation.total_amount) -
-															Number(reservation.paid_amount)
-													).toLocaleString()}{" "}
-													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+													{formatMoney(amountDue)} SAR
 												</h3>
 											</div>
 										) : null}
+
+										<div className='col-md-5 mx-auto'>
+											<h6>
+												{chosenLanguage === "Arabic"
+													? "حالة الدفع"
+													: "Payment Status"}
+											</h6>
+										</div>
+										<div className='col-md-5 mx-auto'>
+											<h5>{paymentSummary.status}</h5>
+										</div>
 									</div>
 
-									<div className='my-3'>
+								<div className='my-3'>
 										<div className='row'>
 											<div className='col-md-5 mx-auto'>
 												<h6>
@@ -1356,3 +1545,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 };
 
 export default ReservationDetail;
+
+
+

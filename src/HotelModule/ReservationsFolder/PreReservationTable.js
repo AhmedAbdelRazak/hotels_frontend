@@ -206,7 +206,7 @@ const PreReservationTable = ({
 						if (record.roomDetails.length > 1) {
 							return (
 								<div>
-									<div>{record.roomDetails[0].room_number}</div>
+									<div>{record.roomDetails[0] && record.roomDetails[0].room_number}</div>
 									<button
 										style={{
 											background: "none",
@@ -246,8 +246,8 @@ const PreReservationTable = ({
 						} else {
 							return (
 								<div>
-									{record.roomDetails[0].room_number
-										? record.roomDetails[0].room_number
+									{record.roomDetails[0] && record.roomDetails[0].room_number
+										? record.roomDetails[0] && record.roomDetails[0].room_number
 										: "No Room"}
 								</div>
 							);
@@ -256,7 +256,7 @@ const PreReservationTable = ({
 						if (record.roomId.length > 1) {
 							return (
 								<div>
-									<div>{record.roomId[0].room_number}</div>
+									<div>{record.roomId[0] && record.roomId[0].room_number}</div>
 									<button
 										style={{
 											background: "none",
@@ -296,8 +296,8 @@ const PreReservationTable = ({
 						} else {
 							return (
 								<div>
-									{record.roomId[0].room_number
-										? record.roomId[0].room_number
+									{record.roomId[0] && record.roomId[0].room_number
+										? record.roomId[0] && record.roomId[0].room_number
 										: "No Room"}
 								</div>
 							);
@@ -496,7 +496,7 @@ const PreReservationTable = ({
 										reservation.roomDetails.length > 0 ? (
 											reservation.roomDetails.length > 1 ? (
 												<div>
-													<div>{reservation.roomDetails[0].room_number}</div>
+													<div>{reservation.roomDetails[0] && reservation.roomDetails[0].room_number}</div>
 													<button
 														style={{
 															background: "none",
@@ -539,15 +539,15 @@ const PreReservationTable = ({
 												</div>
 											) : (
 												<div>
-													{reservation.roomDetails[0].room_number
-														? reservation.roomDetails[0].room_number
+													{reservation.roomDetails[0] && reservation.roomDetails[0].room_number
+														? reservation.roomDetails[0] && reservation.roomDetails[0].room_number
 														: "No Room"}
 												</div>
 											)
 										) : reservation.roomId && reservation.roomId.length > 0 ? (
 											reservation.roomId.length > 1 ? (
 												<div>
-													<div>{reservation.roomId[0].room_number}</div>
+													<div>{reservation.roomId[0] && reservation.roomId[0].room_number}</div>
 													<button
 														style={{
 															background: "none",
@@ -588,8 +588,8 @@ const PreReservationTable = ({
 												</div>
 											) : (
 												<div>
-													{reservation.roomId[0].room_number
-														? reservation.roomId[0].room_number
+													{reservation.roomId[0] && reservation.roomId[0].room_number
+														? reservation.roomId[0] && reservation.roomId[0].room_number
 														: "No Room"}
 												</div>
 											)
@@ -785,3 +785,4 @@ const StatusSpan = styled.span`
 			? "#fff"
 			: "inherit"};
 `;
+

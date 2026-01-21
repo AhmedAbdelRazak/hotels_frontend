@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
-import { DatePicker } from "antd";
-import { Modal, InputNumber } from "antd";
+import { DatePicker, Modal, InputNumber, Select } from "antd";
 import moment from "moment";
 import {
+	getHotelReservations,
+	getHotelRooms,
 	getListOfRoomSummary,
 	gettingRoomInventory,
 	updateSingleReservation,
@@ -28,10 +29,24 @@ export const EditReservationMain = ({
 	const [updatedRoomPrice, setUpdatedRoomPrice] = useState(0);
 	const [roomsSummary, setRoomsSummary] = useState("");
 	const [roomInventory, setRoomInventory] = useState("");
+	const [hotelRooms, setHotelRooms] = useState([]);
+	const [selectedRoomIds, setSelectedRoomIds] = useState([]);
+	const [bookedRoomIds, setBookedRoomIds] = useState([]);
+	const [isRoomChangeConfirmVisible, setIsRoomChangeConfirmVisible] =
+		useState(false);
+	const [pendingRoomIds, setPendingRoomIds] = useState([]);
 
 	const { user } = isAuthenticated();
+	const hotelIdValue =
+		reservation?.hotelId?._id ||
+		reservation?.hotelId ||
+		hotelDetails?._id ||
+		hotelDetails?.id ||
+		"";
+	const belongsToId =
+		reservation?.belongsTo?._id || reservation?.belongsTo || user?._id || "";
 
-	const formatDate = (date) => {
+	const formatDate = useCallback((date) => {
 		if (!date) return "";
 
 		const d = new Date(date);
@@ -43,7 +58,93 @@ export const EditReservationMain = ({
 		if (day.length < 2) day = "0" + day;
 
 		return [year, month, day].join("-");
+	}, []);
+
+	const normalizeDate = useCallback((value) => {
+		if (!value) return null;
+		const parsed = moment(value);
+		return parsed.isValid() ? parsed.startOf("day") : null;
+	}, []);
+
+	const getReservationRoomIds = useCallback((roomIdValue) => {
+		if (!Array.isArray(roomIdValue)) return [];
+		return roomIdValue
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string") return room;
+				if (typeof room === "object" && room._id) return room._id;
+				return room;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+	}, []);
+
+	const getNightsCount = () => {
+		const start = normalizeDate(reservation.checkin_date);
+		const end = normalizeDate(reservation.checkout_date);
+		if (!start || !end) return 0;
+		const diff = end.diff(start, "days");
+		return diff > 0 ? diff : 0;
 	};
+
+	const buildPricingByNightly = (nightlyPrice, nightsCount, startDate) => {
+		if (!startDate || !nightsCount) return [];
+		return Array.from({ length: nightsCount }, (_, idx) => {
+			const date = startDate.clone().add(idx, "day").format("YYYY-MM-DD");
+			return {
+				date,
+				price: nightlyPrice,
+				totalPriceWithCommission: nightlyPrice,
+				totalPriceWithoutCommission: nightlyPrice,
+			};
+		});
+	};
+
+	const getPricingByDayForRoom = (nightlyPrice, existingPricingByDay) => {
+		const nightsCount = Math.max(getNightsCount(), 1);
+		const start = normalizeDate(reservation.checkin_date);
+		if (!start) return [];
+		if (Array.isArray(existingPricingByDay) && existingPricingByDay.length > 0) {
+			if (existingPricingByDay.length === nightsCount) {
+				return existingPricingByDay.map((day) => ({
+					...day,
+					price: nightlyPrice,
+					totalPriceWithCommission: nightlyPrice,
+					totalPriceWithoutCommission: nightlyPrice,
+				}));
+			}
+		}
+		return buildPricingByNightly(nightlyPrice, nightsCount, start);
+	};
+
+	const isReservationActive = useCallback((reservationData) => {
+		const status = String(reservationData?.reservation_status || "").toLowerCase();
+		if (!status) return true;
+		if (status.includes("cancel")) return false;
+		if (status.includes("no_show") || status.includes("no show")) return false;
+		if (
+			status.includes("checked_out") ||
+			status.includes("checkedout") ||
+			status.includes("early_checked_out") ||
+			status.includes("closed")
+		)
+			return false;
+		return true;
+	}, []);
+
+	const hasOverlap = useCallback(
+		(reservationData, rangeStart, rangeEnd) => {
+			if (!rangeStart || !rangeEnd) return false;
+			const reservationStart = normalizeDate(reservationData?.checkin_date);
+			const reservationEnd = normalizeDate(reservationData?.checkout_date);
+			if (!reservationStart || !reservationEnd) return false;
+			return (
+				rangeStart.isBefore(reservationEnd) &&
+				rangeEnd.isAfter(reservationStart)
+			);
+		},
+		[normalizeDate],
+	);
 
 	// eslint-disable-next-line
 	const disabledDate = (current) => {
@@ -54,11 +155,12 @@ export const EditReservationMain = ({
 	const getRoomInventory = () => {
 		const formattedStartDate = formatDate(reservation.checkin_date);
 		const formattedEndDate = formatDate(reservation.checkout_date);
+		if (!hotelIdValue || !belongsToId) return;
 		gettingRoomInventory(
 			formattedStartDate,
 			formattedEndDate,
-			user._id,
-			reservation.hotelId
+			belongsToId,
+			hotelIdValue
 		).then((data) => {
 			if (data && data.error) {
 				console.log(data.error, "Error rendering");
@@ -76,7 +178,7 @@ export const EditReservationMain = ({
 			getListOfRoomSummary(
 				formattedStartDate,
 				formattedEndDate,
-				reservation.hotelId
+				hotelIdValue
 			).then((data) => {
 				if (data && data.error) {
 					console.log(data.error, "Error rendering");
@@ -91,13 +193,81 @@ export const EditReservationMain = ({
 	console.log(reservation, "reservation");
 
 	useEffect(() => {
+		if (!hotelIdValue || !belongsToId) return;
+		getHotelRooms(hotelIdValue, belongsToId).then((data) => {
+			if (data && data.error) {
+				console.log(data.error);
+			} else {
+				setHotelRooms(Array.isArray(data) ? data : []);
+			}
+		});
+	}, [hotelIdValue, belongsToId]);
+
+	useEffect(() => {
+		setSelectedRoomIds(getReservationRoomIds(reservation?.roomId));
+	}, [reservation?.roomId, getReservationRoomIds]);
+
+	useEffect(() => {
+		if (!reservation?.checkin_date || !reservation?.checkout_date) return;
+		if (!hotelIdValue || !belongsToId) return;
+
+		const formattedStartDate = formatDate(reservation.checkin_date);
+		const formattedEndDate = formatDate(reservation.checkout_date);
+		const rangeStart = normalizeDate(reservation.checkin_date);
+		const rangeEnd = normalizeDate(reservation.checkout_date);
+
+		getHotelReservations(
+			hotelIdValue,
+			belongsToId,
+			formattedStartDate,
+			formattedEndDate
+		).then((data) => {
+			if (data && data.error) {
+				console.log(data.error, "Error loading reservations");
+				return;
+			}
+			const reservationsList = Array.isArray(data) ? data : [];
+			const bookedIds = new Set();
+			reservationsList.forEach((reservationItem) => {
+				if (
+					reservation?._id &&
+					reservationItem?._id === reservation._id
+				)
+					return;
+				if (!isReservationActive(reservationItem)) return;
+				if (!hasOverlap(reservationItem, rangeStart, rangeEnd)) return;
+				getReservationRoomIds(reservationItem.roomId).forEach((id) =>
+					bookedIds.add(id)
+				);
+			});
+			setBookedRoomIds(Array.from(bookedIds));
+		});
+	}, [
+		reservation?.checkin_date,
+		reservation?.checkout_date,
+		hotelIdValue,
+		belongsToId,
+		reservation?._id,
+		formatDate,
+		normalizeDate,
+		getReservationRoomIds,
+		isReservationActive,
+		hasOverlap,
+	]);
+
+	useEffect(() => {
 		gettingOverallRoomsSummary();
 
 		if (reservation.checkin_date && reservation.checkout_date) {
 			getRoomInventory();
 		}
 		// eslint-disable-next-line
-	}, [reservation.checkin_date, reservation.checkout_date]);
+	}, [
+		reservation.checkin_date,
+		reservation.checkout_date,
+		belongsToId,
+		hotelIdValue,
+	]);
 
 	const openModal = (room, index) => {
 		setIsModalVisible(true);
@@ -127,7 +297,7 @@ export const EditReservationMain = ({
 				// Update days_of_residence only if both dates are present and the duration is non-negative
 				days_of_residence:
 					end && dateAtMidnight && duration >= 0
-						? duration
+						? duration + 1
 						: currentReservation.days_of_residence,
 			};
 		});
@@ -151,7 +321,7 @@ export const EditReservationMain = ({
 			return {
 				...currentReservation,
 				checkout_date: adjustedDate ? adjustedDate.toISOString() : null, // Store as ISO string or null if no date
-				days_of_residence: duration >= 0 ? duration : 0,
+				days_of_residence: duration >= 0 ? duration + 1 : 0,
 			};
 		});
 	};
@@ -181,6 +351,55 @@ export const EditReservationMain = ({
 
 	const handleRoomCountChange = (e) => {
 		setSelectedCount(e.target.value);
+	};
+
+	const normalizeRoomSelection = useCallback((values) => {
+		if (!Array.isArray(values)) return [];
+		return values
+			.map((value) => (value && typeof value === "object" ? value.value : value))
+			.filter(Boolean)
+			.map((id) => String(id));
+	}, []);
+
+	const areSameRoomSelection = useCallback((left, right) => {
+		if (!Array.isArray(left) || !Array.isArray(right)) return false;
+		if (left.length !== right.length) return false;
+		const leftSorted = [...left].map(String).sort();
+		const rightSorted = [...right].map(String).sort();
+		return leftSorted.every((id, index) => id === rightSorted[index]);
+	}, []);
+
+	const applyRoomSelection = useCallback(
+		(roomIds) => {
+			setSelectedRoomIds(roomIds);
+			setReservation((currentReservation) => ({
+				...currentReservation,
+				roomId: roomIds,
+			}));
+		},
+		[setReservation]
+	);
+
+	const handleRoomSelectionChange = (values) => {
+		const nextValues = normalizeRoomSelection(values);
+		if (
+			selectedRoomIds.length > 0 &&
+			!areSameRoomSelection(selectedRoomIds, nextValues)
+		) {
+			setPendingRoomIds(nextValues);
+			setIsRoomChangeConfirmVisible(true);
+			return;
+		}
+		applyRoomSelection(nextValues);
+	};
+	const handleConfirmRoomChange = () => {
+		applyRoomSelection(pendingRoomIds);
+		setPendingRoomIds([]);
+		setIsRoomChangeConfirmVisible(false);
+	};
+	const handleCancelRoomChange = () => {
+		setPendingRoomIds([]);
+		setIsRoomChangeConfirmVisible(false);
 	};
 
 	const addRoomToReservation = () => {
@@ -213,6 +432,9 @@ export const EditReservationMain = ({
 						? {
 								...item,
 								count: item.count + parseInt(selectedCount, 10),
+								pricingByDay: Array.isArray(item.pricingByDay)
+									? item.pricingByDay
+									: getPricingByDayForRoom(chosenPrice),
 						  }
 						: item
 				);
@@ -222,6 +444,7 @@ export const EditReservationMain = ({
 					room_type: selectedRoomType,
 					chosenPrice: chosenPrice,
 					count: parseInt(selectedCount, 10),
+					pricingByDay: getPricingByDayForRoom(chosenPrice),
 				});
 			}
 
@@ -250,10 +473,15 @@ export const EditReservationMain = ({
 		if (selectedRoomIndex !== null) {
 			setReservation((currentReservation) => {
 				const updatedRooms = [...currentReservation.pickedRoomsType];
+				const nightlyPrice = Number(updatedRoomPrice) || 0;
 				updatedRooms[selectedRoomIndex] = {
 					...updatedRooms[selectedRoomIndex],
 					count: updatedRoomCount,
-					chosenPrice: updatedRoomPrice,
+					chosenPrice: nightlyPrice,
+					pricingByDay: getPricingByDayForRoom(
+						nightlyPrice,
+						updatedRooms[selectedRoomIndex]?.pricingByDay
+					),
 				};
 				return {
 					...currentReservation,
@@ -282,21 +510,51 @@ export const EditReservationMain = ({
 
 	// This function calculates the total number of nights between check-in and check-out dates
 	const calculateNightsOfResidence = () => {
-		const checkinDate = moment(reservation.checkin_date);
-		const checkoutDate = moment(reservation.checkout_date);
-		return checkoutDate.diff(checkinDate, "days");
+		return getNightsCount();
 	};
 
 	const UpdateReservation = () => {
 		const confirmationMessage = `Are you sure you want to update this reservation?`;
 		if (window.confirm(confirmationMessage)) {
+			const nightsCount = getNightsCount();
+			const totalPerDay = calculateTotalAmountPerDay();
+			const normalizedPickedRoomsType = Array.isArray(reservation.pickedRoomsType)
+				? reservation.pickedRoomsType.map((room) => {
+						const nightlyPrice = Number(room.chosenPrice) || 0;
+						return {
+							...room,
+							chosenPrice: nightlyPrice,
+							pricingByDay: getPricingByDayForRoom(
+								nightlyPrice,
+								room.pricingByDay
+							),
+						};
+				  })
+				: [];
+
+			const totalRoomsFromTypes = normalizedPickedRoomsType.reduce(
+				(sum, room) => sum + (Number(room.count) || 1),
+				0
+			);
+			const normalizedRoomIds = Array.isArray(selectedRoomIds)
+				? selectedRoomIds
+				: [];
+			const totalRooms =
+				normalizedRoomIds.length > 0
+					? normalizedRoomIds.length
+					: totalRoomsFromTypes;
+			const daysOfResidence =
+				Number(reservation.days_of_residence) || nightsCount + 1;
+
 			const updateData = {
 				...reservation,
-				total_amount:
-					calculateTotalAmountPerDay() * Number(calculateNightsOfResidence()),
-
-				sub_total:
-					calculateTotalAmountPerDay() * Number(calculateNightsOfResidence()),
+				pickedRoomsType: normalizedPickedRoomsType,
+				pickedRoomsPricing: normalizedPickedRoomsType,
+				roomId: normalizedRoomIds,
+				total_rooms: totalRooms,
+				days_of_residence: daysOfResidence,
+				total_amount: totalPerDay * Number(nightsCount),
+				sub_total: totalPerDay * Number(nightsCount),
 				hotelName: hotelDetails.hotelName,
 				sendEmail: sendEmail,
 			};
@@ -319,6 +577,111 @@ export const EditReservationMain = ({
 	};
 
 	console.log(reservation, "reservation");
+	const bookedRoomIdSet = useMemo(() => new Set(bookedRoomIds), [bookedRoomIds]);
+	const roomTypeDisplayNameLookup = useMemo(() => {
+		const map = new Map();
+		const roomTypes = Array.isArray(hotelDetails?.roomCountDetails)
+			? hotelDetails.roomCountDetails
+			: [];
+		roomTypes.forEach((roomType) => {
+			const key = roomType?.roomType;
+			if (!key) return;
+			map.set(String(key), {
+				name: roomType.displayName || roomType.roomType || String(key),
+				nameAr:
+					roomType.displayName_OtherLanguage ||
+					roomType.displayName ||
+					roomType.roomType ||
+					String(key),
+			});
+		});
+		return map;
+	}, [hotelDetails?.roomCountDetails]);
+	const resolveRoomId = useCallback((room) => {
+		if (!room) return "";
+		if (typeof room === "string") return room;
+		if (typeof room === "object") {
+			return room._id || room.id || room.roomId || "";
+		}
+		return "";
+	}, []);
+	const getRoomLabel = useCallback(
+		(room) => {
+			const roomNumber =
+				room?.room_number || room?.roomNumber || room?.room_no || "";
+			const roomTypeKey = room?.room_type || room?.roomType || "";
+			const displayNameFromRoom = room?.display_name || room?.displayName || "";
+			const displayNameInfo = roomTypeKey
+				? roomTypeDisplayNameLookup.get(String(roomTypeKey))
+				: null;
+			const mappedDisplayName =
+				chosenLanguage === "Arabic"
+					? displayNameInfo?.nameAr
+					: displayNameInfo?.name;
+			const roomType =
+				displayNameFromRoom ||
+				mappedDisplayName ||
+				roomTypeKey ||
+				"";
+			const numberLabel = roomNumber
+				? roomNumber
+				: chosenLanguage === "Arabic"
+				  ? "بدون رقم"
+				  : "No #";
+			const typeLabel = roomType
+				? roomType
+				: chosenLanguage === "Arabic"
+				  ? "غرفة"
+				  : "room";
+			return `${numberLabel} | ${typeLabel}`;
+		},
+		[chosenLanguage, roomTypeDisplayNameLookup]
+	);
+	const roomsForSelect = useMemo(() => {
+		const merged = [];
+		const seen = new Set();
+		const addRoom = (room) => {
+			const id = resolveRoomId(room);
+			if (!id || seen.has(id)) return;
+			seen.add(id);
+			merged.push(room);
+		};
+		(Array.isArray(hotelRooms) ? hotelRooms : []).forEach(addRoom);
+		(Array.isArray(reservation?.roomDetails) ? reservation.roomDetails : []).forEach(
+			addRoom
+		);
+		(Array.isArray(reservation?.roomId) ? reservation.roomId : [])
+			.filter((room) => room && typeof room === "object")
+			.forEach(addRoom);
+		return merged;
+	}, [hotelRooms, reservation?.roomDetails, reservation?.roomId, resolveRoomId]);
+	const roomLookup = useMemo(() => {
+		const map = new Map();
+		roomsForSelect.forEach((room) => {
+			const id = resolveRoomId(room);
+			if (!id) return;
+			map.set(String(id), room);
+		});
+		return map;
+	}, [roomsForSelect, resolveRoomId]);
+	const selectedRoomValues = useMemo(() => {
+		if (!Array.isArray(selectedRoomIds)) return [];
+		return selectedRoomIds.map((id) => {
+			const room = roomLookup.get(String(id));
+			const label = room ? getRoomLabel(room) : String(id);
+			return { value: String(id), label };
+		});
+	}, [selectedRoomIds, roomLookup, getRoomLabel]);
+	const requestedRoomsCount = Array.isArray(reservation.pickedRoomsType)
+		? reservation.pickedRoomsType.reduce(
+				(sum, room) => sum + (Number(room.count) || 1),
+				0
+		  )
+		: 0;
+	const nightsCountDisplay = getNightsCount();
+	const daysCountDisplay =
+		Number(reservation.days_of_residence) || nightsCountDisplay + 1;
+	const nightsDisplay = Math.max(daysCountDisplay - 1, 0);
 	return (
 		<div>
 			<EditReservationMainWrapper isArabic={chosenLanguage === "Arabic"}>
@@ -356,6 +719,24 @@ export const EditReservationMain = ({
 						</button>
 					</div>
 				</Modal>
+				<Modal
+					title={
+						chosenLanguage === "Arabic"
+							? "تأكيد تغيير الغرفة"
+							: "Confirm Room Change"
+					}
+					open={isRoomChangeConfirmVisible}
+					onOk={handleConfirmRoomChange}
+					onCancel={handleCancelRoomChange}
+					okText={chosenLanguage === "Arabic" ? "نعم" : "Yes"}
+					cancelText={chosenLanguage === "Arabic" ? "إلغاء" : "Cancel"}
+				>
+					<p>
+						{chosenLanguage === "Arabic"
+							? "هل تريد تغيير الغرفة لهذا الضيف؟"
+							: "Do you want to change the room for this guest?"}
+					</p>
+				</Modal>
 
 				<div className='row'>
 					<div className='col-md-8'>
@@ -367,7 +748,7 @@ export const EditReservationMain = ({
 								>
 									<label style={{ fontWeight: "bold" }}>
 										{" "}
-										{chosenLanguage === "Arabic" ? "الاسم" : "Guest Name"}
+										{chosenLanguage === "Arabic" ? "اسم الضيف" : "Guest Name"}
 									</label>
 									<input
 										background='red'
@@ -391,7 +772,7 @@ export const EditReservationMain = ({
 									style={{ marginTop: "10px", marginBottom: "10px" }}
 								>
 									<label style={{ fontWeight: "bold" }}>
-										{chosenLanguage === "Arabic" ? "الهاتف" : "Guest Phone"}
+										{chosenLanguage === "Arabic" ? "هاتف الضيف" : "Guest Phone"}
 									</label>
 									<input
 										type='text'
@@ -415,7 +796,7 @@ export const EditReservationMain = ({
 								>
 									<label style={{ fontWeight: "bold" }}>
 										{chosenLanguage === "Arabic"
-											? "البريد الإلكتروني"
+											? "بريد الضيف الإلكتروني"
 											: "Guest Email"}{" "}
 									</label>
 									<input
@@ -524,7 +905,7 @@ export const EditReservationMain = ({
 									}}
 								>
 									{chosenLanguage === "Arabic"
-										? "موعد انتهاء الأقامة"
+										? "تاريخ المغادرة"
 										: "Checkout Date"}{" "}
 									{reservation.checkout_date
 										? `(${new Date(reservation.checkout_date).toDateString()})`
@@ -664,7 +1045,7 @@ export const EditReservationMain = ({
 								<div className='form-group'>
 									<label style={{ fontWeight: "bold" }}>
 										{chosenLanguage === "Arabic"
-											? " الدفع او السداد"
+											? "طريقة الدفع"
 											: "Payment"}
 									</label>
 									<select
@@ -721,7 +1102,7 @@ export const EditReservationMain = ({
 								>
 									<label style={{ fontWeight: "bold" }}>
 										{chosenLanguage === "Arabic"
-											? "عدد الضيوف"
+											? "إجمالي النزلاء"
 											: "Total Guests"}
 									</label>
 									<input
@@ -774,7 +1155,7 @@ export const EditReservationMain = ({
 									style={{ marginTop: "10px", marginBottom: "10px" }}
 								>
 									<label style={{ fontWeight: "bold" }}>
-										{chosenLanguage === "Arabic" ? "تعليق الضيف" : "Comment"}
+										{chosenLanguage === "Arabic" ? "تعليق" : "Comment"}
 									</label>
 									<textarea
 										background='red'
@@ -795,6 +1176,88 @@ export const EditReservationMain = ({
 										}}
 									/>
 								</div>
+							</div>
+						</div>
+
+						<div
+							className='row my-3 mx-auto'
+							style={{
+								background: "#f5f5f5",
+								width: "99%",
+								padding: "12px",
+								borderRadius: "8px",
+							}}
+						>
+							<div className='col-md-12'>
+								<label style={{ fontWeight: "bold" }}>
+									{chosenLanguage === "Arabic"
+										? "تخصيص الغرف"
+										: "Room Assignment"}
+								</label>
+							</div>
+							<div className='col-md-12'>
+							<Select
+								mode='multiple'
+								labelInValue
+								style={{ width: "100%" }}
+								placeholder={
+									chosenLanguage === "Arabic"
+										? "اختر أرقام الغرف"
+										: "Select room numbers"
+								}
+								value={selectedRoomValues}
+								onChange={handleRoomSelectionChange}
+								optionLabelProp='label'
+							>
+								{roomsForSelect.map((room) => {
+									const roomId = String(resolveRoomId(room));
+									const isBooked = bookedRoomIdSet.has(roomId);
+									const isSelected = selectedRoomIds.includes(roomId);
+									const baseLabel = getRoomLabel(room);
+									const floorLabel = room.floor
+										? ` | ${chosenLanguage === "Arabic" ? "الدور" : "Floor"} ${room.floor}`
+										: "";
+									const occupiedLabel =
+										isBooked && !isSelected
+											? ` (${chosenLanguage === "Arabic" ? "محجوزة" : "Occupied"})`
+											: "";
+									const displayLabel = `${baseLabel}${floorLabel}${occupiedLabel}`;
+									return (
+										<Select.Option
+											key={roomId}
+											value={roomId}
+											label={baseLabel}
+											disabled={isBooked && !isSelected}
+										>
+											<span
+												style={{
+													textTransform: "capitalize",
+													color: isBooked && !isSelected ? "#8b8b8b" : "inherit",
+												}}
+											>
+												{displayLabel}
+											</span>
+										</Select.Option>
+									);
+								})}
+							</Select>
+								{requestedRoomsCount > 0 ? (
+									<div
+										style={{
+											marginTop: "8px",
+											fontWeight: "bold",
+											color:
+												selectedRoomIds.length === requestedRoomsCount
+													? "#1f7a1f"
+													: "#b45f06",
+										}}
+									>
+										{chosenLanguage === "Arabic"
+											? "الغرف المختارة"
+											: "Selected Rooms"}{" "}
+										{selectedRoomIds.length} / {requestedRoomsCount}
+									</div>
+								) : null}
 							</div>
 						</div>
 					</div>
@@ -837,13 +1300,13 @@ export const EditReservationMain = ({
 							</div>
 							<div className='col-md-6 my-2'>{reservation.payment}</div>
 							<div className='col-md-6 my-2'>
-								{chosenLanguage === "Arabic" ? "حالة الحجز" : "Status"}
+								{chosenLanguage === "Arabic" ? "الحالة" : "Status"}
 							</div>
 							<div className='col-md-6 my-2'></div>
 						</div>
 						<h4 className='my-4 text-center' style={{ color: "#006ad1" }}>
 							{chosenLanguage === "Arabic"
-								? "المبلغ الإجمالي"
+								? "إجمالي المبلغ:"
 								: "Total Amount:"}{" "}
 							{(
 								calculateTotalAmountPerDay() *
@@ -1024,10 +1487,7 @@ export const EditReservationMain = ({
 						<>
 							<div className='total-amount my-3'>
 								<h5 style={{ fontWeight: "bold" }}>
-									Days Of Residence: {reservation.days_of_residence + 1} Days /{" "}
-									{reservation.days_of_residence <= 1
-										? 1
-										: reservation.days_of_residence}{" "}
+									Days Of Residence: {daysCountDisplay} Days / {nightsDisplay}{" "}
 									Nights
 								</h5>
 

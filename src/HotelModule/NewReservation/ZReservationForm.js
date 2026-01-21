@@ -194,12 +194,12 @@ const ZReservationForm = ({
 		setStart_date(
 			checkinDate && checkinDate.isValid()
 				? checkinDate.startOf("day").toISOString()
-				: null
+				: null,
 		);
 		setEnd_date(
 			checkoutDate && checkoutDate.isValid()
 				? checkoutDate.startOf("day").toISOString()
-				: null
+				: null,
 		);
 
 		if (checkinDate && checkoutDate) {
@@ -216,12 +216,12 @@ const ZReservationForm = ({
 			reservation.payment ||
 				reservation.payment_status ||
 				reservation.financeStatus ||
-				""
+				"",
 		);
 		setPickedRoomsType(
 			Array.isArray(reservation.pickedRoomsType)
 				? reservation.pickedRoomsType
-				: []
+				: [],
 		);
 
 		setSearchClicked(false);
@@ -235,7 +235,7 @@ const ZReservationForm = ({
 		if (!reservationId) return;
 
 		const selectedReservation = todaysReservations.find(
-			(reservation) => reservation._id === reservationId
+			(reservation) => reservation._id === reservationId,
 		);
 		populateFromReservation(selectedReservation);
 	};
@@ -283,7 +283,7 @@ const ZReservationForm = ({
 
 	const paymentSummary = useMemo(
 		() => summarizePayment(searchedReservation, payment_status),
-		[searchedReservation, payment_status]
+		[searchedReservation, payment_status],
 	);
 
 	const totalAmountValue = useMemo(() => {
@@ -299,7 +299,7 @@ const ZReservationForm = ({
 	const paidOnline = normalizeNumber(searchedReservation?.paid_amount, 0);
 	const paidOffline = normalizeNumber(
 		searchedReservation?.payment_details?.onsite_paid_amount,
-		0
+		0,
 	);
 	const totalPaid = paidOnline + paidOffline;
 	const isCreditDebit =
@@ -322,35 +322,35 @@ const ZReservationForm = ({
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال اسم الزائر"
-					: "Name is required"
+					: "Name is required",
 			);
 		}
 		if (!customer_details.phone) {
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال رقم هاتف الزائر"
-					: "Phone is required"
+					: "Phone is required",
 			);
 		}
 		if (!customer_details.passport) {
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال رقم جواز الزائر"
-					: "passport is required"
+					: "passport is required",
 			);
 		}
 		if (!customer_details.nationality) {
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال جنسية الزائر"
-					: "nationality is required"
+					: "nationality is required",
 			);
 		}
 		if (!start_date) {
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال تاريخ وصول الزائر"
-					: "Check in Date is required"
+					: "Check in Date is required",
 			);
 		}
 
@@ -358,7 +358,7 @@ const ZReservationForm = ({
 			return toast.error(
 				chosenLanguage === "Arabic"
 					? "الرجاء إدخال تاريخ مغادرة الزائر"
-					: "Check out Date is required"
+					: "Check out Date is required",
 			);
 		}
 		setTaskeenClicked(true);
@@ -369,7 +369,7 @@ const ZReservationForm = ({
 
 	const handleFileUpload = (uploadFunction) => {
 		const isFromUS = window.confirm(
-			"Is this upload from the US? Click OK for Yes, Cancel for No."
+			"Is this upload from the US? Click OK for Yes, Cancel for No.",
 		);
 		const country = isFromUS ? "US" : "NotUS";
 
@@ -1139,7 +1139,7 @@ const ZReservationForm = ({
 													  ).toLocaleString()
 													: finalTotalByRoom()
 													  ? Number(
-																finalTotalByRoom() / (days_of_residence - 1)
+																finalTotalByRoom() / (days_of_residence - 1),
 													    ).toFixed(2)
 													  : 0}{" "}
 												{chosenLanguage === "Arabic"
@@ -1149,41 +1149,37 @@ const ZReservationForm = ({
 
 											{chosenLanguage === "Arabic" ? (
 												<div className='room-list my-3'>
-													{displayPickedRoomsType.map(
-															(room, index) => (
-																<div
-																	key={index}
-																	className='room-item my-2'
-																	style={{
-																		fontWeight: "bold",
-																		textTransform: "capitalize",
-																	}}
-																>
-																	{`نوع الغرفة: ${
-																		room.room_type
-																	}، السعر: ${room.chosenPrice.toLocaleString()} ريال سعودي، العدد: ${
-																		room.count
-																	} غرف`}
-																</div>
-															)
-														)}
+													{displayPickedRoomsType.map((room, index) => (
+														<div
+															key={index}
+															className='room-item my-2'
+															style={{
+																fontWeight: "bold",
+																textTransform: "capitalize",
+															}}
+														>
+															{`نوع الغرفة: ${
+																room.room_type
+															}، السعر: ${room.chosenPrice.toLocaleString()} ريال سعودي، العدد: ${
+																room.count
+															} غرف`}
+														</div>
+													))}
 												</div>
 											) : (
 												<div className='room-list my-3'>
-													{displayPickedRoomsType.map(
-															(room, index) => (
-																<div
-																	key={index}
-																	className='room-item my-2'
-																	style={{
-																		fontWeight: "bold",
-																		textTransform: "capitalize",
-																	}}
-																>
-																	{`Room Type: ${room.room_type}, Price: ${room.chosenPrice} SAR, Count: ${room.count} Rooms`}
-																</div>
-															)
-														)}
+													{displayPickedRoomsType.map((room, index) => (
+														<div
+															key={index}
+															className='room-item my-2'
+															style={{
+																fontWeight: "bold",
+																textTransform: "capitalize",
+															}}
+														>
+															{`Room Type: ${room.room_type}, Price: ${room.chosenPrice} SAR, Count: ${room.count} Rooms`}
+														</div>
+													))}
 												</div>
 											)}
 										</div>
@@ -1211,98 +1207,96 @@ const ZReservationForm = ({
 												overflow: "auto",
 											}}
 										>
-											{displayPickedRoomsType.map(
-													(room, index) => (
-														<div key={index} className='inner-grid'>
-															{index === 0 ? (
-																<div>
-																	<div style={{ fontSize: "14px" }}>
-																		{customer_details && customer_details.name}
-																	</div>
-																	<div
-																		className='mx-auto mt-2'
-																		style={{ fontSize: "14px" }}
-																	>
-																		{chosenLanguage === "Arabic"
-																			? "رقم التأكيد"
-																			: "Confirmation #"}
-																		: {confirmation_number}
-																	</div>
-																</div>
-															) : (
-																<div></div>
-															)}
-
-															<div>
-																{index === 0 ? (
-																	<div style={{ fontSize: "14px" }}>
-																		{chosenLanguage === "Arabic"
-																			? "أنواع الغرف:"
-																			: "Room Types:"}{" "}
-																	</div>
-																) : null}
-
-																<div
-																	className='mx-auto mt-1'
-																	style={{
-																		background: "white",
-																		width: "85%",
-																		padding: "5px",
-																		textTransform: "capitalize",
-																		fontSize: "12px",
-																	}}
-																>
-																	{room.room_type + " | " + room.displayName}
-																</div>
+											{displayPickedRoomsType.map((room, index) => (
+												<div key={index} className='inner-grid'>
+													{index === 0 ? (
+														<div>
+															<div style={{ fontSize: "14px" }}>
+																{customer_details && customer_details.name}
 															</div>
-
-															<div>
-																{index === 0 ? (
-																	<div style={{ fontSize: "14px" }}>
-																		{chosenLanguage === "Arabic"
-																			? "	عدد الغرف:"
-																			: "Room Count:"}{" "}
-																	</div>
-																) : null}
-
-																<div
-																	className='mx-auto mt-1'
-																	style={{
-																		background: "white",
-																		width: "85%",
-																		padding: "5px",
-																		fontSize: "12px",
-																	}}
-																>
-																	{room.count}
-																</div>
-															</div>
-															<div>
-																{index === 0 ? (
-																	<div style={{ fontSize: "14px" }}>
-																		{chosenLanguage === "Arabic"
-																			? "السعر في اليوم الواحد:"
-																			: "Price/ Day:"}{" "}
-																	</div>
-																) : null}
-
-																<div
-																	className='mx-auto mt-1'
-																	style={{
-																		background: "white",
-																		width: "85%",
-																		padding: "5px",
-																		fontSize: "12px",
-																	}}
-																>
-																	{room &&
-																		Number(room.chosenPrice) &&
-																		Number(room.chosenPrice).toFixed(2)}
-																</div>
+															<div
+																className='mx-auto mt-2'
+																style={{ fontSize: "14px" }}
+															>
+																{chosenLanguage === "Arabic"
+																	? "رقم التأكيد"
+																	: "Confirmation #"}
+																: {confirmation_number}
 															</div>
 														</div>
-													)
-												)}
+													) : (
+														<div></div>
+													)}
+
+													<div>
+														{index === 0 ? (
+															<div style={{ fontSize: "14px" }}>
+																{chosenLanguage === "Arabic"
+																	? "أنواع الغرف:"
+																	: "Room Types:"}{" "}
+															</div>
+														) : null}
+
+														<div
+															className='mx-auto mt-1'
+															style={{
+																background: "white",
+																width: "85%",
+																padding: "5px",
+																textTransform: "capitalize",
+																fontSize: "12px",
+															}}
+														>
+															{room.room_type + " | " + room.displayName}
+														</div>
+													</div>
+
+													<div>
+														{index === 0 ? (
+															<div style={{ fontSize: "14px" }}>
+																{chosenLanguage === "Arabic"
+																	? "	عدد الغرف:"
+																	: "Room Count:"}{" "}
+															</div>
+														) : null}
+
+														<div
+															className='mx-auto mt-1'
+															style={{
+																background: "white",
+																width: "85%",
+																padding: "5px",
+																fontSize: "12px",
+															}}
+														>
+															{room.count}
+														</div>
+													</div>
+													<div>
+														{index === 0 ? (
+															<div style={{ fontSize: "14px" }}>
+																{chosenLanguage === "Arabic"
+																	? "السعر في اليوم الواحد:"
+																	: "Price/ Day:"}{" "}
+															</div>
+														) : null}
+
+														<div
+															className='mx-auto mt-1'
+															style={{
+																background: "white",
+																width: "85%",
+																padding: "5px",
+																fontSize: "12px",
+															}}
+														>
+															{room &&
+																Number(room.chosenPrice) &&
+																Number(room.chosenPrice).toFixed(2)}
+														</div>
+													</div>
+												</div>
+											))}
 										</div>
 									) : null}
 

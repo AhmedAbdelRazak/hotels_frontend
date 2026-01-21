@@ -6,6 +6,7 @@ import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
+import HotelInventory from "./HotelInventory";
 import { useCartContext } from "../../cart_context";
 
 const HotelReportsMain = () => {
@@ -121,11 +122,7 @@ const HotelReportsMain = () => {
 
 						{activeTab === "inventory" && (
 							<div>
-								<h3>Hotels Inventory</h3>
-								<p>
-									{/* You could create a new component here for a specific hotel's reports */}
-									Work in progress...
-								</p>
+								<HotelInventory chosenLanguage={chosenLanguage} />
 							</div>
 						)}
 					</div>

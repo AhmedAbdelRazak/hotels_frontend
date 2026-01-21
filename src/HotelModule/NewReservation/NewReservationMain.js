@@ -166,16 +166,14 @@ const NewReservationMain = () => {
 					} else {
 						if (data && data.name && data._id && data2) {
 							const belongsToId =
-								user.role === 2000
-									? user._id
-									: selectedHotelLS.belongsTo._id;
+								user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id;
 
 							if (heatMapStartDate && heatMapEndDate) {
 								getHotelReservations(
 									hotelId,
 									belongsToId,
 									heatMapStartDate,
-									heatMapEndDate
+									heatMapEndDate,
 								).then((data3) => {
 									if (data3 && data3.error) {
 										console.log(data3.error);
@@ -189,7 +187,9 @@ const NewReservationMain = () => {
 										console.log(todayData.error);
 										setTodaysCheckins([]);
 									} else {
-										setTodaysCheckins(Array.isArray(todayData) ? todayData : []);
+										setTodaysCheckins(
+											Array.isArray(todayData) ? todayData : [],
+										);
 									}
 								});
 							}
@@ -198,13 +198,13 @@ const NewReservationMain = () => {
 								hotelId,
 								belongsToId,
 								heatMapStartDate,
-								heatMapEndDate
+								heatMapEndDate,
 							).then((data4) => {
 								if (data4 && data4.error) {
 									console.log(data4.error);
 								} else {
 									setAllReservationsHeatMap(
-										data4 && data4.length > 0 ? data4 : []
+										data4 && data4.length > 0 ? data4 : [],
 									);
 								}
 							});
@@ -238,7 +238,7 @@ const NewReservationMain = () => {
 			while (currentDate.isBefore(endDate)) {
 				const dateString = currentDate.format("YYYY-MM-DD");
 				const pricing = pricingRate.find(
-					(price) => price.calendarDate === dateString
+					(price) => price.calendarDate === dateString,
 				);
 				const price = pricing
 					? parseFloat(pricing.price)
@@ -248,7 +248,7 @@ const NewReservationMain = () => {
 			}
 			return daysArray;
 		},
-		[hotelDetails.roomCountDetails]
+		[hotelDetails.roomCountDetails],
 	);
 
 	const gettingOverallRoomsSummary = () => {
@@ -258,7 +258,7 @@ const NewReservationMain = () => {
 			getListOfRoomSummary(
 				formattedStartDate,
 				formattedEndDate,
-				hotelDetails._id
+				hotelDetails._id,
 			).then((data) => {
 				if (data && data.error) {
 				} else {
@@ -317,7 +317,7 @@ const NewReservationMain = () => {
 		) {
 			const roomIds = searchedReservation.roomId;
 			const selectedRooms = hotelRooms.filter((room) =>
-				roomIds.includes(room._id)
+				roomIds.includes(room._id),
 			);
 
 			setPickedHotelRooms(roomIds);
@@ -327,7 +327,7 @@ const NewReservationMain = () => {
 					const pricingByDay = generatePricingTable(
 						roomType,
 						start_date,
-						end_date
+						end_date,
 					);
 					return {
 						roomId: room._id,
@@ -336,7 +336,7 @@ const NewReservationMain = () => {
 							pricingByDay.length,
 						pricingByDay,
 					};
-				})
+				}),
 			);
 
 			if (selectedRooms.length > 0) setCurrentRoom(selectedRooms[0]);
@@ -393,19 +393,19 @@ const NewReservationMain = () => {
 					totalPriceWithCommission: finalWithComm,
 					totalPriceWithoutCommission: safeParseFloat(
 						d.totalPriceWithoutCommission,
-						0
+						0,
 					),
 				};
 			});
 			const totalWithComm = pricingDetails.reduce(
 				(a, d) => a + d.totalPriceWithCommission,
-				0
+				0,
 			);
 			const avgNight =
 				pricingDetails.length > 0 ? totalWithComm / pricingDetails.length : 0;
 			const hotelShouldGet = pricingDetails.reduce(
 				(a, d) => a + d.rootPrice,
-				0
+				0,
 			);
 
 			for (let i = 0; i < (line.count || 1); i += 1) {
@@ -449,7 +449,7 @@ const NewReservationMain = () => {
 		}
 
 		const invalidRoomCount = pickedRoomsType.some(
-			(room) => Number(room.count) <= 0
+			(room) => Number(room.count) <= 0,
 		);
 		if (invalidRoomCount && activeTab === "newReservation") {
 			return toast.error("Room count must be greater than 0");
@@ -566,9 +566,7 @@ const NewReservationMain = () => {
 						? "InHouse"
 						: searchedReservation.reservation_status || "Confirmed",
 				total_rooms:
-					pickedHotelRooms.length ||
-					searchedReservation.total_rooms ||
-					0,
+					pickedHotelRooms.length || searchedReservation.total_rooms || 0,
 				total_guests: total_guests
 					? total_guests
 					: searchedReservation.total_guests || pickedHotelRooms.length,
@@ -609,7 +607,7 @@ const NewReservationMain = () => {
 				user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
 				hotelDetails._id,
 				token,
-				new_reservation
+				new_reservation,
 			).then((data) => {
 				if (data && data.error) {
 					console.log(data.error, "error create new reservation");
@@ -633,7 +631,7 @@ const NewReservationMain = () => {
 			formattedStartDate,
 			formattedEndDate,
 			user.role === 2000 ? user._id : selectedHotel.belongsTo._id,
-			hotelDetails._id
+			hotelDetails._id,
 		).then((data) => {
 			if (data && data.error) {
 			} else {
@@ -707,7 +705,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?heatmap`
+										}/${selectedHotelLocalStorage._id}?heatmap`,
 									);
 								}}
 							>
@@ -724,7 +722,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?reserveARoom`
+										}/${selectedHotelLocalStorage._id}?reserveARoom`,
 									);
 								}}
 							>
@@ -740,7 +738,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?newReservation`
+										}/${selectedHotelLocalStorage._id}?newReservation`,
 									);
 								}}
 							>
@@ -758,7 +756,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?list`
+										}/${selectedHotelLocalStorage._id}?list`,
 									);
 								}}
 							>
@@ -776,7 +774,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?housingreport`
+										}/${selectedHotelLocalStorage._id}?housingreport`,
 									);
 								}}
 							>

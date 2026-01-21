@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import styled, { keyframes } from "styled-components";
 import { InputNumber, Modal, Table, Tooltip } from "antd";
 import moment from "moment";
@@ -45,6 +45,62 @@ const HotelOverviewReservation = ({
 	const [selectedRoomStatus, setSelectedRoomStatus] = useState(null);
 	const [totalToDistribute, setTotalToDistribute] = useState("");
 
+	const normalizeDisplayName = useCallback(
+		(value) => String(value || "").trim().toLowerCase(),
+		[],
+	);
+
+	const roomCountDetails = useMemo(
+		() =>
+			Array.isArray(hotelDetails?.roomCountDetails)
+				? hotelDetails.roomCountDetails
+				: [],
+		[hotelDetails?.roomCountDetails],
+	);
+
+	const roomDetailsByDisplayName = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			const key = normalizeDisplayName(detail.displayName || detail.roomType);
+			if (!key || map.has(key)) return;
+			map.set(key, detail);
+		});
+		return map;
+	}, [normalizeDisplayName, roomCountDetails]);
+
+	const roomDetailsByType = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			if (!detail.roomType || map.has(detail.roomType)) return;
+			map.set(detail.roomType, detail);
+		});
+		return map;
+	}, [roomCountDetails]);
+
+	const getRoomDisplayInfo = useCallback(
+		(room) => {
+			const displayNameRaw = room?.display_name || room?.displayName || "";
+			const detailByDisplay = displayNameRaw
+				? roomDetailsByDisplayName.get(normalizeDisplayName(displayNameRaw))
+				: null;
+			const roomType = room?.room_type || "";
+			const detailByType =
+				!detailByDisplay && roomType ? roomDetailsByType.get(roomType) : null;
+			const detail = detailByDisplay || detailByType;
+			const resolvedRoomType = detail?.roomType || roomType;
+			const fallbackLabel = resolvedRoomType
+				? resolvedRoomType.replace(/([A-Z])/g, " $1").trim()
+				: "Room";
+			return {
+				displayName: displayNameRaw || detail?.displayName || fallbackLabel,
+				roomType: resolvedRoomType,
+				color: detail?.roomColor || room?.roomColorCode || "#000",
+				detail,
+			};
+		},
+		[normalizeDisplayName, roomDetailsByDisplayName, roomDetailsByType],
+	);
+
 	const normalizeNumber = (value, fallback = 0) => {
 		const parsed = Number(value);
 		return Number.isFinite(parsed) ? parsed : fallback;
@@ -73,10 +129,98 @@ const HotelOverviewReservation = ({
 			buildDayRow(
 				start.clone().add(idx, "day").format("YYYY-MM-DD"),
 				nightlyPrice,
-				template
+				template,
 			)
 		);
 	};
+
+	const normalizeDate = useCallback((value) => {
+		if (!value) return null;
+		const parsed = moment(value);
+		return parsed.isValid() ? parsed.startOf("day") : null;
+	}, []);
+
+	const getAvailabilityRange = useCallback(() => {
+		const selectedStart = normalizeDate(start_date);
+		const selectedEnd = normalizeDate(end_date);
+		if (selectedStart && selectedEnd) {
+			return { rangeStart: selectedStart, rangeEnd: selectedEnd };
+		}
+		return {
+			rangeStart: normalizeDate(start_date_Map),
+			rangeEnd: normalizeDate(end_date_Map),
+		};
+	}, [start_date, end_date, start_date_Map, end_date_Map, normalizeDate]);
+
+	const getReservationRoomIds = useCallback((reservation) => {
+		if (!reservation || !Array.isArray(reservation.roomId)) return [];
+		return reservation.roomId
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string") return room;
+				if (typeof room === "object" && room._id) return room._id;
+				return room;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+	}, []);
+
+	const reservationHasRoom = (reservation, roomId) => {
+		if (!roomId) return false;
+		const ids = getReservationRoomIds(reservation);
+		return ids.includes(String(roomId));
+	};
+
+	const isReservationActive = useCallback((reservation) => {
+		const status = String(reservation?.reservation_status || "").toLowerCase();
+		if (!status) return true;
+		if (status.includes("cancel")) return false;
+		if (status.includes("no_show") || status.includes("no show")) return false;
+		if (
+			status.includes("checked_out") ||
+			status.includes("checkedout") ||
+			status.includes("early_checked_out") ||
+			status.includes("closed")
+		)
+			return false;
+		return true;
+	}, []);
+
+	const hasOverlap = useCallback(
+		(reservation, rangeStart, rangeEnd) => {
+		if (!rangeStart || !rangeEnd) return false;
+		const reservationStart = normalizeDate(reservation?.checkin_date);
+		const reservationEnd = normalizeDate(reservation?.checkout_date);
+		if (!reservationStart || !reservationEnd) return false;
+		return rangeStart.isBefore(reservationEnd) && rangeEnd.isAfter(reservationStart);
+		},
+		[normalizeDate],
+	);
+
+	const getBookedBedsForRoom = useCallback((roomId) => {
+		if (!roomId) return [];
+		const { rangeStart, rangeEnd } = getAvailabilityRange();
+		if (!rangeStart || !rangeEnd) return [];
+		const bookedBedsTemp = [];
+		(allReservations || []).forEach((reservation) => {
+			if (!isReservationActive(reservation)) return;
+			if (!hasOverlap(reservation, rangeStart, rangeEnd)) return;
+			const reservationRoomIds = getReservationRoomIds(reservation);
+			const matchesRoom = reservationRoomIds.includes(String(roomId));
+			if (!matchesRoom && reservationRoomIds.length > 0) return;
+			const bookedBeds = Array.isArray(reservation.bedNumber)
+				? reservation.bedNumber
+				: [];
+			bookedBedsTemp.push(...bookedBeds);
+		});
+		return bookedBedsTemp;
+	}, [
+		allReservations,
+		getAvailabilityRange,
+		getReservationRoomIds,
+		hasOverlap,
+		isReservationActive,
+	]);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -92,27 +236,17 @@ const HotelOverviewReservation = ({
 
 	useEffect(() => {
 		if (currentRoom && currentRoom.room_type === "individualBed") {
-			const bookedBedsTemp = [];
-
-			allReservations.forEach((reservation) => {
-				const startDate = moment(start_date_Map);
-				const endDate = moment(end_date_Map);
-				const reservationStart = moment(reservation.checkin_date);
-				const reservationEnd = moment(reservation.checkout_date);
-
-				const overlap =
-					startDate.isBefore(reservationEnd) &&
-					endDate.isAfter(reservationStart);
-
-				if (overlap) {
-					const bookedBeds = reservation.bedNumber || [];
-					bookedBedsTemp.push(...bookedBeds);
-				}
-			});
-
-			setBookedBeds(bookedBedsTemp);
+			setBookedBeds(getBookedBedsForRoom(currentRoom._id));
 		}
-	}, [currentRoom, start_date_Map, end_date_Map, allReservations]);
+	}, [
+		currentRoom,
+		start_date,
+		end_date,
+		start_date_Map,
+		end_date_Map,
+		allReservations,
+		getBookedBedsForRoom,
+	]);
 
 	const { hotelFloors, parkingLot } = hotelDetails;
 	const floors = Array.from({ length: hotelFloors }, (_, index) => index + 1);
@@ -139,83 +273,68 @@ const HotelOverviewReservation = ({
 		setPickedHotelRooms(pickedHotelRooms.filter((id) => id !== roomId));
 
 		const priceToRemove = pickedRoomPricing.find(
-			(pricing) => pricing.roomId === roomId
+			(pricing) => pricing.roomId === roomId,
 		)?.chosenPrice;
 
 		if (priceToRemove) {
 			setTotal_Amount((prevTotal) =>
-				Math.max(prevTotal - Number(priceToRemove), 0)
+				Math.max(prevTotal - Number(priceToRemove), 0),
 			);
 		}
 
 		setPickedRoomPricing(
-			pickedRoomPricing.filter((pricing) => pricing.roomId !== roomId)
+			pickedRoomPricing.filter((pricing) => pricing.roomId !== roomId),
 		);
 	};
 
 	const isRoomBooked = (roomId, roomType, bedsNumber) => {
-		if (!start_date_Map || !end_date_Map) return false;
+		const { rangeStart, rangeEnd } = getAvailabilityRange();
+		if (!rangeStart || !rangeEnd) return false;
 
-		const startDate = moment(start_date_Map);
-		const endDate = moment(end_date_Map);
-
-		if (searchedReservation && searchedReservation.roomId.includes(roomId)) {
+		if (
+			searchedReservation &&
+			reservationHasRoom(searchedReservation, roomId)
+		) {
 			// Allow clicking on the room if it matches the searched reservation
 			return false;
 		}
 
 		if (roomType === "individualBed") {
-			const bookedBedsTemp = [];
-
-			const isBooked = allReservations.some((reservation) => {
-				const reservationStart = moment(reservation.checkin_date);
-				const reservationEnd = moment(reservation.checkout_date);
-
-				const overlap =
-					startDate.isBefore(reservationEnd) &&
-					endDate.isAfter(reservationStart);
-
-				if (overlap) {
-					const bookedBeds = reservation.bedNumber || [];
-					bookedBedsTemp.push(...bookedBeds);
-					const allBedsBooked = bedsNumber.every((bed) =>
-						bookedBeds.includes(bed)
-					);
-
-					return allBedsBooked;
-				}
-
-				return false;
-			});
-
-			return isBooked;
-		} else {
-			return allReservations.some((reservation) => {
-				const reservationStart = moment(reservation.checkin_date);
-				const reservationEnd = moment(reservation.checkout_date);
-
-				return (
-					startDate.isBefore(reservationEnd) &&
-					endDate.isAfter(reservationStart) &&
-					reservation.roomId.some((room) => room._id === roomId)
-				);
-			});
+			const bookedBedsTemp = getBookedBedsForRoom(roomId);
+			const allBedsBooked =
+				Array.isArray(bedsNumber) &&
+				bedsNumber.length > 0 &&
+				bedsNumber.every((bed) => bookedBedsTemp.includes(bed));
+			return allBedsBooked;
 		}
+
+		return (allReservations || []).some((reservation) => {
+			if (!isReservationActive(reservation)) return false;
+			return (
+				hasOverlap(reservation, rangeStart, rangeEnd) &&
+				reservationHasRoom(reservation, roomId)
+			);
+		});
 	};
 
 	const showModal = (room) => {
 		if (!room) return;
 		setCurrentRoom(room);
 
-		const { room_type } = room;
-		const displayName = room.display_name || room.displayName;
+		const roomInfo = getRoomDisplayInfo(room);
+		const room_type = roomInfo.roomType || room.room_type;
+		const displayName = roomInfo.displayName;
 		const nightsCount = Math.max(getStayNights(), 1);
 
 		// Check if the searched reservation has pricing information
 		if (searchedReservation && searchedReservation.pickedRoomsType) {
-			const roomTypeDetails = searchedReservation.pickedRoomsType.find(
-				(r) => r.room_type === room_type && r.displayName === displayName
-			);
+			const roomTypeDetails =
+				searchedReservation.pickedRoomsType.find(
+					(r) => r.displayName === displayName,
+				) ||
+				searchedReservation.pickedRoomsType.find(
+					(r) => r.room_type === room_type,
+				);
 
 			if (
 				roomTypeDetails &&
@@ -235,7 +354,7 @@ const HotelOverviewReservation = ({
 							...safeDay,
 							price: Number.isFinite(normalizedPrice) ? normalizedPrice : 0,
 						};
-					})
+					}),
 				);
 			} else if (
 				roomTypeDetails &&
@@ -250,17 +369,15 @@ const HotelOverviewReservation = ({
 				nightsCount > 0
 			) {
 				const roomCountFromTypes = Array.isArray(
-					searchedReservation.pickedRoomsType
+					searchedReservation.pickedRoomsType,
 				)
 					? searchedReservation.pickedRoomsType.reduce(
 							(sum, r) => sum + (Number(r.count) || 1),
-							0
+							0,
 					  )
 					: 0;
 				const totalRooms =
-					Number(searchedReservation.total_rooms) ||
-					roomCountFromTypes ||
-					1;
+					Number(searchedReservation.total_rooms) || roomCountFromTypes || 1;
 				const perNight =
 					normalizeNumber(searchedReservation.total_amount, 0) /
 					nightsCount /
@@ -271,7 +388,7 @@ const HotelOverviewReservation = ({
 					room_type,
 					displayName,
 					start_date,
-					end_date
+					end_date,
 				);
 				if (!generated || generated.length === 0) {
 					setPricingByDay(buildPricingByNightly(0, nightsCount));
@@ -282,7 +399,7 @@ const HotelOverviewReservation = ({
 				room_type,
 				displayName,
 				start_date,
-				end_date
+				end_date,
 			);
 			if (!generated || generated.length === 0) {
 				setPricingByDay(buildPricingByNightly(0, nightsCount));
@@ -294,11 +411,10 @@ const HotelOverviewReservation = ({
 
 	const generatePricingTable = useCallback(
 		(roomType, displayName, startDate, endDate) => {
-			// Find the corresponding room in hotelDetails
-			const roomDetails = hotelDetails.roomCountDetails.find(
-				(detail) =>
-					detail.roomType === roomType && detail.displayName === displayName
-			);
+			const displayKey = normalizeDisplayName(displayName);
+			const roomDetails =
+				(displayKey && roomDetailsByDisplayName.get(displayKey)) ||
+				(roomType ? roomDetailsByType.get(roomType) : null);
 
 			if (!roomDetails) {
 				console.warn("No matching room details found");
@@ -314,7 +430,7 @@ const HotelOverviewReservation = ({
 			while (currentDate.isBefore(endDate)) {
 				const dateString = currentDate.format("YYYY-MM-DD");
 				const pricing = pricingRate.find(
-					(price) => price.calendarDate === dateString
+					(price) => price.calendarDate === dateString,
 				);
 				const price = pricing
 					? parseFloat(pricing.price)
@@ -331,7 +447,12 @@ const HotelOverviewReservation = ({
 			setPricingByDay(daysArray);
 			return daysArray;
 		},
-		[hotelDetails.roomCountDetails, setPricingByDay]
+		[
+			normalizeDisplayName,
+			roomDetailsByDisplayName,
+			roomDetailsByType,
+			setPricingByDay,
+		],
 	);
 
 	const handleInheritPrices = () => {
@@ -345,7 +466,7 @@ const HotelOverviewReservation = ({
 			toast.error(
 				chosenLanguage === "Arabic"
 					? "يرجى إدخال سعر صالح"
-					: "Please enter a valid price."
+					: "Please enter a valid price.",
 			);
 			return;
 		}
@@ -353,12 +474,12 @@ const HotelOverviewReservation = ({
 			toast.error(
 				chosenLanguage === "Arabic"
 					? "لا توجد بيانات تسعير لتحديثها"
-					: "No pricing data to update."
+					: "No pricing data to update.",
 			);
 			return;
 		}
 		setPricingByDay((prev) =>
-			prev.map((day) => buildDayRow(day.date, nextPrice, day))
+			prev.map((day) => buildDayRow(day.date, nextPrice, day)),
 		);
 	};
 
@@ -367,7 +488,7 @@ const HotelOverviewReservation = ({
 			toast.error(
 				chosenLanguage === "Arabic"
 					? "يرجى إدخال إجمالي صالح"
-					: "Please enter a valid total amount."
+					: "Please enter a valid total amount.",
 			);
 			return;
 		}
@@ -376,7 +497,7 @@ const HotelOverviewReservation = ({
 			toast.error(
 				chosenLanguage === "Arabic"
 					? "يرجى إدخال إجمالي صالح"
-					: "Please enter a valid total amount."
+					: "Please enter a valid total amount.",
 			);
 			return;
 		}
@@ -404,14 +525,14 @@ const HotelOverviewReservation = ({
 			toast.error(
 				chosenLanguage === "Arabic"
 					? "يرجى التأكد من التسعير قبل المتابعة"
-					: "Please confirm pricing before continuing."
+					: "Please confirm pricing before continuing.",
 			);
 			return;
 		}
 
 		const nightlyTotal = pricingByDay.reduce(
 			(acc, day) => acc + (Number(day.price) || 0),
-			0
+			0,
 		);
 		const chosenPrice = nightlyTotal / pricingByDay.length;
 
@@ -427,19 +548,15 @@ const HotelOverviewReservation = ({
 				currentRoom.display_name || currentRoom.displayName;
 			const totalWithComm = pricingSnapshot.reduce(
 				(acc, day) =>
-					acc +
-					normalizeNumber(
-						day.totalPriceWithCommission ?? day.price,
-						0
-					),
-				0
+					acc + normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
+				0,
 			);
 			const hotelShouldGet = pricingSnapshot.reduce(
 				(acc, day) => acc + normalizeNumber(day.rootPrice, 0),
-				0
+				0,
 			);
 			const hasRootPrice = pricingSnapshot.some(
-				(day) => day.rootPrice !== undefined
+				(day) => day.rootPrice !== undefined,
 			);
 
 			setPickedRoomsType((prev) => {
@@ -448,7 +565,7 @@ const HotelOverviewReservation = ({
 				const idx = next.findIndex(
 					(line) =>
 						line.room_type === currentRoom.room_type &&
-						line.displayName === currentDisplayName
+						line.displayName === currentDisplayName,
 				);
 				if (idx === -1) return prev;
 
@@ -460,7 +577,7 @@ const HotelOverviewReservation = ({
 
 				if (Number.isFinite(totalWithComm) && totalWithComm > 0) {
 					updatedLine.totalPriceWithCommission = Number(
-						totalWithComm.toFixed(2)
+						totalWithComm.toFixed(2),
 					);
 				}
 				if (hasRootPrice) {
@@ -495,15 +612,15 @@ const HotelOverviewReservation = ({
 				const stayNights = Math.max(getStayNights(), 1);
 				const updatedTotalAmount = updatedRooms.reduce((sum, room) => {
 					const count = Number(room.count) || 1;
-					if (Array.isArray(room.pricingByDay) && room.pricingByDay.length > 0) {
+					if (
+						Array.isArray(room.pricingByDay) &&
+						room.pricingByDay.length > 0
+					) {
 						const roomTotal = room.pricingByDay.reduce(
 							(acc, day) =>
 								acc +
-								normalizeNumber(
-									day.totalPriceWithCommission ?? day.price,
-									0
-								),
-							0
+								normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
+							0,
 						);
 						return sum + roomTotal * count;
 					}
@@ -597,8 +714,8 @@ const HotelOverviewReservation = ({
 						const nextPrice = normalizeNumber(value, 0);
 						setPricingByDay((prev) =>
 							prev.map((day, idx) =>
-								idx === index ? buildDayRow(day.date, nextPrice, day) : day
-							)
+								idx === index ? buildDayRow(day.date, nextPrice, day) : day,
+							),
 						);
 					}}
 				/>
@@ -610,7 +727,7 @@ const HotelOverviewReservation = ({
 		if (!isModalVisible) return;
 		const total = pricingByDay.reduce(
 			(acc, day) => acc + normalizeNumber(day.price, 0),
-			0
+			0,
 		);
 		setTotalToDistribute(Number(total.toFixed(2)));
 	}, [pricingByDay, isModalVisible]);
@@ -635,6 +752,7 @@ const HotelOverviewReservation = ({
 	};
 
 	const filteredRooms = hotelRooms.filter((room) => {
+		const roomInfo = getRoomDisplayInfo(room);
 		const isAvailabilityMatch =
 			selectedAvailability === null ||
 			(selectedAvailability === "occupied" &&
@@ -643,8 +761,8 @@ const HotelOverviewReservation = ({
 				!isRoomBooked(room._id, room.room_type, room.bedsNumber));
 		const isRoomTypeMatch =
 			selectedRoomType === null ||
-			room.display_name === selectedRoomType ||
-			room.displayName === selectedRoomType;
+			normalizeDisplayName(roomInfo.displayName) ===
+				normalizeDisplayName(selectedRoomType);
 		const isFloorMatch = selectedFloor === null || room.floor === selectedFloor;
 		const isRoomStatusMatch =
 			selectedRoomStatus === null ||
@@ -658,29 +776,35 @@ const HotelOverviewReservation = ({
 		);
 	});
 
-	const distinctRoomTypesWithColors =
-		hotelRooms &&
-		hotelRooms.reduce((accumulator, room) => {
-			const displayName = room.display_name || room.displayName;
-			if (!displayName) return accumulator;
+	const distinctRoomTypesWithColors = useMemo(() => {
+		const accumulator = [];
+		const seen = new Set();
+		(hotelRooms || []).forEach((room) => {
+			const roomInfo = getRoomDisplayInfo(room);
+			const displayKey = normalizeDisplayName(roomInfo.displayName);
+			if (!displayKey || seen.has(displayKey)) return;
+			seen.add(displayKey);
+			accumulator.push({
+				displayName: roomInfo.displayName,
+				roomColorCode: roomInfo.color,
+			});
+		});
+		return accumulator;
+	}, [getRoomDisplayInfo, hotelRooms, normalizeDisplayName]);
 
-			if (
-				!accumulator.some((item) => item.displayName === displayName)
-			) {
-				accumulator.push({
-					displayName,
-					roomColorCode: room.roomColorCode,
-				});
+	const getRoomDetails = useCallback(
+		(roomType, displayName) => {
+			const displayKey = normalizeDisplayName(displayName);
+			if (displayKey && roomDetailsByDisplayName.has(displayKey)) {
+				return roomDetailsByDisplayName.get(displayKey);
 			}
-			return accumulator;
-		}, []);
-
-	const getRoomDetails = (roomType, displayName) => {
-		return hotelDetails.roomCountDetails.find(
-			(detail) =>
-				detail.roomType === roomType && detail.displayName === displayName
-		);
-	};
+			if (roomType && roomDetailsByType.has(roomType)) {
+				return roomDetailsByType.get(roomType);
+			}
+			return null;
+		},
+		[normalizeDisplayName, roomDetailsByDisplayName, roomDetailsByType],
+	);
 
 	const getRoomImage = (roomType, displayName) => {
 		const roomDetails = getRoomDetails(roomType, displayName);
@@ -725,14 +849,15 @@ const HotelOverviewReservation = ({
 												filteredRooms
 													.filter((room) => room.floor === floor)
 													.map((room, idx) => {
-														const { isBooked } = isRoomBooked(
+														const isBooked = isRoomBooked(
 															room._id,
 															room.room_type,
-															room.bedsNumber
+															room.bedsNumber,
 														);
+														const roomInfo = getRoomDisplayInfo(room);
 														const roomImage = getRoomImage(
-															room.room_type,
-															room.display_name
+															roomInfo.roomType,
+															roomInfo.displayName,
 														);
 														return (
 															<Tooltip
@@ -754,12 +879,12 @@ const HotelOverviewReservation = ({
 																			/>
 																		)}
 																		<div>Room #: {room.room_number}</div>
-																		<div
-																			style={{ textTransform: "capitalize" }}
-																		>
-																			Room Type: {room.room_type}
+																		<div style={{ textTransform: "capitalize" }}>
+																			Display Name: {roomInfo.displayName}
 																		</div>
-																		<div>Display Name: {room.display_name}</div>
+																		<div style={{ textTransform: "capitalize" }}>
+																			Room Type: {roomInfo.roomType || "N/A"}
+																		</div>
 																		<div>
 																			Occupied: {isBooked ? "Yes" : "No"}
 																		</div>
@@ -774,7 +899,7 @@ const HotelOverviewReservation = ({
 															>
 																<RoomSquare
 																	key={idx}
-																	color={room.roomColorCode}
+																	color={roomInfo.color}
 																	picked={pickedHotelRooms.includes(room._id)}
 																	reserved={isBooked}
 																	style={{
@@ -818,12 +943,16 @@ const HotelOverviewReservation = ({
 													filteredRooms
 														.filter((room) => room.floor === floor)
 														.map((room, idx) => {
-															const { isBooked } = isRoomBooked(
+															const isBooked = isRoomBooked(
 																room._id,
 																room.room_type,
-																room.bedsNumber
+																room.bedsNumber,
 															);
-															const roomImage = getRoomImage(room.room_type);
+															const roomInfo = getRoomDisplayInfo(room);
+															const roomImage = getRoomImage(
+																roomInfo.roomType,
+																roomInfo.displayName,
+															);
 															return (
 																<Tooltip
 																	title={
@@ -844,11 +973,12 @@ const HotelOverviewReservation = ({
 																				/>
 																			)}
 																			<div>Room #: {room.room_number}</div>
-																			<div
-																				style={{ textTransform: "capitalize" }}
-																			>
-																				Room Type: {room.room_type}
-																			</div>
+																		<div style={{ textTransform: "capitalize" }}>
+																			Display Name: {roomInfo.displayName}
+																		</div>
+																		<div style={{ textTransform: "capitalize" }}>
+																			Room Type: {roomInfo.roomType || "N/A"}
+																		</div>
 																			<div>
 																				Occupied: {isBooked ? "Yes" : "No"}
 																			</div>
@@ -863,7 +993,7 @@ const HotelOverviewReservation = ({
 																>
 																	<RoomSquare
 																		key={idx}
-																		color={room.roomColorCode}
+																		color={roomInfo.color}
 																		picked={pickedHotelRooms.includes(room._id)}
 																		reserved={isBooked}
 																		style={{
@@ -924,9 +1054,7 @@ const HotelOverviewReservation = ({
 							</label>
 							<InputNumber
 								value={totalToDistribute}
-								onChange={(value) =>
-									setTotalToDistribute(value ?? "")
-								}
+								onChange={(value) => setTotalToDistribute(value ?? "")}
 								min={0}
 								style={{ width: "100%", marginBottom: "8px" }}
 							/>
@@ -945,30 +1073,28 @@ const HotelOverviewReservation = ({
 							dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 						>
 							<label style={{ fontWeight: "bold", display: "block" }}>
-								{chosenLanguage === "Arabic"
-									? "سعر الليلة"
-									: "Nightly Price"}
+								{chosenLanguage === "Arabic" ? "سعر الليلة" : "Nightly Price"}
 							</label>
-						<InputNumber
-							value={inheritedPrice}
-							onChange={(value) => setInheritedPrice(value)}
-							placeholder={
-								chosenLanguage === "Arabic"
-									? "أدخل سعر الليلة"
-									: "Enter nightly price"
-							}
-							style={{ width: "100%", marginBottom: "10px" }}
-						/>
-						<div>
-							<button
-								onClick={handleInheritPrices}
-								className='btn btn-success my-2 p-1 w-50'
-							>
-								{chosenLanguage === "Arabic"
-									? "تطبيق سعر الليلة"
-									: "Apply Nightly Price"}
-							</button>
-						</div>
+							<InputNumber
+								value={inheritedPrice}
+								onChange={(value) => setInheritedPrice(value)}
+								placeholder={
+									chosenLanguage === "Arabic"
+										? "أدخل سعر الليلة"
+										: "Enter nightly price"
+								}
+								style={{ width: "100%", marginBottom: "10px" }}
+							/>
+							<div>
+								<button
+									onClick={handleInheritPrices}
+									className='btn btn-success my-2 p-1 w-50'
+								>
+									{chosenLanguage === "Arabic"
+										? "تطبيق سعر الليلة"
+										: "Apply Nightly Price"}
+								</button>
+							</div>
 						</div>
 
 						{currentRoom?.room_type === "individualBed" && (
@@ -1041,8 +1167,8 @@ const HotelOverviewReservation = ({
 											  Number(
 													pricingByDay.reduce(
 														(acc, day) => acc + day.price,
-														0
-													) / pricingByDay.length
+														0,
+													) / pricingByDay.length,
 											  ).toFixed(2)
 											: 0}{" "}
 										SAR
