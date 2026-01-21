@@ -1,6 +1,6 @@
 // client/src/AdminModule/AllReservation/AllReservationMain.jsx
 import React, { useEffect, useState, useCallback } from "react";
-import { useHistory } from "react-router-dom";
+import { useHistory, useLocation } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
@@ -18,7 +18,20 @@ import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 
 const SUPER_USER_IDS = ["6553f1c6d06c5cea2f98a838", "6969d80da28c78c6280171df"];
 
+const getPageFromSearch = (search) => {
+	const params = new URLSearchParams(search || "");
+	const pageParam = parseInt(params.get("page"), 10);
+	return Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+};
+const getSearchTermFromSearch = (search) => {
+	const params = new URLSearchParams(search || "");
+	return params.get("search") || "";
+};
+
 const AllReservationMain = ({ chosenLanguage }) => {
+	const history = useHistory();
+	const location = useLocation();
+
 	// Local UI states
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
@@ -37,9 +50,13 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [filteredReservations, setFilteredReservations] = useState([]);
 
 	// Pagination & search
-	const [currentPage, setCurrentPage] = useState(1);
+	const [currentPage, setCurrentPage] = useState(() =>
+		getPageFromSearch(location.search)
+	);
 	const [pageSize, setPageSize] = useState(15);
-	const [searchTerm, setSearchTerm] = useState("");
+	const [searchTerm, setSearchTerm] = useState(() =>
+		getSearchTermFromSearch(location.search)
+	);
 
 	// Server filter
 	const [filterType, setFilterType] = useState("");
@@ -65,7 +82,53 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 	// Auth token still via isAuthenticated()
 	const { user: authUser, token } = isAuthenticated() || {};
-	const history = useHistory();
+
+	// Keep currentPage/searchTerm in sync with query params
+	useEffect(() => {
+		const pageFromQuery = getPageFromSearch(location.search);
+		const searchFromQuery = getSearchTermFromSearch(location.search);
+		setCurrentPage((prev) =>
+			prev !== pageFromQuery ? pageFromQuery : prev
+		);
+		setSearchTerm((prev) =>
+			prev !== searchFromQuery ? searchFromQuery : prev
+		);
+	}, [location.search]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const desiredPage = String(currentPage);
+		const desiredSearch = (searchTerm || "").trim();
+		let changed = false;
+
+		if (params.get("page") !== desiredPage) {
+			params.set("page", desiredPage);
+			changed = true;
+		}
+
+		if (desiredSearch) {
+			if (params.get("search") !== searchTerm) {
+				params.set("search", searchTerm);
+				changed = true;
+			}
+		} else if (params.has("search")) {
+			params.delete("search");
+			changed = true;
+		}
+
+		if (!changed) return;
+		const nextSearch = params.toString();
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch ? `?${nextSearch}` : "",
+		});
+	}, [
+		currentPage,
+		searchTerm,
+		history,
+		location.pathname,
+		location.search,
+	]);
 
 	// --- helpers ---
 	const extractHotels = (payload) => {

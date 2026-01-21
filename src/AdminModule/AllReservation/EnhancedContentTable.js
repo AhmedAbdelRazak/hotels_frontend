@@ -1,5 +1,5 @@
 // client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import styled from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
 import { CalendarOutlined } from "@ant-design/icons";
@@ -8,6 +8,37 @@ import MoreDetails from "./MoreDetails";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
+import { useHistory, useLocation } from "react-router-dom";
+
+const getReservationKey = (reservation) => {
+	if (!reservation) return "";
+	if (reservation._id) return String(reservation._id);
+	if (reservation.confirmation_number)
+		return String(reservation.confirmation_number);
+	return "";
+};
+
+const matchesReservationKey = (reservation, key) => {
+	if (!reservation || !key) return false;
+	const normalized = String(key);
+	if (reservation._id && String(reservation._id) === normalized) return true;
+	if (
+		reservation.confirmation_number &&
+		String(reservation.confirmation_number) === normalized
+	) {
+		return true;
+	}
+	return false;
+};
+
+const isSameReservation = (a, b) => {
+	if (!a || !b) return false;
+	if (a._id && b._id) return String(a._id) === String(b._id);
+	if (a.confirmation_number && b.confirmation_number) {
+		return String(a.confirmation_number) === String(b.confirmation_number);
+	}
+	return false;
+};
 
 const EnhancedContentTable = ({
 	data,
@@ -46,8 +77,14 @@ const EnhancedContentTable = ({
 	currentUserId, // not used here but passed through for future hooks
 	onReservationUpdated = () => {},
 }) => {
+	const history = useHistory();
+	const location = useLocation();
+
 	// ------------------ Search Box local state ------------------
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
+	useEffect(() => {
+		setSearchBoxValue(searchTerm || "");
+	}, [searchTerm]);
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
@@ -184,19 +221,29 @@ const EnhancedContentTable = ({
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 
-	const showDetailsModal = (reservation) => {
-		setSelectedReservation(reservation);
-		setIsModalVisible(true);
-	};
-	const handleModalClose = () => {
-		setSelectedReservation(null);
-		setIsModalVisible(false);
+	const updateQueryParams = (updates) => {
+		const params = new URLSearchParams(location.search);
+		Object.entries(updates).forEach(([key, value]) => {
+			if (value === undefined || value === null || value === "") {
+				params.delete(key);
+			} else {
+				params.set(key, String(value));
+			}
+		});
+		const nextSearch = params.toString();
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch ? `?${nextSearch}` : "",
+		});
 	};
 
-	const handleReservationUpdated = (updated) => {
+	const updateSelectedReservation = (updated) => {
 		if (!updated) return;
 		setSelectedReservation((prev) => {
-			const merged = prev ? { ...prev, ...updated } : updated;
+			if (!prev || !isSameReservation(prev, updated)) {
+				return prev;
+			}
+			const merged = { ...prev, ...updated };
 			if (
 				prev?.hotelId &&
 				(!merged.hotelId ||
@@ -207,8 +254,45 @@ const EnhancedContentTable = ({
 			}
 			return merged;
 		});
+	};
+
+	const showDetailsModal = (reservation) => {
+		setSelectedReservation(reservation);
+		setIsModalVisible(true);
+		updateQueryParams({ reservationId: getReservationKey(reservation) });
+	};
+	const handleModalClose = () => {
+		setSelectedReservation(null);
+		setIsModalVisible(false);
+		updateQueryParams({ reservationId: "" });
+	};
+
+	const handleReservationUpdated = (updated) => {
+		if (!updated) return;
+		updateSelectedReservation(updated);
 		onReservationUpdated(updated);
 	};
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const reservationId = params.get("reservationId");
+		if (!reservationId) return;
+
+		const match = formattedReservations.find((reservation) =>
+			matchesReservationKey(reservation, reservationId)
+		);
+		if (!match) return;
+
+		setSelectedReservation((prev) => {
+			if (prev && isSameReservation(prev, match)) {
+				return prev;
+			}
+			return match;
+		});
+		if (!isModalVisible) {
+			setIsModalVisible(true);
+		}
+	}, [location.search, formattedReservations, isModalVisible]);
 
 	// ------------------ Filter Button Handlers ------------------
 	const onFilterClick = (type) => {
@@ -303,7 +387,10 @@ const EnhancedContentTable = ({
 	};
 
 	// ------------------ Render ------------------
-	const totalPages = Math.ceil(totalDocuments / pageSize);
+	const safePageSize = Number(pageSize) > 0 ? Number(pageSize) : 1;
+	const totalPages = Math.ceil(totalDocuments / safePageSize);
+	const baseIndex =
+		(Number(currentPage) > 1 ? Number(currentPage) - 1 : 0) * safePageSize;
 	const reservedByActive = (val) => (activeReservedBy || "") === (val || "");
 	const bookingSourceActive = (val) =>
 		(activeBookingSource || "") === (val || "");
@@ -660,7 +747,7 @@ const EnhancedContentTable = ({
 										reservation._id || `${reservation.confirmation_number}-${i}`
 									}
 								>
-									<td>{i + 1}</td>
+									<td>{baseIndex + i + 1}</td>
 									<td>
 										<Tooltip title={reservation.confirmation_number}>
 											<span>{reservation.confirmation_number}</span>
@@ -781,14 +868,16 @@ const EnhancedContentTable = ({
 			>
 				{selectedReservation && selectedReservation.hotelId ? (
 					<MoreDetails
+						key={getReservationKey(selectedReservation)}
 						selectedReservation={selectedReservation}
 						hotelDetails={selectedReservation.hotelId}
 						reservation={selectedReservation}
-						setReservation={setSelectedReservation}
+						setReservation={updateSelectedReservation}
 						onReservationUpdated={handleReservationUpdated}
 					/>
 				) : selectedReservation ? (
 					<ReservationDetail
+						key={getReservationKey(selectedReservation)}
 						reservation={selectedReservation}
 						hotelDetails={selectedReservation.hotelId}
 					/>

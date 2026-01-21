@@ -12,7 +12,6 @@ import {
 	Select,
 	DatePicker,
 	message,
-	notification,
 	InputNumber,
 	Modal,
 	Descriptions,
@@ -829,23 +828,29 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Submit form
 	const handleSubmit = async () => {
-		if (submittingRef.current) return;
+		if (submittingRef.current || isSubmitting) return;
+		submittingRef.current = true;
+
+		const abortSubmit = (msg) => {
+			message.error(msg);
+			submittingRef.current = false;
+		};
 
 		// --- Basic field checks ---
 		if (!selectedHotel?._id) {
-			message.error("Please select a hotel.");
+			abortSubmit("Please select a hotel.");
 			return;
 		}
-		if (!name || !email || !phone) {
-			message.error("Please fill in guest name, email, and phone.");
+		if (!name || !phone) {
+			abortSubmit("Please fill in guest name and phone.");
 			return;
 		}
 		if (!checkInDate || !checkOutDate) {
-			message.error("Please pick both check‑in and check‑out dates.");
+			abortSubmit("Please pick both check-in and check-out dates.");
 			return;
 		}
 		if (!dayjs(checkOutDate).isAfter(dayjs(checkInDate), "day")) {
-			message.error("Check‑out must be after check‑in.");
+			abortSubmit("Check-out must be after check-in.");
 			return;
 		}
 
@@ -856,7 +861,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				(r) => r.roomType && r.displayName && Number(r.count) > 0
 			)
 		) {
-			message.error("Please select at least one valid room type and count.");
+			abortSubmit("Please select at least one valid room type and count.");
 			return;
 		}
 		if (
@@ -864,7 +869,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0
 			)
 		) {
-			message.error("Please ensure all selected rooms have valid pricing.");
+			abortSubmit("Please ensure all selected rooms have valid pricing.");
 			return;
 		}
 
@@ -873,14 +878,14 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			if (advancePaymentOption === "percentage") {
 				const p = safeParseFloat(advancePaymentPercentage, -1);
 				if (p < 1 || p > 100) {
-					message.error("Please enter a valid percentage between 1 and 100.");
+					abortSubmit("Please enter a valid percentage between 1 and 100.");
 					return;
 				}
 			}
 			if (advancePaymentOption === "sar") {
 				const amt = safeParseFloat(advancePaymentSAR, -1);
 				if (amt < 1 || amt > totalAmount) {
-					message.error(
+					abortSubmit(
 						"Please enter a valid SAR amount between 1 and the total amount."
 					);
 					return;
@@ -897,21 +902,21 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			normalizedStatus === "paid offline"
 		) {
 			if (amountNumber <= 0) {
-				message.error("Please enter a paid amount greater than 0.");
+				abortSubmit("Please enter a paid amount greater than 0.");
 				return;
 			}
 			if (amountNumber > Number(totalAmount || 0)) {
-				message.error("Paid amount cannot exceed the total amount.");
+				abortSubmit("Paid amount cannot exceed the total amount.");
 				return;
 			}
 		} else if (normalizedStatus === "credit/ debit") {
 			// Authorized (Not Captured) -> allow 0, but never > total
 			if (amountNumber < 0) {
-				message.error("Authorized amount cannot be negative.");
+				abortSubmit("Authorized amount cannot be negative.");
 				return;
 			}
 			if (amountNumber > Number(totalAmount || 0)) {
-				message.error("Authorized amount cannot exceed the total amount.");
+				abortSubmit("Authorized amount cannot exceed the total amount.");
 				return;
 			}
 		}
@@ -990,7 +995,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		customerDetails: {
 			name,
 			nickName,
-			email,
+			email:
+				String(email || "").trim() || "no-email@jannatbooking.com",
 			phone,
 			passport: "Not Provided",
 			passportExpiry: "1/1/2027",
@@ -1057,16 +1063,6 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					}!`,
 					key: "submit",
 					duration: 2,
-				});
-				notification.success({
-					message: "Reservation saved",
-					description: `Confirmation ${
-						response?.data?.confirmation_number
-							? `#${response.data.confirmation_number}`
-							: ""
-					} has been saved. No need to re-submit.`,
-					placement: "topRight",
-					duration: 6,
 				});
 
 				window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1389,7 +1385,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						</Form.Item>
 					</div>
 					<div className='col-md-4'>
-						<Form.Item label='Email' required>
+						<Form.Item label='Email'>
 							<Input
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
@@ -1616,3 +1612,4 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 };
 
 export default OrderTaker;
+
