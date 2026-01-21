@@ -89,7 +89,7 @@ function App() {
 		const fetchCurrencyRates = async () => {
 			try {
 				const response = await fetch(
-					`${process.env.REACT_APP_API_URL}/currency-rates`
+					`${process.env.REACT_APP_API_URL}/currency-rates`,
 				);
 				if (!response.ok) {
 					throw new Error("Failed to fetch currency rates");

@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, {
+	useEffect,
+	useState,
+	useRef,
+	useMemo,
+	useCallback,
+} from "react";
 import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -111,50 +117,56 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	const formatMoney = useCallback(
 		(value) => normalizeNumber(value, 0).toLocaleString(),
-		[normalizeNumber]
+		[normalizeNumber],
 	);
 
-	const summarizePayment = useCallback((reservationData, paymentOverride = "") => {
-		const paymentModeRaw =
-			(paymentOverride ||
-				reservationData?.payment ||
-				reservationData?.payment_status ||
-				reservationData?.financeStatus ||
-				"") + "";
-		const paymentMode = paymentModeRaw.toLowerCase().trim();
-		const pd = reservationData?.paypal_details || {};
-		const legacyCaptured = !!reservationData?.payment_details?.captured;
-		const payOffline =
-			normalizeNumber(reservationData?.payment_details?.onsite_paid_amount, 0) >
-				0 || paymentMode === "paid offline";
-		const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
-		const initialCompleted =
-			(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
-		const anyMitCompleted =
-			Array.isArray(pd?.mit) &&
-			pd.mit.some(
-				(c) => (c?.capture_status || "").toUpperCase() === "COMPLETED"
-			);
+	const summarizePayment = useCallback(
+		(reservationData, paymentOverride = "") => {
+			const paymentModeRaw =
+				(paymentOverride ||
+					reservationData?.payment ||
+					reservationData?.payment_status ||
+					reservationData?.financeStatus ||
+					"") + "";
+			const paymentMode = paymentModeRaw.toLowerCase().trim();
+			const pd = reservationData?.paypal_details || {};
+			const legacyCaptured = !!reservationData?.payment_details?.captured;
+			const payOffline =
+				normalizeNumber(
+					reservationData?.payment_details?.onsite_paid_amount,
+					0,
+				) > 0 || paymentMode === "paid offline";
+			const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
+			const initialCompleted =
+				(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
+			const anyMitCompleted =
+				Array.isArray(pd?.mit) &&
+				pd.mit.some(
+					(c) => (c?.capture_status || "").toUpperCase() === "COMPLETED",
+				);
 
-		const isCaptured =
-			legacyCaptured ||
-			capTotal > 0 ||
-			initialCompleted ||
-			anyMitCompleted ||
-			paymentMode === "paid online" ||
-			paymentMode === "captured" ||
-			paymentMode === "credit/ debit" ||
-			paymentMode === "credit/debit";
+			const isCaptured =
+				legacyCaptured ||
+				capTotal > 0 ||
+				initialCompleted ||
+				anyMitCompleted ||
+				paymentMode === "paid online" ||
+				paymentMode === "captured" ||
+				paymentMode === "credit/ debit" ||
+				paymentMode === "credit/debit";
 
-		const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
+			const isNotPaid =
+				paymentMode === "not paid" && !isCaptured && !payOffline;
 
-		let status = "Not Captured";
-		if (isCaptured) status = "Captured";
-		else if (payOffline) status = "Paid Offline";
-		else if (isNotPaid) status = "Not Paid";
+			let status = "Not Captured";
+			if (isCaptured) status = "Captured";
+			else if (payOffline) status = "Paid Offline";
+			else if (isNotPaid) status = "Not Paid";
 
-		return { status, isCaptured, paidOffline: payOffline, paymentMode };
-	}, [normalizeNumber]);
+			return { status, isCaptured, paidOffline: payOffline, paymentMode };
+		},
+		[normalizeNumber],
+	);
 
 	const getReservationRoomIds = useCallback((roomIdValue) => {
 		if (!Array.isArray(roomIdValue)) return [];
@@ -189,18 +201,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	// eslint-disable-next-line
 	const daysOfResidence = calculateDaysBetweenDates(
 		reservation.checkin_date,
-		reservation.checkout_date
+		reservation.checkout_date,
 	);
 
 	const paymentSummary = useMemo(
 		() => summarizePayment(reservation),
-		[reservation, summarizePayment]
+		[reservation, summarizePayment],
 	);
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
 	const paidOnline = normalizeNumber(reservation?.paid_amount, 0);
 	const paidOffline = normalizeNumber(
 		reservation?.payment_details?.onsite_paid_amount,
-		0
+		0,
 	);
 	const totalPaid = paidOnline + paidOffline;
 	const isCreditDebit =
@@ -254,7 +266,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
 					(total, room) => total + room.count * parseFloat(room.chosenPrice),
-					0
+					0,
 				);
 
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
@@ -295,7 +307,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					(total, room) => {
 						return total + room.count * parseFloat(room.chosenPrice);
 					},
-					0
+					0,
 				);
 
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
@@ -385,7 +397,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 		const fromRoomId = Array.isArray(reservation?.roomId)
 			? reservation.roomId.filter(
-					(room) => room && typeof room === "object" && room.room_number
+					(room) => room && typeof room === "object" && room.room_number,
 			  )
 			: [];
 		return fromRoomId;
@@ -648,7 +660,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							relocationArray1.some(
 								(hotel) =>
 									hotel._id === hotelDetails._id &&
-									hotel.belongsTo === hotelDetails.belongsTo._id
+									hotel.belongsTo === hotelDetails.belongsTo._id,
 							) && (
 								<h5
 									className='text-center mx-auto mt-3'
@@ -794,13 +806,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														onClick={() => {
 															sendPaymnetLinkToTheClient(
 																linkGenerate,
-																reservation.customer_details.email
+																reservation.customer_details.email,
 															).then((data) => {
 																if (data && data.error) {
 																	console.log(data.error);
 																} else {
 																	toast.success(
-																		"Email Was Successfully Sent to the guest!"
+																		"Email Was Successfully Sent to the guest!",
 																	);
 																}
 															});
@@ -830,17 +842,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														border: "1px darkred solid",
 													}}
 													onClick={() => {
-														// Keeping your existing pattern in ReservationDetail
 														setLinkGenerated(
-															`${process.env.REACT_APP_MAIN_URL_JANNAT}/${
-																reservation._id
-															}/${reservation._id}/${reservation._id}/${
-																hotelDetails.hotelName
-															}/roomTypes/${reservation._id}/${
-																reservation._id
-															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount
-															).toFixed(2)}`
+															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
 														);
 													}}
 												>
@@ -868,13 +871,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														onClick={() => {
 															sendPaymnetLinkToTheClient(
 																linkGenerate,
-																reservation.customer_details.email
+																reservation.customer_details.email,
 															).then((data) => {
 																if (data && data.error) {
 																	console.log(data.error);
 																} else {
 																	toast.success(
-																		"Email Was Successfully Sent to the guest!"
+																		"Email Was Successfully Sent to the guest!",
 																	);
 																}
 															});
@@ -905,15 +908,17 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													}}
 													onClick={() => {
 														setLinkGenerated(
-															`${process.env.REACT_APP_MAIN_URL_JANNAT}/${
+															`${
+																process.env.REACT_APP_MAIN_URL_JANNAT
+															}/client-payment/${reservation._id}/${
 																reservation._id
-															}/${reservation._id}/${reservation._id}/${
+															}/${reservation._id}/${
 																hotelDetails.hotelName
 															}/roomTypes/${reservation._id}/${
 																reservation._id
 															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount
-															).toFixed(2)}`
+																reservation.total_amount,
+															).toFixed(2)}`,
 														);
 													}}
 												>
@@ -951,7 +956,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													reservation.reservation_status.includes("cancelled")
 														? "red"
 														: reservation.reservation_status.includes(
-																	"checked_out"
+																	"checked_out",
 														    )
 														  ? "darkgreen"
 														  : reservation.reservation_status === "inhouse"
@@ -962,7 +967,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													reservation.reservation_status.includes("cancelled")
 														? "white"
 														: reservation.reservation_status.includes(
-																	"checked_out"
+																	"checked_out",
 														    )
 														  ? "white"
 														  : "black",
@@ -997,7 +1002,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 															toast.error("Failed Sending Email");
 														} else {
 															toast.success(
-																`Email was successfully sent to ${reservation.customer_details.email}`
+																`Email was successfully sent to ${reservation.customer_details.email}`,
 															);
 														}
 													});
@@ -1048,7 +1053,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												? calculateReservationPeriod(
 														reservation.checkin_date,
 														reservation.checkout_date,
-														chosenLanguage
+														chosenLanguage,
 												  )
 												: ""}
 										</div>
@@ -1206,7 +1211,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 															year: "numeric",
 															month: "2-digit",
 															day: "2-digit",
-														}
+														},
 												  ).format(new Date(reservation.booked_at))
 												: "N/A"}
 										</div>
@@ -1293,10 +1298,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											className='mx-auto mt-2'
 											style={{ fontWeight: "bold", textAlign: "center" }}
 										>
-											{chosenLanguage === "Arabic"
-												? "الأسرّة"
-												: "Beds"}{" "}
-											: {reservation.bedNumber.join(", ")}
+											{chosenLanguage === "Arabic" ? "الأسرّة" : "Beds"} :{" "}
+											{reservation.bedNumber.join(", ")}
 										</div>
 									) : null}
 								</div>
@@ -1371,9 +1374,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</h4>
 										</div>
 										<div className='col-md-5 mx-auto'>
-											<h3>
-												{formatMoney(totalAmountValue)} SAR
-											</h3>
+											<h3>{formatMoney(totalAmountValue)} SAR</h3>
 										</div>
 
 										{displayPaymentLabel ? (
@@ -1404,9 +1405,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										) : null}
 										{totalPaid > 0 ? (
 											<div className='col-md-5 mx-auto'>
-												<h3>
-													{formatMoney(totalPaid)} SAR
-												</h3>
+												<h3>{formatMoney(totalPaid)} SAR</h3>
 											</div>
 										) : null}
 
@@ -1421,9 +1420,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										) : null}
 										{paidOnline > 0 ? (
 											<div className='col-md-5 mx-auto'>
-												<h5>
-													{formatMoney(paidOnline)} SAR
-												</h5>
+												<h5>{formatMoney(paidOnline)} SAR</h5>
 											</div>
 										) : null}
 
@@ -1438,9 +1435,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										) : null}
 										{paidOffline > 0 ? (
 											<div className='col-md-5 mx-auto'>
-												<h5>
-													{formatMoney(paidOffline)} SAR
-												</h5>
+												<h5>{formatMoney(paidOffline)} SAR</h5>
 											</div>
 										) : null}
 
@@ -1473,7 +1468,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 									</div>
 
-								<div className='my-3'>
+									<div className='my-3'>
 										<div className='row'>
 											<div className='col-md-5 mx-auto'>
 												<h6>
@@ -1487,7 +1482,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												<h5>
 													{getTotalAmountPerDay(reservation.pickedRoomsType) &&
 														getTotalAmountPerDay(
-															reservation.pickedRoomsType
+															reservation.pickedRoomsType,
 														).toLocaleString()}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
@@ -1507,7 +1502,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{getAverageRootPrice(
-														reservation.pickedRoomsType
+														reservation.pickedRoomsType,
 													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
@@ -1527,7 +1522,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{calculateOverallTotalRootPrice(
-														reservation.pickedRoomsType
+														reservation.pickedRoomsType,
 													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
@@ -1545,6 +1540,3 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 };
 
 export default ReservationDetail;
-
-
-
