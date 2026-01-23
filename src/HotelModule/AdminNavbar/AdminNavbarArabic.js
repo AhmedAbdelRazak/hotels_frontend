@@ -71,21 +71,21 @@ const AdminNavbarArabic = ({
 				لوحة تحكم الإدارة
 			</Link>,
 			"sub1",
-			<PieChartOutlined />
+			<PieChartOutlined />,
 		),
 		getItem(
 			<Link to={`/hotel-management/new-reservation/${userId}/${hotelId}`}>
 				الحجوزات
 			</Link>,
 			"sub3",
-			<ShopOutlined />
+			<ShopOutlined />,
 		),
 		getItem(
 			<Link to={`/hotel-management/hotel-reports/${userId}/${hotelId}`}>
 				تقارير الفندق
 			</Link>,
 			"sub4",
-			<AreaChartOutlined />
+			<AreaChartOutlined />,
 		),
 		getItem(
 			<Link
@@ -94,28 +94,28 @@ const AdminNavbarArabic = ({
 				إعدادات الفندق
 			</Link>,
 			"sub6",
-			<SettingOutlined />
+			<SettingOutlined />,
 		),
 		getItem(
 			<Link to={`/hotel-management/house-keeping/${userId}/${hotelId}`}>
 				هاوس كيبينج
 			</Link>,
 			"sub7",
-			<BankTwoTone />
+			<BankTwoTone />,
 		),
 		getItem(
 			<Link to={`/hotel-management/staff/${userId}/${hotelId}`}>
 				طاقم الفندق
 			</Link>,
 			"sub8",
-			<TeamOutlined />
+			<TeamOutlined />,
 		),
 		getItem(
 			<div className='margin-divider'></div>,
 			"divider1",
 			null,
 			null,
-			"divider"
+			"divider",
 		),
 		getItem(
 			"إدارة الواردات",
@@ -123,7 +123,7 @@ const AdminNavbarArabic = ({
 			<ImportOutlined />,
 			null,
 			null,
-			"black-bg"
+			"black-bg",
 		),
 		getItem(
 			<Link to={`/hotel-management/customer-service/${userId}/${hotelId}`}>
@@ -133,7 +133,7 @@ const AdminNavbarArabic = ({
 			<CustomerServiceOutlined />,
 			null,
 			null,
-			"black-bg"
+			"black-bg",
 		),
 		getItem(
 			"نقاط البيع والمنتجات",
@@ -141,7 +141,7 @@ const AdminNavbarArabic = ({
 			<ShopOutlined />,
 			null,
 			null,
-			"black-bg"
+			"black-bg",
 		),
 		getItem(
 			"المالية",
@@ -149,7 +149,7 @@ const AdminNavbarArabic = ({
 			<DollarCircleOutlined />,
 			null,
 			null,
-			"black-bg"
+			"black-bg",
 		),
 		getItem(
 			"حسابات الموظفين",
@@ -157,14 +157,14 @@ const AdminNavbarArabic = ({
 			<TeamOutlined />,
 			null,
 			null,
-			"black-bg"
+			"black-bg",
 		),
 		getItem(
 			<div className='margin-divider'></div>,
 			"divider2",
 			null,
 			null,
-			"divider2"
+			"divider2",
 		),
 		getItem(
 			<Link to={`/hotel-management-payment/${userId}/${hotelId}`}>
@@ -174,7 +174,7 @@ const AdminNavbarArabic = ({
 			<CreditCardOutlined />,
 			null,
 			null,
-			"red-bg"
+			"red-bg",
 		),
 		getItem(
 			<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
@@ -184,7 +184,7 @@ const AdminNavbarArabic = ({
 			<CreditCardOutlined />,
 			null,
 			null,
-			"reddish-bg"
+			"reddish-bg",
 		),
 	];
 
@@ -209,7 +209,7 @@ const AdminNavbarArabic = ({
 					style={{
 						marginBottom: 8,
 						textAlign: "center",
-						marginLeft: chosenLanguage === "Arabic" ? 200 : 5,
+						marginLeft: chosenLanguage === "Arabic" ? (collapsed ? 5 : 200) : 5,
 						marginTop: chosenLanguage === "Arabic" ? 10 : 10,
 						top: collapsed ? "10px" : "",
 						right: collapsed ? "10px" : "",
@@ -352,7 +352,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 1200px) {
-		width: ${(props) => (props.show ? "20%" : "60%")} !important;
+		width: ${(props) => (props.show ? "80px" : "75%")} !important;
 
 		ul {
 			display: ${(props) => (props.show ? "none" : "")};

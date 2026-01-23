@@ -197,7 +197,7 @@ const AdminNavbar = ({
 				show={collapsed}
 				show2={clickedOn}
 				style={{
-					width: 285,
+					width: collapsed ? 80 : 285,
 				}}
 				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			>
@@ -361,7 +361,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 1200px) {
-		width: ${(props) => (props.show ? "20%" : "60%")} !important;
+		width: ${(props) => (props.show ? "80px" : "75%")} !important;
 
 		ul {
 			display: ${(props) => (props.show ? "none" : "")};
