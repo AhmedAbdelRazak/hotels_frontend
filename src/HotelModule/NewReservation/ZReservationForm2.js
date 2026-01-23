@@ -19,6 +19,7 @@ import {
 	EditOutlined,
 	CheckCircleTwoTone,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import moment from "moment";
 import { toast } from "react-toastify";
 import { isAuthenticated } from "../../auth";
@@ -37,6 +38,13 @@ const safeParseFloat = (v, fb = 0) => {
 	return Number.isNaN(n) ? fb : n;
 };
 const pct = (v) => (v > 1 ? v / 100 : v);
+const buildRoomKey = (roomType, displayName) =>
+	`${roomType || ""}|${displayName || ""}`;
+const splitRoomKey = (key = "") => {
+	const idx = key.indexOf("|");
+	if (idx === -1) return { room_type: key, displayName: "" };
+	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
+};
 
 /* Build pricing rows like OrderTaker (commission fallback=10%) */
 const buildPricingByDay = ({
@@ -138,7 +146,10 @@ const ZReservationForm2 = ({
 	const [totalDistribute, setTotalDistribute] = useState("");
 
 	const selectedKeys = useMemo(
-		() => (pickedRoomsType || []).map((r) => `${r.room_type}_${r.displayName}`),
+		() =>
+			(pickedRoomsType || []).map((r) =>
+				buildRoomKey(r.room_type, r.displayName || r.display_name)
+			),
 		[pickedRoomsType]
 	);
 
@@ -176,55 +187,61 @@ const ZReservationForm2 = ({
 	};
 
 	/* Utilities from hotel room details */
+	const findRoomDetail = useCallback(
+		(room_type, displayName) => {
+			const details = Array.isArray(hotelDetails?.roomCountDetails)
+				? hotelDetails.roomCountDetails
+				: [];
+			if (!room_type) return null;
+			const byDisplay =
+				displayName &&
+				details.find(
+					(r) => r.roomType === room_type && r.displayName === displayName
+				);
+			return byDisplay || details.find((r) => r.roomType === room_type) || null;
+		},
+		[hotelDetails?.roomCountDetails]
+	);
+
 	const commissionForRoom = useCallback(
 		(room_type, displayName) => {
-			const matched = hotelDetails?.roomCountDetails?.find(
-				(r) => r.roomType === room_type && r.displayName === displayName
-			);
+			const matched = findRoomDetail(room_type, displayName);
 			const fb = safeParseFloat(
 				matched?.roomCommission ?? hotelDetails?.commission,
 				10
 			);
 			return fb > 0 ? fb : 10;
 		},
-		[hotelDetails?.roomCountDetails, hotelDetails?.commission]
-	);
-
-	const findRoomDetail = useCallback(
-		(room_type, displayName) =>
-			hotelDetails?.roomCountDetails?.find(
-				(r) => r.roomType === room_type && r.displayName === displayName
-			),
-		[hotelDetails?.roomCountDetails]
+		[findRoomDetail, hotelDetails?.commission]
 	);
 
 	/* Dates */
 	const onStartDateChange = (value) => {
-		const atMid = value ? value.clone().startOf("day").toDate() : null;
-		setStart_date(atMid ? atMid.toISOString() : null);
-		if (atMid && end_date) {
-			const dur = moment(end_date)
-				.startOf("day")
-				.diff(moment(atMid).startOf("day"), "days");
-			setDays_of_residence(dur >= 0 ? dur + 1 : 0);
+		const dateAtMidnight = value ? value.startOf("day") : null;
+		setStart_date(dateAtMidnight ? dateAtMidnight.toISOString() : null);
+		if (dateAtMidnight && end_date) {
+			const adjustedEndDate = dayjs(end_date).startOf("day");
+			const duration = adjustedEndDate.diff(dateAtMidnight, "day");
+			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
 		} else {
 			setDays_of_residence(0);
 		}
 	};
 	const onEndDateChange = (value) => {
-		const atMid = value ? value.clone().startOf("day").toDate() : null;
-		setEnd_date(atMid ? atMid.toISOString() : null);
-		if (atMid && start_date) {
-			const dur = moment(atMid)
-				.startOf("day")
-				.diff(moment(start_date).startOf("day"), "days");
-			setDays_of_residence(dur >= 0 ? dur + 1 : 0);
+		const adjustedEndDate = value ? value.startOf("day") : null;
+		setEnd_date(adjustedEndDate ? adjustedEndDate.toISOString() : null);
+		if (adjustedEndDate && start_date) {
+			const adjustedStartDate = dayjs(start_date).startOf("day");
+			const duration = adjustedEndDate.diff(adjustedStartDate, "day");
+			setDays_of_residence(duration >= 0 ? duration + 1 : 0);
 		} else {
 			setDays_of_residence(0);
 		}
 	};
 	const disabledEndDate = (current) =>
-		start_date ? current && current < moment(start_date).startOf("day") : true;
+		start_date
+			? current && current.isBefore(dayjs(start_date).startOf("day"), "day")
+			: false;
 
 	/* Build one selected room line with day rows */
 	const buildRoomLine = useCallback(
@@ -232,6 +249,8 @@ const ZReservationForm2 = ({
 			if (!start_date || !end_date) return null;
 			const detail = findRoomDetail(room_type, displayName);
 			if (!detail) return null;
+			const resolvedDisplayName =
+				displayName || detail?.displayName || room_type;
 
 			const rows = buildPricingByDay({
 				pricingRate: detail.pricingRate || [],
@@ -262,7 +281,7 @@ const ZReservationForm2 = ({
 
 			return {
 				room_type,
-				displayName,
+				displayName: resolvedDisplayName,
 				pricingByDay: rows,
 				chosenPrice: Number(avgNight.toFixed(2)),
 				count: 1,
@@ -283,11 +302,14 @@ const ZReservationForm2 = ({
 			);
 			return;
 		}
-		const [room_type, displayName] = key.split("_");
+		const { room_type, displayName } = splitRoomKey(key);
 		const exists = selectedKeys.includes(key);
 		if (exists) {
 			setPickedRoomsType((prev) =>
-				prev.filter((r) => `${r.room_type}_${r.displayName}` !== key)
+				prev.filter(
+					(r) =>
+						buildRoomKey(r.room_type, r.displayName || r.display_name) !== key
+				)
 			);
 		} else {
 			const built = buildRoomLine(room_type, displayName);
@@ -436,7 +458,7 @@ const ZReservationForm2 = ({
 		if (!start_date || !end_date || !pickedRoomsType?.length) return;
 		setPickedRoomsType((prev) =>
 			prev
-				.map((r) => buildRoomLine(r.room_type, r.displayName))
+				.map((r) => buildRoomLine(r.room_type, r.displayName || r.display_name))
 				.filter(Boolean)
 				.map((built, idx) => ({ ...built, count: prev[idx]?.count || 1 }))
 		);
@@ -820,7 +842,7 @@ const ZReservationForm2 = ({
 										format='YYYY-MM-DD'
 										value={
 											customer_details.passportExpiry
-												? moment(customer_details.passportExpiry)
+												? dayjs(customer_details.passportExpiry)
 												: null
 										}
 										onChange={(v) =>
@@ -883,7 +905,7 @@ const ZReservationForm2 = ({
 										{start_date ? (
 											<small className='pill-inline'>
 												<CalendarOutlined />{" "}
-												{moment(start_date).format("YYYY-MM-DD")}
+												{dayjs(start_date).format("YYYY-MM-DD")}
 											</small>
 										) : null}
 									</Label>
@@ -893,7 +915,7 @@ const ZReservationForm2 = ({
 										inputReadOnly
 										size='middle'
 										format='YYYY-MM-DD'
-										value={start_date ? moment(start_date) : null}
+										value={start_date ? dayjs(start_date) : null}
 										onChange={onStartDateChange}
 										getPopupContainer={() => document.body}
 										popupStyle={{ zIndex: Z_TOP + 5 }}
@@ -913,7 +935,7 @@ const ZReservationForm2 = ({
 										{end_date ? (
 											<small className='pill-inline'>
 												<CalendarOutlined />{" "}
-												{moment(end_date).format("YYYY-MM-DD")}
+												{dayjs(end_date).format("YYYY-MM-DD")}
 											</small>
 										) : null}
 									</Label>
@@ -923,7 +945,7 @@ const ZReservationForm2 = ({
 										inputReadOnly
 										size='middle'
 										format='YYYY-MM-DD'
-										value={end_date ? moment(end_date) : null}
+										value={end_date ? dayjs(end_date) : null}
 										onChange={onEndDateChange}
 										getPopupContainer={() => document.body}
 										popupStyle={{ zIndex: Z_TOP + 5 }}
@@ -1135,20 +1157,34 @@ const ZReservationForm2 = ({
 									</Label>
 									<RoomGrid>
 										{roomInventory.map((room) => {
-											const key = `${room.room_type}_${room.displayName}`;
+											const fallbackDetail = findRoomDetail(
+												room.room_type,
+												room.displayName || room.display_name
+											);
+											const resolvedDisplayName =
+												room.displayName ||
+												room.display_name ||
+												fallbackDetail?.displayName ||
+												room.room_type;
+											const key = buildRoomKey(
+												room.room_type,
+												resolvedDisplayName
+											);
 											const active = selectedKeys.includes(key);
+											const availableCount =
+												room.available ?? room.total_available ?? 0;
 											return (
 												<RoomChip
 													key={key}
 													active={active}
 													onClick={() => toggleChip(key)}
-													title={`${room.displayName} (${room.room_type})`}
+													title={`${resolvedDisplayName} (${room.room_type})`}
 												>
 													<span className='icon'>
 														<HomeOutlined />
 													</span>
 													<span className='text'>
-														{room.displayName} <em>({room.room_type})</em>
+														{resolvedDisplayName} <em>({room.room_type})</em>
 													</span>
 													<span
 														className='badge'
@@ -1158,7 +1194,7 @@ const ZReservationForm2 = ({
 														{chosenLanguage === "Arabic"
 															? "المتاح"
 															: "Available"}
-														: {room.total_available}
+														: {availableCount}
 													</span>
 													{active && (
 														<CheckCircleTwoTone

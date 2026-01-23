@@ -5,6 +5,10 @@ import moment from "moment";
 import { toast } from "react-toastify";
 import HotelMapFilters from "./HotelMapFilters"; // Ensure this path is correct
 
+const CHECKED_OUT_STATUS_REGEX =
+	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
+const INHOUSE_STATUS_REGEX = /in[_\s-]?house/i;
+
 const HotelOverviewReservation = ({
 	hotelRooms,
 	hotelDetails,
@@ -46,7 +50,10 @@ const HotelOverviewReservation = ({
 	const [totalToDistribute, setTotalToDistribute] = useState("");
 
 	const normalizeDisplayName = useCallback(
-		(value) => String(value || "").trim().toLowerCase(),
+		(value) =>
+			String(value || "")
+				.trim()
+				.toLowerCase(),
 		[],
 	);
 
@@ -114,13 +121,28 @@ const HotelOverviewReservation = ({
 		return diff > 0 ? diff : 0;
 	};
 
-	const buildDayRow = (date, price, template = {}) => ({
-		...template,
-		date,
-		price,
-		totalPriceWithCommission: price,
-		totalPriceWithoutCommission: price,
-	});
+	const buildDayRow = (date, price, template = {}) => {
+		const normalizedPrice = normalizeNumber(price, 0);
+		const safeTemplate = template || {};
+
+		const next = {
+			...safeTemplate,
+			date,
+			price: normalizedPrice,
+			// Guest-facing price should always reflect edits.
+			totalPriceWithCommission: normalizedPrice,
+		};
+
+		// Preserve existing non-commission price when available.
+		if (safeTemplate.totalPriceWithoutCommission !== undefined) {
+			next.totalPriceWithoutCommission =
+				safeTemplate.totalPriceWithoutCommission;
+		} else {
+			next.totalPriceWithoutCommission = normalizedPrice;
+		}
+
+		return next;
+	};
 
 	const buildPricingByNightly = (nightlyPrice, nightsCount, template = {}) => {
 		if (!start_date || !nightsCount) return [];
@@ -130,8 +152,41 @@ const HotelOverviewReservation = ({
 				start.clone().add(idx, "day").format("YYYY-MM-DD"),
 				nightlyPrice,
 				template,
-			)
+			),
 		);
+	};
+
+	const getLineDisplayName = (line) =>
+		normalizeDisplayName(line?.displayName || line?.display_name);
+
+	const isRoomLineMatch = (line, roomType, displayName) => {
+		if (!line) return false;
+		const lineType = String(line.room_type || "")
+			.trim()
+			.toLowerCase();
+		const targetType = String(roomType || "")
+			.trim()
+			.toLowerCase();
+		if (!lineType || !targetType || lineType !== targetType) return false;
+
+		const lineDisplay = getLineDisplayName(line);
+		const targetDisplay = normalizeDisplayName(displayName);
+		if (!lineDisplay || !targetDisplay) return true;
+		return lineDisplay === targetDisplay;
+	};
+
+	const updateRoomsList = (rooms, roomType, displayName, updater) => {
+		if (!Array.isArray(rooms)) {
+			return { next: rooms, didUpdate: false };
+		}
+		let didUpdate = false;
+		const next = rooms.map((line) => {
+			if (didUpdate) return line;
+			if (!isRoomLineMatch(line, roomType, displayName)) return line;
+			didUpdate = true;
+			return updater(line);
+		});
+		return { next, didUpdate };
 	};
 
 	const normalizeDate = useCallback((value) => {
@@ -153,8 +208,11 @@ const HotelOverviewReservation = ({
 	}, [start_date, end_date, start_date_Map, end_date_Map, normalizeDate]);
 
 	const getReservationRoomIds = useCallback((reservation) => {
-		if (!reservation || !Array.isArray(reservation.roomId)) return [];
-		return reservation.roomId
+		if (!reservation || !reservation.roomId) return [];
+		const rawIds = Array.isArray(reservation.roomId)
+			? reservation.roomId
+			: [reservation.roomId];
+		return rawIds
 			.map((room) => {
 				if (!room) return null;
 				if (typeof room === "string") return room;
@@ -174,53 +232,74 @@ const HotelOverviewReservation = ({
 	const isReservationActive = useCallback((reservation) => {
 		const status = String(reservation?.reservation_status || "").toLowerCase();
 		if (!status) return true;
-		if (status.includes("cancel")) return false;
-		if (status.includes("no_show") || status.includes("no show")) return false;
-		if (
-			status.includes("checked_out") ||
-			status.includes("checkedout") ||
-			status.includes("early_checked_out") ||
-			status.includes("closed")
-		)
-			return false;
-		return true;
+		return !CHECKED_OUT_STATUS_REGEX.test(status);
 	}, []);
 
-	const hasOverlap = useCallback(
-		(reservation, rangeStart, rangeEnd) => {
-		if (!rangeStart || !rangeEnd) return false;
-		const reservationStart = normalizeDate(reservation?.checkin_date);
-		const reservationEnd = normalizeDate(reservation?.checkout_date);
-		if (!reservationStart || !reservationEnd) return false;
-		return rangeStart.isBefore(reservationEnd) && rangeEnd.isAfter(reservationStart);
+	const isReservationOverdueInhouse = useCallback(
+		(reservation) => {
+			const status = String(reservation?.reservation_status || "");
+			if (!INHOUSE_STATUS_REGEX.test(status)) return false;
+			const checkinDate = normalizeDate(
+				reservation?.checkin_date || reservation?.checkinDate,
+			);
+			const checkoutDate = normalizeDate(
+				reservation?.checkout_date || reservation?.checkoutDate,
+			);
+			if (!checkinDate || !checkoutDate) return false;
+			const today = moment().startOf("day");
+			return (
+				checkinDate.isSameOrBefore(today, "day") &&
+				checkoutDate.isSameOrBefore(today, "day")
+			);
 		},
 		[normalizeDate],
 	);
 
-	const getBookedBedsForRoom = useCallback((roomId) => {
-		if (!roomId) return [];
-		const { rangeStart, rangeEnd } = getAvailabilityRange();
-		if (!rangeStart || !rangeEnd) return [];
-		const bookedBedsTemp = [];
-		(allReservations || []).forEach((reservation) => {
-			if (!isReservationActive(reservation)) return;
-			if (!hasOverlap(reservation, rangeStart, rangeEnd)) return;
-			const reservationRoomIds = getReservationRoomIds(reservation);
-			const matchesRoom = reservationRoomIds.includes(String(roomId));
-			if (!matchesRoom && reservationRoomIds.length > 0) return;
-			const bookedBeds = Array.isArray(reservation.bedNumber)
-				? reservation.bedNumber
-				: [];
-			bookedBedsTemp.push(...bookedBeds);
-		});
-		return bookedBedsTemp;
-	}, [
-		allReservations,
-		getAvailabilityRange,
-		getReservationRoomIds,
-		hasOverlap,
-		isReservationActive,
-	]);
+	const hasOverlap = useCallback(
+		(reservation, rangeStart, rangeEnd) => {
+			if (!rangeStart || !rangeEnd) return false;
+			const reservationStart = normalizeDate(
+				reservation?.checkin_date || reservation?.checkinDate,
+			);
+			const reservationEnd = normalizeDate(
+				reservation?.checkout_date || reservation?.checkoutDate,
+			);
+			if (!reservationStart || !reservationEnd) return false;
+			return (
+				rangeStart.isBefore(reservationEnd) &&
+				rangeEnd.isAfter(reservationStart)
+			);
+		},
+		[normalizeDate],
+	);
+
+	const getBookedBedsForRoom = useCallback(
+		(roomId) => {
+			if (!roomId) return [];
+			const { rangeStart, rangeEnd } = getAvailabilityRange();
+			if (!rangeStart || !rangeEnd) return [];
+			const bookedBedsTemp = [];
+			(allReservations || []).forEach((reservation) => {
+				if (!isReservationActive(reservation)) return;
+				if (!hasOverlap(reservation, rangeStart, rangeEnd)) return;
+				const reservationRoomIds = getReservationRoomIds(reservation);
+				const matchesRoom = reservationRoomIds.includes(String(roomId));
+				if (!matchesRoom && reservationRoomIds.length > 0) return;
+				const bookedBeds = Array.isArray(reservation.bedNumber)
+					? reservation.bedNumber
+					: [];
+				bookedBedsTemp.push(...bookedBeds);
+			});
+			return bookedBedsTemp;
+		},
+		[
+			allReservations,
+			getAvailabilityRange,
+			getReservationRoomIds,
+			hasOverlap,
+			isReservationActive,
+		],
+	);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -299,6 +378,13 @@ const HotelOverviewReservation = ({
 			return false;
 		}
 
+		const hasOverdueInhouse = (allReservations || []).some(
+			(reservation) =>
+				isReservationOverdueInhouse(reservation) &&
+				reservationHasRoom(reservation, roomId),
+		);
+		if (hasOverdueInhouse) return true;
+
 		if (roomType === "individualBed") {
 			const bookedBedsTemp = getBookedBedsForRoom(roomId);
 			const allBedsBooked =
@@ -349,10 +435,18 @@ const HotelOverviewReservation = ({
 							safeDay.totalPriceWithCommission ??
 							safeDay.totalPriceWithoutCommission ??
 							0;
-						const normalizedPrice = Number(rawPrice);
+						const normalizedPrice = normalizeNumber(rawPrice, 0);
 						return {
 							...safeDay,
-							price: Number.isFinite(normalizedPrice) ? normalizedPrice : 0,
+							price: normalizedPrice,
+							totalPriceWithCommission:
+								safeDay.totalPriceWithCommission !== undefined
+									? safeDay.totalPriceWithCommission
+									: normalizedPrice,
+							totalPriceWithoutCommission:
+								safeDay.totalPriceWithoutCommission !== undefined
+									? safeDay.totalPriceWithoutCommission
+									: normalizedPrice,
 						};
 					}),
 				);
@@ -543,112 +637,154 @@ const HotelOverviewReservation = ({
 
 		const pricingSnapshot = pricingByDay.map((day) => ({ ...day }));
 
-		if (setPickedRoomsType && Array.isArray(pickedRoomsType)) {
-			const currentDisplayName =
-				currentRoom.display_name || currentRoom.displayName;
-			const totalWithComm = pricingSnapshot.reduce(
-				(acc, day) =>
-					acc + normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
-				0,
-			);
-			const hotelShouldGet = pricingSnapshot.reduce(
-				(acc, day) => acc + normalizeNumber(day.rootPrice, 0),
-				0,
-			);
-			const hasRootPrice = pricingSnapshot.some(
-				(day) => day.rootPrice !== undefined,
-			);
+		const roomInfo = getRoomDisplayInfo(currentRoom);
+		const resolvedRoomType = roomInfo.roomType || currentRoom.room_type;
+		const resolvedDisplayName =
+			roomInfo.displayName ||
+			currentRoom.display_name ||
+			currentRoom.displayName ||
+			"";
 
-			setPickedRoomsType((prev) => {
-				if (!Array.isArray(prev)) return prev;
-				const next = [...prev];
-				const idx = next.findIndex(
-					(line) =>
-						line.room_type === currentRoom.room_type &&
-						line.displayName === currentDisplayName,
-				);
-				if (idx === -1) return prev;
+		const totalWithComm = pricingSnapshot.reduce(
+			(acc, day) =>
+				acc + normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
+			0,
+		);
+		const hotelShouldGet = pricingSnapshot.reduce(
+			(acc, day) => acc + normalizeNumber(day.rootPrice, 0),
+			0,
+		);
+		const hasRootPrice = pricingSnapshot.some(
+			(day) => day.rootPrice !== undefined,
+		);
 
-				const updatedLine = {
-					...next[idx],
-					pricingByDay: pricingSnapshot,
-					chosenPrice: Number(chosenPrice.toFixed(2)),
-				};
+		const updateRoomLine = (line) => {
+			const updatedLine = {
+				...line,
+				pricingByDay: pricingSnapshot,
+				chosenPrice: Number(chosenPrice.toFixed(2)),
+			};
 
-				if (Number.isFinite(totalWithComm) && totalWithComm > 0) {
-					updatedLine.totalPriceWithCommission = Number(
-						totalWithComm.toFixed(2),
-					);
-				}
-				if (hasRootPrice) {
-					updatedLine.hotelShouldGet = Number(hotelShouldGet.toFixed(2));
-				}
-
-				next[idx] = updatedLine;
-				return next;
-			});
-
-			if (setSearchedReservation && searchedReservation) {
-				const updatedRooms = Array.isArray(pickedRoomsType)
-					? pickedRoomsType.map((line) => {
-							if (
-								line.room_type === currentRoom.room_type &&
-								line.displayName === currentDisplayName
-							) {
-								return {
-									...line,
-									pricingByDay: pricingSnapshot,
-									chosenPrice: Number(chosenPrice.toFixed(2)),
-									totalPriceWithCommission: Number(totalWithComm.toFixed(2)),
-									hotelShouldGet: hasRootPrice
-										? Number(hotelShouldGet.toFixed(2))
-										: line.hotelShouldGet,
-								};
-							}
-							return line;
-					  })
-					: [];
-
-				const stayNights = Math.max(getStayNights(), 1);
-				const updatedTotalAmount = updatedRooms.reduce((sum, room) => {
-					const count = Number(room.count) || 1;
-					if (
-						Array.isArray(room.pricingByDay) &&
-						room.pricingByDay.length > 0
-					) {
-						const roomTotal = room.pricingByDay.reduce(
-							(acc, day) =>
-								acc +
-								normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
-							0,
-						);
-						return sum + roomTotal * count;
-					}
-					const nightly = normalizeNumber(room.chosenPrice, 0);
-					return sum + nightly * stayNights * count;
-				}, 0);
-
-				setSearchedReservation({
-					...searchedReservation,
-					pickedRoomsType: updatedRooms,
-					total_amount:
-						updatedTotalAmount > 0
-							? Number(updatedTotalAmount.toFixed(2))
-							: searchedReservation.total_amount,
-				});
+			if (Number.isFinite(totalWithComm) && totalWithComm > 0) {
+				updatedLine.totalPriceWithCommission = Number(totalWithComm.toFixed(2));
 			}
+			if (hasRootPrice) {
+				updatedLine.hotelShouldGet = Number(hotelShouldGet.toFixed(2));
+			}
+
+			return updatedLine;
+		};
+
+		const basePickedRoomsType =
+			Array.isArray(pickedRoomsType) && pickedRoomsType.length > 0
+				? pickedRoomsType
+				: Array.isArray(searchedReservation?.pickedRoomsType)
+				  ? searchedReservation.pickedRoomsType
+				  : [];
+
+		const { next: nextPickedRoomsType, didUpdate } = updateRoomsList(
+			basePickedRoomsType,
+			resolvedRoomType,
+			resolvedDisplayName,
+			updateRoomLine,
+		);
+
+		if (setPickedRoomsType && didUpdate) {
+			setPickedRoomsType(nextPickedRoomsType);
 		}
 
-		setPickedRoomPricing([
-			...pickedRoomPricing,
-			{
-				roomId: currentRoom._id,
-				chosenPrice: finalChosenPrice,
-				pricingByDay: pricingSnapshot,
-			},
-		]);
+		if (setSearchedReservation && searchedReservation && didUpdate) {
+			const basePickedRoomsPricing =
+				Array.isArray(searchedReservation.pickedRoomsPricing) &&
+				searchedReservation.pickedRoomsPricing.length > 0
+					? searchedReservation.pickedRoomsPricing
+					: nextPickedRoomsType;
 
-		setTotal_Amount((prevTotal) => prevTotal + finalChosenPrice);
+			const { next: nextPickedRoomsPricing } = updateRoomsList(
+				basePickedRoomsPricing,
+				resolvedRoomType,
+				resolvedDisplayName,
+				updateRoomLine,
+			);
+
+			const stayNights = Math.max(getStayNights(), 1);
+			const updatedTotalAmount = nextPickedRoomsType.reduce((sum, room) => {
+				const count = Number(room.count) || 1;
+				if (Array.isArray(room.pricingByDay) && room.pricingByDay.length > 0) {
+					const roomTotal = room.pricingByDay.reduce(
+						(acc, day) =>
+							acc +
+							normalizeNumber(day.totalPriceWithCommission ?? day.price, 0),
+						0,
+					);
+					return sum + roomTotal * count;
+				}
+				const nightly = normalizeNumber(room.chosenPrice, 0);
+				return sum + nightly * stayNights * count;
+			}, 0);
+
+			setSearchedReservation({
+				...searchedReservation,
+				pickedRoomsType: nextPickedRoomsType,
+				pickedRoomsPricing:
+					Array.isArray(nextPickedRoomsPricing) &&
+					nextPickedRoomsPricing.length > 0
+						? nextPickedRoomsPricing
+						: searchedReservation.pickedRoomsPricing,
+				total_amount:
+					updatedTotalAmount > 0
+						? Number(updatedTotalAmount.toFixed(2))
+						: searchedReservation.total_amount,
+			});
+		}
+
+		const existingPricingEntry = Array.isArray(pickedRoomPricing)
+			? pickedRoomPricing.find(
+					(pricing) => String(pricing.roomId) === String(currentRoom._id),
+			  )
+			: null;
+		const previousChosenPrice = existingPricingEntry
+			? normalizeNumber(existingPricingEntry.chosenPrice, 0)
+			: 0;
+
+		const roomPricingEntry = {
+			...(existingPricingEntry || {}),
+			roomId: currentRoom._id,
+			room_type:
+				existingPricingEntry?.room_type ||
+				resolvedRoomType ||
+				currentRoom.room_type,
+			displayName: existingPricingEntry?.displayName || resolvedDisplayName,
+			count: existingPricingEntry?.count || 1,
+			chosenPrice: finalChosenPrice,
+			pricingByDay: pricingSnapshot,
+		};
+
+		if (Number.isFinite(totalWithComm) && totalWithComm > 0) {
+			roomPricingEntry.totalPriceWithCommission = Number(
+				totalWithComm.toFixed(2),
+			);
+		}
+		if (hasRootPrice) {
+			roomPricingEntry.hotelShouldGet = Number(hotelShouldGet.toFixed(2));
+		}
+
+		setPickedRoomPricing((prev) => {
+			const next = Array.isArray(prev) ? [...prev] : [];
+			const idx = next.findIndex(
+				(pricing) => String(pricing.roomId) === String(currentRoom._id),
+			);
+			if (idx >= 0) {
+				next[idx] = roomPricingEntry;
+			} else {
+				next.push(roomPricingEntry);
+			}
+			return next;
+		});
+
+		setTotal_Amount((prevTotal) =>
+			Math.max(prevTotal - previousChosenPrice + finalChosenPrice, 0),
+		);
 		resetState();
 		setIsModalVisible(false);
 	};
@@ -879,10 +1015,14 @@ const HotelOverviewReservation = ({
 																			/>
 																		)}
 																		<div>Room #: {room.room_number}</div>
-																		<div style={{ textTransform: "capitalize" }}>
+																		<div
+																			style={{ textTransform: "capitalize" }}
+																		>
 																			Display Name: {roomInfo.displayName}
 																		</div>
-																		<div style={{ textTransform: "capitalize" }}>
+																		<div
+																			style={{ textTransform: "capitalize" }}
+																		>
 																			Room Type: {roomInfo.roomType || "N/A"}
 																		</div>
 																		<div>
@@ -973,12 +1113,16 @@ const HotelOverviewReservation = ({
 																				/>
 																			)}
 																			<div>Room #: {room.room_number}</div>
-																		<div style={{ textTransform: "capitalize" }}>
-																			Display Name: {roomInfo.displayName}
-																		</div>
-																		<div style={{ textTransform: "capitalize" }}>
-																			Room Type: {roomInfo.roomType || "N/A"}
-																		</div>
+																			<div
+																				style={{ textTransform: "capitalize" }}
+																			>
+																				Display Name: {roomInfo.displayName}
+																			</div>
+																			<div
+																				style={{ textTransform: "capitalize" }}
+																			>
+																				Room Type: {roomInfo.roomType || "N/A"}
+																			</div>
 																			<div>
 																				Occupied: {isBooked ? "Yes" : "No"}
 																			</div>

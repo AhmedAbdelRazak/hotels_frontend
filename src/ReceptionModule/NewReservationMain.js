@@ -10,7 +10,8 @@ import {
 	getHotelDetails,
 	getHotelRooms,
 	hotelAccount,
-	getHotelReservations,
+	getHotelReservationsCurrent,
+	getHotelReservationsRange,
 	getListOfRoomSummary,
 	getReservationSearch,
 	updateSingleReservation,
@@ -58,7 +59,7 @@ const NewReservationMain = () => {
 	const [start_date_Map, setStart_date_Map] = useState("");
 	const [end_date_Map, setEnd_date_Map] = useState("");
 	const [paidAmount, setPaidAmount] = useState("");
-	const [allReservationsHeatMap, setAllReservationsHeatMap] = useState("");
+	const [allReservationsHeatMap, setAllReservationsHeatMap] = useState([]);
 	const [customer_details, setCustomer_details] = useState({
 		name: "",
 		phone: "",
@@ -153,37 +154,39 @@ const NewReservationMain = () => {
 						console.log(data2.error, "Error rendering");
 					} else {
 						if (data && data.name && data._id && data2 && data2.length > 0) {
-							if (start_date && end_date) {
-								getHotelReservations(
-									data2[0]._id,
-									user._id,
-									heatMapStartDate,
-									heatMapEndDate
-								).then((data3) => {
-									if (data3 && data3.error) {
-										console.log(data3.error);
-									} else {
-										console.log(data3, "data3 for reception module");
-
-										setAllReservations(data3 && data3.length > 0 ? data3 : []);
+							const belongsToId = data?.belongsToId || user._id;
+							if (heatMapStartDate && heatMapEndDate) {
+								getHotelReservationsCurrent(data2[0]._id, belongsToId).then(
+									(data3) => {
+										if (data3 && data3.error) {
+											console.log(data3.error);
+										} else {
+											setAllReservationsHeatMap(
+												Array.isArray(data3) ? data3 : []
+											);
+										}
 									}
-								});
+								);
 							}
 
-							getHotelReservations(
-								data2[0]._id,
-								data.belongsToId,
-								heatMapStartDate,
-								heatMapEndDate
-							).then((data4) => {
-								if (data4 && data4.error) {
-									console.log(data4.error);
-								} else {
-									setAllReservationsHeatMap(
-										data4 && data4.length > 0 ? data4 : []
-									);
-								}
-							});
+							const rangeStart = start_date ? formatDate(start_date) : "";
+							const rangeEnd = end_date ? formatDate(end_date) : "";
+							if (rangeStart && rangeEnd) {
+								getHotelReservationsRange(
+									data2[0]._id,
+									belongsToId,
+									rangeStart,
+									rangeEnd
+								).then((data4) => {
+									if (data4 && data4.error) {
+										console.log(data4.error);
+									} else {
+										setAllReservations(Array.isArray(data4) ? data4 : []);
+									}
+								});
+							} else {
+								setAllReservations([]);
+							}
 
 							if (!hotelDetails) {
 								setHotelDetails(data2[0]);
@@ -643,7 +646,7 @@ const NewReservationMain = () => {
 												setTotal_Amount={setTotal_Amount}
 												setPickedRoomPricing={setPickedRoomPricing}
 												pickedRoomPricing={pickedRoomPricing}
-												allReservations={allReservationsHeatMap}
+												allReservations={allReservations}
 												setBookingComment={setBookingComment}
 												booking_comment={booking_comment}
 												setBookingSource={setBookingSource}
@@ -691,6 +694,7 @@ const NewReservationMain = () => {
 										end_date={end_date_Map}
 										allReservations={allReservationsHeatMap}
 										chosenLanguage={chosenLanguage}
+										useCurrentOccupancy
 									/>
 								) : null}
 							</>

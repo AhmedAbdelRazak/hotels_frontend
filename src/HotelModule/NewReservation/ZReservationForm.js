@@ -218,10 +218,14 @@ const ZReservationForm = ({
 				reservation.financeStatus ||
 				"",
 		);
+		const roomsFromType = Array.isArray(reservation.pickedRoomsType)
+			? reservation.pickedRoomsType
+			: [];
+		const roomsFromPricing = Array.isArray(reservation.pickedRoomsPricing)
+			? reservation.pickedRoomsPricing.filter((room) => room && room.room_type)
+			: [];
 		setPickedRoomsType(
-			Array.isArray(reservation.pickedRoomsType)
-				? reservation.pickedRoomsType
-				: [],
+			roomsFromType.length > 0 ? roomsFromType : roomsFromPricing,
 		);
 
 		setSearchClicked(false);

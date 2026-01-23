@@ -435,6 +435,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		});
 	};
 
+	// eslint-disable-next-line
 	const getAverageRootPrice = (pickedRoomsType) => {
 		if (!pickedRoomsType || pickedRoomsType.length === 0) return 0;
 
@@ -453,6 +454,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		return totalDays > 0 ? totalRootPrice / totalDays : 0;
 	};
 
+	// eslint-disable-next-line
 	const calculateOverallTotalRootPrice = (pickedRoomsType) => {
 		if (!pickedRoomsType || pickedRoomsType.length === 0) return 0;
 
@@ -1484,46 +1486,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														getTotalAmountPerDay(
 															reservation.pickedRoomsType,
 														).toLocaleString()}{" "}
-													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
-												</h5>
-											</div>
-										</div>
-									</div>
-
-									<div className='my-3'>
-										<div className='row'>
-											<div className='col-md-5 mx-auto'>
-												<h6>
-													{chosenLanguage === "Arabic"
-														? "معدل السعر الجزري"
-														: "Average Daily Root Price"}
-												</h6>
-											</div>
-											<div className='col-md-5 mx-auto'>
-												<h5>
-													{getAverageRootPrice(
-														reservation.pickedRoomsType,
-													).toFixed(2)}{" "}
-													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
-												</h5>
-											</div>
-										</div>
-									</div>
-
-									<div className='my-3'>
-										<div className='row my-3'>
-											<div className='col-md-5 mx-auto'>
-												<h6>
-													{chosenLanguage === "Arabic"
-														? "إجمالي السعر الجزري"
-														: "Overall Total with Root Price"}
-												</h6>
-											</div>
-											<div className='col-md-5 mx-auto'>
-												<h5>
-													{calculateOverallTotalRootPrice(
-														reservation.pickedRoomsType,
-													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
 											</div>

@@ -3,6 +3,9 @@ import styled, { keyframes } from "styled-components";
 import { Tooltip } from "antd";
 import moment from "moment";
 
+const CHECKED_OUT_STATUS_REGEX =
+	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
+
 const HotelHeatMap = ({
 	hotelRooms,
 	hotelDetails,
@@ -10,6 +13,7 @@ const HotelHeatMap = ({
 	end_date,
 	allReservations,
 	chosenLanguage,
+	useCurrentOccupancy = false,
 }) => {
 	const [selectedRoomType, setSelectedRoomType] = useState(null);
 	const [fixIt, setFixIt] = useState(false);
@@ -29,21 +33,22 @@ const HotelHeatMap = ({
 		};
 	}, []);
 
-	const { hotelFloors, parkingLot } = hotelDetails;
+	const safeHotelRooms = Array.isArray(hotelRooms) ? hotelRooms : [];
+	const { hotelFloors = 0, parkingLot } = hotelDetails || {};
 	const floors = Array.from(
-		{ length: hotelFloors },
+		{ length: Number(hotelFloors) || 0 },
 		(_, index) => hotelFloors - index
 	);
 
 	// console.log(pickedRoomPricing, "pickedRoomPricing");
 
 	const filteredRooms = selectedRoomType
-		? hotelRooms.filter((room) => room.room_type === selectedRoomType)
-		: hotelRooms;
+		? safeHotelRooms.filter((room) => room.room_type === selectedRoomType)
+		: safeHotelRooms;
 
 	const distinctRoomTypesWithColors =
-		hotelRooms &&
-		hotelRooms.reduce((accumulator, room) => {
+		safeHotelRooms &&
+		safeHotelRooms.reduce((accumulator, room) => {
 			// Check if this room_type is already processed
 			if (!accumulator.some((item) => item.room_type === room.room_type)) {
 				accumulator.push({
@@ -55,20 +60,41 @@ const HotelHeatMap = ({
 		}, []);
 
 	const isRoomBooked = (roomId) => {
+		if (!roomId) return false;
+		const reservations = Array.isArray(allReservations) ? allReservations : [];
+
+		if (useCurrentOccupancy) {
+			return reservations.some((reservation) => {
+				const status = String(reservation?.reservation_status || "");
+				if (CHECKED_OUT_STATUS_REGEX.test(status)) return false;
+				const roomIds = Array.isArray(reservation.roomId)
+					? reservation.roomId
+					: [];
+				return roomIds.some(
+					(room) => String(room?._id || room) === String(roomId)
+				);
+			});
+		}
+
 		if (!start_date || !end_date) return false;
 
 		const startDate = moment(start_date);
 		const endDate = moment(end_date);
 
-		return allReservations.some((reservation) => {
+		return reservations.some((reservation) => {
+			const status = String(reservation?.reservation_status || "");
+			if (CHECKED_OUT_STATUS_REGEX.test(status)) return false;
+
 			const reservationStart = moment(reservation.checkin_date);
 			const reservationEnd = moment(reservation.checkout_date);
+			const roomIds = Array.isArray(reservation.roomId)
+				? reservation.roomId
+				: [];
 
-			// Check if the date range overlaps and the room ID is in the reservation's roomId array
 			return (
 				startDate.isBefore(reservationEnd) &&
 				endDate.isAfter(reservationStart) &&
-				reservation.roomId.some((room) => room._id === roomId)
+				roomIds.some((room) => String(room?._id || room) === String(roomId))
 			);
 		});
 	};

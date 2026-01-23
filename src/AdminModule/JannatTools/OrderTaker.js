@@ -113,7 +113,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Radio options: "commission_plus_one_day", "percentage", or "sar"
 	const [advancePaymentOption, setAdvancePaymentOption] = useState(
-		"commission_plus_one_day"
+		"commission_plus_one_day",
 	);
 	const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState("");
 	const [advancePaymentSAR, setAdvancePaymentSAR] = useState("");
@@ -161,11 +161,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			if (data && !data.error) {
 				// Only keep active hotels
 				const activeHotels = (data.hotels || []).filter(
-					(h) => h.activateHotel === true
+					(h) => h.activateHotel === true,
 				);
 				// Sort by name
 				const sortedHotels = activeHotels.sort((a, b) =>
-					(a?.hotelName || "").localeCompare(b?.hotelName || "")
+					(a?.hotelName || "").localeCompare(b?.hotelName || ""),
 				);
 
 				// Super admin sees all
@@ -186,7 +186,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						// Filter
 						const allowedIds = (userHotelsToSupport || []).map((h) => h?._id);
 						const filtered = sortedHotels.filter((h) =>
-							allowedIds.includes(h._id)
+							allowedIds.includes(h._id),
 						);
 						setAllHotels(filtered);
 					}
@@ -219,7 +219,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			endDate,
 			basePrice,
 			defaultCost,
-			commissionRate
+			commissionRate,
 		) => {
 			const start = dayjs(startDate).startOf("day");
 			const end = dayjs(endDate).subtract(1, "day").startOf("day");
@@ -229,7 +229,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			while (currentDate.isBefore(end) || currentDate.isSame(end, "day")) {
 				const formattedDate = currentDate.format("YYYY-MM-DD");
 				const rateForDate = pricingRate.find(
-					(r) => r.calendarDate === formattedDate
+					(r) => r.calendarDate === formattedDate,
 				);
 
 				const price = rateForDate
@@ -252,7 +252,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			}
 			return dateArray;
 		},
-		[]
+		[],
 	);
 
 	/**
@@ -267,7 +267,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			endDate,
 			basePrice,
 			defaultCost,
-			rawCommission
+			rawCommission,
 		) => {
 			const baseCommission = rawCommission > 0 ? rawCommission : 10;
 
@@ -277,7 +277,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				endDate,
 				basePrice,
 				defaultCost,
-				baseCommission
+				baseCommission,
 			);
 
 			return noCommissionArray.map((day) => {
@@ -292,7 +292,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				};
 			});
 		},
-		[calculatePricingByDay]
+		[calculatePricingByDay],
 	);
 
 	const redistributeManualTotal = (room, newNights, newStart, newEnd) => {
@@ -359,7 +359,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						room,
 						nights,
 						startDate,
-						endDate
+						endDate,
 					);
 					if (reDistributed && reDistributed.length) {
 						room.pricingByDay = reDistributed;
@@ -369,7 +369,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						const matched = selectedHotel?.roomCountDetails?.find(
 							(r) =>
 								r.roomType?.trim() === room.roomType.trim() &&
-								r.displayName?.trim() === room.displayName.trim()
+								r.displayName?.trim() === room.displayName.trim(),
 						);
 						if (!matched) {
 							return room;
@@ -377,7 +377,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 						const fallbackCommission = safeParseFloat(
 							matched.roomCommission ?? selectedHotel.commission,
-							10
+							10,
 						);
 						const finalCommission =
 							fallbackCommission > 0 ? fallbackCommission : 10;
@@ -388,7 +388,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							endDate,
 							safeParseFloat(matched.price?.basePrice, 0),
 							safeParseFloat(matched.defaultCost, 0),
-							finalCommission
+							finalCommission,
 						);
 						room.pricingByDay = recalculated;
 					}
@@ -400,11 +400,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 				const roomTotalRoot = room.pricingByDay.reduce(
 					(acc, day) => acc + safeParseFloat(day.rootPrice),
-					0
+					0,
 				);
 				const roomTotalWithComm = room.pricingByDay.reduce(
 					(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
-					0
+					0,
 				);
 				const roomTotalCommission = room.pricingByDay.reduce((acc, day) => {
 					return (
@@ -443,7 +443,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			selectedRooms,
 			selectedHotel,
 			calculatePricingByDayWithCommission,
-		]
+		],
 	);
 
 	useEffect(() => {
@@ -580,7 +580,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		// 1. Sum up daily final
 		const sumWithComm = updatedPricingByDay.reduce(
 			(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
-			0
+			0,
 		);
 		// 2. averageRootToTotalRatio
 		let ratio = 0;
@@ -611,7 +611,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						averageRootToTotalRatio: ratio > 0 ? ratio : 0,
 						commissionRate: newCommRate,
 				  }
-				: room
+				: room,
 		);
 		setSelectedRooms(updated);
 	};
@@ -716,7 +716,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		const newHotel = allHotels.find((ht) => ht._id === hotelId);
 		if (selectedHotel && selectedHotel._id !== hotelId) {
 			message.warning(
-				"Hotel changed! Room selection and pricing will be reset."
+				"Hotel changed! Room selection and pricing will be reset.",
 			);
 			clearAll();
 		}
@@ -739,11 +739,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		selectedHotel.roomCountDetails.forEach((r) => {
 			const offers =
 				(r.offers || []).filter((o) =>
-					isActiveOrUpcoming(o.offerFrom || o.from, o.offerTo || o.to)
+					isActiveOrUpcoming(o.offerFrom || o.from, o.offerTo || o.to),
 				).length || 0;
 			const months =
 				(r.monthly || []).filter((m) =>
-					isActiveOrUpcoming(m.monthFrom || m.from, m.monthTo || m.to)
+					isActiveOrUpcoming(m.monthFrom || m.from, m.monthTo || m.to),
 				).length || 0;
 			total += offers + months;
 		});
@@ -787,7 +787,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		const firstDay = pricingByDay[0] || {};
 		const manualTotal = pricingByDay.reduce(
 			(acc, d) => acc + safeParseFloat(d.totalPriceWithCommission),
-			0
+			0,
 		);
 		const ratio =
 			manualTotal > 0
@@ -796,7 +796,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							acc +
 							safeParseFloat(d.rootPrice) /
 								safeParseFloat(d.totalPriceWithCommission),
-						0
+						0,
 				  ) / pricingByDay.length
 				: 0;
 
@@ -858,7 +858,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		if (
 			!selectedRooms.length ||
 			!selectedRooms.every(
-				(r) => r.roomType && r.displayName && Number(r.count) > 0
+				(r) => r.roomType && r.displayName && Number(r.count) > 0,
 			)
 		) {
 			abortSubmit("Please select at least one valid room type and count.");
@@ -866,7 +866,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		}
 		if (
 			!selectedRooms.every(
-				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0
+				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0,
 			)
 		) {
 			abortSubmit("Please ensure all selected rooms have valid pricing.");
@@ -886,7 +886,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				const amt = safeParseFloat(advancePaymentSAR, -1);
 				if (amt < 1 || amt > totalAmount) {
 					abortSubmit(
-						"Please enter a valid SAR amount between 1 and the total amount."
+						"Please enter a valid SAR amount between 1 and the total amount.",
 					);
 					return;
 				}
@@ -931,17 +931,17 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						rootPrice: safeParseFloat(day.rootPrice),
 						commissionRate: safeParseFloat(day.commissionRate),
 						totalPriceWithCommission: safeParseFloat(
-							day.totalPriceWithCommission
+							day.totalPriceWithCommission,
 						),
 						// preserve the “no‑commission” portion your code expects
 						totalPriceWithoutCommission: safeParseFloat(
-							day.totalPriceWithoutCommission
+							day.totalPriceWithoutCommission,
 						),
 					}));
 
 					const totalWithComm = pricingDetails.reduce(
 						(acc, d) => acc + d.totalPriceWithCommission,
-						0
+						0,
 					);
 					const avgNight =
 						pricingDetails.length > 0
@@ -957,10 +957,10 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						totalPriceWithCommission: totalWithComm,
 						hotelShouldGet: pricingDetails.reduce(
 							(acc, d) => acc + d.rootPrice,
-							0
+							0,
 						),
 					};
-				})
+				}),
 			);
 		};
 
@@ -987,25 +987,24 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		}
 
 		// --- Compose request payload ---
-	const reservationData = {
-		userId: effectiveUserId,
-		hotelId: selectedHotel._id,
-		belongsTo: selectedHotel.belongsTo?._id || "",
-		hotel_name: selectedHotel.hotelName || "",
-		customerDetails: {
-			name,
-			nickName,
-			email:
-				String(email || "").trim() || "no-email@jannatbooking.com",
-			phone,
-			passport: "Not Provided",
-			passportExpiry: "1/1/2027",
-			nationality,
-			postalCode: "00000",
-			reservedBy: agentName,
-			reservedById: effectiveUserId || SUPER_USER_ID,
-			confirmation_number2: String(confirmationNumber || "").trim(),
-		},
+		const reservationData = {
+			userId: effectiveUserId,
+			hotelId: selectedHotel._id,
+			belongsTo: selectedHotel.belongsTo?._id || "",
+			hotel_name: selectedHotel.hotelName || "",
+			customerDetails: {
+				name,
+				nickName,
+				email: String(email || "").trim() || "no-email@jannatbooking.com",
+				phone,
+				passport: "Not Provided",
+				passportExpiry: "1/1/2027",
+				nationality,
+				postalCode: "00000",
+				reservedBy: agentName,
+				reservedById: effectiveUserId || SUPER_USER_ID,
+				confirmation_number2: String(confirmationNumber || "").trim(),
+			},
 			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),
 			total_guests: Number(adults || 0) + Number(children || 0),
 			adults,
@@ -1095,7 +1094,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	const createdPaidDisplay = Number(
 		(selectedReservation?.payment_details?.onsite_paid_amount ?? 0) ||
 			(selectedReservation?.paid_amount ?? 0) ||
-			0
+			0,
 	);
 
 	return (
@@ -1612,4 +1611,3 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 };
 
 export default OrderTaker;
-

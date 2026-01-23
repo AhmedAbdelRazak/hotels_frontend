@@ -1,17 +1,36 @@
-import React, { useEffect, useState } from "react";
-import styled, { keyframes } from "styled-components";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import styled, { keyframes, css } from "styled-components";
 import { Tooltip, Modal } from "antd";
 import moment from "moment";
 import HotelMapCards from "./HotelMapCards";
 import HotelMapFilters from "./HotelMapFilters";
+import ReservationDetail from "../ReservationsFolder/ReservationDetail";
+
+const normalizeDisplayName = (value) =>
+	String(value || "")
+		.trim()
+		.toLowerCase();
+
+const normalizeDate = (value) => {
+	if (!value) return null;
+	const parsed = moment(value);
+	return parsed.isValid() ? parsed.startOf("day") : null;
+};
+
+const CHECKED_OUT_STATUS_REGEX =
+	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
+const INHOUSE_STATUS_REGEX = /in[_\s-]?house/i;
 
 const HotelHeatMap = ({
 	hotelRooms,
 	hotelDetails,
 	start_date,
 	end_date,
+	start_date_Map,
+	end_date_Map,
 	allReservations,
 	chosenLanguage,
+	useCurrentOccupancy = false,
 }) => {
 	const [selectedRoomType, setSelectedRoomType] = useState(null);
 	const [selectedAvailability, setSelectedAvailability] = useState(null);
@@ -21,6 +40,10 @@ const HotelHeatMap = ({
 	const [selectedRoom, setSelectedRoom] = useState(null);
 	const [bookedBeds, setBookedBeds] = useState([]);
 	const [selectedRoomStatus, setSelectedRoomStatus] = useState(null);
+	const [isReservationModalVisible, setIsReservationModalVisible] =
+		useState(false);
+	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [reservationModalKey, setReservationModalKey] = useState(0);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -37,15 +60,84 @@ const HotelHeatMap = ({
 		};
 	}, []);
 
-	const normalizeDate = (value) => {
-		if (!value) return null;
-		const parsed = moment(value);
-		return parsed.isValid() ? parsed.startOf("day") : null;
-	};
+	const safeHotelRooms = useMemo(
+		() => (Array.isArray(hotelRooms) ? hotelRooms : []),
+		[hotelRooms],
+	);
 
-	const getReservationRoomIds = (reservation) => {
-		if (!reservation || !Array.isArray(reservation.roomId)) return [];
-		return reservation.roomId
+	const roomCountDetails = useMemo(
+		() =>
+			Array.isArray(hotelDetails?.roomCountDetails)
+				? hotelDetails.roomCountDetails
+				: [],
+		[hotelDetails?.roomCountDetails],
+	);
+
+	const roomDetailsByDisplayName = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			const key = normalizeDisplayName(detail.displayName || detail.roomType);
+			if (!key || map.has(key)) return;
+			map.set(key, detail);
+		});
+		return map;
+	}, [roomCountDetails]);
+
+	const roomDetailsByType = useMemo(() => {
+		const map = new Map();
+		roomCountDetails.forEach((detail) => {
+			if (!detail.roomType || map.has(detail.roomType)) return;
+			map.set(detail.roomType, detail);
+		});
+		return map;
+	}, [roomCountDetails]);
+
+	const getRoomDisplayInfo = useCallback(
+		(room) => {
+			const displayNameRaw = room?.display_name || room?.displayName || "";
+			const detailByDisplay = displayNameRaw
+				? roomDetailsByDisplayName.get(normalizeDisplayName(displayNameRaw))
+				: null;
+			const roomType = room?.room_type || "";
+			const detailByType =
+				!detailByDisplay && roomType ? roomDetailsByType.get(roomType) : null;
+			const detail = detailByDisplay || detailByType;
+			const resolvedRoomType = detail?.roomType || roomType;
+			const fallbackLabel = resolvedRoomType
+				? resolvedRoomType.replace(/([A-Z])/g, " $1").trim()
+				: "Room";
+			return {
+				displayName: displayNameRaw || detail?.displayName || fallbackLabel,
+				roomType: resolvedRoomType,
+				color: detail?.roomColor || room?.roomColorCode || "#000",
+				detail,
+			};
+		},
+		[roomDetailsByDisplayName, roomDetailsByType],
+	);
+
+	const getAvailabilityRange = useCallback(() => {
+		if (useCurrentOccupancy) {
+			const today = moment().startOf("day");
+			const tomorrow = moment().add(1, "day").startOf("day");
+			return { rangeStart: today, rangeEnd: tomorrow };
+		}
+		const selectedStart = normalizeDate(start_date);
+		const selectedEnd = normalizeDate(end_date);
+		if (selectedStart && selectedEnd) {
+			return { rangeStart: selectedStart, rangeEnd: selectedEnd };
+		}
+		const fallbackStart = normalizeDate(start_date_Map);
+		const fallbackEnd = normalizeDate(end_date_Map);
+		return { rangeStart: fallbackStart, rangeEnd: fallbackEnd };
+	}, [useCurrentOccupancy, start_date, end_date, start_date_Map, end_date_Map]);
+
+	const getReservationRoomIds = useCallback((reservation) => {
+		if (!reservation || !reservation.roomId) return [];
+		const rawIds = Array.isArray(reservation.roomId)
+			? reservation.roomId
+			: [reservation.roomId];
+		return rawIds
 			.map((room) => {
 				if (!room) return null;
 				if (typeof room === "string") return room;
@@ -54,127 +146,329 @@ const HotelHeatMap = ({
 			})
 			.filter(Boolean)
 			.map((id) => String(id));
-	};
+	}, []);
 
-	const reservationHasRoom = (reservation, roomId) => {
-		if (!roomId) return false;
-		const ids = getReservationRoomIds(reservation);
-		return ids.includes(String(roomId));
-	};
+	const reservationHasRoom = useCallback(
+		(reservation, roomId) => {
+			if (!roomId) return false;
+			const ids = getReservationRoomIds(reservation);
+			return ids.includes(String(roomId));
+		},
+		[getReservationRoomIds],
+	);
 
-	const isReservationActive = (reservation) => {
+	const isReservationActive = useCallback((reservation) => {
 		const status = String(reservation?.reservation_status || "").toLowerCase();
 		if (!status) return true;
-		if (status.includes("cancel")) return false;
-		if (status.includes("no_show") || status.includes("no show")) return false;
-		if (
-			status.includes("checked_out") ||
-			status.includes("checkedout") ||
-			status.includes("early_checked_out") ||
-			status.includes("closed")
-		)
-			return false;
-		return true;
-	};
+		return !CHECKED_OUT_STATUS_REGEX.test(status);
+	}, []);
 
-	const hasOverlap = (reservation, rangeStart, rangeEnd) => {
+	const isReservationOverdueInhouse = useCallback(
+		(reservation) => {
+			const status = String(reservation?.reservation_status || "");
+			if (!INHOUSE_STATUS_REGEX.test(status)) return false;
+			const checkinDate = normalizeDate(
+				reservation?.checkin_date || reservation?.checkinDate,
+			);
+			const checkoutDate = normalizeDate(
+				reservation?.checkout_date || reservation?.checkoutDate,
+			);
+			if (!checkinDate || !checkoutDate) return false;
+			const today = moment().startOf("day");
+			return (
+				checkinDate.isSameOrBefore(today, "day") &&
+				checkoutDate.isSameOrBefore(today, "day")
+			);
+		},
+		[],
+	);
+
+	const hasOverlap = useCallback((reservation, rangeStart, rangeEnd) => {
 		if (!rangeStart || !rangeEnd) return false;
-		const reservationStart = normalizeDate(reservation?.checkin_date);
-		const reservationEnd = normalizeDate(reservation?.checkout_date);
+		const reservationStart = normalizeDate(
+			reservation?.checkin_date || reservation?.checkinDate,
+		);
+		const reservationEnd = normalizeDate(
+			reservation?.checkout_date || reservation?.checkoutDate,
+		);
 		if (!reservationStart || !reservationEnd) return false;
-		return rangeStart.isBefore(reservationEnd) && rangeEnd.isAfter(reservationStart);
-	};
+		return (
+			rangeStart.isBefore(reservationEnd) && rangeEnd.isAfter(reservationStart)
+		);
+	}, []);
 
-	const isRoomBooked = (roomId, roomType, bedsNumber) => {
-		const rangeStart = normalizeDate(start_date);
-		const rangeEnd = normalizeDate(end_date);
-		if (!rangeStart || !rangeEnd) return { isBooked: false, bookedBedsTemp: [] };
-
-		if (roomType === "individualBed") {
-			const bookedBedsTemp = [];
-			const isBooked = (allReservations || []).some((reservation) => {
+	const getRoomReservations = useCallback(
+		(roomId) => {
+			if (!roomId) return [];
+			const { rangeStart, rangeEnd } = getAvailabilityRange();
+			const reservations = Array.isArray(allReservations)
+				? allReservations
+				: [];
+			return reservations.filter((reservation) => {
 				if (!isReservationActive(reservation)) return false;
-				if (!hasOverlap(reservation, rangeStart, rangeEnd)) return false;
+				if (!reservationHasRoom(reservation, roomId)) return false;
+				if (isReservationOverdueInhouse(reservation)) return true;
+				if (!rangeStart || !rangeEnd) return false;
+				return hasOverlap(reservation, rangeStart, rangeEnd);
+			});
+		},
+		[
+			allReservations,
+			getAvailabilityRange,
+			hasOverlap,
+			isReservationActive,
+			isReservationOverdueInhouse,
+			reservationHasRoom,
+		],
+	);
+
+	const getBookedBedsForRoom = useCallback(
+		(roomId) => {
+			if (!roomId) return [];
+			const { rangeStart, rangeEnd } = getAvailabilityRange();
+			if (!useCurrentOccupancy && (!rangeStart || !rangeEnd)) return [];
+			const bookedBedsTemp = [];
+			(allReservations || []).forEach((reservation) => {
+				if (!isReservationActive(reservation)) return;
+				const isOverdue = isReservationOverdueInhouse(reservation);
+				if (
+					!isOverdue &&
+					!useCurrentOccupancy &&
+					!hasOverlap(reservation, rangeStart, rangeEnd)
+				) {
+					return;
+				}
 				const reservationRoomIds = getReservationRoomIds(reservation);
 				const matchesRoom = reservationRoomIds.includes(String(roomId));
-				if (!matchesRoom && reservationRoomIds.length > 0) return false;
+				if (!matchesRoom && reservationRoomIds.length > 0) return;
 				const bookedBeds = Array.isArray(reservation.bedNumber)
 					? reservation.bedNumber
 					: [];
 				bookedBedsTemp.push(...bookedBeds);
+			});
+			return bookedBedsTemp;
+		},
+		[
+			allReservations,
+			getAvailabilityRange,
+			getReservationRoomIds,
+			hasOverlap,
+			isReservationActive,
+			isReservationOverdueInhouse,
+			useCurrentOccupancy,
+		],
+	);
+
+	const isRoomBooked = useCallback(
+		(roomId, roomType, bedsNumber) => {
+			const { rangeStart, rangeEnd } = getAvailabilityRange();
+			if (!useCurrentOccupancy && (!rangeStart || !rangeEnd)) return false;
+
+			const hasOverdueInhouse = (allReservations || []).some(
+				(reservation) =>
+					isReservationOverdueInhouse(reservation) &&
+					reservationHasRoom(reservation, roomId),
+			);
+			if (hasOverdueInhouse) return true;
+
+			if (roomType === "individualBed") {
+				const bookedBedsTemp = getBookedBedsForRoom(roomId);
 				const allBedsBooked =
 					Array.isArray(bedsNumber) &&
 					bedsNumber.length > 0 &&
-					bedsNumber.every((bed) => bookedBeds.includes(bed));
+					bedsNumber.every((bed) => bookedBedsTemp.includes(bed));
 				return allBedsBooked;
-			});
-			return { isBooked, bookedBedsTemp };
-		} else {
-			const isBooked = (allReservations || []).some((reservation) => {
-				if (!isReservationActive(reservation)) return false;
-				return (
-					hasOverlap(reservation, rangeStart, rangeEnd) &&
-					reservationHasRoom(reservation, roomId)
-				);
-			});
-			return { isBooked, bookedBedsTemp: [] };
-		}
-	};
-
-	const { hotelFloors, parkingLot } = hotelDetails;
-	const floors = Array.from({ length: hotelFloors }, (_, index) => index + 1); // Ascending order
-	const floorsDesc = [...floors].reverse(); // Descending order for display on the canvas
-
-	const filteredRooms =
-		hotelRooms &&
-		hotelRooms.filter((room) => {
-			const isAvailabilityMatch =
-				selectedAvailability === null ||
-				(selectedAvailability === "occupied" &&
-					isRoomBooked(room._id, room.room_type, room.bedsNumber).isBooked) ||
-				(selectedAvailability === "vacant" &&
-					!isRoomBooked(room._id, room.room_type, room.bedsNumber).isBooked);
-			const isRoomTypeMatch =
-				selectedRoomType === null || room.room_type === selectedRoomType;
-			const isFloorMatch =
-				selectedFloor === null || room.floor === selectedFloor;
-			const isRoomStatusMatch =
-				selectedRoomStatus === null ||
-				(selectedRoomStatus === "clean" && room.cleanRoom) ||
-				(selectedRoomStatus === "dirty" && !room.cleanRoom);
-			return (
-				isAvailabilityMatch &&
-				isRoomTypeMatch &&
-				isFloorMatch &&
-				isRoomStatusMatch
-			);
-		});
-
-	const distinctRoomTypesWithColors =
-		hotelRooms &&
-		hotelRooms.reduce((accumulator, room) => {
-			if (!accumulator.some((item) => item.room_type === room.room_type)) {
-				accumulator.push({
-					room_type: room.room_type,
-					roomColorCode: room.roomColorCode,
-				});
 			}
-			return accumulator;
-		}, []);
 
-	const handleRoomClick = (room) => {
-		const { isBooked, bookedBedsTemp } = isRoomBooked(
-			room._id,
-			room.room_type,
-			room.bedsNumber
+			return (allReservations || []).some((reservation) => {
+				if (!isReservationActive(reservation)) return false;
+				if (!useCurrentOccupancy && !hasOverlap(reservation, rangeStart, rangeEnd))
+					return false;
+				return reservationHasRoom(reservation, roomId);
+			});
+		},
+		[
+			allReservations,
+			getAvailabilityRange,
+			getBookedBedsForRoom,
+			hasOverlap,
+			isReservationActive,
+			isReservationOverdueInhouse,
+			reservationHasRoom,
+			useCurrentOccupancy,
+		],
+	);
+
+	const getRoomDueStatus = useCallback(
+		(roomId) => {
+			if (!roomId) return false;
+			const matches = getRoomReservations(roomId);
+			if (matches.length === 0) return false;
+			const { rangeStart } = getAvailabilityRange();
+			if (!rangeStart) return false;
+			return matches.some((reservation) => {
+				const checkinDate = normalizeDate(
+					reservation?.checkin_date || reservation?.checkinDate,
+				);
+				return checkinDate ? checkinDate.isSame(rangeStart, "day") : false;
+			});
+		},
+		[getAvailabilityRange, getRoomReservations],
+	);
+
+	const getRoomOverdueStatus = useCallback(
+		(roomId) => {
+			if (!roomId) return false;
+			const reservations = Array.isArray(allReservations)
+				? allReservations
+				: [];
+			return reservations.some(
+				(reservation) =>
+					isReservationOverdueInhouse(reservation) &&
+					reservationHasRoom(reservation, roomId),
+			);
+		},
+		[allReservations, isReservationOverdueInhouse, reservationHasRoom],
+	);
+
+	const getRoomBookingStatus = useCallback(
+		(room) => {
+			if (!room) {
+				return { isBooked: false, bookedBeds: [], isDue: false, isOverdue: false };
+			}
+			const isDue = getRoomDueStatus(room._id);
+			const isOverdue = getRoomOverdueStatus(room._id);
+			if (room.room_type === "individualBed") {
+				const bookedBeds = getBookedBedsForRoom(room._id);
+				return {
+					isBooked: isRoomBooked(
+						room._id,
+						room.room_type,
+						room.bedsNumber,
+					),
+					bookedBeds,
+					isDue,
+					isOverdue,
+				};
+			}
+			return {
+				isBooked: isRoomBooked(room._id, room.room_type, room.bedsNumber),
+				bookedBeds: [],
+				isDue,
+				isOverdue,
+			};
+		},
+		[
+			getBookedBedsForRoom,
+			getRoomDueStatus,
+			getRoomOverdueStatus,
+			isRoomBooked,
+		],
+	);
+
+	const getPrimaryReservationForRoom = useCallback(
+		(roomId) => {
+			const matches = getRoomReservations(roomId);
+			if (matches.length === 0) return null;
+			if (matches.length === 1) return matches[0];
+			const { rangeStart } = getAvailabilityRange();
+			const rangeStartValue = rangeStart ? rangeStart.valueOf() : null;
+			const sorted = [...matches].sort((first, second) => {
+				const firstDate = normalizeDate(
+					first?.checkin_date || first?.checkinDate,
+				);
+				const secondDate = normalizeDate(
+					second?.checkin_date || second?.checkinDate,
+				);
+				const firstTime = firstDate
+					? firstDate.valueOf()
+					: Number.POSITIVE_INFINITY;
+				const secondTime = secondDate
+					? secondDate.valueOf()
+					: Number.POSITIVE_INFINITY;
+				if (rangeStartValue !== null) {
+					const firstDiff = Math.abs(firstTime - rangeStartValue);
+					const secondDiff = Math.abs(secondTime - rangeStartValue);
+					if (firstDiff !== secondDiff) return firstDiff - secondDiff;
+				}
+				return firstTime - secondTime;
+			});
+			return sorted[0] || null;
+		},
+		[getAvailabilityRange, getRoomReservations],
+	);
+
+	const { hotelFloors = 0, parkingLot } = hotelDetails || {};
+	const floors = Array.from(
+		{ length: Number(hotelFloors) || 0 },
+		(_, index) => index + 1,
+	);
+	const floorsDesc = [...floors].reverse();
+
+	const filteredRooms = safeHotelRooms.filter((room) => {
+		const roomInfo = getRoomDisplayInfo(room);
+		const bookingStatus = getRoomBookingStatus(room);
+		const selectedKey = normalizeDisplayName(selectedRoomType);
+		const roomDisplayKey = normalizeDisplayName(roomInfo.displayName);
+		const roomTypeKey = normalizeDisplayName(roomInfo.roomType);
+		const isAvailabilityMatch =
+			selectedAvailability === null ||
+			(selectedAvailability === "occupied" && bookingStatus.isBooked) ||
+			(selectedAvailability === "vacant" && !bookingStatus.isBooked);
+		const isRoomTypeMatch =
+			selectedRoomType === null ||
+			roomDisplayKey === selectedKey ||
+			roomTypeKey === selectedKey;
+		const isFloorMatch = selectedFloor === null || room.floor === selectedFloor;
+		const isRoomStatusMatch =
+			selectedRoomStatus === null ||
+			(selectedRoomStatus === "clean" && room.cleanRoom) ||
+			(selectedRoomStatus === "dirty" && !room.cleanRoom);
+		return (
+			isAvailabilityMatch &&
+			isRoomTypeMatch &&
+			isFloorMatch &&
+			isRoomStatusMatch
 		);
+	});
 
-		if (room.room_type === "individualBed" && !isBooked) {
-			setBookedBeds(bookedBedsTemp);
+	const distinctRoomTypesWithColors = useMemo(() => {
+		const accumulator = [];
+		const seen = new Set();
+		safeHotelRooms.forEach((room) => {
+			const roomInfo = getRoomDisplayInfo(room);
+			const displayKey = normalizeDisplayName(roomInfo.displayName);
+			if (!displayKey || seen.has(displayKey)) return;
+			seen.add(displayKey);
+			accumulator.push({
+				displayName: roomInfo.displayName,
+				room_type: roomInfo.roomType,
+				roomColorCode: roomInfo.color,
+			});
+		});
+		return accumulator;
+	}, [getRoomDisplayInfo, safeHotelRooms]);
+
+	const handleRoomClick = useCallback(
+		(room, roomInfo, bookingStatus) => {
+			if (!room) return;
+			if (bookingStatus?.isBooked) {
+				const reservation = getPrimaryReservationForRoom(room._id);
+				if (reservation) {
+					setSelectedReservation(reservation);
+					setIsBedModalVisible(false);
+					setIsReservationModalVisible(true);
+				}
+				return;
+			}
+
+			if (roomInfo?.roomType !== "individualBed") return;
+			setBookedBeds(bookingStatus?.bookedBeds || []);
 			setSelectedRoom(room);
 			setIsBedModalVisible(true);
-		}
-	};
+		},
+		[getPrimaryReservationForRoom],
+	);
 
 	const handleFilterChange = (filterType, value) => {
 		if (filterType === "availability") {
@@ -195,12 +489,25 @@ const HotelHeatMap = ({
 		setSelectedRoomStatus(null);
 	};
 
-	const getRoomDetails = (roomType, displayName) => {
-		return hotelDetails.roomCountDetails.find(
-			(detail) =>
-				detail.roomType === roomType && detail.displayName === displayName
-		);
-	};
+	const handleReservationModalClose = useCallback(() => {
+		setSelectedReservation(null);
+		setIsReservationModalVisible(false);
+		setReservationModalKey((prevKey) => prevKey + 1);
+	}, []);
+
+	const getRoomDetails = useCallback(
+		(roomType, displayName) => {
+			const displayKey = normalizeDisplayName(displayName);
+			if (displayKey && roomDetailsByDisplayName.has(displayKey)) {
+				return roomDetailsByDisplayName.get(displayKey);
+			}
+			if (roomType && roomDetailsByType.has(roomType)) {
+				return roomDetailsByType.get(roomType);
+			}
+			return null;
+		},
+		[roomDetailsByDisplayName, roomDetailsByType],
+	);
 
 	const getRoomImage = (roomType, displayName) => {
 		const roomDetails = getRoomDetails(roomType, displayName);
@@ -249,15 +556,20 @@ const HotelHeatMap = ({
 												filteredRooms
 													.filter((room) => room.floor === floor)
 													.map((room, idx) => {
-														const { isBooked } = isRoomBooked(
-															room._id,
-															room.room_type,
-															room.bedsNumber
-														);
+														const bookingStatus = getRoomBookingStatus(room);
+														const roomInfo = getRoomDisplayInfo(room);
 														const roomImage = getRoomImage(
-															room.room_type,
-															room.display_name
+															roomInfo.roomType,
+															roomInfo.displayName,
 														);
+														const isBedRoom =
+															roomInfo.roomType === "individualBed";
+														const totalBeds = Array.isArray(room.bedsNumber)
+															? room.bedsNumber.length
+															: 0;
+														const bookedBedsCount =
+															bookingStatus.bookedBeds.length;
+														const showBedSummary = isBedRoom && totalBeds > 0;
 														return (
 															<Tooltip
 																title={
@@ -281,12 +593,23 @@ const HotelHeatMap = ({
 																		<div
 																			style={{ textTransform: "capitalize" }}
 																		>
-																			Room Type: {room.room_type}
+																			Room Type: {roomInfo.roomType || "N/A"}
 																		</div>
-																		<div>Display Name: {room.display_name}</div>
+																		<div
+																			style={{ textTransform: "capitalize" }}
+																		>
+																			Display Name: {roomInfo.displayName}
+																		</div>
 																		<div>
-																			Occupied: {isBooked ? "Yes" : "No"}
+																			Occupied:{" "}
+																			{bookingStatus.isBooked ? "Yes" : "No"}
 																		</div>
+																		{showBedSummary && (
+																			<div>
+																				Beds booked: {bookedBedsCount} /{" "}
+																				{totalBeds}
+																			</div>
+																		)}
 																		<div>
 																			Clean: {room.cleanRoom ? "Yes" : "No"}
 																		</div>
@@ -298,22 +621,24 @@ const HotelHeatMap = ({
 															>
 																<RoomSquare
 																	key={idx}
-																	color={room.roomColorCode}
+																	color={roomInfo.color}
 																	picked={""}
-																	reserved={isBooked}
+																	reserved={bookingStatus.isBooked}
+																	due={bookingStatus.isDue}
+																	overdue={bookingStatus.isOverdue}
+																	clickable={
+																		bookingStatus.isBooked || isBedRoom
+																	}
 																	style={{
-																		cursor: isBooked
-																			? "not-allowed"
-																			: room.room_type === "individualBed"
-																			  ? "pointer"
-																			  : "default",
-																		opacity: isBooked ? 0.5 : 1,
-																		textDecoration: isBooked
-																			? "line-through"
-																			: "none",
+																		opacity: bookingStatus.isBooked ? 0.75 : 1,
 																	}}
-																	onClick={() => handleRoomClick(room)}
+																	onClick={() =>
+																		handleRoomClick(room, roomInfo, bookingStatus)
+																	}
 																>
+																	{bookingStatus.isOverdue && (
+																		<CheckoutBadge>Checkout</CheckoutBadge>
+																	)}
 																	{room.room_number}
 																</RoomSquare>
 															</Tooltip>
@@ -338,15 +663,20 @@ const HotelHeatMap = ({
 													filteredRooms
 														.filter((room) => room.floor === floor)
 														.map((room, idx) => {
-															const { isBooked } = isRoomBooked(
-																room._id,
-																room.room_type,
-																room.bedsNumber
-															);
+															const bookingStatus = getRoomBookingStatus(room);
+															const roomInfo = getRoomDisplayInfo(room);
 															const roomImage = getRoomImage(
-																room.room_type,
-																room.displayName
+																roomInfo.roomType,
+																roomInfo.displayName,
 															);
+															const isBedRoom =
+																roomInfo.roomType === "individualBed";
+															const totalBeds = Array.isArray(room.bedsNumber)
+																? room.bedsNumber.length
+																: 0;
+															const bookedBedsCount =
+																bookingStatus.bookedBeds.length;
+															const showBedSummary = isBedRoom && totalBeds > 0;
 															return (
 																<Tooltip
 																	title={
@@ -362,13 +692,26 @@ const HotelHeatMap = ({
 																				/>
 																			)}
 																			<div>Room #: {room.room_number}</div>
-																			<div>Room Type: {room.room_type}</div>
-																			<div>
-																				Display Name: {room.displayName}
+																			<div
+																				style={{ textTransform: "capitalize" }}
+																			>
+																				Room Type: {roomInfo.roomType || "N/A"}
+																			</div>
+																			<div
+																				style={{ textTransform: "capitalize" }}
+																			>
+																				Display Name: {roomInfo.displayName}
 																			</div>
 																			<div>
-																				Occupied: {isBooked ? "Yes" : "No"}
+																				Occupied:{" "}
+																				{bookingStatus.isBooked ? "Yes" : "No"}
 																			</div>
+																			{showBedSummary && (
+																				<div>
+																					Beds booked: {bookedBedsCount} /{" "}
+																					{totalBeds}
+																				</div>
+																			)}
 																			<div>
 																				Clean: {room.cleanRoom ? "Yes" : "No"}
 																			</div>
@@ -378,22 +721,24 @@ const HotelHeatMap = ({
 																>
 																	<RoomSquare
 																		key={idx}
-																		color={room.roomColorCode}
+																		color={roomInfo.color}
 																		picked={""}
-																		reserved={isBooked}
+																		reserved={bookingStatus.isBooked}
+																		due={bookingStatus.isDue}
+																		overdue={bookingStatus.isOverdue}
+																		clickable={
+																			bookingStatus.isBooked || isBedRoom
+																		}
 																		style={{
-																			cursor: isBooked
-																				? "not-allowed"
-																				: room.room_type === "individualBed"
-																				  ? "pointer"
-																				  : "default",
-																			opacity: isBooked ? 0.5 : 1,
-																			textDecoration: isBooked
-																				? "line-through"
-																				: "none",
+																			opacity: bookingStatus.isBooked ? 0.75 : 1,
 																		}}
-																		onClick={() => handleRoomClick(room)}
+																		onClick={() =>
+																			handleRoomClick(room, roomInfo, bookingStatus)
+																		}
 																	>
+																		{bookingStatus.isOverdue && (
+																			<CheckoutBadge>Checkout</CheckoutBadge>
+																		)}
 																		{room.room_number}
 																	</RoomSquare>
 																</Tooltip>
@@ -406,6 +751,33 @@ const HotelHeatMap = ({
 					</FloorsContainer>
 				</div>
 			</div>
+
+			<Modal
+				key={reservationModalKey}
+				title={
+					chosenLanguage === "Arabic"
+						? "ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø­Ø¬Ø²"
+						: "Reservation Details"
+				}
+				open={isReservationModalVisible}
+				onOk={handleReservationModalClose}
+				onCancel={handleReservationModalClose}
+				width='84.5%'
+				style={{
+					position: "absolute",
+					left: chosenLanguage === "Arabic" ? "1%" : "auto",
+					right: chosenLanguage === "Arabic" ? "auto" : "5%",
+					top: "1%",
+				}}
+			>
+				{selectedReservation && (
+					<ReservationDetail
+						reservation={selectedReservation}
+						setReservation={setSelectedReservation}
+						hotelDetails={hotelDetails}
+					/>
+				)}
+			</Modal>
 
 			<Modal
 				title={
@@ -428,8 +800,14 @@ const HotelHeatMap = ({
 				onCancel={() => setIsBedModalVisible(false)}
 			>
 				<div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-					{selectedRoom?.bedsNumber.map((bed, index) => (
-						<BedSquare key={index} booked={bookedBeds.includes(bed)}>
+					{(Array.isArray(selectedRoom?.bedsNumber)
+						? selectedRoom.bedsNumber
+						: []
+					).map((bed, index) => (
+						<BedSquare
+							key={index}
+							booked={bookedBeds.includes(bed)}
+						>
 							{bed}
 						</BedSquare>
 					))}
@@ -446,6 +824,67 @@ const fadeIn = keyframes`
   from { opacity: 0; }
   to { opacity: 1; }
 `;
+
+const duePulse = keyframes`
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 158, 0, 0.28);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 14px rgba(255, 158, 0, 0.36);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 158, 0, 0.28);
+  }
+`;
+
+const overduePulse = keyframes`
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28);
+  }
+  50% {
+    transform: scale(1.14);
+    box-shadow: 0 0 16px rgba(220, 38, 38, 0.38);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28);
+  }
+`;
+
+const checkoutFade = keyframes`
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -2px);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -6px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -2px);
+  }
+`;
+
+const resolvePulseAnimation = ({ overdue, due }) => {
+	if (overdue) {
+		return css`
+			animation: ${overduePulse} 1.6s ease-in-out infinite;
+		`;
+	}
+	if (due) {
+		return css`
+			animation: ${duePulse} 1.7s ease-in-out infinite;
+		`;
+	}
+	return css`
+		animation: none;
+	`;
+};
 
 const HotelOverviewWrapper = styled.div`
 	margin-top: 30px;
@@ -523,12 +962,23 @@ const RoomSquare = styled.div`
 	align-items: center;
 	justify-content: center;
 	font-size: ${({ picked }) => (picked ? "0.9rem" : "0.7rem")};
-	cursor: ${({ reserved }) => (reserved ? "not-allowed" : "pointer")};
+	cursor: ${({ clickable }) => (clickable ? "pointer" : "default")};
+	transform-origin: center;
+	will-change: transform;
+	box-shadow: ${({ reserved }) =>
+		reserved ? "0 0 4px rgba(0, 0, 0, 0.2)" : "none"};
 	transition:
 		width 1s,
 		height 1s,
 		background-color 1s,
-		color 1s;
+		color 1s,
+		box-shadow 0.3s,
+		transform 0.3s;
+	${resolvePulseAnimation};
+
+	@media (prefers-reduced-motion: reduce) {
+		animation: none;
+	}
 
 	${({ reserved }) =>
 		reserved &&
@@ -550,6 +1000,24 @@ const RoomSquare = styled.div`
       pointer-events: none; // Disable interactions
     }
   `}
+`;
+
+const CheckoutBadge = styled.div`
+	position: absolute;
+	top: -10px;
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 2px 6px;
+	border-radius: 10px;
+	font-size: 0.55rem;
+	font-weight: bold;
+	letter-spacing: 0.3px;
+	color: #7f1d1d;
+	background: rgba(255, 255, 255, 0.92);
+	border: 1px solid rgba(220, 38, 38, 0.45);
+	text-transform: uppercase;
+	pointer-events: none;
+	animation: ${checkoutFade} 1.6s ease-in-out infinite;
 `;
 
 const BedSquare = styled.div`
