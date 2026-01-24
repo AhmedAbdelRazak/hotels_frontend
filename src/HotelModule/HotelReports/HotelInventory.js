@@ -180,8 +180,10 @@ const HotelInventory = ({ chosenLanguage }) => {
 					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u0020(\u0647\u062c\u0631\u064a)",
 				exportStatus: "\u0627\u0644\u062d\u0627\u0644\u0629",
 				exportRooms: "\u0627\u0644\u063a\u0631\u0641",
-				bookingSource: "\u0645\u0635\u062f\u0631\u0020\u0627\u0644\u062d\u062c\u0632",
-				paymentStatus: "\u062d\u0627\u0644\u0629\u0020\u0627\u0644\u062f\u0641\u0639",
+				bookingSource:
+					"\u0645\u0635\u062f\u0631\u0020\u0627\u0644\u062d\u062c\u0632",
+				paymentStatus:
+					"\u062d\u0627\u0644\u0629\u0020\u0627\u0644\u062f\u0641\u0639",
 				paymentStatusAll: "\u0627\u0644\u0643\u0644",
 				paymentStatusClear: "\u0645\u0633\u062d",
 				paymentStatusTip:
