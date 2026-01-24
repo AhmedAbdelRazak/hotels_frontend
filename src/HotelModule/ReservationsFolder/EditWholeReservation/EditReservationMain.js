@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import styled from "styled-components";
 import {
 	DatePicker,
@@ -75,7 +81,7 @@ export const EditReservationMain = ({
 			Array.isArray(hotelDetails?.roomCountDetails)
 				? hotelDetails.roomCountDetails
 				: [],
-		[hotelDetails?.roomCountDetails]
+		[hotelDetails?.roomCountDetails],
 	);
 	const lastDateKeyRef = useRef("");
 	const initialRoomIdsRef = useRef(null);
@@ -94,13 +100,16 @@ export const EditReservationMain = ({
 			const byDisplay =
 				displayName &&
 				roomDetails.find(
-					(room) => room.roomType === roomType && room.displayName === displayName
+					(room) =>
+						room.roomType === roomType && room.displayName === displayName,
 				);
 			return (
-				byDisplay || roomDetails.find((room) => room.roomType === roomType) || null
+				byDisplay ||
+				roomDetails.find((room) => room.roomType === roomType) ||
+				null
 			);
 		},
-		[roomDetails]
+		[roomDetails],
 	);
 
 	const resolveDisplayNameForType = useCallback(
@@ -109,7 +118,7 @@ export const EditReservationMain = ({
 			const detail = findRoomDetail(roomType, displayName);
 			return detail?.displayName || roomType || "";
 		},
-		[findRoomDetail]
+		[findRoomDetail],
 	);
 
 	const resolveDisplayLabelForType = useCallback(
@@ -127,7 +136,7 @@ export const EditReservationMain = ({
 			}
 			return detail.displayName || roomType || "";
 		},
-		[chosenLanguage, findRoomDetail]
+		[chosenLanguage, findRoomDetail],
 	);
 
 	const commissionForRoom = useCallback(
@@ -135,11 +144,11 @@ export const EditReservationMain = ({
 			const detail = findRoomDetail(roomType, displayName);
 			const fallback = safeParseFloat(
 				detail?.roomCommission ?? hotelDetails?.commission,
-				10
+				10,
 			);
 			return fallback > 0 ? fallback : 10;
 		},
-		[findRoomDetail, hotelDetails?.commission, safeParseFloat]
+		[findRoomDetail, hotelDetails?.commission, safeParseFloat],
 	);
 
 	const formatDate = useCallback((date) => {
@@ -197,13 +206,14 @@ export const EditReservationMain = ({
 				totalPriceWithCommission: normalizedPrice,
 			};
 			if (safeTemplate.totalPriceWithoutCommission !== undefined) {
-				next.totalPriceWithoutCommission = safeTemplate.totalPriceWithoutCommission;
+				next.totalPriceWithoutCommission =
+					safeTemplate.totalPriceWithoutCommission;
 			} else {
 				next.totalPriceWithoutCommission = normalizedPrice;
 			}
 			return next;
 		},
-		[safeParseFloat]
+		[safeParseFloat],
 	);
 
 	const buildPricingByNightly = useCallback(
@@ -214,7 +224,7 @@ export const EditReservationMain = ({
 				return buildDayRow(date, nightlyPrice, template);
 			});
 		},
-		[buildDayRow]
+		[buildDayRow],
 	);
 
 	const buildPricingByDayFromDetail = useCallback(
@@ -238,15 +248,15 @@ export const EditReservationMain = ({
 					detail.pricingRate.find((r) => r.calendarDate === dateString);
 				const basePrice = safeParseFloat(
 					rate?.price,
-					safeParseFloat(detail?.price?.basePrice, 0)
+					safeParseFloat(detail?.price?.basePrice, 0),
 				);
 				const rootPrice = safeParseFloat(
 					rate?.rootPrice ?? rate?.defaultCost,
-					safeParseFloat(detail?.defaultCost, 0)
+					safeParseFloat(detail?.defaultCost, 0),
 				);
 				const commissionRate = safeParseFloat(
 					rate?.commissionRate,
-					fallbackCommission
+					fallbackCommission,
 				);
 				const totalPriceWithCommission =
 					basePrice + rootPrice * pct(commissionRate);
@@ -269,7 +279,7 @@ export const EditReservationMain = ({
 			reservation.checkin_date,
 			reservation.checkout_date,
 			safeParseFloat,
-		]
+		],
 	);
 
 	const getPricingByDayForRoom = useCallback(
@@ -287,12 +297,17 @@ export const EditReservationMain = ({
 					}));
 				}
 				const template = existingPricingByDay[0];
-				return buildPricingByNightly(nightlyPrice, nightsCount, start, template);
+				return buildPricingByNightly(
+					nightlyPrice,
+					nightsCount,
+					start,
+					template,
+				);
 			}
 			const templateRows = buildPricingByDayFromDetail(roomType, displayName);
 			if (templateRows.length > 0) {
 				return templateRows.map((day) =>
-					buildDayRow(day.date, nightlyPrice, day)
+					buildDayRow(day.date, nightlyPrice, day),
 				);
 			}
 			return buildPricingByNightly(nightlyPrice, nightsCount, start);
@@ -304,13 +319,12 @@ export const EditReservationMain = ({
 			getNightsCount,
 			normalizeDate,
 			reservation.checkin_date,
-		]
+		],
 	);
 
 	const getDayFinal = useCallback(
-		(day) =>
-			safeParseFloat(day?.totalPriceWithCommission ?? day?.price, 0),
-		[safeParseFloat]
+		(day) => safeParseFloat(day?.totalPriceWithCommission ?? day?.price, 0),
+		[safeParseFloat],
 	);
 
 	const applyFinalToDay = (day, finalValue) => {
@@ -330,12 +344,12 @@ export const EditReservationMain = ({
 		(pricingByDay) => {
 			const total = pricingByDay.reduce(
 				(sum, day) => sum + getDayFinal(day),
-				0
+				0,
 			);
 			const avg = pricingByDay.length ? total / pricingByDay.length : 0;
 			return Number(avg.toFixed(2));
 		},
-		[getDayFinal]
+		[getDayFinal],
 	);
 
 	const ensurePricingByDay = (line) => {
@@ -344,13 +358,13 @@ export const EditReservationMain = ({
 		const nightly = Number(line?.chosenPrice) || 0;
 		const resolvedDisplayName = resolveDisplayNameForType(
 			line?.room_type,
-			line?.displayName || line?.display_name
+			line?.displayName || line?.display_name,
 		);
 		return getPricingByDayForRoom(
 			nightly,
 			null,
 			line?.room_type,
-			resolvedDisplayName
+			resolvedDisplayName,
 		);
 	};
 
@@ -498,14 +512,14 @@ export const EditReservationMain = ({
 				(room) => {
 					const displayName = resolveDisplayNameForType(
 						room.room_type,
-						room.displayName || room.display_name
+						room.displayName || room.display_name,
 					);
 					const nightlyPrice = Number(room.chosenPrice) || 0;
 					const pricingByDay = getPricingByDayForRoom(
 						nightlyPrice,
 						room.pricingByDay,
 						room.room_type,
-						displayName
+						displayName,
 					);
 					return {
 						...room,
@@ -513,7 +527,7 @@ export const EditReservationMain = ({
 						pricingByDay,
 						chosenPrice: recalcChosenPrice(pricingByDay),
 					};
-				}
+				},
 			);
 			return {
 				...currentReservation,
@@ -547,7 +561,7 @@ export const EditReservationMain = ({
 			const currentLine = updatedRooms[selectedRoomIndex] || {};
 			const resolvedDisplayName = resolveDisplayNameForType(
 				currentLine.room_type,
-				currentLine.displayName || currentLine.display_name
+				currentLine.displayName || currentLine.display_name,
 			);
 			updatedRooms[selectedRoomIndex] = {
 				...currentLine,
@@ -608,7 +622,7 @@ export const EditReservationMain = ({
 			const currentLine = updatedRooms[selectedRoomIndex] || {};
 			const pricingByDay = ensurePricingByDay(currentLine);
 			const updatedPricing = pricingByDay.map((day, idx) =>
-				idx === dayIndex ? applyFinalToDay(day, finalValue) : day
+				idx === dayIndex ? applyFinalToDay(day, finalValue) : day,
 			);
 			updatedRooms[selectedRoomIndex] = {
 				...currentLine,
@@ -631,7 +645,7 @@ export const EditReservationMain = ({
 			const pricingByDay = ensurePricingByDay(currentLine);
 			const firstFinal = pricingByDay.length ? getDayFinal(pricingByDay[0]) : 0;
 			const updatedPricing = pricingByDay.map((day) =>
-				applyFinalToDay(day, firstFinal)
+				applyFinalToDay(day, firstFinal),
 			);
 			updatedRooms[selectedRoomIndex] = {
 				...currentLine,
@@ -753,7 +767,10 @@ export const EditReservationMain = ({
 	const disabledEndDate = (current) => {
 		if (!reservation.checkin_date) return false;
 		if (!current) return false;
-		return current.isBefore(dayjs(reservation.checkin_date).startOf("day"), "day");
+		return current.isBefore(
+			dayjs(reservation.checkin_date).startOf("day"),
+			"day",
+		);
 	};
 	const selectedKeys = useMemo(() => {
 		const keys = new Set();
@@ -764,8 +781,8 @@ export const EditReservationMain = ({
 			keys.add(
 				buildRoomKey(
 					room.room_type,
-					room.displayName || room.display_name || ""
-				)
+					room.displayName || room.display_name || "",
+				),
 			);
 		});
 		return Array.from(keys);
@@ -775,7 +792,8 @@ export const EditReservationMain = ({
 
 	const buildRoomLine = useCallback(
 		(roomType, displayName) => {
-			if (!reservation?.checkin_date || !reservation?.checkout_date) return null;
+			if (!reservation?.checkin_date || !reservation?.checkout_date)
+				return null;
 			const detail = findRoomDetail(roomType, displayName);
 			if (!detail) return null;
 			const resolvedDisplayName =
@@ -785,13 +803,15 @@ export const EditReservationMain = ({
 				nightly,
 				null,
 				roomType,
-				resolvedDisplayName
+				resolvedDisplayName,
 			);
 			const total = pricingByDay.reduce(
 				(sum, day) => sum + getDayFinal(day),
-				0
+				0,
 			);
-			const avgNight = pricingByDay.length ? total / pricingByDay.length : nightly;
+			const avgNight = pricingByDay.length
+				? total / pricingByDay.length
+				: nightly;
 			return {
 				room_type: roomType,
 				displayName: resolvedDisplayName,
@@ -807,7 +827,7 @@ export const EditReservationMain = ({
 			getPricingByDayForRoom,
 			getDayFinal,
 			safeParseFloat,
-		]
+		],
 	);
 
 	const toggleChip = (key) => {
@@ -815,7 +835,7 @@ export const EditReservationMain = ({
 			toast.info(
 				chosenLanguage === "Arabic"
 					? "من فضلك اختر تاريخ الوصول والمغادرة أولا"
-					: "Please pick check-in and check-out first."
+					: "Please pick check-in and check-out first.",
 			);
 			return;
 		}
@@ -827,10 +847,8 @@ export const EditReservationMain = ({
 				...prev,
 				pickedRoomsType: (prev.pickedRoomsType || []).filter(
 					(r) =>
-						buildRoomKey(
-							r.room_type,
-							r.displayName || r.display_name || ""
-						) !== key
+						buildRoomKey(r.room_type, r.displayName || r.display_name || "") !==
+						key,
 				),
 			}));
 		} else {
@@ -902,7 +920,7 @@ export const EditReservationMain = ({
 		return rooms.reduce(
 			(total, room) =>
 				total + (Number(room.count) || 1) * (Number(room.chosenPrice) || 0),
-			0
+			0,
 		);
 	};
 
@@ -925,7 +943,7 @@ export const EditReservationMain = ({
 		rooms.forEach((room) => {
 			const displayName = resolveDisplayNameForType(
 				room.room_type,
-				room.displayName || room.display_name
+				room.displayName || room.display_name,
 			);
 			const pricingByDay = Array.isArray(room.pricingByDay)
 				? room.pricingByDay
@@ -933,18 +951,20 @@ export const EditReservationMain = ({
 			const normalizedPricing = pricingByDay.map((day) => {
 				const finalPrice = safeParseFloat(
 					day.totalPriceWithCommission ?? day.price,
-					0
+					0,
 				);
 				const totalPriceWithCommission = safeParseFloat(
 					day.totalPriceWithCommission ?? finalPrice,
-					finalPrice
+					finalPrice,
 				);
 				const totalPriceWithoutCommission =
 					day.totalPriceWithoutCommission !== undefined
 						? safeParseFloat(day.totalPriceWithoutCommission, 0)
 						: finalPrice;
 				const rootPrice =
-					day.rootPrice !== undefined ? safeParseFloat(day.rootPrice, 0) : day.rootPrice;
+					day.rootPrice !== undefined
+						? safeParseFloat(day.rootPrice, 0)
+						: day.rootPrice;
 				const commissionRate =
 					day.commissionRate !== undefined
 						? safeParseFloat(day.commissionRate, 0)
@@ -960,11 +980,11 @@ export const EditReservationMain = ({
 			});
 			const totalWithComm = normalizedPricing.reduce(
 				(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission, 0),
-				0
+				0,
 			);
 			const hotelShouldGet = normalizedPricing.reduce(
 				(acc, day) => acc + safeParseFloat(day.rootPrice, 0),
-				0
+				0,
 			);
 			const avgNight =
 				normalizedPricing.length > 0
@@ -1019,17 +1039,32 @@ export const EditReservationMain = ({
 			if (shouldSetInhouse) {
 				updateData.reservation_status = "inhouse";
 			}
+			if (
+				reservation.paid_amount !== "" &&
+				reservation.paid_amount !== null &&
+				reservation.paid_amount !== undefined
+			) {
+				updateData.paid_amount = safeParseFloat(reservation.paid_amount, 0);
+			}
 
 			if (hasRoomLineEdits || hasDateEdits) {
-				const nightsCount = getNightsCount();
+				const dateStart = normalizeDate(reservation.checkin_date);
+				const dateEnd = normalizeDate(reservation.checkout_date);
+				const hasValidDates = !!dateStart && !!dateEnd;
+				const nightsCount = hasValidDates
+					? Math.max(dateEnd.diff(dateStart, "days"), 0)
+					: 0;
 				const totalPerDay = calculateTotalAmountPerDay();
+				const totalAmount = Number(
+					(totalPerDay * Number(nightsCount)).toFixed(2),
+				);
 				const normalizedPickedRoomsType = Array.isArray(
-					reservation.pickedRoomsType
+					reservation.pickedRoomsType,
 				)
 					? reservation.pickedRoomsType.map((room) => {
 							const displayName = resolveDisplayNameForType(
 								room.room_type,
-								room.displayName || room.display_name
+								room.displayName || room.display_name,
 							);
 							const nightlyPrice = Number(room.chosenPrice) || 0;
 							return {
@@ -1040,7 +1075,7 @@ export const EditReservationMain = ({
 									nightlyPrice,
 									room.pricingByDay,
 									room.room_type,
-									displayName
+									displayName,
 								),
 							};
 					  })
@@ -1048,18 +1083,19 @@ export const EditReservationMain = ({
 
 				const totalRoomsFromTypes = normalizedPickedRoomsType.reduce(
 					(sum, room) => sum + (Number(room.count) || 1),
-					0
+					0,
 				);
-				const daysOfResidence =
-					Number(reservation.days_of_residence) || nightsCount + 1;
+				const daysOfResidence = hasValidDates
+					? Math.max(nightsCount + 1, 1)
+					: Number(reservation.days_of_residence) || 0;
 				const flattenedRooms = flattenRoomsForSave(normalizedPickedRoomsType);
 
 				updateData.pickedRoomsType = flattenedRooms;
 				updateData.pickedRoomsPricing = flattenedRooms;
 				updateData.total_rooms = totalRoomsFromTypes;
 				updateData.days_of_residence = daysOfResidence;
-				updateData.total_amount = totalPerDay * Number(nightsCount);
-				updateData.sub_total = totalPerDay * Number(nightsCount);
+				updateData.total_amount = totalAmount;
+				updateData.sub_total = totalAmount;
 			}
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
@@ -1076,7 +1112,7 @@ export const EditReservationMain = ({
 					// Update local state or re-fetch reservation data if necessary
 					setReservation(response.reservation);
 					initialRoomIdsRef.current = getReservationRoomIds(
-						response.reservation?.roomId
+						response.reservation?.roomId,
 					);
 					setHasRoomLineEdits(false);
 					setHasDateEdits(false);
@@ -1199,13 +1235,21 @@ export const EditReservationMain = ({
 	const selectedRoomLabel = selectedRoomLine
 		? resolveDisplayNameForType(
 				selectedRoomLine.room_type,
-				selectedRoomLine.displayName || selectedRoomLine.display_name
+				selectedRoomLine.displayName || selectedRoomLine.display_name,
 		  )
 		: "";
-	const nightsCountDisplay = getNightsCount();
-	const daysCountDisplay =
-		Number(reservation.days_of_residence) || nightsCountDisplay + 1;
-	const nightsDisplay = Math.max(daysCountDisplay - 1, 0);
+	const hasValidDateRange = useMemo(() => {
+		const start = normalizeDate(reservation.checkin_date);
+		const end = normalizeDate(reservation.checkout_date);
+		return !!start && !!end;
+	}, [normalizeDate, reservation.checkin_date, reservation.checkout_date]);
+	const nightsCountDisplay = hasValidDateRange ? getNightsCount() : 0;
+	const daysCountDisplay = hasValidDateRange
+		? Math.max(nightsCountDisplay + 1, 1)
+		: Number(reservation.days_of_residence) || 0;
+	const nightsDisplay = hasValidDateRange
+		? nightsCountDisplay
+		: Math.max(daysCountDisplay - 1, 0);
 	const selectedRoomPricing = selectedRoomLine
 		? ensurePricingByDay(selectedRoomLine)
 		: [];
@@ -1214,15 +1258,28 @@ export const EditReservationMain = ({
 		return reservation.pickedRoomsType.reduce(
 			(sum, room) =>
 				sum + (Number(room.chosenPrice) || 0) * (Number(room.count) || 1),
-			0
+			0,
 		);
 	}, [reservation.pickedRoomsType]);
 	const grandTotal = useMemo(() => {
-		const nights = Math.max(0, daysCountDisplay - 1);
+		const nights = Math.max(0, nightsCountDisplay);
 		return Number((totalPerDay * nights).toFixed(2));
-	}, [totalPerDay, daysCountDisplay]);
-	const commentValue =
-		reservation.comment ?? reservation.booking_comment ?? "";
+	}, [totalPerDay, nightsCountDisplay]);
+	const paidAmountValue = useMemo(() => {
+		if (
+			reservation.paid_amount === "" ||
+			reservation.paid_amount === null ||
+			reservation.paid_amount === undefined
+		) {
+			return 0;
+		}
+		return safeParseFloat(reservation.paid_amount, 0);
+	}, [reservation.paid_amount, safeParseFloat]);
+	const remainingAmount = useMemo(
+		() => Math.max(grandTotal - paidAmountValue, 0),
+		[grandTotal, paidAmountValue],
+	);
+	const commentValue = reservation.comment ?? reservation.booking_comment ?? "";
 	const customerDetails = reservation.customer_details || {};
 	const bookingSourceOptions = [
 		"janat",
@@ -1304,9 +1361,7 @@ export const EditReservationMain = ({
 								}
 							}}
 						>
-							{chosenLanguage === "Arabic"
-								? "تعديل الأسعار"
-								: "Adjust Pricing"}
+							{chosenLanguage === "Arabic" ? "تعديل الأسعار" : "Adjust Pricing"}
 						</Button>
 					</div>
 				</Modal>
@@ -1366,7 +1421,7 @@ export const EditReservationMain = ({
 							.reduce(
 								(sum, day) =>
 									sum + safeParseFloat(day.totalPriceWithCommission, 0),
-								0
+								0,
 							)
 							.toFixed(2)}{" "}
 						SAR
@@ -1518,9 +1573,7 @@ export const EditReservationMain = ({
 											...reservation,
 											customer_details: {
 												...customerDetails,
-												passportExpiry: v
-													? v.startOf("day").toISOString()
-													: "",
+												passportExpiry: v ? v.startOf("day").toISOString() : "",
 											},
 										})
 									}
@@ -1528,9 +1581,7 @@ export const EditReservationMain = ({
 									popupStyle={{ zIndex: Z_TOP + 5 }}
 									style={{ width: "100%", minWidth: 240 }}
 									placeholder={
-										chosenLanguage === "Arabic"
-											? "اختر التاريخ"
-											: "Pick a date"
+										chosenLanguage === "Arabic" ? "اختر التاريخ" : "Pick a date"
 									}
 								/>
 							</div>
@@ -1567,7 +1618,7 @@ export const EditReservationMain = ({
 								>
 									{customerDetails.nationality &&
 									!countryListWithAbbreviations.some(
-										(c) => c.code === customerDetails.nationality
+										(c) => c.code === customerDetails.nationality,
 									) ? (
 										<Select.Option
 											key={customerDetails.nationality}
@@ -1612,9 +1663,7 @@ export const EditReservationMain = ({
 									popupStyle={{ zIndex: Z_TOP + 5 }}
 									style={{ width: "100%", minWidth: 240 }}
 									placeholder={
-										chosenLanguage === "Arabic"
-											? "اختر التاريخ"
-											: "Pick a date"
+										chosenLanguage === "Arabic" ? "اختر التاريخ" : "Pick a date"
 									}
 								/>
 							</div>
@@ -1646,9 +1695,7 @@ export const EditReservationMain = ({
 									popupStyle={{ zIndex: Z_TOP + 5 }}
 									style={{ width: "100%", minWidth: 240 }}
 									placeholder={
-										chosenLanguage === "Arabic"
-											? "اختر التاريخ"
-											: "Pick a date"
+										chosenLanguage === "Arabic" ? "اختر التاريخ" : "Pick a date"
 									}
 								/>
 							</div>
@@ -1679,7 +1726,7 @@ export const EditReservationMain = ({
 										</option>
 										{reservation.booking_source &&
 										!bookingSourceOptions.includes(
-											reservation.booking_source
+											reservation.booking_source,
 										) ? (
 											<option value={reservation.booking_source}>
 												{reservation.booking_source}
@@ -1872,9 +1919,7 @@ export const EditReservationMain = ({
 														style={{
 															textTransform: "capitalize",
 															color:
-																isBooked && !isSelected
-																	? "#8b8b8b"
-																	: "inherit",
+																isBooked && !isSelected ? "#8b8b8b" : "inherit",
 														}}
 													>
 														{displayLabel}
@@ -1906,55 +1951,65 @@ export const EditReservationMain = ({
 					</Left>
 
 					<Right>
-						<h4 className='headline'>
-							{chosenLanguage === "Arabic"
-								? "حجز غرفة للضيف"
-								: "Reserve A Room For The Guest"}
-						</h4>
+					<h4 className='headline'>
+						{chosenLanguage === "Arabic"
+							? "حجز غرفة للضيف"
+							: "Reserve A Room For The Guest"}
+					</h4>
 
-						<div className='summary-list'>
-							<div className='item'>
-								<span>
-									{chosenLanguage === "Arabic"
-										? "رقم التأكيد"
-										: "Confirmation #"}
-								</span>
-								<strong>{reservation.confirmation_number || "-"}</strong>
-							</div>
-							<div className='item'>
-								<span>
-									{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
-								</span>
-								<div className='pill'>
-									{reservation.checkin_date
-										? moment(reservation.checkin_date).format("YYYY-MM-DD")
-										: "-"}
-								</div>
-							</div>
-							<div className='item'>
-								<span>
-									{chosenLanguage === "Arabic"
-										? "تاريخ المغادرة"
-										: "Departure"}
-								</span>
-								<div className='pill'>
-									{reservation.checkout_date
-										? moment(reservation.checkout_date).format("YYYY-MM-DD")
-										: "-"}
-								</div>
-							</div>
-							<div className='item'>
-								<span>
-									{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}
-								</span>
-								<strong>{reservation.payment || "Not Paid"}</strong>
+					<div className='summary-list'>
+						<div className='item'>
+							<span>
+								{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
+							</span>
+							<div className='pill'>
+								{reservation.checkin_date
+									? moment(reservation.checkin_date).format("YYYY-MM-DD")
+									: "-"}
 							</div>
 						</div>
+						<div className='item'>
+							<span>
+								{chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Departure"}
+							</span>
+							<div className='pill'>
+								{reservation.checkout_date
+									? moment(reservation.checkout_date).format("YYYY-MM-DD")
+									: "-"}
+							</div>
+						</div>
+						<div className='item'>
+							<span>
+								{chosenLanguage === "Arabic"
+									? "رقم التأكيد"
+									: "Confirmation #"}
+							</span>
+							<strong>{reservation.confirmation_number || "-"}</strong>
+						</div>
+						<div className='item'>
+							<span>{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}</span>
+							<strong>{reservation.payment || "Not Paid"}</strong>
+						</div>
+					</div>
 
 						<h4 className='total'>
 							{chosenLanguage === "Arabic" ? "المبلغ الإجمالي" : "Total Amount"}:{" "}
 							{grandTotal.toLocaleString()} SAR
 						</h4>
+						{paidAmountValue > 0 && (
+							<div className='total-meta'>
+								<span>
+									{chosenLanguage === "Arabic" ? "المبلغ المدفوع" : "Paid Amount"}
+									: {paidAmountValue.toLocaleString()} SAR
+								</span>
+								{remainingAmount > 0 && (
+									<span>
+										{chosenLanguage === "Arabic" ? "المتبقي" : "Remaining"}:{" "}
+										{remainingAmount.toLocaleString()} SAR
+									</span>
+								)}
+							</div>
+						)}
 
 						<div className='text-center'>
 							<Button
@@ -1982,7 +2037,7 @@ export const EditReservationMain = ({
 									{roomInventory.map((room) => {
 										const fallbackDetail = findRoomDetail(
 											room.room_type,
-											room.displayName || room.display_name
+											room.displayName || room.display_name,
 										);
 										const resolvedDisplayName =
 											room.displayName ||
@@ -1991,7 +2046,7 @@ export const EditReservationMain = ({
 											room.room_type;
 										const key = buildRoomKey(
 											room.room_type,
-											resolvedDisplayName
+											resolvedDisplayName,
 										);
 										const active = selectedKeys.includes(key);
 										const availableCount =
@@ -2014,9 +2069,7 @@ export const EditReservationMain = ({
 													style={{ background: room.roomColor || "#ddd" }}
 												/>
 												<span className='avail'>
-													{chosenLanguage === "Arabic"
-														? "المتاح"
-														: "Available"}
+													{chosenLanguage === "Arabic" ? "المتاح" : "Available"}
 													: {availableCount}
 												</span>
 												{active && (
@@ -2064,7 +2117,7 @@ export const EditReservationMain = ({
 									{reservation.pickedRoomsType.map((room, index) => {
 										const displayLabel = resolveDisplayLabelForType(
 											room.room_type,
-											room.displayName || room.display_name
+											room.displayName || room.display_name,
 										);
 										return (
 											<div
@@ -2124,13 +2177,18 @@ export const EditReservationMain = ({
 									{chosenLanguage === "Arabic" ? "الإجمالي" : "Total Amount"}:{" "}
 									{grandTotal.toLocaleString()} SAR
 								</h3>
-								{reservation.paid_amount &&
-								reservation.payment === "deposit" ? (
+								{paidAmountValue > 0 ? (
 									<h3>
 										{chosenLanguage === "Arabic"
 											? "المبلغ المدفوع"
 											: "Paid Amount"}
-										: {Number(reservation.paid_amount).toLocaleString()} SAR
+										: {paidAmountValue.toLocaleString()} SAR
+									</h3>
+								) : null}
+								{paidAmountValue > 0 && remainingAmount > 0 ? (
+									<h3>
+										{chosenLanguage === "Arabic" ? "المتبقي" : "Remaining"}:{" "}
+										{remainingAmount.toLocaleString()} SAR
 									</h3>
 								) : null}
 							</div>
@@ -2316,6 +2374,15 @@ const Right = styled.div`
 		gap: 12px;
 		margin-bottom: 8px;
 	}
+	.total-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin-bottom: 10px;
+		font-weight: 700;
+		color: #1f2937;
+		text-align: center;
+	}
 	.item {
 		background: #fafafa;
 		border: 1px solid #f0f0f0;
@@ -2402,7 +2469,3 @@ const RoomChip = styled.button`
 		opacity: 0.8;
 	}
 `;
-
-
-
-
