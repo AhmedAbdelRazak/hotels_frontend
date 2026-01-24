@@ -32,6 +32,13 @@ const getRateTone = (rate = 0) => {
 
 const formatInt = (value) => Number(value || 0).toLocaleString("en-US");
 
+const PAYMENT_STATUS_OPTIONS = [
+	"Not Paid",
+	"Not Captured",
+	"Captured",
+	"Paid Offline",
+];
+
 const hijriMonthsEn = [
 	"Muharram",
 	"Safar",
@@ -97,6 +104,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 			: null,
 	);
 	const [includeCancelled, setIncludeCancelled] = useState(false);
+	const [paymentStatuses, setPaymentStatuses] = useState([]);
 	const [data, setData] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -172,6 +180,16 @@ const HotelInventory = ({ chosenLanguage }) => {
 					"\u062a\u0627\u0631\u064a\u062e\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u0020(\u0647\u062c\u0631\u064a)",
 				exportStatus: "\u0627\u0644\u062d\u0627\u0644\u0629",
 				exportRooms: "\u0627\u0644\u063a\u0631\u0641",
+				bookingSource: "\u0645\u0635\u062f\u0631\u0020\u0627\u0644\u062d\u062c\u0632",
+				paymentStatus: "\u062d\u0627\u0644\u0629\u0020\u0627\u0644\u062f\u0641\u0639",
+				paymentStatusAll: "\u0627\u0644\u0643\u0644",
+				paymentStatusClear: "\u0645\u0633\u062d",
+				paymentStatusTip:
+					"\u0645\u0644\u0627\u062d\u0638\u0629\u003a\u0020\u064a\u0645\u0643\u0646\u0643\u0020\u0627\u062e\u062a\u064a\u0627\u0631\u0020\u0623\u0643\u062b\u0631\u0020\u0645\u0646\u0020\u062d\u0627\u0644\u0629\u002e",
+				exportBookingSource:
+					"\u0645\u0635\u062f\u0631\u0020\u0627\u0644\u062d\u062c\u0632",
+				exportPaymentStatus:
+					"\u062d\u0627\u0644\u0629\u0020\u0627\u0644\u062f\u0641\u0639",
 			};
 		}
 		return {
@@ -216,6 +234,13 @@ const HotelInventory = ({ chosenLanguage }) => {
 			exportCheckoutHijri: "Check-out (Hijri)",
 			exportStatus: "Status",
 			exportRooms: "Rooms",
+			bookingSource: "Booking Source",
+			paymentStatus: "Payment Status",
+			paymentStatusAll: "All",
+			paymentStatusClear: "Clear",
+			paymentStatusTip: "Tip: you can select multiple statuses.",
+			exportBookingSource: "Booking Source",
+			exportPaymentStatus: "Payment Status",
 		};
 	}, [chosenLanguage]);
 
@@ -290,6 +315,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 			start: range.start,
 			end: range.end,
 			includeCancelled,
+			paymentStatuses,
 		})
 			.then((result) => {
 				if (result?.error) {
@@ -304,7 +330,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 				setData(null);
 			})
 			.finally(() => setLoading(false));
-	}, [hotelId, range.start, range.end, includeCancelled]);
+	}, [hotelId, range.start, range.end, includeCancelled, paymentStatuses]);
 
 	useEffect(() => {
 		fetchCalendar();
@@ -336,6 +362,7 @@ const HotelInventory = ({ chosenLanguage }) => {
 			date: daySelection.date,
 			roomKey: daySelection.roomKey || undefined,
 			includeCancelled,
+			paymentStatuses,
 		})
 			.then((result) => {
 				if (result?.error) {
@@ -350,7 +377,13 @@ const HotelInventory = ({ chosenLanguage }) => {
 				setDayDetails(null);
 			})
 			.finally(() => setDayDetailsLoading(false));
-	}, [hotelId, daySelection?.date, daySelection?.roomKey, includeCancelled]);
+	}, [
+		hotelId,
+		daySelection?.date,
+		daySelection?.roomKey,
+		includeCancelled,
+		paymentStatuses,
+	]);
 
 	const formatHijriDate = useCallback(
 		(dateStr) => {
@@ -369,6 +402,17 @@ const HotelInventory = ({ chosenLanguage }) => {
 
 	const modalDir = chosenLanguage === "Arabic" ? "rtl" : "ltr";
 
+	const togglePaymentStatus = (status) => {
+		setPaymentStatuses((prev) => {
+			const set = new Set(prev || []);
+			if (set.has(status)) set.delete(status);
+			else set.add(status);
+			return PAYMENT_STATUS_OPTIONS.filter((s) => set.has(s));
+		});
+	};
+
+	const paymentAllActive = paymentStatuses.length === 0;
+
 	const handleExport = () => {
 		if (!dayDetails || !Array.isArray(dayDetails.reservations)) return;
 		if (!dayDetails.reservations.length) return;
@@ -385,6 +429,9 @@ const HotelInventory = ({ chosenLanguage }) => {
 			const checkinHijri = formatHijriDate(reservation.checkin_date);
 			const checkoutHijri = formatHijriDate(reservation.checkout_date);
 			const status = reservation.reservation_status || "";
+			const bookingSource = reservation.booking_source || "";
+			const paymentStatus =
+				reservation.payment_status || reservation.payment || "";
 			const roomIds = Array.isArray(reservation.roomId)
 				? reservation.roomId
 				: [];
@@ -414,6 +461,8 @@ const HotelInventory = ({ chosenLanguage }) => {
 				[labels.exportCheckin]: checkinDate,
 				[labels.exportCheckout]: checkoutDate,
 				[labels.exportStatus]: status,
+				[labels.exportBookingSource]: bookingSource,
+				[labels.exportPaymentStatus]: paymentStatus,
 				[labels.exportRooms]: rooms,
 			};
 		});
@@ -426,6 +475,8 @@ const HotelInventory = ({ chosenLanguage }) => {
 			labels.exportCheckin,
 			labels.exportCheckout,
 			labels.exportStatus,
+			labels.exportBookingSource,
+			labels.exportPaymentStatus,
 			labels.exportRooms,
 		];
 
@@ -564,6 +615,35 @@ const HotelInventory = ({ chosenLanguage }) => {
 					</div>
 				</Controls>
 			</HeaderRow>
+
+			<PaymentStatusBar $rtl={modalDir === "rtl"}>
+				<div className='label'>{labels.paymentStatus}</div>
+				<div className='buttons'>
+					<StatusButton
+						size='small'
+						onClick={() => setPaymentStatuses([])}
+						isActive={paymentAllActive}
+					>
+						{labels.paymentStatusAll}
+					</StatusButton>
+					{PAYMENT_STATUS_OPTIONS.map((status) => (
+						<StatusButton
+							key={status}
+							size='small'
+							onClick={() => togglePaymentStatus(status)}
+							isActive={paymentStatuses.includes(status)}
+						>
+							{status}
+						</StatusButton>
+					))}
+					{!paymentAllActive && (
+						<Button size='small' onClick={() => setPaymentStatuses([])}>
+							{labels.paymentStatusClear}
+						</Button>
+					)}
+				</div>
+				<div className='hint'>{labels.paymentStatusTip}</div>
+			</PaymentStatusBar>
 
 			{loading && (
 				<LoadingRow>
@@ -789,6 +869,10 @@ const HotelInventory = ({ chosenLanguage }) => {
 													hijriCheckin || labels.na
 											  }${hijriRangeSeparator}${hijriCheckout || labels.na}`
 											: "";
+									const paymentStatus =
+										reservation.payment_status ||
+										reservation.payment ||
+										labels.na;
 									return (
 										<div key={reservation._id} className='card'>
 											<div className='row'>
@@ -803,6 +887,15 @@ const HotelInventory = ({ chosenLanguage }) => {
 												</span>
 												<span>
 													{reservation.reservation_status || "status"}
+												</span>
+											</div>
+											<div className='row row-sub'>
+												<span>
+													{labels.bookingSource}:{" "}
+													{reservation.booking_source || labels.na}
+												</span>
+												<span>
+													{labels.paymentStatus}: {paymentStatus}
 												</span>
 											</div>
 											{hijriRange && (
@@ -864,6 +957,46 @@ const Controls = styled.div`
 		font-size: 0.8rem;
 		color: #5c5c5c;
 	}
+`;
+
+const PaymentStatusBar = styled.div`
+	border: 1px solid #e2e6ef;
+	border-radius: 12px;
+	padding: 10px 12px;
+	background: #fcfcfc;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	text-align: ${(p) => (p.$rtl ? "right" : "left")};
+
+	.label {
+		font-weight: 600;
+		color: #333;
+		text-align: ${(p) => (p.$rtl ? "right" : "left")};
+	}
+
+	.buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		width: 100%;
+		justify-content: flex-start;
+		direction: ${(p) => (p.$rtl ? "rtl" : "ltr")};
+	}
+
+	.hint {
+		font-size: 0.75rem;
+		color: #6b7280;
+		text-align: ${(p) => (p.$rtl ? "right" : "left")};
+	}
+`;
+
+const StatusButton = styled(Button)`
+	font-size: 12px;
+	border-color: ${(p) => (p.isActive ? "#0f7e6b" : "initial")};
+	background-color: ${(p) => (p.isActive ? "#dff3ef" : "initial")};
+	color: ${(p) => (p.isActive ? "#0a5a4c" : "initial")};
 `;
 
 const SummaryRow = styled.div`

@@ -228,7 +228,7 @@ export const getListOfRoomSummary = (checkinDate, checkoutDate, hotelId) => {
 
 export const getHotelInventoryCalendar = (
 	hotelId,
-	{ start, end, includeCancelled = false } = {}
+	{ start, end, includeCancelled = false, paymentStatuses = [] } = {}
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -237,6 +237,9 @@ export const getHotelInventoryCalendar = (
 	if (start) params.set("start", start);
 	if (end) params.set("end", end);
 	if (includeCancelled) params.set("includeCancelled", "true");
+	if (Array.isArray(paymentStatuses) && paymentStatuses.length > 0) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/calendar?${params.toString()}`,
@@ -250,7 +253,7 @@ export const getHotelInventoryCalendar = (
 
 export const getHotelInventoryDayReservations = (
 	hotelId,
-	{ date, roomKey, includeCancelled = false } = {}
+	{ date, roomKey, includeCancelled = false, paymentStatuses = [] } = {}
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -261,6 +264,9 @@ export const getHotelInventoryDayReservations = (
 	const params = new URLSearchParams({ date });
 	if (roomKey) params.set("roomKey", roomKey);
 	if (includeCancelled) params.set("includeCancelled", "true");
+	if (Array.isArray(paymentStatuses) && paymentStatuses.length > 0) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
 
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/day?${params.toString()}`,
