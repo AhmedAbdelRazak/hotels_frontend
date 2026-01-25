@@ -282,9 +282,18 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 			if (data3 && data3.error) {
 				console.log(data3.error);
 			} else {
+				const rooms = Array.isArray(data3) ? data3 : [];
+				const roomIds = Array.isArray(reservation.roomId)
+					? reservation.roomId
+							.map((room) =>
+								typeof room === "object" && room?._id ? room._id : room
+							)
+							.filter(Boolean)
+							.map((id) => String(id))
+					: [];
 				// Filter the rooms to only include those whose _id is in reservation.roomId
-				const filteredRooms = data3.filter((room) =>
-					reservation.roomId.includes(room._id)
+				const filteredRooms = rooms.filter((room) =>
+					roomIds.includes(String(room?._id))
 				);
 				setChosenRooms(filteredRooms);
 			}

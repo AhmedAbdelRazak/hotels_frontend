@@ -138,7 +138,37 @@ const ContentSection = styled.div`
 	}
 `;
 
-// ... other styled components
+const PaymentBreakdownToggle = styled.button`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 90%;
+	margin: 14px auto 6px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid #d9d9d9;
+	background: #fafafa;
+	color: #222;
+	font-weight: 600;
+	cursor: pointer;
+
+	&:hover {
+		background: #f1f1f1;
+	}
+`;
+
+const PaymentBreakdownHint = styled.span`
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: #666;
+`;
+
+const PaymentBreakdownTotals = styled.div`
+	border: 1px solid #e5e5e5;
+	background: #f7f7f7;
+	border-radius: 8px;
+	padding: 12px 14px;
+`;
 
 const safeNumber = (val) => {
 	const parsed = Number(val);
@@ -150,6 +180,70 @@ const formatDisplayDate = (date, locale) => {
 	if (!date) return "N/A";
 	return moment(date).locale(locale).format("MMM DD, YYYY");
 };
+
+const paymentBreakdownFields = [
+	{
+		key: "paid_online_via_link",
+		label: "Paid Online (Payment Link)",
+		group: "online",
+	},
+	{
+		key: "paid_at_hotel_cash",
+		label: "Paid at Hotel (Cash)",
+		group: "offline",
+	},
+	{
+		key: "paid_at_hotel_card",
+		label: "Paid at Hotel (Card)",
+		group: "offline",
+	},
+	{
+		key: "paid_to_zad",
+		label: "Paid to ZAD",
+		group: "online",
+	},
+	{
+		key: "paid_online_jannatbooking",
+		label: "Paid Online (Jannat Booking)",
+		group: "online",
+	},
+	{
+		key: "paid_online_other_platforms",
+		label: "Paid Online (Other Platforms)",
+		group: "online",
+	},
+];
+
+const paymentBreakdownNumericKeys = paymentBreakdownFields.map(
+	(field) => field.key,
+);
+
+const buildPaymentBreakdown = (breakdown) => ({
+	paid_online_via_link: safeNumber(breakdown?.paid_online_via_link),
+	paid_at_hotel_cash: safeNumber(breakdown?.paid_at_hotel_cash),
+	paid_at_hotel_card: safeNumber(breakdown?.paid_at_hotel_card),
+	paid_to_zad: safeNumber(breakdown?.paid_to_zad),
+	paid_online_jannatbooking: safeNumber(breakdown?.paid_online_jannatbooking),
+	paid_online_other_platforms: safeNumber(
+		breakdown?.paid_online_other_platforms,
+	),
+	payment_comments:
+		typeof breakdown?.payment_comments === "string"
+			? breakdown.payment_comments
+			: "",
+});
+
+const getPaymentBreakdownTotals = (breakdown) =>
+	paymentBreakdownFields.reduce(
+		(acc, field) => {
+			const value = safeNumber(breakdown?.[field.key]);
+			acc.total += value;
+			if (field.group === "offline") acc.offline += value;
+			else acc.online += value;
+			return acc;
+		},
+		{ total: 0, online: 0, offline: 0 },
+	);
 
 const MoreDetails = ({
 	reservation,
@@ -166,9 +260,16 @@ const MoreDetails = ({
 	const [isModalVisible5, setIsModalVisible5] = useState(false);
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
+	const [isPaymentBreakdownVisible, setIsPaymentBreakdownVisible] =
+		useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
+	const [paymentBreakdownDraft, setPaymentBreakdownDraft] = useState(
+		buildPaymentBreakdown(reservation?.paid_amount_breakdown),
+	);
+	const [isSavingPaymentBreakdown, setIsSavingPaymentBreakdown] =
+		useState(false);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -181,11 +282,11 @@ const MoreDetails = ({
 	const localeCode = chosenLanguage === "Arabic" ? "ar" : "en";
 	const formattedCheckin = formatDisplayDate(
 		reservation?.checkin_date,
-		localeCode
+		localeCode,
 	);
 	const formattedCheckout = formatDisplayDate(
 		reservation?.checkout_date,
-		localeCode
+		localeCode,
 	);
 	const customerFullName =
 		reservation?.customer_details?.fullName ||
@@ -200,6 +301,73 @@ const MoreDetails = ({
 			setSendEmail(false);
 		}
 	}, [isModalVisible]);
+
+	useEffect(() => {
+		if (!isPaymentBreakdownVisible) return;
+		setPaymentBreakdownDraft(
+			buildPaymentBreakdown(reservation?.paid_amount_breakdown),
+		);
+	}, [isPaymentBreakdownVisible, reservation?.paid_amount_breakdown]);
+
+	const totalAmountValue = safeNumber(reservation?.total_amount);
+	const paymentBreakdownTotals = getPaymentBreakdownTotals(
+		paymentBreakdownDraft,
+	);
+	const remainingPaymentAmount = Math.max(
+		totalAmountValue - paymentBreakdownTotals.total,
+		0,
+	);
+
+	const handlePaymentBreakdownValueChange = (key, rawValue) => {
+		setPaymentBreakdownDraft((prev) => {
+			const parsedValue = Math.max(safeNumber(rawValue), 0);
+			const totalOther = paymentBreakdownNumericKeys.reduce((sum, fieldKey) => {
+				if (fieldKey === key) return sum;
+				return sum + safeNumber(prev[fieldKey]);
+			}, 0);
+			const maxForField = Math.max(totalAmountValue - totalOther, 0);
+			const clampedValue = Math.min(parsedValue, maxForField);
+			return { ...prev, [key]: clampedValue };
+		});
+	};
+
+	const handlePaymentBreakdownCommentChange = (value) => {
+		setPaymentBreakdownDraft((prev) => ({
+			...prev,
+			payment_comments: value,
+		}));
+	};
+
+	const handleSavePaymentBreakdown = () => {
+		if (!reservation?._id) return;
+		const nextTotals = getPaymentBreakdownTotals(paymentBreakdownDraft);
+		if (nextTotals.total > totalAmountValue) {
+			return toast.error("Paid total cannot exceed the total amount.");
+		}
+		setIsSavingPaymentBreakdown(true);
+		const updateData = {
+			paid_amount_breakdown: buildPaymentBreakdown(paymentBreakdownDraft),
+			paid_amount: nextTotals.total,
+		};
+
+		updateSingleReservation(reservation._id, updateData).then((response) => {
+			setIsSavingPaymentBreakdown(false);
+			if (!response || response.error) {
+				console.error(response?.error || response);
+				return toast.error(
+					"An error occurred while updating the payment breakdown",
+				);
+			}
+			const updated = response?.reservation || response;
+			const merged = updated?._id
+				? updated
+				: { ...reservation, ...updateData };
+			toast.success("Payment breakdown was successfully updated");
+			setIsPaymentBreakdownVisible(false);
+			setReservation(merged);
+			onReservationUpdated(merged);
+		});
+	};
 
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
@@ -222,7 +390,7 @@ const MoreDetails = ({
 	// eslint-disable-next-line
 	const daysOfResidence = calculateDaysBetweenDates(
 		reservation.checkin_date,
-		reservation.checkout_date
+		reservation.checkout_date,
 	);
 
 	// Revised calculateReservationPeriod function
@@ -269,7 +437,7 @@ const MoreDetails = ({
 
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
 					(total, room) => total + room.count * parseFloat(room.chosenPrice),
-					0
+					0,
 				);
 
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
@@ -316,7 +484,7 @@ const MoreDetails = ({
 					(total, room) => {
 						return total + room.count * parseFloat(room.chosenPrice);
 					},
-					0
+					0,
 				);
 
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
@@ -380,7 +548,7 @@ const MoreDetails = ({
 			} else {
 				// Filter the rooms to only include those whose _id is in reservation.roomId
 				const filteredRooms = data3.filter((room) =>
-					reservation.roomId.includes(room._id)
+					reservation.roomId.includes(room._id),
 				);
 				setChosenRooms(filteredRooms);
 			}
@@ -474,7 +642,7 @@ const MoreDetails = ({
 	// eslint-disable-next-line
 	const nights = calculateNights(
 		reservation?.checkin_date,
-		reservation?.checkout_date
+		reservation?.checkout_date,
 	);
 
 	// Compute the commission for one night from each room's pricingByDay data.
@@ -697,6 +865,98 @@ const MoreDetails = ({
 						</div>
 					</Modal>
 
+					<Modal
+						title='Payment Breakdown'
+						open={isPaymentBreakdownVisible}
+						onCancel={() => setIsPaymentBreakdownVisible(false)}
+						footer={null}
+						width={720}
+						centered
+						zIndex={12022}
+						destroyOnClose
+					>
+						<div className='container-fluid'>
+							<div className='row'>
+								{paymentBreakdownFields.map((field) => (
+									<div className='col-md-6 mb-3' key={field.key}>
+										<label style={{ fontWeight: "bold" }}>
+											{field.label}
+										</label>
+										<input
+											type='number'
+											min='0'
+											step='0.01'
+											className='form-control'
+											value={paymentBreakdownDraft[field.key]}
+											onChange={(e) =>
+												handlePaymentBreakdownValueChange(
+													field.key,
+													e.target.value,
+												)
+											}
+										/>
+									</div>
+								))}
+							</div>
+							<div className='row'>
+								<div className='col-md-12 mb-3'>
+									<label style={{ fontWeight: "bold" }}>
+										Payment Comments
+									</label>
+									<textarea
+										className='form-control'
+										rows='3'
+										value={paymentBreakdownDraft.payment_comments}
+										onChange={(e) =>
+											handlePaymentBreakdownCommentChange(e.target.value)
+										}
+									/>
+								</div>
+							</div>
+							<PaymentBreakdownTotals>
+								<div className='row'>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Total Amount
+										</div>
+										<div style={{ fontWeight: "bold" }}>
+											{formatNumber(totalAmountValue)} SAR
+										</div>
+									</div>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Total Paid
+										</div>
+										<div style={{ fontWeight: "bold" }}>
+											{formatNumber(paymentBreakdownTotals.total)} SAR
+										</div>
+									</div>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Remaining
+										</div>
+										<div style={{ fontWeight: "bold", color: "#1b6b34" }}>
+											{formatNumber(remainingPaymentAmount)} SAR
+										</div>
+									</div>
+								</div>
+							</PaymentBreakdownTotals>
+							<div className='text-center mt-4'>
+								<button
+									type='button'
+									className='btn btn-primary'
+									disabled={
+										isSavingPaymentBreakdown ||
+										paymentBreakdownTotals.total > totalAmountValue
+									}
+									onClick={handleSavePaymentBreakdown}
+								>
+									{isSavingPaymentBreakdown ? "Updating..." : "Update"}
+								</button>
+							</div>
+						</div>
+					</Modal>
+
 					<div
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
@@ -738,7 +998,7 @@ const MoreDetails = ({
 							relocationArray1.some(
 								(hotel) =>
 									hotel._id === hotelDetails._id &&
-									hotel.belongsTo === hotelDetails.belongsTo._id
+									hotel.belongsTo === hotelDetails.belongsTo._id,
 							) && (
 								<h5
 									className='text-center mx-auto mt-3'
@@ -904,13 +1164,13 @@ const MoreDetails = ({
 														onClick={() => {
 															sendPaymnetLinkToTheClient(
 																linkGenerate,
-																reservation.customer_details.email
+																reservation.customer_details.email,
 															).then((data) => {
 																if (data && data.error) {
 																	console.log(data.error);
 																} else {
 																	toast.success(
-																		"Email Was Successfully Sent to the guest!"
+																		"Email Was Successfully Sent to the guest!",
 																	);
 																}
 															});
@@ -941,7 +1201,7 @@ const MoreDetails = ({
 													}}
 													onClick={() => {
 														setLinkGenerated(
-															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`
+															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
 														);
 													}}
 												>
@@ -969,13 +1229,13 @@ const MoreDetails = ({
 														onClick={() => {
 															sendPaymnetLinkToTheClient(
 																linkGenerate,
-																reservation.customer_details.email
+																reservation.customer_details.email,
 															).then((data) => {
 																if (data && data.error) {
 																	console.log(data.error);
 																} else {
 																	toast.success(
-																		"Email Was Successfully Sent to the guest!"
+																		"Email Was Successfully Sent to the guest!",
 																	);
 																}
 															});
@@ -1015,8 +1275,8 @@ const MoreDetails = ({
 															}/roomTypes/${reservation._id}/${
 																reservation._id
 															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount
-															).toFixed(2)}`
+																reservation.total_amount,
+															).toFixed(2)}`,
 														);
 													}}
 												>
@@ -1055,7 +1315,7 @@ const MoreDetails = ({
 													reservation.reservation_status.includes("cancelled")
 														? "red"
 														: reservation.reservation_status.includes(
-																	"checked_out"
+																	"checked_out",
 														    )
 														  ? "darkgreen"
 														  : reservation.reservation_status === "inhouse"
@@ -1066,7 +1326,7 @@ const MoreDetails = ({
 													reservation.reservation_status.includes("cancelled")
 														? "white"
 														: reservation.reservation_status.includes(
-																	"checked_out"
+																	"checked_out",
 														    )
 														  ? "white"
 														  : "black",
@@ -1104,7 +1364,7 @@ const MoreDetails = ({
 															toast.error("Failed Sending Email");
 														} else {
 															toast.success(
-																`Email was successfully sent to ${reservation.customer_details.email}`
+																`Email was successfully sent to ${reservation.customer_details.email}`,
 															);
 														}
 													});
@@ -1123,17 +1383,17 @@ const MoreDetails = ({
 															reservation._id /* or reservation.confirmation_number */,
 															{
 																notifyAdmins: true, // set true if you also want to re-notify owner/platform
-															}
+															},
 														);
 
 														if (resp?.ok) {
 															toast.success(
-																"WhatsApp confirmation queued successfully."
+																"WhatsApp confirmation queued successfully.",
 															);
 														} else {
 															toast.error(
 																resp?.message ||
-																	"Failed to queue WhatsApp message."
+																	"Failed to queue WhatsApp message.",
 															);
 														}
 													} catch (e) {
@@ -1180,7 +1440,7 @@ const MoreDetails = ({
 												? calculateReservationPeriod(
 														reservation.checkin_date,
 														reservation.checkout_date,
-														chosenLanguage
+														chosenLanguage,
 												  )
 												: ""}
 										</div>
@@ -1352,7 +1612,7 @@ const MoreDetails = ({
 															year: "numeric",
 															month: "2-digit",
 															day: "2-digit",
-														}
+														},
 												  ).format(new Date(reservation.booked_at))
 												: "N/A"}
 										</div>
@@ -1384,6 +1644,16 @@ const MoreDetails = ({
 									<div className='col-md-8 my-4 mx-auto'>
 										{chosenLanguage === "Arabic" ? "ملحوظة" : "Comment"}
 										<div>{reservation && reservation.comment}</div>
+									</div>
+
+									<div className='col-md-12'>
+										<PaymentBreakdownToggle
+											type='button'
+											onClick={() => setIsPaymentBreakdownVisible(true)}
+										>
+											<span>Payment Breakdown</span>
+											<PaymentBreakdownHint>Click to update</PaymentBreakdownHint>
+										</PaymentBreakdownToggle>
 									</div>
 
 									{chosenRooms && chosenRooms.length > 0 ? (
@@ -1565,7 +1835,7 @@ const MoreDetails = ({
 												<h3 style={{ color: "darkgreen" }}>
 													{Number(
 														Number(reservation.total_amount) -
-															Number(reservation.paid_amount)
+															Number(reservation.paid_amount),
 													).toLocaleString()}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h3>
@@ -1611,7 +1881,7 @@ const MoreDetails = ({
 												<h5>
 													{getTotalAmountPerDay(reservation.pickedRoomsType) &&
 														getTotalAmountPerDay(
-															reservation.pickedRoomsType
+															reservation.pickedRoomsType,
 														).toLocaleString()}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
@@ -1631,7 +1901,7 @@ const MoreDetails = ({
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{getAverageRootPrice(
-														reservation.pickedRoomsType
+														reservation.pickedRoomsType,
 													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>
@@ -1650,7 +1920,7 @@ const MoreDetails = ({
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{calculateOverallTotalRootPrice(
-														reservation.pickedRoomsType
+														reservation.pickedRoomsType,
 													).toFixed(2)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h5>

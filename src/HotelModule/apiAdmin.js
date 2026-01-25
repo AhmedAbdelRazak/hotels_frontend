@@ -11,7 +11,7 @@ export const hotelAccount = (userId, token, accountId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -23,7 +23,7 @@ export const createNewReservation = (
 	userId,
 	hotelId,
 	token,
-	new_reservation
+	new_reservation,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/create/${userId}/${hotelId}`,
@@ -35,7 +35,7 @@ export const createNewReservation = (
 				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(new_reservation),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -77,7 +77,7 @@ export const sendReservationConfirmationEmail = (
 	reservationData,
 	userId,
 	hotelId,
-	token
+	token,
 ) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/send-reservation-email`, {
 		method: "POST",
@@ -98,7 +98,7 @@ export const sendReservationConfirmationEmail = (
 
 export const sendPaymnetLinkToTheClient = (
 	reservationLink,
-	reservationEmail
+	reservationEmail,
 ) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/send-payment-link-email`, {
 		method: "POST",
@@ -152,7 +152,7 @@ export const gettingHotelDetailsForAdmin = (userId, token) => {
 		{
 			method: "GET",
 			Authorization: `Bearer ${token}`,
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -165,7 +165,7 @@ export const getHotelReservations = (hotelId, userId, startdate, enddate) => {
 		`${process.env.REACT_APP_API_URL}/reservations/${startdate}/${enddate}/${hotelId}/${userId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -177,13 +177,13 @@ export const getHotelReservationsRange = (
 	hotelId,
 	userId,
 	startdate,
-	enddate
+	enddate,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/occupancy/range/${startdate}/${enddate}/${hotelId}/${userId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -194,7 +194,7 @@ export const getHotelReservationsCurrent = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/occupancy/current/${hotelId}/${userId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -205,7 +205,7 @@ export const getTodaysCheckins = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/checkins-today/${hotelId}/${userId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -218,7 +218,7 @@ export const getListOfRoomSummary = (checkinDate, checkoutDate, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/room/${checkinDate}/${checkoutDate}/${hotelId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -228,7 +228,7 @@ export const getListOfRoomSummary = (checkinDate, checkoutDate, hotelId) => {
 
 export const getHotelInventoryCalendar = (
 	hotelId,
-	{ start, end, includeCancelled = false, paymentStatuses = [] } = {}
+	{ start, end, includeCancelled = false, paymentStatuses = [] } = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -242,10 +242,12 @@ export const getHotelInventoryCalendar = (
 	}
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/calendar?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/hotel-inventory/${hotelId}/calendar?${params.toString()}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -253,7 +255,7 @@ export const getHotelInventoryCalendar = (
 
 export const getHotelInventoryDayReservations = (
 	hotelId,
-	{ date, roomKey, includeCancelled = false, paymentStatuses = [] } = {}
+	{ date, roomKey, includeCancelled = false, paymentStatuses = [] } = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -269,10 +271,12 @@ export const getHotelInventoryDayReservations = (
 	}
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/day?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/hotel-inventory/${hotelId}/day?${params.toString()}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -280,7 +284,7 @@ export const getHotelInventoryDayReservations = (
 
 export const getHotelInventoryAvailability = (
 	hotelId,
-	{ start, end, includeCancelled = false } = {}
+	{ start, end, includeCancelled = false } = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -291,10 +295,12 @@ export const getHotelInventoryAvailability = (
 	if (includeCancelled) params.set("includeCancelled", "true");
 
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-inventory/${hotelId}/availability?${params.toString()}`,
+		`${
+			process.env.REACT_APP_API_URL
+		}/hotel-inventory/${hotelId}/availability?${params.toString()}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -305,7 +311,7 @@ export const getReservationSearch = (searchQuery, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/search/${searchQuery}/${hotelId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -318,7 +324,7 @@ export const getReservationSearchAllMatches = (searchQuery, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/search/all-list/${searchQuery}/${hotelId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -331,7 +337,7 @@ export const reservationsList = (page, records, filters, hotelId, date) => {
 		`${process.env.REACT_APP_API_URL}/reservations/list/${page}/${records}/${filters}/${hotelId}/${date}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -345,13 +351,13 @@ export const checkedoutReservationsList = (
 	startDate,
 	endDate,
 	hotelId,
-	channel
+	channel,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations-checkedout/${page}/${records}/${hotelId}/${channel}/${startDate}/${endDate}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -364,7 +370,7 @@ export const getCheckedOutReservations = (page, records, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/checkedout-reservations/list/${page}/${records}/${hotelId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -384,13 +390,13 @@ export const generalReportReservationsList = (
 	cancel,
 	inhouse,
 	showCheckedout,
-	payment
+	payment,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations-general-report/${page}/${records}/${hotelId}/${channel}/${startDate}/${endDate}/${dateBy}/${noshow}/${cancel}/${inhouse}/${showCheckedout}/${payment}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -408,14 +414,14 @@ export const getGeneralReportReservations = (
 	cancel,
 	inhouse,
 	showCheckedout,
-	payment
+	payment,
 ) => {
 	console.log("From API Admin getGeneralReportReservations", hotelId);
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/general-report-reservations/list/${hotelId}/${channel}/${startDate}/${endDate}/${dateBy}/${noshow}/${cancel}/${inhouse}/${showCheckedout}/${payment}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -428,7 +434,7 @@ export const getReservationSummary = (hotelId, date) => {
 		`${process.env.REACT_APP_API_URL}/reservations-summary/${hotelId}/${date}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -441,13 +447,13 @@ export const reservationsTotalRecords = (
 	records,
 	filters,
 	hotelId,
-	date
+	date,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/get-total-records/${page}/${records}/${filters}/${hotelId}/${date}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -459,7 +465,7 @@ export const checkedoutReservationsTotalRecords = (
 	startDate,
 	endDate,
 	hotelId,
-	channel
+	channel,
 ) => {
 	console.log("From API Admin checkedoutReservationsTotalRecords", hotelId);
 
@@ -467,7 +473,7 @@ export const checkedoutReservationsTotalRecords = (
 		`${process.env.REACT_APP_API_URL}/reservations-summary-checkedout/${hotelId}/${channel}/${startDate}/${endDate}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -480,7 +486,7 @@ export const singlePreReservation = (reservationNumber, hotelId, belongsTo) => {
 		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationNumber}/${hotelId}/${belongsTo}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -493,7 +499,7 @@ export const singlePreReservationById = (reservationId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -513,7 +519,7 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				// Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(reservation),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -526,7 +532,7 @@ export const gettingRoomInventory = (startdate, enddate, userId, accountId) => {
 		`${process.env.REACT_APP_API_URL}/room-inventory-reserved/${startdate}/${enddate}/${userId}/${accountId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -539,7 +545,7 @@ export const gettingDayOverDayInventory = (userId, accountId) => {
 		`${process.env.REACT_APP_API_URL}/inventory-report/${userId}/${accountId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -558,7 +564,7 @@ export const agodaData = (accountId, belongsTo, file) => {
 		{
 			method: "POST",
 			body: formData, // send the file as FormData
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -573,7 +579,7 @@ export const expediaData = (accountId, belongsTo, file, country) => {
 		{
 			method: "POST",
 			body: formData, // send the file as FormData
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -590,7 +596,7 @@ export const airbnbData = (accountId, belongsTo, file, country) => {
 		{
 			method: "POST",
 			body: formData, // send the file as FormData
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -605,7 +611,7 @@ export const bookingData = (accountId, belongsTo, file) => {
 		{
 			method: "POST",
 			body: formData, // send the file as FormData
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -620,7 +626,7 @@ export const janatData = (accountId, belongsTo, file) => {
 		{
 			method: "POST",
 			body: formData, // send the file as FormData
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -638,7 +644,7 @@ export const cloudinaryUpload1 = (userId, token, image) => {
 			},
 			body: JSON.stringify(image),
 			// body: image,
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -660,7 +666,7 @@ export const updateHotelDetails = (hotelId, userId, token, details) => {
 				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(details),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -688,7 +694,7 @@ export const gettingDateReport = (date, hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/todate/ahowan/yaba/${date}/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -701,7 +707,7 @@ export const gettingDayOverDay = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/dayoverday/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -714,7 +720,7 @@ export const gettingMonthOverMonth = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/monthovermonth/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -727,7 +733,7 @@ export const gettingBookingSource = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/bookingsource/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -740,7 +746,7 @@ export const gettingReservationStatus = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/reservationstatus/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -790,7 +796,7 @@ export const processPayment = (reservationId, paymentData) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(paymentData),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -808,7 +814,7 @@ export const processCommissionPayment = (paymentData) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(paymentData),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -819,7 +825,7 @@ export const processCommissionPayment = (paymentData) => {
 export const currecyConversion = (saudimoney) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/currencyapi/${Number(saudimoney).toFixed(
-			2
+			2,
 		)}`,
 		{
 			method: "GET",
@@ -827,7 +833,7 @@ export const currecyConversion = (saudimoney) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -847,7 +853,7 @@ export const updateSubscriptionCardFn = (token, paymentData) => {
 				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(paymentData),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -891,7 +897,7 @@ export const getSubscriptionData = (userId, token, subscriptionId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -909,7 +915,7 @@ export const createNewHouseKeepingTask = (hotelId, housekeeping) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(housekeeping),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -927,7 +933,7 @@ export const getAllHouseKeepingTasks = (page, records, hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -943,7 +949,7 @@ export const getAllHouseKeepingTotalRecords = (hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -959,7 +965,7 @@ export const getHouseKeepingStaff = (hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -978,7 +984,7 @@ export const updatingHouseKeepingTask = (taskId, task) => {
 				Accept: "application/json",
 			},
 			body: JSON.stringify(task),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -994,7 +1000,7 @@ export const getEmployeeWorkLoad = (userId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -1010,7 +1016,7 @@ export const pendingPaymentReservationList = (page, records, hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -1026,7 +1032,7 @@ export const gettingCommissionPaidReservations = (page, records, hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -1068,7 +1074,7 @@ export const hotelsForAccount = (accountId) => {
 				"Content-Type": "application/json",
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -1086,7 +1092,7 @@ export const getFilteredSupportCases = (token, hotelId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1102,7 +1108,7 @@ export const getFilteredClosedSupportCases = (token, hotelId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1118,7 +1124,7 @@ export const getFilteredClosedSupportCasesClients = (token, hotelId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1183,7 +1189,7 @@ export const getUnseenMessagesCountByAdmin = async (userId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1205,7 +1211,7 @@ export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1227,7 +1233,7 @@ export const getUnseenMessagesByClient = async (clientId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1250,7 +1256,7 @@ export const updateSeenStatusForAdminOrOwner = async (caseId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1273,7 +1279,7 @@ export const updateSeenStatusForClient = async (caseId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1297,7 +1303,7 @@ export const markAllMessagesAsSeenByHotel = async (caseId, userId) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ userId }), // Pass the current user's ID
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1315,7 +1321,7 @@ export const gettingAdminDashboardFigures = (hotelId) => {
 		`${process.env.REACT_APP_API_URL}/admin-dashboard-reports/${hotelId}`,
 		{
 			method: "GET",
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -1382,7 +1388,7 @@ function buildHotelsQuery(selectedHotels, limit) {
 function buildQueryString(params) {
 	return Object.entries(params)
 		.map(
-			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
+			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`,
 		)
 		.join("&");
 }
@@ -1395,7 +1401,7 @@ export const getReservationsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1407,7 +1413,7 @@ export const getReservationsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1416,7 +1422,7 @@ export const getReservationsByDay = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByDay data:", err)
+			console.error("Error fetching reservationsByDay data:", err),
 		);
 };
 
@@ -1427,7 +1433,7 @@ export const getCheckinsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1439,7 +1445,7 @@ export const getCheckinsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1457,7 +1463,7 @@ export const getCheckoutsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1469,7 +1475,7 @@ export const getCheckoutsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1487,7 +1493,7 @@ export const getReservationsByDayByHotelName = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1499,7 +1505,7 @@ export const getReservationsByDayByHotelName = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1508,7 +1514,7 @@ export const getReservationsByDayByHotelName = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByDayByHotelName data:", err)
+			console.error("Error fetching reservationsByDayByHotelName data:", err),
 		);
 };
 
@@ -1519,7 +1525,7 @@ export const getReservationsByBookingStatus = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1531,7 +1537,7 @@ export const getReservationsByBookingStatus = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1540,7 +1546,7 @@ export const getReservationsByBookingStatus = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByBookingStatus data:", err)
+			console.error("Error fetching reservationsByBookingStatus data:", err),
 		);
 };
 
@@ -1551,7 +1557,7 @@ export const getReservationsByHotelNames = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1563,7 +1569,7 @@ export const getReservationsByHotelNames = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1572,7 +1578,7 @@ export const getReservationsByHotelNames = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByHotelNames data:", err)
+			console.error("Error fetching reservationsByHotelNames data:", err),
 		);
 };
 
@@ -1584,7 +1590,7 @@ export const getTopHotelsByReservations = (
 	token,
 	limit = 5,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, limit, extraParams);
 
@@ -1596,7 +1602,7 @@ export const getTopHotelsByReservations = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1605,7 +1611,7 @@ export const getTopHotelsByReservations = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching topHotelsByReservations data:", err)
+			console.error("Error fetching topHotelsByReservations data:", err),
 		);
 };
 
@@ -1615,7 +1621,7 @@ export const getTopHotelsByReservations = (
 export const getSpecificListOfReservations = (
 	userId,
 	token,
-	queryParamsObj
+	queryParamsObj,
 ) => {
 	const queryString = buildQueryString(queryParamsObj);
 
@@ -1627,7 +1633,7 @@ export const getSpecificListOfReservations = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1636,8 +1642,38 @@ export const getSpecificListOfReservations = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching specific list of reservations:", err)
+			console.error("Error fetching specific list of reservations:", err),
 		);
+};
+
+export const getPaidBreakdownReportHotel = (
+	userId,
+	token,
+	{ hotelId, searchQuery = "", page = 1, limit = 200 } = {},
+) => {
+	const params = new URLSearchParams();
+	if (hotelId) params.set("hotelId", hotelId);
+	if (searchQuery) params.set("searchQuery", searchQuery);
+	if (page) params.set("page", String(page));
+	if (limit) params.set("limit", String(limit));
+
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/hotel-adminreports/paid-breakdown/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.error("Error fetching paid breakdown report:", err);
+			return { data: [], totalDocuments: 0 };
+		});
 };
 
 export const getExportToExcelList = (userId, token, queryParamsObj) => {
@@ -1651,7 +1687,7 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1660,7 +1696,7 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching specific list of reservations:", err)
+			console.error("Error fetching specific list of reservations:", err),
 		);
 };
 
@@ -1676,7 +1712,7 @@ export const currencyConversion = (amounts) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1700,14 +1736,14 @@ export async function getOwnerPayPalClientToken({
 		{
 			method: "GET",
 			headers: { ...authHeaders(token) },
-		}
+		},
 	);
 	const json = await res.json();
 	if (!res.ok)
 		throw new Error(
 			json?.error ||
 				json?.message ||
-				"Failed to fetch PayPal client token (owner)"
+				"Failed to fetch PayPal client token (owner)",
 		);
 	const clientToken =
 		typeof json === "string"
@@ -1742,7 +1778,7 @@ export async function createOwnerPayPalSetupToken({
 /** Exchange setup_token -> vault & save on hotel */
 export async function saveOwnerVaultCard(
 	{ hotelId, setup_token, label, setDefault },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const { data } = await axios.post(
 		`${API}/paypal-owner/vault/exchange`,
@@ -1750,7 +1786,7 @@ export async function saveOwnerVaultCard(
 		{
 			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			withCredentials: false,
-		}
+		},
 	);
 	return data; // { message, ownerPaymentMethods: [...] }
 }
@@ -1762,52 +1798,52 @@ export async function listOwnerPaymentMethods(hotelId, { token } = {}) {
 		{
 			headers: { ...authHeaders(token) },
 			withCredentials: false,
-		}
+		},
 	);
 	return data;
 }
 
 export async function setOwnerDefaultPaymentMethod(
 	{ hotelId, methodId, vault_id },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const { data } = await axios.post(
 		`${API}/paypal-owner/payment-methods/set-default`,
 		{ hotelId, methodId, vault_id },
-		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } },
 	);
 	return data;
 }
 export async function activateOwnerPaymentMethod(
 	{ hotelId, methodId },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const { data } = await axios.post(
 		`${API}/paypal-owner/payment-methods/activate`,
 		{ hotelId, methodId },
-		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } },
 	);
 	return data;
 }
 export async function deactivateOwnerPaymentMethod(
 	{ hotelId, methodId },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const { data } = await axios.post(
 		`${API}/paypal-owner/payment-methods/deactivate`,
 		{ hotelId, methodId },
-		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } },
 	);
 	return data;
 }
 export async function deleteOwnerPaymentMethod(
 	{ hotelId, methodId },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const { data } = await axios.post(
 		`${API}/paypal-owner/payment-methods/delete`,
 		{ hotelId, methodId },
-		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } }
+		{ headers: { "Content-Type": "application/json", ...authHeaders(token) } },
 	);
 	return data;
 }

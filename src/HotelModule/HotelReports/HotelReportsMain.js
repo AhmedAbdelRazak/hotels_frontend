@@ -7,6 +7,7 @@ import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelInventory from "./HotelInventory";
+import PaidReportHotel from "./PaidReportHotel";
 import { useCartContext } from "../../cart_context";
 
 const HotelReportsMain = () => {
@@ -107,6 +108,12 @@ const HotelReportsMain = () => {
 							>
 								Hotels' Inventory
 							</button>
+							<button
+								className={activeTab === "paid-overview" ? "active" : ""}
+								onClick={() => handleTabChange("paid-overview")}
+							>
+								Paid Reservations Overview
+							</button>
 						</TabNavigation>
 
 						{/* --------------- Tab Content --------------- */}
@@ -123,6 +130,13 @@ const HotelReportsMain = () => {
 						{activeTab === "inventory" && (
 							<div>
 								<HotelInventory chosenLanguage={chosenLanguage} />
+							</div>
+						)}
+
+						{activeTab === "paid-overview" && (
+							<div>
+								<h3>Paid Reservations Overview</h3>
+								<PaidReportHotel />
 							</div>
 						)}
 					</div>

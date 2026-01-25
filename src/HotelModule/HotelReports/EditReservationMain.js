@@ -183,7 +183,8 @@ const EditReservationMain = ({
 		try {
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.filter((h) => h.activateHotel === true);
+				const hotels = Array.isArray(data) ? data : [];
+				const activeHotels = hotels.filter((h) => h.activateHotel === true);
 				const sortedHotels = activeHotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);

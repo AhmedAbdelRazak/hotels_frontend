@@ -1951,55 +1951,57 @@ export const EditReservationMain = ({
 					</Left>
 
 					<Right>
-					<h4 className='headline'>
-						{chosenLanguage === "Arabic"
-							? "حجز غرفة للضيف"
-							: "Reserve A Room For The Guest"}
-					</h4>
+						<h4 className='headline'>
+							{chosenLanguage === "Arabic"
+								? "حجز غرفة للضيف"
+								: "Reserve A Room For The Guest"}
+						</h4>
 
-					<div className='summary-list'>
-						<div className='item'>
-							<span>
-								{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
-							</span>
-							<div className='pill'>
-								{reservation.checkin_date
-									? moment(reservation.checkin_date).format("YYYY-MM-DD")
-									: "-"}
+						<div className='summary-list'>
+							<div className='item'>
+								<span>
+									{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
+								</span>
+								<div className='pill'>
+									{reservation.checkin_date
+										? moment(reservation.checkin_date).format("YYYY-MM-DD")
+										: "-"}
+								</div>
+							</div>
+							<div className='item'>
+								<span>
+									{chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Departure"}
+								</span>
+								<div className='pill'>
+									{reservation.checkout_date
+										? moment(reservation.checkout_date).format("YYYY-MM-DD")
+										: "-"}
+								</div>
+							</div>
+							<div className='item'>
+								<span>
+									{chosenLanguage === "Arabic"
+										? "رقم التأكيد"
+										: "Confirmation #"}
+								</span>
+								<strong>{reservation.confirmation_number || "-"}</strong>
+							</div>
+							<div className='item'>
+								<span>{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}</span>
+								<strong>{reservation.payment || "Not Paid"}</strong>
 							</div>
 						</div>
-						<div className='item'>
-							<span>
-								{chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Departure"}
-							</span>
-							<div className='pill'>
-								{reservation.checkout_date
-									? moment(reservation.checkout_date).format("YYYY-MM-DD")
-									: "-"}
-							</div>
-						</div>
-						<div className='item'>
-							<span>
-								{chosenLanguage === "Arabic"
-									? "رقم التأكيد"
-									: "Confirmation #"}
-							</span>
-							<strong>{reservation.confirmation_number || "-"}</strong>
-						</div>
-						<div className='item'>
-							<span>{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}</span>
-							<strong>{reservation.payment || "Not Paid"}</strong>
-						</div>
-					</div>
 
 						<h4 className='total'>
-							{chosenLanguage === "Arabic" ? "المبلغ الإجمالي" : "Total Amount"}:{" "}
-							{grandTotal.toLocaleString()} SAR
+							{chosenLanguage === "Arabic" ? "المبلغ الإجمالي" : "Total Amount"}
+							: {grandTotal.toLocaleString()} SAR
 						</h4>
 						{paidAmountValue > 0 && (
 							<div className='total-meta'>
 								<span>
-									{chosenLanguage === "Arabic" ? "المبلغ المدفوع" : "Paid Amount"}
+									{chosenLanguage === "Arabic"
+										? "المبلغ المدفوع"
+										: "Paid Amount"}
 									: {paidAmountValue.toLocaleString()} SAR
 								</span>
 								{remainingAmount > 0 && (

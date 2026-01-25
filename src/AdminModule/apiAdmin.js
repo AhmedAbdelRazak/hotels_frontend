@@ -14,7 +14,7 @@ export const hotelAccount = (userId, token, accountId) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -33,7 +33,7 @@ export const createHotelDetails = (userId, token, hotelDetails) => {
 				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(hotelDetails),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -105,7 +105,7 @@ export const gettingHotelDetailsForAdmin = (userId, token, query = "") =>
 		}`,
 		{
 			headers: { Authorization: `Bearer ${token}` },
-		}
+		},
 	)
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
@@ -117,7 +117,7 @@ export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
 		}`,
 		{
 			headers: { Authorization: `Bearer ${token}` },
-		}
+		},
 	)
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
@@ -128,7 +128,7 @@ export const sendReservationConfirmationSMS = (reservationId, opts = {}) => {
 		.post(
 			`${process.env.REACT_APP_API_URL}/reservations/${reservationId}/wa/confirmation`,
 			null,
-			{ params }
+			{ params },
 		)
 		.then((res) => res.data)
 		.catch((err) => {
@@ -149,7 +149,7 @@ export const cloudinaryUpload1 = (userId, token, image) => {
 			},
 			body: JSON.stringify(image),
 			// body: image,
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -198,7 +198,7 @@ export const gettingAllHotelAccounts = (userId, token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -218,7 +218,7 @@ export const createSupportCase = async (data) => {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify(data),
-			}
+			},
 		);
 		return await response.json();
 	} catch (error) {
@@ -266,7 +266,7 @@ export const getFilteredSupportCasesClients = (token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -295,7 +295,7 @@ export const getFilteredClosedSupportCasesClients = (token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -311,7 +311,7 @@ export const hotelsForAccount = (accountId) => {
 				"Content-Type": "application/json",
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -378,7 +378,7 @@ export const updateSeenByCustomer = async (caseId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => {
@@ -395,7 +395,7 @@ export const deleteSpecificMessage = async (caseId, messageId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => {
@@ -412,7 +412,7 @@ export const getUnseenMessagesCountByAdmin = async (userId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -434,7 +434,7 @@ export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -456,7 +456,7 @@ export const getUnseenMessagesByClient = async (clientId) => {
 			headers: {
 				Accept: "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -479,7 +479,7 @@ export const updateSeenStatusForAdminOrOwner = async (caseId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -502,7 +502,7 @@ export const updateSeenStatusForClient = async (caseId) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -525,7 +525,7 @@ export const markAllMessagesAsSeenByAdmin = async (caseId, userId) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ userId }), // Pass the current user's ID
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -553,7 +553,7 @@ export const agodaData = (accountId, belongsTo, file, userId, token) => {
 				Authorization: `Bearer ${token}`, // Add the token here
 			},
 			body: formData, // Use FormData as the body
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -579,7 +579,7 @@ export const expediaData = (accountId, belongsTo, file, userId, token) => {
 				Authorization: `Bearer ${token}`, // Add the token here
 			},
 			body: formData, // Use FormData as the body
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -616,7 +616,7 @@ export const getAllReservationForAdmin = (
 		createdDate = "",
 		createdFrom = "",
 		createdTo = "",
-	} = {}
+	} = {},
 ) => {
 	const params = new URLSearchParams({
 		page,
@@ -663,7 +663,7 @@ export const getAllReservationForAdmin = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -683,7 +683,7 @@ export const distinctBookingSources = (userId, token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((res) => {
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -708,7 +708,7 @@ export const getUncompletedReservations = (userId, token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`, // Add the token here
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -723,7 +723,7 @@ export const updatePaymentToken = (
 	userId,
 	token,
 	reservationId,
-	newTokenId
+	newTokenId,
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/update-payment-token/${userId}`,
@@ -738,7 +738,7 @@ export const updatePaymentToken = (
 				reservationId, // Reservation ID to update
 				newTokenId, // New tokenized payment ID
 			}),
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -759,7 +759,7 @@ export const createNewReservationClient = async (reservationData) => {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(reservationData), // This line was missing the body to send the request data
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => {
@@ -792,7 +792,7 @@ export const triggerPayment = (
 	paymentOption, // 'depositOnly' | 'depositAndOneNight' | 'fullAmount' | 'customAmount'
 	customUSD, // original custom USD (optional)
 	amountSAR, // number in SAR (for your own ledger)
-	cmid = null // optional PayPal Client-Metadata-ID if you have it
+	cmid = null, // optional PayPal Client-Metadata-ID if you have it
 ) => {
 	const url = `${process.env.REACT_APP_API_URL}/reservations/paypal/mit-charge`;
 	return fetch(url, {
@@ -822,7 +822,7 @@ export const emailSendForTriggeringPayment = async (
 	token,
 	reservationId,
 	amountSAR,
-	amountUSD // optional but recommended
+	amountUSD, // optional but recommended
 ) => {
 	const headers = {
 		Accept: "application/json",
@@ -903,7 +903,7 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				// Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(reservation),
-		}
+		},
 	)
 		.then((response) => {
 			return response.json();
@@ -953,7 +953,7 @@ function buildHotelsQuery(selectedHotels, limit) {
 function buildQueryString(params) {
 	return Object.entries(params)
 		.map(
-			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`
+			([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`,
 		)
 		.join("&");
 }
@@ -973,7 +973,7 @@ export const distinctReservedByList = (userId, token) => {
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByDay data:", err)
+			console.error("Error fetching reservationsByDay data:", err),
 		);
 };
 
@@ -985,7 +985,7 @@ export const getReservationsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -997,7 +997,7 @@ export const getReservationsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1006,7 +1006,7 @@ export const getReservationsByDay = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByDay data:", err)
+			console.error("Error fetching reservationsByDay data:", err),
 		);
 };
 
@@ -1017,7 +1017,7 @@ export const getCheckinsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1029,7 +1029,7 @@ export const getCheckinsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1047,7 +1047,7 @@ export const getCheckoutsByDay = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1059,7 +1059,7 @@ export const getCheckoutsByDay = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1077,7 +1077,7 @@ export const getReservationsByDayByHotelName = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1089,7 +1089,7 @@ export const getReservationsByDayByHotelName = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1098,7 +1098,7 @@ export const getReservationsByDayByHotelName = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByDayByHotelName data:", err)
+			console.error("Error fetching reservationsByDayByHotelName data:", err),
 		);
 };
 
@@ -1109,7 +1109,7 @@ export const getReservationsByBookingStatus = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1121,7 +1121,7 @@ export const getReservationsByBookingStatus = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1130,7 +1130,7 @@ export const getReservationsByBookingStatus = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByBookingStatus data:", err)
+			console.error("Error fetching reservationsByBookingStatus data:", err),
 		);
 };
 
@@ -1141,7 +1141,7 @@ export const getReservationsByHotelNames = (
 	userId,
 	token,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, null, extraParams);
 
@@ -1153,7 +1153,7 @@ export const getReservationsByHotelNames = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1162,7 +1162,7 @@ export const getReservationsByHotelNames = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching reservationsByHotelNames data:", err)
+			console.error("Error fetching reservationsByHotelNames data:", err),
 		);
 };
 
@@ -1174,7 +1174,7 @@ export const getTopHotelsByReservations = (
 	token,
 	limit = 5,
 	selectedHotels = [],
-	extraParams = {}
+	extraParams = {},
 ) => {
 	const query = buildQueryWithParams(selectedHotels, limit, extraParams);
 
@@ -1186,7 +1186,7 @@ export const getTopHotelsByReservations = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1195,7 +1195,7 @@ export const getTopHotelsByReservations = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching topHotelsByReservations data:", err)
+			console.error("Error fetching topHotelsByReservations data:", err),
 		);
 };
 
@@ -1214,7 +1214,7 @@ export const getBookingSourcePaymentSummary = (
 		includeCancelled,
 		excludeCancelled,
 		paymentStatuses,
-	} = {}
+	} = {},
 ) => {
 	const params = new URLSearchParams();
 
@@ -1242,7 +1242,7 @@ export const getBookingSourcePaymentSummary = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1262,7 +1262,7 @@ export const getBookingSourcePaymentSummary = (
 export const getSpecificListOfReservations = (
 	userId,
 	token,
-	queryParamsObj
+	queryParamsObj,
 ) => {
 	const queryString = buildQueryString(queryParamsObj);
 
@@ -1274,7 +1274,7 @@ export const getSpecificListOfReservations = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1283,7 +1283,7 @@ export const getSpecificListOfReservations = (
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching specific list of reservations:", err)
+			console.error("Error fetching specific list of reservations:", err),
 		);
 };
 
@@ -1298,7 +1298,7 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1307,8 +1307,36 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 			return response.json();
 		})
 		.catch((err) =>
-			console.error("Error fetching specific list of reservations:", err)
+			console.error("Error fetching specific list of reservations:", err),
 		);
+};
+
+export const getPaidBreakdownReportAdmin = (
+	userId,
+	token,
+	{ hotelId, searchQuery = "", page = 1, limit = 200 } = {},
+) => {
+	const params = new URLSearchParams();
+	if (hotelId) params.set("hotelId", hotelId);
+	if (searchQuery) params.set("searchQuery", searchQuery);
+	if (page) params.set("page", String(page));
+	if (limit) params.set("limit", String(limit));
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/paid-breakdown/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.error("Error fetching paid breakdown report:", err);
+			return { data: [], totalDocuments: 0 };
+		});
 };
 
 export const getHotelOccupancyCalendar = (
@@ -1322,7 +1350,7 @@ export const getHotelOccupancyCalendar = (
 		end,
 		display = "roomType",
 		paymentStatuses,
-	} = {}
+	} = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required for occupancy view"));
@@ -1348,7 +1376,7 @@ export const getHotelOccupancyCalendar = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1373,11 +1401,11 @@ export const getHotelOccupancyWarnings = (
 		end,
 		display = "roomType",
 		paymentStatuses,
-	} = {}
+	} = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(
-			new Error("hotelId is required for occupancy warnings")
+			new Error("hotelId is required for occupancy warnings"),
 		);
 	}
 
@@ -1401,7 +1429,7 @@ export const getHotelOccupancyWarnings = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1426,11 +1454,11 @@ export const getHotelOccupancyDayReservations = (
 		includeCancelled = false,
 		display = "roomType",
 		paymentStatuses,
-	} = {}
+	} = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(
-			new Error("hotelId is required for day reservations")
+			new Error("hotelId is required for day reservations"),
 		);
 	}
 	if (!date) {
@@ -1456,7 +1484,7 @@ export const getHotelOccupancyDayReservations = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => {
 			if (!response.ok) {
@@ -1482,7 +1510,7 @@ export const currencyConversion = (amounts) => {
 				Accept: "application/json",
 				"Content-Type": "application/json",
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1496,7 +1524,7 @@ export async function chargeOwnerCommissions(body, { token } = {}) {
 			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			body: JSON.stringify(body),
 			credentials: "omit",
-		}
+		},
 	);
 	const json = await res.json();
 	if (!res.ok) throw new Error(json?.message || "Charge failed");
@@ -1514,7 +1542,7 @@ export async function getAdminPayoutsOverview(params = {}, { token } = {}) {
 		{
 			headers: { ...authHeaders(token) },
 			cache: "no-store",
-		}
+		},
 	);
 	if (!res.ok) throw new Error("Failed to load admin payouts overview");
 	return res.json();
@@ -1530,7 +1558,7 @@ export async function listAdminPayouts(params = {}, { token } = {}) {
 		{
 			headers: { ...authHeaders(token) },
 			cache: "no-store",
-		}
+		},
 	);
 	if (!res.ok) throw new Error("Failed to list admin payouts");
 	return res.json();
@@ -1544,7 +1572,7 @@ export async function listAdminHotelsLite({ token } = {}) {
 		{
 			headers: { ...authHeaders(token) },
 			cache: "no-store",
-		}
+		},
 	);
 	if (!res.ok) throw new Error("Failed to list hotels");
 	return res.json(); // { count, hotels: [{ _id, hotelName }] }
@@ -1553,7 +1581,7 @@ export async function listAdminHotelsLite({ token } = {}) {
 /* ===== Admin reservation updates (audit-logged) ===== */
 export async function adminUpdateCommissionStatus(
 	{ reservationId, commissionPaid, note },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const res = await fetch(
 		`${process.env.REACT_APP_API_URL}/admin-payouts/commission-status`,
@@ -1561,7 +1589,7 @@ export async function adminUpdateCommissionStatus(
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			body: JSON.stringify({ reservationId, commissionPaid, note }),
-		}
+		},
 	);
 	const json = await res.json();
 	if (!res.ok)
@@ -1570,7 +1598,7 @@ export async function adminUpdateCommissionStatus(
 }
 export async function adminUpdateTransferStatus(
 	{ reservationId, moneyTransferredToHotel, note },
-	{ token } = {}
+	{ token } = {},
 ) {
 	const res = await fetch(
 		`${process.env.REACT_APP_API_URL}/admin-payouts/transfer-status`,
@@ -1578,7 +1606,7 @@ export async function adminUpdateTransferStatus(
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			body: JSON.stringify({ reservationId, moneyTransferredToHotel, note }),
-		}
+		},
 	);
 	const json = await res.json();
 	if (!res.ok)
@@ -1587,7 +1615,7 @@ export async function adminUpdateTransferStatus(
 }
 export async function adminUpdateReservationPayoutFlags(
 	payload,
-	{ token } = {}
+	{ token } = {},
 ) {
 	const res = await fetch(
 		`${process.env.REACT_APP_API_URL}/admin-payouts/update-reservation`,
@@ -1595,7 +1623,7 @@ export async function adminUpdateReservationPayoutFlags(
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", ...authHeaders(token) },
 			body: JSON.stringify(payload),
-		}
+		},
 	);
 	const json = await res.json();
 	if (!res.ok) throw new Error(json?.message || "Failed to update reservation");
@@ -1618,7 +1646,7 @@ export const adminAutoReconcileHotel = async (params, { token }) => {
 				note: params.note || "",
 				toleranceHalala: params.toleranceHalala || 5,
 			}),
-		}
+		},
 	);
 	if (!res.ok) {
 		const err = await res.json().catch(() => ({}));
@@ -1655,7 +1683,7 @@ export const listExpenses = (userId, token, { hotelId } = {}) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1676,7 +1704,7 @@ export const listExpenseHotels = (userId, token) => {
 export const getFinancialReport = (
 	userId,
 	token,
-	{ hotelId, year, excludeCancelled, paymentStatuses } = {}
+	{ hotelId, year, excludeCancelled, paymentStatuses } = {},
 ) => {
 	const params = new URLSearchParams();
 	if (hotelId) params.set("hotelId", hotelId);
@@ -1702,7 +1730,7 @@ export const getFinancialReport = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1719,7 +1747,7 @@ export const updateExpense = (expenseId, userId, token, expense) => {
 				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(expense),
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -1734,7 +1762,7 @@ export const deleteExpense = (expenseId, userId, token) => {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-		}
+		},
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));

@@ -87,6 +87,126 @@ const ContentSection = styled.div`
 	}
 `;
 
+const PaymentBreakdownToggle = styled.button`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 90%;
+	margin: 14px auto 6px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid #d9d9d9;
+	background: #fafafa;
+	color: #222;
+	font-weight: 600;
+	cursor: pointer;
+
+	&:hover {
+		background: #f1f1f1;
+	}
+`;
+
+const PaymentBreakdownHint = styled.span`
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: #666;
+`;
+
+const PaymentBreakdownTotals = styled.div`
+	border: 1px solid #e5e5e5;
+	background: #f7f7f7;
+	border-radius: 8px;
+	padding: 12px 14px;
+`;
+
+const paymentBreakdownFields = [
+	{
+		key: "paid_online_via_link",
+		label: "Paid Online (Payment Link)",
+		group: "online",
+	},
+	{
+		key: "paid_at_hotel_cash",
+		label: "Paid at Hotel (Cash)",
+		group: "offline",
+	},
+	{
+		key: "paid_at_hotel_card",
+		label: "Paid at Hotel (Card)",
+		group: "offline",
+	},
+	{
+		key: "paid_to_zad",
+		label: "Paid to ZAD",
+		group: "online",
+	},
+	{
+		key: "paid_online_jannatbooking",
+		label: "Paid Online (Jannat Booking)",
+		group: "online",
+	},
+	{
+		key: "paid_online_other_platforms",
+		label: "Paid Online (Other Platforms)",
+		group: "online",
+	},
+];
+
+const paymentBreakdownNumericKeys = paymentBreakdownFields.map(
+	(field) => field.key,
+);
+
+const resolveBreakdownNumber = (value, normalizer) => {
+	if (typeof normalizer === "function") {
+		return normalizer(value, 0);
+	}
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const buildPaymentBreakdown = (breakdown, normalizer) => ({
+	paid_online_via_link: resolveBreakdownNumber(
+		breakdown?.paid_online_via_link,
+		normalizer,
+	),
+	paid_at_hotel_cash: resolveBreakdownNumber(
+		breakdown?.paid_at_hotel_cash,
+		normalizer,
+	),
+	paid_at_hotel_card: resolveBreakdownNumber(
+		breakdown?.paid_at_hotel_card,
+		normalizer,
+	),
+	paid_to_zad: resolveBreakdownNumber(breakdown?.paid_to_zad, normalizer),
+	paid_online_jannatbooking: resolveBreakdownNumber(
+		breakdown?.paid_online_jannatbooking,
+		normalizer,
+	),
+	paid_online_other_platforms: resolveBreakdownNumber(
+		breakdown?.paid_online_other_platforms,
+		normalizer,
+	),
+	payment_comments:
+		typeof breakdown?.payment_comments === "string"
+			? breakdown.payment_comments
+			: "",
+});
+
+const getPaymentBreakdownTotals = (breakdown, normalizer) =>
+	paymentBreakdownFields.reduce(
+		(acc, field) => {
+			const value = resolveBreakdownNumber(
+				breakdown?.[field.key],
+				normalizer,
+			);
+			acc.total += value;
+			if (field.group === "offline") acc.offline += value;
+			else acc.online += value;
+			return acc;
+		},
+		{ total: 0, online: 0, offline: 0 },
+	);
+
 const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const pdfRef = useRef(null);
 	// eslint-disable-next-line
@@ -97,9 +217,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const [isModalVisible5, setIsModalVisible5] = useState(false); // Ops Receipt (ReceiptPDFB2B)
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
+	const [isPaymentBreakdownVisible, setIsPaymentBreakdownVisible] =
+		useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
 	const [sendEmail, setSendEmail] = useState(true);
+	const [paymentBreakdownDraft, setPaymentBreakdownDraft] = useState(
+		buildPaymentBreakdown(reservation?.paid_amount_breakdown),
+	);
+	const [isSavingPaymentBreakdown, setIsSavingPaymentBreakdown] =
+		useState(false);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -119,6 +246,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		(value) => normalizeNumber(value, 0).toLocaleString(),
 		[normalizeNumber],
 	);
+
+	useEffect(() => {
+		if (!isPaymentBreakdownVisible) return;
+		setPaymentBreakdownDraft(
+			buildPaymentBreakdown(reservation?.paid_amount_breakdown, normalizeNumber),
+		);
+	}, [isPaymentBreakdownVisible, reservation?.paid_amount_breakdown, normalizeNumber]);
 
 	const summarizePayment = useCallback(
 		(reservationData, paymentOverride = "") => {
@@ -209,12 +343,24 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		[reservation, summarizePayment],
 	);
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
-	const paidOnline = normalizeNumber(reservation?.paid_amount, 0);
-	const paidOffline = normalizeNumber(
-		reservation?.payment_details?.onsite_paid_amount,
-		0,
+	const breakdownTotalsFromReservation = useMemo(
+		() =>
+			getPaymentBreakdownTotals(
+				reservation?.paid_amount_breakdown,
+				normalizeNumber,
+			),
+		[reservation?.paid_amount_breakdown, normalizeNumber],
 	);
-	const totalPaid = paidOnline + paidOffline;
+	const hasBreakdownValues = breakdownTotalsFromReservation.total > 0;
+	const paidOnline = hasBreakdownValues
+		? breakdownTotalsFromReservation.online
+		: normalizeNumber(reservation?.paid_amount, 0);
+	const paidOffline = hasBreakdownValues
+		? breakdownTotalsFromReservation.offline
+		: normalizeNumber(reservation?.payment_details?.onsite_paid_amount, 0);
+	const totalPaid = hasBreakdownValues
+		? breakdownTotalsFromReservation.total
+		: paidOnline + paidOffline;
 	const isCreditDebit =
 		paymentSummary.paymentMode === "credit/ debit" ||
 		paymentSummary.paymentMode === "credit/debit";
@@ -228,6 +374,73 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.payment_status ||
 		reservation?.financeStatus ||
 		"";
+	const breakdownDraftTotals = useMemo(
+		() => getPaymentBreakdownTotals(paymentBreakdownDraft, normalizeNumber),
+		[paymentBreakdownDraft, normalizeNumber],
+	);
+	const remainingPaymentAmount = Math.max(
+		totalAmountValue - breakdownDraftTotals.total,
+		0,
+	);
+
+	const handlePaymentBreakdownValueChange = (key, rawValue) => {
+		setPaymentBreakdownDraft((prev) => {
+			const parsedValue = Math.max(normalizeNumber(rawValue, 0), 0);
+			const totalOther = paymentBreakdownNumericKeys.reduce(
+				(sum, fieldKey) => {
+					if (fieldKey === key) return sum;
+					return sum + normalizeNumber(prev[fieldKey], 0);
+				},
+				0,
+			);
+			const maxForField = Math.max(totalAmountValue - totalOther, 0);
+			const clampedValue = Math.min(parsedValue, maxForField);
+			return { ...prev, [key]: clampedValue };
+		});
+	};
+
+	const handlePaymentBreakdownCommentChange = (value) => {
+		setPaymentBreakdownDraft((prev) => ({
+			...prev,
+			payment_comments: value,
+		}));
+	};
+
+	const handleSavePaymentBreakdown = () => {
+		if (!reservation?._id) return;
+		const nextTotals = getPaymentBreakdownTotals(
+			paymentBreakdownDraft,
+			normalizeNumber,
+		);
+		if (nextTotals.total > totalAmountValue) {
+			return toast.error("Paid total cannot exceed the total amount.");
+		}
+		setIsSavingPaymentBreakdown(true);
+		const updateData = {
+			paid_amount_breakdown: buildPaymentBreakdown(
+				paymentBreakdownDraft,
+				normalizeNumber,
+			),
+			paid_amount: nextTotals.total,
+		};
+
+		updateSingleReservation(reservation._id, updateData).then((response) => {
+			setIsSavingPaymentBreakdown(false);
+			if (!response || response.error) {
+				console.error(response?.error || response);
+				return toast.error(
+					"An error occurred while updating the payment breakdown",
+				);
+			}
+			const updated = response?.reservation || response;
+			const merged = updated?._id
+				? updated
+				: { ...reservation, ...updateData };
+			toast.success("Payment breakdown was successfully updated");
+			setIsPaymentBreakdownVisible(false);
+			setReservation(merged);
+		});
+	};
 
 	// Same as in MoreDetails
 	function calculateReservationPeriod(checkin, checkout, language) {
@@ -617,6 +830,97 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							}
 						>
 							{linkGenerate}
+						</div>
+					</Modal>
+
+					<Modal
+						title='Payment Breakdown'
+						open={isPaymentBreakdownVisible}
+						onCancel={() => setIsPaymentBreakdownVisible(false)}
+						footer={null}
+						width={720}
+						centered
+						destroyOnClose
+					>
+						<div className='container-fluid'>
+							<div className='row'>
+								{paymentBreakdownFields.map((field) => (
+									<div className='col-md-6 mb-3' key={field.key}>
+										<label style={{ fontWeight: "bold" }}>
+											{field.label}
+										</label>
+										<input
+											type='number'
+											min='0'
+											step='0.01'
+											className='form-control'
+											value={paymentBreakdownDraft[field.key]}
+											onChange={(e) =>
+												handlePaymentBreakdownValueChange(
+													field.key,
+													e.target.value,
+												)
+											}
+										/>
+									</div>
+								))}
+							</div>
+							<div className='row'>
+								<div className='col-md-12 mb-3'>
+									<label style={{ fontWeight: "bold" }}>
+										Payment Comments
+									</label>
+									<textarea
+										className='form-control'
+										rows='3'
+										value={paymentBreakdownDraft.payment_comments}
+										onChange={(e) =>
+											handlePaymentBreakdownCommentChange(e.target.value)
+										}
+									/>
+								</div>
+							</div>
+							<PaymentBreakdownTotals>
+								<div className='row'>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Total Amount
+										</div>
+										<div style={{ fontWeight: "bold" }}>
+											{formatMoney(totalAmountValue)} SAR
+										</div>
+									</div>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Total Paid
+										</div>
+										<div style={{ fontWeight: "bold" }}>
+											{formatMoney(breakdownDraftTotals.total)} SAR
+										</div>
+									</div>
+									<div className='col-md-4'>
+										<div style={{ fontSize: "0.85rem", color: "#666" }}>
+											Remaining
+										</div>
+										<div style={{ fontWeight: "bold", color: "#1b6b34" }}>
+											{formatMoney(remainingPaymentAmount)} SAR
+										</div>
+									</div>
+								</div>
+							</PaymentBreakdownTotals>
+							<div className='text-center mt-4'>
+								<button
+									type='button'
+									className='btn btn-primary'
+									disabled={
+										isSavingPaymentBreakdown ||
+										breakdownDraftTotals.total > totalAmountValue
+									}
+									onClick={handleSavePaymentBreakdown}
+								>
+									{isSavingPaymentBreakdown ? "Updating..." : "Update"}
+								</button>
+							</div>
 						</div>
 					</Modal>
 
@@ -1245,6 +1549,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									<div className='col-md-8 my-4 mx-auto'>
 										{chosenLanguage === "Arabic" ? "ملحوظة" : "Comment"}
 										<div>{reservation && reservation.comment}</div>
+									</div>
+
+									<div className='col-md-12'>
+										<PaymentBreakdownToggle
+											type='button'
+											onClick={() => setIsPaymentBreakdownVisible(true)}
+										>
+											<span>Payment Breakdown</span>
+											<PaymentBreakdownHint>Click to update</PaymentBreakdownHint>
+										</PaymentBreakdownToggle>
 									</div>
 
 									{roomTableRows && roomTableRows.length > 0 ? (

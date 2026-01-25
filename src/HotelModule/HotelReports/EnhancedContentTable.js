@@ -18,13 +18,18 @@ const EnhancedContentTable = ({
 }) => {
 	// ------------------ Search Box local state ------------------
 	const [searchBoxValue, setSearchBoxValue] = useState(searchTerm || "");
+	const safeData = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+	const parsedTotalDocuments = Number(totalDocuments);
+	const safeTotalDocuments = Number.isFinite(parsedTotalDocuments)
+		? parsedTotalDocuments
+		: safeData.length;
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
 	// (Currently we artificially label #2944008828 as captured as well)
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
 
 	const formattedReservations = useMemo(() => {
-		return data.map((reservation) => {
+		return safeData.map((reservation) => {
 			const {
 				customer_details = {},
 				hotelId = {},
@@ -56,7 +61,7 @@ const EnhancedContentTable = ({
 				payment_status: computedPaymentStatus,
 			};
 		});
-	}, [data, capturedConfirmationNumbers]);
+	}, [safeData, capturedConfirmationNumbers]);
 
 	// ------------------ Sorting logic (unchanged) ------------------
 	const [sortConfig, setSortConfig] = useState({
@@ -129,7 +134,7 @@ const EnhancedContentTable = ({
 	};
 
 	// ------------------ Server Pagination Controls ------------------
-	const totalPages = Math.ceil(totalDocuments / pageSize);
+	const totalPages = Math.max(Math.ceil(safeTotalDocuments / pageSize), 1);
 
 	const handlePrevPage = () => {
 		if (currentPage > 1) {

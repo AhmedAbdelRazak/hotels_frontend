@@ -34,12 +34,19 @@ function parseGroupKeyDate(groupKey) {
 	return dayjs(groupKey, "YYYY-MM-DD", true);
 }
 
+const normalizeArray = (value) => {
+	if (Array.isArray(value)) return value;
+	if (value && Array.isArray(value.data)) return value.data;
+	return [];
+};
+
 /** 2) Build unique year-month & year-quarter sets from the data */
 function buildMonthQuarterOptions(dataArray) {
+	const src = normalizeArray(dataArray);
 	const monthSet = new Set();
 	const quarterSet = new Set();
 
-	dataArray.forEach((item) => {
+	src.forEach((item) => {
 		const d = parseGroupKeyDate(item.groupKey);
 		if (d.isValid()) {
 			const year = d.year();
@@ -72,7 +79,8 @@ function getMeasureValue(item, measure) {
 
 /** 4) Sum over an array */
 function sumOfMeasure(dataArray, measure) {
-	return dataArray.reduce(
+	const src = normalizeArray(dataArray);
+	return src.reduce(
 		(acc, item) => acc + getMeasureValue(item, measure),
 		0
 	);
@@ -85,13 +93,14 @@ function filterByRangeAndSelection(
 	monthSelected,
 	quarterSelected
 ) {
-	if (range === "all") return dataArray;
+	const src = normalizeArray(dataArray);
+	if (range === "all") return src;
 
 	if (range === "month" && monthSelected) {
 		const [y, m] = monthSelected.split("-");
 		const year = Number(y);
 		const month = Number(m);
-		return dataArray.filter((item) => {
+		return src.filter((item) => {
 			const d = parseGroupKeyDate(item.groupKey);
 			return d.isValid() && d.year() === year && d.month() + 1 === month;
 		});
@@ -101,7 +110,7 @@ function filterByRangeAndSelection(
 		const [y, qStr] = quarterSelected.split("-Q");
 		const year = Number(y);
 		const qNum = Number(qStr);
-		return dataArray.filter((item) => {
+		return src.filter((item) => {
 			const d = parseGroupKeyDate(item.groupKey);
 			if (!d.isValid() || d.year() !== year) return false;
 			const mon = d.month() + 1;
@@ -109,7 +118,7 @@ function filterByRangeAndSelection(
 		});
 	}
 
-	return dataArray;
+	return src;
 }
 
 /** 6) Format numeric values for display (table/cards) */
@@ -150,7 +159,8 @@ function createYAxisFormatter(measure) {
 function transformToMonthly(dataArray) {
 	// We'll aggregate multiple days in the same YYYY-MM bucket
 	const monthlyMap = {};
-	for (const item of dataArray) {
+	const src = normalizeArray(dataArray);
+	for (const item of src) {
 		const d = parseGroupKeyDate(item.groupKey);
 		if (!d.isValid()) continue;
 		const monthKey = d.format("YYYY-MM");
@@ -259,7 +269,11 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 	// Modal
 	const [modalVisible, setModalVisible] = useState(false);
 	const [modalLoading, setModalLoading] = useState(false);
-	const [modalData, setModalData] = useState([]); // array of reservations
+	const [modalData, setModalData] = useState({
+		data: [],
+		totalDocuments: 0,
+		scorecards: null,
+	});
 
 	// Additional state for EnhancedContentTable pagination
 	const [currentPage, setCurrentPage] = useState(1);
@@ -319,40 +333,45 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 		])
 			.then((results) => {
 				const [rByDay, cByDay, coByDay, rByStatus, topHotelsData] = results;
+				const safeReservationsByDay = normalizeArray(rByDay);
+				const safeCheckinsByDay = normalizeArray(cByDay);
+				const safeCheckoutsByDay = normalizeArray(coByDay);
+				const safeByStatus = normalizeArray(rByStatus);
+				const safeTopHotels = normalizeArray(topHotelsData);
 
-				setReservationsByDay(rByDay || []);
-				setCheckinsByDay(cByDay || []);
-				setCheckoutsByDay(coByDay || []);
-				setReservationsByBookingStatus(rByStatus || []);
-				setTopHotels(topHotelsData || []);
+				setReservationsByDay(safeReservationsByDay);
+				setCheckinsByDay(safeCheckinsByDay);
+				setCheckoutsByDay(safeCheckoutsByDay);
+				setReservationsByBookingStatus(safeByStatus);
+				setTopHotels(safeTopHotels);
 
 				// Build unique month/quarter sets
 				const { monthArray: dM, quarterArray: dQ } = buildMonthQuarterOptions(
-					rByDay || []
+					safeReservationsByDay
 				);
 				setDayMonthOptions(dM);
 				setDayQuarterOptions(dQ);
 
 				const { monthArray: cM, quarterArray: cQ } = buildMonthQuarterOptions(
-					cByDay || []
+					safeCheckinsByDay
 				);
 				setCheckinMonthOptions(cM);
 				setCheckinQuarterOptions(cQ);
 
 				const { monthArray: coM, quarterArray: coQ } = buildMonthQuarterOptions(
-					coByDay || []
+					safeCheckoutsByDay
 				);
 				setCheckoutMonthOptions(coM);
 				setCheckoutQuarterOptions(coQ);
 
 				const { monthArray: sM, quarterArray: sQ } = buildMonthQuarterOptions(
-					rByStatus || []
+					safeByStatus
 				);
 				setStatusMonthOptions(sM);
 				setStatusQuarterOptions(sQ);
 
 				const { monthArray: tM, quarterArray: tQ } = buildMonthQuarterOptions(
-					topHotelsData || []
+					safeTopHotels
 				);
 				setTopMonthOptions(tM);
 				setTopQuarterOptions(tQ);
@@ -410,7 +429,16 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 				// also respect the excludeCancelled toggle globally
 				excludeCancelled,
 			});
-			setModalData(data || []);
+			const list = Array.isArray(data)
+				? data
+				: Array.isArray(data?.data)
+				  ? data.data
+				  : [];
+			setModalData({
+				data: list,
+				totalDocuments: Number(data?.totalDocuments || list.length || 0),
+				scorecards: data?.scorecards || null,
+			});
 			setCurrentPage(1);
 		} catch (err) {
 			console.error("Failed to fetch specific reservations", err);
@@ -759,7 +787,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 		// The useEffect with fetchReservations() will run automatically on next render
 	};
 
-	console.log(modalData, "modalDataaaaaaaaa");
+	const modalRows = Array.isArray(modalData?.data) ? modalData.data : [];
 	return (
 		<ReservationsOverviewWrapper
 			dir={chosenLanguage === "Arabic" ? "ltr" : "ltr"}
@@ -1201,13 +1229,13 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 			>
 				{modalLoading ? (
 					<Spin tip='Loading...' />
-				) : modalData.length === 0 ? (
+				) : modalRows.length === 0 ? (
 					<p>No reservations found</p>
 				) : (
 					<EnhancedContentTable
 						// We pass only the subset after user-based filtering
 						// plus totalDocuments from the server for pagination
-						data={modalData.data}
+						data={modalRows}
 						totalDocuments={modalData.totalDocuments}
 						currentPage={currentPage}
 						pageSize={pageSize}

@@ -9,6 +9,7 @@ import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelsInventoryMap from "./HotelsInventoryMap";
+import PaidReportAdmin from "./PaidReportAdmin";
 
 const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -188,6 +189,13 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 								>
 									Hotels' Inventory
 								</button>
+
+								<button
+									className={activeTab === "paid-overview" ? "active" : ""}
+									onClick={() => handleTabChange("paid-overview")}
+								>
+									Paid Reservations Overview
+								</button>
 							</TabNavigation>
 
 							{activeTab === "reservations" && (
@@ -201,6 +209,13 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 								<div>
 									<h3>Hotels Inventory</h3>
 									<HotelsInventoryMap />
+								</div>
+							)}
+
+							{activeTab === "paid-overview" && (
+								<div>
+									<h3>Paid Reservations Overview</h3>
+									<PaidReportAdmin />
 								</div>
 							)}
 						</div>
