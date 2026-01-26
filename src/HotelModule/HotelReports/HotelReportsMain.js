@@ -129,14 +129,17 @@ const HotelReportsMain = () => {
 
 						{activeTab === "inventory" && (
 							<div>
-								<HotelInventory chosenLanguage={chosenLanguage} />
+								<HotelInventory
+									chosenLanguage={chosenLanguage}
+									collapsed={collapsed}
+								/>
 							</div>
 						)}
 
 						{activeTab === "paid-overview" && (
 							<div>
 								<h3>Paid Reservations Overview</h3>
-								<PaidReportHotel />
+								<PaidReportHotel collapsed={collapsed} />
 							</div>
 						)}
 					</div>

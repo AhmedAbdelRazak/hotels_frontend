@@ -346,6 +346,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					reservationData?.payment_details?.onsite_paid_amount,
 					0,
 				) > 0 || paymentMode === "paid offline";
+			const breakdown = reservationData?.paid_amount_breakdown || {};
+			const breakdownCaptured = Object.keys(breakdown).some((key) => {
+				if (key === "payment_comments") return false;
+				return normalizeNumber(breakdown[key], 0) > 0;
+			});
 			const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
 			const initialCompleted =
 				(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
@@ -363,7 +368,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				paymentMode === "paid online" ||
 				paymentMode === "captured" ||
 				paymentMode === "credit/ debit" ||
-				paymentMode === "credit/debit";
+				paymentMode === "credit/debit" ||
+				breakdownCaptured;
 
 			const isNotPaid =
 				paymentMode === "not paid" && !isCaptured && !payOffline;

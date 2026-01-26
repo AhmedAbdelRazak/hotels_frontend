@@ -288,6 +288,71 @@ const getPaymentBreakdownTotals = (breakdown) =>
 		{ total: 0, online: 0, offline: 0 },
 	);
 
+const hasPaidBreakdownCapture = (breakdown = {}) =>
+	paymentBreakdownNumericKeys.some((key) => safeNumber(breakdown?.[key]) > 0);
+
+const summarizeReservationPaymentStatus = (reservation = {}) => {
+	const paymentStr = (reservation?.payment || "").toLowerCase();
+	const paymentDetails = reservation?.payment_details || {};
+	const paypalDetails = reservation?.paypal_details || {};
+
+	const legacyCaptured = !!paymentDetails.captured;
+	const paidOffline =
+		safeNumber(paymentDetails.onsite_paid_amount) > 0 ||
+		paymentStr === "paid offline";
+
+	const breakdownCaptured = hasPaidBreakdownCapture(
+		reservation?.paid_amount_breakdown,
+	);
+
+	const capturedTotals = [
+		paypalDetails.captured_total_sar,
+		paypalDetails.captured_total_usd,
+		paypalDetails.captured_total,
+	]
+		.map(safeNumber)
+		.filter((n) => n > 0);
+
+	const initialCompleted =
+		(paypalDetails?.initial?.capture_status || paypalDetails?.initial?.status || "")
+			.toUpperCase() === "COMPLETED";
+
+	const anyMitCompleted =
+		Array.isArray(paypalDetails?.mit) &&
+		paypalDetails.mit.some(
+			(m) =>
+				(m?.capture_status || m?.status || "").toUpperCase() === "COMPLETED",
+		);
+
+	const anyCapturesCompleted =
+		Array.isArray(paypalDetails?.captures) &&
+		paypalDetails.captures.some(
+			(c) =>
+				(c?.capture_status || c?.status || "").toUpperCase() === "COMPLETED",
+		);
+
+	const isCaptured =
+		legacyCaptured ||
+		capturedTotals.length > 0 ||
+		initialCompleted ||
+		anyMitCompleted ||
+		anyCapturesCompleted ||
+		paymentStr === "paid online" ||
+		paymentStr === "captured" ||
+		paymentStr === "credit/ debit" ||
+		paymentStr === "credit/debit" ||
+		breakdownCaptured;
+
+	const isNotPaid = paymentStr === "not paid" && !isCaptured && !paidOffline;
+
+	let status = "Not Captured";
+	if (isCaptured) status = "Captured";
+	else if (paidOffline) status = "Paid Offline";
+	else if (isNotPaid) status = "Not Paid";
+
+	return { status, isCaptured, paidOffline, isNotPaid };
+};
+
 const MoreDetails = ({
 	reservation,
 	setReservation,
@@ -400,6 +465,30 @@ const MoreDetails = ({
 		totalAmountValue - paymentBreakdownTotals.total,
 		0,
 	);
+	const paymentStatusSummary = useMemo(
+		() => summarizeReservationPaymentStatus(reservation),
+		[reservation],
+	);
+	const paymentStatusLabel = useMemo(() => {
+		const status = paymentStatusSummary?.status || "Not Captured";
+		if (chosenLanguage !== "Arabic") return status;
+		switch (status) {
+			case "Captured":
+				return "تم التحصيل";
+			case "Paid Offline":
+				return "مدفوع نقداً";
+			case "Not Paid":
+				return "غير مدفوع";
+			default:
+				return "غير محصل";
+		}
+	}, [paymentStatusSummary, chosenLanguage]);
+	const paymentStatusColor = useMemo(() => {
+		const status = paymentStatusSummary?.status || "Not Captured";
+		if (status === "Captured" || status === "Paid Offline") return "darkgreen";
+		if (status === "Not Paid") return "darkred";
+		return "#a16207";
+	}, [paymentStatusSummary]);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		setPaymentBreakdownDraft((prev) => {
@@ -2214,6 +2303,23 @@ const MoreDetails = ({
 									</div>
 									<div className='my-3'>
 										<div className='row'>
+											<div className='col-md-5 mx-auto'>
+												<h6>
+													{chosenLanguage === "Arabic"
+														? "حالة الدفع"
+														: "Payment Status"}
+												</h6>
+											</div>
+											<div className='col-md-5 mx-auto'>
+												<h5
+													style={{
+														color: paymentStatusColor,
+														fontWeight: "bold",
+													}}
+												>
+													{paymentStatusLabel}
+												</h5>
+											</div>
 											{reservation?.payment_details?.onsite_paid_amount &&
 											reservation?.payment_details?.onsite_paid_amount > 0 ? (
 												<div className='col-md-5 mx-auto'>

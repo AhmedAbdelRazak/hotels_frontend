@@ -96,6 +96,12 @@ const EnhancedContentTable = ({
 		const payOffline =
 			Number(reservation?.payment_details?.onsite_paid_amount || 0) > 0 ||
 			pmt === "paid offline";
+		const breakdown = reservation?.paid_amount_breakdown || {};
+		const breakdownCaptured = Object.keys(breakdown).some((key) => {
+			if (key === "payment_comments") return false;
+			const val = Number(breakdown[key]);
+			return Number.isFinite(val) && val > 0;
+		});
 
 		// PayPal ledger signals
 		const capTotal = Number(pd?.captured_total_usd || 0);
@@ -117,7 +123,8 @@ const EnhancedContentTable = ({
 			capTotal > 0 ||
 			initialCompleted ||
 			anyMitCompleted ||
-			pmt === "paid online";
+			pmt === "paid online" ||
+			breakdownCaptured;
 
 		const isNotPaid = pmt === "not paid" && !isCaptured && !payOffline;
 

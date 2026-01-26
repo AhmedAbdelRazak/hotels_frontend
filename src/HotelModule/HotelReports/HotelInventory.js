@@ -69,7 +69,7 @@ const hijriMonthsAr = [
 	"\u0630\u0648\u0020\u0627\u0644\u062d\u062c\u0629",
 ];
 
-const HotelInventory = ({ chosenLanguage }) => {
+const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 	const { hotelId } = useParams();
 	const supportsHijri =
 		typeof moment.fn?.iMonth === "function" &&
@@ -403,6 +403,17 @@ const HotelInventory = ({ chosenLanguage }) => {
 	);
 
 	const modalDir = chosenLanguage === "Arabic" ? "rtl" : "ltr";
+	const modalOffsets = useMemo(() => {
+		const sideMenuWidth = collapsed ? 90 : 295;
+		const gutter = 16;
+		const width = `calc(100vw - ${sideMenuWidth + gutter * 2}px)`;
+		const left =
+			chosenLanguage === "Arabic" ? `${gutter}px` : `${sideMenuWidth + gutter}px`;
+		return {
+			width,
+			style: { top: "3%", left, position: "absolute" },
+		};
+	}, [chosenLanguage, collapsed]);
 
 	const togglePaymentStatus = (status) => {
 		setPaymentStatuses((prev) => {
@@ -813,8 +824,8 @@ const HotelInventory = ({ chosenLanguage }) => {
 				onCancel={() => setDayModalOpen(false)}
 				onOk={() => setDayModalOpen(false)}
 				title={modalTitle}
-				width={820}
-				style={{ maxWidth: "92vw" }}
+				width={modalOffsets.width}
+				style={modalOffsets.style}
 				styles={{ body: { padding: "18px 28px 22px" } }}
 			>
 				{dayDetailsLoading && (

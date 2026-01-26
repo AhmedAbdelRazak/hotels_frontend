@@ -391,12 +391,26 @@ const PaidReportAdmin = () => {
 							</tr>
 						</thead>
 						<tbody>
-							{rows.map((reservation) => (
-								<tr key={reservation._id}>
-									<td>
-										{reservation?.customer_details?.name || labels.na}
-									</td>
-									<td>{reservation?.confirmation_number || labels.na}</td>
+							{rows.map((reservation) => {
+								const nameValue =
+									reservation?.customer_details?.name || labels.na;
+								const confirmationValue =
+									reservation?.confirmation_number || labels.na;
+								const commentsValue =
+									reservation?.paid_amount_breakdown?.payment_comments ||
+									labels.na;
+								return (
+									<tr key={reservation._id}>
+										<td>
+											<EllipsisText title={nameValue} $maxWidth='160px'>
+												{nameValue}
+											</EllipsisText>
+										</td>
+										<td>
+											<EllipsisText title={confirmationValue} $maxWidth='140px'>
+												{confirmationValue}
+											</EllipsisText>
+										</td>
 									<td>
 										{formatDate(
 											reservation?.checkin_date,
@@ -420,8 +434,9 @@ const PaidReportAdmin = () => {
 										</td>
 									))}
 									<td>
-										{reservation?.paid_amount_breakdown?.payment_comments ||
-											labels.na}
+										<EllipsisText title={commentsValue} $maxWidth='160px'>
+											{commentsValue}
+										</EllipsisText>
 									</td>
 									<td>{formatMoney(reservation?.paidTotal, numberLocale)}</td>
 									<td>{formatMoney(reservation?.totalAmount, numberLocale)}</td>
@@ -434,7 +449,8 @@ const PaidReportAdmin = () => {
 										</Button>
 									</td>
 								</tr>
-							))}
+								);
+							})}
 						</tbody>
 						<tfoot>
 							<tr>
@@ -508,8 +524,10 @@ const SearchRow = styled.div`
 `;
 
 const TableWrapper = styled.div`
+	width: 100%;
 	max-height: 680px;
 	overflow: auto;
+	max-width: 100%;
 	border: 1px solid #f0f0f0;
 `;
 
@@ -538,6 +556,15 @@ const StyledTable = styled.table`
 		background-color: #f5f5f5;
 		font-weight: 600;
 	}
+`;
+
+const EllipsisText = styled.span`
+	display: inline-block;
+	max-width: ${(props) => props.$maxWidth || "180px"};
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
 `;
 
 const EmptyState = styled.div`

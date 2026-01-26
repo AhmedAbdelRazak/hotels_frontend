@@ -35,7 +35,7 @@ const formatDate = (value, locale = "en-US", fallback = "N/A") => {
 	return date.toLocaleDateString(locale);
 };
 
-const PaidReportHotel = () => {
+const PaidReportHotel = ({ collapsed = false }) => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
 	const { hotelId } = useParams();
@@ -53,6 +53,16 @@ const PaidReportHotel = () => {
 
 	const isArabic = chosenLanguage === "Arabic";
 	const numberLocale = "en-US";
+	const modalOffsets = useMemo(() => {
+		const sideMenuWidth = collapsed ? 90 : 295;
+		const gutter = 16;
+		const width = `calc(100vw - ${sideMenuWidth + gutter * 2}px)`;
+		const left = isArabic ? `${gutter}px` : `${sideMenuWidth + gutter}px`;
+		return {
+			width,
+			style: { top: "3%", left, position: "absolute" },
+		};
+	}, [collapsed, isArabic]);
 	const labels = useMemo(
 		() => ({
 			searchPlaceholder: isArabic
@@ -337,12 +347,29 @@ const PaidReportHotel = () => {
 									</tr>
 								</thead>
 								<tbody>
-									{rows.map((reservation) => (
-										<tr key={reservation._id}>
-											<td>
-												{reservation?.customer_details?.name || labels.na}
-											</td>
-											<td>{reservation?.confirmation_number || labels.na}</td>
+									{rows.map((reservation) => {
+										const nameValue =
+											reservation?.customer_details?.name || labels.na;
+										const confirmationValue =
+											reservation?.confirmation_number || labels.na;
+										const commentsValue =
+											reservation?.paid_amount_breakdown?.payment_comments ||
+											labels.na;
+										return (
+											<tr key={reservation._id}>
+												<td>
+													<EllipsisText title={nameValue} $maxWidth='160px'>
+														{nameValue}
+													</EllipsisText>
+												</td>
+												<td>
+													<EllipsisText
+														title={confirmationValue}
+														$maxWidth='140px'
+													>
+														{confirmationValue}
+													</EllipsisText>
+												</td>
 											<td>
 												{formatDate(
 													reservation?.checkin_date,
@@ -366,8 +393,9 @@ const PaidReportHotel = () => {
 												</td>
 											))}
 											<td>
-												{reservation?.paid_amount_breakdown?.payment_comments ||
-													labels.na}
+												<EllipsisText title={commentsValue} $maxWidth='160px'>
+													{commentsValue}
+												</EllipsisText>
 											</td>
 											<td>
 												{formatMoney(reservation?.paidTotal, numberLocale)}
@@ -387,7 +415,8 @@ const PaidReportHotel = () => {
 												</Button>
 											</td>
 										</tr>
-									))}
+										);
+									})}
 								</tbody>
 								<tfoot>
 									<tr>
@@ -424,8 +453,8 @@ const PaidReportHotel = () => {
 				open={detailsVisible}
 				onCancel={handleCloseDetails}
 				footer={null}
-				width='90%'
-				style={{ top: "3%" }}
+				width={modalOffsets.width}
+				style={modalOffsets.style}
 				destroyOnClose
 			>
 				{selectedReservation ? (
@@ -457,8 +486,10 @@ const SearchRow = styled.div`
 `;
 
 const TableWrapper = styled.div`
+	width: 100%;
 	max-height: 680px;
 	overflow: auto;
+	max-width: 100%;
 	border: 1px solid #f0f0f0;
 `;
 
@@ -487,6 +518,15 @@ const StyledTable = styled.table`
 		background-color: #f5f5f5;
 		font-weight: 600;
 	}
+`;
+
+const EllipsisText = styled.span`
+	display: inline-block;
+	max-width: ${(props) => props.$maxWidth || "180px"};
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
 `;
 
 const EmptyState = styled.div`

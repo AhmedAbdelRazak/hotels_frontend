@@ -9,6 +9,62 @@ import { getReservationSearchAllMatches } from "../apiAdmin";
 import ReservationDetail from "./ReservationDetail";
 import DownloadExcel from "./DownloadExcel";
 
+const normalizeNumber = (value, fallback = 0) => {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const hasPaidBreakdownCapture = (breakdown) => {
+	if (!breakdown || typeof breakdown !== "object") return false;
+	return Object.keys(breakdown).some((key) => {
+		if (key === "payment_comments") return false;
+		return normalizeNumber(breakdown[key], 0) > 0;
+	});
+};
+
+const summarizePaymentStatus = (reservation = {}) => {
+	const paymentModeRaw =
+		(reservation?.payment ||
+			reservation?.payment_status ||
+			reservation?.financeStatus ||
+			"") + "";
+	const paymentMode = paymentModeRaw.toLowerCase().trim();
+	const pd = reservation?.paypal_details || {};
+	const legacyCaptured = !!reservation?.payment_details?.captured;
+	const payOffline =
+		normalizeNumber(reservation?.payment_details?.onsite_paid_amount, 0) > 0 ||
+		paymentMode === "paid offline";
+	const breakdownCaptured = hasPaidBreakdownCapture(
+		reservation?.paid_amount_breakdown,
+	);
+	const capTotal = normalizeNumber(pd?.captured_total_usd, 0);
+	const initialCompleted =
+		(pd?.initial?.capture_status || "").toUpperCase() === "COMPLETED";
+	const anyMitCompleted =
+		Array.isArray(pd?.mit) &&
+		pd.mit.some(
+			(item) => (item?.capture_status || "").toUpperCase() === "COMPLETED",
+		);
+
+	const isCaptured =
+		legacyCaptured ||
+		capTotal > 0 ||
+		initialCompleted ||
+		anyMitCompleted ||
+		paymentMode === "paid online" ||
+		paymentMode === "captured" ||
+		paymentMode === "credit/ debit" ||
+		paymentMode === "credit/debit" ||
+		breakdownCaptured;
+
+	const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
+
+	if (isCaptured) return "Captured";
+	if (payOffline) return "Paid Offline";
+	if (isNotPaid) return "Not Paid";
+	return "Not Captured";
+};
+
 const PreReservationTable = ({
 	allPreReservations,
 	q,
@@ -87,7 +143,7 @@ const PreReservationTable = ({
 		const dailyTotal =
 			reservation.pickedRoomsType.reduce(
 				(acc, room) => acc + Number(room.chosenPrice) * room.count,
-				0
+				0,
 			) + Number(0);
 		return dailyTotal * reservation.days_of_residence;
 	}
@@ -206,7 +262,9 @@ const PreReservationTable = ({
 						if (record.roomDetails.length > 1) {
 							return (
 								<div>
-									<div>{record.roomDetails[0] && record.roomDetails[0].room_number}</div>
+									<div>
+										{record.roomDetails[0] && record.roomDetails[0].room_number}
+									</div>
 									<button
 										style={{
 											background: "none",
@@ -220,7 +278,7 @@ const PreReservationTable = ({
 										onClick={() => {
 											// Toggle visibility of remaining room numbers
 											const roomDetailsElement = document.getElementById(
-												`room-details-${record.confirmation_number}`
+												`room-details-${record.confirmation_number}`,
 											);
 											if (roomDetailsElement.style.display === "none") {
 												roomDetailsElement.style.display = "block";
@@ -270,7 +328,7 @@ const PreReservationTable = ({
 										onClick={() => {
 											// Toggle visibility of remaining room numbers
 											const roomDetailsElement = document.getElementById(
-												`room-details-${record.confirmation_number}`
+												`room-details-${record.confirmation_number}`,
 											);
 											if (roomDetailsElement.style.display === "none") {
 												roomDetailsElement.style.display = "block";
@@ -323,7 +381,7 @@ const PreReservationTable = ({
 			currentPage,
 			recordsPerPage,
 			// Removed 'showDetailsModal' dependency by excluding "details" column
-		]
+		],
 	);
 
 	// Prepare data for the standard table
@@ -332,6 +390,7 @@ const PreReservationTable = ({
 			...reservation,
 			key: reservation.confirmation_number, // Unique key for each row
 			index: (currentPage - 1) * recordsPerPage + index + 1,
+			payment_status_display: summarizePaymentStatus(reservation),
 		}));
 	}, [allPreReservations, currentPage, recordsPerPage]);
 
@@ -477,7 +536,12 @@ const PreReservationTable = ({
 									<td>
 										{moment(reservation.checkout_date).format("YYYY-MM-DD")}
 									</td>
-									<td>{reservation.payment}</td>
+									<td>
+										{reservation.payment_status_display ||
+											reservation.payment_status ||
+											reservation.payment ||
+											""}
+									</td>
 									<td>
 										{/* Status with Conditional Styling */}
 										<StatusSpan status={reservation.reservation_status}>
@@ -496,7 +560,10 @@ const PreReservationTable = ({
 										reservation.roomDetails.length > 0 ? (
 											reservation.roomDetails.length > 1 ? (
 												<div>
-													<div>{reservation.roomDetails[0] && reservation.roomDetails[0].room_number}</div>
+													<div>
+														{reservation.roomDetails[0] &&
+															reservation.roomDetails[0].room_number}
+													</div>
 													<button
 														style={{
 															background: "none",
@@ -511,7 +578,7 @@ const PreReservationTable = ({
 															// Toggle visibility of remaining room numbers
 															const roomDetailsElement =
 																document.getElementById(
-																	`room-details-${reservation.confirmation_number}`
+																	`room-details-${reservation.confirmation_number}`,
 																);
 															if (roomDetailsElement.style.display === "none") {
 																roomDetailsElement.style.display = "block";
@@ -539,15 +606,20 @@ const PreReservationTable = ({
 												</div>
 											) : (
 												<div>
-													{reservation.roomDetails[0] && reservation.roomDetails[0].room_number
-														? reservation.roomDetails[0] && reservation.roomDetails[0].room_number
+													{reservation.roomDetails[0] &&
+													reservation.roomDetails[0].room_number
+														? reservation.roomDetails[0] &&
+														  reservation.roomDetails[0].room_number
 														: "No Room"}
 												</div>
 											)
 										) : reservation.roomId && reservation.roomId.length > 0 ? (
 											reservation.roomId.length > 1 ? (
 												<div>
-													<div>{reservation.roomId[0] && reservation.roomId[0].room_number}</div>
+													<div>
+														{reservation.roomId[0] &&
+															reservation.roomId[0].room_number}
+													</div>
 													<button
 														style={{
 															background: "none",
@@ -562,7 +634,7 @@ const PreReservationTable = ({
 															// Toggle visibility of remaining room numbers
 															const roomDetailsElement =
 																document.getElementById(
-																	`room-details-${reservation.confirmation_number}`
+																	`room-details-${reservation.confirmation_number}`,
 																);
 															if (roomDetailsElement.style.display === "none") {
 																roomDetailsElement.style.display = "block";
@@ -588,8 +660,10 @@ const PreReservationTable = ({
 												</div>
 											) : (
 												<div>
-													{reservation.roomId[0] && reservation.roomId[0].room_number
-														? reservation.roomId[0] && reservation.roomId[0].room_number
+													{reservation.roomId[0] &&
+													reservation.roomId[0].room_number
+														? reservation.roomId[0] &&
+														  reservation.roomId[0].room_number
 														: "No Room"}
 												</div>
 											)
@@ -785,4 +859,3 @@ const StatusSpan = styled.span`
 			? "#fff"
 			: "inherit"};
 `;
-

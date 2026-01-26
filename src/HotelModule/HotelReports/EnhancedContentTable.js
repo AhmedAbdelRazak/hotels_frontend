@@ -4,6 +4,15 @@ import { Tooltip, Modal, Button, Input } from "antd";
 import MoreDetails from "./MoreDetails";
 // import ExportToExcelButton from "./ExportToExcelButton";
 
+const hasPaidBreakdownCapture = (breakdown) => {
+	if (!breakdown || typeof breakdown !== "object") return false;
+	return Object.keys(breakdown).some((key) => {
+		if (key === "payment_comments") return false;
+		const value = Number(breakdown[key]);
+		return Number.isFinite(value) && value > 0;
+	});
+};
+
 const EnhancedContentTable = ({
 	data,
 	totalDocuments,
@@ -36,8 +45,12 @@ const EnhancedContentTable = ({
 				payment_details = {},
 			} = reservation;
 
+			const breakdownCaptured = hasPaidBreakdownCapture(
+				reservation.paid_amount_breakdown,
+			);
 			const isCaptured =
 				payment_details.captured ||
+				breakdownCaptured ||
 				capturedConfirmationNumbers.includes(reservation.confirmation_number);
 
 			// Payment status logic with "Paid Offline" as last sanity check before "Not Paid"
