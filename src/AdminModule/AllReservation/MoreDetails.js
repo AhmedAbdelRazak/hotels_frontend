@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, {
+	useEffect,
+	useState,
+	useRef,
+	useCallback,
+	useMemo,
+} from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -170,9 +176,23 @@ const PaymentBreakdownTotals = styled.div`
 	padding: 12px 14px;
 `;
 
+const PaymentBreakdownNote = styled.div`
+	color: #c0392b;
+	font-size: 0.85rem;
+	margin-bottom: 10px;
+	font-weight: 600;
+`;
+
 const safeNumber = (val) => {
 	const parsed = Number(val);
 	return isNaN(parsed) ? 0 : parsed;
+};
+
+const normalizeIdValue = (value) => {
+	if (!value) return "";
+	if (typeof value === "string") return value;
+	if (typeof value === "object") return value._id || value.id || "";
+	return "";
 };
 
 const formatNumber = (val) => Number(val || 0).toLocaleString();
@@ -185,6 +205,11 @@ const paymentBreakdownFields = [
 	{
 		key: "paid_online_via_link",
 		label: "Paid Online (Payment Link)",
+		group: "online",
+	},
+	{
+		key: "paid_online_via_instapay",
+		label: "Paid Online (InstaPay)",
 		group: "online",
 	},
 	{
@@ -220,6 +245,7 @@ const paymentBreakdownNumericKeys = paymentBreakdownFields.map(
 
 const buildPaymentBreakdown = (breakdown) => ({
 	paid_online_via_link: safeNumber(breakdown?.paid_online_via_link),
+	paid_online_via_instapay: safeNumber(breakdown?.paid_online_via_instapay),
 	paid_at_hotel_cash: safeNumber(breakdown?.paid_at_hotel_cash),
 	paid_at_hotel_card: safeNumber(breakdown?.paid_at_hotel_card),
 	paid_to_zad: safeNumber(breakdown?.paid_to_zad),
@@ -359,9 +385,7 @@ const MoreDetails = ({
 				);
 			}
 			const updated = response?.reservation || response;
-			const merged = updated?._id
-				? updated
-				: { ...reservation, ...updateData };
+			const merged = updated?._id ? updated : { ...reservation, ...updateData };
 			toast.success("Payment breakdown was successfully updated");
 			setIsPaymentBreakdownVisible(false);
 			setReservation(merged);
@@ -541,26 +565,77 @@ const MoreDetails = ({
 		}
 	};
 
-	const getHotelRoomsDetails = () => {
-		getHotelRooms(reservation.hotelId, user._id).then((data3) => {
+	const roomIdValue = reservation?.roomId;
+	const rawHotelIdValue = reservation?.hotelId;
+	const hotelIdValue = useMemo(() => {
+		return normalizeIdValue(rawHotelIdValue);
+	}, [rawHotelIdValue]);
+	const roomOwnerId = useMemo(() => {
+		return normalizeIdValue(reservation?.belongsTo || user?._id);
+	}, [reservation?.belongsTo, user?._id]);
+
+	const getReservationRoomIds = useCallback((roomIdList) => {
+		if (!Array.isArray(roomIdList)) return [];
+		return roomIdList
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string") return room;
+				if (typeof room === "object" && room._id) return room._id;
+				return room;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+	}, []);
+
+	const getHotelRoomsDetails = useCallback(() => {
+		if (!hotelIdValue || !roomOwnerId) {
+			setChosenRooms([]);
+			return;
+		}
+		const roomIds = getReservationRoomIds(roomIdValue);
+		if (roomIds.length === 0) {
+			setChosenRooms([]);
+			return;
+		}
+		getHotelRooms(hotelIdValue, roomOwnerId).then((data3) => {
 			if (data3 && data3.error) {
 				console.log(data3.error);
+				setChosenRooms([]);
 			} else {
-				// Filter the rooms to only include those whose _id is in reservation.roomId
-				const filteredRooms = data3.filter((room) =>
-					reservation.roomId.includes(room._id),
-				);
+				const filteredRooms = Array.isArray(data3)
+					? data3.filter((room) => roomIds.includes(String(room?._id)))
+					: [];
 				setChosenRooms(filteredRooms);
 			}
 		});
-	};
+	}, [getReservationRoomIds, hotelIdValue, roomIdValue, roomOwnerId]);
 
 	useEffect(() => {
-		if (reservation && reservation.roomId && reservation.roomId.length > 0) {
+		if (Array.isArray(roomIdValue) && roomIdValue.length > 0) {
 			getHotelRoomsDetails();
+		} else {
+			setChosenRooms([]);
 		}
-		// eslint-disable-next-line
-	}, []);
+	}, [roomIdValue, getHotelRoomsDetails]);
+
+	const roomTableRows = useMemo(() => {
+		const fromDetails = Array.isArray(reservation?.roomDetails)
+			? reservation.roomDetails.filter(Boolean)
+			: [];
+		if (fromDetails.length > 0) return fromDetails;
+
+		const fromChosen = Array.isArray(chosenRooms)
+			? chosenRooms.filter(Boolean)
+			: [];
+		if (fromChosen.length > 0) return fromChosen;
+
+		const fromRoomId = Array.isArray(reservation?.roomId)
+			? reservation.roomId.filter(
+					(room) => room && typeof room === "object" && room.room_number,
+			  )
+			: [];
+		return fromRoomId;
+	}, [reservation, chosenRooms]);
 
 	const downloadPDF = () => {
 		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
@@ -876,12 +951,15 @@ const MoreDetails = ({
 						destroyOnClose
 					>
 						<div className='container-fluid'>
+							<PaymentBreakdownNote>
+								{chosenLanguage === "Arabic"
+									? "جميع المبالغ بالريال السعودي (SAR)"
+									: "All amounts are in SAR."}
+							</PaymentBreakdownNote>
 							<div className='row'>
 								{paymentBreakdownFields.map((field) => (
 									<div className='col-md-6 mb-3' key={field.key}>
-										<label style={{ fontWeight: "bold" }}>
-											{field.label}
-										</label>
+										<label style={{ fontWeight: "bold" }}>{field.label}</label>
 										<input
 											type='number'
 											min='0'
@@ -900,9 +978,7 @@ const MoreDetails = ({
 							</div>
 							<div className='row'>
 								<div className='col-md-12 mb-3'>
-									<label style={{ fontWeight: "bold" }}>
-										Payment Comments
-									</label>
+									<label style={{ fontWeight: "bold" }}>Payment Comments</label>
 									<textarea
 										className='form-control'
 										rows='3'
@@ -1652,11 +1728,13 @@ const MoreDetails = ({
 											onClick={() => setIsPaymentBreakdownVisible(true)}
 										>
 											<span>Payment Breakdown</span>
-											<PaymentBreakdownHint>Click to update</PaymentBreakdownHint>
+											<PaymentBreakdownHint>
+												Click to update
+											</PaymentBreakdownHint>
 										</PaymentBreakdownToggle>
 									</div>
 
-									{chosenRooms && chosenRooms.length > 0 ? (
+									{roomTableRows && roomTableRows.length > 0 ? (
 										<div className='table-responsive'>
 											<table
 												className='table table-bordered table-hover mx-auto'
@@ -1683,18 +1761,27 @@ const MoreDetails = ({
 													</tr>
 												</thead>
 												<tbody>
-													{chosenRooms.map((room, index) => (
+													{roomTableRows.map((room, index) => (
 														<tr key={index}>
 															<td style={{ textTransform: "capitalize" }}>
-																{room.room_type}
+																{room.room_type || room.roomType || "N/A"}
 															</td>
-															<td>{room.room_number}</td>
+															<td>
+																{room.room_number || room.roomNumber || "N/A"}
+															</td>
 														</tr>
 													))}
 												</tbody>
 											</table>
 										</div>
-									) : null}
+									) : (
+										<div
+											className='mx-auto'
+											style={{ marginTop: "10px", fontWeight: "bold" }}
+										>
+											{chosenLanguage === "Arabic" ? "No Room" : "No Room"}
+										</div>
+									)}
 								</div>
 							</ContentSection>
 							<ContentSection>

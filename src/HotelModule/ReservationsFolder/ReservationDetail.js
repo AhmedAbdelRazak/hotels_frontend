@@ -119,10 +119,22 @@ const PaymentBreakdownTotals = styled.div`
 	padding: 12px 14px;
 `;
 
+const PaymentBreakdownNote = styled.div`
+	color: #c0392b;
+	font-size: 0.85rem;
+	margin-bottom: 10px;
+	font-weight: 600;
+`;
+
 const paymentBreakdownFields = [
 	{
 		key: "paid_online_via_link",
 		label: "Paid Online (Payment Link)",
+		group: "online",
+	},
+	{
+		key: "paid_online_via_instapay",
+		label: "Paid Online (InstaPay)",
 		group: "online",
 	},
 	{
@@ -169,6 +181,10 @@ const buildPaymentBreakdown = (breakdown, normalizer) => ({
 		breakdown?.paid_online_via_link,
 		normalizer,
 	),
+	paid_online_via_instapay: resolveBreakdownNumber(
+		breakdown?.paid_online_via_instapay,
+		normalizer,
+	),
 	paid_at_hotel_cash: resolveBreakdownNumber(
 		breakdown?.paid_at_hotel_cash,
 		normalizer,
@@ -195,10 +211,7 @@ const buildPaymentBreakdown = (breakdown, normalizer) => ({
 const getPaymentBreakdownTotals = (breakdown, normalizer) =>
 	paymentBreakdownFields.reduce(
 		(acc, field) => {
-			const value = resolveBreakdownNumber(
-				breakdown?.[field.key],
-				normalizer,
-			);
+			const value = resolveBreakdownNumber(breakdown?.[field.key], normalizer);
 			acc.total += value;
 			if (field.group === "offline") acc.offline += value;
 			else acc.online += value;
@@ -250,9 +263,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	useEffect(() => {
 		if (!isPaymentBreakdownVisible) return;
 		setPaymentBreakdownDraft(
-			buildPaymentBreakdown(reservation?.paid_amount_breakdown, normalizeNumber),
+			buildPaymentBreakdown(
+				reservation?.paid_amount_breakdown,
+				normalizeNumber,
+			),
 		);
-	}, [isPaymentBreakdownVisible, reservation?.paid_amount_breakdown, normalizeNumber]);
+	}, [
+		isPaymentBreakdownVisible,
+		reservation?.paid_amount_breakdown,
+		normalizeNumber,
+	]);
 
 	const summarizePayment = useCallback(
 		(reservationData, paymentOverride = "") => {
@@ -386,13 +406,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		setPaymentBreakdownDraft((prev) => {
 			const parsedValue = Math.max(normalizeNumber(rawValue, 0), 0);
-			const totalOther = paymentBreakdownNumericKeys.reduce(
-				(sum, fieldKey) => {
-					if (fieldKey === key) return sum;
-					return sum + normalizeNumber(prev[fieldKey], 0);
-				},
-				0,
-			);
+			const totalOther = paymentBreakdownNumericKeys.reduce((sum, fieldKey) => {
+				if (fieldKey === key) return sum;
+				return sum + normalizeNumber(prev[fieldKey], 0);
+			}, 0);
 			const maxForField = Math.max(totalAmountValue - totalOther, 0);
 			const clampedValue = Math.min(parsedValue, maxForField);
 			return { ...prev, [key]: clampedValue };
@@ -433,9 +450,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				);
 			}
 			const updated = response?.reservation || response;
-			const merged = updated?._id
-				? updated
-				: { ...reservation, ...updateData };
+			const merged = updated?._id ? updated : { ...reservation, ...updateData };
 			toast.success("Payment breakdown was successfully updated");
 			setIsPaymentBreakdownVisible(false);
 			setReservation(merged);
@@ -843,12 +858,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						destroyOnClose
 					>
 						<div className='container-fluid'>
+							<PaymentBreakdownNote>
+								{chosenLanguage === "Arabic"
+									? "جميع المبالغ بالريال السعودي (SAR)"
+									: "All amounts are in SAR."}
+							</PaymentBreakdownNote>
 							<div className='row'>
 								{paymentBreakdownFields.map((field) => (
 									<div className='col-md-6 mb-3' key={field.key}>
-										<label style={{ fontWeight: "bold" }}>
-											{field.label}
-										</label>
+										<label style={{ fontWeight: "bold" }}>{field.label}</label>
 										<input
 											type='number'
 											min='0'
@@ -867,9 +885,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							</div>
 							<div className='row'>
 								<div className='col-md-12 mb-3'>
-									<label style={{ fontWeight: "bold" }}>
-										Payment Comments
-									</label>
+									<label style={{ fontWeight: "bold" }}>Payment Comments</label>
 									<textarea
 										className='form-control'
 										rows='3'
@@ -1557,7 +1573,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											onClick={() => setIsPaymentBreakdownVisible(true)}
 										>
 											<span>Payment Breakdown</span>
-											<PaymentBreakdownHint>Click to update</PaymentBreakdownHint>
+											<PaymentBreakdownHint>
+												Click to update
+											</PaymentBreakdownHint>
 										</PaymentBreakdownToggle>
 									</div>
 

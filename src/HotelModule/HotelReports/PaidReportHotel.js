@@ -14,6 +14,7 @@ const breakdownKeys = [
 	"paid_to_zad",
 	"paid_online_jannatbooking",
 	"paid_online_other_platforms",
+	"paid_online_via_instapay",
 ];
 
 const safeNumber = (value) => {
@@ -82,6 +83,9 @@ const PaidReportHotel = () => {
 				paid_online_other_platforms: isArabic
 					? "مدفوع أونلاين (منصات أخرى)"
 					: "Paid Online (Other Platforms)",
+				paid_online_via_instapay: isArabic
+					? "مدفوع أونلاين (إنستاباي)"
+					: "Paid Online (InstaPay)",
 			},
 			paidBreakdown: isArabic ? "تفاصيل الدفع" : "Paid Breakdown",
 			breakdownTotalsTitle: isArabic
@@ -140,8 +144,12 @@ const PaidReportHotel = () => {
 				);
 				setReservations(list);
 				setScorecards({
-					totalAmount: safeNumber(scorecardPayload?.totalAmount ?? fallbackTotalAmount),
-					paidAmount: safeNumber(scorecardPayload?.paidAmount ?? fallbackPaidAmount),
+					totalAmount: safeNumber(
+						scorecardPayload?.totalAmount ?? fallbackTotalAmount,
+					),
+					paidAmount: safeNumber(
+						scorecardPayload?.paidAmount ?? fallbackPaidAmount,
+					),
 					breakdownTotals: scorecardPayload?.breakdownTotals || {},
 				});
 			})
@@ -281,11 +289,15 @@ const PaidReportHotel = () => {
 					<ScorecardsRow>
 						<Scorecard>
 							<span>{labels.scoreTotalAmount}</span>
-							<strong>{formatMoney(scorecards.totalAmount, numberLocale)}</strong>
+							<strong>
+								{formatMoney(scorecards.totalAmount, numberLocale)}
+							</strong>
 						</Scorecard>
 						<Scorecard>
 							<span>{labels.scorePaidAmount}</span>
-							<strong>{formatMoney(scorecards.paidAmount, numberLocale)}</strong>
+							<strong>
+								{formatMoney(scorecards.paidAmount, numberLocale)}
+							</strong>
 						</Scorecard>
 					</ScorecardsRow>
 					<BreakdownTotals>

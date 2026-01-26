@@ -18,6 +18,7 @@ const breakdownKeys = [
 	"paid_to_zad",
 	"paid_online_jannatbooking",
 	"paid_online_other_platforms",
+	"paid_online_via_instapay",
 ];
 
 const safeNumber = (value) => {
@@ -104,6 +105,9 @@ const PaidReportAdmin = () => {
 				paid_online_other_platforms: isArabic
 					? "مدفوع أونلاين (منصات أخرى)"
 					: "Paid Online (Other Platforms)",
+				paid_online_via_instapay: isArabic
+					? "مدفوع أونلاين (إنستاباي)"
+					: "Paid Online (InstaPay)",
 			},
 			paidBreakdown: isArabic ? "تفاصيل الدفع" : "Paid Breakdown",
 			breakdownTotalsTitle: isArabic
