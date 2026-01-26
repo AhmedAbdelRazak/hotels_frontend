@@ -99,6 +99,7 @@ export const sendReservationConfirmationEmail = (
 export const sendPaymnetLinkToTheClient = (
 	reservationLink,
 	reservationEmail,
+	extraPayload = {},
 ) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/send-payment-link-email`, {
 		method: "POST",
@@ -109,6 +110,7 @@ export const sendPaymnetLinkToTheClient = (
 		body: JSON.stringify({
 			paymentLink: reservationLink,
 			customerEmail: reservationEmail,
+			...extraPayload,
 		}),
 	})
 		.then((response) => {
@@ -116,6 +118,38 @@ export const sendPaymnetLinkToTheClient = (
 		})
 		.catch((err) => {
 			console.log(err);
+		});
+};
+
+export const sendReservationConfirmationSMSManualHotel = (
+	reservationId,
+	payload = {},
+) => {
+	return axios
+		.post(
+			`${process.env.REACT_APP_API_URL}/hotel/reservations/${reservationId}/wa/confirmation-manual`,
+			payload,
+		)
+		.then((res) => res.data)
+		.catch((err) => {
+			if (err?.response?.data) return err.response.data;
+			return { ok: false, message: "Network error" };
+		});
+};
+
+export const sendReservationPaymentLinkSMSManualHotel = (
+	reservationId,
+	payload = {},
+) => {
+	return axios
+		.post(
+			`${process.env.REACT_APP_API_URL}/hotel/reservations/${reservationId}/wa/payment-link-manual`,
+			payload,
+		)
+		.then((res) => res.data)
+		.catch((err) => {
+			if (err?.response?.data) return err.response.data;
+			return { ok: false, message: "Network error" };
 		});
 };
 

@@ -137,6 +137,41 @@ export const sendReservationConfirmationSMS = (reservationId, opts = {}) => {
 		});
 };
 
+export const sendReservationConfirmationSMSManualAdmin = (
+	reservationId,
+	payload = {},
+	opts = {},
+) => {
+	const params = { notifyAdmins: opts.notifyAdmins ? "true" : "false" };
+	return axios
+		.post(
+			`${process.env.REACT_APP_API_URL}/admin/reservations/${reservationId}/wa/confirmation-manual`,
+			payload,
+			{ params },
+		)
+		.then((res) => res.data)
+		.catch((err) => {
+			if (err?.response?.data) return err.response.data;
+			return { ok: false, message: "Network error" };
+		});
+};
+
+export const sendReservationPaymentLinkSMSManualAdmin = (
+	reservationId,
+	payload = {},
+) => {
+	return axios
+		.post(
+			`${process.env.REACT_APP_API_URL}/admin/reservations/${reservationId}/wa/payment-link-manual`,
+			payload,
+		)
+		.then((res) => res.data)
+		.catch((err) => {
+			if (err?.response?.data) return err.response.data;
+			return { ok: false, message: "Network error" };
+		});
+};
+
 export const cloudinaryUpload1 = (userId, token, image) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/admin/uploadimages/${userId}`,

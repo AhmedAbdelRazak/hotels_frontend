@@ -26,7 +26,10 @@ import { relocationArray1 } from "../../HotelModule/ReservationsFolder/Reservati
 import PaymentTrigger from "./PaymentTrigger";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
-import { sendReservationConfirmationSMS } from "../apiAdmin";
+import {
+	sendReservationConfirmationSMSManualAdmin,
+	sendReservationPaymentLinkSMSManualAdmin,
+} from "../apiAdmin";
 
 const ModalZFix = createGlobalStyle`
 	.edit-reservation-modal .ant-modal,
@@ -188,6 +191,20 @@ const safeNumber = (val) => {
 	return isNaN(parsed) ? 0 : parsed;
 };
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const normalizeDigits = (value) => String(value || "").replace(/\D/g, "");
+const splitPhoneForModal = (raw) => {
+	const cleaned = normalizeDigits(raw);
+	if (!cleaned) return { code: "", phone: "" };
+	const hasPlus = String(raw || "")
+		.trim()
+		.startsWith("+");
+	if (hasPlus && cleaned.length > 3) {
+		return { code: cleaned.slice(0, 3), phone: cleaned.slice(3) };
+	}
+	return { code: "", phone: cleaned };
+};
+
 const normalizeIdValue = (value) => {
 	if (!value) return "";
 	if (typeof value === "string") return value;
@@ -286,6 +303,22 @@ const MoreDetails = ({
 	const [isModalVisible5, setIsModalVisible5] = useState(false);
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
+	const [paymentLinkEmailModalOpen, setPaymentLinkEmailModalOpen] =
+		useState(false);
+	const [paymentLinkEmailValue, setPaymentLinkEmailValue] = useState("");
+	const [isSendingPaymentLinkEmail, setIsSendingPaymentLinkEmail] =
+		useState(false);
+	const [confirmationEmailModalOpen, setConfirmationEmailModalOpen] =
+		useState(false);
+	const [confirmationEmailValue, setConfirmationEmailValue] = useState("");
+	const [isSendingConfirmationEmail, setIsSendingConfirmationEmail] =
+		useState(false);
+	const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+	const [whatsAppMessageType, setWhatsAppMessageType] =
+		useState("confirmation");
+	const [whatsAppCountryCode, setWhatsAppCountryCode] = useState("");
+	const [whatsAppPhone, setWhatsAppPhone] = useState("");
+	const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 	const [isPaymentBreakdownVisible, setIsPaymentBreakdownVisible] =
 		useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
@@ -334,6 +367,30 @@ const MoreDetails = ({
 			buildPaymentBreakdown(reservation?.paid_amount_breakdown),
 		);
 	}, [isPaymentBreakdownVisible, reservation?.paid_amount_breakdown]);
+
+	useEffect(() => {
+		if (!paymentLinkEmailModalOpen) return;
+		setPaymentLinkEmailValue(reservation?.customer_details?.email || "");
+	}, [paymentLinkEmailModalOpen, reservation?.customer_details?.email]);
+
+	useEffect(() => {
+		if (!confirmationEmailModalOpen) return;
+		setConfirmationEmailValue(reservation?.customer_details?.email || "");
+	}, [confirmationEmailModalOpen, reservation?.customer_details?.email]);
+
+	useEffect(() => {
+		if (!whatsAppModalOpen) return;
+		setWhatsAppMessageType("confirmation");
+	}, [whatsAppModalOpen]);
+
+	useEffect(() => {
+		if (!whatsAppModalOpen) return;
+		const preset = splitPhoneForModal(
+			reservation?.customer_details?.phone || "",
+		);
+		setWhatsAppCountryCode(preset.code);
+		setWhatsAppPhone(preset.phone);
+	}, [whatsAppModalOpen, reservation?.customer_details?.phone]);
 
 	const totalAmountValue = safeNumber(reservation?.total_amount);
 	const paymentBreakdownTotals = getPaymentBreakdownTotals(
@@ -391,6 +448,115 @@ const MoreDetails = ({
 			setReservation(merged);
 			onReservationUpdated(merged);
 		});
+	};
+
+	const buildPaymentLinkPayload = () => ({
+		guestName: customerFullName || reservation?.customer_details?.name || "",
+		hotelName: hotelDetails?.hotelName || "",
+		confirmationNumber: reservation?.confirmation_number || "",
+		totalAmount: reservation?.total_amount,
+		paidAmount: reservation?.paid_amount,
+		currency: reservation?.currency || "SAR",
+		checkinDate: reservation?.checkin_date,
+		checkoutDate: reservation?.checkout_date,
+	});
+
+	const handleSendPaymentLinkEmail = async () => {
+		const email = String(paymentLinkEmailValue || "").trim();
+		if (!emailPattern.test(email)) {
+			return toast.error("Please provide a valid email address.");
+		}
+		if (!linkGenerate) {
+			return toast.error("Please generate the payment link first.");
+		}
+		setIsSendingPaymentLinkEmail(true);
+		try {
+			const resp = await sendPaymnetLinkToTheClient(
+				linkGenerate,
+				email,
+				buildPaymentLinkPayload(),
+			);
+			if (resp && resp.error) {
+				toast.error("Failed Sending Email");
+			} else {
+				toast.success(`Payment link sent to ${email}`);
+				setPaymentLinkEmailModalOpen(false);
+			}
+		} catch (e) {
+			toast.error("Failed Sending Email");
+		} finally {
+			setIsSendingPaymentLinkEmail(false);
+		}
+	};
+
+	const handleSendConfirmationEmail = async () => {
+		const email = String(confirmationEmailValue || "").trim();
+		if (!emailPattern.test(email)) {
+			return toast.error("Please provide a valid email address.");
+		}
+		setIsSendingConfirmationEmail(true);
+		try {
+			const resp = await sendReservationConfirmationEmail({
+				...reservation,
+				hotelName: hotelDetails?.hotelName,
+				overrideEmail: email,
+			});
+			if (resp && resp.error) {
+				toast.error("Failed Sending Email");
+			} else {
+				toast.success(`Confirmation email sent to ${email}`);
+				setConfirmationEmailModalOpen(false);
+			}
+		} catch (e) {
+			toast.error("Failed Sending Email");
+		} finally {
+			setIsSendingConfirmationEmail(false);
+		}
+	};
+
+	const handleSendWhatsApp = async () => {
+		const code = normalizeDigits(whatsAppCountryCode);
+		const phone = normalizeDigits(whatsAppPhone);
+		if (!code || !phone) {
+			return toast.error(
+				"Please provide country code and phone number (digits only).",
+			);
+		}
+		setIsSendingWhatsApp(true);
+		try {
+			let resp;
+			if (whatsAppMessageType === "payment_link") {
+				const paymentUrl = String(linkGenerate || "").trim();
+				if (!paymentUrl) {
+					return toast.error("Please generate the payment link first.");
+				}
+				resp = await sendReservationPaymentLinkSMSManualAdmin(
+					reservation?._id || reservation?.confirmation_number,
+					{ countryCode: code, phone, paymentUrl },
+				);
+				if (resp?.ok) {
+					toast.success("WhatsApp payment link queued successfully.");
+					setWhatsAppModalOpen(false);
+				} else {
+					toast.error(resp?.message || "Failed to queue WhatsApp message.");
+				}
+			} else {
+				resp = await sendReservationConfirmationSMSManualAdmin(
+					reservation?._id || reservation?.confirmation_number,
+					{ countryCode: code, phone },
+				);
+				if (resp?.ok) {
+					toast.success("WhatsApp confirmation queued successfully.");
+					setWhatsAppModalOpen(false);
+				} else {
+					toast.error(resp?.message || "Failed to queue WhatsApp message.");
+				}
+			}
+		} catch (e) {
+			toast.error("Failed to queue WhatsApp message.");
+		} finally {
+			setIsSendingWhatsApp(false);
+		}
 	};
 
 	const getTotalAmountPerDay = (pickedRoomsType) => {
@@ -1033,6 +1199,188 @@ const MoreDetails = ({
 						</div>
 					</Modal>
 
+					<Modal
+						title={
+							chosenLanguage === "Arabic"
+								? "إرسال رابط الدفع"
+								: "Send Payment Link"
+						}
+						open={paymentLinkEmailModalOpen}
+						onCancel={() => setPaymentLinkEmailModalOpen(false)}
+						onOk={handleSendPaymentLinkEmail}
+						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
+						confirmLoading={isSendingPaymentLinkEmail}
+						centered
+					>
+						<div className='mb-3'>
+							<label style={{ fontWeight: "bold" }}>
+								{chosenLanguage === "Arabic"
+									? "البريد الإلكتروني"
+									: "Recipient Email"}
+							</label>
+							<input
+								type='email'
+								className='form-control'
+								value={paymentLinkEmailValue}
+								onChange={(e) => setPaymentLinkEmailValue(e.target.value)}
+							/>
+						</div>
+						<div className='mb-2' style={{ fontWeight: "bold" }}>
+							{chosenLanguage === "Arabic" ? "رابط الدفع" : "Payment Link"}
+						</div>
+						<div
+							style={{
+								fontSize: "0.9rem",
+								wordBreak: "break-all",
+								color: "#2563eb",
+							}}
+						>
+							{linkGenerate || "N/A"}
+						</div>
+					</Modal>
+
+					<Modal
+						title={
+							chosenLanguage === "Arabic"
+								? "إرسال تأكيد الحجز"
+								: "Send Confirmation Email"
+						}
+						open={confirmationEmailModalOpen}
+						onCancel={() => setConfirmationEmailModalOpen(false)}
+						onOk={handleSendConfirmationEmail}
+						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
+						confirmLoading={isSendingConfirmationEmail}
+						centered
+					>
+						<div className='mb-3'>
+							<label style={{ fontWeight: "bold" }}>
+								{chosenLanguage === "Arabic"
+									? "البريد الإلكتروني"
+									: "Recipient Email"}
+							</label>
+							<input
+								type='email'
+								className='form-control'
+								value={confirmationEmailValue}
+								onChange={(e) => setConfirmationEmailValue(e.target.value)}
+							/>
+						</div>
+						<div style={{ fontSize: "0.9rem", color: "#6b7280" }}>
+							{chosenLanguage === "Arabic"
+								? "سيتم إرسال تأكيد الحجز مع تفاصيل الحجز وملف PDF."
+								: "A confirmation email with reservation details and PDF will be sent."}
+						</div>
+					</Modal>
+
+					<Modal
+						title={
+							chosenLanguage === "Arabic"
+								? "إرسال رسالة واتساب"
+								: "Send WhatsApp Message"
+						}
+						open={whatsAppModalOpen}
+						onCancel={() => setWhatsAppModalOpen(false)}
+						onOk={handleSendWhatsApp}
+						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
+						confirmLoading={isSendingWhatsApp}
+						centered
+					>
+						<div className='mb-3'>
+							<label style={{ fontWeight: "bold" }}>
+								{chosenLanguage === "Arabic" ? "نوع الرسالة" : "Message Type"}
+							</label>
+							<div className='d-flex flex-column' style={{ gap: "6px" }}>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: "8px",
+									}}
+								>
+									<input
+										type='radio'
+										name='waMessageType'
+										value='confirmation'
+										checked={whatsAppMessageType === "confirmation"}
+										onChange={() => setWhatsAppMessageType("confirmation")}
+									/>
+									{chosenLanguage === "Arabic"
+										? "تأكيد الحجز (مع رابط PDF)"
+										: "Reservation confirmation (with PDF link)"}
+								</label>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: "8px",
+									}}
+								>
+									<input
+										type='radio'
+										name='waMessageType'
+										value='payment_link'
+										checked={whatsAppMessageType === "payment_link"}
+										onChange={() => setWhatsAppMessageType("payment_link")}
+									/>
+									{chosenLanguage === "Arabic" ? "رابط الدفع" : "Payment link"}
+								</label>
+							</div>
+							{whatsAppMessageType === "payment_link" && (
+								<div
+									style={{
+										marginTop: "6px",
+										fontSize: "0.85rem",
+										color: linkGenerate ? "#2563eb" : "#b45309",
+										wordBreak: "break-all",
+									}}
+								>
+									{linkGenerate
+										? linkGenerate
+										: chosenLanguage === "Arabic"
+										  ? "يرجى إنشاء رابط الدفع أولاً."
+										  : "Please generate the payment link first."}
+								</div>
+							)}
+						</div>
+						<div className='row'>
+							<div className='col-md-4 mb-3'>
+								<label style={{ fontWeight: "bold" }}>
+									{chosenLanguage === "Arabic" ? "رمز الدولة" : "Country Code"}
+								</label>
+								<input
+									type='text'
+									className='form-control'
+									placeholder='966'
+									value={whatsAppCountryCode}
+									onChange={(e) =>
+										setWhatsAppCountryCode(normalizeDigits(e.target.value))
+									}
+								/>
+							</div>
+							<div className='col-md-8 mb-3'>
+								<label style={{ fontWeight: "bold" }}>
+									{chosenLanguage === "Arabic" ? "رقم الهاتف" : "Phone Number"}
+								</label>
+								<input
+									type='text'
+									className='form-control'
+									placeholder={
+										chosenLanguage === "Arabic" ? "بدون مسافات" : "Digits only"
+									}
+									value={whatsAppPhone}
+									onChange={(e) =>
+										setWhatsAppPhone(normalizeDigits(e.target.value))
+									}
+								/>
+							</div>
+						</div>
+						<div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+							{chosenLanguage === "Arabic"
+								? "يرجى إدخال الأرقام فقط بدون مسافات أو رموز."
+								: "Please enter digits only (no spaces or special characters)."}
+						</div>
+					</Modal>
+
 					<div
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
@@ -1237,20 +1585,7 @@ const MoreDetails = ({
 											{linkGenerate ? (
 												<>
 													<button
-														onClick={() => {
-															sendPaymnetLinkToTheClient(
-																linkGenerate,
-																reservation.customer_details.email,
-															).then((data) => {
-																if (data && data.error) {
-																	console.log(data.error);
-																} else {
-																	toast.success(
-																		"Email Was Successfully Sent to the guest!",
-																	);
-																}
-															});
-														}}
+														onClick={() => setPaymentLinkEmailModalOpen(true)}
 														style={{
 															background: "darkgreen",
 															border: "1px darkred solid",
@@ -1302,20 +1637,7 @@ const MoreDetails = ({
 											{linkGenerate ? (
 												<>
 													<button
-														onClick={() => {
-															sendPaymnetLinkToTheClient(
-																linkGenerate,
-																reservation.customer_details.email,
-															).then((data) => {
-																if (data && data.error) {
-																	console.log(data.error);
-																} else {
-																	toast.success(
-																		"Email Was Successfully Sent to the guest!",
-																	);
-																}
-															});
-														}}
+														onClick={() => setPaymentLinkEmailModalOpen(true)}
 														style={{
 															background: "darkgreen",
 															border: "1px darkred solid",
@@ -1431,53 +1753,14 @@ const MoreDetails = ({
 										<div className='row  my-2'>
 											<button
 												className='col-md-5'
-												onClick={() => {
-													sendReservationConfirmationEmail({
-														...reservation,
-														hotelName: hotelDetails.hotelName,
-													}).then((data) => {
-														if (data && data.error) {
-															toast.error("Failed Sending Email");
-														} else {
-															toast.success(
-																`Email was successfully sent to ${reservation.customer_details.email}`,
-															);
-														}
-													});
-												}}
+												onClick={() => setConfirmationEmailModalOpen(true)}
 											>
 												Email
 											</button>
 											<button
 												className='col-md-5'
-												disabled={loading}
-												onClick={async () => {
-													try {
-														setLoading(true);
-														// You can send reservation._id OR reservation.confirmation_number
-														const resp = await sendReservationConfirmationSMS(
-															reservation._id /* or reservation.confirmation_number */,
-															{
-																notifyAdmins: true, // set true if you also want to re-notify owner/platform
-															},
-														);
-
-														if (resp?.ok) {
-															toast.success(
-																"WhatsApp confirmation queued successfully.",
-															);
-														} else {
-															toast.error(
-																resp?.message ||
-																	"Failed to queue WhatsApp message.",
-															);
-														}
-													} catch (e) {
-														toast.error("Failed to queue WhatsApp message.");
-													} finally {
-														setLoading(false);
-													}
-												}}
+												disabled={isSendingWhatsApp}
+												onClick={() => setWhatsAppModalOpen(true)}
 											>
 												SMS
 											</button>

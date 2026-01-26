@@ -11,7 +11,7 @@ import { updateSingleReservation } from "../apiAdmin";
  */
 const ReceiptPDF = forwardRef(function ReceiptPDF(
 	{ reservation, hotelDetails },
-	ref
+	ref,
 ) {
 	const [localResv, setLocalResv] = useState(reservation);
 	const [updateOpen, setUpdateOpen] = useState(false);
@@ -26,9 +26,9 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	const bookingDate = useMemo(
 		() =>
 			new Date(
-				localResv?.createdAt || reservation?.createdAt || Date.now()
+				localResv?.createdAt || reservation?.createdAt || Date.now(),
 			).toLocaleDateString(),
-		[localResv, reservation]
+		[localResv, reservation],
 	);
 
 	const totalAmount = safeNumber(localResv?.total_amount);
@@ -40,7 +40,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	// Onsite paid amount (POS/cash)
 	const paidAmountOffline = safeNumber(
-		localResv?.payment_details?.onsite_paid_amount
+		localResv?.payment_details?.onsite_paid_amount,
 	);
 
 	const paymentStatus = (localResv?.payment || "").toLowerCase();
@@ -71,7 +71,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	const nights = calculateNights(
 		localResv?.checkin_date,
-		localResv?.checkout_date
+		localResv?.checkout_date,
 	);
 
 	const openUpdateModal = () => setUpdateOpen(true);
@@ -418,7 +418,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				{(() => {
 					const remaining = Math.max(
 						0,
-						Number((totalAmount - totalPaid).toFixed(2))
+						Number((totalAmount - totalPaid).toFixed(2)),
 					);
 					return (
 						<div>
