@@ -9,10 +9,13 @@ import ReservationsOverview from "./ReservationsOverview";
 import HotelInventory from "./HotelInventory";
 import PaidReportHotel from "./PaidReportHotel";
 import { useCartContext } from "../../cart_context";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const HotelReportsMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [activeTab, setActiveTab] = useState("reservations");
 	const [getUser, setGetUser] = useState("");
 	const { chosenLanguage } = useCartContext();
@@ -38,10 +41,10 @@ const HotelReportsMain = () => {
 	useEffect(() => {
 		gettingUserId();
 
-		if (window.innerWidth <= 1000) {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
-	}, [gettingUserId]);
+	}, [gettingUserId, hasStoredCollapsed]);
 
 	/* -----------------------------------------------------------
      5) Handle Tab Changes (push query param to URL)

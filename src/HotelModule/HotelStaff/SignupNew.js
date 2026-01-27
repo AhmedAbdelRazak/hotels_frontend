@@ -9,11 +9,14 @@ import { defaultUserValues } from "../../AdminModule/NewHotels/Assets";
 import { toast } from "react-toastify";
 import { isAuthenticated, signup } from "../../auth";
 import { getHotelDetails, hotelAccount } from "../apiAdmin";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const SignupNew = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [values, setValues] = useState(defaultUserValues);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [roleDescription, setRoleDescription] = useState("");
 	const [hotelDetails, setHotelDetails] = useState("");
 
@@ -21,11 +24,11 @@ const SignupNew = () => {
 
 	const { user, token } = isAuthenticated();
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 		// eslint-disable-next-line
-	}, []);
+	}, [hasStoredCollapsed]);
 
 	const gettingHotelData = () => {
 		hotelAccount(user._id, token, user._id).then((data) => {

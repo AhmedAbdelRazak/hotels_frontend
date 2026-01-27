@@ -15,10 +15,13 @@ import {
 import { isAuthenticated } from "../../auth";
 import HouseKeepingTable from "./HouseKeepingTable";
 import CreateNewTask from "./CreateNewTask";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const HouseKeepingMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [houseKeepingTasks, setHouseKeepingTasks] = useState([]);
 	const [totalTasksCount, setTotalTasksCount] = useState([]);
 	const [hotelDetails, setHotelDetails] = useState([]);
@@ -33,10 +36,6 @@ const HouseKeepingMain = () => {
 	const { user, token } = isAuthenticated();
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
-			setCollapsed(true);
-		}
-
 		if (window.location.search.includes("overAllTasks")) {
 			setActiveTab("overAllTasks");
 		} else if (window.location.search.includes("createNewTask")) {
@@ -48,6 +47,12 @@ const HouseKeepingMain = () => {
 		}
 		// eslint-disable-next-line
 	}, [activeTab]);
+
+	useEffect(() => {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
+			setCollapsed(true);
+		}
+	}, [hasStoredCollapsed]);
 
 	const gettingOverallHouseKeepingTasks = () => {
 		hotelAccount(user._id, token, user._id).then((data) => {

@@ -13,10 +13,12 @@ import { isAuthenticated } from "../../auth";
 import PreReservationTable from "../ReservationsFolder/PreReservationTable";
 import { Spin } from "antd";
 import { useCartContext } from "../../cart_context";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const ReservationsMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed } = getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [allPreReservations, setAllPreReservations] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [currentPage, setCurrentPage] = useState(1); // New state for current page

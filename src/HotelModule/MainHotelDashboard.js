@@ -19,6 +19,7 @@ import { hotelAccount, updateHotelDetails } from "./apiAdmin";
 import TopNavbar from "./AdminNavbar/TopNavbar";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
+import { getStoredMenuCollapsed } from "./utils/menuState";
 
 /* 🔑  step‑modal registry */
 import { STEP_MODAL_REGISTRY } from "./utils/hotel‑setup‑modals";
@@ -85,7 +86,8 @@ const MainHotelDashboard = () => {
 
 	/* side‑nav + data */
 	const [adminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed } = getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [userData, setUserData] = useState({});
 
 	/* add / edit property */

@@ -29,10 +29,13 @@ import HotelRunnerReservationList from "./HotelRunnerReservationList";
 import useBoss from "../useBoss";
 import HotelHeatMap from "./HotelHeatMap";
 import InHouseReport from "./InHouseReport";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const NewReservationMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [loading, setLoading] = useState(false);
 	const [hotelRooms, setHotelRooms] = useState("");
 	const [hotelDetails, setHotelDetails] = useState("");
@@ -95,8 +98,6 @@ const NewReservationMain = () => {
 	const history = useHistory();
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) setCollapsed(true);
-
 		if (window.location.search.includes("reserveARoom")) {
 			setActiveTab("reserveARoom");
 		} else if (window.location.search.includes("newReservation")) {
@@ -114,6 +115,12 @@ const NewReservationMain = () => {
 		}
 		// eslint-disable-next-line
 	}, [activeTab]);
+
+	useEffect(() => {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
+			setCollapsed(true);
+		}
+	}, [hasStoredCollapsed]);
 
 	const disabledDate = (current) => current < moment();
 

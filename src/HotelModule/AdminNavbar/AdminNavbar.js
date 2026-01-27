@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { Redirect, Link } from "react-router-dom";
 import {
@@ -38,6 +38,8 @@ const handleSignout = (history) => {
 	});
 };
 
+const MENU_COLLAPSE_KEY = "hotelAdminMenuCollapsed";
+
 const AdminNavbar = ({
 	fromPage,
 	setAdminMenuStatus,
@@ -59,9 +61,21 @@ const AdminNavbar = ({
 
 	const roomCountDetails = selectedHotel.roomCountDetails || [];
 
+	useEffect(() => {
+		const stored = localStorage.getItem(MENU_COLLAPSE_KEY);
+		if (stored === null) {
+			return;
+		}
+		const nextCollapsed = stored === "true";
+		setCollapsed(nextCollapsed);
+		setAdminMenuStatus(nextCollapsed);
+	}, [setAdminMenuStatus, setCollapsed]);
+
 	const toggleCollapsed = () => {
-		setCollapsed(!collapsed);
-		setAdminMenuStatus(!collapsed);
+		const nextCollapsed = !collapsed;
+		setCollapsed(nextCollapsed);
+		setAdminMenuStatus(nextCollapsed);
+		localStorage.setItem(MENU_COLLAPSE_KEY, String(nextCollapsed));
 	};
 
 	const items = [

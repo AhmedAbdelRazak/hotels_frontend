@@ -40,6 +40,8 @@ const handleSignout = (history) => {
 	});
 };
 
+const MENU_COLLAPSE_KEY = "hotelAdminMenuCollapsed";
+
 const AdminNavbarArabic = ({
 	fromPage,
 	setAdminMenuStatus,
@@ -48,11 +50,24 @@ const AdminNavbarArabic = ({
 }) => {
 	const [clickedOn, setClickedOn] = useState(false);
 	const { chosenLanguage } = useCartContext();
-	const toggleCollapsed = () => {
-		setCollapsed(!collapsed);
-		setAdminMenuStatus(!collapsed);
-	};
 	const history = useHistory();
+
+	useEffect(() => {
+		const stored = localStorage.getItem(MENU_COLLAPSE_KEY);
+		if (stored === null) {
+			return;
+		}
+		const nextCollapsed = stored === "true";
+		setCollapsed(nextCollapsed);
+		setAdminMenuStatus(nextCollapsed);
+	}, [setAdminMenuStatus, setCollapsed]);
+
+	const toggleCollapsed = () => {
+		const nextCollapsed = !collapsed;
+		setCollapsed(nextCollapsed);
+		setAdminMenuStatus(nextCollapsed);
+		localStorage.setItem(MENU_COLLAPSE_KEY, String(nextCollapsed));
+	};
 
 	// Retrieve user and selectedHotel details
 	const { user } = isAuthenticated();

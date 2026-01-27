@@ -20,6 +20,7 @@ import { defaultHotelDetails } from "../../AdminModule/NewHotels/Assets";
 import ZUpdateRoomCount from "./ZUpdateRoomCount";
 import ZSuccessfulUpdate from "./ZSuccessfulUpdate";
 import PaymentSettings from "./PaymentSettings";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const roomTypeColors = {
 	standardRooms: "#003366", // Dark Blue
@@ -39,7 +40,9 @@ const roomTypeColors = {
 const HotelSettingsMain = () => {
 	const history = useHistory();
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [hotelDetails, setHotelDetails] = useState("");
 	const [values, setValues] = useState("");
 	const { languageToggle, chosenLanguage } = useCartContext();
@@ -130,10 +133,6 @@ const HotelSettingsMain = () => {
 	}, []);
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
-			setCollapsed(true);
-		}
-
 		if (window.location.search.includes("hoteldetails")) {
 			setActiveTab("HotelDetails");
 		} else if (window.location.search.includes("roomdetails")) {
@@ -149,6 +148,12 @@ const HotelSettingsMain = () => {
 		}
 		// eslint-disable-next-line
 	}, [activeTab]);
+
+	useEffect(() => {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
+			setCollapsed(true);
+		}
+	}, [hasStoredCollapsed]);
 
 	const roomTypes = [
 		{ value: "standardRooms", label: "Standard Rooms" },

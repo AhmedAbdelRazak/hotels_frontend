@@ -34,6 +34,7 @@ import {
 	Tag,
 	message,
 } from "antd";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 import {
 	PayPalScriptProvider,
@@ -335,7 +336,9 @@ function QuickAddMethodModal({
 const PaymentMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [hotelDetails, setHotelDetails] = useState("");
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const { user, token } = isAuthenticated();
 	const { chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -364,7 +367,7 @@ const PaymentMain = () => {
 	};
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) setCollapsed(true);
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) setCollapsed(true);
 		gettingHotelData();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);

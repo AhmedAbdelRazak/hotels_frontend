@@ -13,6 +13,7 @@ import {
 } from "../apiAdmin";
 import PasscodeModal from "./PasscodeModal";
 import AdminDashboard from "./AdminDashboard";
+import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const HotelManagerDashboard = () => {
 	// eslint-disable-next-line
@@ -20,7 +21,9 @@ const HotelManagerDashboard = () => {
 
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [modalVisiblePasscode, setModalVisiblePasscode] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	// eslint-disable-next-line
 	const [hotelDetails, setHotelDetails] = useState("");
 	// eslint-disable-next-line
@@ -37,12 +40,12 @@ const HotelManagerDashboard = () => {
 	const { user, token } = isAuthenticated();
 
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 
 		// eslint-disable-next-line
-	}, []);
+	}, [hasStoredCollapsed]);
 
 	// Helper function to format a date object into yyyy-mm-dd
 	function formatDate(date) {

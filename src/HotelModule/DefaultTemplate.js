@@ -4,17 +4,20 @@ import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 // import { Link } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
+import { getStoredMenuCollapsed } from "./utils/menuState";
 
 const HotelSettingsMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
+		getStoredMenuCollapsed();
+	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const { languageToggle, chosenLanguage } = useCartContext();
 	useEffect(() => {
-		if (window.innerWidth <= 1000) {
+		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
 		// eslint-disable-next-line
-	}, []);
+	}, [hasStoredCollapsed]);
 
 	return (
 		<HotelSettingsMainWrapper
