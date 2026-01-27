@@ -26,6 +26,7 @@ import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
 import {
 	createNewReservationClient,
+	getAdminHotelInventoryAvailability,
 	gettingHotelDetailsForAdminAll,
 	readUserId,
 } from "../apiAdmin";
@@ -43,6 +44,8 @@ const safeParseFloat = (value, fallback = 0) => {
 	const parsed = parseFloat(value);
 	return isNaN(parsed) ? fallback : parsed;
 };
+
+const normalizeRoomLabel = (value) => String(value || "").trim();
 
 /** Treat as "external" if NOT 'manual' and NOT 'Jannat Employee' */
 const isExternalSource = (src) => {
@@ -120,6 +123,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
+	const [roomAvailability, setRoomAvailability] = useState([]);
 
 	// Edit Pricing Modal
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
@@ -207,6 +211,136 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		setAgentName((effectiveUser?.name || "").trim());
 		getAllHotels();
 	}, [effectiveUser, getAllHotels]);
+
+	// Build a quick lookup for availability by display name
+	const availabilityByDisplayName = useMemo(() => {
+		const map = new Map();
+		(roomAvailability || []).forEach((room) => {
+			const label = normalizeRoomLabel(
+				room?.displayName ||
+					room?.display_name ||
+					room?.room_type ||
+					room?.roomType,
+			);
+			if (!label) return;
+			if (!map.has(label)) map.set(label, room);
+		});
+		return map;
+	}, [roomAvailability]);
+
+	const resolveRoomMetaByDisplayName = useCallback(
+		(displayName) => {
+			const normalized = normalizeRoomLabel(displayName);
+			if (!normalized) return null;
+
+			const fromAvailability = availabilityByDisplayName.get(normalized);
+			if (fromAvailability) {
+				return {
+					displayName: normalizeRoomLabel(
+						fromAvailability.displayName ||
+							fromAvailability.display_name ||
+							normalized,
+					),
+					roomType: normalizeRoomLabel(
+						fromAvailability.room_type ||
+							fromAvailability.roomType ||
+							fromAvailability.displayName ||
+							fromAvailability.display_name ||
+							normalized,
+					),
+				};
+			}
+
+			const details = Array.isArray(selectedHotel?.roomCountDetails)
+				? selectedHotel.roomCountDetails
+				: [];
+			const byDisplay = details.find(
+				(d) =>
+					normalizeRoomLabel(d?.displayName || d?.display_name) === normalized,
+			);
+			if (byDisplay) {
+				return {
+					displayName: normalizeRoomLabel(
+						byDisplay.displayName || byDisplay.display_name || normalized,
+					),
+					roomType: normalizeRoomLabel(
+						byDisplay.roomType || byDisplay.room_type || normalized,
+					),
+				};
+			}
+
+			const byRoomType = details.find(
+				(d) => normalizeRoomLabel(d?.roomType || d?.room_type) === normalized,
+			);
+			if (byRoomType) {
+				return {
+					displayName: normalizeRoomLabel(
+						byRoomType.displayName || byRoomType.display_name || normalized,
+					),
+					roomType: normalizeRoomLabel(
+						byRoomType.roomType || byRoomType.room_type || normalized,
+					),
+				};
+			}
+
+			return { displayName: normalized, roomType: normalized };
+		},
+		[availabilityByDisplayName, selectedHotel],
+	);
+
+	const roomOptions = useMemo(() => {
+		if (!selectedHotel) return [];
+
+		const availabilityList =
+			Array.isArray(roomAvailability) && roomAvailability.length > 0
+				? roomAvailability
+				: null;
+
+		if (availabilityList) {
+			return availabilityList.map((room) => {
+				const displayName = normalizeRoomLabel(
+					room?.displayName ||
+						room?.display_name ||
+						room?.room_type ||
+						room?.roomType,
+				);
+				const roomType = normalizeRoomLabel(
+					room?.room_type || room?.roomType || "",
+				);
+				const availableCount = room?.available ?? room?.total_available ?? 0;
+				return {
+					key: `${displayName}__${roomType || "rt"}`,
+					value: displayName,
+					displayName,
+					roomType,
+					availableCount,
+				};
+			});
+		}
+
+		const details = Array.isArray(selectedHotel?.roomCountDetails)
+			? selectedHotel.roomCountDetails
+			: [];
+
+		return details.map((detail) => {
+			const displayName = normalizeRoomLabel(
+				detail?.displayName ||
+					detail?.display_name ||
+					detail?.roomType ||
+					detail?.room_type,
+			);
+			const roomType = normalizeRoomLabel(
+				detail?.roomType || detail?.room_type || "",
+			);
+			return {
+				key: `${displayName}__${roomType || "rt"}`,
+				value: displayName,
+				displayName,
+				roomType,
+				availableCount: null,
+			};
+		});
+	}, [selectedHotel, roomAvailability]);
 
 	/**
 	 * Return an array of day‐by‐day pricing from `startDate` to `endDate - 1`.
@@ -366,11 +500,24 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					}
 				} else if (!userWantsManualOverride) {
 					if (forceRecalcFromDb || lengthMismatch) {
-						const matched = selectedHotel?.roomCountDetails?.find(
-							(r) =>
-								r.roomType?.trim() === room.roomType.trim() &&
-								r.displayName?.trim() === room.displayName.trim(),
-						);
+						const normalizedRoomType = normalizeRoomLabel(room.roomType);
+						const normalizedDisplay = normalizeRoomLabel(room.displayName);
+						const matched = selectedHotel?.roomCountDetails?.find((r) => {
+							const detailType = normalizeRoomLabel(r.roomType || r.room_type);
+							const detailDisplay = normalizeRoomLabel(
+								r.displayName || r.display_name,
+							);
+
+							if (normalizedDisplay && detailDisplay === normalizedDisplay) {
+								return !normalizedRoomType || detailType === normalizedRoomType;
+							}
+							if (normalizedRoomType && detailType === normalizedRoomType) {
+								return (
+									!normalizedDisplay || detailDisplay === normalizedDisplay
+								);
+							}
+							return false;
+						});
 						if (!matched) {
 							return room;
 						}
@@ -523,11 +670,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			setSelectedRooms(updated);
 			return;
 		}
-		const [roomType, displayName] = value.split("|");
+		const resolved = resolveRoomMetaByDisplayName(value);
 		updated[index] = {
 			...updated[index],
-			roomType: roomType.trim(),
-			displayName: displayName.trim(),
+			roomType: normalizeRoomLabel(resolved?.roomType || ""),
+			displayName: normalizeRoomLabel(resolved?.displayName || value),
 			pricingByDay: [],
 			// Reset manual overrides if user changes room type
 			manualTotal: null,
@@ -705,6 +852,40 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		if (!checkInDate) return true;
 		return current && current <= dayjs(checkInDate).startOf("day");
 	};
+
+	// Fetch availability for selected hotel and dates (admin/PMS endpoint)
+	useEffect(() => {
+		if (
+			!selectedHotel?._id ||
+			!checkInDate ||
+			!checkOutDate ||
+			!effectiveUserId ||
+			!token ||
+			!dayjs(checkOutDate).isAfter(dayjs(checkInDate), "day")
+		) {
+			setRoomAvailability([]);
+			return;
+		}
+
+		const start = dayjs(checkInDate).format("YYYY-MM-DD");
+		const end = dayjs(checkOutDate).format("YYYY-MM-DD");
+
+		getAdminHotelInventoryAvailability(
+			effectiveUserId,
+			token,
+			selectedHotel._id,
+			{
+				start,
+				end,
+			},
+		).then((data) => {
+			if (data && data.error) {
+				setRoomAvailability([]);
+			} else {
+				setRoomAvailability(Array.isArray(data) ? data : []);
+			}
+		});
+	}, [selectedHotel?._id, checkInDate, checkOutDate, effectiveUserId, token]);
 
 	// Hotel dropdown
 	const handleHotelChange = (hotelId) => {
@@ -925,6 +1106,16 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		const transformPickedRooms = (rooms) => {
 			return rooms.flatMap((room) =>
 				Array.from({ length: room.count }, () => {
+					const resolvedMeta = resolveRoomMetaByDisplayName(
+						room.displayName || room.roomType,
+					);
+					const finalDisplayName = normalizeRoomLabel(
+						room.displayName || resolvedMeta?.displayName || room.roomType,
+					);
+					const finalRoomType = normalizeRoomLabel(
+						room.roomType || resolvedMeta?.roomType || finalDisplayName,
+					);
+
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
 						price: safeParseFloat(day.totalPriceWithCommission), // nightly final
@@ -949,8 +1140,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							: 0;
 
 					return {
-						room_type: room.roomType.trim(),
-						displayName: room.displayName.trim(),
+						room_type: finalRoomType,
+						displayName: finalDisplayName,
 						chosenPrice: avgNight.toFixed(2),
 						count: 1, // flattened entries
 						pricingByDay: pricingDetails,
@@ -1200,23 +1391,34 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						<Form.Item label={`Room Type ${index + 1}`} required>
 							<Select
 								placeholder='Select Room Type'
-								value={
-									room.roomType
-										? `${room.roomType}|${room.displayName}`
-										: undefined
-								}
+								value={room.displayName ? room.displayName : undefined}
 								onChange={(v) => handleRoomSelectionChange(v, index)}
 								disabled={!selectedHotel}
 								allowClear
+								optionLabelProp='label'
 							>
-								{selectedHotel?.roomCountDetails?.map((rd) => {
-									const val = `${rd.roomType}|${rd.displayName}`;
-									return (
-										<Option key={val} value={val}>
-											{rd.displayName} ({rd.roomType})
-										</Option>
-									);
-								})}
+								{roomOptions.map((opt) => (
+									<Option
+										key={opt.key}
+										value={opt.value}
+										label={opt.displayName}
+									>
+										<span
+											style={{
+												display: "flex",
+												justifyContent: "space-between",
+												gap: 8,
+											}}
+										>
+											<span>{opt.displayName}</span>
+											{opt.availableCount !== null && (
+												<span style={{ opacity: 0.7, fontSize: 12 }}>
+													Available: {opt.availableCount}
+												</span>
+											)}
+										</span>
+									</Option>
+								))}
 							</Select>
 						</Form.Item>
 

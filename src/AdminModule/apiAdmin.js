@@ -802,6 +802,39 @@ export const createNewReservationClient = async (reservationData) => {
 		});
 };
 
+export const getAdminHotelInventoryAvailability = (
+	userId,
+	token,
+	hotelId,
+	{ start, end, includeCancelled = false } = {},
+) => {
+	if (!hotelId) {
+		return Promise.reject(new Error("hotelId is required"));
+	}
+	if (!userId) {
+		return Promise.reject(new Error("userId is required"));
+	}
+	const params = new URLSearchParams();
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/admin/hotel-inventory/${hotelId}/availability/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.error("Error fetching availability:", err));
+};
+
 const parseJSON = async (res) => {
 	const text = await res.text();
 	let data;
