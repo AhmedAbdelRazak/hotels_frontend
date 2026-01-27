@@ -26,6 +26,7 @@ import dayjs from "dayjs";
 import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
 import {
+	getAdminHotelInventoryAvailability,
 	gettingHotelDetailsForAdminAll,
 	updateSingleReservation,
 } from "../apiAdmin";
@@ -53,6 +54,10 @@ const safeParseFloat = (val, fallback = 0) => {
 	const n = parseFloat(val);
 	return Number.isFinite(n) ? n : fallback;
 };
+
+const normalizeRoomLabel = (value) => String(value || "").trim().toLowerCase();
+const availabilityKey = (roomType, displayName) =>
+	`${normalizeRoomLabel(displayName)}|${normalizeRoomLabel(roomType)}`;
 
 /** Commission to percent:
  * - If <= 0 → fallback 10
@@ -163,6 +168,7 @@ const EditReservationMain = ({
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
+	const [roomAvailability, setRoomAvailability] = useState([]);
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
@@ -344,6 +350,18 @@ const EditReservationMain = ({
 			setSelectedHotel(null);
 		}
 	}, [reservation, allHotels]);
+
+	const availabilityByRoomKey = useMemo(() => {
+		const map = new Map();
+		(roomAvailability || []).forEach((room) => {
+			const key = availabilityKey(
+				room?.room_type || room?.roomType,
+				room?.displayName || room?.display_name || room?.room_type
+			);
+			if (!map.has(key)) map.set(key, room);
+		});
+		return map;
+	}, [roomAvailability]);
 
 	// ---------- Pricing builders with new fallback ----------
 	const getMatchedRoom = useCallback(
@@ -605,12 +623,41 @@ const EditReservationMain = ({
 		setCheckOutDate(dayjs(value));
 	};
 
-	const disableCheckInDate = (current) =>
-		current && current < dayjs().startOf("day");
+	// Allow selecting any past or future date when editing
+	const disableCheckInDate = () => false;
 	const disableCheckOutDate = (current) => {
 		if (!checkInDate) return true;
 		return current && current <= dayjs(checkInDate).startOf("day");
 	};
+
+	// Availability fetch (admin/PMS endpoint)
+	useEffect(() => {
+		if (
+			!selectedHotel?._id ||
+			!checkInDate ||
+			!checkOutDate ||
+			!user?._id ||
+			!token ||
+			!dayjs(checkOutDate).isAfter(dayjs(checkInDate), "day")
+		) {
+			setRoomAvailability([]);
+			return;
+		}
+
+		const start = dayjs(checkInDate).format("YYYY-MM-DD");
+		const end = dayjs(checkOutDate).format("YYYY-MM-DD");
+
+		getAdminHotelInventoryAvailability(user._id, token, selectedHotel._id, {
+			start,
+			end,
+		}).then((data) => {
+			if (data && data.error) {
+				setRoomAvailability([]);
+			} else {
+				setRoomAvailability(Array.isArray(data) ? data : []);
+			}
+		});
+	}, [selectedHotel?._id, checkInDate, checkOutDate, user?._id, token]);
 
 	// ---------------- Room selection ----------------
 	const handleRoomSelectionChange = (value, index) => {
@@ -1115,13 +1162,34 @@ const EditReservationMain = ({
 								onChange={(val) => handleRoomSelectionChange(val, index)}
 								disabled={isLoading || !selectedHotel}
 								getPopupContainer={resolvePopupContainer}
+								optionLabelProp='label'
 							>
 								{selectedHotel &&
 									selectedHotel.roomCountDetails?.map((d) => {
 										const val = `${d.roomType}|${d.displayName}`;
+										const roomKey = availabilityKey(d.roomType, d.displayName);
+										const availability = availabilityByRoomKey.get(roomKey);
+										const availableCount =
+											availability?.available ?? availability?.total_available ?? null;
+										const labelText = `${d.displayName || d.roomType}${
+											d.roomType ? ` (${d.roomType})` : ""
+										}`;
 										return (
-											<Option key={val} value={val}>
-												{d.displayName} ({d.roomType})
+											<Option key={val} value={val} label={labelText}>
+												<span
+													style={{
+														display: "flex",
+														justifyContent: "space-between",
+														gap: 8,
+													}}
+												>
+													<span>{labelText}</span>
+													{availableCount !== null && (
+														<span style={{ opacity: 0.7, fontSize: 12 }}>
+															Available: {availableCount}
+														</span>
+													)}
+												</span>
 											</Option>
 										);
 									})}

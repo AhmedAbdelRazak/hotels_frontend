@@ -844,9 +844,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	};
 
 	// Disable past dates
-	const disableCheckInDate = (current) => {
-		return current && current < dayjs().startOf("day");
-	};
+	const disableCheckInDate = () => false;
 	// Disable any check-out date on or before checkInDate
 	const disableCheckOutDate = (current) => {
 		if (!checkInDate) return true;
