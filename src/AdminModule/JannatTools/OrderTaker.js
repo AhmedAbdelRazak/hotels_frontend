@@ -1285,6 +1285,18 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			(selectedReservation?.paid_amount ?? 0) ||
 			0,
 	);
+	const paidAmountDisplay = useMemo(() => {
+		const status = String(paymentStatus || "").toLowerCase().trim();
+		if (
+			status === "paid online" ||
+			status === "paid offline" ||
+			status === "credit/ debit" ||
+			status === "not captured"
+		) {
+			return Number(paidAmount || 0);
+		}
+		return 0;
+	}, [paymentStatus, paidAmount]);
 
 	return (
 		<div style={{ padding: "20px", maxWidth: "700px", margin: "auto" }}>
@@ -1726,7 +1738,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							</span>
 						</Descriptions.Item>
 						<Descriptions.Item label='Paid Amount'>
-							{createdPaidDisplay} SAR
+							{(reservationCreated ? createdPaidDisplay : paidAmountDisplay).toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Number of Nights'>
 							{numberOfNights}

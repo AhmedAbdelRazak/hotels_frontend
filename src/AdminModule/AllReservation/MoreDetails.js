@@ -1079,7 +1079,7 @@ const MoreDetails = ({
 						style={{ top: 20 }}
 						styles={{
 							mask: { zIndex: 11999 },
-							body: { maxHeight: "82vh", overflowY: "auto" },
+							body: { maxHeight: "86vh", overflowY: "auto" },
 						}}
 						wrapClassName='edit-reservation-modal'
 						rootClassName='edit-reservation-modal'

@@ -984,6 +984,25 @@ const EditReservationMain = ({
 		[selectedHotel, reservation?.hotelId?._id]
 	);
 
+	const paidAmountDisplay = useMemo(() => {
+		const onsite = Number(reservation?.payment_details?.onsite_paid_amount || 0);
+		const paid = Number(reservation?.paid_amount || 0);
+		const status = String(
+			reservation?.payment || reservation?.payment_status || ""
+		)
+			.toLowerCase()
+			.trim();
+
+		if (status === "paid offline") return onsite;
+		if (
+			status === "paid online" ||
+			status === "credit/ debit" ||
+			status === "not captured"
+		)
+			return paid;
+		return onsite || paid || 0;
+	}, [reservation]);
+
 	return (
 		<div
 			style={{
@@ -1408,7 +1427,7 @@ const EditReservationMain = ({
 							{totalAmount.toFixed(2)} SAR
 						</Descriptions.Item>
 						<Descriptions.Item label='Paid Amount'>
-							{reservation.payment_details?.onsite_paid_amount || 0} SAR{" "}
+							{paidAmountDisplay.toFixed(2)} SAR{" "}
 							<EditOutlined
 								style={{ marginLeft: 8, cursor: "pointer" }}
 								onClick={handleOpenPaidAmountEdit}
