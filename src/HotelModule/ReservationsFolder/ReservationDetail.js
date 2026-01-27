@@ -292,6 +292,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		[normalizeNumber],
 	);
 
+	const restrictedCashUserId = "6969d80da28c78c6280171df";
+	const isRestrictedCashUser = user?._id === restrictedCashUserId;
+	const existingCashValue = normalizeNumber(
+		reservation?.paid_amount_breakdown?.paid_at_hotel_cash,
+		0,
+	);
+	const isCashLocked = isRestrictedCashUser && existingCashValue > 0;
+
 	useEffect(() => {
 		if (!isPaymentBreakdownVisible) return;
 		setPaymentBreakdownDraft(
@@ -462,6 +470,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
+		if (key === "paid_at_hotel_cash" && isCashLocked) {
+			return;
+		}
 		setPaymentBreakdownDraft((prev) => {
 			const parsedValue = Math.max(normalizeNumber(rawValue, 0), 0);
 			const totalOther = paymentBreakdownNumericKeys.reduce((sum, fieldKey) => {
@@ -483,8 +494,21 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	const handleSavePaymentBreakdown = () => {
 		if (!reservation?._id) return;
-		const nextTotals = getPaymentBreakdownTotals(
+		const sanitizedBreakdown = buildPaymentBreakdown(
 			paymentBreakdownDraft,
+			normalizeNumber,
+		);
+		if (
+			isCashLocked &&
+			sanitizedBreakdown.paid_at_hotel_cash !== existingCashValue
+		) {
+			sanitizedBreakdown.paid_at_hotel_cash = existingCashValue;
+			toast.warn(
+				"Paid at Hotel (Cash) is locked for your account and cannot be changed.",
+			);
+		}
+		const nextTotals = getPaymentBreakdownTotals(
+			sanitizedBreakdown,
 			normalizeNumber,
 		);
 		if (nextTotals.total > totalAmountValue) {
@@ -492,11 +516,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		}
 		setIsSavingPaymentBreakdown(true);
 		const updateData = {
-			paid_amount_breakdown: buildPaymentBreakdown(
-				paymentBreakdownDraft,
-				normalizeNumber,
-			),
+			paid_amount_breakdown: sanitizedBreakdown,
 			paid_amount: nextTotals.total,
+			requestingUserId: user?._id,
 		};
 
 		updateSingleReservation(reservation._id, updateData).then((response) => {
@@ -1040,6 +1062,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											step='0.01'
 											className='form-control'
 											value={paymentBreakdownDraft[field.key]}
+											disabled={
+												field.key === "paid_at_hotel_cash" && isCashLocked
+											}
+											style={
+												field.key === "paid_at_hotel_cash" && isCashLocked
+													? {
+															backgroundColor: "#f0f0f0",
+															color: "#999",
+															cursor: "not-allowed",
+													  }
+													: undefined
+											}
 											onChange={(e) =>
 												handlePaymentBreakdownValueChange(
 													field.key,
