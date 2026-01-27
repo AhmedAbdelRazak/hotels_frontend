@@ -443,11 +443,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const totalPaid = hasBreakdownValues
 		? breakdownTotalsFromReservation.total
 		: paidOnline + paidOffline;
-	const isCreditDebit =
-		paymentSummary.paymentMode === "credit/ debit" ||
-		paymentSummary.paymentMode === "credit/debit";
-	const assumePaidInFull =
-		isCreditDebit || (paymentSummary.isCaptured && totalPaid === 0);
+	const assumePaidInFull = paymentSummary.isCaptured && totalPaid === 0;
 	const amountDue = assumePaidInFull
 		? 0
 		: Math.max(totalAmountValue - totalPaid, 0);
