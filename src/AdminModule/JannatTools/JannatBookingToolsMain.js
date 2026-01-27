@@ -11,6 +11,7 @@ import ReservationCalculator from "./ReservationCalculator";
 import OrderTaker from "./OrderTaker";
 import EmployeeRegister from "./EmployeeRegister";
 import UncompletedReservations from "./UncompletedReservations";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -57,21 +58,22 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 			return;
 		}
 
-		// If the user has both 'hotelsToSupport' and 'accessTo' (and they're non-empty),
-		// we skip the password check entirely.
-		const hasHotelsToSupport =
-			(Array.isArray(getUser.hotelsToSupport) &&
-				getUser.hotelsToSupport.length > 0) ||
-			getUser.hotelsToSupport === "all";
-		const hasAccessTo =
-			Array.isArray(getUser.accessTo) && getUser.accessTo.length > 0;
+		const isSuperAdminAccess =
+			!getUser?.accessTo ||
+			getUser.accessTo.length === 0 ||
+			getUser.accessTo.includes("all");
 
-		// Check if user is allowed "JannatTools" => skip password
-		const includesJannatTools = Array.isArray(getUser.accessTo)
-			? getUser.accessTo.includes("JannatTools")
-			: false;
+		const accessTo = getUser.accessTo || [];
+		const includesJannatTools = accessTo.includes("JannatTools");
 
-		if (hasHotelsToSupport && hasAccessTo && includesJannatTools) {
+		if (SUPER_USER_IDS.includes(getUser?._id) || isSuperAdminAccess) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			localStorage.setItem("ToolsVerified", "true");
+			return;
+		}
+
+		if (includesJannatTools) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 			localStorage.setItem("ToolsVerified", "true");
@@ -95,7 +97,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		const accessTo = getUser.accessTo || [];
 
 		// If user has "JannatTools", do nothing special here
-		if (accessTo.includes("JannatTools")) {
+		if (accessTo.includes("JannatTools") || SUPER_USER_IDS.includes(getUser?._id)) {
 			return;
 		}
 
@@ -130,7 +132,8 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	const isSuperAdmin =
 		!getUser?.accessTo ||
 		getUser?.accessTo.length === 0 ||
-		getUser?.accessTo.includes("all");
+		getUser?.accessTo.includes("all") ||
+		SUPER_USER_IDS.includes(getUser?._id);
 
 	// Handle password verification
 	const handlePasswordVerification = () => {

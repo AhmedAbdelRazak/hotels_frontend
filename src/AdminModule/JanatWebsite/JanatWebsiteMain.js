@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
 import ZLogoAdd from "./ZLogoAdd";
@@ -8,7 +8,7 @@ import ZContactusBannerAdd from "./ZContactusBannerAdd";
 import ZAboutUsAdd from "./ZAboutUsAdd";
 // eslint-disable-next-line
 import ZHotelsMainBanner from "./ZHotelsMainBanner";
-import { JanatWebsite, getJanatWebsiteRecord } from "../apiAdmin";
+import { JanatWebsite, getJanatWebsiteRecord, readUserId } from "../apiAdmin";
 import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
@@ -16,6 +16,8 @@ import ZPrivacyPolicy from "./ZPrivacyPolicy";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import ZHomePageBanner3 from "./ZHomePageBanner3";
+import { isAuthenticated } from "../../auth";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -42,6 +44,20 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
+	const [getUser, setGetUser] = useState(null);
+
+	const { user, token } = isAuthenticated() || {};
+
+	const loadCurrentUser = useCallback(() => {
+		if (!user?._id || !token) return;
+		readUserId(user._id, token).then((data) => {
+			if (data && data.error) {
+				console.error(data.error);
+			} else {
+				setGetUser(data);
+			}
+		});
+	}, [user?._id, token]);
 
 	const gettingJanatWebsiteRecord = () => {
 		getJanatWebsiteRecord().then((data) => {
@@ -93,21 +109,33 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 		if (window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+		loadCurrentUser();
+		gettingJanatWebsiteRecord();
+		// eslint-disable-next-line
+	}, [loadCurrentUser]);
+
+	useEffect(() => {
+		if (!getUser) return;
+
+		const accessTo = getUser.accessTo || [];
+		const hasAccess =
+			SUPER_USER_IDS.includes(getUser?._id) ||
+			accessTo.includes("JannatBookingWebsite") ||
+			accessTo.includes("all") ||
+			accessTo.length === 0;
 
 		// Check if password is already verified
 		const websitePasswordVerified = localStorage.getItem(
 			"JannatBookingWebsiteVerified"
 		);
 
-		if (websitePasswordVerified) {
+		if (websitePasswordVerified || hasAccess) {
 			setIsPasswordVerified(true);
+			setIsModalVisible(false);
 		} else {
 			setIsModalVisible(true);
 		}
-
-		gettingJanatWebsiteRecord();
-		// eslint-disable-next-line
-	}, []);
+	}, [getUser]);
 
 	const handlePasswordVerification = () => {
 		if (password === "JannatBookingWebsite2025") {

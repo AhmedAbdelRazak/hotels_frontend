@@ -9,6 +9,7 @@ import CustomerServiceDetails from "./CustomerServiceDetails";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import { NotificationProvider } from "./NotificationContext";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const CustomerServiceMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -37,6 +38,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 		!getUser.accessTo ||
 		getUser.accessTo.length === 0 ||
 		getUser.accessTo.includes("all");
+	const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
 
 	// Validate user and handle access control
 	useEffect(() => {
@@ -50,7 +52,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 			const accessTo = getUser.accessTo || [];
 
 			// Check if the user has access to CustomerService or is a Super Admin
-			if (accessTo.includes("CustomerService") || isSuperAdmin) {
+			if (accessTo.includes("CustomerService") || isSuperAdmin || isSuperUser) {
 				setIsPasswordVerified(true);
 				setIsModalVisible(false); // Ensure modal does not show
 				return;
@@ -71,7 +73,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 				history.push("/"); // Redirect to home if no valid access
 			}
 		}
-	}, [getUser, history, isSuperAdmin]);
+	}, [getUser, history, isSuperAdmin, isSuperUser]);
 
 	// Initial setup
 	useEffect(() => {
@@ -82,7 +84,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 		}
 
 		// If user is a Super Admin, skip modal
-		if (isSuperAdmin) {
+		if (isSuperAdmin || isSuperUser) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 		} else {
@@ -96,7 +98,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 				setIsModalVisible(true);
 			}
 		}
-	}, [gettingUserId, isSuperAdmin]);
+	}, [gettingUserId, isSuperAdmin, isSuperUser]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_CUSTOMER_SERVICE) {

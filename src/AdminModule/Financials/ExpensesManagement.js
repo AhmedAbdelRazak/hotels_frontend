@@ -33,6 +33,7 @@ import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { useHistory } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 import {
 	cloudinaryUpload1,
 	createExpense,
@@ -92,7 +93,6 @@ const getDateValue = (value) => {
 
 const DEFAULT_HOTEL_FILTER = "all";
 const DEFAULT_SORT_STATE = { columnKey: "expenseDate", order: "ascend" };
-const SUPER_USER_IDS = ["6553f1c6d06c5cea2f98a838", "6969d80da28c78c6280171df"];
 
 const ALLOWED_RECEIPT_TYPES = ["application/pdf"];
 const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;

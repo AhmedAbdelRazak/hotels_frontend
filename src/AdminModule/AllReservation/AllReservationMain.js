@@ -15,8 +15,7 @@ import {
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
-
-const SUPER_USER_IDS = ["6553f1c6d06c5cea2f98a838", "6969d80da28c78c6280171df"];
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const getPageFromSearch = (search) => {
 	const params = new URLSearchParams(search || "");
@@ -186,7 +185,12 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			return;
 		}
 		const accessTo = getUser.accessTo || [];
-		if (accessTo.includes("HotelsReservations") || isSuperAdmin) return;
+		if (
+			accessTo.includes("HotelsReservations") ||
+			isSuperAdmin ||
+			SUPER_USER_IDS.includes(getUser?._id)
+		)
+			return;
 
 		if (accessTo.includes("JannatTools")) {
 			history.push("/admin/jannatbooking-tools?tab=calculator");
@@ -206,23 +210,20 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	/** 4) Can skip password? */
 	const canSkipPassword = (usr) => {
 		if (!usr) return false;
-		const { accessTo = [], hotelsToSupport } = usr;
-		const hasReservationsAccess =
-			accessTo.includes("HotelsReservations") || accessTo.includes("all");
-		let hasHotels = false;
-		if (Array.isArray(hotelsToSupport)) {
-			hasHotels = hotelsToSupport.length > 0;
-		} else if (typeof hotelsToSupport === "string") {
-			hasHotels = hotelsToSupport === "all";
-		}
-		return hasReservationsAccess && hasHotels;
+		if (SUPER_USER_IDS.includes(usr._id)) return true;
+		const accessTo = usr.accessTo || [];
+		return (
+			accessTo.includes("HotelsReservations") ||
+			accessTo.includes("all") ||
+			accessTo.length === 0
+		);
 	};
 
 	/** 5) Show/hide password modal (after getUser is known) */
 	useEffect(() => {
 		if (!getUser) return;
 		const reservationPw = localStorage.getItem("ReservationListVerified");
-		if (reservationPw || canSkipPassword(getUser)) {
+		if (reservationPw || canSkipPassword(getUser) || isSuperAdmin) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 			return;

@@ -157,6 +157,7 @@ const IntegratorMain = ({ chosenLanguage }) => {
 							allHotelDetailsAdmin.length > 0 ? (
 								<ContentOfIntegrator
 									allHotelDetailsAdmin={allHotelDetailsAdmin}
+									currentUser={getUser}
 								/>
 							) : (
 								<div>No Hotel Found</div>

@@ -32,6 +32,7 @@ import {
 } from "../apiAdmin";
 import EditPricingModal from "../JannatTools/EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const { Option } = Select;
 
@@ -178,6 +179,7 @@ const EditReservationMain = ({
 	const [isLoading, setIsLoading] = useState(false);
 
 	const { user, token } = isAuthenticated();
+	const isSuperUser = SUPER_USER_IDS.includes(user?._id);
 
 	// Paid-amount gating
 	const [verifyPasswordModalVisible, setVerifyPasswordModalVisible] =
@@ -199,6 +201,12 @@ const EditReservationMain = ({
 	}, [reservation]);
 
 	const handleOpenPaidAmountEdit = () => {
+		if (isSuperUser) {
+			setVerifyPasswordModalVisible(false);
+			setVerifyPasswordInput("");
+			setPaidAmountModalVisible(true);
+			return;
+		}
 		setVerifyPasswordModalVisible(true);
 		setVerifyPasswordInput("");
 	};
@@ -214,6 +222,12 @@ const EditReservationMain = ({
 	};
 
 	const handleVerifyPasswordSubmit = () => {
+		if (isSuperUser) {
+			setVerifyPasswordModalVisible(false);
+			setVerifyPasswordInput("");
+			setPaidAmountModalVisible(true);
+			return;
+		}
 		if (verifyPasswordInput.trim() === PASSWORD_FOR_PAID_AMOUNT) {
 			setVerifyPasswordModalVisible(false);
 			setPaidAmountModalVisible(true);

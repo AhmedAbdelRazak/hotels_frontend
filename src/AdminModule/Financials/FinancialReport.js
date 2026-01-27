@@ -6,9 +6,9 @@ import { toast } from "react-toastify";
 import { useHistory } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import { getFinancialReport, listExpenseHotels } from "../apiAdmin";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const DEFAULT_HOTEL_FILTER = "all";
-const SUPER_USER_IDS = ["6553f1c6d06c5cea2f98a838"];
 const PAYMENT_STATUS_OPTIONS = [
 	"Captured",
 	"Paid Offline",

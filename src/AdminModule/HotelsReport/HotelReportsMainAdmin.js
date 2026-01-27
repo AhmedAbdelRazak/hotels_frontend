@@ -10,6 +10,7 @@ import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -19,6 +20,11 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [activeTab, setActiveTab] = useState("reservations");
 	const [getUser, setGetUser] = useState(null);
+	const isSuperAdmin =
+		!!getUser &&
+		(!getUser?.accessTo ||
+			getUser?.accessTo.length === 0 ||
+			getUser?.accessTo.includes("all"));
 
 	const { user, token } = isAuthenticated() || {};
 	const location = useLocation();
@@ -47,15 +53,17 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 		const accessTo = getUser.accessTo || [];
 
-		// If user has HotelReports in access, skip password
-		if (accessTo.includes("HotelReports")) {
+		const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
+
+		// If user has HotelReports in access, or is super/admin, skip password
+		if (accessTo.includes("HotelReports") || isSuperUser || isSuperAdmin) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 			return;
 		}
 
 		// If unrestricted or includes "all", keep password flow
-		if (accessTo.length === 0 || accessTo.includes("all")) {
+		if (accessTo.length === 0 || accessTo.includes("all") || isSuperUser) {
 			return;
 		}
 
@@ -83,13 +91,13 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 		const adminReportsPasswordVerified =
 			localStorage.getItem("ReportsVerified");
-		if (adminReportsPasswordVerified) {
+		if (adminReportsPasswordVerified || (getUser && isSuperAdmin)) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [gettingUserId]);
+	}, [gettingUserId, getUser?._id, isSuperAdmin]);
 
 	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {

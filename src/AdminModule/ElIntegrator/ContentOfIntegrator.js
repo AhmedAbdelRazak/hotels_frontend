@@ -8,8 +8,9 @@ import {
 } from "@ant-design/icons";
 import { agodaData, expediaData } from "../apiAdmin"; // Import both functions
 import { isAuthenticated } from "../../auth";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
-const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
+const ContentOfIntegrator = ({ allHotelDetailsAdmin, currentUser }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedHotel, setSelectedHotel] = useState(null);
 	const [password, setPassword] = useState("");
@@ -22,8 +23,14 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin }) => {
 	const openModal = (hotel) => {
 		setSelectedHotel(hotel);
 		const IntegratorVerified = localStorage.getItem("IntegratorVerified");
+		const accessTo = currentUser?.accessTo || [];
+		const hasAccess =
+			SUPER_USER_IDS.includes(currentUser?._id) ||
+			accessTo.includes("Integrator") ||
+			accessTo.includes("all") ||
+			accessTo.length === 0;
 
-		if (IntegratorVerified) {
+		if (IntegratorVerified || hasAccess) {
 			setIsPasswordVerified(true); // Skip password step
 		} else {
 			setIsPasswordVerified(false); // Require password verification

@@ -33,11 +33,11 @@ import {
 import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
 import PackagesModal from "./PackagesModal"; // expects: open, onClose, onApply, hotel
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const { Option } = Select;
 const { Text } = Typography;
-
-const SUPER_USER_ID = "6553f1c6d06c5cea2f98a838";
+const fallbackSuperUserId = SUPER_USER_IDS[0] || "";
 
 /** --------------------- Safe Parse Float --------------------- */
 const safeParseFloat = (value, fallback = 0) => {
@@ -78,7 +78,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	const effectiveUser = localUser;
 	const effectiveUserId = effectiveUser?._id || null;
-	const canEditAgentName = effectiveUserId === SUPER_USER_ID;
+	const canEditAgentName = SUPER_USER_IDS.includes(effectiveUserId);
 
 	/** -------------- State Variables -------------- */
 	const [selectedRooms, setSelectedRooms] = useState([
@@ -1191,7 +1191,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				nationality,
 				postalCode: "00000",
 				reservedBy: agentName,
-				reservedById: effectiveUserId || SUPER_USER_ID,
+				reservedById: effectiveUserId || fallbackSuperUserId,
 				confirmation_number2: String(confirmationNumber || "").trim(),
 			},
 			total_rooms: selectedRooms.reduce((t, r) => t + Number(r.count || 0), 0),

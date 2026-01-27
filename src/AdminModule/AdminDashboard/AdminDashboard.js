@@ -8,6 +8,7 @@ import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { useHistory } from "react-router-dom";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const AdminDashboard = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -35,6 +36,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 		!getUser.accessTo ||
 		getUser.accessTo.length === 0 ||
 		getUser.accessTo.includes("all");
+	const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
 
 	// Validate user and handle access control
 	useEffect(() => {
@@ -48,7 +50,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 			const accessTo = getUser.accessTo || [];
 
 			// Check if the user has access to AdminDashboard
-			if (accessTo.includes("AdminDashboard") || isSuperAdmin) {
+			if (accessTo.includes("AdminDashboard") || isSuperAdmin || isSuperUser) {
 				setIsPasswordVerified(true);
 				setIsModalVisible(false); // Ensure modal does not show
 				return;
@@ -67,7 +69,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				history.push("/"); // Redirect to home if no valid access
 			}
 		}
-	}, [getUser, history, isSuperAdmin]);
+	}, [getUser, history, isSuperAdmin, isSuperUser]);
 
 	// Initial setup
 	useEffect(() => {
@@ -78,7 +80,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 		}
 
 		// If user is a Super Admin, skip modal
-		if (isSuperAdmin) {
+		if (isSuperAdmin || isSuperUser) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 		} else {
@@ -92,7 +94,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				setIsModalVisible(true);
 			}
 		}
-	}, [gettingUserId, isSuperAdmin]);
+	}, [gettingUserId, isSuperAdmin, isSuperUser]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_ADMIN_DASHBOARD) {

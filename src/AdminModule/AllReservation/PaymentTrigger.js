@@ -7,6 +7,7 @@ import { triggerPayment } from "../apiAdmin";
 import { Modal, Radio, Input, message } from "antd";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { toast } from "react-toastify";
+import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const safeNumber = (val) => {
 	const n = Number(val);
@@ -19,6 +20,7 @@ const PAYMENT_CONFIRM_MODAL_Z = 12120;
 
 const PaymentTrigger = ({ reservation }) => {
 	const { user, token } = isAuthenticated();
+	const isSuperUser = SUPER_USER_IDS.includes(user?._id);
 
 	// UI state
 	const [loading, setLoading] = useState(false);
@@ -210,18 +212,29 @@ const PaymentTrigger = ({ reservation }) => {
 			return;
 		}
 		setModalError("");
+		if (isSuperUser) {
+			setPasswordInput("");
+			setModalErrorPassword("");
+			void handlePasswordConfirm(true);
+			return;
+		}
 		setIsPasswordModalVisible(true);
 	};
 
-	const handlePasswordConfirm = async () => {
-		if (!passwordInput) {
-			setModalErrorPassword("Please enter the confirmation password.");
-			return;
-		}
-		if (passwordInput !== process.env.REACT_APP_CONFIRM_PAYMENT) {
-			setModalErrorPassword("Incorrect password. Please try again.");
-			toast.error("Incorrect password. Please try again.");
-			return;
+	const handlePasswordConfirm = async (skipPassword = false) => {
+		if (!skipPassword) {
+			if (!passwordInput) {
+				setModalErrorPassword("Please enter the confirmation password.");
+				return;
+			}
+			if (passwordInput !== process.env.REACT_APP_CONFIRM_PAYMENT) {
+				setModalErrorPassword("Incorrect password. Please try again.");
+				toast.error("Incorrect password. Please try again.");
+				return;
+			}
+		} else {
+			setModalErrorPassword("");
+			setPasswordInput("");
 		}
 
 		const { finalUSD, finalSAR } = getChargeAmount();
