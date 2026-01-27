@@ -314,8 +314,11 @@ const summarizeReservationPaymentStatus = (reservation = {}) => {
 		.filter((n) => n > 0);
 
 	const initialCompleted =
-		(paypalDetails?.initial?.capture_status || paypalDetails?.initial?.status || "")
-			.toUpperCase() === "COMPLETED";
+		(
+			paypalDetails?.initial?.capture_status ||
+			paypalDetails?.initial?.status ||
+			""
+		).toUpperCase() === "COMPLETED";
 
 	const anyMitCompleted =
 		Array.isArray(paypalDetails?.mit) &&
@@ -458,6 +461,20 @@ const MoreDetails = ({
 	}, [whatsAppModalOpen, reservation?.customer_details?.phone]);
 
 	const totalAmountValue = safeNumber(reservation?.total_amount);
+	const breakdownTotalsFromReservation = useMemo(
+		() => getPaymentBreakdownTotals(reservation?.paid_amount_breakdown),
+		[reservation?.paid_amount_breakdown],
+	);
+	const hasBreakdownValues = breakdownTotalsFromReservation.total > 0;
+	const paidOnline = hasBreakdownValues
+		? breakdownTotalsFromReservation.online
+		: safeNumber(reservation?.paid_amount);
+	const paidOffline = hasBreakdownValues
+		? breakdownTotalsFromReservation.offline
+		: safeNumber(reservation?.payment_details?.onsite_paid_amount);
+	const totalPaid = hasBreakdownValues
+		? breakdownTotalsFromReservation.total
+		: paidOnline + paidOffline;
 	const paymentBreakdownTotals = getPaymentBreakdownTotals(
 		paymentBreakdownDraft,
 	);
@@ -489,6 +506,10 @@ const MoreDetails = ({
 		if (status === "Not Paid") return "darkred";
 		return "#a16207";
 	}, [paymentStatusSummary]);
+	const assumePaidInFull = paymentStatusSummary?.isCaptured && totalPaid === 0;
+	const amountDue = assumePaidInFull
+		? 0
+		: Math.max(totalAmountValue - totalPaid, 0);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		setPaymentBreakdownDraft((prev) => {
@@ -2260,7 +2281,7 @@ const MoreDetails = ({
 											</h3>
 										</div>
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalPaid > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
@@ -2270,16 +2291,16 @@ const MoreDetails = ({
 											</div>
 										) : null}
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalPaid > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3>
-													{reservation.paid_amount.toLocaleString()}{" "}
+													{formatNumber(totalPaid)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h3>
 											</div>
 										) : null}
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
@@ -2289,13 +2310,10 @@ const MoreDetails = ({
 											</div>
 										) : null}
 
-										{reservation && reservation.paid_amount !== 0 ? (
+										{totalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3 style={{ color: "darkgreen" }}>
-													{Number(
-														Number(reservation.total_amount) -
-															Number(reservation.paid_amount),
-													).toLocaleString()}{" "}
+													{formatNumber(amountDue)}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h3>
 											</div>
@@ -2320,8 +2338,7 @@ const MoreDetails = ({
 													{paymentStatusLabel}
 												</h5>
 											</div>
-											{reservation?.payment_details?.onsite_paid_amount &&
-											reservation?.payment_details?.onsite_paid_amount > 0 ? (
+											{paidOffline > 0 ? (
 												<div className='col-md-5 mx-auto'>
 													<h5
 														style={{ color: "darkgreen", fontWeight: "bold" }}
@@ -2332,14 +2349,13 @@ const MoreDetails = ({
 													</h5>
 												</div>
 											) : null}
-											{reservation?.payment_details?.onsite_paid_amount &&
-											reservation?.payment_details?.onsite_paid_amount > 0 ? (
+											{paidOffline > 0 ? (
 												<div
 													className='col-md-5 mx-auto'
 													style={{ color: "darkgreen", fontWeight: "bold" }}
 												>
 													<h5>
-														{reservation.payment_details.onsite_paid_amount}{" "}
+														{formatNumber(paidOffline)}{" "}
 														{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 													</h5>
 												</div>
