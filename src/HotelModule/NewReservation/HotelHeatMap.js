@@ -723,6 +723,8 @@ const HotelHeatMap = ({
 															totalBeds > 0 &&
 															bookedBedsCount > 0 &&
 															bookedBedsCount < totalBeds;
+														const partialBedRatio =
+															totalBeds > 0 ? bookedBedsCount / totalBeds : 0;
 														const showBedSummary = isBedRoom && totalBeds > 0;
 														return (
 															<Tooltip
@@ -802,6 +804,7 @@ const HotelHeatMap = ({
 																	{isPartialBedBooking ? (
 																		<HalfOccupiedOverlay
 																			$rtl={chosenLanguage === "Arabic"}
+																			$ratio={partialBedRatio}
 																			$animate={
 																				bookingStatus.isDue ||
 																				bookingStatus.isOverdue
@@ -883,6 +886,8 @@ const HotelHeatMap = ({
 																totalBeds > 0 &&
 																bookedBedsCount > 0 &&
 																bookedBedsCount < totalBeds;
+															const partialBedRatio =
+																totalBeds > 0 ? bookedBedsCount / totalBeds : 0;
 															const showBedSummary = isBedRoom && totalBeds > 0;
 															return (
 																<Tooltip
@@ -954,49 +959,50 @@ const HotelHeatMap = ({
 																		{bookingStatus.isOverdue && (
 																			<CheckoutBadge>Checkout</CheckoutBadge>
 																		)}
-																	{isPartialBedBooking ? (
-																		<HalfOccupiedOverlay
-																			$rtl={chosenLanguage === "Arabic"}
-																			$animate={
-																				bookingStatus.isDue ||
-																				bookingStatus.isOverdue
-																			}
-																			$overdue={bookingStatus.isOverdue}
-																		/>
-																	) : isBedRoom && bookedBedsCount > 0 ? (
-																		<BedOccupancyLines
-																			$animate={
-																				bookingStatus.isDue ||
-																				bookingStatus.isOverdue
-																			}
-																			$overdue={bookingStatus.isOverdue}
-																		>
-																			{Array.from(
-																				{ length: bookedBedsCount },
-																				(_, lineIndex) => {
-																					const offset =
-																						bookedBedsCount === 1
-																							? 50
-																							: 15 +
-																							  (70 * lineIndex) /
-																									(bookedBedsCount - 1);
-																					return (
-																						<BedOccupancyLine
-																							key={lineIndex}
-																							$offset={offset}
-																							$animate={
-																								bookingStatus.isDue ||
-																								bookingStatus.isOverdue
-																							}
-																							$overdue={
-																								bookingStatus.isOverdue
-																							}
-																						/>
-																					);
-																				},
-																			)}
-																		</BedOccupancyLines>
-																	) : null}
+																		{isPartialBedBooking ? (
+																			<HalfOccupiedOverlay
+																				$rtl={chosenLanguage === "Arabic"}
+																				$ratio={partialBedRatio}
+																				$animate={
+																					bookingStatus.isDue ||
+																					bookingStatus.isOverdue
+																				}
+																				$overdue={bookingStatus.isOverdue}
+																			/>
+																		) : isBedRoom && bookedBedsCount > 0 ? (
+																			<BedOccupancyLines
+																				$animate={
+																					bookingStatus.isDue ||
+																					bookingStatus.isOverdue
+																				}
+																				$overdue={bookingStatus.isOverdue}
+																			>
+																				{Array.from(
+																					{ length: bookedBedsCount },
+																					(_, lineIndex) => {
+																						const offset =
+																							bookedBedsCount === 1
+																								? 50
+																								: 15 +
+																								  (70 * lineIndex) /
+																										(bookedBedsCount - 1);
+																						return (
+																							<BedOccupancyLine
+																								key={lineIndex}
+																								$offset={offset}
+																								$animate={
+																									bookingStatus.isDue ||
+																									bookingStatus.isOverdue
+																								}
+																								$overdue={
+																									bookingStatus.isOverdue
+																								}
+																							/>
+																						);
+																					},
+																				)}
+																			</BedOccupancyLines>
+																		) : null}
 																		{room.room_number}
 																	</RoomSquare>
 																</Tooltip>
@@ -1285,7 +1291,7 @@ const HalfOccupiedOverlay = styled.div`
 	top: 0;
 	bottom: 0;
 	${({ $rtl }) => ($rtl ? "right: 0;" : "left: 0;")}
-	width: 50%;
+	width: ${({ $ratio }) => `${Math.min(Math.max($ratio || 0, 0), 1) * 100}%`};
 	background: rgba(148, 163, 184, 0.6);
 	box-shadow: inset 0 0 6px rgba(15, 23, 42, 0.25);
 	pointer-events: none;
