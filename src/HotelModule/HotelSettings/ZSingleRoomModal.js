@@ -319,6 +319,84 @@ const ZSingleRoomModal = ({
 					</div>
 				</div>
 
+				<div className='row'>
+					<div className='col-md-2 form-group' style={{ marginTop: "10px" }}>
+						<label
+							htmlFor='isHandicapped'
+							style={{
+								fontWeight: "bold",
+								fontSize: "11px",
+								textAlign: "center",
+								display: "block",
+							}}
+						>
+							Handicapped Room
+						</label>
+						<input
+							id='isHandicapped'
+							type='checkbox'
+							checked={!!clickedRoom.isHandicapped}
+							onChange={(e) =>
+								setClickedRoom({
+									...clickedRoom,
+									isHandicapped: e.target.checked,
+								})
+							}
+							style={{ width: "auto", margin: "6px auto 0" }}
+						/>
+					</div>
+					<div className='col-md-2 form-group' style={{ marginTop: "10px" }}>
+						<label
+							htmlFor='isVip'
+							style={{
+								fontWeight: "bold",
+								fontSize: "11px",
+								textAlign: "center",
+								display: "block",
+							}}
+						>
+							VIP Room
+						</label>
+						<input
+							id='isVip'
+							type='checkbox'
+							checked={!!clickedRoom.isVip}
+							onChange={(e) =>
+								setClickedRoom({
+									...clickedRoom,
+									isVip: e.target.checked,
+								})
+							}
+							style={{ width: "auto", margin: "6px auto 0" }}
+						/>
+					</div>
+					<div className='col-md-2 form-group' style={{ marginTop: "10px" }}>
+						<label
+							htmlFor='active'
+							style={{
+								fontWeight: "bold",
+								fontSize: "11px",
+								textAlign: "center",
+								display: "block",
+							}}
+						>
+							Open for Housing
+						</label>
+						<input
+							id='active'
+							type='checkbox'
+							checked={clickedRoom.active !== false}
+							onChange={(e) =>
+								setClickedRoom({
+									...clickedRoom,
+									active: e.target.checked,
+								})
+							}
+							style={{ width: "auto", margin: "6px auto 0" }}
+						/>
+					</div>
+				</div>
+
 				{clickedRoom && clickedRoom._id && (
 					<div>
 						<button

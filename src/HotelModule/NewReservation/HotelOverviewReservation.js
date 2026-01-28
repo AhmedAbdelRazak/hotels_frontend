@@ -331,17 +331,83 @@ const HotelOverviewReservation = ({
 	const floors = Array.from({ length: hotelFloors }, (_, index) => index + 1);
 	const floorsDesc = [...floors].reverse(); // Descending order for display on the canvas
 
-	const handleRoomClick = (roomId, show, room) => {
+	const getRoomWarningFlags = (room) => ({
+		isHandicapped: !!room?.isHandicapped,
+		isVip: !!room?.isVip,
+	});
+
+	const confirmRoomSelection = (room) =>
+		new Promise((resolve) => {
+			const flags = getRoomWarningFlags(room);
+			if (!flags.isHandicapped && !flags.isVip) {
+				resolve(true);
+				return;
+			}
+			Modal.confirm({
+				title: "تنبيه / Notice",
+				centered: true,
+				okText: "متابعة / Continue",
+				cancelText: "إلغاء / Cancel",
+				content: (
+					<div>
+						{flags.isHandicapped ? (
+							<div style={{ marginBottom: flags.isVip ? "12px" : 0 }}>
+								<div
+									dir='rtl'
+									style={{ textAlign: "right", fontWeight: 600 }}
+								>
+									تنبيه: هذه غرفة مخصصة لذوي الإعاقة. هل تريد المتابعة؟
+								</div>
+								<div style={{ textAlign: "left", fontWeight: 600 }}>
+									Notice: This is a handicapped room. Do you want to continue?
+								</div>
+							</div>
+						) : null}
+						{flags.isVip ? (
+							<div>
+								<div
+									dir='rtl'
+									style={{ textAlign: "right", fontWeight: 600 }}
+								>
+									تنبيه: هذه غرفة VIP. هل تريد المتابعة؟
+								</div>
+								<div style={{ textAlign: "left", fontWeight: 600 }}>
+									Notice: This is a VIP room. Do you want to continue?
+								</div>
+							</div>
+						) : null}
+					</div>
+				),
+				onOk: () => resolve(true),
+				onCancel: () => resolve(false),
+			});
+		});
+
+	const handleRoomClick = async (roomId, show, room) => {
 		if (!roomId || !room) return;
+
+		const isSelected = pickedHotelRooms.includes(roomId);
+		const isSearchRoom =
+			searchedReservation && reservationHasRoom(searchedReservation, roomId);
+		if (room.active === false && !isSelected && !isSearchRoom) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "هذه الغرفة مغلقة وغير متاحة للسكن."
+					: "This room is closed and not available for housing.",
+			);
+			return;
+		}
 
 		if (isRoomBooked(roomId, room.room_type, room.bedsNumber)) {
 			toast.error("Room is booked. Cannot select.");
 			return;
 		}
 
-		if (pickedHotelRooms.includes(roomId)) {
+		if (isSelected) {
 			handleRoomDeselection(roomId);
 		} else {
+			const shouldContinue = await confirmRoomSelection(room);
+			if (!shouldContinue) return;
 			setPickedHotelRooms([...pickedHotelRooms, roomId]);
 			setCurrentRoom(room);
 			showModal(room);
@@ -990,6 +1056,7 @@ const HotelOverviewReservation = ({
 															room.room_type,
 															room.bedsNumber,
 														);
+														const isClosed = room.active === false;
 														const roomInfo = getRoomDisplayInfo(room);
 														const roomImage = getRoomImage(
 															roomInfo.roomType,
@@ -1031,6 +1098,32 @@ const HotelOverviewReservation = ({
 																		<div>
 																			Clean: {room.cleanRoom ? "Yes" : "No"}
 																		</div>
+																		<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																			{chosenLanguage === "Arabic"
+																				? "مفتوحة للسكن: "
+																				: "Open for Housing: "}{" "}
+																			{room.active === false
+																				? chosenLanguage === "Arabic"
+																					? "لا"
+																					: "No"
+																				: chosenLanguage === "Arabic"
+																					? "نعم"
+																					: "Yes"}
+																		</div>
+																		{room.isHandicapped ? (
+																			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																				{chosenLanguage === "Arabic"
+																					? "غرفة لذوي الإعاقة"
+																					: "Handicapped Room"}
+																			</div>
+																		) : null}
+																		{room.isVip ? (
+																			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																				{chosenLanguage === "Arabic"
+																					? "غرفة VIP"
+																					: "VIP Room"}
+																			</div>
+																		) : null}
 																	</div>
 																}
 																key={idx}
@@ -1045,9 +1138,11 @@ const HotelOverviewReservation = ({
 																	style={{
 																		cursor: isBooked
 																			? "not-allowed"
-																			: "pointer",
-																		opacity: isBooked ? 0.5 : 1,
-																		textDecoration: isBooked
+																			: isClosed
+																				? "not-allowed"
+																				: "pointer",
+																		opacity: isBooked || isClosed ? 0.5 : 1,
+																		textDecoration: isBooked || isClosed
 																			? "line-through"
 																			: "none",
 																	}}
@@ -1088,6 +1183,7 @@ const HotelOverviewReservation = ({
 																room.room_type,
 																room.bedsNumber,
 															);
+															const isClosed = room.active === false;
 															const roomInfo = getRoomDisplayInfo(room);
 															const roomImage = getRoomImage(
 																roomInfo.roomType,
@@ -1129,6 +1225,44 @@ const HotelOverviewReservation = ({
 																			<div>
 																				Clean: {room.cleanRoom ? "Yes" : "No"}
 																			</div>
+																			<div
+																				dir={
+																					chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																				}
+																			>
+																				{chosenLanguage === "Arabic"
+																					? "مفتوحة للسكن: "
+																					: "Open for Housing: "}{" "}
+																				{room.active === false
+																					? chosenLanguage === "Arabic"
+																						? "لا"
+																						: "No"
+																					: chosenLanguage === "Arabic"
+																						? "نعم"
+																						: "Yes"}
+																			</div>
+																			{room.isHandicapped ? (
+																				<div
+																					dir={
+																						chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																					}
+																				>
+																					{chosenLanguage === "Arabic"
+																						? "غرفة لذوي الإعاقة"
+																						: "Handicapped Room"}
+																				</div>
+																			) : null}
+																			{room.isVip ? (
+																				<div
+																					dir={
+																						chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																					}
+																				>
+																					{chosenLanguage === "Arabic"
+																						? "غرفة VIP"
+																						: "VIP Room"}
+																				</div>
+																			) : null}
 																		</div>
 																	}
 																	key={idx}
@@ -1143,9 +1277,11 @@ const HotelOverviewReservation = ({
 																		style={{
 																			cursor: isBooked
 																				? "not-allowed"
-																				: "pointer",
-																			opacity: isBooked ? 0.5 : 1,
-																			textDecoration: isBooked
+																				: isClosed
+																					? "not-allowed"
+																					: "pointer",
+																			opacity: isBooked || isClosed ? 0.5 : 1,
+																			textDecoration: isBooked || isClosed
 																				? "line-through"
 																				: "none",
 																		}}

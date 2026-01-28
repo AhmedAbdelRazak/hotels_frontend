@@ -278,6 +278,14 @@ const HotelOverview = ({
 																Occupied: {room.isOccupied ? "Yes" : "No"}
 															</div>
 															<div>Clean: {room.cleanRoom ? "Yes" : "No"}</div>
+															<div>
+																Open for Housing:{" "}
+																{room.active === false ? "No" : "Yes"}
+															</div>
+															{room.isHandicapped ? (
+																<div>Handicapped Room</div>
+															) : null}
+															{room.isVip ? <div>VIP Room</div> : null}
 														</div>
 													}
 													key={idx}

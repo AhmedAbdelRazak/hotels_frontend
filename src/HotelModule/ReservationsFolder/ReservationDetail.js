@@ -298,7 +298,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.paid_amount_breakdown?.paid_at_hotel_cash,
 		0,
 	);
-	const isCashLocked = isRestrictedCashUser && existingCashValue > 0;
 
 	useEffect(() => {
 		if (!isPaymentBreakdownVisible) return;
@@ -455,6 +454,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const amountDue = assumePaidInFull
 		? 0
 		: Math.max(totalAmountValue - totalPaid, 0);
+	const breakdownRemainingAmount = Math.max(
+		totalAmountValue - breakdownTotalsFromReservation.total,
+		0,
+	);
+	const isCashLocked =
+		isRestrictedCashUser &&
+		existingCashValue > 0 &&
+		breakdownRemainingAmount <= 0;
 	const displayPaymentLabel =
 		reservation?.payment ||
 		reservation?.payment_status ||

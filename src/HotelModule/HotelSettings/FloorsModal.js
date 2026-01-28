@@ -129,6 +129,9 @@ const FloorsModal = ({
 					floor: clickedFloor,
 					hotelId: hotelDetails._id,
 					belongsTo: userId,
+					isHandicapped: !!roomDetails.isHandicapped,
+					isVip: !!roomDetails.isVip,
+					active: true,
 				};
 
 				if (roomDetails.roomType === "individualBed") {

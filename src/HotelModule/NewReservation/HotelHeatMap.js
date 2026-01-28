@@ -769,6 +769,32 @@ const HotelHeatMap = ({
 																		<div>
 																			Clean: {room.cleanRoom ? "Yes" : "No"}
 																		</div>
+																		<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																			{chosenLanguage === "Arabic"
+																				? "مفتوحة للسكن: "
+																				: "Open for Housing: "}{" "}
+																			{room.active === false
+																				? chosenLanguage === "Arabic"
+																					? "لا"
+																					: "No"
+																				: chosenLanguage === "Arabic"
+																					? "نعم"
+																					: "Yes"}
+																		</div>
+																		{room.isHandicapped ? (
+																			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																				{chosenLanguage === "Arabic"
+																					? "غرفة لذوي الإعاقة"
+																					: "Handicapped Room"}
+																			</div>
+																		) : null}
+																		{room.isVip ? (
+																			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+																				{chosenLanguage === "Arabic"
+																					? "غرفة VIP"
+																					: "VIP Room"}
+																			</div>
+																		) : null}
 																	</div>
 																}
 																key={idx}
@@ -927,6 +953,44 @@ const HotelHeatMap = ({
 																			<div>
 																				Clean: {room.cleanRoom ? "Yes" : "No"}
 																			</div>
+																			<div
+																				dir={
+																					chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																				}
+																			>
+																				{chosenLanguage === "Arabic"
+																					? "مفتوحة للسكن: "
+																					: "Open for Housing: "}{" "}
+																				{room.active === false
+																					? chosenLanguage === "Arabic"
+																						? "لا"
+																						: "No"
+																					: chosenLanguage === "Arabic"
+																						? "نعم"
+																						: "Yes"}
+																			</div>
+																			{room.isHandicapped ? (
+																				<div
+																					dir={
+																						chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																					}
+																				>
+																					{chosenLanguage === "Arabic"
+																						? "غرفة لذوي الإعاقة"
+																						: "Handicapped Room"}
+																				</div>
+																			) : null}
+																			{room.isVip ? (
+																				<div
+																					dir={
+																						chosenLanguage === "Arabic" ? "rtl" : "ltr"
+																					}
+																				>
+																					{chosenLanguage === "Arabic"
+																						? "غرفة VIP"
+																						: "VIP Room"}
+																				</div>
+																			) : null}
 																		</div>
 																	}
 																	key={idx}

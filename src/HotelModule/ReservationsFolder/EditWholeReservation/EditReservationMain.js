@@ -401,8 +401,10 @@ export const EditReservationMain = ({
 
 	// eslint-disable-next-line
 	const disabledDate = (current) => {
-		// Can not select days before today and today
-		return current < moment();
+		// Allow edits up to 14 days in the past
+		if (!current) return false;
+		const earliestAllowed = dayjs().startOf("day").subtract(14, "day");
+		return current.isBefore(earliestAllowed, "day");
 	};
 
 	const getRoomInventory = () => {
