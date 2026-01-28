@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import styled from "styled-components";
 import { DatePicker, Spin } from "antd";
 import HotelOverviewReservation from "./HotelOverviewReservation";
@@ -21,7 +21,10 @@ const normalizeNumber = (value, fallback = 0) => {
 	return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const formatMoney = (value) => normalizeNumber(value, 0).toLocaleString();
+const formatMoney = (value) =>
+	normalizeNumber(value, 0).toLocaleString(undefined, {
+		maximumFractionDigits: 2,
+	});
 
 const summarizePayment = (reservation, paymentOverride = "") => {
 	const paymentModeRaw =
@@ -128,6 +131,117 @@ const ZReservationForm = ({
 	const [isFixed, setIsFixed] = useState(false);
 
 	const { user } = isAuthenticated();
+
+	useEffect(() => {
+		if (!Array.isArray(pickedHotelRooms)) return;
+		const normalized = pickedHotelRooms
+			.map((entry) => {
+				if (!entry) return null;
+				if (typeof entry === "string" || typeof entry === "number") {
+					return String(entry);
+				}
+				if (typeof entry === "object") {
+					return (
+						entry._id ||
+						entry.roomId ||
+						entry.id ||
+						entry.room_id ||
+						null
+					);
+				}
+				return null;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+		const unique = Array.from(new Set(normalized));
+		const current = pickedHotelRooms
+			.map((entry) => {
+				if (!entry) return null;
+				if (typeof entry === "string" || typeof entry === "number") {
+					return String(entry);
+				}
+				if (typeof entry === "object") {
+					return (
+						entry._id ||
+						entry.roomId ||
+						entry.id ||
+						entry.room_id ||
+						null
+					);
+				}
+				return null;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+		if (unique.join("|") !== current.join("|")) {
+			setPickedHotelRooms(unique);
+		}
+	}, [pickedHotelRooms, setPickedHotelRooms]);
+
+	const pickedRoomsDetailed = useMemo(() => {
+		const roomMap = new Map(
+			(Array.isArray(hotelRooms) ? hotelRooms : []).map((room) => [
+				String(room?._id),
+				room,
+			]),
+		);
+		return (Array.isArray(pickedHotelRooms) ? pickedHotelRooms : [])
+			.map((roomId) => roomMap.get(String(roomId)))
+			.filter(Boolean);
+	}, [hotelRooms, pickedHotelRooms]);
+
+	const pricingByRoomId = useMemo(() => {
+		const map = new Map();
+		(Array.isArray(pickedRoomPricing) ? pickedRoomPricing : []).forEach(
+			(pricing) => {
+				if (!pricing?.roomId) return;
+				map.set(String(pricing.roomId), pricing);
+			},
+		);
+		return map;
+	}, [pickedRoomPricing]);
+
+	const handleRemoveAssignedRoom = useCallback(
+		(roomId) => {
+			if (!roomId) return;
+			const roomIdStr = String(roomId);
+			const pricingEntry = Array.isArray(pickedRoomPricing)
+				? pickedRoomPricing.find(
+						(pricing) => String(pricing.roomId) === roomIdStr,
+				  )
+				: null;
+			const priceToRemove = pricingEntry
+				? normalizeNumber(pricingEntry.chosenPrice, 0)
+				: 0;
+
+			setPickedHotelRooms((prev) =>
+				Array.isArray(prev)
+					? prev.filter((id) => String(id) !== roomIdStr)
+					: prev,
+			);
+			setPickedRoomPricing((prev) =>
+				Array.isArray(prev)
+					? prev.filter((pricing) => String(pricing.roomId) !== roomIdStr)
+					: prev,
+			);
+			if (priceToRemove) {
+				setTotal_Amount((prevTotal) =>
+					Math.max(prevTotal - Number(priceToRemove), 0),
+				);
+			}
+			if (currentRoom && String(currentRoom._id) === roomIdStr) {
+				setCurrentRoom(null);
+			}
+		},
+		[
+			currentRoom,
+			pickedRoomPricing,
+			setCurrentRoom,
+			setPickedHotelRooms,
+			setPickedRoomPricing,
+			setTotal_Amount,
+		],
+	);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -1143,15 +1257,16 @@ const ZReservationForm = ({
 												{searchedReservation &&
 												searchedReservation.confirmation_number &&
 												days_of_residence
-													? (
-															searchedReservation.total_amount /
-															(days_of_residence - 1)
-													  ).toLocaleString()
+													? formatMoney(
+															normalizeNumber(searchedReservation.total_amount, 0) /
+																Math.max(days_of_residence - 1, 1),
+													  )
 													: finalTotalByRoom()
-													  ? Number(
-																finalTotalByRoom() / (days_of_residence - 1),
-													    ).toFixed(2)
-													  : 0}{" "}
+													  ? formatMoney(
+																normalizeNumber(finalTotalByRoom(), 0) /
+																	Math.max(days_of_residence - 1, 1),
+														    )
+													  : formatMoney(0)}{" "}
 												{chosenLanguage === "Arabic"
 													? "ريال سعودي/ يوم"
 													: "SAR/ Day"}
@@ -1170,7 +1285,7 @@ const ZReservationForm = ({
 														>
 															{`نوع الغرفة: ${
 																room.room_type
-															}، السعر: ${room.chosenPrice.toLocaleString()} ريال سعودي، العدد: ${
+															}، السعر: ${formatMoney(room.chosenPrice)} ريال سعودي، العدد: ${
 																room.count
 															} غرف`}
 														</div>
@@ -1187,7 +1302,7 @@ const ZReservationForm = ({
 																textTransform: "capitalize",
 															}}
 														>
-															{`Room Type: ${room.room_type}, Price: ${room.chosenPrice} SAR, Count: ${room.count} Rooms`}
+															{`Room Type: ${room.room_type}, Price: ${formatMoney(room.chosenPrice)} SAR, Count: ${room.count} Rooms`}
 														</div>
 													))}
 												</div>
@@ -1324,14 +1439,13 @@ const ZReservationForm = ({
 												paddingRight: "10px",
 											}}
 										>
-											{pickedHotelRooms &&
-												pickedRoomPricing &&
-												pickedRoomPricing.length > 0 &&
-												pickedHotelRooms.length > 0 &&
-												hotelRooms
-													.filter((room) => pickedHotelRooms.includes(room._id))
-													.map((room, index) => (
-														<div key={index} className='inner-grid2'>
+											{pickedRoomsDetailed.length > 0 &&
+												pickedRoomsDetailed.map((room, index) => {
+													const pricing = pricingByRoomId.get(
+														String(room._id),
+													);
+													return (
+														<div key={String(room._id)} className='inner-grid2'>
 															<div></div>
 
 															<div style={{ fontSize: "14px" }}>
@@ -1361,6 +1475,9 @@ const ZReservationForm = ({
 																			float: "right",
 																			cursor: "pointer",
 																		}}
+																		onClick={() =>
+																			handleRemoveAssignedRoom(room._id)
+																		}
 																	>
 																		X
 																	</div>{" "}
@@ -1406,12 +1523,9 @@ const ZReservationForm = ({
 																		fontSize: "12px",
 																	}}
 																>
-																	{pickedRoomPricing &&
-																		pickedRoomPricing[index] &&
-																		pickedRoomPricing[index].chosenPrice &&
-																		pickedRoomPricing[
-																			index
-																		].chosenPrice.toFixed(2)}
+																	{pricing?.chosenPrice !== undefined
+																		? Number(pricing.chosenPrice).toFixed(2)
+																		: "N/A"}
 																</div>
 															</div>
 															<div>
@@ -1436,7 +1550,8 @@ const ZReservationForm = ({
 																</div>
 															</div>
 														</div>
-													))}
+													);
+												})}
 										</div>
 									</div>
 								</div>
@@ -1470,7 +1585,7 @@ const ZReservationForm = ({
 											{chosenLanguage === "Arabic"
 												? "المبلغ الإجمالي"
 												: "Total Amount:"}{" "}
-											{Number(total_amount * (days_of_residence - 1))}{" "}
+											{formatMoney(normalizeNumber(total_amount * (days_of_residence - 1), 0))}{" "}
 											{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 										</h4>
 									) : null}
@@ -1490,10 +1605,10 @@ const ZReservationForm = ({
 												: "Total Amount:"}{" "}
 											{searchedReservation &&
 											searchedReservation.confirmation_number
-												? searchedReservation.total_amount.toLocaleString()
+												? formatMoney(searchedReservation.total_amount)
 												: finalTotalByRoom()
-												  ? finalTotalByRoom()
-												  : 0}
+												  ? formatMoney(finalTotalByRoom())
+												  : formatMoney(0)}
 											{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 										</h4>
 									) : null}
@@ -1650,3 +1765,5 @@ const ZReservationFormWrapper = styled.div`
 		font-weight: bold;
 	}
 `;
+
+

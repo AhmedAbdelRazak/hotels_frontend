@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import styled, { keyframes } from "styled-components";
 import { InputNumber, Modal, Table, Tooltip } from "antd";
 import moment from "moment";
@@ -48,8 +48,16 @@ const HotelOverviewReservation = ({
 	const [selectedFloor, setSelectedFloor] = useState(null);
 	const [selectedRoomStatus, setSelectedRoomStatus] = useState(null);
 	const [totalToDistribute, setTotalToDistribute] = useState("");
+	const manualSelectionRef = useRef(false);
 
 	const normalizeDisplayName = useCallback(
+		(value) =>
+			String(value || "")
+				.trim()
+				.toLowerCase(),
+		[],
+	);
+	const normalizeRoomType = useCallback(
 		(value) =>
 			String(value || "")
 				.trim()
@@ -314,6 +322,10 @@ const HotelOverviewReservation = ({
 	}, []);
 
 	useEffect(() => {
+		manualSelectionRef.current = false;
+	}, [searchedReservation?._id, searchedReservation?.confirmation_number]);
+
+	useEffect(() => {
 		if (currentRoom && currentRoom.room_type === "individualBed") {
 			setBookedBeds(getBookedBedsForRoom(currentRoom._id));
 		}
@@ -386,7 +398,9 @@ const HotelOverviewReservation = ({
 	const handleRoomClick = async (roomId, show, room) => {
 		if (!roomId || !room) return;
 
-		const isSelected = pickedHotelRooms.includes(roomId);
+		const isSelected = pickedHotelRooms.some(
+			(id) => String(id) === String(roomId),
+		);
 		const isSearchRoom =
 			searchedReservation && reservationHasRoom(searchedReservation, roomId);
 		if (room.active === false && !isSelected && !isSearchRoom) {
@@ -405,21 +419,49 @@ const HotelOverviewReservation = ({
 
 		if (isSelected) {
 			handleRoomDeselection(roomId);
+			manualSelectionRef.current = true;
 		} else {
 			const shouldContinue = await confirmRoomSelection(room);
 			if (!shouldContinue) return;
-			setPickedHotelRooms([...pickedHotelRooms, roomId]);
+			const shouldReset =
+				!manualSelectionRef.current &&
+				Array.isArray(pickedHotelRooms) &&
+				pickedHotelRooms.length > 0;
+			if (shouldReset) {
+				setPickedHotelRooms([roomId]);
+				setPickedRoomPricing((prev) =>
+					Array.isArray(prev)
+						? prev.filter(
+								(pricing) =>
+									String(pricing.roomId) === String(roomId),
+						  )
+						: prev,
+				);
+			} else {
+				setPickedHotelRooms((prev) => {
+					const next = Array.isArray(prev) ? prev : [];
+					if (next.some((id) => String(id) === String(roomId))) return next;
+					return [...next, roomId];
+				});
+			}
+			manualSelectionRef.current = true;
 			setCurrentRoom(room);
 			showModal(room);
 		}
 	};
 
 	const handleRoomDeselection = (roomId) => {
-		setPickedHotelRooms(pickedHotelRooms.filter((id) => id !== roomId));
+		setPickedHotelRooms((prev) =>
+			Array.isArray(prev)
+				? prev.filter((id) => String(id) !== String(roomId))
+				: prev,
+		);
 
-		const priceToRemove = pickedRoomPricing.find(
-			(pricing) => pricing.roomId === roomId,
-		)?.chosenPrice;
+		const priceToRemove = Array.isArray(pickedRoomPricing)
+			? pickedRoomPricing.find(
+					(pricing) => String(pricing.roomId) === String(roomId),
+			  )?.chosenPrice
+			: null;
 
 		if (priceToRemove) {
 			setTotal_Amount((prevTotal) =>
@@ -427,8 +469,10 @@ const HotelOverviewReservation = ({
 			);
 		}
 
-		setPickedRoomPricing(
-			pickedRoomPricing.filter((pricing) => pricing.roomId !== roomId),
+		setPickedRoomPricing((prev) =>
+			Array.isArray(prev)
+				? prev.filter((pricing) => String(pricing.roomId) !== String(roomId))
+				: prev,
 		);
 	};
 
@@ -474,18 +518,32 @@ const HotelOverviewReservation = ({
 		setCurrentRoom(room);
 
 		const roomInfo = getRoomDisplayInfo(room);
-		const room_type = roomInfo.roomType || room.room_type;
-		const displayName = roomInfo.displayName;
+		const room_type = room.room_type || roomInfo.roomType || "";
+		const displayName =
+			roomInfo.displayName ||
+			room.display_name ||
+			room.displayName ||
+			"";
 		const nightsCount = Math.max(getStayNights(), 1);
 
 		// Check if the searched reservation has pricing information
 		if (searchedReservation && searchedReservation.pickedRoomsType) {
+			const displayKey = normalizeDisplayName(displayName);
+			const roomTypeKey = normalizeRoomType(room_type);
+			const pickedRoomsList = Array.isArray(
+				searchedReservation.pickedRoomsType,
+			)
+				? searchedReservation.pickedRoomsType
+				: [];
 			const roomTypeDetails =
-				searchedReservation.pickedRoomsType.find(
-					(r) => r.displayName === displayName,
+				pickedRoomsList.find(
+					(r) =>
+						normalizeDisplayName(r.displayName || r.display_name) ===
+						displayKey,
 				) ||
-				searchedReservation.pickedRoomsType.find(
-					(r) => r.room_type === room_type,
+				pickedRoomsList.find(
+					(r) =>
+						normalizeRoomType(r.room_type || r.roomType) === roomTypeKey,
 				);
 
 			if (
@@ -856,7 +914,7 @@ const HotelOverviewReservation = ({
 	};
 
 	const handleCancel = () => {
-		if (currentRoom && pickedHotelRooms.includes(currentRoom._id)) {
+		if (currentRoom && pickedHotelRooms.some((id) => String(id) === String(currentRoom._id))) {
 			handleRoomDeselection(currentRoom._id);
 		}
 		resetState();
@@ -1051,6 +1109,9 @@ const HotelOverviewReservation = ({
 												filteredRooms
 													.filter((room) => room.floor === floor)
 													.map((room, idx) => {
+														const roomKey = String(
+															room?._id || room?.room_number || `${floor}-${idx}`,
+														);
 														const isBooked = isRoomBooked(
 															room._id,
 															room.room_type,
@@ -1126,14 +1187,14 @@ const HotelOverviewReservation = ({
 																		) : null}
 																	</div>
 																}
-																key={idx}
+																key={roomKey}
 																overlayStyle={{ zIndex: 100000000 }}
 																color='white'
 															>
 																<RoomSquare
-																	key={idx}
+																	key={roomKey}
 																	color={roomInfo.color}
-																	picked={pickedHotelRooms.includes(room._id)}
+																	picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
 																	reserved={isBooked}
 																	style={{
 																		cursor: isBooked
@@ -1178,6 +1239,9 @@ const HotelOverviewReservation = ({
 													filteredRooms
 														.filter((room) => room.floor === floor)
 														.map((room, idx) => {
+															const roomKey = String(
+																room?._id || room?.room_number || `${floor}-${idx}`,
+															);
 															const isBooked = isRoomBooked(
 																room._id,
 																room.room_type,
@@ -1265,14 +1329,14 @@ const HotelOverviewReservation = ({
 																			) : null}
 																		</div>
 																	}
-																	key={idx}
+																	key={roomKey}
 																	overlayStyle={{ zIndex: 100000000 }}
 																	color='white'
 																>
 																	<RoomSquare
-																		key={idx}
+																		key={roomKey}
 																		color={roomInfo.color}
-																		picked={pickedHotelRooms.includes(room._id)}
+																		picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
 																		reserved={isBooked}
 																		style={{
 																			cursor: isBooked
@@ -1653,3 +1717,4 @@ const BedSquare = styled.div`
         }
     `}
 `;
+

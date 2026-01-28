@@ -1179,7 +1179,16 @@ export const EditReservationMain = ({
 				: chosenLanguage === "Arabic"
 				  ? "غرفة"
 				  : "room";
-			return `${numberLabel} | ${typeLabel}`;
+			const flags = [];
+			if (room?.isVip) flags.push("VIP");
+			if (room?.isHandicapped) {
+				flags.push(chosenLanguage === "Arabic" ? "ذوي الإعاقة" : "Handicapped");
+			}
+			if (room?.active === false) {
+				flags.push(chosenLanguage === "Arabic" ? "مغلقة" : "Closed");
+			}
+			const flagsLabel = flags.length > 0 ? ` (${flags.join(" • ")})` : "";
+			return `${numberLabel} | ${typeLabel}${flagsLabel}`;
 		},
 		[chosenLanguage, roomTypeDisplayNameLookup],
 	);
@@ -1895,6 +1904,7 @@ export const EditReservationMain = ({
 											const roomId = String(resolveRoomId(room));
 											const isBooked = bookedRoomIdSet.has(roomId);
 											const isSelected = selectedRoomIds.includes(roomId);
+											const isInactive = room?.active === false;
 											const baseLabel = getRoomLabel(room);
 											const floorLabel = room.floor
 												? ` | ${
@@ -1910,18 +1920,20 @@ export const EditReservationMain = ({
 													  })`
 													: "";
 											const displayLabel = `${baseLabel}${floorLabel}${occupiedLabel}`;
+											const isDisabled =
+												(isBooked && !isSelected) ||
+												(isInactive && !isSelected);
 											return (
 												<Select.Option
 													key={roomId}
 													value={roomId}
 													label={baseLabel}
-													disabled={isBooked && !isSelected}
+													disabled={isDisabled}
 												>
 													<span
 														style={{
 															textTransform: "capitalize",
-															color:
-																isBooked && !isSelected ? "#8b8b8b" : "inherit",
+															color: isDisabled ? "#8b8b8b" : "inherit",
 														}}
 													>
 														{displayLabel}
