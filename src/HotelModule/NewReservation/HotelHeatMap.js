@@ -715,6 +715,7 @@ const HotelHeatMap = ({
 														const totalBeds = Array.isArray(room.bedsNumber)
 															? room.bedsNumber.length
 															: 0;
+														const isInactive = room.active === false;
 														const bookedBedsCount = Array.from(
 															new Set(bookingStatus.bookedBeds),
 														).length;
@@ -808,13 +809,17 @@ const HotelHeatMap = ({
 																	reserved={
 																		bookingStatus.isBooked && !isBedRoom
 																	}
+																	inactive={isInactive}
 																	due={bookingStatus.isDue}
 																	overdue={bookingStatus.isOverdue}
 																	clickable={
 																		bookingStatus.isBooked || isBedRoom
 																	}
 																	style={{
-																		opacity: bookingStatus.isBooked ? 0.75 : 1,
+																		opacity:
+																			bookingStatus.isBooked || isInactive
+																				? 0.6
+																				: 1,
 																	}}
 																	onClick={() =>
 																		handleRoomClick(
@@ -904,6 +909,7 @@ const HotelHeatMap = ({
 															const totalBeds = Array.isArray(room.bedsNumber)
 																? room.bedsNumber.length
 																: 0;
+															const isInactive = room.active === false;
 															const bookedBedsCount = Array.from(
 																new Set(bookingStatus.bookedBeds),
 															).length;
@@ -1002,15 +1008,17 @@ const HotelHeatMap = ({
 																		reserved={
 																			bookingStatus.isBooked && !isBedRoom
 																		}
+																		inactive={isInactive}
 																		due={bookingStatus.isDue}
 																		overdue={bookingStatus.isOverdue}
 																		clickable={
 																			bookingStatus.isBooked || isBedRoom
 																		}
 																		style={{
-																			opacity: bookingStatus.isBooked
-																				? 0.75
-																				: 1,
+																			opacity:
+																				bookingStatus.isBooked || isInactive
+																					? 0.6
+																					: 1,
 																		}}
 																		onClick={() =>
 																			handleRoomClick(
@@ -1313,6 +1321,7 @@ const RoomSquare = styled.div`
 	cursor: ${({ clickable }) => (clickable ? "pointer" : "default")};
 	transform-origin: center;
 	will-change: transform;
+	filter: ${({ inactive }) => (inactive ? "grayscale(1)" : "none")};
 	box-shadow: ${({ reserved }) =>
 		reserved ? "0 0 4px rgba(0, 0, 0, 0.2)" : "none"};
 	transition:

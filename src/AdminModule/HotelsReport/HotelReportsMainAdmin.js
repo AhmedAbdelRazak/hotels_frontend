@@ -79,7 +79,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 				history.push("/");
 				break;
 		}
-	}, [getUser, history]);
+	}, [getUser, history, isSuperAdmin]);
 
 	/* ------------------ 3) Init & localStorage ------------------ */
 	useEffect(() => {
@@ -97,7 +97,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [gettingUserId, getUser?._id, isSuperAdmin]);
+	}, [gettingUserId, getUser, getUser?._id, isSuperAdmin]);
 
 	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {

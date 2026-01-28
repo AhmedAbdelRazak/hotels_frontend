@@ -229,7 +229,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			return;
 		}
 		setIsModalVisible(true);
-	}, [getUser]);
+	}, [getUser, isSuperAdmin]);
 
 	/** 6) Password verification */
 	const handlePasswordVerification = () => {
