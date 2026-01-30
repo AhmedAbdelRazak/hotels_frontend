@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 // import { Link } from "react-router-dom";
 import moment from "moment";
@@ -6,6 +6,28 @@ import FilterComponent from "./FilterComponent";
 import { Modal, Pagination, Table } from "antd";
 import { getReservationSearchAllMatches } from "../HotelModule/apiAdmin";
 import ReservationDetail from "./ReservationDetail";
+import { useHistory, useLocation } from "react-router-dom";
+
+const getReservationKey = (reservation) => {
+	if (!reservation) return "";
+	if (reservation._id) return String(reservation._id);
+	if (reservation.confirmation_number)
+		return String(reservation.confirmation_number);
+	return "";
+};
+
+const matchesReservationKey = (reservation, key) => {
+	if (!reservation || !key) return false;
+	const normalized = String(key);
+	if (reservation._id && String(reservation._id) === normalized) return true;
+	if (
+		reservation.confirmation_number &&
+		String(reservation.confirmation_number) === normalized
+	) {
+		return true;
+	}
+	return false;
+};
 
 const PreReservationTable = ({
 	allPreReservations,
@@ -27,6 +49,8 @@ const PreReservationTable = ({
 	setSelectedDates,
 	reservationObject,
 }) => {
+	const history = useHistory();
+	const location = useLocation();
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [modalKey, setModalKey] = useState(0);
@@ -238,22 +262,56 @@ const PreReservationTable = ({
 		},
 	];
 
+	const updateQueryParams = useCallback(
+		(updates) => {
+			const params = new URLSearchParams(location.search);
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value === undefined || value === null || value === "") {
+					params.delete(key);
+				} else {
+					params.set(key, String(value));
+				}
+			});
+			const nextSearch = params.toString();
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearch ? `?${nextSearch}` : "",
+			});
+		},
+		[history, location.pathname, location.search],
+	);
+
 	const showDetailsModal = (reservation) => {
 		setSelectedReservation(reservation);
 		setIsModalVisible(true);
+		updateQueryParams({ reservationId: getReservationKey(reservation) });
 	};
 
 	const handleOk = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
 		setModalKey((prevKey) => prevKey + 1); // Increment the key
+		updateQueryParams({ reservationId: "" });
 	};
 
 	const handleCancel = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
 		setModalKey((prevKey) => prevKey + 1); // Increment the key
+		updateQueryParams({ reservationId: "" });
 	};
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const reservationId = params.get("reservationId");
+		if (!reservationId) return;
+		const match = allPreReservations.find((reservation) =>
+			matchesReservationKey(reservation, reservationId),
+		);
+		if (!match) return;
+		setSelectedReservation(match);
+		setIsModalVisible(true);
+	}, [location.search, allPreReservations]);
 
 	return (
 		<>

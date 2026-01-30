@@ -272,6 +272,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	);
 	const [isSavingPaymentBreakdown, setIsSavingPaymentBreakdown] =
 		useState(false);
+	const [editModalDirty, setEditModalDirty] = useState(false);
+	const editModalSnapshotRef = useRef("");
+	const reservationRef = useRef(reservation);
+	const statusModalSnapshotRef = useRef({
+		selectedStatus: "",
+		sendEmail: true,
+	});
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -290,6 +297,30 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const formatMoney = useCallback(
 		(value) => normalizeNumber(value, 0).toLocaleString(),
 		[normalizeNumber],
+	);
+
+	const confirmDiscardChanges = useCallback(
+		(onDiscard) => {
+			Modal.confirm({
+				title:
+					chosenLanguage === "Arabic"
+						? "تغييرات غير محفوظة"
+						: "Unsaved changes",
+				content:
+					chosenLanguage === "Arabic"
+						? "لديك تغييرات غير محفوظة. يرجى الضغط على زر التحديث داخل النافذة لحفظ التغييرات."
+						: "You have unsaved changes. Please click the update button inside the modal to save them.",
+				okText: chosenLanguage === "Arabic" ? "إغلاق بدون حفظ" : "Discard",
+				cancelText: chosenLanguage === "Arabic" ? "متابعة التعديل" : "Keep Editing",
+				centered: true,
+				zIndex: 2000,
+				maskClosable: false,
+				onOk: () => {
+					if (typeof onDiscard === "function") onDiscard();
+				},
+			});
+		},
+		[chosenLanguage],
 	);
 
 	const restrictedCashUserId = "6969d80da28c78c6280171df";
@@ -336,6 +367,26 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		setWhatsAppCountryCode(preset.code);
 		setWhatsAppPhone(preset.phone);
 	}, [whatsAppModalOpen, reservation?.customer_details?.phone]);
+
+	useEffect(() => {
+		reservationRef.current = reservation;
+	}, [reservation]);
+
+	useEffect(() => {
+		if (!isModalVisible2) return;
+		editModalSnapshotRef.current = JSON.stringify(
+			reservationRef.current || {},
+		);
+		setEditModalDirty(false);
+	}, [isModalVisible2]);
+
+	useEffect(() => {
+		if (!isModalVisible2) return;
+		const snapshot = JSON.stringify(reservation || {});
+		if (snapshot !== editModalSnapshotRef.current) {
+			setEditModalDirty(true);
+		}
+	}, [reservation, isModalVisible2]);
 
 	const summarizePayment = useCallback(
 		(reservationData, paymentOverride = "") => {
@@ -541,6 +592,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			toast.success("Payment breakdown was successfully updated");
 			setIsPaymentBreakdownVisible(false);
 			setReservation(merged);
+			setTimeout(() => window.location.reload(false), 1500);
 		});
 	};
 
@@ -653,6 +705,88 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		}
 	};
 
+	const handleEditModalClose = () => {
+		if (editModalDirty) {
+			confirmDiscardChanges(() => {
+				setIsModalVisible2(false);
+				setEditModalDirty(false);
+			});
+			return;
+		}
+		setIsModalVisible2(false);
+	};
+
+	const handleEditReservationSaved = (updatedReservation) => {
+		editModalSnapshotRef.current = JSON.stringify(
+			updatedReservation || reservation || {},
+		);
+		setEditModalDirty(false);
+	};
+
+	const handleStatusModalOpen = () => {
+		setSelectedStatus("");
+		setSendEmail(true);
+		statusModalSnapshotRef.current = { selectedStatus: "", sendEmail: true };
+		setIsModalVisible(true);
+	};
+
+	const handleStatusModalClose = () => {
+		const statusDirty =
+			!!selectedStatus ||
+			sendEmail !== statusModalSnapshotRef.current.sendEmail;
+		if (statusDirty) {
+			confirmDiscardChanges(() => {
+				setIsModalVisible(false);
+				setSelectedStatus("");
+				setSendEmail(statusModalSnapshotRef.current.sendEmail);
+			});
+			return;
+		}
+		setIsModalVisible(false);
+		setSelectedStatus("");
+	};
+
+	const handleRelocateModalOpen = () => {
+		setSelectedHotelDetails("");
+		setIsModalVisible4(true);
+	};
+
+	const handleRelocateModalClose = () => {
+		if (selectedHotelDetails) {
+			confirmDiscardChanges(() => {
+				setIsModalVisible4(false);
+				setSelectedHotelDetails("");
+			});
+			return;
+		}
+		setIsModalVisible4(false);
+	};
+
+	const hasPaymentBreakdownChanges = useCallback(() => {
+		const base = buildPaymentBreakdown(
+			reservation?.paid_amount_breakdown,
+			normalizeNumber,
+		);
+		const draft = buildPaymentBreakdown(paymentBreakdownDraft, normalizeNumber);
+		const numericChanged = paymentBreakdownNumericKeys.some(
+			(key) => normalizeNumber(base[key], 0) !== normalizeNumber(draft[key], 0),
+		);
+		const commentChanged =
+			String(base.payment_comments || "") !==
+			String(draft.payment_comments || "");
+		return numericChanged || commentChanged;
+	}, [paymentBreakdownDraft, reservation?.paid_amount_breakdown, normalizeNumber]);
+
+	const handlePaymentBreakdownClose = () => {
+		if (hasPaymentBreakdownChanges()) {
+			confirmDiscardChanges(() => {
+				setIsPaymentBreakdownVisible(false);
+			});
+			return;
+		}
+		setIsPaymentBreakdownVisible(false);
+	};
+
 	// Same as in MoreDetails
 	function calculateReservationPeriod(checkin, checkout, language) {
 		const checkinDate = moment(checkin).startOf("day");
@@ -704,6 +838,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
 					setReservation(response.reservation);
+					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		}
@@ -745,6 +880,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
 					setReservation(response);
+					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		}
@@ -776,7 +912,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					setIsModalVisible4(false);
 					setTimeout(() => {
 						window.location.reload(false);
-					}, 2000);
+					}, 1500);
 				}
 			});
 		}
@@ -911,7 +1047,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							chosenLanguage === "Arabic" ? "تعديل الحجز" : "Edit Reservation"
 						}
 						open={isModalVisible2}
-						onCancel={() => setIsModalVisible2(false)}
+						onCancel={handleEditModalClose}
 						onOk={handleUpdateReservationStatus2}
 						footer={null}
 						width='84.5%'
@@ -928,6 +1064,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								setReservation={setReservation}
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
+								onReservationSaved={handleEditReservationSaved}
 							/>
 						)}
 					</Modal>
@@ -940,7 +1077,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								: "Update Reservation Status"
 						}
 						open={isModalVisible}
-						onCancel={() => setIsModalVisible(false)}
+						onCancel={handleStatusModalClose}
 						onOk={handleUpdateReservationStatus}
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
@@ -988,7 +1125,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								: "Relocate Reservation?"
 						}
 						open={isModalVisible4}
-						onCancel={() => setIsModalVisible4(false)}
+						onCancel={handleRelocateModalClose}
 						onOk={handleUpdateReservationStatus3}
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
@@ -1047,7 +1184,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					<Modal
 						title='Payment Breakdown'
 						open={isPaymentBreakdownVisible}
-						onCancel={() => setIsPaymentBreakdownVisible(false)}
+						onCancel={handlePaymentBreakdownClose}
 						footer={null}
 						width={720}
 						centered
@@ -1382,9 +1519,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										cursor: "pointer",
 										color: "#67634c",
 									}}
-									onClick={() => {
-										setIsModalVisible4(true);
-									}}
+									onClick={handleRelocateModalOpen}
 								>
 									<EditOutlined />
 									{chosenLanguage === "Arabic"
@@ -1627,7 +1762,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											? "حالة الحجز"
 											: "Reservation Status"}
 										<EditOutlined
-											onClick={() => setIsModalVisible(true)}
+											onClick={handleStatusModalOpen}
 											style={{
 												marginLeft: "5px",
 												marginRight: "5px",

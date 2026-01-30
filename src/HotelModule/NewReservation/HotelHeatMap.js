@@ -5,6 +5,28 @@ import moment from "moment";
 import HotelMapCards from "./HotelMapCards";
 import HotelMapFilters from "./HotelMapFilters";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
+import { useHistory, useLocation } from "react-router-dom";
+
+const getReservationKey = (reservation) => {
+	if (!reservation) return "";
+	if (reservation._id) return String(reservation._id);
+	if (reservation.confirmation_number)
+		return String(reservation.confirmation_number);
+	return "";
+};
+
+const matchesReservationKey = (reservation, key) => {
+	if (!reservation || !key) return false;
+	const normalized = String(key);
+	if (reservation._id && String(reservation._id) === normalized) return true;
+	if (
+		reservation.confirmation_number &&
+		String(reservation.confirmation_number) === normalized
+	) {
+		return true;
+	}
+	return false;
+};
 
 const normalizeDisplayName = (value) =>
 	String(value || "")
@@ -32,6 +54,8 @@ const HotelHeatMap = ({
 	chosenLanguage,
 	useCurrentOccupancy = false,
 }) => {
+	const history = useHistory();
+	const location = useLocation();
 	const [selectedRoomType, setSelectedRoomType] = useState(null);
 	const [selectedAvailability, setSelectedAvailability] = useState(null);
 	const [selectedFloor, setSelectedFloor] = useState(null);
@@ -59,6 +83,23 @@ const HotelHeatMap = ({
 			window.removeEventListener("scroll", handleScroll);
 		};
 	}, []);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const reservationId = params.get("reservationId");
+		if (!reservationId) return;
+		const reservationsList = Array.isArray(allReservations)
+			? allReservations
+			: [];
+		const match = reservationsList.find((reservation) =>
+			matchesReservationKey(reservation, reservationId),
+		);
+		if (!match) return;
+		setSelectedReservation(match);
+		if (!isReservationModalVisible) {
+			setIsReservationModalVisible(true);
+		}
+	}, [location.search, allReservations, isReservationModalVisible]);
 
 	const safeHotelRooms = useMemo(
 		() => (Array.isArray(hotelRooms) ? hotelRooms : []),
@@ -567,6 +608,25 @@ const HotelHeatMap = ({
 		return accumulator;
 	}, [getRoomDisplayInfo, safeHotelRooms]);
 
+	const updateQueryParams = useCallback(
+		(updates) => {
+			const params = new URLSearchParams(location.search);
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value === undefined || value === null || value === "") {
+					params.delete(key);
+				} else {
+					params.set(key, String(value));
+				}
+			});
+			const nextSearch = params.toString();
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearch ? `?${nextSearch}` : "",
+			});
+		},
+		[history, location.pathname, location.search],
+	);
+
 	const handleRoomClick = useCallback(
 		(room, roomInfo, bookingStatus) => {
 			if (!room) return;
@@ -576,6 +636,7 @@ const HotelHeatMap = ({
 					setSelectedReservation(reservation);
 					setIsBedModalVisible(false);
 					setIsReservationModalVisible(true);
+					updateQueryParams({ reservationId: getReservationKey(reservation) });
 				}
 				return;
 			}
@@ -585,7 +646,7 @@ const HotelHeatMap = ({
 			setSelectedRoom(room);
 			setIsBedModalVisible(true);
 		},
-		[getPrimaryReservationForRoom],
+		[getPrimaryReservationForRoom, updateQueryParams],
 	);
 
 	const handleBedClick = useCallback((reservation) => {
@@ -593,7 +654,8 @@ const HotelHeatMap = ({
 		setSelectedReservation(reservation);
 		setIsBedModalVisible(false);
 		setIsReservationModalVisible(true);
-	}, []);
+		updateQueryParams({ reservationId: getReservationKey(reservation) });
+	}, [updateQueryParams]);
 
 	const handleFilterChange = (filterType, value) => {
 		if (filterType === "availability") {
@@ -618,7 +680,8 @@ const HotelHeatMap = ({
 		setSelectedReservation(null);
 		setIsReservationModalVisible(false);
 		setReservationModalKey((prevKey) => prevKey + 1);
-	}, []);
+		updateQueryParams({ reservationId: "" });
+	}, [updateQueryParams]);
 
 	const bedStatuses = useMemo(() => {
 		const bedMap = new Map();

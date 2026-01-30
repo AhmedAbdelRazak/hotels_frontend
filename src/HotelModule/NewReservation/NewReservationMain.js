@@ -710,7 +710,7 @@ const NewReservationMain = () => {
 					console.log(data.error);
 				} else {
 					toast.success("Checkin Was Successfully Processed!");
-					setTimeout(() => window.location.reload(false), 2000);
+					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		} else {
@@ -724,7 +724,7 @@ const NewReservationMain = () => {
 					console.log(data.error, "error create new reservation");
 				} else {
 					toast.success("Reservation Was Successfully Booked!");
-					setTimeout(() => window.location.reload(false), 2000);
+					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		}

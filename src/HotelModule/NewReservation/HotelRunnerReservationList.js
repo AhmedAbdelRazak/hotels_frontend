@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useHistory, useLocation } from "react-router-dom";
 import {
 	agodaData,
 	airbnbData,
@@ -20,17 +21,33 @@ const HotelRunnerReservationList = ({
 	hotelDetails,
 	isBoss,
 }) => {
+	const history = useHistory();
+	const location = useLocation();
 	const [allPreReservations, setAllPreReservations] = useState([]);
 	const [loading, setLoading] = useState(false);
-	const [currentPage, setCurrentPage] = useState(1); // New state for current page
+	const getPageFromSearch = (search) => {
+		const params = new URLSearchParams(search || "");
+		const pageParam = parseInt(params.get("page"), 10);
+		return Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+	};
+	const getSearchTermFromSearch = (search) => {
+		const params = new URLSearchParams(search || "");
+		return params.get("search") || "";
+	};
+
+	const [currentPage, setCurrentPage] = useState(() =>
+		getPageFromSearch(location.search)
+	); // New state for current page
 	const [recordsPerPage] = useState(70); // You can adjust this as needed
 	const [selectedFilter, setSelectedFilter] = useState(""); // New state for selected filter
 	const [totalRecords, setTotalRecords] = useState(0);
 	const [selectedDates, setSelectedDates] = useState("");
 	const [reservationObject, setReservationObject] = useState("");
 
-	const [q, setQ] = useState("");
-	const [searchClicked, setSearchClicked] = useState(false);
+	const [searchTerm, setSearchTerm] = useState(() =>
+		getSearchTermFromSearch(location.search)
+	);
+	const [q, setQ] = useState(() => getSearchTermFromSearch(location.search));
 
 	// eslint-disable-next-line
 	const { user } = isAuthenticated();
@@ -47,13 +64,17 @@ const HotelRunnerReservationList = ({
 		return [year, month, day].join("-");
 	};
 
-	const getAllPreReservation = () => {
+	const getAllPreReservation = (activeSearchTerm = "") => {
 		setLoading(true); // Set loading to true when fetching data
 		const dateToUse = selectedDates ? selectedDates : formatDate(new Date());
+		const filtersPayload = JSON.stringify({
+			selectedFilter,
+			searchQuery: activeSearchTerm || "",
+		});
 		reservationsList(
 			currentPage,
 			recordsPerPage,
-			JSON.stringify({ selectedFilter }),
+			filtersPayload,
 			hotelDetails._id,
 			dateToUse // Pass the formatted date
 		)
@@ -76,13 +97,64 @@ const HotelRunnerReservationList = ({
 	};
 
 	useEffect(() => {
+		const pageFromQuery = getPageFromSearch(location.search);
+		const searchFromQuery = getSearchTermFromSearch(location.search);
+		setCurrentPage((prev) =>
+			prev !== pageFromQuery ? pageFromQuery : prev
+		);
+		setSearchTerm((prev) =>
+			prev !== searchFromQuery ? searchFromQuery : prev
+		);
+		setQ((prev) => (prev !== searchFromQuery ? searchFromQuery : prev));
+	}, [location.search]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const desiredPage = String(currentPage);
+		const desiredSearch = (searchTerm || "").trim();
+		let changed = false;
+
+		if (params.get("page") !== desiredPage) {
+			params.set("page", desiredPage);
+			changed = true;
+		}
+
+		if (desiredSearch) {
+			if (params.get("search") !== desiredSearch) {
+				params.set("search", desiredSearch);
+				changed = true;
+			}
+		} else if (params.has("search")) {
+			params.delete("search");
+			changed = true;
+		}
+
+		if (!changed) return;
+		const nextSearch = params.toString();
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch ? `?${nextSearch}` : "",
+		});
+	}, [
+		currentPage,
+		searchTerm,
+		history,
+		location.pathname,
+		location.search,
+	]);
+
+	useEffect(() => {
 		const dateToUse = selectedDates ? selectedDates : formatDate(new Date());
+		const filtersPayload = JSON.stringify({
+			selectedFilter,
+			searchQuery: searchTerm || "",
+		});
 
 		// Fetch total records
 		reservationsTotalRecords(
 			currentPage,
 			recordsPerPage,
-			JSON.stringify({ selectedFilter }),
+			filtersPayload,
 			hotelDetails._id,
 			dateToUse // Pass the formatted date
 		).then((data) => {
@@ -92,11 +164,15 @@ const HotelRunnerReservationList = ({
 				setTotalRecords(data.total); // Set total records
 			}
 		});
-		if (!searchClicked || !q) {
-			getAllPreReservation();
-		}
+		getAllPreReservation(searchTerm);
 		// eslint-disable-next-line
-	}, [currentPage, selectedFilter, searchClicked, selectedDates]);
+	}, [currentPage, selectedFilter, selectedDates, searchTerm]);
+
+	const handleSearch = (value) => {
+		const trimmed = String(value || "").trim();
+		setSearchTerm(trimmed);
+		setCurrentPage(1);
+	};
 
 	const handlePageChange = (newPage) => {
 		setCurrentPage(newPage);
@@ -207,6 +283,7 @@ const HotelRunnerReservationList = ({
 							setQ={setQ}
 							q={q}
 							chosenLanguage={chosenLanguage}
+							onSearch={handleSearch}
 							handlePageChange={handlePageChange}
 							handleFilterChange={handleFilterChange}
 							currentPage={currentPage}
@@ -215,8 +292,6 @@ const HotelRunnerReservationList = ({
 							setSelectedFilter={setSelectedFilter}
 							totalRecords={totalRecords}
 							setAllPreReservations={setAllPreReservations}
-							setSearchClicked={setSearchClicked}
-							searchClicked={searchClicked}
 							getAllPreReservation={getAllPreReservation}
 							hotelDetails={hotelDetails}
 							selectedDates={selectedDates}

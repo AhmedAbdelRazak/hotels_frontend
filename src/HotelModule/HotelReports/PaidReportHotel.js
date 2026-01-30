@@ -1,11 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { Button, Input, Modal, Spin, message } from "antd";
-import { useParams } from "react-router-dom";
+import { useParams, useHistory, useLocation } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import { useCartContext } from "../../cart_context";
 import { getPaidBreakdownReportHotel } from "../apiAdmin";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
+
+const getReservationKey = (reservation) => {
+	if (!reservation) return "";
+	if (reservation._id) return String(reservation._id);
+	if (reservation.confirmation_number)
+		return String(reservation.confirmation_number);
+	return "";
+};
+
+const matchesReservationKey = (reservation, key) => {
+	if (!reservation || !key) return false;
+	const normalized = String(key);
+	if (reservation._id && String(reservation._id) === normalized) return true;
+	if (
+		reservation.confirmation_number &&
+		String(reservation.confirmation_number) === normalized
+	) {
+		return true;
+	}
+	return false;
+};
 
 const breakdownKeys = [
 	"paid_online_via_link",
@@ -39,6 +60,8 @@ const PaidReportHotel = ({ collapsed = false }) => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
 	const { hotelId } = useParams();
+	const history = useHistory();
+	const location = useLocation();
 	const [searchTerm, setSearchTerm] = useState("");
 	const [searchBoxValue, setSearchBoxValue] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -247,6 +270,25 @@ const PaidReportHotel = ({ collapsed = false }) => {
 		return tableTotals.breakdownTotals;
 	}, [scorecards.breakdownTotals, tableTotals]);
 
+	const updateQueryParams = useCallback(
+		(updates) => {
+			const params = new URLSearchParams(location.search);
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value === undefined || value === null || value === "") {
+					params.delete(key);
+				} else {
+					params.set(key, String(value));
+				}
+			});
+			const nextSearch = params.toString();
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearch ? `?${nextSearch}` : "",
+			});
+		},
+		[history, location.pathname, location.search],
+	);
+
 	const handleOpenDetails = (reservation) => {
 		if (!reservation?.hotelId) {
 			message.error(labels.missingHotel);
@@ -254,11 +296,13 @@ const PaidReportHotel = ({ collapsed = false }) => {
 		}
 		setSelectedReservation(reservation);
 		setDetailsVisible(true);
+		updateQueryParams({ reservationId: getReservationKey(reservation) });
 	};
 
 	const handleCloseDetails = () => {
 		setSelectedReservation(null);
 		setDetailsVisible(false);
+		updateQueryParams({ reservationId: "" });
 	};
 
 	const handleReservationUpdated = (updated) => {
@@ -274,6 +318,18 @@ const PaidReportHotel = ({ collapsed = false }) => {
 			prev && prev._id === updated._id ? { ...prev, ...updated } : prev,
 		);
 	};
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const reservationId = params.get("reservationId");
+		if (!reservationId) return;
+		const match = reservations.find((reservation) =>
+			matchesReservationKey(reservation, reservationId),
+		);
+		if (!match) return;
+		setSelectedReservation(match);
+		setDetailsVisible(true);
+	}, [location.search, reservations]);
 
 	return (
 		<Wrapper dir={isArabic ? "rtl" : "ltr"} isArabic={isArabic}>

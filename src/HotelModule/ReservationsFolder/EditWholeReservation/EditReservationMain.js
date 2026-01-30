@@ -49,6 +49,7 @@ export const EditReservationMain = ({
 	reservation,
 	setReservation,
 	hotelDetails,
+	onReservationSaved,
 }) => {
 	const [isRoomCountModalOpen, setIsRoomCountModalOpen] = useState(false);
 	const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
@@ -725,21 +726,36 @@ export const EditReservationMain = ({
 		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
-			const end = currentReservation.checkout_date
+			const currentStart = currentReservation.checkin_date
+				? dayjs(currentReservation.checkin_date).startOf("day")
+				: null;
+			const currentEnd = currentReservation.checkout_date
 				? dayjs(currentReservation.checkout_date).startOf("day")
 				: null;
+			let nightsCount = 0;
+			if (currentStart && currentEnd) {
+				nightsCount = Math.max(currentEnd.diff(currentStart, "day"), 0);
+			} else if (Number(currentReservation.days_of_residence) > 0) {
+				nightsCount = Math.max(
+					Number(currentReservation.days_of_residence) - 1,
+					0,
+				);
+			}
 
-			// Calculate the difference in days only if there's both checkin and checkout dates
-			const duration =
-				dateAtMidnight && end ? end.diff(dateAtMidnight, "day") : 0;
+			const nextCheckout =
+				dateAtMidnight && nightsCount > 0
+					? dateAtMidnight.clone().add(nightsCount, "day")
+					: currentEnd;
 
 			return {
 				...currentReservation,
 				checkin_date: dateAtMidnight ? dateAtMidnight.toISOString() : null,
-				// Update days_of_residence only if both dates are present and the duration is non-negative
+				checkout_date: nextCheckout
+					? nextCheckout.toISOString()
+					: currentReservation.checkout_date,
 				days_of_residence:
-					end && dateAtMidnight && duration >= 0
-						? duration + 1
+					dateAtMidnight && nextCheckout
+						? Math.max(nextCheckout.diff(dateAtMidnight, "day"), 0) + 1
 						: currentReservation.days_of_residence,
 			};
 		});
@@ -1112,12 +1128,19 @@ export const EditReservationMain = ({
 					setIsPricingModalOpen(false);
 
 					// Update local state or re-fetch reservation data if necessary
-					setReservation(response.reservation);
-					initialRoomIdsRef.current = getReservationRoomIds(
-						response.reservation?.roomId,
-					);
+					const updatedReservation = response?.reservation || response;
+					if (updatedReservation) {
+						setReservation(updatedReservation);
+						if (typeof onReservationSaved === "function") {
+							onReservationSaved(updatedReservation);
+						}
+						initialRoomIdsRef.current = getReservationRoomIds(
+							updatedReservation?.roomId,
+						);
+					}
 					setHasRoomLineEdits(false);
 					setHasDateEdits(false);
+					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		}
@@ -1209,6 +1232,33 @@ export const EditReservationMain = ({
 		(Array.isArray(reservation?.roomId) ? reservation.roomId : [])
 			.filter((room) => room && typeof room === "object")
 			.forEach(addRoom);
+		const getRoomNumberRaw = (room) =>
+			room?.room_number || room?.roomNumber || room?.room_no || "";
+		const getRoomNumberDigits = (value) => {
+			const match = String(value || "").match(/\d+/);
+			return match ? parseInt(match[0], 10) : null;
+		};
+		merged.sort((a, b) => {
+			const aRaw = getRoomNumberRaw(a);
+			const bRaw = getRoomNumberRaw(b);
+			const aNum = getRoomNumberDigits(aRaw);
+			const bNum = getRoomNumberDigits(bRaw);
+
+			if (aNum != null && bNum != null && aNum !== bNum) {
+				return aNum - bNum;
+			}
+			if (aNum != null && bNum == null) return -1;
+			if (aNum == null && bNum != null) return 1;
+
+			const aStr = String(aRaw || "").toLowerCase();
+			const bStr = String(bRaw || "").toLowerCase();
+			if (aStr !== bStr)
+				return aStr.localeCompare(bStr, undefined, { numeric: true });
+
+			const aId = String(resolveRoomId(a) || "");
+			const bId = String(resolveRoomId(b) || "");
+			return aId.localeCompare(bId);
+		});
 		return merged;
 	}, [
 		hotelRooms,

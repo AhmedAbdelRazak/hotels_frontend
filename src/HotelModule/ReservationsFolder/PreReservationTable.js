@@ -1,6 +1,6 @@
 // PreReservationTable.js
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import styled from "styled-components";
 import moment from "moment";
 import { Tooltip, Modal, Button, Pagination } from "antd"; // Ensure Pagination is correctly imported
@@ -8,6 +8,28 @@ import FilterComponent from "./FilterComponent";
 import { getReservationSearchAllMatches } from "../apiAdmin";
 import ReservationDetail from "./ReservationDetail";
 import DownloadExcel from "./DownloadExcel";
+import { useHistory, useLocation } from "react-router-dom";
+
+const getReservationKey = (reservation) => {
+	if (!reservation) return "";
+	if (reservation._id) return String(reservation._id);
+	if (reservation.confirmation_number)
+		return String(reservation.confirmation_number);
+	return "";
+};
+
+const matchesReservationKey = (reservation, key) => {
+	if (!reservation || !key) return false;
+	const normalized = String(key);
+	if (reservation._id && String(reservation._id) === normalized) return true;
+	if (
+		reservation.confirmation_number &&
+		String(reservation.confirmation_number) === normalized
+	) {
+		return true;
+	}
+	return false;
+};
 
 const normalizeNumber = (value, fallback = 0) => {
 	const parsed = Number(value);
@@ -81,10 +103,13 @@ const PreReservationTable = ({
 	setAllPreReservations,
 	setSearchClicked,
 	searchClicked,
+	onSearch,
 	selectedDates,
 	setSelectedDates,
 	reservationObject,
 }) => {
+	const history = useHistory();
+	const location = useLocation();
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [modalKey, setModalKey] = useState(0);
@@ -98,32 +123,78 @@ const PreReservationTable = ({
 	};
 
 	// Define showDetailsModal before it's used and memoize it to prevent unnecessary re-renders
-	const showDetailsModal = useCallback((reservation) => {
-		setSelectedReservation(reservation);
-		setIsModalVisible(true);
-	}, []);
+	const updateQueryParams = useCallback(
+		(updates) => {
+			const params = new URLSearchParams(location.search);
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value === undefined || value === null || value === "") {
+					params.delete(key);
+				} else {
+					params.set(key, String(value));
+				}
+			});
+			const nextSearch = params.toString();
+			const nextSearchString = nextSearch ? `?${nextSearch}` : "";
+			if (nextSearchString === location.search) return;
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearchString,
+			});
+		},
+		[history, location.pathname, location.search],
+	);
+
+	const showDetailsModal = useCallback(
+		(reservation) => {
+			setSelectedReservation(reservation);
+			setIsModalVisible(true);
+			updateQueryParams({ reservationId: getReservationKey(reservation) });
+		},
+		[updateQueryParams],
+	);
 
 	const handleOk = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
 		setModalKey((prevKey) => prevKey + 1); // Increment the key
+		updateQueryParams({ reservationId: "" });
 	};
 
 	const handleCancel = () => {
 		setSelectedReservation(null);
 		setIsModalVisible(false);
 		setModalKey((prevKey) => prevKey + 1); // Increment the key
+		updateQueryParams({ reservationId: "" });
 	};
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const reservationId = params.get("reservationId");
+		if (!reservationId) return;
+		const match = allPreReservations.find((reservation) =>
+			matchesReservationKey(reservation, reservationId),
+		);
+		if (!match) return;
+		setSelectedReservation(match);
+		setIsModalVisible(true);
+	}, [location.search, allPreReservations]);
 
 	const searchSubmit = (e) => {
 		e.preventDefault();
-		if (!q) {
-			setSearchClicked(!searchClicked);
-			setQ("");
+		const trimmed = String(q || "").trim();
+		if (typeof onSearch === "function") {
+			onSearch(trimmed);
+			return;
+		}
+		if (!trimmed) {
+			if (typeof setSearchClicked === "function") {
+				setSearchClicked(!searchClicked);
+			}
+			if (typeof setQ === "function") setQ("");
 			return;
 		}
 
-		getReservationSearchAllMatches(q, hotelDetails._id)
+		getReservationSearchAllMatches(trimmed, hotelDetails._id)
 			.then((data) => {
 				if (data && data.error) {
 					console.log("Search error:", data.error);

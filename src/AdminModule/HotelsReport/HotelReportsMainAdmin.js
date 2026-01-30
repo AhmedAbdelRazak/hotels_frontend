@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
@@ -20,11 +20,11 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [activeTab, setActiveTab] = useState("reservations");
 	const [getUser, setGetUser] = useState(null);
+	const accessList = useMemo(() => {
+		return Array.isArray(getUser?.accessTo) ? getUser.accessTo : [];
+	}, [getUser?.accessTo]);
 	const isSuperAdmin =
-		!!getUser &&
-		(!getUser?.accessTo ||
-			getUser?.accessTo.length === 0 ||
-			getUser?.accessTo.includes("all"));
+		!!getUser && (accessList.length === 0 || accessList.includes("all"));
 
 	const { user, token } = isAuthenticated() || {};
 	const location = useLocation();
@@ -37,7 +37,14 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 			if (data && data.error) {
 				console.error(data.error);
 			} else {
-				setGetUser(data);
+				const normalizedUser =
+					data && typeof data === "object"
+						? {
+								...data,
+								accessTo: Array.isArray(data.accessTo) ? data.accessTo : [],
+						  }
+						: data;
+				setGetUser(normalizedUser);
 			}
 		});
 	}, [user?._id, token]);
@@ -51,7 +58,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 			return;
 		}
 
-		const accessTo = getUser.accessTo || [];
+		const accessTo = accessList;
 
 		const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
 
@@ -79,16 +86,20 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 				history.push("/");
 				break;
 		}
-	}, [getUser, history, isSuperAdmin]);
+	}, [accessList, getUser, history, isSuperAdmin]);
 
 	/* ------------------ 3) Init & localStorage ------------------ */
 	useEffect(() => {
 		gettingUserId();
+	}, [gettingUserId]);
 
+	useEffect(() => {
 		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+	}, []);
 
+	useEffect(() => {
 		const adminReportsPasswordVerified =
 			localStorage.getItem("ReportsVerified");
 		if (adminReportsPasswordVerified || (getUser && isSuperAdmin)) {
@@ -97,7 +108,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [gettingUserId, getUser, getUser?._id, isSuperAdmin]);
+	}, [getUser, isSuperAdmin]);
 
 	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {

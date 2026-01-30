@@ -525,6 +525,95 @@ const HotelOverviewReservation = ({
 			room.displayName ||
 			"";
 		const nightsCount = Math.max(getStayNights(), 1);
+		const normalizeReservationPricing = (pricingDays = []) =>
+			pricingDays.map((day) => {
+				const safeDay = day || {};
+				const rawPrice =
+					safeDay.price ??
+					safeDay.totalPriceWithCommission ??
+					safeDay.totalPriceWithoutCommission ??
+					0;
+				const normalizedPrice = normalizeNumber(rawPrice, 0);
+				return {
+					...safeDay,
+					price: normalizedPrice,
+					totalPriceWithCommission:
+						safeDay.totalPriceWithCommission !== undefined
+							? safeDay.totalPriceWithCommission
+							: normalizedPrice,
+					totalPriceWithoutCommission:
+						safeDay.totalPriceWithoutCommission !== undefined
+							? safeDay.totalPriceWithoutCommission
+							: normalizedPrice,
+				};
+			});
+		const expandedReservationLines = (lines = []) => {
+			const expanded = [];
+			lines.forEach((line) => {
+				if (!line) return;
+				const count = Math.max(1, Number(line.count) || 1);
+				for (let i = 0; i < count; i += 1) {
+					expanded.push(line);
+				}
+			});
+			return expanded;
+		};
+
+		if (searchedReservation) {
+			const reservationLinesRaw = Array.isArray(
+				searchedReservation.pickedRoomsPricing,
+			)
+				? searchedReservation.pickedRoomsPricing
+				: Array.isArray(searchedReservation.pickedRoomsType)
+				  ? searchedReservation.pickedRoomsType
+				  : [];
+			const reservationLines = expandedReservationLines(reservationLinesRaw);
+			const withPricing = reservationLines.filter(
+				(line) =>
+					Array.isArray(line?.pricingByDay) && line.pricingByDay.length > 0,
+			);
+			const withChosen = reservationLines.filter(
+				(line) => Number(line?.chosenPrice) > 0,
+			);
+			const byRoomId = (lines) =>
+				lines.find(
+					(line) =>
+						line?.roomId && String(line.roomId) === String(room._id),
+				);
+			const pickByIndex = (lines) => {
+				if (!Array.isArray(lines) || lines.length === 0) return null;
+				const usedCount = Array.isArray(pickedRoomPricing)
+					? pickedRoomPricing.length
+					: 0;
+				const idx = Math.min(usedCount, lines.length - 1);
+				return lines[idx] || null;
+			};
+
+			const selectedLine =
+				byRoomId(withPricing) ||
+				pickByIndex(withPricing) ||
+				byRoomId(withChosen) ||
+				pickByIndex(withChosen);
+
+			if (selectedLine) {
+				if (
+					Array.isArray(selectedLine.pricingByDay) &&
+					selectedLine.pricingByDay.length > 0
+				) {
+					setPricingByDay(
+						normalizeReservationPricing(selectedLine.pricingByDay),
+					);
+					setIsModalVisible(true);
+					return;
+				}
+				if (Number(selectedLine.chosenPrice) > 0 && nightsCount > 0) {
+					const nightlyPrice = normalizeNumber(selectedLine.chosenPrice, 0);
+					setPricingByDay(buildPricingByNightly(nightlyPrice, nightsCount));
+					setIsModalVisible(true);
+					return;
+				}
+			}
+		}
 
 		// Check if the searched reservation has pricing information
 		if (searchedReservation && searchedReservation.pickedRoomsType) {
@@ -552,27 +641,7 @@ const HotelOverviewReservation = ({
 				roomTypeDetails.pricingByDay.length > 0
 			) {
 				setPricingByDay(
-					roomTypeDetails.pricingByDay.map((day) => {
-						const safeDay = day || {};
-						const rawPrice =
-							safeDay.price ??
-							safeDay.totalPriceWithCommission ??
-							safeDay.totalPriceWithoutCommission ??
-							0;
-						const normalizedPrice = normalizeNumber(rawPrice, 0);
-						return {
-							...safeDay,
-							price: normalizedPrice,
-							totalPriceWithCommission:
-								safeDay.totalPriceWithCommission !== undefined
-									? safeDay.totalPriceWithCommission
-									: normalizedPrice,
-							totalPriceWithoutCommission:
-								safeDay.totalPriceWithoutCommission !== undefined
-									? safeDay.totalPriceWithoutCommission
-									: normalizedPrice,
-						};
-					}),
+					normalizeReservationPricing(roomTypeDetails.pricingByDay),
 				);
 			} else if (
 				roomTypeDetails &&
@@ -1462,12 +1531,21 @@ const HotelOverviewReservation = ({
 							</div>
 						)}
 
-						<Table
-							dataSource={pricingByDay}
-							columns={columns}
-							rowKey='date'
-							pagination={false}
-						/>
+						<div
+							style={{
+								maxHeight:
+									pricingByDay.length > 8 ? "320px" : "none",
+								overflowY: pricingByDay.length > 8 ? "auto" : "visible",
+								paddingRight: pricingByDay.length > 8 ? "6px" : undefined,
+							}}
+						>
+							<Table
+								dataSource={pricingByDay}
+								columns={columns}
+								rowKey='date'
+								pagination={false}
+							/>
+						</div>
 
 						{currentRoom?.room_type === "individualBed" ? (
 							<>
