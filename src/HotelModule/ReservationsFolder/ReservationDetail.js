@@ -192,6 +192,38 @@ const resolveBreakdownNumber = (value, normalizer) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizeNumericInput = (value) => {
+	const raw = String(value ?? "");
+	if (!raw) return "";
+	const arabicDigits = {
+		"٠": "0",
+		"١": "1",
+		"٢": "2",
+		"٣": "3",
+		"٤": "4",
+		"٥": "5",
+		"٦": "6",
+		"٧": "7",
+		"٨": "8",
+		"٩": "9",
+		"۰": "0",
+		"۱": "1",
+		"۲": "2",
+		"۳": "3",
+		"۴": "4",
+		"۵": "5",
+		"۶": "6",
+		"۷": "7",
+		"۸": "8",
+		"۹": "9",
+	};
+	const normalizedDigits = raw.replace(
+		/[٠-٩۰-۹]/g,
+		(d) => arabicDigits[d] || d,
+	);
+	return normalizedDigits.replace(/[^\d.,-]/g, "");
+};
+
 const buildPaymentBreakdown = (breakdown, normalizer) => ({
 	paid_online_via_link: resolveBreakdownNumber(
 		breakdown?.paid_online_via_link,
@@ -290,7 +322,17 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const { user, token } = isAuthenticated();
 
 	const normalizeNumber = useCallback((value, fallback = 0) => {
-		const parsed = Number(value);
+		if (value === null || value === undefined) return fallback;
+		if (typeof value === "number") {
+			return Number.isFinite(value) ? value : fallback;
+		}
+		const cleaned = normalizeNumericInput(value);
+		if (!cleaned) return fallback;
+		const normalized =
+			cleaned.includes(",") && !cleaned.includes(".")
+				? cleaned.replace(/,/g, ".")
+				: cleaned.replace(/,/g, "");
+		const parsed = Number(normalized);
 		return Number.isFinite(parsed) ? parsed : fallback;
 	}, []);
 
@@ -311,7 +353,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						? "لديك تغييرات غير محفوظة. يرجى الضغط على زر التحديث داخل النافذة لحفظ التغييرات."
 						: "You have unsaved changes. Please click the update button inside the modal to save them.",
 				okText: chosenLanguage === "Arabic" ? "إغلاق بدون حفظ" : "Discard",
-				cancelText: chosenLanguage === "Arabic" ? "متابعة التعديل" : "Keep Editing",
+				cancelText:
+					chosenLanguage === "Arabic" ? "متابعة التعديل" : "Keep Editing",
 				centered: true,
 				zIndex: 2000,
 				maskClosable: false,
@@ -340,7 +383,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		);
 	}, [
 		isPaymentBreakdownVisible,
-		reservation?.paid_amount_breakdown,
+		reservation?._id,
+		reservation?.confirmation_number,
 		normalizeNumber,
 	]);
 
@@ -374,9 +418,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	useEffect(() => {
 		if (!isModalVisible2) return;
-		editModalSnapshotRef.current = JSON.stringify(
-			reservationRef.current || {},
-		);
+		editModalSnapshotRef.current = JSON.stringify(reservationRef.current || {});
 		setEditModalDirty(false);
 	}, [isModalVisible2]);
 
@@ -532,14 +574,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			return;
 		}
 		setPaymentBreakdownDraft((prev) => {
-			const parsedValue = Math.max(normalizeNumber(rawValue, 0), 0);
-			const totalOther = paymentBreakdownNumericKeys.reduce((sum, fieldKey) => {
-				if (fieldKey === key) return sum;
-				return sum + normalizeNumber(prev[fieldKey], 0);
-			}, 0);
-			const maxForField = Math.max(totalAmountValue - totalOther, 0);
-			const clampedValue = Math.min(parsedValue, maxForField);
-			return { ...prev, [key]: clampedValue };
+			const cleaned = normalizeNumericInput(rawValue);
+			const nextValue = cleaned === "" ? "" : cleaned;
+			return { ...prev, [key]: nextValue };
 		});
 	};
 
@@ -775,7 +812,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			String(base.payment_comments || "") !==
 			String(draft.payment_comments || "");
 		return numericChanged || commentChanged;
-	}, [paymentBreakdownDraft, reservation?.paid_amount_breakdown, normalizeNumber]);
+	}, [
+		paymentBreakdownDraft,
+		reservation?.paid_amount_breakdown,
+		normalizeNumber,
+	]);
 
 	const handlePaymentBreakdownClose = () => {
 		if (hasPaymentBreakdownChanges()) {
@@ -1201,11 +1242,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									<div className='col-md-6 mb-3' key={field.key}>
 										<label style={{ fontWeight: "bold" }}>{field.label}</label>
 										<input
-											type='number'
-											min='0'
-											step='0.01'
+											type='text'
+											inputMode='decimal'
 											className='form-control'
-											value={paymentBreakdownDraft[field.key]}
+											value={paymentBreakdownDraft[field.key] ?? ""}
 											disabled={
 												field.key === "paid_at_hotel_cash" && isCashLocked
 											}
