@@ -1,5 +1,5 @@
 // src/HotelModule/NewReservation/NewReservationMain.js
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
@@ -68,6 +68,8 @@ const NewReservationMain = () => {
 	const [currentRoom, setCurrentRoom] = useState(null);
 	const [pricingByDay, setPricingByDay] = useState([]);
 	const [isBoss] = useBoss();
+	const lastReservationKeyRef = useRef(null);
+	const lastInhouseAppliedRef = useRef(null);
 
 	const [start_date, setStart_date] = useState("");
 	const [end_date, setEnd_date] = useState("");
@@ -238,30 +240,6 @@ const NewReservationMain = () => {
 		});
 	};
 
-	const generatePricingTable = useCallback(
-		(roomType, startDate, endDate) => {
-			const roomDetails = hotelDetails.roomCountDetails[roomType];
-			const pricingRate = roomDetails?.pricingRate || [];
-			const basePrice = roomDetails?.price?.basePrice || 0;
-
-			const daysArray = [];
-			const currentDate = moment(startDate);
-			while (currentDate.isBefore(endDate)) {
-				const dateString = currentDate.format("YYYY-MM-DD");
-				const pricing = pricingRate.find(
-					(price) => price.calendarDate === dateString,
-				);
-				const price = pricing
-					? parseFloat(pricing.price)
-					: parseFloat(basePrice);
-				daysArray.push({ date: dateString, price });
-				currentDate.add(1, "day");
-			}
-			return daysArray;
-		},
-		[hotelDetails.roomCountDetails],
-	);
-
 	const gettingOverallRoomsSummary = () => {
 		if (start_date && end_date) {
 			const formattedStartDate = formatDate(start_date);
@@ -320,49 +298,171 @@ const NewReservationMain = () => {
 		// eslint-disable-next-line
 	}, [searchClicked]);
 
-	const handlePreselectRooms = useCallback(() => {
-		if (
-			searchedReservation &&
-			searchedReservation.roomId &&
-			searchedReservation.roomId.length > 0
-		) {
-			const roomIds = searchedReservation.roomId;
-			const selectedRooms = hotelRooms.filter((room) =>
-				roomIds.includes(room._id),
-			);
+	const isReservationInHouse = (reservation) => {
+		const status = String(reservation?.reservation_status || "").toLowerCase();
+		return (
+			status.includes("inhouse") ||
+			status.includes("in_house") ||
+			status.includes("in house")
+		);
+	};
 
-			setPickedHotelRooms(roomIds);
-			setPickedRoomPricing(
-				selectedRooms.map((room) => {
-					const roomType = room.room_type;
-					const pricingByDay = generatePricingTable(
-						roomType,
-						start_date,
-						end_date,
-					);
-					return {
-						roomId: room._id,
-						chosenPrice:
-							pricingByDay.reduce((acc, day) => acc + day.price, 0) /
-							pricingByDay.length,
-						pricingByDay,
-					};
-				}),
-			);
+	useEffect(() => {
+		const reservationKey =
+			searchedReservation?._id ||
+			searchedReservation?.confirmation_number ||
+			"";
 
-			if (selectedRooms.length > 0) setCurrentRoom(selectedRooms[0]);
+		if (!reservationKey) {
+			lastReservationKeyRef.current = null;
+			lastInhouseAppliedRef.current = null;
+			return;
 		}
+
+		if (lastReservationKeyRef.current !== reservationKey) {
+			setPickedHotelRooms([]);
+			setPickedRoomPricing([]);
+			setPickedRoomsType([]);
+			setCurrentRoom(null);
+			setPricingByDay([]);
+			setBedNumber([]);
+			lastReservationKeyRef.current = reservationKey;
+			lastInhouseAppliedRef.current = null;
+		}
+
+		if (!isReservationInHouse(searchedReservation)) return;
+		if (lastInhouseAppliedRef.current === reservationKey) return;
+		if (!Array.isArray(hotelRooms) || hotelRooms.length === 0) return;
+
+		const rawRoomIds = Array.isArray(searchedReservation.roomId)
+			? searchedReservation.roomId
+			: [searchedReservation.roomId];
+		const normalizedRoomIds = rawRoomIds
+			.map((room) => {
+				if (!room) return null;
+				if (typeof room === "string" || typeof room === "number") {
+					return String(room);
+				}
+				if (typeof room === "object") {
+					return (
+						room._id ||
+						room.id ||
+						room.roomId ||
+						room.room_id ||
+						room.room_number ||
+						null
+					);
+				}
+				return null;
+			})
+			.filter(Boolean)
+			.map((id) => String(id));
+
+		if (normalizedRoomIds.length === 0) return;
+
+		const roomIdMap = new Map();
+		hotelRooms.forEach((room) => {
+			if (!room) return;
+			const roomId = String(room._id);
+			roomIdMap.set(roomId, roomId);
+			if (room.room_number !== undefined && room.room_number !== null) {
+				roomIdMap.set(String(room.room_number), roomId);
+			}
+		});
+
+		const resolvedRoomIds = Array.from(
+			new Set(
+				normalizedRoomIds.map((id) => roomIdMap.get(id) || String(id)),
+			),
+		);
+		const roomIdSet = new Set(resolvedRoomIds.map((id) => String(id)));
+
+		const roomsById = new Map(
+			hotelRooms.map((room) => [String(room._id), room]),
+		);
+		const resolvedRooms = resolvedRoomIds
+			.map((id) => roomsById.get(String(id)))
+			.filter(Boolean);
+
+		const reservationPricing = Array.isArray(
+			searchedReservation?.pickedRoomsPricing,
+		)
+			? searchedReservation.pickedRoomsPricing
+			: Array.isArray(searchedReservation?.pickedRoomsType)
+			  ? searchedReservation.pickedRoomsType
+			  : [];
+
+		const pricingWithIds = reservationPricing
+			.map((pricing) => {
+				if (!pricing) return null;
+				const roomIdRaw =
+					pricing.roomId || pricing.room_id || pricing._id || null;
+				if (!roomIdRaw) return null;
+				return { ...pricing, roomId: String(roomIdRaw) };
+			})
+			.filter(Boolean)
+			.filter((pricing) => roomIdSet.has(String(pricing.roomId)));
+
+		const pickedRoomsPricing =
+			pricingWithIds.length > 0
+				? pricingWithIds
+				: (() => {
+						const usedRoomIds = new Set();
+						const normalizedRooms = resolvedRooms.map((room) => ({
+							room,
+							roomId: String(room._id),
+							type: String(room.room_type || "")
+								.trim()
+								.toLowerCase(),
+							display: String(
+								room.display_name || room.displayName || "",
+							)
+								.trim()
+								.toLowerCase(),
+						}));
+
+						return reservationPricing
+							.map((pricing) => {
+								if (!pricing) return null;
+								const type = String(
+									pricing.room_type || pricing.roomType || "",
+								)
+									.trim()
+									.toLowerCase();
+								const display = String(
+									pricing.displayName || pricing.display_name || "",
+								)
+									.trim()
+									.toLowerCase();
+								let match = null;
+								if (type) {
+									match = normalizedRooms.find(
+										(room) =>
+											!usedRoomIds.has(room.roomId) &&
+											room.type === type &&
+											(!display || room.display === display),
+									);
+								}
+								if (!match) return null;
+								usedRoomIds.add(match.roomId);
+								return { ...pricing, roomId: match.roomId };
+							})
+							.filter(Boolean);
+				  })();
+
+		setPickedHotelRooms(resolvedRoomIds);
+		setPickedRoomPricing(pickedRoomsPricing);
+		lastInhouseAppliedRef.current = reservationKey;
 	}, [
 		searchedReservation,
 		hotelRooms,
-		start_date,
-		end_date,
-		generatePricingTable,
+		setBedNumber,
+		setCurrentRoom,
+		setPickedHotelRooms,
+		setPickedRoomPricing,
+		setPickedRoomsType,
+		setPricingByDay,
 	]);
-
-	useEffect(() => {
-		handlePreselectRooms();
-	}, [handlePreselectRooms]);
 
 	/* Grouped summary for reserveARoom path (unchanged) */
 
