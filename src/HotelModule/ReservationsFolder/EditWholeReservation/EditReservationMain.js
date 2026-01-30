@@ -2260,17 +2260,31 @@ export const EditReservationMain = ({
 							</div>
 
 							<div className='mt-5 mx-auto text-center col-md-6'>
-								<Button
-									className='cta'
-									type='primary'
-									onClick={() => {
-										UpdateReservation();
-									}}
-								>
-									{chosenLanguage === "Arabic"
-										? "تحديث الحجز..."
-										: "Update Reservation"}
-								</Button>
+								<div className='cta-panel'>
+									<div className='cta-title'>
+										{chosenLanguage === "Arabic"
+											? "اضغط لحفظ التعديلات"
+											: "Click to Save Changes"}
+									</div>
+									<Button
+										className='cta'
+										type='primary'
+										block
+										size='large'
+										onClick={() => {
+											UpdateReservation();
+										}}
+									>
+										{chosenLanguage === "Arabic"
+											? "تحديث الحجز"
+											: "Update Reservation"}
+									</Button>
+									<div className='cta-subtitle'>
+										{chosenLanguage === "Arabic"
+											? "لن يتم تطبيق أي تغيير إلا بعد الضغط على زر التحديث"
+											: "Changes won’t apply until you press Update"}
+									</div>
+								</div>
 							</div>
 						</>
 					) : null}
@@ -2344,8 +2358,38 @@ const Wrapper = styled.div`
 
 	.cta {
 		font-weight: 700;
-		font-size: 1.05rem;
-		padding: 10px 18px;
+		font-size: 1.1rem;
+		letter-spacing: 0.2px;
+		padding: 12px 18px;
+		border-radius: 12px;
+		box-shadow: 0 10px 20px rgba(0, 106, 209, 0.25);
+		transition:
+			transform 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+
+	.cta:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 14px 24px rgba(0, 106, 209, 0.3);
+	}
+
+	.cta-panel {
+		background: #f7faff;
+		border: 1px solid #cfe2ff;
+		border-radius: 16px;
+		padding: 16px;
+		box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+	}
+
+	.cta-title {
+		font-weight: 800;
+		margin-bottom: 10px;
+	}
+
+	.cta-subtitle {
+		margin-top: 10px;
+		font-size: 0.9rem;
+		color: #555;
 	}
 `;
 
