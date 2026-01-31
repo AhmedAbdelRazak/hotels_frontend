@@ -114,6 +114,40 @@ const PaymentBreakdownHint = styled.span`
 	color: #666;
 `;
 
+const AssignRoomCallout = styled.button`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-direction: ${(props) => (props.isArabic ? "row-reverse" : "row")};
+	width: 90%;
+	margin: 6px auto 14px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	border: 1px solid #2f7a45;
+	background: linear-gradient(135deg, #e9f7ef, #f7fffb);
+	color: #1d4f2b;
+	font-weight: 700;
+	cursor: pointer;
+	box-shadow: 0 6px 14px rgba(31, 111, 67, 0.12);
+	transition: transform 0.15s ease, box-shadow 0.15s ease,
+		background 0.15s ease;
+
+	&:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 10px 18px rgba(31, 111, 67, 0.18);
+		background: linear-gradient(135deg, #e2f4ea, #f1fff7);
+	}
+`;
+
+const AssignRoomHint = styled.span`
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #2f7a45;
+	background: #e2f0e7;
+	padding: 2px 10px;
+	border-radius: 999px;
+`;
+
 const PaymentBreakdownTotals = styled.div`
 	border: 1px solid #e5e5e5;
 	background: #f7f7f7;
@@ -140,6 +174,14 @@ const splitPhoneForModal = (raw) => {
 		return { code: cleaned.slice(0, 3), phone: cleaned.slice(3) };
 	}
 	return { code: "", phone: cleaned };
+};
+
+const resolveId = (value) => {
+	if (!value) return "";
+	if (typeof value === "string") return value;
+	if (typeof value === "number") return String(value);
+	if (typeof value === "object") return value._id || value.id || "";
+	return "";
 };
 
 const paymentBreakdownFields = [
@@ -306,6 +348,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		useState(false);
 	const [editModalDirty, setEditModalDirty] = useState(false);
 	const editModalSnapshotRef = useRef("");
+	const paymentBreakdownRef = useRef(reservation?.paid_amount_breakdown);
 	const reservationRef = useRef(reservation);
 	const statusModalSnapshotRef = useRef({
 		selectedStatus: "",
@@ -374,10 +417,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	);
 
 	useEffect(() => {
+		paymentBreakdownRef.current = reservation?.paid_amount_breakdown;
+	}, [reservation?.paid_amount_breakdown]);
+
+	useEffect(() => {
 		if (!isPaymentBreakdownVisible) return;
 		setPaymentBreakdownDraft(
 			buildPaymentBreakdown(
-				reservation?.paid_amount_breakdown,
+				paymentBreakdownRef.current,
 				normalizeNumber,
 			),
 		);
@@ -632,6 +679,46 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			setTimeout(() => window.location.reload(false), 1500);
 		});
 	};
+
+	const handleAssignRoomClick = useCallback(() => {
+		const hotelId = resolveId(hotelDetails?._id || reservation?.hotelId);
+		const belongsToId = resolveId(
+			hotelDetails?.belongsTo || reservation?.belongsTo,
+		);
+
+		if (!hotelId || !belongsToId) {
+			toast.error(
+				"Missing hotel reference. Please reload and try again.",
+			);
+			return;
+		}
+
+		const selectedHotel = {
+			_id: hotelId,
+			hotelName:
+				hotelDetails?.hotelName ||
+				reservation?.hotelName ||
+				reservation?.hotelId?.hotelName ||
+				"",
+			belongsTo: belongsToId,
+		};
+
+		try {
+			localStorage.setItem("selectedHotel", JSON.stringify(selectedHotel));
+		} catch (_) {}
+
+		const confirmationValue =
+			reservation?.confirmation_number ||
+			reservation?.customer_details?.confirmation_number ||
+			"";
+		const params = new URLSearchParams();
+		params.set("reserveARoom", "true");
+		if (confirmationValue) {
+			params.set("confirmation_number", String(confirmationValue));
+		}
+
+		window.location.href = `/hotel-management/new-reservation/${belongsToId}/${hotelId}?${params.toString()}`;
+	}, [hotelDetails, reservation]);
 
 	const buildPaymentLinkPayload = () => ({
 		guestName: reservation?.customer_details?.name || "",
@@ -2108,6 +2195,24 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												Click to update
 											</PaymentBreakdownHint>
 										</PaymentBreakdownToggle>
+									</div>
+									<div className='col-md-12'>
+										<AssignRoomCallout
+											type='button'
+											onClick={handleAssignRoomClick}
+											isArabic={chosenLanguage === "Arabic"}
+										>
+											<span>
+												{chosenLanguage === "Arabic"
+													? "تخصيص غرفة للضيف"
+													: "Assign a room to the guest"}
+											</span>
+											<AssignRoomHint>
+												{chosenLanguage === "Arabic"
+													? "فتح شاشة التسكين"
+													: "Open housing screen"}
+											</AssignRoomHint>
+										</AssignRoomCallout>
 									</div>
 
 									{roomTableRows && roomTableRows.length > 0 ? (

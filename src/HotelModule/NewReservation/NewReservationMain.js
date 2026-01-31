@@ -4,7 +4,7 @@ import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 // eslint-disable-next-line
-import { Link, useHistory } from "react-router-dom";
+import { Link, useHistory, useLocation } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
 import moment from "moment";
 import ZReservationForm from "./ZReservationForm";
@@ -98,6 +98,8 @@ const NewReservationMain = () => {
 	const { languageToggle, chosenLanguage } = useCartContext();
 
 	const history = useHistory();
+	const location = useLocation();
+	const lastAutoSearchRef = useRef("");
 
 	useEffect(() => {
 		if (window.location.search.includes("reserveARoom")) {
@@ -117,6 +119,49 @@ const NewReservationMain = () => {
 		}
 		// eslint-disable-next-line
 	}, [activeTab]);
+
+	useEffect(() => {
+		const confirmationFromUrl = getConfirmationFromSearch(location.search);
+		if (!confirmationFromUrl) return;
+		if (!hotelDetails?._id) return;
+		if (lastAutoSearchRef.current === confirmationFromUrl) return;
+		lastAutoSearchRef.current = confirmationFromUrl;
+		setSearchQuery(confirmationFromUrl);
+		setSearchClicked(true);
+	}, [location.search, hotelDetails?._id]);
+
+	useEffect(() => {
+		if (activeTab !== "reserveARoom") return;
+		const currentConfirmation = String(
+			searchedReservation?.confirmation_number || confirmation_number || "",
+		).trim();
+		const params = new URLSearchParams(
+			location.search.startsWith("?")
+				? location.search
+				: `?${location.search}`,
+		);
+		const existing = params.get("confirmation_number") || "";
+
+		if (!currentConfirmation) return;
+		if (existing === currentConfirmation) return;
+		params.set("confirmation_number", currentConfirmation);
+		if (!params.has("reserveARoom")) {
+			params.set("reserveARoom", "true");
+		}
+		const nextSearch = params.toString();
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch ? `?${nextSearch}` : "",
+		});
+		lastAutoSearchRef.current = currentConfirmation;
+	}, [
+		activeTab,
+		confirmation_number,
+		history,
+		location.pathname,
+		location.search,
+		searchedReservation?.confirmation_number,
+	]);
 
 	useEffect(() => {
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
@@ -1044,6 +1089,18 @@ export default NewReservationMain;
 function safeParseFloat(value, fallback = 0) {
 	const parsed = parseFloat(value);
 	return isNaN(parsed) ? fallback : parsed;
+}
+
+function getConfirmationFromSearch(search = "") {
+	if (!search) return "";
+	const normalized = search.startsWith("?") ? search : `?${search}`;
+	const params = new URLSearchParams(normalized);
+	return (
+		params.get("confirmation_number") ||
+		params.get("confirmation") ||
+		params.get("confirmationNumber") ||
+		""
+	);
 }
 
 const NewReservationMainWrapper = styled.div`

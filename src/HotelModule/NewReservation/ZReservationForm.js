@@ -141,13 +141,7 @@ const ZReservationForm = ({
 					return String(entry);
 				}
 				if (typeof entry === "object") {
-					return (
-						entry._id ||
-						entry.roomId ||
-						entry.id ||
-						entry.room_id ||
-						null
-					);
+					return entry._id || entry.roomId || entry.id || entry.room_id || null;
 				}
 				return null;
 			})
@@ -161,13 +155,7 @@ const ZReservationForm = ({
 					return String(entry);
 				}
 				if (typeof entry === "object") {
-					return (
-						entry._id ||
-						entry.roomId ||
-						entry.id ||
-						entry.room_id ||
-						null
-					);
+					return entry._id || entry.roomId || entry.id || entry.room_id || null;
 				}
 				return null;
 			})
@@ -1258,14 +1246,16 @@ const ZReservationForm = ({
 												searchedReservation.confirmation_number &&
 												days_of_residence
 													? formatMoney(
-															normalizeNumber(searchedReservation.total_amount, 0) /
-																Math.max(days_of_residence - 1, 1),
+															normalizeNumber(
+																searchedReservation.total_amount,
+																0,
+															) / Math.max(days_of_residence - 1, 1),
 													  )
 													: finalTotalByRoom()
 													  ? formatMoney(
 																normalizeNumber(finalTotalByRoom(), 0) /
 																	Math.max(days_of_residence - 1, 1),
-														    )
+													    )
 													  : formatMoney(0)}{" "}
 												{chosenLanguage === "Arabic"
 													? "ريال سعودي/ يوم"
@@ -1285,9 +1275,9 @@ const ZReservationForm = ({
 														>
 															{`نوع الغرفة: ${
 																room.room_type
-															}، السعر: ${formatMoney(room.chosenPrice)} ريال سعودي، العدد: ${
-																room.count
-															} غرف`}
+															}، السعر: ${formatMoney(
+																room.chosenPrice,
+															)} ريال سعودي، العدد: ${room.count} غرف`}
 														</div>
 													))}
 												</div>
@@ -1302,7 +1292,11 @@ const ZReservationForm = ({
 																textTransform: "capitalize",
 															}}
 														>
-															{`Room Type: ${room.room_type}, Price: ${formatMoney(room.chosenPrice)} SAR, Count: ${room.count} Rooms`}
+															{`Room Type: ${
+																room.room_type
+															}, Price: ${formatMoney(
+																room.chosenPrice,
+															)} SAR, Count: ${room.count} Rooms`}
 														</div>
 													))}
 												</div>
@@ -1441,9 +1435,7 @@ const ZReservationForm = ({
 										>
 											{pickedRoomsDetailed.length > 0 &&
 												pickedRoomsDetailed.map((room, index) => {
-													const pricing = pricingByRoomId.get(
-														String(room._id),
-													);
+													const pricing = pricingByRoomId.get(String(room._id));
 													return (
 														<div key={String(room._id)} className='inner-grid2'>
 															<div></div>
@@ -1585,7 +1577,12 @@ const ZReservationForm = ({
 											{chosenLanguage === "Arabic"
 												? "المبلغ الإجمالي"
 												: "Total Amount:"}{" "}
-											{formatMoney(normalizeNumber(total_amount * (days_of_residence - 1), 0))}{" "}
+											{formatMoney(
+												normalizeNumber(
+													total_amount * (days_of_residence - 1),
+													0,
+												),
+											)}{" "}
 											{chosenLanguage === "Arabic" ? "ريال سعودي" : "SAR"}
 										</h4>
 									) : null}
@@ -1765,5 +1762,3 @@ const ZReservationFormWrapper = styled.div`
 		font-weight: bold;
 	}
 `;
-
-

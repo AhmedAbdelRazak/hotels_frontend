@@ -26,6 +26,21 @@ const getSearchTermFromSearch = (search) => {
 	const params = new URLSearchParams(search || "");
 	return params.get("search") || "";
 };
+const DATE_FILTER_TYPES = new Set(["checkin", "checkout", "created"]);
+const getDateFilterFromSearch = (search) => {
+	const params = new URLSearchParams(search || "");
+	const type = params.get("dateType") || "";
+	const from = params.get("dateFrom") || "";
+	const to = params.get("dateTo") || "";
+	if (!type || !DATE_FILTER_TYPES.has(type) || !from) {
+		return { type: "", from: "", to: "" };
+	}
+	return { type, from, to };
+};
+const isSameDateFilter = (a, b) =>
+	(a?.type || "") === (b?.type || "") &&
+	(a?.from || "") === (b?.from || "") &&
+	(a?.to || "") === (b?.to || "");
 
 const AllReservationMain = ({ chosenLanguage }) => {
 	const history = useHistory();
@@ -69,7 +84,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [activeBookingSource, setActiveBookingSource] = useState(""); // lowercase or ""
 
 	// Single date modal filter { type: 'checkin'|'checkout'|'created'|'' , from, to }
-	const [dateFilter, setDateFilter] = useState({ type: "", from: "", to: "" });
+	const [dateFilter, setDateFilter] = useState(() =>
+		getDateFilterFromSearch(location.search)
+	);
 
 	// Password modal states
 	const [isModalVisible, setIsModalVisible] = useState(false);
@@ -86,11 +103,15 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	useEffect(() => {
 		const pageFromQuery = getPageFromSearch(location.search);
 		const searchFromQuery = getSearchTermFromSearch(location.search);
+		const dateFromQuery = getDateFilterFromSearch(location.search);
 		setCurrentPage((prev) =>
 			prev !== pageFromQuery ? pageFromQuery : prev
 		);
 		setSearchTerm((prev) =>
 			prev !== searchFromQuery ? searchFromQuery : prev
+		);
+		setDateFilter((prev) =>
+			isSameDateFilter(prev, dateFromQuery) ? prev : dateFromQuery
 		);
 	}, [location.search]);
 
@@ -98,6 +119,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		const params = new URLSearchParams(location.search);
 		const desiredPage = String(currentPage);
 		const desiredSearch = (searchTerm || "").trim();
+		const desiredDateType = dateFilter?.type || "";
+		const desiredDateFrom = dateFilter?.from || "";
+		const desiredDateTo = dateFilter?.to || "";
 		let changed = false;
 
 		if (params.get("page") !== desiredPage) {
@@ -115,6 +139,35 @@ const AllReservationMain = ({ chosenLanguage }) => {
 			changed = true;
 		}
 
+		if (desiredDateType && desiredDateFrom) {
+			if (params.get("dateType") !== desiredDateType) {
+				params.set("dateType", desiredDateType);
+				changed = true;
+			}
+			if (params.get("dateFrom") !== desiredDateFrom) {
+				params.set("dateFrom", desiredDateFrom);
+				changed = true;
+			}
+			if (desiredDateTo) {
+				if (params.get("dateTo") !== desiredDateTo) {
+					params.set("dateTo", desiredDateTo);
+					changed = true;
+				}
+			} else if (params.has("dateTo")) {
+				params.delete("dateTo");
+				changed = true;
+			}
+		} else if (
+			params.has("dateType") ||
+			params.has("dateFrom") ||
+			params.has("dateTo")
+		) {
+			params.delete("dateType");
+			params.delete("dateFrom");
+			params.delete("dateTo");
+			changed = true;
+		}
+
 		if (!changed) return;
 		const nextSearch = params.toString();
 		history.replace({
@@ -124,6 +177,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [
 		currentPage,
 		searchTerm,
+		dateFilter?.type,
+		dateFilter?.from,
+		dateFilter?.to,
 		history,
 		location.pathname,
 		location.search,
