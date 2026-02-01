@@ -1,8 +1,56 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import CountUp from "react-countup";
+import { getHotelMapSummary } from "../apiAdmin";
+import { isAuthenticated } from "../../auth";
+
+const defaultStats = {
+	occupied: 0,
+	vacant: 0,
+	clean: 0,
+	dirty: 0,
+	cleaning: 0,
+	outOfService: 0,
+};
 
 const HotelMapCards = () => {
+	const [stats, setStats] = useState(defaultStats);
+
+	const { user } = isAuthenticated();
+	const selectedHotel =
+		JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	const hotelId = selectedHotel?._id;
+	const belongsToId =
+		user?.role === 2000
+			? user?._id
+			: selectedHotel?.belongsTo?._id || selectedHotel?.belongsTo;
+
+	useEffect(() => {
+		if (!hotelId || !belongsToId) return;
+		let isMounted = true;
+
+		getHotelMapSummary(hotelId, belongsToId).then((data) => {
+			if (!isMounted) return;
+			if (data && data.error) {
+				setStats(defaultStats);
+				return;
+			}
+			const summary = data?.summary || {};
+			setStats({
+				occupied: Number(summary.occupied) || 0,
+				vacant: Number(summary.vacant) || 0,
+				clean: Number(summary.clean) || 0,
+				dirty: Number(summary.dirty) || 0,
+				cleaning: Number(summary.cleaning) || 0,
+				outOfService: Number(summary.outOfService) || 0,
+			});
+		});
+
+		return () => {
+			isMounted = false;
+		};
+	}, [hotelId, belongsToId]);
+
 	return (
 		<Wrapper>
 			<StatsCards>
@@ -10,7 +58,7 @@ const HotelMapCards = () => {
 					<h2>
 						Occupied{" "}
 						<span>
-							<CountUp end={12} duration={1.5} />
+							<CountUp end={stats.occupied} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
@@ -21,7 +69,7 @@ const HotelMapCards = () => {
 					<h2>
 						Vacant{" "}
 						<span>
-							<CountUp end={3} duration={1.5} />
+							<CountUp end={stats.vacant} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
@@ -29,7 +77,7 @@ const HotelMapCards = () => {
 					<h2>
 						Clean{" "}
 						<span>
-							<CountUp end={19} duration={1.5} />
+							<CountUp end={stats.clean} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
@@ -37,7 +85,7 @@ const HotelMapCards = () => {
 					<h2>
 						Dirty{" "}
 						<span>
-							<CountUp end={23} duration={1.5} />
+							<CountUp end={stats.dirty} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
@@ -48,7 +96,7 @@ const HotelMapCards = () => {
 					<h2>
 						Cleaning{" "}
 						<span>
-							<CountUp end={17} duration={1.5} />
+							<CountUp end={stats.cleaning} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
@@ -56,7 +104,7 @@ const HotelMapCards = () => {
 					<h2>
 						Out Of Service{" "}
 						<span>
-							<CountUp end={15} duration={1.5} />
+							<CountUp end={stats.outOfService} duration={1.5} />
 						</span>
 					</h2>
 				</StatCard>
