@@ -196,6 +196,11 @@ const paymentBreakdownFields = [
 		group: "online",
 	},
 	{
+		key: "paid_no_show",
+		label: "Paid No Show",
+		group: "online",
+	},
+	{
 		key: "paid_at_hotel_cash",
 		label: "Paid at Hotel (Cash)",
 		group: "offline",
@@ -275,6 +280,7 @@ const buildPaymentBreakdown = (breakdown, normalizer) => ({
 		breakdown?.paid_online_via_instapay,
 		normalizer,
 	),
+	paid_no_show: resolveBreakdownNumber(breakdown?.paid_no_show, normalizer),
 	paid_at_hotel_cash: resolveBreakdownNumber(
 		breakdown?.paid_at_hotel_cash,
 		normalizer,

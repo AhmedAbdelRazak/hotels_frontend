@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { Button, Input, Modal, Spin, message } from "antd";
+import * as XLSX from "xlsx";
 import { useParams, useHistory, useLocation } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import { useCartContext } from "../../cart_context";
@@ -36,6 +37,7 @@ const breakdownKeys = [
 	"paid_online_jannatbooking",
 	"paid_online_other_platforms",
 	"paid_online_via_instapay",
+	"paid_no_show",
 ];
 
 const safeNumber = (value) => {
@@ -56,6 +58,24 @@ const formatDate = (value, locale = "en-US", fallback = "N/A") => {
 	return date.toLocaleDateString(locale);
 };
 
+const sanitizeFileSegment = (value, fallback = "report") => {
+	const cleaned = String(value || "")
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return cleaned || fallback;
+};
+
+const buildWorksheetCols = (rows, headers) =>
+	headers.map((header) => {
+		const maxCellLength = rows.reduce((maxLen, row) => {
+			const currentLen = String(row?.[header] ?? "").length;
+			return Math.max(maxLen, currentLen);
+		}, String(header || "").length);
+		return { wch: Math.min(Math.max(maxCellLength + 2, 12), 48) };
+	});
+
 const PaidReportHotel = ({ collapsed = false }) => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
@@ -73,10 +93,28 @@ const PaidReportHotel = ({ collapsed = false }) => {
 	});
 	const [detailsVisible, setDetailsVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [isSmallViewport, setIsSmallViewport] = useState(() =>
+		typeof window !== "undefined" ? window.innerWidth <= 992 : false,
+	);
 
 	const isArabic = chosenLanguage === "Arabic";
 	const numberLocale = "en-US";
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const handleResize = () => setIsSmallViewport(window.innerWidth <= 992);
+		handleResize();
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
+
 	const modalOffsets = useMemo(() => {
+		if (isSmallViewport) {
+			return {
+				width: "96vw",
+				style: { top: 12 },
+			};
+		}
 		const sideMenuWidth = collapsed ? 90 : 295;
 		const gutter = 16;
 		const width = `calc(100vw - ${sideMenuWidth + gutter * 2}px)`;
@@ -85,17 +123,22 @@ const PaidReportHotel = ({ collapsed = false }) => {
 			width,
 			style: { top: "3%", left, position: "absolute" },
 		};
-	}, [collapsed, isArabic]);
+	}, [collapsed, isArabic, isSmallViewport]);
 	const labels = useMemo(
 		() => ({
 			searchPlaceholder: isArabic
 				? "ابحث برقم التأكيد أو الهاتف أو الاسم أو الفندق..."
 				: "Search by confirmation, phone, name, or hotel name...",
 			search: isArabic ? "بحث" : "Search",
+			exportExcel: isArabic ? "تصدير إكسل" : "Export Excel",
+			noDataToExport: isArabic
+				? "لا توجد بيانات متاحة للتصدير."
+				: "No data available to export.",
 			emptyData: isArabic
 				? "لا توجد سجلات لبيان الدفع."
 				: "No paid breakdown records found.",
 			name: isArabic ? "الاسم" : "Name",
+			hotel: isArabic ? "الفندق" : "Hotel",
 			confirmation: isArabic ? "رقم التأكيد" : "Confirmation #",
 			checkin: isArabic ? "تاريخ الوصول" : "Check-in",
 			checkout: isArabic ? "تاريخ المغادرة" : "Check-out",
@@ -119,6 +162,7 @@ const PaidReportHotel = ({ collapsed = false }) => {
 				paid_online_via_instapay: isArabic
 					? "مدفوع أونلاين (إنستاباي)"
 					: "Paid Online (InstaPay)",
+				paid_no_show: isArabic ? "مدفوع عدم حضور" : "Paid No Show",
 			},
 			paidBreakdown: isArabic ? "تفاصيل الدفع" : "Paid Breakdown",
 			breakdownTotalsTitle: isArabic
@@ -270,6 +314,97 @@ const PaidReportHotel = ({ collapsed = false }) => {
 		return tableTotals.breakdownTotals;
 	}, [scorecards.breakdownTotals, tableTotals]);
 
+	const handleExportExcel = useCallback(() => {
+		if (!rows.length) {
+			message.info(labels.noDataToExport);
+			return;
+		}
+
+		const headers = [
+			labels.name,
+			labels.confirmation,
+			labels.hotel,
+			labels.checkin,
+			labels.checkout,
+			...breakdownKeys.map((key) => labels.breakdown[key] || key),
+			labels.paidBreakdown,
+			labels.totalPaid,
+			labels.totalAmount,
+			labels.remaining,
+		];
+
+		const exportRows = rows.map((reservation) => {
+			const row = {
+				[labels.name]: reservation?.customer_details?.name || "",
+				[labels.confirmation]: reservation?.confirmation_number || "",
+				[labels.hotel]: reservation?.hotelId?.hotelName || "",
+				[labels.checkin]: formatDate(
+					reservation?.checkin_date,
+					numberLocale,
+					"",
+				),
+				[labels.checkout]: formatDate(
+					reservation?.checkout_date,
+					numberLocale,
+					"",
+				),
+				[labels.paidBreakdown]:
+					reservation?.paid_amount_breakdown?.payment_comments || "",
+				[labels.totalPaid]: safeNumber(reservation?.paidTotal),
+				[labels.totalAmount]: safeNumber(reservation?.totalAmount),
+				[labels.remaining]: safeNumber(reservation?.remainingAmount),
+			};
+
+			breakdownKeys.forEach((key) => {
+				row[labels.breakdown[key] || key] = safeNumber(
+					reservation?.paid_amount_breakdown?.[key],
+				);
+			});
+
+			return row;
+		});
+
+		const totalsRow = {
+			[labels.name]: labels.totalRow,
+			[labels.confirmation]: "",
+			[labels.hotel]: "",
+			[labels.checkin]: "",
+			[labels.checkout]: "",
+			[labels.paidBreakdown]: "",
+			[labels.totalPaid]: safeNumber(tableTotals.totalPaid),
+			[labels.totalAmount]: safeNumber(tableTotals.totalAmount),
+			[labels.remaining]: safeNumber(tableTotals.remainingAmount),
+		};
+
+		breakdownKeys.forEach((key) => {
+			totalsRow[labels.breakdown[key] || key] = safeNumber(
+				tableTotals.breakdownTotals?.[key],
+			);
+		});
+
+		const rowsWithTotals = [...exportRows, totalsRow];
+		const worksheet = XLSX.utils.json_to_sheet(rowsWithTotals, {
+			header: headers,
+		});
+		worksheet["!cols"] = buildWorksheetCols(rowsWithTotals, headers);
+		worksheet["!autofilter"] = {
+			ref: XLSX.utils.encode_range({
+				s: { r: 0, c: 0 },
+				e: { r: rowsWithTotals.length, c: headers.length - 1 },
+			}),
+		};
+
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, worksheet, "Paid Breakdown");
+
+		const hotelName =
+			rows?.[0]?.hotelId?.hotelName || selectedReservation?.hotelId?.hotelName || "";
+		const hotelSegment = sanitizeFileSegment(hotelName || hotelId, "hotel");
+		const fileDate = new Date().toISOString().slice(0, 10);
+		const fileName = `paid-breakdown-hotel-${hotelSegment}-${fileDate}.xlsx`;
+		XLSX.writeFile(workbook, fileName);
+	}, [rows, labels, numberLocale, tableTotals, selectedReservation, hotelId]);
+
 	const updateQueryParams = useCallback(
 		(updates) => {
 			const params = new URLSearchParams(location.search);
@@ -336,13 +471,20 @@ const PaidReportHotel = ({ collapsed = false }) => {
 			<SearchRow>
 				<Input
 					placeholder={labels.searchPlaceholder}
-					style={{ width: 500 }}
+					style={{ width: "100%", maxWidth: 500 }}
 					value={searchBoxValue}
 					onChange={(e) => setSearchBoxValue(e.target.value)}
 					onKeyDown={handleSearchKey}
 				/>
 				<Button type='primary' onClick={handleSearch}>
 					{labels.search}
+				</Button>
+				<Button
+					onClick={handleExportExcel}
+					disabled={loading || rows.length === 0}
+					className='report-export-btn'
+				>
+					{labels.exportExcel}
 				</Button>
 			</SearchRow>
 
@@ -539,14 +681,34 @@ const SearchRow = styled.div`
 	flex-wrap: wrap;
 	margin-bottom: 16px;
 	gap: 8px;
+	min-width: 280px;
+
+	input {
+		flex: 1;
+	}
+
+	@media (max-width: 992px) {
+		min-width: 100%;
+		width: 100%;
+
+		button {
+			width: 100%;
+		}
+	}
 `;
 
 const TableWrapper = styled.div`
 	width: 100%;
 	max-height: 680px;
 	overflow: auto;
+	-webkit-overflow-scrolling: touch;
 	max-width: 100%;
 	border: 1px solid #f0f0f0;
+
+	@media (max-width: 992px) {
+		max-height: none;
+		border-radius: 10px;
+	}
 `;
 
 const StyledTable = styled.table`
@@ -573,6 +735,33 @@ const StyledTable = styled.table`
 	tfoot tr {
 		background-color: #f5f5f5;
 		font-weight: 600;
+	}
+
+	@media (max-width: 992px) {
+		min-width: 980px;
+
+		th,
+		td {
+			font-size: 11px;
+			padding: 6px;
+		}
+
+		th:first-child,
+		td:first-child {
+			position: sticky;
+			left: 0;
+			background: #fff;
+			z-index: 2;
+		}
+
+		thead th:first-child {
+			background: #fafafa;
+			z-index: 3;
+		}
+
+		tfoot td:first-child {
+			background: #f5f5f5;
+		}
 	}
 `;
 
@@ -623,6 +812,15 @@ const Scorecard = styled.div`
 		font-size: 1.1rem;
 		color: #1a202c;
 	}
+
+	@media (max-width: 768px) {
+		min-width: calc(50% - 6px);
+		padding: 10px 12px;
+	}
+
+	@media (max-width: 520px) {
+		min-width: 100%;
+	}
 `;
 
 const BreakdownTotals = styled.div`
@@ -639,6 +837,10 @@ const BreakdownTotalsGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 	gap: 12px;
+
+	@media (max-width: 768px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const BreakdownTotalsItem = styled.div`
@@ -660,3 +862,4 @@ const BreakdownTotalsItem = styled.div`
 		color: #1a202c;
 	}
 `;
+

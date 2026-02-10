@@ -23,7 +23,9 @@ import {
 	getHotelOccupancyDayReservations,
 	getHotelOccupancyWarnings,
 	getBookingSourcePaymentSummary,
+	getCheckoutDatePaymentSummary,
 	gettingHotelDetailsForAdmin,
+	distinctBookingSources as getDistinctBookingSources,
 } from "../apiAdmin";
 import WarningsModal from "./WarningsModal";
 
@@ -85,6 +87,8 @@ const PAYMENT_STATUS_OPTIONS = [
 	"Captured",
 	"Paid Offline",
 ];
+
+const EMPTY_LIST = [];
 
 const shortLabel = (label = "") => {
 	const words = String(label || "")
@@ -247,10 +251,14 @@ const HotelsInventoryMap = () => {
 
 	const [includeCancelled, setIncludeCancelled] = useState(false);
 	const [paymentStatuses, setPaymentStatuses] = useState([]);
+	const [bookingSources, setBookingSources] = useState([]);
+	const [allBookingSources, setAllBookingSources] = useState([]);
 	const [displayMode, setDisplayMode] = useState("displayName");
 
 	const [data, setData] = useState(null);
 	const [bookingSourceSummary, setBookingSourceSummary] = useState(null);
+	const [checkinDateSummary, setCheckinDateSummary] = useState(null);
+	const [checkoutDateSummary, setCheckoutDateSummary] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
@@ -346,37 +354,93 @@ const HotelsInventoryMap = () => {
 		Number(summary.totalRoomsAll) || Number(summary.totalRooms) || 0;
 	const totalPhysicalRooms = Number(summary.totalPhysicalRooms) || 0;
 
-	const totalAmount = Number(summary.totalAmount) || 0;
 	const paymentBreakdown = Array.isArray(summary.paymentBreakdown)
 		? summary.paymentBreakdown
 		: [];
 	const bookingSourceMatrix = bookingSourceSummary || {};
+	const checkinDateMatrix = checkinDateSummary || {};
+	const checkoutDateMatrix = checkoutDateSummary || {};
 	const bookingSourceStatusesRaw = Array.isArray(bookingSourceMatrix.statuses)
 		? bookingSourceMatrix.statuses
 		: [];
-	const bookingSourceStatusOrder = [
+	const checkinDateStatusesRaw = Array.isArray(checkinDateMatrix.statuses)
+		? checkinDateMatrix.statuses
+		: [];
+	const checkoutDateStatusesRaw = Array.isArray(checkoutDateMatrix.statuses)
+		? checkoutDateMatrix.statuses
+		: [];
+	const paymentStatusOrder = [
 		"Captured",
 		"Paid Offline",
 		"Not Captured",
 		"Not Paid",
 	];
-	const bookingSourceStatuses = bookingSourceStatusesRaw.length
-		? [
-				...bookingSourceStatusOrder.filter((status) =>
-					bookingSourceStatusesRaw.includes(status),
-				),
-				...bookingSourceStatusesRaw.filter(
-					(status) => !bookingSourceStatusOrder.includes(status),
-				),
-		  ]
-		: bookingSourceStatusOrder;
+	const paymentStatusHeaders =
+		bookingSourceStatusesRaw.length ||
+		checkinDateStatusesRaw.length ||
+		checkoutDateStatusesRaw.length
+			? [
+					...paymentStatusOrder.filter(
+						(status) =>
+							bookingSourceStatusesRaw.includes(status) ||
+							checkinDateStatusesRaw.includes(status) ||
+							checkoutDateStatusesRaw.includes(status),
+					),
+					...Array.from(
+						new Set([
+							...bookingSourceStatusesRaw,
+							...checkinDateStatusesRaw,
+							...checkoutDateStatusesRaw,
+						]),
+					).filter((status) => !paymentStatusOrder.includes(status)),
+			  ]
+			: paymentStatusOrder;
 	const bookingSourceRows = Array.isArray(bookingSourceMatrix.rows)
 		? bookingSourceMatrix.rows
-		: [];
+		: EMPTY_LIST;
+	const bookingSourceOptions = useMemo(() => {
+		const merged = new Set();
+		(allBookingSources || []).forEach((source) => {
+			const cleaned = String(source || "").trim();
+			if (cleaned) merged.add(cleaned);
+		});
+		bookingSourceRows.forEach((row) => {
+			const cleaned = String(row?.booking_source || "").trim();
+			if (cleaned) merged.add(cleaned);
+		});
+		(bookingSources || []).forEach((source) => {
+			const cleaned = String(source || "").trim();
+			if (cleaned) merged.add(cleaned);
+		});
+		return Array.from(merged).sort((a, b) =>
+			a.localeCompare(b, undefined, { sensitivity: "base" }),
+		);
+	}, [allBookingSources, bookingSourceRows, bookingSources]);
 	const bookingSourceColumnTotals = bookingSourceMatrix.columnTotals || {};
 	const bookingSourceOverallTotal = Number(
 		bookingSourceMatrix.overallTotal || 0,
 	);
+	const checkinDateRows = Array.isArray(checkinDateMatrix.rows)
+		? checkinDateMatrix.rows
+		: EMPTY_LIST;
+	const checkinDateColumnTotals = checkinDateMatrix.columnTotals || {};
+	const checkinDateOverallTotal = Number(checkinDateMatrix.overallTotal || 0);
+	const checkinDateOverallReservations = Number(
+		checkinDateMatrix.overallReservationsCount || 0,
+	);
+	const checkoutDateRows = Array.isArray(checkoutDateMatrix.rows)
+		? checkoutDateMatrix.rows
+		: EMPTY_LIST;
+	const checkoutDateColumnTotals = checkoutDateMatrix.columnTotals || {};
+	const checkoutDateOverallTotal = Number(checkoutDateMatrix.overallTotal || 0);
+	const checkoutDateOverallReservations = Number(
+		checkoutDateMatrix.overallReservationsCount || 0,
+	);
+	const checkoutGrossAmount = checkoutDateOverallTotal;
+	const checkoutReservationsCount = checkoutDateOverallReservations;
+	const checkinReservationsCount =
+		Number(summary.checkinReservationsCount) || 0;
+	const checkinGrossAmount = Number(summary.checkinGrossTotal) || 0;
 
 	const monthLabel = useMemo(() => {
 		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
@@ -471,6 +535,19 @@ const HotelsInventoryMap = () => {
 		loadHotels();
 	}, [loadHotels]);
 
+	const loadBookingSources = useCallback(() => {
+		if (!user?._id || !token) return;
+		getDistinctBookingSources(user._id, token)
+			.then((sources) =>
+				setAllBookingSources(Array.isArray(sources) ? sources : []),
+			)
+			.catch(() => setAllBookingSources([]));
+	}, [token, user?._id]);
+
+	useEffect(() => {
+		loadBookingSources();
+	}, [loadBookingSources]);
+
 	// ------------------ Fetch occupancy ------------------
 	const fetchOccupancy = useCallback(async () => {
 		if (!user?._id || !token || !selectedHotelId) return;
@@ -479,7 +556,12 @@ const HotelsInventoryMap = () => {
 		setError("");
 
 		try {
-			const [occupancyResult, bookingSourceResult] = await Promise.allSettled([
+			const [
+				occupancyResult,
+				bookingSourceResult,
+				checkoutDateResult,
+				checkinDateResult,
+			] = await Promise.allSettled([
 				getHotelOccupancyCalendar(user._id, token, {
 					hotelId: selectedHotelId,
 					month: rangeOverride ? null : monthValue.format("YYYY-MM"),
@@ -488,6 +570,7 @@ const HotelsInventoryMap = () => {
 					includeCancelled,
 					display: displayMode,
 					paymentStatuses,
+					bookingSources,
 				}),
 				getBookingSourcePaymentSummary(user._id, token, {
 					hotelId: selectedHotelId,
@@ -496,6 +579,28 @@ const HotelsInventoryMap = () => {
 					end: rangeOverride?.end || null,
 					includeCancelled,
 					paymentStatuses,
+					dateBasis: "checkout",
+					bookingSources,
+				}),
+				getCheckoutDatePaymentSummary(user._id, token, {
+					hotelId: selectedHotelId,
+					month: rangeOverride ? null : monthValue.format("YYYY-MM"),
+					start: rangeOverride?.start || null,
+					end: rangeOverride?.end || null,
+					includeCancelled,
+					paymentStatuses,
+					bookingSources,
+					dateBasis: "checkout",
+				}),
+				getCheckoutDatePaymentSummary(user._id, token, {
+					hotelId: selectedHotelId,
+					month: rangeOverride ? null : monthValue.format("YYYY-MM"),
+					start: rangeOverride?.start || null,
+					end: rangeOverride?.end || null,
+					includeCancelled,
+					paymentStatuses,
+					bookingSources,
+					dateBasis: "checkin",
 				}),
 			]);
 
@@ -513,15 +618,32 @@ const HotelsInventoryMap = () => {
 			} else {
 				setBookingSourceSummary(null);
 			}
+			if (checkoutDateResult.status === "fulfilled") {
+				setCheckoutDateSummary(
+					checkoutDateResult.value?.data || checkoutDateResult.value || null,
+				);
+			} else {
+				setCheckoutDateSummary(null);
+			}
+			if (checkinDateResult.status === "fulfilled") {
+				setCheckinDateSummary(
+					checkinDateResult.value?.data || checkinDateResult.value || null,
+				);
+			} else {
+				setCheckinDateSummary(null);
+			}
 		} catch (err) {
 			setError(err?.message || "Failed to load occupancy");
 			setData(null);
 			setBookingSourceSummary(null);
+			setCheckoutDateSummary(null);
+			setCheckinDateSummary(null);
 		} finally {
 			setLoading(false);
 		}
 	}, [
 		displayMode,
+		bookingSources,
 		includeCancelled,
 		monthValue,
 		rangeOverride,
@@ -574,6 +696,7 @@ const HotelsInventoryMap = () => {
 				includeCancelled,
 				display: displayMode,
 				paymentStatuses,
+				bookingSources,
 			});
 			setWarningsData(payload?.warnings || []);
 		} catch {
@@ -583,6 +706,7 @@ const HotelsInventoryMap = () => {
 		}
 	}, [
 		displayMode,
+		bookingSources,
 		includeCancelled,
 		monthValue,
 		rangeOverride,
@@ -617,6 +741,7 @@ const HotelsInventoryMap = () => {
 						includeCancelled,
 						display: displayMode,
 						paymentStatuses,
+						bookingSources,
 					},
 				);
 				setDayDetails(payload);
@@ -631,6 +756,7 @@ const HotelsInventoryMap = () => {
 		},
 		[
 			displayMode,
+			bookingSources,
 			includeCancelled,
 			paymentStatuses,
 			selectedHotelId,
@@ -691,6 +817,7 @@ const HotelsInventoryMap = () => {
 	};
 
 	const paymentAllActive = paymentStatuses.length === 0;
+	const bookingSourceAllActive = bookingSources.length === 0;
 
 	return (
 		<Wrapper>
@@ -832,36 +959,80 @@ const HotelsInventoryMap = () => {
 
 			{/* Payment filter row */}
 			<PaymentStatusBar>
-				<div className='label'>Payment status</div>
+				<div className='filters-row'>
+					<div className='filter-panel'>
+						<div className='label'>Payment status</div>
+						<div className='buttons'>
+							<StatusButton
+								size='small'
+								onClick={() => setPaymentStatuses([])}
+								isActive={paymentAllActive}
+							>
+								All
+							</StatusButton>
 
-				<div className='buttons'>
-					<StatusButton
-						size='small'
-						onClick={() => setPaymentStatuses([])}
-						isActive={paymentAllActive}
-					>
-						All
-					</StatusButton>
+							{PAYMENT_STATUS_OPTIONS.map((status) => (
+								<StatusButton
+									key={status}
+									size='small'
+									onClick={() => togglePaymentStatus(status)}
+									isActive={paymentStatuses.includes(status)}
+								>
+									{status}
+								</StatusButton>
+							))}
 
-					{PAYMENT_STATUS_OPTIONS.map((status) => (
-						<StatusButton
-							key={status}
-							size='small'
-							onClick={() => togglePaymentStatus(status)}
-							isActive={paymentStatuses.includes(status)}
-						>
-							{status}
-						</StatusButton>
-					))}
+							{!paymentAllActive && (
+								<Button size='small' onClick={() => setPaymentStatuses([])}>
+									Clear
+								</Button>
+							)}
+						</div>
+					</div>
 
-					{!paymentAllActive && (
-						<Button size='small' onClick={() => setPaymentStatuses([])}>
-							Clear
-						</Button>
-					)}
+					<div className='filter-panel'>
+						<div className='label'>Booking source</div>
+						<div className='source-controls'>
+							<Select
+								mode='multiple'
+								allowClear
+								placeholder='All booking sources'
+								value={bookingSources}
+								onChange={(values) =>
+									setBookingSources(
+										Array.isArray(values)
+											? values.filter((v) => String(v || "").trim())
+											: [],
+									)
+								}
+								style={{ width: "100%" }}
+								maxTagCount='responsive'
+								optionFilterProp='children'
+								filterOption={(input, option) =>
+									String(option?.children || "")
+										.toLowerCase()
+										.includes(String(input || "").toLowerCase())
+								}
+							>
+								{bookingSourceOptions.map((source) => (
+									<Option key={source} value={source}>
+										{source}
+									</Option>
+								))}
+							</Select>
+
+							{!bookingSourceAllActive && (
+								<Button size='small' onClick={() => setBookingSources([])}>
+									Clear
+								</Button>
+							)}
+						</div>
+					</div>
 				</div>
 
-				<div className='hint muted'>Tip: you can select multiple statuses.</div>
+				<div className='hint muted'>
+					Tip: you can select multiple statuses and booking sources.
+				</div>
 			</PaymentStatusBar>
 
 			{error && (
@@ -884,6 +1055,30 @@ const HotelsInventoryMap = () => {
 				/>
 			) : (
 				<>
+					<FinancialSummaryRow>
+						<Card size='small' title='Total Amount (SAR)'>
+							<div className='metric'>
+								<span>Gross (checkout-date basis)</span>
+								<b>{formatCurrency(checkoutGrossAmount)}</b>
+							</div>
+							<div className='metric muted'>
+								<span>Reservations checked out</span>
+								<b>{formatInt(checkoutReservationsCount)}</b>
+							</div>
+						</Card>
+
+						<Card size='small' title='Check-in Reservations (Selected Period)'>
+							<div className='metric'>
+								<span>Total check-ins</span>
+								<b>{formatInt(checkinReservationsCount)}</b>
+							</div>
+							<div className='metric muted'>
+								<span>Check-in gross (SAR)</span>
+								<b>{formatCurrency(checkinGrossAmount)}</b>
+							</div>
+						</Card>
+					</FinancialSummaryRow>
+
 					<SummaryGrid>
 						<Card size='small' title='Average Occupancy (capped)'>
 							<Progress
@@ -952,13 +1147,6 @@ const HotelsInventoryMap = () => {
 									</div>
 								</>
 							)}
-						</Card>
-
-						<Card size='small' title='Total Amount (SAR)'>
-							<div className='metric'>
-								<span>Gross</span>
-								<b>{formatCurrency(totalAmount)}</b>
-							</div>
 						</Card>
 
 						<Card size='small' title='Peak Day'>
@@ -1366,12 +1554,14 @@ const HotelsInventoryMap = () => {
 					<Card size='small' title='Payment status breakdown'>
 						<BreakdownTablesRow>
 							<BreakdownTable>
-								<div className='table-title'>Booking source totals (SAR)</div>
+								<div className='table-title'>
+									Booking source totals by checkout date (SAR)
+								</div>
 								<table>
 									<thead>
 										<tr>
 											<th>Booking source</th>
-											{bookingSourceStatuses.map((status) => (
+											{paymentStatusHeaders.map((status) => (
 												<th key={status}>{status}</th>
 											))}
 											<th>Total (SAR)</th>
@@ -1382,7 +1572,7 @@ const HotelsInventoryMap = () => {
 											bookingSourceRows.map((row) => (
 												<tr key={row.booking_source || "Unknown"}>
 													<td>{row.booking_source || "Unknown"}</td>
-													{bookingSourceStatuses.map((status) => (
+													{paymentStatusHeaders.map((status) => (
 														<td key={`${row.booking_source}-${status}`}>
 															{formatCurrency(
 																row?.totalsByStatus?.[status] || 0,
@@ -1395,7 +1585,7 @@ const HotelsInventoryMap = () => {
 										) : (
 											<tr>
 												<td
-													colSpan={bookingSourceStatuses.length + 2}
+													colSpan={paymentStatusHeaders.length + 2}
 													className='empty'
 												>
 													No booking source data in this range
@@ -1407,7 +1597,7 @@ const HotelsInventoryMap = () => {
 										<tfoot>
 											<tr className='totals'>
 												<td>Total</td>
-												{bookingSourceStatuses.map((status) => (
+												{paymentStatusHeaders.map((status) => (
 													<td key={`total-${status}`}>
 														{formatCurrency(
 															bookingSourceColumnTotals?.[status] || 0,
@@ -1452,6 +1642,158 @@ const HotelsInventoryMap = () => {
 											</tr>
 										)}
 									</tbody>
+								</table>
+							</BreakdownTable>
+						</BreakdownTablesRow>
+
+						<BreakdownTablesRow style={{ marginTop: 12 }}>
+							<BreakdownTable>
+								<div className='table-title'>
+									Checkin date totals by payment status (SAR)
+								</div>
+								<table>
+									<thead>
+										<tr>
+											<th>Checkin date</th>
+											<th>Reservations</th>
+											{paymentStatusHeaders.map((status) => (
+												<th key={`checkin-date-${status}`}>{status}</th>
+											))}
+											<th>Total (SAR)</th>
+										</tr>
+									</thead>
+									<tbody>
+										{checkinDateRows.length ? (
+											checkinDateRows.map((row) => {
+												const dateKey = row?.checkin_date || row?.date || "";
+												return (
+													<tr key={`checkin-${dateKey || "unknown-date"}`}>
+														<td className='date-cell'>
+															{hijriAvailable && dateKey ? (
+																<div className='hijri-date'>
+																	{moment(dateKey)
+																		.locale("en")
+																		.format("iD iMMMM iYYYY")}
+																</div>
+															) : null}
+															<div className='greg-date'>
+																{dateKey || "n/a"}
+															</div>
+														</td>
+														<td>{formatInt(row?.reservationsCount || 0)}</td>
+														{paymentStatusHeaders.map((status) => (
+															<td key={`checkin-${dateKey}-${status}`}>
+																{formatCurrency(
+																	row?.totalsByStatus?.[status] || 0,
+																)}
+															</td>
+														))}
+														<td>{formatCurrency(row?.rowTotal || 0)}</td>
+													</tr>
+												);
+											})
+										) : (
+											<tr>
+												<td
+													colSpan={paymentStatusHeaders.length + 3}
+													className='empty'
+												>
+													No checkin-date payment data in this range
+												</td>
+											</tr>
+										)}
+									</tbody>
+									{checkinDateRows.length ? (
+										<tfoot>
+											<tr className='totals'>
+												<td>Total</td>
+												<td>{formatInt(checkinDateOverallReservations)}</td>
+												{paymentStatusHeaders.map((status) => (
+													<td key={`checkin-date-total-${status}`}>
+														{formatCurrency(
+															checkinDateColumnTotals?.[status] || 0,
+														)}
+													</td>
+												))}
+												<td>{formatCurrency(checkinDateOverallTotal)}</td>
+											</tr>
+										</tfoot>
+									) : null}
+								</table>
+							</BreakdownTable>
+
+							<BreakdownTable>
+								<div className='table-title'>
+									Checkout date totals by payment status (SAR)
+								</div>
+								<table>
+									<thead>
+										<tr>
+											<th>Checkout date</th>
+											<th>Reservations</th>
+											{paymentStatusHeaders.map((status) => (
+												<th key={`date-${status}`}>{status}</th>
+											))}
+											<th>Total (SAR)</th>
+										</tr>
+									</thead>
+									<tbody>
+										{checkoutDateRows.length ? (
+											checkoutDateRows.map((row) => {
+												const dateKey = row?.checkout_date || row?.date || "";
+												return (
+													<tr key={`checkout-${dateKey || "unknown-date"}`}>
+														<td className='date-cell'>
+															{hijriAvailable && dateKey ? (
+																<div className='hijri-date'>
+																	{moment(dateKey)
+																		.locale("en")
+																		.format("iD iMMMM iYYYY")}
+																</div>
+															) : null}
+															<div className='greg-date'>
+																{dateKey || "n/a"}
+															</div>
+														</td>
+														<td>{formatInt(row?.reservationsCount || 0)}</td>
+														{paymentStatusHeaders.map((status) => (
+															<td key={`checkout-${dateKey}-${status}`}>
+																{formatCurrency(
+																	row?.totalsByStatus?.[status] || 0,
+																)}
+															</td>
+														))}
+														<td>{formatCurrency(row?.rowTotal || 0)}</td>
+													</tr>
+												);
+											})
+										) : (
+											<tr>
+												<td
+													colSpan={paymentStatusHeaders.length + 3}
+													className='empty'
+												>
+													No checkout-date payment data in this range
+												</td>
+											</tr>
+										)}
+									</tbody>
+									{checkoutDateRows.length ? (
+										<tfoot>
+											<tr className='totals'>
+												<td>Total</td>
+												<td>{formatInt(checkoutDateOverallReservations)}</td>
+												{paymentStatusHeaders.map((status) => (
+													<td key={`checkout-date-total-${status}`}>
+														{formatCurrency(
+															checkoutDateColumnTotals?.[status] || 0,
+														)}
+													</td>
+												))}
+												<td>{formatCurrency(checkoutDateOverallTotal)}</td>
+											</tr>
+										</tfoot>
+									) : null}
 								</table>
 							</BreakdownTable>
 						</BreakdownTablesRow>
@@ -1772,6 +2114,20 @@ const PaymentStatusBar = styled.div`
 	flex-direction: column;
 	gap: 8px;
 
+	.filters-row {
+		display: grid;
+		grid-template-columns: minmax(300px, 1.15fr) minmax(260px, 1fr);
+		gap: 12px;
+		align-items: start;
+	}
+
+	.filter-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-width: 0;
+	}
+
 	.label {
 		font-weight: 600;
 		color: #333;
@@ -1784,8 +2140,31 @@ const PaymentStatusBar = styled.div`
 		align-items: center;
 	}
 
+	.source-controls {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.source-controls .ant-select {
+		flex: 1;
+		min-width: 220px;
+	}
+
 	.hint {
 		margin-top: 2px;
+	}
+
+	@media (max-width: 992px) {
+		.filters-row {
+			grid-template-columns: 1fr;
+		}
+
+		.source-controls {
+			flex-direction: column;
+			align-items: stretch;
+		}
 	}
 `;
 
@@ -1809,6 +2188,16 @@ const SummaryGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 	gap: 10px;
+`;
+
+const FinancialSummaryRow = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(280px, 1fr));
+	gap: 12px;
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const TitleWithFlag = styled.div`
@@ -2068,6 +2457,13 @@ const BreakdownTable = styled.div`
 	max-width: 100%;
 	flex: 1 1 420px;
 
+	&.full-width {
+		display: block;
+		min-width: 100%;
+		width: 100%;
+		flex: 1 1 100%;
+	}
+
 	.table-title {
 		font-weight: 600;
 		margin-bottom: 6px;
@@ -2091,6 +2487,21 @@ const BreakdownTable = styled.div`
 		font-weight: 600;
 	}
 
+	.date-cell {
+		min-width: 170px;
+		white-space: normal;
+	}
+
+	.hijri-date {
+		font-weight: 700;
+		color: #234f45;
+	}
+
+	.greg-date {
+		color: #666;
+		margin-top: 2px;
+	}
+
 	tfoot td,
 	.totals td {
 		font-weight: 700;
@@ -2100,6 +2511,11 @@ const BreakdownTable = styled.div`
 	.empty {
 		text-align: center;
 		color: #777;
+	}
+
+	@media (max-width: 768px) {
+		min-width: 100%;
+		flex: 1 1 100%;
 	}
 `;
 

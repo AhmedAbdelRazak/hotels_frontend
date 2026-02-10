@@ -1282,6 +1282,8 @@ export const getBookingSourcePaymentSummary = (
 		includeCancelled,
 		excludeCancelled,
 		paymentStatuses,
+		dateBasis,
+		bookingSources,
 	} = {},
 ) => {
 	const params = new URLSearchParams();
@@ -1297,6 +1299,10 @@ export const getBookingSourcePaymentSummary = (
 	if (excludeCancelled) params.set("excludeCancelled", "true");
 	if (paymentStatuses?.length) {
 		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+	if (dateBasis) params.set("dateBasis", dateBasis);
+	if (bookingSources?.length) {
+		params.set("bookingSources", bookingSources.join(","));
 	}
 
 	const query = params.toString();
@@ -1320,6 +1326,69 @@ export const getBookingSourcePaymentSummary = (
 		})
 		.catch((err) => {
 			console.error("Error fetching booking source summary data:", err);
+			return { success: false, data: null };
+	});
+};
+
+/* ========================================================================
+	 8.1) Checkout Date x Payment Status summary
+	 ======================================================================== */
+export const getCheckoutDatePaymentSummary = (
+	userId,
+	token,
+	{
+		selectedHotels = [],
+		hotelId,
+		start,
+		end,
+		month,
+		includeCancelled,
+		excludeCancelled,
+		paymentStatuses,
+		bookingSources,
+		dateBasis,
+	} = {},
+) => {
+	const params = new URLSearchParams();
+
+	if (hotelId) params.set("hotelId", hotelId);
+	if (!hotelId && selectedHotels?.length && !selectedHotels.includes("all")) {
+		params.set("hotels", selectedHotels.join(","));
+	}
+	if (month) params.set("month", month);
+	if (start) params.set("start", start);
+	if (end) params.set("end", end);
+	if (includeCancelled) params.set("includeCancelled", "true");
+	if (excludeCancelled) params.set("excludeCancelled", "true");
+	if (paymentStatuses?.length) {
+		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+	if (bookingSources?.length) {
+		params.set("bookingSources", bookingSources.join(","));
+	}
+	if (dateBasis) params.set("dateBasis", dateBasis);
+
+	const query = params.toString();
+	const suffix = query ? `?${query}` : "";
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/checkout-date-payment-summary/${userId}${suffix}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching checkout date summary data:", err);
 			return { success: false, data: null };
 		});
 };
@@ -1418,6 +1487,7 @@ export const getHotelOccupancyCalendar = (
 		end,
 		display = "roomType",
 		paymentStatuses,
+		bookingSources,
 	} = {},
 ) => {
 	if (!hotelId) {
@@ -1432,6 +1502,9 @@ export const getHotelOccupancyCalendar = (
 	if (display) params.set("display", display);
 	if (paymentStatuses?.length) {
 		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+	if (bookingSources?.length) {
+		params.set("bookingSources", bookingSources.join(","));
 	}
 
 	return fetch(
@@ -1469,6 +1542,7 @@ export const getHotelOccupancyWarnings = (
 		end,
 		display = "roomType",
 		paymentStatuses,
+		bookingSources,
 	} = {},
 ) => {
 	if (!hotelId) {
@@ -1485,6 +1559,9 @@ export const getHotelOccupancyWarnings = (
 	if (display) params.set("display", display);
 	if (paymentStatuses?.length) {
 		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+	if (bookingSources?.length) {
+		params.set("bookingSources", bookingSources.join(","));
 	}
 
 	return fetch(
@@ -1522,6 +1599,7 @@ export const getHotelOccupancyDayReservations = (
 		includeCancelled = false,
 		display = "roomType",
 		paymentStatuses,
+		bookingSources,
 	} = {},
 ) => {
 	if (!hotelId) {
@@ -1540,6 +1618,9 @@ export const getHotelOccupancyDayReservations = (
 	if (display) params.set("display", display);
 	if (paymentStatuses?.length) {
 		params.set("paymentStatuses", paymentStatuses.join(","));
+	}
+	if (bookingSources?.length) {
+		params.set("bookingSources", bookingSources.join(","));
 	}
 
 	return fetch(

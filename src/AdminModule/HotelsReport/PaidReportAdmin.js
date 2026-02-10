@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { Button, Input, Modal, Select, Spin, message } from "antd";
+import * as XLSX from "xlsx";
 import { isAuthenticated } from "../../auth";
 import { useCartContext } from "../../cart_context";
 import {
@@ -19,6 +20,7 @@ const breakdownKeys = [
 	"paid_online_jannatbooking",
 	"paid_online_other_platforms",
 	"paid_online_via_instapay",
+	"paid_no_show",
 ];
 
 const safeNumber = (value) => {
@@ -52,6 +54,24 @@ const extractHotels = (payload) => {
 	return [];
 };
 
+const sanitizeFileSegment = (value, fallback = "report") => {
+	const cleaned = String(value || "")
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return cleaned || fallback;
+};
+
+const buildWorksheetCols = (rows, headers) =>
+	headers.map((header) => {
+		const maxCellLength = rows.reduce((maxLen, row) => {
+			const currentLen = String(row?.[header] ?? "").length;
+			return Math.max(maxLen, currentLen);
+		}, String(header || "").length);
+		return { wch: Math.min(Math.max(maxCellLength + 2, 12), 48) };
+	});
+
 const PaidReportAdmin = () => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
@@ -78,6 +98,10 @@ const PaidReportAdmin = () => {
 				? "ابحث برقم التأكيد أو الهاتف أو الاسم أو الفندق..."
 				: "Search by confirmation, phone, name, or hotel name...",
 			search: isArabic ? "بحث" : "Search",
+			exportExcel: isArabic ? "تصدير إكسل" : "Export Excel",
+			noDataToExport: isArabic
+				? "لا توجد بيانات متاحة للتصدير."
+				: "No data available to export.",
 			emptySelect: isArabic
 				? "يرجى اختيار فندق لعرض تقرير المدفوعات."
 				: "Select a hotel to view the paid breakdown report.",
@@ -85,6 +109,7 @@ const PaidReportAdmin = () => {
 				? "لا توجد سجلات لبيان الدفع."
 				: "No paid breakdown records found.",
 			name: isArabic ? "الاسم" : "Name",
+			hotel: isArabic ? "الفندق" : "Hotel",
 			confirmation: isArabic ? "رقم التأكيد" : "Confirmation #",
 			checkin: isArabic ? "تاريخ الوصول" : "Check-in",
 			checkout: isArabic ? "تاريخ المغادرة" : "Check-out",
@@ -108,6 +133,7 @@ const PaidReportAdmin = () => {
 				paid_online_via_instapay: isArabic
 					? "مدفوع أونلاين (إنستاباي)"
 					: "Paid Online (InstaPay)",
+				paid_no_show: isArabic ? "مدفوع عدم حضور" : "Paid No Show",
 			},
 			paidBreakdown: isArabic ? "تفاصيل الدفع" : "Paid Breakdown",
 			breakdownTotalsTitle: isArabic
@@ -277,6 +303,108 @@ const PaidReportAdmin = () => {
 		return tableTotals.breakdownTotals;
 	}, [scorecards.breakdownTotals, tableTotals]);
 
+	const selectedHotelName = useMemo(() => {
+		if (!selectedHotelId) return "";
+		const hotel = hotels.find((item) => String(item?._id) === String(selectedHotelId));
+		return hotel?.hotelName || "";
+	}, [hotels, selectedHotelId]);
+
+	const handleExportExcel = useCallback(() => {
+		if (!rows.length) {
+			message.info(labels.noDataToExport);
+			return;
+		}
+
+		const headers = [
+			labels.name,
+			labels.confirmation,
+			labels.hotel,
+			labels.checkin,
+			labels.checkout,
+			...breakdownKeys.map((key) => labels.breakdown[key] || key),
+			labels.paidBreakdown,
+			labels.totalPaid,
+			labels.totalAmount,
+			labels.remaining,
+		];
+
+		const exportRows = rows.map((reservation) => {
+			const row = {
+				[labels.name]: reservation?.customer_details?.name || "",
+				[labels.confirmation]: reservation?.confirmation_number || "",
+				[labels.hotel]:
+					reservation?.hotelId?.hotelName || selectedHotelName || "",
+				[labels.checkin]: formatDate(
+					reservation?.checkin_date,
+					numberLocale,
+					"",
+				),
+				[labels.checkout]: formatDate(
+					reservation?.checkout_date,
+					numberLocale,
+					"",
+				),
+				[labels.paidBreakdown]:
+					reservation?.paid_amount_breakdown?.payment_comments || "",
+				[labels.totalPaid]: safeNumber(reservation?.paidTotal),
+				[labels.totalAmount]: safeNumber(reservation?.totalAmount),
+				[labels.remaining]: safeNumber(reservation?.remainingAmount),
+			};
+
+			breakdownKeys.forEach((key) => {
+				row[labels.breakdown[key] || key] = safeNumber(
+					reservation?.paid_amount_breakdown?.[key],
+				);
+			});
+
+			return row;
+		});
+
+		const totalsRow = {
+			[labels.name]: labels.totalRow,
+			[labels.confirmation]: "",
+			[labels.hotel]: "",
+			[labels.checkin]: "",
+			[labels.checkout]: "",
+			[labels.paidBreakdown]: "",
+			[labels.totalPaid]: safeNumber(tableTotals.totalPaid),
+			[labels.totalAmount]: safeNumber(tableTotals.totalAmount),
+			[labels.remaining]: safeNumber(tableTotals.remainingAmount),
+		};
+
+		breakdownKeys.forEach((key) => {
+			totalsRow[labels.breakdown[key] || key] = safeNumber(
+				tableTotals.breakdownTotals?.[key],
+			);
+		});
+
+		const rowsWithTotals = [...exportRows, totalsRow];
+		const worksheet = XLSX.utils.json_to_sheet(rowsWithTotals, {
+			header: headers,
+		});
+		worksheet["!cols"] = buildWorksheetCols(rowsWithTotals, headers);
+		worksheet["!autofilter"] = {
+			ref: XLSX.utils.encode_range({
+				s: { r: 0, c: 0 },
+				e: { r: rowsWithTotals.length, c: headers.length - 1 },
+			}),
+		};
+
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, worksheet, "Paid Breakdown");
+
+		const fileDate = new Date().toISOString().slice(0, 10);
+		const hotelSegment = sanitizeFileSegment(selectedHotelName, "hotel");
+		const fileName = `paid-breakdown-admin-${hotelSegment}-${fileDate}.xlsx`;
+		XLSX.writeFile(workbook, fileName);
+	}, [
+		rows,
+		labels,
+		selectedHotelName,
+		numberLocale,
+		tableTotals,
+	]);
+
 	const handleOpenDetails = (reservation) => {
 		if (!reservation?.hotelId) {
 			message.error(labels.missingHotel);
@@ -309,7 +437,7 @@ const PaidReportAdmin = () => {
 		<Wrapper dir={isArabic ? "rtl" : "ltr"} isArabic={isArabic}>
 			<ControlsRow>
 				<Select
-					style={{ minWidth: 260 }}
+					style={{ minWidth: 220, width: "100%", maxWidth: 360 }}
 					placeholder={labels.selectHotel}
 					value={selectedHotelId || undefined}
 					onChange={(value) => setSelectedHotelId(value)}
@@ -324,7 +452,7 @@ const PaidReportAdmin = () => {
 				<SearchRow>
 					<Input
 						placeholder={labels.searchPlaceholder}
-						style={{ width: 500 }}
+						style={{ width: "100%", maxWidth: 500 }}
 						value={searchBoxValue}
 						onChange={(e) => setSearchBoxValue(e.target.value)}
 						onKeyDown={handleSearchKey}
@@ -332,6 +460,13 @@ const PaidReportAdmin = () => {
 					/>
 					<Button type='primary' onClick={handleSearch} disabled={!selectedHotelId}>
 						{labels.search}
+					</Button>
+					<Button
+						onClick={handleExportExcel}
+						disabled={!selectedHotelId || loading || rows.length === 0}
+						className='report-export-btn'
+					>
+						{labels.exportExcel}
 					</Button>
 				</SearchRow>
 			</ControlsRow>
@@ -514,6 +649,11 @@ const ControlsRow = styled.div`
 	gap: 16px;
 	align-items: center;
 	margin-bottom: 16px;
+
+	@media (max-width: 992px) {
+		align-items: stretch;
+		gap: 10px;
+	}
 `;
 
 const SearchRow = styled.div`
@@ -521,14 +661,35 @@ const SearchRow = styled.div`
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 8px;
+	flex: 1;
+	min-width: 280px;
+
+	input {
+		flex: 1;
+	}
+
+	@media (max-width: 992px) {
+		min-width: 100%;
+		width: 100%;
+
+		button {
+			width: 100%;
+		}
+	}
 `;
 
 const TableWrapper = styled.div`
 	width: 100%;
 	max-height: 680px;
 	overflow: auto;
+	-webkit-overflow-scrolling: touch;
 	max-width: 100%;
 	border: 1px solid #f0f0f0;
+
+	@media (max-width: 992px) {
+		max-height: none;
+		border-radius: 10px;
+	}
 `;
 
 const StyledTable = styled.table`
@@ -555,6 +716,33 @@ const StyledTable = styled.table`
 	tfoot tr {
 		background-color: #f5f5f5;
 		font-weight: 600;
+	}
+
+	@media (max-width: 992px) {
+		min-width: 980px;
+
+		th,
+		td {
+			font-size: 11px;
+			padding: 6px;
+		}
+
+		th:first-child,
+		td:first-child {
+			position: sticky;
+			left: 0;
+			background: #fff;
+			z-index: 2;
+		}
+
+		thead th:first-child {
+			background: #fafafa;
+			z-index: 3;
+		}
+
+		tfoot td:first-child {
+			background: #f5f5f5;
+		}
 	}
 `;
 
@@ -605,6 +793,15 @@ const Scorecard = styled.div`
 		font-size: 1.1rem;
 		color: #1a202c;
 	}
+
+	@media (max-width: 768px) {
+		min-width: calc(50% - 6px);
+		padding: 10px 12px;
+	}
+
+	@media (max-width: 520px) {
+		min-width: 100%;
+	}
 `;
 
 const BreakdownTotals = styled.div`
@@ -621,6 +818,10 @@ const BreakdownTotalsGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 	gap: 12px;
+
+	@media (max-width: 768px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const BreakdownTotalsItem = styled.div`
@@ -642,3 +843,4 @@ const BreakdownTotalsItem = styled.div`
 		color: #1a202c;
 	}
 `;
+

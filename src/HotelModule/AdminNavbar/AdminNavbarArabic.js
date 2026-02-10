@@ -1,5 +1,5 @@
 // eslint-disable-next-line
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { Redirect, Link } from "react-router-dom";
 import {
@@ -41,6 +41,12 @@ const handleSignout = (history) => {
 };
 
 const MENU_COLLAPSE_KEY = "hotelAdminMenuCollapsed";
+const MOBILE_MENU_BREAKPOINT = 1200;
+
+const isMobileMenuViewport = () => {
+	if (typeof window === "undefined") return false;
+	return window.innerWidth <= MOBILE_MENU_BREAKPOINT;
+};
 
 const AdminNavbarArabic = ({
 	fromPage,
@@ -49,24 +55,75 @@ const AdminNavbarArabic = ({
 	setCollapsed,
 }) => {
 	const [clickedOn, setClickedOn] = useState(false);
+	const [isMobileMenu, setIsMobileMenu] = useState(() =>
+		isMobileMenuViewport(),
+	);
 	const { chosenLanguage } = useCartContext();
 	const history = useHistory();
 
+	const applyMenuCollapsedState = useCallback(
+		(nextCollapsed) => {
+			setCollapsed(nextCollapsed);
+			setAdminMenuStatus(nextCollapsed);
+			if (typeof window !== "undefined") {
+				localStorage.setItem(MENU_COLLAPSE_KEY, String(nextCollapsed));
+			}
+		},
+		[setAdminMenuStatus, setCollapsed],
+	);
+
 	useEffect(() => {
+		if (typeof window === "undefined") return;
 		const stored = localStorage.getItem(MENU_COLLAPSE_KEY);
 		if (stored === null) {
+			if (isMobileMenuViewport()) {
+				applyMenuCollapsedState(true);
+			}
 			return;
 		}
 		const nextCollapsed = stored === "true";
+		if (isMobileMenuViewport() && !nextCollapsed) {
+			applyMenuCollapsedState(true);
+			return;
+		}
 		setCollapsed(nextCollapsed);
 		setAdminMenuStatus(nextCollapsed);
-	}, [setAdminMenuStatus, setCollapsed]);
+	}, [applyMenuCollapsedState, setAdminMenuStatus, setCollapsed]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const handleResize = () => {
+			setIsMobileMenu(isMobileMenuViewport());
+		};
+		handleResize();
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
+
+	useEffect(() => {
+		if (!isMobileMenu) return;
+		applyMenuCollapsedState(true);
+	}, [isMobileMenu, applyMenuCollapsedState]);
+
+	const collapseMenuOnMobile = useCallback(() => {
+		if (isMobileMenu && !collapsed) {
+			applyMenuCollapsedState(true);
+		}
+	}, [applyMenuCollapsedState, collapsed, isMobileMenu]);
+
+	useEffect(() => {
+		const unlisten = history.listen(() => {
+			collapseMenuOnMobile();
+		});
+		return () => {
+			if (typeof unlisten === "function") {
+				unlisten();
+			}
+		};
+	}, [collapseMenuOnMobile, history]);
 
 	const toggleCollapsed = () => {
-		const nextCollapsed = !collapsed;
-		setCollapsed(nextCollapsed);
-		setAdminMenuStatus(nextCollapsed);
-		localStorage.setItem(MENU_COLLAPSE_KEY, String(nextCollapsed));
+		applyMenuCollapsedState(!collapsed);
 	};
 
 	// Retrieve user and selectedHotel details
@@ -210,11 +267,18 @@ const AdminNavbarArabic = ({
 				collapsed={collapsed}
 				roomCountDetails={roomCountDetails}
 			/>
+			{isMobileMenu && !collapsed && (
+				<MobileMenuBackdrop
+					type='button'
+					aria-label='Close mobile side menu'
+					onClick={collapseMenuOnMobile}
+				/>
+			)}
 			<AdminNavbarWrapper
 				show={collapsed}
 				show2={clickedOn}
 				style={{
-					width: collapsed ? 80 : 285,
+					width: collapsed ? 80 : isMobileMenu ? "min(90vw, 340px)" : 285,
 				}}
 				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			>
@@ -224,11 +288,12 @@ const AdminNavbarArabic = ({
 					style={{
 						marginBottom: 8,
 						textAlign: "center",
-						marginLeft: chosenLanguage === "Arabic" ? (collapsed ? 5 : 200) : 5,
-						marginTop: chosenLanguage === "Arabic" ? 10 : 10,
-						top: collapsed ? "10px" : "",
-						right: collapsed ? "10px" : "",
-						zIndex: collapsed ? 1000 : "",
+						marginRight: isMobileMenu ? 8 : collapsed ? 5 : 200,
+						marginTop: 10,
+						position: isMobileMenu ? "sticky" : undefined,
+						top: isMobileMenu ? 8 : collapsed ? "10px" : "",
+						right: isMobileMenu ? 8 : collapsed ? "10px" : "",
+						zIndex: isMobileMenu ? 20001 : collapsed ? 1000 : "",
 					}}
 				>
 					{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -273,6 +338,7 @@ const AdminNavbarArabic = ({
 						} else {
 							setClickedOn(false);
 						}
+						collapseMenuOnMobile();
 						return <Redirect to={e.key} />;
 					}}
 				/>
@@ -282,6 +348,25 @@ const AdminNavbarArabic = ({
 };
 
 export default AdminNavbarArabic;
+
+const MobileMenuBackdrop = styled.button`
+	display: none;
+	border: 0;
+	margin: 0;
+	padding: 0;
+
+	@media (max-width: 1200px) {
+		display: block;
+		position: fixed;
+		top: 70px;
+		left: 0;
+		width: 100vw;
+		height: calc(100vh - 70px);
+		background: rgba(7, 10, 20, 0.45);
+		z-index: 19999;
+		cursor: pointer;
+	}
+`;
 
 const AdminNavbarWrapper = styled.div`
 	margin-bottom: 15px;
@@ -367,20 +452,47 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 1200px) {
-		width: ${(props) => (props.show ? "80px" : "75%")} !important;
+		top: 70px !important;
+		right: 0;
+		height: calc(100vh - 70px);
+		width: ${(props) => (props.show ? "80px" : "min(90vw, 340px)")} !important;
+		background: ${(props) => (props.show ? "transparent" : "#1e1e2d")};
+		border-left: ${(props) =>
+			props.show ? "none" : "1px solid rgba(255, 255, 255, 0.08)"};
+		box-shadow: ${(props) =>
+			props.show ? "none" : "-8px 0 22px rgba(0, 0, 0, 0.35)"};
+		transition: width 0.22s ease, box-shadow 0.22s ease;
+		overflow-y: auto;
+		overflow-x: hidden;
 
 		ul {
-			display: ${(props) => (props.show ? "none" : "")};
-			margin-top: 0px !important;
-			top: 0px !important;
+			display: ${(props) => (props.show ? "none" : "block")};
+			width: 100%;
+			height: auto !important;
+			min-height: calc(100vh - 150px);
+			margin-top: 6px !important;
+			top: 0 !important;
+			padding: 0 0 20px !important;
 		}
 
-		.ant-menu.ant-menu-dark {
-			/* position: fixed; */
+		li {
+			margin-bottom: 8px;
+			font-size: 0.88rem !important;
+		}
+
+		.ant-menu.ant-menu-dark,
+		.ant-menu-dark .ant-menu-sub,
+		.ant-menu.ant-menu-dark .ant-menu-sub {
+			background: ${(props) => (props.show ? "transparent" : "#1e1e2d")}
+				!important;
 		}
 
 		button {
-			margin-top: 5px !important;
+			margin: 8px !important;
+			top: 8px !important;
+			right: 8px !important;
+			border-radius: 10px;
+			box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
 		}
 	}
 `;

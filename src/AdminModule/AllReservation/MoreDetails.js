@@ -272,6 +272,11 @@ const paymentBreakdownFields = [
 		group: "online",
 	},
 	{
+		key: "paid_no_show",
+		label: "Paid No Show",
+		group: "online",
+	},
+	{
 		key: "paid_at_hotel_cash",
 		label: "Paid at Hotel (Cash)",
 		group: "offline",
@@ -305,6 +310,7 @@ const paymentBreakdownNumericKeys = paymentBreakdownFields.map(
 const buildPaymentBreakdown = (breakdown) => ({
 	paid_online_via_link: safeNumber(breakdown?.paid_online_via_link),
 	paid_online_via_instapay: safeNumber(breakdown?.paid_online_via_instapay),
+	paid_no_show: safeNumber(breakdown?.paid_no_show),
 	paid_at_hotel_cash: safeNumber(breakdown?.paid_at_hotel_cash),
 	paid_at_hotel_card: safeNumber(breakdown?.paid_at_hotel_card),
 	paid_to_zad: safeNumber(breakdown?.paid_to_zad),
