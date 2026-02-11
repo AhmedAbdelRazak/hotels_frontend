@@ -16,6 +16,7 @@ import {
 import dayjs from "dayjs";
 import moment from "moment-hijri";
 import { isAuthenticated } from "../../auth";
+import EnhancedContentTable from "../AllReservation/EnhancedContentTable";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import MoreDetails from "../AllReservation/MoreDetails";
 import {
@@ -24,6 +25,7 @@ import {
 	getHotelOccupancyWarnings,
 	getBookingSourcePaymentSummary,
 	getCheckoutDatePaymentSummary,
+	getSpecificListOfReservations,
 	gettingHotelDetailsForAdmin,
 	distinctBookingSources as getDistinctBookingSources,
 } from "../apiAdmin";
@@ -39,6 +41,10 @@ const ModalZFix = createGlobalStyle`
 	.day-details-modal .ant-modal-mask,
 	.reservation-details-modal .ant-modal-mask {
 		z-index: 4000 !important;
+	}
+	.report-reservations-modal .ant-modal,
+	.report-reservations-modal .ant-modal-mask {
+		z-index: 4002 !important;
 	}
 `;
 
@@ -273,6 +279,16 @@ const HotelsInventoryMap = () => {
 
 	const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [reportModalOpen, setReportModalOpen] = useState(false);
+	const [reportModalLoading, setReportModalLoading] = useState(false);
+	const [reportModalData, setReportModalData] = useState({
+		data: [],
+		totalDocuments: 0,
+		scorecards: {},
+	});
+	const [reportCurrentPage, setReportCurrentPage] = useState(1);
+	const [reportPageSize, setReportPageSize] = useState(50);
+	const [reportSearchTerm, setReportSearchTerm] = useState("");
 
 	const formatInt = (val = 0) => Number(val || 0).toLocaleString("en-US");
 	const formatCurrency = (val = 0) =>
@@ -438,9 +454,23 @@ const HotelsInventoryMap = () => {
 	);
 	const checkoutGrossAmount = checkoutDateOverallTotal;
 	const checkoutReservationsCount = checkoutDateOverallReservations;
-	const checkinReservationsCount =
-		Number(summary.checkinReservationsCount) || 0;
-	const checkinGrossAmount = Number(summary.checkinGrossTotal) || 0;
+	const checkinReservationsCount = Number(
+		checkinDateMatrix.overallReservationsCount ??
+			summary.checkinReservationsCount ??
+			0,
+	);
+	const checkinGrossAmount = Number(
+		checkinDateMatrix.overallTotal ?? summary.checkinGrossTotal ?? 0,
+	);
+
+	const selectedHotelName = useMemo(() => {
+		const byId = sortedHotels.find(
+			(h) => String(h._id) === String(selectedHotelId),
+		);
+		if (byId?.hotelName) return byId.hotelName;
+		const fromPayload = data?.hotel?.hotelName;
+		return fromPayload ? String(fromPayload) : "";
+	}, [data?.hotel?.hotelName, selectedHotelId, sortedHotels]);
 
 	const monthLabel = useMemo(() => {
 		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
@@ -522,6 +552,21 @@ const HotelsInventoryMap = () => {
 	};
 
 	const paymentLabel = (status, label) => label || status || "-";
+
+	const formatDualDate = useCallback(
+		(dateValue) => {
+			const d = dateValue ? dayjs(dateValue) : null;
+			const gregDate = d?.isValid()
+				? d.format("ddd, DD MMM YYYY")
+				: dateValue || "n/a";
+			const hijriDate =
+				hijriAvailable && dateValue
+					? moment(dateValue).locale("en").format("iD iMMMM iYYYY")
+					: "";
+			return { gregDate, hijriDate };
+		},
+		[hijriAvailable],
+	);
 
 	// ------------------ Load hotels ------------------
 	const loadHotels = useCallback(() => {
@@ -804,6 +849,53 @@ const HotelsInventoryMap = () => {
 			fetchWarnings,
 			warningsModalOpen,
 		],
+	);
+
+	const handleReportSearch = useCallback(() => {
+		setReportCurrentPage(1);
+	}, []);
+
+	const openReportReservationsByDate = useCallback(
+		async ({ date, dateType } = {}) => {
+			if (!date || !dateType || !user?._id || !token) return;
+
+			const safeType = dateType === "checkin" ? "checkin" : "checkout";
+			const queryKey =
+				safeType === "checkin" ? `checkinDate_${date}` : `checkoutDate_${date}`;
+
+			setReportModalLoading(true);
+			setReportModalOpen(true);
+
+			try {
+				const payload = await getSpecificListOfReservations(user._id, token, {
+					[queryKey]: 1,
+					hotels: selectedHotelName || "all",
+					excludeCancelled: !includeCancelled,
+				});
+
+				const normalized = {
+					data: Array.isArray(payload?.data)
+						? payload.data
+						: Array.isArray(payload)
+						  ? payload
+						  : [],
+					totalDocuments:
+						payload?.totalDocuments ||
+						(Array.isArray(payload) ? payload.length : 0),
+					scorecards: payload?.scorecards || {},
+				};
+
+				setReportModalData(normalized);
+				setReportCurrentPage(1);
+				setReportSearchTerm("");
+			} catch (err) {
+				setReportModalData({ data: [], totalDocuments: 0, scorecards: {} });
+				console.error("Failed to load reservation details", err);
+			} finally {
+				setReportModalLoading(false);
+			}
+		},
+		[includeCancelled, selectedHotelName, token, user?._id],
 	);
 
 	// ------------------ Payment filter buttons ------------------
@@ -1666,19 +1758,37 @@ const HotelsInventoryMap = () => {
 										{checkinDateRows.length ? (
 											checkinDateRows.map((row) => {
 												const dateKey = row?.checkin_date || row?.date || "";
+												const { gregDate, hijriDate } = formatDualDate(dateKey);
 												return (
-													<tr key={`checkin-${dateKey || "unknown-date"}`}>
+													<tr
+														key={`checkin-${dateKey || "unknown-date"}`}
+														className={dateKey ? "clickable-row" : ""}
+														onClick={() =>
+															dateKey
+																? openReportReservationsByDate({
+																		date: dateKey,
+																		dateType: "checkin",
+																  })
+																: null
+														}
+														role={dateKey ? "button" : undefined}
+														tabIndex={dateKey ? 0 : undefined}
+														onKeyDown={(e) => {
+															if (!dateKey) return;
+															if (e.key === "Enter" || e.key === " ") {
+																e.preventDefault();
+																openReportReservationsByDate({
+																	date: dateKey,
+																	dateType: "checkin",
+																});
+															}
+														}}
+													>
 														<td className='date-cell'>
-															{hijriAvailable && dateKey ? (
-																<div className='hijri-date'>
-																	{moment(dateKey)
-																		.locale("en")
-																		.format("iD iMMMM iYYYY")}
-																</div>
+															{hijriDate ? (
+																<div className='hijri-date'>{hijriDate}</div>
 															) : null}
-															<div className='greg-date'>
-																{dateKey || "n/a"}
-															</div>
+															<div className='greg-date'>{gregDate}</div>
 														</td>
 														<td>{formatInt(row?.reservationsCount || 0)}</td>
 														{paymentStatusHeaders.map((status) => (
@@ -1741,19 +1851,37 @@ const HotelsInventoryMap = () => {
 										{checkoutDateRows.length ? (
 											checkoutDateRows.map((row) => {
 												const dateKey = row?.checkout_date || row?.date || "";
+												const { gregDate, hijriDate } = formatDualDate(dateKey);
 												return (
-													<tr key={`checkout-${dateKey || "unknown-date"}`}>
+													<tr
+														key={`checkout-${dateKey || "unknown-date"}`}
+														className={dateKey ? "clickable-row" : ""}
+														onClick={() =>
+															dateKey
+																? openReportReservationsByDate({
+																		date: dateKey,
+																		dateType: "checkout",
+																  })
+																: null
+														}
+														role={dateKey ? "button" : undefined}
+														tabIndex={dateKey ? 0 : undefined}
+														onKeyDown={(e) => {
+															if (!dateKey) return;
+															if (e.key === "Enter" || e.key === " ") {
+																e.preventDefault();
+																openReportReservationsByDate({
+																	date: dateKey,
+																	dateType: "checkout",
+																});
+															}
+														}}
+													>
 														<td className='date-cell'>
-															{hijriAvailable && dateKey ? (
-																<div className='hijri-date'>
-																	{moment(dateKey)
-																		.locale("en")
-																		.format("iD iMMMM iYYYY")}
-																</div>
+															{hijriDate ? (
+																<div className='hijri-date'>{hijriDate}</div>
 															) : null}
-															<div className='greg-date'>
-																{dateKey || "n/a"}
-															</div>
+															<div className='greg-date'>{gregDate}</div>
 														</td>
 														<td>{formatInt(row?.reservationsCount || 0)}</td>
 														{paymentStatusHeaders.map((status) => (
@@ -1800,6 +1928,37 @@ const HotelsInventoryMap = () => {
 					</Card>
 				</>
 			)}
+
+			<Modal
+				title='Detailed Reservations List'
+				open={reportModalOpen}
+				onCancel={() => setReportModalOpen(false)}
+				footer={null}
+				width='85%'
+				style={{ top: "3%", left: "7%" }}
+				wrapClassName='report-reservations-modal'
+			>
+				{reportModalLoading ? (
+					<Spin tip='Loading reservations...' />
+				) : reportModalData.data.length === 0 ? (
+					<p>No reservations found</p>
+				) : (
+					<EnhancedContentTable
+						data={reportModalData.data}
+						totalDocuments={reportModalData.totalDocuments}
+						currentPage={reportCurrentPage}
+						pageSize={reportPageSize}
+						setCurrentPage={setReportCurrentPage}
+						setPageSize={setReportPageSize}
+						searchTerm={reportSearchTerm}
+						setSearchTerm={setReportSearchTerm}
+						handleSearch={handleReportSearch}
+						scorecardsObject={reportModalData.scorecards}
+						fromPage='reports'
+						onReservationUpdated={handleReservationUpdated}
+					/>
+				)}
+			</Modal>
 
 			{/* Day details modal */}
 			<Modal
@@ -2485,6 +2644,14 @@ const BreakdownTable = styled.div`
 	th {
 		background: #f6f8f8;
 		font-weight: 600;
+	}
+
+	.clickable-row {
+		cursor: pointer;
+	}
+
+	.clickable-row:hover td {
+		background: #f6fbfa;
 	}
 
 	.date-cell {
