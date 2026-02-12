@@ -73,12 +73,28 @@ const splitBookingSource = (source) => {
 
 const normalizeRoomTypeLabel = (value) =>
 	String(value || "")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
 		.replace(/[_]+/g, " ")
 		.replace(/\s*-\s*/g, " - ")
 		.replace(/\s+/g, " ")
 		.trim();
 
-const resolveRoomType = (reservation) => {
+const titleCase = (value) =>
+	String(value || "")
+		.toLowerCase()
+		.replace(/\b\w/g, (char) => char.toUpperCase());
+
+const getRoomTypePreset = (value) => {
+	const token = normalizeRoomTypeLabel(value).toLowerCase();
+	if (!token) return null;
+	if (token.includes("quad")) return { label: "Quad Room", beds: 4 };
+	if (token.includes("triple")) return { label: "Triple Room", beds: 3 };
+	if (token.includes("double")) return { label: "Double Room", beds: 2 };
+	if (token.includes("family")) return { label: "Family Room", beds: 5 };
+	return { label: null, beds: 1 };
+};
+
+const getPrimaryRoomData = (reservation) => {
 	const firstPicked = Array.isArray(reservation?.pickedRoomsType)
 		? reservation.pickedRoomsType[0] || {}
 		: {};
@@ -86,17 +102,29 @@ const resolveRoomType = (reservation) => {
 		? reservation.roomDetails[0] || {}
 		: {};
 
-	const fromReservationRoomType =
+	const rawRoomType =
 		firstPicked.room_type ||
 		firstPicked.roomType ||
 		firstDetails.room_type ||
 		firstDetails.roomType ||
 		"";
 
-	const normalizedRoomType = normalizeRoomTypeLabel(fromReservationRoomType);
+	return {
+		firstPicked,
+		firstDetails,
+		rawRoomType,
+		normalizedRoomType: normalizeRoomTypeLabel(rawRoomType),
+	};
+};
+
+const resolveRoomType = (reservation) => {
+	const { firstPicked, firstDetails, normalizedRoomType } =
+		getPrimaryRoomData(reservation);
+	const roomTypePreset = getRoomTypePreset(normalizedRoomType);
 
 	const english =
-		normalizedRoomType ||
+		roomTypePreset?.label ||
+		(normalizedRoomType ? titleCase(normalizedRoomType) : "") ||
 		firstPicked.displayName ||
 		firstDetails.displayName ||
 		"N/A";
@@ -106,7 +134,8 @@ const resolveRoomType = (reservation) => {
 		firstPicked.roomTypeArabic ||
 		firstDetails.room_type_ar ||
 		firstDetails.roomTypeArabic ||
-		normalizedRoomType ||
+		roomTypePreset?.label ||
+		(normalizedRoomType ? titleCase(normalizedRoomType) : "") ||
 		firstPicked.displayName_OtherLanguage ||
 		firstDetails.displayName_OtherLanguage ||
 		english;
@@ -115,18 +144,9 @@ const resolveRoomType = (reservation) => {
 };
 
 const resolveBedCount = (reservation) => {
-	if (!Array.isArray(reservation?.pickedRoomsType)) {
-		return Math.max(safeNumber(reservation?.total_guests), 1);
-	}
-
-	const fromRooms = reservation.pickedRoomsType.reduce((sum, room) => {
-		const beds = safeNumber(room?.bedsCount || room?.bedNumber);
-		const qty = Math.max(safeNumber(room?.count), 1);
-		return sum + beds * qty;
-	}, 0);
-
-	if (fromRooms > 0) return fromRooms;
-	return Math.max(safeNumber(reservation?.total_guests), 1);
+	const { normalizedRoomType } = getPrimaryRoomData(reservation);
+	const roomTypePreset = getRoomTypePreset(normalizedRoomType);
+	return roomTypePreset?.beds || 1;
 };
 
 const resolveRoomQuantity = (reservation) => {
@@ -201,7 +221,7 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 		paymentMethodText = "Paid on Platform تم الدفع بالمنصة";
 	}
 
-	const { arabic: roomTypeArabic } = resolveRoomType(reservation);
+	const { english: roomTypeLabel } = resolveRoomType(reservation);
 	const bedCount = resolveBedCount(reservation);
 	const roomQuantity = resolveRoomQuantity(reservation);
 	const guests = Math.max(safeNumber(reservation?.total_guests), 1);
@@ -452,7 +472,7 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 										className='middle'
 										style={{ textTransform: "capitalize" }}
 									>
-										{roomTypeArabic}
+										{roomTypeLabel}
 									</td>
 									<td className='right'>
 										<div>Room Type</div>
