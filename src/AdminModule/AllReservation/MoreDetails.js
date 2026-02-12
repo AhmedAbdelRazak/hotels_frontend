@@ -26,6 +26,7 @@ import { relocationArray1 } from "../../HotelModule/ReservationsFolder/Reservati
 import PaymentTrigger from "./PaymentTrigger";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
+import AlDawleya from "./AlDawleya";
 import {
 	sendReservationConfirmationSMSManualAdmin,
 	sendReservationPaymentLinkSMSManualAdmin,
@@ -187,7 +188,9 @@ const AssignRoomCallout = styled.button`
 	font-weight: 700;
 	cursor: pointer;
 	box-shadow: 0 6px 14px rgba(31, 111, 67, 0.12);
-	transition: transform 0.15s ease, box-shadow 0.15s ease,
+	transition:
+		transform 0.15s ease,
+		box-shadow 0.15s ease,
 		background 0.15s ease;
 
 	&:hover {
@@ -411,12 +414,14 @@ const MoreDetails = ({
 	onReservationUpdated = () => {},
 }) => {
 	const pdfRef = useRef(null);
+	const alDawleyaPdfRef = useRef(null);
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [isModalVisible3, setIsModalVisible3] = useState(false);
 	const [isModalVisible5, setIsModalVisible5] = useState(false);
+	const [isModalVisible6, setIsModalVisible6] = useState(false);
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [paymentLinkEmailModalOpen, setPaymentLinkEmailModalOpen] =
@@ -1003,8 +1008,13 @@ const MoreDetails = ({
 		return fromRoomId;
 	}, [reservation, chosenRooms]);
 
-	const downloadPDF = () => {
-		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
+	const downloadPDFFromRef = (targetRef, fileName = "receipt.pdf") => {
+		if (!targetRef?.current) return;
+		html2canvas(targetRef.current, {
+			scale: 1,
+			useCORS: true,
+			backgroundColor: "#ffffff",
+		}).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
 
 			// Let's create a PDF and add our image into it
@@ -1035,8 +1045,16 @@ const MoreDetails = ({
 				heightLeft -= pdfHeight;
 			}
 
-			pdf.save("receipt.pdf");
+			pdf.save(fileName);
 		});
+	};
+
+	const downloadPDF = () => {
+		downloadPDFFromRef(pdfRef, "receipt.pdf");
+	};
+
+	const downloadAlDawleyaPDF = () => {
+		downloadPDFFromRef(alDawleyaPdfRef, "al-dawleya.pdf");
 	};
 
 	const getAverageRootPrice = (pickedRoomsType) => {
@@ -1728,6 +1746,51 @@ const MoreDetails = ({
 								</div>
 							)}
 						</Modal>
+						<Modal
+							title='Al Dawleya'
+							open={isModalVisible6}
+							onCancel={() => setIsModalVisible6(false)}
+							onOk={() => setIsModalVisible6(false)}
+							footer={null}
+							width='84.5%'
+							style={{
+								position: "absolute",
+								left: chosenLanguage === "Arabic" ? "15%" : "auto",
+								right: chosenLanguage === "Arabic" ? "auto" : "5%",
+								top: "1%",
+							}}
+							zIndex={12012}
+							styles={{ mask: { zIndex: 12011 } }}
+							getContainer={() => document.body}
+							wrapClassName='receipt-modal'
+							rootClassName='receipt-modal'
+						>
+							<div className='text-center my-3 '>
+								<button
+									className='btn btn-info w-50'
+									style={{ fontWeight: "bold", fontSize: "1.1rem" }}
+									onClick={downloadAlDawleyaPDF}
+								>
+									Print To PDF
+								</button>
+							</div>
+							{reservation && (
+								<div
+									dir='ltr'
+									style={{
+										display: "flex",
+										justifyContent: "center",
+										width: "100%",
+									}}
+								>
+									<AlDawleya
+										ref={alDawleyaPdfRef}
+										reservation={reservation}
+										hotelDetails={hotelDetails}
+									/>
+								</div>
+							)}
+						</Modal>
 
 						<Header>
 							<Section>
@@ -1819,6 +1882,20 @@ const MoreDetails = ({
 													Generate Payment Link
 												</button>
 											)}
+											<button
+												className='my-2'
+												style={{
+													background: "#0a2f63",
+													border: "1px solid #0a2f63",
+													color: "#ffffff",
+													display: "block",
+													width: "100%",
+													marginTop: "10px",
+												}}
+												onClick={() => setIsModalVisible6(true)}
+											>
+												Al Dawleya
+											</button>
 										</div>
 									) : (
 										<div className='col-md-4 mx-auto text-center'>
@@ -1881,6 +1958,20 @@ const MoreDetails = ({
 													Generate Payment Link
 												</button>
 											)}
+											<button
+												className='my-2'
+												style={{
+													background: "#0a2f63",
+													border: "1px solid #0a2f63",
+													color: "#ffffff",
+													display: "block",
+													width: "100%",
+													marginTop: "10px",
+												}}
+												onClick={() => setIsModalVisible6(true)}
+											>
+												Al Dawleya
+											</button>
 										</div>
 									)}
 
