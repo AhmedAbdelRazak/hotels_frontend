@@ -852,6 +852,55 @@ const parseJSON = async (res) => {
 	return data;
 };
 
+export const getReservationVccStatus = (reservationId, token) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/paypal/vcc-status/${reservationId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+		},
+	).then(parseJSON);
+};
+
+export const chargeReservationViaVcc = ({
+	token,
+	reservationId,
+	usdAmount,
+	cardNumber,
+	cardExpiry,
+	cardCVV,
+	cmid = null,
+}) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(`${process.env.REACT_APP_API_URL}/reservations/paypal/vcc-charge`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		},
+		credentials: "omit",
+		body: JSON.stringify({
+			reservationId,
+			usdAmount: Number(usdAmount),
+			card: {
+				number: cardNumber,
+				expiry: cardExpiry,
+				cvv: cardCVV,
+			},
+			...(cmid ? { cmid } : {}),
+		}),
+	}).then(parseJSON);
+};
+
 export const triggerPayment = (
 	userId, // kept for call-site compatibility; not used in route
 	token,

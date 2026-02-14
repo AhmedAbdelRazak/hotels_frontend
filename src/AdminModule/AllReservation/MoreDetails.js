@@ -30,6 +30,8 @@ import AlDawleya from "./AlDawleya";
 import {
 	sendReservationConfirmationSMSManualAdmin,
 	sendReservationPaymentLinkSMSManualAdmin,
+	getReservationVccStatus,
+	chargeReservationViaVcc,
 } from "../apiAdmin";
 
 const ModalZFix = createGlobalStyle`
@@ -242,6 +244,42 @@ const splitPhoneForModal = (raw) => {
 	return { code: "", phone: cleaned };
 };
 
+const VCC_PROMPT_WARNING_MESSAGE =
+	"This reservation was prompted once before, please reach out to Ahmed Admin for more details";
+
+const normalizeReservationStatusForVcc = (status) =>
+	String(status || "")
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "_");
+
+const isCancelledOrNoShowForVcc = (status) => {
+	const normalized = normalizeReservationStatusForVcc(status);
+	return normalized.includes("cancel") || /no[_-]?show/.test(normalized);
+};
+
+const normalizeCardDigits = (value) => String(value || "").replace(/\D/g, "");
+const normalizeVccExpiryInput = (value) => {
+	const digits = normalizeCardDigits(value).slice(0, 4);
+	if (digits.length <= 2) return digits;
+	return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+};
+
+const extractRoomNumbersForVcc = (roomRows, reservation) => {
+	const set = new Set();
+	(Array.isArray(roomRows) ? roomRows : []).forEach((room) => {
+		const roomNo = room?.room_number || room?.roomNumber || room?.number || "";
+		if (String(roomNo).trim()) set.add(String(roomNo).trim());
+	});
+	(Array.isArray(reservation?.bedNumber) ? reservation.bedNumber : []).forEach(
+		(bed) => {
+			const value = String(bed || "").trim();
+			if (value) set.add(value);
+		},
+	);
+	return Array.from(set);
+};
+
 const normalizeIdValue = (value) => {
 	if (!value) return "";
 	if (typeof value === "string") return value;
@@ -450,6 +488,15 @@ const MoreDetails = ({
 	);
 	const [isSavingPaymentBreakdown, setIsSavingPaymentBreakdown] =
 		useState(false);
+	const [isVccPanelVisible, setIsVccPanelVisible] = useState(false);
+	const [vccStep, setVccStep] = useState("amount");
+	const [vccAmountUsd, setVccAmountUsd] = useState("");
+	const [vccCardNumber, setVccCardNumber] = useState("");
+	const [vccCardExpiry, setVccCardExpiry] = useState("");
+	const [vccCardCVV, setVccCardCVV] = useState("");
+	const [isVccSubmitting, setIsVccSubmitting] = useState(false);
+	const [isVccStatusLoading, setIsVccStatusLoading] = useState(false);
+	const [vccStatusState, setVccStatusState] = useState(null);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -475,6 +522,23 @@ const MoreDetails = ({
 	const customerNickName = reservation?.customer_details?.nickName || "";
 	const secondaryConfirmation =
 		reservation?.customer_details?.confirmation_number2 || "";
+	const bookingSourceNormalized = String(
+		reservation?.booking_source || "",
+	).toLowerCase();
+	const isExpediaReservation = bookingSourceNormalized.includes("expedia");
+	const reservationCancelledOrNoShow = isCancelledOrNoShowForVcc(
+		reservation?.reservation_status,
+	);
+
+	const resetVccFlowState = useCallback(() => {
+		setIsVccPanelVisible(false);
+		setVccStep("amount");
+		setVccAmountUsd("");
+		setVccCardNumber("");
+		setVccCardExpiry("");
+		setVccCardCVV("");
+		setIsVccSubmitting(false);
+	}, []);
 
 	useEffect(() => {
 		if (isModalVisible) {
@@ -488,6 +552,61 @@ const MoreDetails = ({
 			buildPaymentBreakdown(reservation?.paid_amount_breakdown),
 		);
 	}, [isPaymentBreakdownVisible, reservation?.paid_amount_breakdown]);
+
+	useEffect(() => {
+		if (isPaymentBreakdownVisible) return;
+		resetVccFlowState();
+		setVccStatusState(null);
+	}, [isPaymentBreakdownVisible, resetVccFlowState]);
+
+	useEffect(() => {
+		if (
+			!isPaymentBreakdownVisible ||
+			!reservation?._id ||
+			!isExpediaReservation
+		) {
+			return;
+		}
+		let active = true;
+		setIsVccStatusLoading(true);
+		getReservationVccStatus(reservation._id, token)
+			.then((data) => {
+				if (!active) return;
+				setVccStatusState(data || null);
+			})
+			.catch((err) => {
+				if (!active) return;
+				console.error("Failed to fetch VCC status:", err);
+				setVccStatusState(
+					reservation?.vcc_payment
+						? {
+								alreadyCharged: !!reservation.vcc_payment?.charged,
+								attemptedBefore:
+									Number(reservation.vcc_payment?.failed_attempts_count || 0) >
+									0,
+								lastFailureMessage:
+									reservation.vcc_payment?.last_failure_message || "",
+								warningMessage:
+									reservation.vcc_payment?.warning_message ||
+									VCC_PROMPT_WARNING_MESSAGE,
+						  }
+						: null,
+				);
+			})
+			.finally(() => {
+				if (!active) return;
+				setIsVccStatusLoading(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [
+		isPaymentBreakdownVisible,
+		isExpediaReservation,
+		reservation?._id,
+		reservation?.vcc_payment,
+		token,
+	]);
 
 	useEffect(() => {
 		if (!paymentLinkEmailModalOpen) return;
@@ -1008,6 +1127,144 @@ const MoreDetails = ({
 		return fromRoomId;
 	}, [reservation, chosenRooms]);
 
+	const vccRoomNumbers = useMemo(
+		() => extractRoomNumbersForVcc(roomTableRows, reservation),
+		[roomTableRows, reservation],
+	);
+	const vccRoomSummary = vccRoomNumbers.join(", ");
+	const vccAlreadyCharged =
+		!!vccStatusState?.alreadyCharged || !!reservation?.vcc_payment?.charged;
+	const vccAttemptedBefore =
+		!!vccStatusState?.attemptedBefore ||
+		Number(reservation?.vcc_payment?.failed_attempts_count || 0) > 0;
+	const vccWarningMessage =
+		vccStatusState?.warningMessage ||
+		reservation?.vcc_payment?.warning_message ||
+		VCC_PROMPT_WARNING_MESSAGE;
+	const vccLastFailureMessage =
+		vccStatusState?.lastFailureMessage ||
+		reservation?.vcc_payment?.last_failure_message ||
+		"";
+
+	const openVccPanel = () => {
+		if (!isExpediaReservation) {
+			toast.error("Pay Via VCC is currently available only for Expedia.");
+			return;
+		}
+		if (vccAlreadyCharged) {
+			toast.info("This reservation was already charged via VCC.");
+			return;
+		}
+		if (vccAttemptedBefore) {
+			toast.error(vccWarningMessage);
+			return;
+		}
+		setIsVccPanelVisible(true);
+		setVccStep("amount");
+	};
+
+	const handleVccAmountContinue = () => {
+		const amountUsd = safeNumber(vccAmountUsd);
+		if (!(amountUsd > 0)) {
+			toast.error("Please enter a valid VCC amount in USD.");
+			return;
+		}
+		if (!reservationCancelledOrNoShow && vccRoomNumbers.length === 0) {
+			toast.error(
+				"Assign a room number first. Room number is required for non-cancelled / non-no-show reservations.",
+			);
+			return;
+		}
+		setVccStep("card");
+	};
+
+	const handleSubmitVccCharge = async () => {
+		if (!reservation?._id) return;
+		if (vccAlreadyCharged) {
+			toast.info("This reservation was already charged via VCC.");
+			return;
+		}
+		if (vccAttemptedBefore) {
+			toast.error(vccWarningMessage);
+			return;
+		}
+
+		const cardNumberDigits = normalizeCardDigits(vccCardNumber);
+		if (!/^\d{16}$/.test(cardNumberDigits)) {
+			toast.error("Card number must be 16 digits.");
+			return;
+		}
+		const cvvDigits = normalizeCardDigits(vccCardCVV);
+		if (!/^\d{3,4}$/.test(cvvDigits)) {
+			toast.error("CVV must be 3 or 4 digits.");
+			return;
+		}
+		if (!/^\d{2}\/\d{2}$/.test(vccCardExpiry)) {
+			toast.error("Expiry date must be in MM/YY format.");
+			return;
+		}
+
+		const amountUsd = safeNumber(vccAmountUsd);
+		if (!(amountUsd > 0)) {
+			toast.error("Invalid amount for VCC payment.");
+			return;
+		}
+
+		setIsVccSubmitting(true);
+		try {
+			const response = await chargeReservationViaVcc({
+				token,
+				reservationId: reservation._id,
+				usdAmount: amountUsd,
+				cardNumber: cardNumberDigits,
+				cardExpiry: vccCardExpiry,
+				cardCVV: cvvDigits,
+			});
+			const updated = response?.reservation;
+			if (updated?._id) {
+				setReservation(updated);
+				onReservationUpdated(updated);
+			}
+			setVccStatusState(
+				response?.vccStatus
+					? { ...response.vccStatus, alreadyCharged: true }
+					: {
+							alreadyCharged: true,
+							attemptedBefore: false,
+					  },
+			);
+			toast.success(response?.message || "VCC payment completed.");
+			resetVccFlowState();
+		} catch (err) {
+			const apiResponse = err?.response || {};
+			const msg =
+				apiResponse?.message ||
+				err?.message ||
+				"VCC payment failed to process.";
+			toast.error(msg);
+			if (apiResponse?.warningMessage) {
+				toast.error(apiResponse.warningMessage);
+			}
+			setVccStatusState((prev) => ({
+				...(prev || {}),
+				...(apiResponse?.vccStatus || {}),
+				alreadyCharged:
+					typeof apiResponse?.alreadyCharged === "boolean"
+						? apiResponse.alreadyCharged
+						: !!prev?.alreadyCharged,
+				attemptedBefore:
+					!!apiResponse?.attemptedBefore ||
+					!!apiResponse?.warningMessage ||
+					!!prev?.attemptedBefore,
+				lastFailureMessage: apiResponse?.message || prev?.lastFailureMessage,
+				warningMessage: apiResponse?.warningMessage || prev?.warningMessage,
+			}));
+			setVccCardCVV("");
+		} finally {
+			setIsVccSubmitting(false);
+		}
+	};
+
 	const downloadPDFFromRef = (targetRef, fileName = "receipt.pdf") => {
 		if (!targetRef?.current) return;
 		html2canvas(targetRef.current, {
@@ -1340,6 +1597,225 @@ const MoreDetails = ({
 									? "جميع المبالغ بالريال السعودي (SAR)"
 									: "All amounts are in SAR."}
 							</PaymentBreakdownNote>
+							<div
+								className='mb-3'
+								style={{
+									border: "1px solid #e5e7eb",
+									borderRadius: "10px",
+									padding: "12px",
+									background: "#f9fafb",
+								}}
+							>
+								<div
+									className='d-flex justify-content-between align-items-center flex-wrap'
+									style={{ gap: "10px" }}
+								>
+									<strong>Virtual Card Payment (OTA)</strong>
+									<button
+										type='button'
+										className='btn btn-success'
+										onClick={openVccPanel}
+										disabled={
+											!isExpediaReservation ||
+											vccAlreadyCharged ||
+											vccAttemptedBefore ||
+											isVccSubmitting
+										}
+									>
+										Pay Via VCC
+									</button>
+								</div>
+								<div style={{ fontSize: "0.85rem", marginTop: "8px" }}>
+									{isExpediaReservation
+										? "Booking source detected as Expedia. Zip code is auto-set to 98119 and cardholder is Expedia VirtualCard."
+										: "VCC processing is currently enabled only for Expedia reservations."}
+								</div>
+								{isVccStatusLoading ? (
+									<div style={{ marginTop: "8px", fontSize: "0.85rem" }}>
+										Checking VCC status...
+									</div>
+								) : null}
+								{vccAlreadyCharged ? (
+									<div
+										style={{
+											marginTop: "8px",
+											color: "#166534",
+											fontWeight: "bold",
+										}}
+									>
+										This reservation was already charged via VCC.
+									</div>
+								) : null}
+								{vccAttemptedBefore ? (
+									<div
+										style={{
+											marginTop: "8px",
+											color: "#991b1b",
+											fontWeight: "bold",
+										}}
+									>
+										{vccWarningMessage}
+										{vccLastFailureMessage ? ` (${vccLastFailureMessage})` : ""}
+									</div>
+								) : null}
+								{isVccPanelVisible && isExpediaReservation ? (
+									<div
+										style={{
+											marginTop: "12px",
+											padding: "12px",
+											border: "1px solid #d1d5db",
+											borderRadius: "8px",
+											background: "#fff",
+										}}
+									>
+										{vccStep === "amount" ? (
+											<div>
+												<label style={{ fontWeight: "bold" }}>
+													VCC Amount (USD)
+												</label>
+												<input
+													type='number'
+													min='0'
+													step='0.01'
+													className='form-control'
+													value={vccAmountUsd}
+													onChange={(e) => setVccAmountUsd(e.target.value)}
+												/>
+												<div className='d-flex justify-content-end mt-3'>
+													<button
+														type='button'
+														className='btn btn-primary'
+														onClick={handleVccAmountContinue}
+													>
+														Continue
+													</button>
+												</div>
+											</div>
+										) : (
+											<div>
+												<div
+													style={{
+														fontSize: "0.88rem",
+														background: "#f3f4f6",
+														padding: "10px",
+														borderRadius: "8px",
+														marginBottom: "10px",
+													}}
+												>
+													<div>
+														<strong>Billing Address:</strong> 1111 Expedia Group
+														Way W, Seattle, WA, 98119, USA
+													</div>
+													<div>
+														<strong>Cardholder:</strong> Expedia VirtualCard
+													</div>
+													<div>
+														<strong>Metadata:</strong> Guest{" "}
+														{customerFullName || "N/A"}, Confirmation{" "}
+														{reservation?.confirmation_number || "N/A"},
+														Confirmation 2 {secondaryConfirmation || "N/A"},
+														Check-in {formattedCheckin}, Check-out{" "}
+														{formattedCheckout}, Hotel{" "}
+														{hotelDetails?.hotelName ||
+															reservation?.hotelName ||
+															"N/A"}
+													</div>
+													<div>
+														<strong>Guest Housed In Room #:</strong>{" "}
+														{reservationCancelledOrNoShow
+															? "Not required (cancelled/no-show)"
+															: vccRoomSummary || "Missing room number"}
+													</div>
+													<div>
+														<strong>Charge:</strong> $
+														{Number(vccAmountUsd || 0).toFixed(2)} USD
+													</div>
+												</div>
+												<div className='row'>
+													<div className='col-md-6 mb-2'>
+														<label style={{ fontWeight: "bold" }}>
+															Card Number
+														</label>
+														<input
+															type='text'
+															className='form-control'
+															inputMode='numeric'
+															maxLength={19}
+															placeholder='1234 5678 9012 3456'
+															value={vccCardNumber}
+															onChange={(e) => {
+																const digits = normalizeCardDigits(
+																	e.target.value,
+																).slice(0, 16);
+																const formatted = digits.replace(
+																	/(\d{4})(?=\d)/g,
+																	"$1 ",
+																);
+																setVccCardNumber(formatted);
+															}}
+														/>
+													</div>
+													<div className='col-md-3 mb-2'>
+														<label style={{ fontWeight: "bold" }}>Expiry</label>
+														<input
+															type='text'
+															className='form-control'
+															inputMode='numeric'
+															maxLength={5}
+															placeholder='MM/YY'
+															value={vccCardExpiry}
+															onChange={(e) =>
+																setVccCardExpiry(
+																	normalizeVccExpiryInput(e.target.value),
+																)
+															}
+														/>
+													</div>
+													<div className='col-md-3 mb-2'>
+														<label style={{ fontWeight: "bold" }}>CVV</label>
+														<input
+															type='password'
+															className='form-control'
+															inputMode='numeric'
+															maxLength={4}
+															placeholder='***'
+															value={vccCardCVV}
+															onChange={(e) =>
+																setVccCardCVV(
+																	normalizeCardDigits(e.target.value).slice(
+																		0,
+																		4,
+																	),
+																)
+															}
+														/>
+													</div>
+												</div>
+												<div className='d-flex justify-content-between mt-3'>
+													<button
+														type='button'
+														className='btn btn-outline-secondary'
+														onClick={() => setVccStep("amount")}
+														disabled={isVccSubmitting}
+													>
+														Back
+													</button>
+													<button
+														type='button'
+														className='btn btn-success'
+														onClick={handleSubmitVccCharge}
+														disabled={isVccSubmitting}
+													>
+														{isVccSubmitting
+															? "Processing..."
+															: "Submit VCC Charge"}
+													</button>
+												</div>
+											</div>
+										)}
+									</div>
+								) : null}
+							</div>
 							<div className='row'>
 								{paymentBreakdownFields.map((field) => (
 									<div className='col-md-6 mb-3' key={field.key}>
