@@ -1132,11 +1132,13 @@ const MoreDetails = ({
 		[roomTableRows, reservation],
 	);
 	const vccRoomSummary = vccRoomNumbers.join(", ");
-	const vccAlreadyCharged =
-		!!vccStatusState?.alreadyCharged || !!reservation?.vcc_payment?.charged;
-	const vccAttemptedBefore =
-		!!vccStatusState?.attemptedBefore ||
-		Number(reservation?.vcc_payment?.failed_attempts_count || 0) > 0;
+	const hasVccStatusSnapshot = vccStatusState !== null;
+	const vccAlreadyCharged = hasVccStatusSnapshot
+		? !!vccStatusState?.alreadyCharged
+		: !!reservation?.vcc_payment?.charged;
+	const vccAttemptedBefore = hasVccStatusSnapshot
+		? !!vccStatusState?.attemptedBefore
+		: Number(reservation?.vcc_payment?.failed_attempts_count || 0) > 0;
 	const vccWarningMessage =
 		vccStatusState?.warningMessage ||
 		reservation?.vcc_payment?.warning_message ||
@@ -1774,7 +1776,7 @@ const MoreDetails = ({
 													<div className='col-md-3 mb-2'>
 														<label style={{ fontWeight: "bold" }}>CVV</label>
 														<input
-															type='password'
+															type='text'
 															className='form-control'
 															inputMode='numeric'
 															maxLength={4}
