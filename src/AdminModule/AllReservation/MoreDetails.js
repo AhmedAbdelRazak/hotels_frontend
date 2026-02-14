@@ -259,6 +259,23 @@ const isCancelledOrNoShowForVcc = (status) => {
 };
 
 const normalizeCardDigits = (value) => String(value || "").replace(/\D/g, "");
+const isLuhnValid = (value) => {
+	const digits = normalizeCardDigits(value);
+	if (!digits) return false;
+	let sum = 0;
+	let shouldDouble = false;
+	for (let i = digits.length - 1; i >= 0; i -= 1) {
+		let digit = Number(digits[i]);
+		if (!Number.isFinite(digit)) return false;
+		if (shouldDouble) {
+			digit *= 2;
+			if (digit > 9) digit -= 9;
+		}
+		sum += digit;
+		shouldDouble = !shouldDouble;
+	}
+	return sum % 10 === 0;
+};
 const normalizeVccExpiryInput = (value) => {
 	const digits = normalizeCardDigits(value).slice(0, 4);
 	if (digits.length <= 2) return digits;
@@ -1194,6 +1211,10 @@ const MoreDetails = ({
 		const cardNumberDigits = normalizeCardDigits(vccCardNumber);
 		if (!/^\d{16}$/.test(cardNumberDigits)) {
 			toast.error("Card number must be 16 digits.");
+			return;
+		}
+		if (!isLuhnValid(cardNumberDigits)) {
+			toast.error("Card number appears invalid. Please re-check it.");
 			return;
 		}
 		const cvvDigits = normalizeCardDigits(vccCardCVV);
