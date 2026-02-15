@@ -868,10 +868,116 @@ export const getReservationVccStatus = (reservationId, token) => {
 	).then(parseJSON);
 };
 
+export const getPayPalClientTokenForVcc = ({
+	token,
+	buyerCountry = "US",
+	debug = false,
+} = {}) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/paypal/token-generated`, {
+		method: "POST",
+		cache: "no-store",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			"Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
+			Pragma: "no-cache",
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		},
+		credentials: "omit",
+		body: JSON.stringify({
+			bc: String(buyerCountry || "US").toUpperCase(),
+			dbg: !!debug,
+			_ts: Date.now(),
+		}),
+	}).then(parseJSON);
+};
+
+export const createReservationVccOrder = ({
+	token,
+	reservationId,
+	usdAmount,
+	postalCode,
+	proceedWithoutRoom = false,
+	cmid = null,
+}) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/paypal/vcc-order/create`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			credentials: "omit",
+			body: JSON.stringify({
+				reservationId,
+				usdAmount: Number(usdAmount),
+				proceedWithoutRoom: !!proceedWithoutRoom,
+				...(postalCode
+					? {
+							billingAddress: {
+								postal_code: String(postalCode).trim(),
+							},
+					  }
+					: {}),
+				...(cmid ? { cmid } : {}),
+			}),
+		},
+	).then(parseJSON);
+};
+
+export const captureReservationVccOrder = ({
+	token,
+	reservationId,
+	orderId,
+	usdAmount,
+	postalCode,
+	proceedWithoutRoom = false,
+	cmid = null,
+}) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	if (!orderId) {
+		return Promise.reject(new Error("orderId is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/paypal/vcc-order/capture`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			credentials: "omit",
+			body: JSON.stringify({
+				reservationId,
+				orderId,
+				usdAmount: Number(usdAmount),
+				proceedWithoutRoom: !!proceedWithoutRoom,
+				...(postalCode
+					? {
+							billingAddress: {
+								postal_code: String(postalCode).trim(),
+							},
+					  }
+					: {}),
+				...(cmid ? { cmid } : {}),
+			}),
+		},
+	).then(parseJSON);
+};
+
 export const chargeReservationViaVcc = ({
 	token,
 	reservationId,
 	usdAmount,
+	postalCode,
 	cardNumber,
 	cardExpiry,
 	cardCVV,
@@ -891,6 +997,13 @@ export const chargeReservationViaVcc = ({
 		body: JSON.stringify({
 			reservationId,
 			usdAmount: Number(usdAmount),
+			...(postalCode
+				? {
+						billingAddress: {
+							postal_code: String(postalCode).trim(),
+						},
+				  }
+				: {}),
 			card: {
 				number: cardNumber,
 				expiry: cardExpiry,
