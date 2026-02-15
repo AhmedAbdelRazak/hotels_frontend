@@ -267,20 +267,32 @@ const VCC_RETRY_AVAILABLE_MESSAGE =
 const VCC_PROVIDER_UI_PRESETS = {
 	expedia: {
 		label: "Expedia",
-		cardholderName: "Expedia VirtualCard",
+		cardholderName: "Expedia Virtual Card",
 		defaultZip: DEFAULT_EXPEDIA_VCC_ZIP,
 		addressLine1: "1111 Expedia Group Way W",
 		adminArea2: "Seattle",
 		adminArea1: "WA",
+		countryCode: "US",
 		country: "USA",
+		postalOverrides: {
+			D02XF99: {
+				addressLine1: "25 St Stephen's Green",
+				adminArea2: "Dublin 2",
+				adminArea1: "Dublin",
+				countryCode: "IE",
+				country: "Ireland",
+				postalCode: "D02 XF99",
+			},
+		},
 	},
 	agoda: {
 		label: "Agoda",
-		cardholderName: "Agoda VirtualCard",
+		cardholderName: "Agoda Virtual Card",
 		defaultZip: DEFAULT_EXPEDIA_VCC_ZIP,
 		addressLine1: "1111 Expedia Group Way W",
 		adminArea2: "Seattle",
 		adminArea1: "WA",
+		countryCode: "US",
 		country: "USA",
 	},
 	booking: {
@@ -290,6 +302,7 @@ const VCC_PROVIDER_UI_PRESETS = {
 		addressLine1: "1111 Expedia Group Way W",
 		adminArea2: "Seattle",
 		adminArea1: "WA",
+		countryCode: "US",
 		country: "USA",
 	},
 };
@@ -300,6 +313,41 @@ const resolveVccProviderKey = (bookingSource) => {
 	if (normalized.includes("agoda")) return "agoda";
 	if (normalized.includes("booking")) return "booking";
 	return "";
+};
+
+const normalizeVccPostalKey = (value) =>
+	String(value || "")
+		.toUpperCase()
+		.replace(/[^A-Z0-9]/g, "");
+
+const resolveVccBillingProfile = (providerPreset, postalCodeInput) => {
+	const preset = providerPreset || {};
+	const base = {
+		addressLine1: preset.addressLine1 || "1111 Expedia Group Way W",
+		adminArea2: preset.adminArea2 || "Seattle",
+		adminArea1: preset.adminArea1 || "WA",
+		countryCode: String(preset.countryCode || "US").toUpperCase(),
+		country: preset.country || "USA",
+		postalCode: String(
+			postalCodeInput || preset.defaultZip || DEFAULT_EXPEDIA_VCC_ZIP,
+		)
+			.toUpperCase()
+			.trim(),
+	};
+	const postalKey = normalizeVccPostalKey(base.postalCode);
+	const override =
+		(preset.postalOverrides && preset.postalOverrides[postalKey]) || null;
+	if (!override) return base;
+	return {
+		addressLine1: override.addressLine1 || base.addressLine1,
+		adminArea2: override.adminArea2 || base.adminArea2,
+		adminArea1: override.adminArea1 || base.adminArea1,
+		countryCode: String(override.countryCode || base.countryCode).toUpperCase(),
+		country: override.country || base.country,
+		postalCode: String(override.postalCode || base.postalCode)
+			.toUpperCase()
+			.trim(),
+	};
 };
 
 const normalizeReservationStatusForVcc = (status) =>
@@ -688,12 +736,26 @@ const MoreDetails = ({
 		vccProviderUiPreset.cardholderName || `${vccProviderLabel} VirtualCard`;
 	const vccDefaultZipCode =
 		vccProviderUiPreset.defaultZip || DEFAULT_EXPEDIA_VCC_ZIP;
+	const vccBillingProfile = useMemo(
+		() =>
+			resolveVccBillingProfile(
+				vccProviderUiPreset,
+				String(vccZipCode || vccDefaultZipCode).trim(),
+			),
+		[vccProviderUiPreset, vccZipCode, vccDefaultZipCode],
+	);
 	const vccAddressLine1 =
-		vccProviderUiPreset.addressLine1 || "1111 Expedia Group Way W";
-	const vccAdminArea2 = vccProviderUiPreset.adminArea2 || "Seattle";
-	const vccAdminArea1 = vccProviderUiPreset.adminArea1 || "WA";
+		vccBillingProfile.addressLine1 || "1111 Expedia Group Way W";
+	const vccAdminArea2 = vccBillingProfile.adminArea2 || "Seattle";
+	const vccAdminArea1 = vccBillingProfile.adminArea1 || "WA";
+	const vccEffectiveZipCode =
+		vccBillingProfile.postalCode ||
+		String(vccZipCode || vccDefaultZipCode).trim();
 	const vccBillingAddressLine = `${vccAddressLine1}, ${vccAdminArea2}, ${vccAdminArea1}`;
-	const vccBillingCountry = vccProviderUiPreset.country || "USA";
+	const vccBillingCountry = vccBillingProfile.country || "USA";
+	const vccBillingCountryCode = String(
+		vccBillingProfile.countryCode || "US",
+	).toUpperCase();
 	const isExpediaReservation = bookingSourceNormalized.includes("expedia");
 	const reservationCancelledOrNoShow = isCancelledOrNoShowForVcc(
 		reservation?.reservation_status,
@@ -2135,8 +2197,7 @@ const MoreDetails = ({
 												>
 													<div>
 														<strong>Billing Address:</strong>{" "}
-														{vccBillingAddressLine},{" "}
-														{vccZipCode || vccDefaultZipCode},{" "}
+														{vccBillingAddressLine}, {vccEffectiveZipCode},{" "}
 														{vccBillingCountry}
 													</div>
 													<div>
@@ -2220,12 +2281,10 @@ const MoreDetails = ({
 																			addressLine1: vccAddressLine1,
 																			adminArea2: vccAdminArea2,
 																			adminArea1: vccAdminArea1,
-																			postalCode: String(
-																				vccZipCode || vccDefaultZipCode,
-																			)
+																			postalCode: String(vccEffectiveZipCode)
 																				.trim()
 																				.toUpperCase(),
-																			countryCode: "US",
+																			countryCode: vccBillingCountryCode,
 																		},
 																	})}
 																/>
