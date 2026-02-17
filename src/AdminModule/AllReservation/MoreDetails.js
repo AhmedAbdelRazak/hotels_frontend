@@ -31,10 +31,14 @@ import {
 	sendReservationConfirmationSMSManualAdmin,
 	sendReservationPaymentLinkSMSManualAdmin,
 	getReservationVccStatus,
+	getReservationBraintreeVccStatus,
 	getPayPalClientTokenForVcc,
+	getBraintreeClientTokenForVcc,
 	createReservationVccOrder,
 	captureReservationVccOrder,
+	chargeReservationViaBraintreeVcc,
 } from "../apiAdmin";
+import DropIn from "braintree-web-drop-in-react";
 import {
 	PayPalScriptProvider,
 	PayPalCardFieldsProvider,
@@ -262,6 +266,9 @@ const VCC_ROOM_UNASSIGNED_CONFIRM_MESSAGE =
 	"Are you sure you want to proceed without assigning a room to the reservation?";
 const DEFAULT_EXPEDIA_VCC_ZIP = "98119";
 const VCC_MAX_ATTEMPTS = 2;
+const VCC_GATEWAY_MODE = String(process.env.REACT_APP_VCC_GATEWAY || "paypal")
+	.trim()
+	.toLowerCase();
 const VCC_RETRY_AVAILABLE_MESSAGE =
 	"One VCC attempt failed before. One final retry is still allowed.";
 const VCC_PROVIDER_UI_PRESETS = {
@@ -700,6 +707,10 @@ const MoreDetails = ({
 	const [isVccPayPalLoading, setIsVccPayPalLoading] = useState(false);
 	const [vccPayPalOptions, setVccPayPalOptions] = useState(null);
 	const [vccPayPalInitError, setVccPayPalInitError] = useState("");
+	const [isVccBraintreeLoading, setIsVccBraintreeLoading] = useState(false);
+	const [vccBraintreeClientToken, setVccBraintreeClientToken] = useState("");
+	const [vccBraintreeInitError, setVccBraintreeInitError] = useState("");
+	const [vccBraintreeInstance, setVccBraintreeInstance] = useState(null);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -734,6 +745,7 @@ const MoreDetails = ({
 	const vccProviderLabel = vccProviderUiPreset.label || "Provider";
 	const vccCardholderName =
 		vccProviderUiPreset.cardholderName || `${vccProviderLabel} VirtualCard`;
+	const isBraintreeVccMode = VCC_GATEWAY_MODE === "braintree";
 	const vccDefaultZipCode =
 		vccProviderUiPreset.defaultZip || DEFAULT_EXPEDIA_VCC_ZIP;
 	const vccBillingProfile = useMemo(
@@ -770,6 +782,10 @@ const MoreDetails = ({
 		setVccPayPalOptions(null);
 		setVccPayPalInitError("");
 		setIsVccPayPalLoading(false);
+		setVccBraintreeClientToken("");
+		setVccBraintreeInitError("");
+		setIsVccBraintreeLoading(false);
+		setVccBraintreeInstance(null);
 		setIsVccSubmitting(false);
 	}, [vccDefaultZipCode]);
 
@@ -807,7 +823,10 @@ const MoreDetails = ({
 		}
 		let active = true;
 		setIsVccStatusLoading(true);
-		getReservationVccStatus(reservation._id, token)
+		const fetchStatus = isBraintreeVccMode
+			? getReservationBraintreeVccStatus
+			: getReservationVccStatus;
+		fetchStatus(reservation._id, token)
 			.then((data) => {
 				if (!active) return;
 				setVccStatusState(data || null);
@@ -815,21 +834,22 @@ const MoreDetails = ({
 			.catch((err) => {
 				if (!active) return;
 				console.error("Failed to fetch VCC status:", err);
+				const fallbackState = isBraintreeVccMode
+					? reservation?.braintree_payment
+					: reservation?.vcc_payment;
 				setVccStatusState(
-					reservation?.vcc_payment
+					fallbackState
 						? {
-								alreadyCharged: !!reservation.vcc_payment?.charged,
+								alreadyCharged: !!fallbackState?.charged,
 								failedAttemptsCount: Number(
-									reservation.vcc_payment?.failed_attempts_count || 0,
+									fallbackState?.failed_attempts_count || 0,
 								),
 								attemptedBefore:
-									Number(reservation.vcc_payment?.failed_attempts_count || 0) >=
+									Number(fallbackState?.failed_attempts_count || 0) >=
 									VCC_MAX_ATTEMPTS,
-								lastFailureMessage:
-									reservation.vcc_payment?.last_failure_message || "",
+								lastFailureMessage: fallbackState?.last_failure_message || "",
 								warningMessage:
-									reservation.vcc_payment?.warning_message ||
-									VCC_PROMPT_WARNING_MESSAGE,
+									fallbackState?.warning_message || VCC_PROMPT_WARNING_MESSAGE,
 						  }
 						: null,
 				);
@@ -844,8 +864,10 @@ const MoreDetails = ({
 	}, [
 		isPaymentBreakdownVisible,
 		isExpediaReservation,
+		isBraintreeVccMode,
 		reservation?._id,
 		reservation?.vcc_payment,
+		reservation?.braintree_payment,
 		token,
 	]);
 
@@ -858,51 +880,85 @@ const MoreDetails = ({
 		) {
 			return;
 		}
-		if (vccPayPalOptions) return;
 
 		let active = true;
-		setIsVccPayPalLoading(true);
-		setVccPayPalInitError("");
-		getPayPalClientTokenForVcc({ token, buyerCountry: "US" })
-			.then((data) => {
-				if (!active) return;
-				const env = String(data?.env || "sandbox").toLowerCase();
-				const clientToken = String(
-					data?.clientToken || data?.client_token || "",
-				).trim();
-				const clientId =
-					env === "live"
-						? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
-						: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX;
-
-				if (!clientToken || !clientId) {
-					throw new Error(
-						"PayPal card fields are not configured. Missing client token or client id.",
-					);
-				}
-
-				setVccPayPalOptions({
-					"client-id": clientId,
-					"data-client-token": clientToken,
-					components: "card-fields",
-					intent: "capture",
-					currency: "USD",
-					commit: true,
-					locale: "en_US",
+		if (isBraintreeVccMode) {
+			if (vccBraintreeClientToken) return undefined;
+			setIsVccBraintreeLoading(true);
+			setVccBraintreeInitError("");
+			getBraintreeClientTokenForVcc({ token })
+				.then((data) => {
+					if (!active) return;
+					const authorization = String(
+						data?.clientToken ||
+							data?.tokenizationKey ||
+							process.env.REACT_APP_BRAINTREE_TOKENIZATION_KEY ||
+							"",
+					).trim();
+					if (!authorization) {
+						throw new Error(
+							"Braintree card fields are not configured. Missing authorization token.",
+						);
+					}
+					setVccBraintreeClientToken(authorization);
+				})
+				.catch((err) => {
+					if (!active) return;
+					const msg =
+						err?.response?.message ||
+						err?.message ||
+						"Failed to initialize Braintree card fields.";
+					setVccBraintreeInitError(msg);
+				})
+				.finally(() => {
+					if (!active) return;
+					setIsVccBraintreeLoading(false);
 				});
-			})
-			.catch((err) => {
-				if (!active) return;
-				const msg =
-					err?.response?.message ||
-					err?.message ||
-					"Failed to initialize PayPal card fields.";
-				setVccPayPalInitError(msg);
-			})
-			.finally(() => {
-				if (!active) return;
-				setIsVccPayPalLoading(false);
-			});
+		} else {
+			if (vccPayPalOptions) return undefined;
+			setIsVccPayPalLoading(true);
+			setVccPayPalInitError("");
+			getPayPalClientTokenForVcc({ token, buyerCountry: "US" })
+				.then((data) => {
+					if (!active) return;
+					const env = String(data?.env || "sandbox").toLowerCase();
+					const clientToken = String(
+						data?.clientToken || data?.client_token || "",
+					).trim();
+					const clientId =
+						env === "live"
+							? process.env.REACT_APP_PAYPAL_CLIENT_ID_LIVE
+							: process.env.REACT_APP_PAYPAL_CLIENT_ID_SANDBOX;
+
+					if (!clientToken || !clientId) {
+						throw new Error(
+							"PayPal card fields are not configured. Missing client token or client id.",
+						);
+					}
+
+					setVccPayPalOptions({
+						"client-id": clientId,
+						"data-client-token": clientToken,
+						components: "card-fields",
+						intent: "capture",
+						currency: "USD",
+						commit: true,
+						locale: "en_US",
+					});
+				})
+				.catch((err) => {
+					if (!active) return;
+					const msg =
+						err?.response?.message ||
+						err?.message ||
+						"Failed to initialize PayPal card fields.";
+					setVccPayPalInitError(msg);
+				})
+				.finally(() => {
+					if (!active) return;
+					setIsVccPayPalLoading(false);
+				});
+		}
 
 		return () => {
 			active = false;
@@ -912,6 +968,8 @@ const MoreDetails = ({
 		isVccPanelVisible,
 		vccStep,
 		isExpediaReservation,
+		isBraintreeVccMode,
+		vccBraintreeClientToken,
 		vccPayPalOptions,
 		token,
 	]);
@@ -927,6 +985,19 @@ const MoreDetails = ({
 		}, 15000);
 		return () => clearTimeout(timer);
 	}, [isVccPayPalLoading]);
+
+	useEffect(() => {
+		if (!isVccBraintreeLoading) return;
+		const timer = setTimeout(() => {
+			setIsVccBraintreeLoading(false);
+			setVccBraintreeInitError(
+				(prev) =>
+					prev ||
+					"Braintree card fields initialization timed out. Please retry.",
+			);
+		}, 15000);
+		return () => clearTimeout(timer);
+	}, [isVccBraintreeLoading]);
 
 	useEffect(() => {
 		if (!paymentLinkEmailModalOpen) return;
@@ -1452,13 +1523,16 @@ const MoreDetails = ({
 		[roomTableRows, reservation],
 	);
 	const vccRoomSummary = vccRoomNumbers.join(", ");
+	const reservationVccSnapshot = isBraintreeVccMode
+		? reservation?.braintree_payment
+		: reservation?.vcc_payment;
 	const hasVccStatusSnapshot = vccStatusState !== null;
 	const vccAlreadyCharged = hasVccStatusSnapshot
 		? !!vccStatusState?.alreadyCharged
-		: !!reservation?.vcc_payment?.charged;
+		: !!reservationVccSnapshot?.charged;
 	const vccFailedAttemptsCount = hasVccStatusSnapshot
 		? Number(vccStatusState?.failedAttemptsCount || 0)
-		: Number(reservation?.vcc_payment?.failed_attempts_count || 0);
+		: Number(reservationVccSnapshot?.failed_attempts_count || 0);
 	const vccAttemptedBefore = hasVccStatusSnapshot
 		? !!vccStatusState?.attemptedBefore
 		: vccFailedAttemptsCount >= VCC_MAX_ATTEMPTS;
@@ -1470,11 +1544,11 @@ const MoreDetails = ({
 	const vccWarningMessage =
 		vccStatusState?.warningMessage ||
 		(vccRetryAllowed ? VCC_RETRY_AVAILABLE_MESSAGE : "") ||
-		reservation?.vcc_payment?.warning_message ||
+		reservationVccSnapshot?.warning_message ||
 		VCC_PROMPT_WARNING_MESSAGE;
 	const vccLastFailureMessage =
 		vccStatusState?.lastFailureMessage ||
-		reservation?.vcc_payment?.last_failure_message ||
+		reservationVccSnapshot?.last_failure_message ||
 		"";
 
 	const openVccPanel = () => {
@@ -1567,6 +1641,8 @@ const MoreDetails = ({
 
 	const applyVccApiError = useCallback((err, fallbackMessage) => {
 		const apiResponse = err?.response || {};
+		const statusPayload =
+			apiResponse?.vccStatus || apiResponse?.braintreeStatus || {};
 		const msg =
 			apiResponse?.message ||
 			err?.message ||
@@ -1578,7 +1654,7 @@ const MoreDetails = ({
 		}
 		setVccStatusState((prev) => ({
 			...(prev || {}),
-			...(apiResponse?.vccStatus || {}),
+			...statusPayload,
 			alreadyCharged:
 				typeof apiResponse?.alreadyCharged === "boolean"
 					? apiResponse.alreadyCharged
@@ -1588,12 +1664,13 @@ const MoreDetails = ({
 					? apiResponse.attemptedBefore
 					: !!prev?.attemptedBefore,
 			failedAttemptsCount: Number(
-				apiResponse?.vccStatus?.failedAttemptsCount ||
-					prev?.failedAttemptsCount ||
-					0,
+				statusPayload?.failedAttemptsCount || prev?.failedAttemptsCount || 0,
 			),
 			lastFailureMessage: apiResponse?.message || prev?.lastFailureMessage,
-			warningMessage: apiResponse?.warningMessage || prev?.warningMessage,
+			warningMessage:
+				apiResponse?.warningMessage ||
+				statusPayload?.warningMessage ||
+				prev?.warningMessage,
 		}));
 	}, []);
 
@@ -1721,6 +1798,67 @@ const MoreDetails = ({
 		setIsVccSubmitting(false);
 		toast.info("VCC payment flow was cancelled.");
 	}, []);
+
+	const handleBraintreeVccSubmit = useCallback(async () => {
+		const validation = validateVccChargeContext(true, true);
+		if (!validation.ok) return;
+		if (
+			!vccBraintreeInstance ||
+			typeof vccBraintreeInstance.requestPaymentMethod !== "function"
+		) {
+			toast.error("Braintree card fields are not ready yet.");
+			return;
+		}
+
+		setIsVccSubmitting(true);
+		try {
+			const payload = await vccBraintreeInstance.requestPaymentMethod();
+			const nonce = String(payload?.nonce || "").trim();
+			if (!nonce) {
+				throw new Error("Braintree did not return a payment nonce.");
+			}
+
+			const response = await chargeReservationViaBraintreeVcc({
+				token,
+				reservationId: reservation._id,
+				usdAmount: validation.amountUsd,
+				postalCode: validation.postalCode,
+				paymentMethodNonce: nonce,
+				cardholderName: vccCardholderName,
+				proceedWithoutRoom: !!validation.proceedWithoutRoom,
+			});
+
+			const updated = response?.reservation;
+			if (updated?._id) {
+				setReservation(updated);
+				onReservationUpdated(updated);
+			}
+			setVccStatusState(
+				response?.braintreeStatus
+					? { ...response.braintreeStatus, alreadyCharged: true }
+					: {
+							alreadyCharged: true,
+							attemptedBefore: false,
+					  },
+			);
+			toast.success(response?.message || "VCC payment completed.");
+			resetVccFlowState();
+		} catch (err) {
+			applyVccApiError(err, "Braintree could not process this VCC payment.");
+		} finally {
+			setIsVccSubmitting(false);
+		}
+	}, [
+		validateVccChargeContext,
+		vccBraintreeInstance,
+		token,
+		reservation?._id,
+		vccCardholderName,
+		setReservation,
+		onReservationUpdated,
+		resetVccFlowState,
+		applyVccApiError,
+	]);
 
 	const downloadPDFFromRef = (targetRef, fileName = "receipt.pdf") => {
 		if (!targetRef?.current) return;
@@ -2225,73 +2363,151 @@ const MoreDetails = ({
 														{Number(vccAmountUsd || 0).toFixed(2)} USD
 													</div>
 												</div>
-												{isVccPayPalLoading ? (
-													<div
-														style={{ fontSize: "0.9rem", marginBottom: "10px" }}
-													>
-														Initializing secure PayPal card fields...
-													</div>
-												) : null}
-												{vccPayPalInitError ? (
-													<div
-														style={{
-															fontSize: "0.9rem",
-															marginBottom: "10px",
-															color: "#991b1b",
-															fontWeight: 600,
-														}}
-													>
-														{vccPayPalInitError}
-													</div>
-												) : null}
-												{vccPayPalOptions && !vccPayPalInitError ? (
-													<PayPalScriptProvider
-														key={String(
-															vccPayPalOptions?.["data-client-token"] ||
-																"vcc-paypal",
-														)}
-														options={vccPayPalOptions}
-													>
-														<PayPalCardFieldsProvider
-															createOrder={createHostedVccOrder}
-															onApprove={handleHostedVccApprove}
-															onError={handleHostedVccProviderError}
-															onCancel={handleHostedVccCancel}
-														>
-															<VccHostedFieldsLayout
-																cardholderName={vccCardholderName}
-															/>
-															<div className='d-flex justify-content-between mt-3'>
-																<button
-																	type='button'
-																	className='btn btn-outline-secondary'
-																	onClick={() => setVccStep("amount")}
-																	disabled={isVccSubmitting}
-																>
-																	Back
-																</button>
-																<VccCardFieldsSubmitButton
-																	disabled={isVccSubmitting}
-																	isSubmitting={isVccSubmitting}
-																	onBeforeSubmit={handleHostedVccBeforeSubmit}
-																	onSubmitError={handleHostedVccSubmitError}
-																	buildSubmitPayload={() => ({
-																		cardholderName: vccCardholderName,
-																		billingAddress: {
-																			addressLine1: vccAddressLine1,
-																			adminArea2: vccAdminArea2,
-																			adminArea1: vccAdminArea1,
-																			postalCode: String(vccEffectiveZipCode)
-																				.trim()
-																				.toUpperCase(),
-																			countryCode: vccBillingCountryCode,
+												{isBraintreeVccMode ? (
+													<>
+														{isVccBraintreeLoading ? (
+															<div
+																style={{
+																	fontSize: "0.9rem",
+																	marginBottom: "10px",
+																}}
+															>
+																Initializing secure Braintree card fields...
+															</div>
+														) : null}
+														{vccBraintreeInitError ? (
+															<div
+																style={{
+																	fontSize: "0.9rem",
+																	marginBottom: "10px",
+																	color: "#991b1b",
+																	fontWeight: 600,
+																}}
+															>
+																{vccBraintreeInitError}
+															</div>
+														) : null}
+														{vccBraintreeClientToken &&
+														!vccBraintreeInitError ? (
+															<div style={{ marginBottom: "12px" }}>
+																<DropIn
+																	options={{
+																		authorization: vccBraintreeClientToken,
+																		card: {
+																			cardholderName: {
+																				required: false,
+																			},
 																		},
-																	})}
+																	}}
+																	onInstance={(instance) =>
+																		setVccBraintreeInstance(instance || null)
+																	}
 																/>
 															</div>
-														</PayPalCardFieldsProvider>
-													</PayPalScriptProvider>
-												) : null}
+														) : null}
+														<div className='d-flex justify-content-between mt-3'>
+															<button
+																type='button'
+																className='btn btn-outline-secondary'
+																onClick={() => setVccStep("amount")}
+																disabled={isVccSubmitting}
+															>
+																Back
+															</button>
+															<button
+																type='button'
+																className='btn btn-success'
+																onClick={handleBraintreeVccSubmit}
+																disabled={
+																	isVccSubmitting ||
+																	!vccBraintreeClientToken ||
+																	!vccBraintreeInstance
+																}
+															>
+																{isVccSubmitting
+																	? "Processing..."
+																	: "Submit VCC Charge"}
+															</button>
+														</div>
+													</>
+												) : (
+													<>
+														{isVccPayPalLoading ? (
+															<div
+																style={{
+																	fontSize: "0.9rem",
+																	marginBottom: "10px",
+																}}
+															>
+																Initializing secure PayPal card fields...
+															</div>
+														) : null}
+														{vccPayPalInitError ? (
+															<div
+																style={{
+																	fontSize: "0.9rem",
+																	marginBottom: "10px",
+																	color: "#991b1b",
+																	fontWeight: 600,
+																}}
+															>
+																{vccPayPalInitError}
+															</div>
+														) : null}
+														{vccPayPalOptions && !vccPayPalInitError ? (
+															<PayPalScriptProvider
+																key={String(
+																	vccPayPalOptions?.["data-client-token"] ||
+																		"vcc-paypal",
+																)}
+																options={vccPayPalOptions}
+															>
+																<PayPalCardFieldsProvider
+																	createOrder={createHostedVccOrder}
+																	onApprove={handleHostedVccApprove}
+																	onError={handleHostedVccProviderError}
+																	onCancel={handleHostedVccCancel}
+																>
+																	<VccHostedFieldsLayout
+																		cardholderName={vccCardholderName}
+																	/>
+																	<div className='d-flex justify-content-between mt-3'>
+																		<button
+																			type='button'
+																			className='btn btn-outline-secondary'
+																			onClick={() => setVccStep("amount")}
+																			disabled={isVccSubmitting}
+																		>
+																			Back
+																		</button>
+																		<VccCardFieldsSubmitButton
+																			disabled={isVccSubmitting}
+																			isSubmitting={isVccSubmitting}
+																			onBeforeSubmit={
+																				handleHostedVccBeforeSubmit
+																			}
+																			onSubmitError={handleHostedVccSubmitError}
+																			buildSubmitPayload={() => ({
+																				cardholderName: vccCardholderName,
+																				billingAddress: {
+																					addressLine1: vccAddressLine1,
+																					adminArea2: vccAdminArea2,
+																					adminArea1: vccAdminArea1,
+																					postalCode: String(
+																						vccEffectiveZipCode,
+																					)
+																						.trim()
+																						.toUpperCase(),
+																					countryCode: vccBillingCountryCode,
+																				},
+																			})}
+																		/>
+																	</div>
+																</PayPalCardFieldsProvider>
+															</PayPalScriptProvider>
+														) : null}
+													</>
+												)}
 											</div>
 										)}
 									</div>

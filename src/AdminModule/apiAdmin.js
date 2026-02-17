@@ -892,6 +892,39 @@ export const getPayPalClientTokenForVcc = ({
 	}).then(parseJSON);
 };
 
+export const getBraintreeClientTokenForVcc = ({ token } = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/braintree/vcc/token-generated`,
+		{
+			method: "GET",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Cache-Control": "no-cache, no-store, max-age=0, must-revalidate",
+				Pragma: "no-cache",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			credentials: "omit",
+		},
+	).then(parseJSON);
+};
+
+export const getReservationBraintreeVccStatus = (reservationId, token) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/braintree/vcc-status/${reservationId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+		},
+	).then(parseJSON);
+};
+
 export const createReservationVccOrder = ({
 	token,
 	reservationId,
@@ -1012,6 +1045,49 @@ export const chargeReservationViaVcc = ({
 			...(cmid ? { cmid } : {}),
 		}),
 	}).then(parseJSON);
+};
+
+export const chargeReservationViaBraintreeVcc = ({
+	token,
+	reservationId,
+	usdAmount,
+	postalCode,
+	paymentMethodNonce,
+	cardholderName = "",
+	proceedWithoutRoom = false,
+}) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	if (!paymentMethodNonce) {
+		return Promise.reject(new Error("paymentMethodNonce is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/braintree/vcc-charge`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			credentials: "omit",
+			body: JSON.stringify({
+				reservationId,
+				usdAmount: Number(usdAmount),
+				proceedWithoutRoom: !!proceedWithoutRoom,
+				paymentMethodNonce,
+				...(cardholderName ? { cardholderName: String(cardholderName) } : {}),
+				...(postalCode
+					? {
+							billingAddress: {
+								postal_code: String(postalCode).trim(),
+							},
+					  }
+					: {}),
+			}),
+		},
+	).then(parseJSON);
 };
 
 export const triggerPayment = (
