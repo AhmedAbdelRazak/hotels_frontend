@@ -32,11 +32,13 @@ import {
 	sendReservationPaymentLinkSMSManualAdmin,
 	getReservationVccStatus,
 	getReservationBraintreeVccStatus,
+	getReservationBofaVccStatus,
 	getPayPalClientTokenForVcc,
 	getBraintreeClientTokenForVcc,
 	createReservationVccOrder,
 	captureReservationVccOrder,
 	chargeReservationViaBraintreeVcc,
+	chargeReservationViaBofaVcc,
 } from "../apiAdmin";
 import DropIn from "braintree-web-drop-in-react";
 import {
@@ -258,6 +260,49 @@ const splitPhoneForModal = (raw) => {
 		return { code: cleaned.slice(0, 3), phone: cleaned.slice(3) };
 	}
 	return { code: "", phone: cleaned };
+};
+const formatVccCardNumber = (value) => {
+	const digitsOnly = String(value || "")
+		.replace(/\D/g, "")
+		.slice(0, 19);
+	return digitsOnly.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
+};
+const normalizeVccCardNumber = (value) =>
+	String(value || "")
+		.replace(/\D/g, "")
+		.slice(0, 19);
+const formatVccExpiry = (value) => {
+	const digitsOnly = String(value || "")
+		.replace(/\D/g, "")
+		.slice(0, 4);
+	if (!digitsOnly) return "";
+	if (digitsOnly.length <= 2) return digitsOnly;
+	return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+};
+const normalizeVccCvv = (value) =>
+	String(value || "")
+		.replace(/\D/g, "")
+		.slice(0, 4);
+const splitVccCardholderName = (value, fallbackName = "Virtual Card") => {
+	const raw = String(value || fallbackName)
+		.trim()
+		.replace(/\s+/g, " ");
+	if (!raw) {
+		return { firstName: "Virtual", lastName: "Card", fullName: "Virtual Card" };
+	}
+	const parts = raw.split(" ");
+	if (parts.length === 1) {
+		return {
+			firstName: parts[0],
+			lastName: "Card",
+			fullName: `${parts[0]} Card`.trim(),
+		};
+	}
+	return {
+		firstName: parts.slice(0, -1).join(" "),
+		lastName: parts[parts.length - 1],
+		fullName: raw,
+	};
 };
 
 const VCC_PROMPT_WARNING_MESSAGE =
@@ -711,6 +756,10 @@ const MoreDetails = ({
 	const [vccBraintreeClientToken, setVccBraintreeClientToken] = useState("");
 	const [vccBraintreeInitError, setVccBraintreeInitError] = useState("");
 	const [vccBraintreeInstance, setVccBraintreeInstance] = useState(null);
+	const [vccManualCardholderName, setVccManualCardholderName] = useState("");
+	const [vccManualCardNumber, setVccManualCardNumber] = useState("");
+	const [vccManualCardExpiry, setVccManualCardExpiry] = useState("");
+	const [vccManualCardCvv, setVccManualCardCvv] = useState("");
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -743,9 +792,16 @@ const MoreDetails = ({
 	const vccProviderUiPreset =
 		VCC_PROVIDER_UI_PRESETS[vccProviderKey] || VCC_PROVIDER_UI_PRESETS.expedia;
 	const vccProviderLabel = vccProviderUiPreset.label || "Provider";
-	const vccCardholderName =
+	const defaultVccCardholderName =
 		vccProviderUiPreset.cardholderName || `${vccProviderLabel} VirtualCard`;
 	const isBraintreeVccMode = VCC_GATEWAY_MODE === "braintree";
+	const isBofaVccMode = VCC_GATEWAY_MODE === "bofa";
+	const isPayPalVccMode = !isBraintreeVccMode && !isBofaVccMode;
+	const vccCardholderName = String(
+		vccManualCardholderName || defaultVccCardholderName,
+	)
+		.trim()
+		.replace(/\s+/g, " ");
 	const vccDefaultZipCode =
 		vccProviderUiPreset.defaultZip || DEFAULT_EXPEDIA_VCC_ZIP;
 	const vccBillingProfile = useMemo(
@@ -778,6 +834,10 @@ const MoreDetails = ({
 		setVccStep("amount");
 		setVccAmountUsd("");
 		setVccZipCode(vccDefaultZipCode);
+		setVccManualCardholderName(defaultVccCardholderName);
+		setVccManualCardNumber("");
+		setVccManualCardExpiry("");
+		setVccManualCardCvv("");
 		vccProceedWithoutRoomRef.current = false;
 		setVccPayPalOptions(null);
 		setVccPayPalInitError("");
@@ -787,7 +847,7 @@ const MoreDetails = ({
 		setIsVccBraintreeLoading(false);
 		setVccBraintreeInstance(null);
 		setIsVccSubmitting(false);
-	}, [vccDefaultZipCode]);
+	}, [vccDefaultZipCode, defaultVccCardholderName]);
 
 	useEffect(() => {
 		if (isModalVisible) {
@@ -808,6 +868,11 @@ const MoreDetails = ({
 	}, [isVccPanelVisible, vccDefaultZipCode]);
 
 	useEffect(() => {
+		if (isVccPanelVisible) return;
+		setVccManualCardholderName(defaultVccCardholderName);
+	}, [isVccPanelVisible, defaultVccCardholderName]);
+
+	useEffect(() => {
 		if (isPaymentBreakdownVisible) return;
 		resetVccFlowState();
 		setVccStatusState(null);
@@ -825,7 +890,9 @@ const MoreDetails = ({
 		setIsVccStatusLoading(true);
 		const fetchStatus = isBraintreeVccMode
 			? getReservationBraintreeVccStatus
-			: getReservationVccStatus;
+			: isBofaVccMode
+				? getReservationBofaVccStatus
+				: getReservationVccStatus;
 		fetchStatus(reservation._id, token)
 			.then((data) => {
 				if (!active) return;
@@ -836,7 +903,9 @@ const MoreDetails = ({
 				console.error("Failed to fetch VCC status:", err);
 				const fallbackState = isBraintreeVccMode
 					? reservation?.braintree_payment
-					: reservation?.vcc_payment;
+					: isBofaVccMode
+						? reservation?.bofa_payment?.vcc
+						: reservation?.vcc_payment;
 				setVccStatusState(
 					fallbackState
 						? {
@@ -865,9 +934,11 @@ const MoreDetails = ({
 		isPaymentBreakdownVisible,
 		isExpediaReservation,
 		isBraintreeVccMode,
+		isBofaVccMode,
 		reservation?._id,
 		reservation?.vcc_payment,
 		reservation?.braintree_payment,
+		reservation?.bofa_payment,
 		token,
 	]);
 
@@ -882,6 +953,14 @@ const MoreDetails = ({
 		}
 
 		let active = true;
+		if (isBofaVccMode) {
+			setIsVccPayPalLoading(false);
+			setVccPayPalInitError("");
+			setIsVccBraintreeLoading(false);
+			setVccBraintreeInitError("");
+			return undefined;
+		}
+
 		if (isBraintreeVccMode) {
 			if (vccBraintreeClientToken) return undefined;
 			setIsVccBraintreeLoading(true);
@@ -914,7 +993,7 @@ const MoreDetails = ({
 					if (!active) return;
 					setIsVccBraintreeLoading(false);
 				});
-		} else {
+		} else if (isPayPalVccMode) {
 			if (vccPayPalOptions) return undefined;
 			setIsVccPayPalLoading(true);
 			setVccPayPalInitError("");
@@ -958,6 +1037,10 @@ const MoreDetails = ({
 					if (!active) return;
 					setIsVccPayPalLoading(false);
 				});
+		} else {
+			setVccPayPalInitError(
+				"Unsupported VCC gateway mode. Please set REACT_APP_VCC_GATEWAY to paypal, braintree, or bofa.",
+			);
 		}
 
 		return () => {
@@ -969,6 +1052,8 @@ const MoreDetails = ({
 		vccStep,
 		isExpediaReservation,
 		isBraintreeVccMode,
+		isBofaVccMode,
+		isPayPalVccMode,
 		vccBraintreeClientToken,
 		vccPayPalOptions,
 		token,
@@ -1525,7 +1610,9 @@ const MoreDetails = ({
 	const vccRoomSummary = vccRoomNumbers.join(", ");
 	const reservationVccSnapshot = isBraintreeVccMode
 		? reservation?.braintree_payment
-		: reservation?.vcc_payment;
+		: isBofaVccMode
+			? reservation?.bofa_payment?.vcc
+			: reservation?.vcc_payment;
 	const hasVccStatusSnapshot = vccStatusState !== null;
 	const vccAlreadyCharged = hasVccStatusSnapshot
 		? !!vccStatusState?.alreadyCharged
@@ -1642,7 +1729,10 @@ const MoreDetails = ({
 	const applyVccApiError = useCallback((err, fallbackMessage) => {
 		const apiResponse = err?.response || {};
 		const statusPayload =
-			apiResponse?.vccStatus || apiResponse?.braintreeStatus || {};
+			apiResponse?.vccStatus ||
+			apiResponse?.braintreeStatus ||
+			apiResponse?.bofaStatus ||
+			{};
 		const msg =
 			apiResponse?.message ||
 			err?.message ||
@@ -1854,6 +1944,111 @@ const MoreDetails = ({
 		token,
 		reservation?._id,
 		vccCardholderName,
+		setReservation,
+		onReservationUpdated,
+		resetVccFlowState,
+		applyVccApiError,
+	]);
+
+	const handleBofaVccSubmit = useCallback(async () => {
+		const validation = validateVccChargeContext(true, true);
+		if (!validation.ok) return;
+
+		const cardNumber = normalizeVccCardNumber(vccManualCardNumber);
+		const cardExpiry = String(vccManualCardExpiry || "").trim();
+		const cardCVV = normalizeVccCvv(vccManualCardCvv);
+
+		if (cardNumber.length < 12 || cardNumber.length > 19) {
+			toast.error("Please enter a valid card number.");
+			return;
+		}
+		if (!/^(\d{2})\/(\d{2}|\d{4})$/.test(cardExpiry)) {
+			toast.error("Please enter expiry in MM/YY format.");
+			return;
+		}
+		const expiryMatch = cardExpiry.match(/^(\d{2})\/(\d{2}|\d{4})$/);
+		const expiryMonth = Number(expiryMatch?.[1] || 0);
+		if (expiryMonth < 1 || expiryMonth > 12) {
+			toast.error("Please enter a valid expiry month.");
+			return;
+		}
+		if (cardCVV.length < 3 || cardCVV.length > 4) {
+			toast.error("Please enter a valid CVV.");
+			return;
+		}
+
+		const cardholder = splitVccCardholderName(
+			vccCardholderName,
+			defaultVccCardholderName,
+		);
+
+		setIsVccSubmitting(true);
+		try {
+			const response = await chargeReservationViaBofaVcc({
+				token,
+				reservationId: reservation._id,
+				usdAmount: validation.amountUsd,
+				postalCode: validation.postalCode,
+				cardNumber,
+				cardExpiry,
+				cardCVV,
+				cardholderName: cardholder.fullName,
+				proceedWithoutRoom: !!validation.proceedWithoutRoom,
+				confirmationNumber2: secondaryConfirmation,
+				billingAddress: {
+					firstName: cardholder.firstName,
+					lastName: cardholder.lastName,
+					address1: vccAddressLine1,
+					locality: vccAdminArea2,
+					administrativeArea: vccAdminArea1,
+					postalCode: String(vccEffectiveZipCode || validation.postalCode)
+						.trim()
+						.toUpperCase(),
+					countryCode: vccBillingCountryCode,
+				},
+			});
+
+			const updated = response?.reservation;
+			if (updated?._id) {
+				setReservation(updated);
+				onReservationUpdated(updated);
+			}
+			setVccStatusState(
+				response?.bofaStatus
+					? { ...response.bofaStatus, alreadyCharged: true }
+					: {
+							alreadyCharged: true,
+							attemptedBefore: false,
+					  },
+			);
+			toast.success(
+				response?.message ||
+					"VCC payment completed via Bank of America.",
+			);
+			resetVccFlowState();
+		} catch (err) {
+			applyVccApiError(
+				err,
+				"Bank of America could not process this VCC payment.",
+			);
+		} finally {
+			setIsVccSubmitting(false);
+		}
+	}, [
+		validateVccChargeContext,
+		vccManualCardNumber,
+		vccManualCardExpiry,
+		vccManualCardCvv,
+		vccCardholderName,
+		defaultVccCardholderName,
+		token,
+		reservation?._id,
+		secondaryConfirmation,
+		vccAddressLine1,
+		vccAdminArea2,
+		vccAdminArea1,
+		vccEffectiveZipCode,
+		vccBillingCountryCode,
 		setReservation,
 		onReservationUpdated,
 		resetVccFlowState,
@@ -2423,6 +2618,98 @@ const MoreDetails = ({
 																	!vccBraintreeClientToken ||
 																	!vccBraintreeInstance
 																}
+															>
+																{isVccSubmitting
+																	? "Processing..."
+																	: "Submit VCC Charge"}
+															</button>
+														</div>
+													</>
+												) : isBofaVccMode ? (
+													<>
+														<div className='mb-3'>
+															<label style={{ fontWeight: "bold" }}>
+																Cardholder Name
+															</label>
+															<input
+																type='text'
+																className='form-control'
+																value={vccManualCardholderName}
+																onChange={(e) =>
+																	setVccManualCardholderName(
+																		e.target.value.slice(0, 80),
+																	)
+																}
+																placeholder={defaultVccCardholderName}
+																autoComplete='off'
+															/>
+														</div>
+														<div className='mb-3'>
+															<label style={{ fontWeight: "bold" }}>
+																Card Number
+															</label>
+															<input
+																type='text'
+																inputMode='numeric'
+																className='form-control'
+																value={vccManualCardNumber}
+																onChange={(e) =>
+																	setVccManualCardNumber(
+																		formatVccCardNumber(e.target.value),
+																	)
+																}
+																placeholder='4111 1111 1111 1111'
+																autoComplete='off'
+															/>
+														</div>
+														<div className='row'>
+															<div className='col-md-6 mb-3'>
+																<label style={{ fontWeight: "bold" }}>Expiry</label>
+																<input
+																	type='text'
+																	inputMode='numeric'
+																	className='form-control'
+																	value={vccManualCardExpiry}
+																	onChange={(e) =>
+																		setVccManualCardExpiry(
+																			formatVccExpiry(e.target.value),
+																		)
+																	}
+																	placeholder='MM/YY'
+																	autoComplete='off'
+																/>
+															</div>
+															<div className='col-md-6 mb-3'>
+																<label style={{ fontWeight: "bold" }}>CVV</label>
+																<input
+																	type='text'
+																	inputMode='numeric'
+																	className='form-control'
+																	value={vccManualCardCvv}
+																	onChange={(e) =>
+																		setVccManualCardCvv(
+																			normalizeVccCvv(e.target.value),
+																		)
+																	}
+																	placeholder='CVV'
+																	autoComplete='off'
+																/>
+															</div>
+														</div>
+														<div className='d-flex justify-content-between mt-3'>
+															<button
+																type='button'
+																className='btn btn-outline-secondary'
+																onClick={() => setVccStep("amount")}
+																disabled={isVccSubmitting}
+															>
+																Back
+															</button>
+															<button
+																type='button'
+																className='btn btn-success'
+																onClick={handleBofaVccSubmit}
+																disabled={isVccSubmitting}
 															>
 																{isVccSubmitting
 																	? "Processing..."

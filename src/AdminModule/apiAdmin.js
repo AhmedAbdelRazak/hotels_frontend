@@ -925,6 +925,22 @@ export const getReservationBraintreeVccStatus = (reservationId, token) => {
 	).then(parseJSON);
 };
 
+export const getReservationBofaVccStatus = (reservationId, token) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/bofa/vcc-status/${reservationId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+		},
+	).then(parseJSON);
+};
+
 export const createReservationVccOrder = ({
 	token,
 	reservationId,
@@ -1088,6 +1104,53 @@ export const chargeReservationViaBraintreeVcc = ({
 			}),
 		},
 	).then(parseJSON);
+};
+
+export const chargeReservationViaBofaVcc = ({
+	token,
+	reservationId,
+	usdAmount,
+	postalCode,
+	cardNumber,
+	cardExpiry,
+	cardCVV,
+	cardType = "",
+	cardholderName = "",
+	billingAddress = {},
+	proceedWithoutRoom = false,
+	confirmationNumber2 = "",
+}) => {
+	if (!reservationId) {
+		return Promise.reject(new Error("reservationId is required"));
+	}
+	return fetch(`${process.env.REACT_APP_API_URL}/reservations/bofa/vcc-charge`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		},
+		credentials: "omit",
+		body: JSON.stringify({
+			reservationId,
+			usdAmount: Number(usdAmount),
+			proceedWithoutRoom: !!proceedWithoutRoom,
+			...(confirmationNumber2
+				? { confirmationNumber2: String(confirmationNumber2) }
+				: {}),
+			...(cardholderName ? { cardholderName: String(cardholderName) } : {}),
+			card: {
+				number: String(cardNumber || ""),
+				expiry: String(cardExpiry || ""),
+				cvv: String(cardCVV || ""),
+				...(cardType ? { type: String(cardType) } : {}),
+			},
+			billingAddress: {
+				...billingAddress,
+				...(postalCode ? { postalCode: String(postalCode).trim() } : {}),
+			},
+		}),
+	}).then(parseJSON);
 };
 
 export const triggerPayment = (
