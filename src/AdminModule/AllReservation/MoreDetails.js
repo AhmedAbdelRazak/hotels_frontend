@@ -33,6 +33,7 @@ import {
 	getReservationVccStatus,
 	getReservationBraintreeVccStatus,
 	getReservationBofaVccStatus,
+	getBofaVccHealth,
 	getPayPalClientTokenForVcc,
 	getBraintreeClientTokenForVcc,
 	createReservationVccOrder,
@@ -272,12 +273,39 @@ const normalizeVccCardNumber = (value) =>
 		.replace(/\D/g, "")
 		.slice(0, 19);
 const formatVccExpiry = (value) => {
-	const digitsOnly = String(value || "")
-		.replace(/\D/g, "")
-		.slice(0, 4);
+	const raw = String(value || "");
+	const byParts = raw
+		.trim()
+		.split(/[\/\-\s]+/)
+		.filter(Boolean);
+	if (byParts.length >= 2) {
+		const monthDigits = byParts[0].replace(/\D/g, "").slice(0, 2);
+		const yearDigits = byParts[1].replace(/\D/g, "").slice(0, 4);
+		if (!monthDigits) return "";
+		const month = monthDigits.padStart(2, "0");
+		return yearDigits ? `${month}/${yearDigits}` : month;
+	}
+
+	const digitsOnly = raw.replace(/\D/g, "").slice(0, 4);
 	if (!digitsOnly) return "";
 	if (digitsOnly.length <= 2) return digitsOnly;
-	return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+
+	let month = digitsOnly.slice(0, 2);
+	let year = digitsOnly.slice(2);
+	const monthNum = Number(month);
+	if (monthNum < 1 || monthNum > 12) {
+		month = `0${digitsOnly[0]}`.slice(-2);
+		year = digitsOnly.slice(1);
+	}
+	return `${month}/${year}`;
+};
+const normalizeVccExpiryForSubmit = (value) => {
+	const formatted = formatVccExpiry(value);
+	const match = String(formatted || "").match(/^(\d{1,2})\/(\d{1,4})$/);
+	if (!match) return String(formatted || "").trim();
+	const month = String(match[1]).padStart(2, "0");
+	const year = String(match[2]).slice(0, 4);
+	return `${month}/${year}`;
 };
 const normalizeVccCvv = (value) =>
 	String(value || "")
@@ -760,6 +788,8 @@ const MoreDetails = ({
 	const [vccManualCardNumber, setVccManualCardNumber] = useState("");
 	const [vccManualCardExpiry, setVccManualCardExpiry] = useState("");
 	const [vccManualCardCvv, setVccManualCardCvv] = useState("");
+	const [isBofaHealthLoading, setIsBofaHealthLoading] = useState(false);
+	const [bofaHealthState, setBofaHealthState] = useState(null);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
@@ -802,6 +832,17 @@ const MoreDetails = ({
 	)
 		.trim()
 		.replace(/\s+/g, " ");
+	const bofaProbeState = bofaHealthState?.probe || null;
+	const bofaHealthCode =
+		bofaProbeState?.classification?.code || bofaProbeState?.error?.issue || "";
+	const bofaHealthMessage =
+		bofaProbeState?.classification?.message ||
+		bofaProbeState?.error?.message ||
+		"";
+	const shouldBlockBofaSubmit =
+		!!isBofaVccMode &&
+		!!bofaHealthState &&
+		bofaHealthState?.readyForCharge === false;
 	const vccDefaultZipCode =
 		vccProviderUiPreset.defaultZip || DEFAULT_EXPEDIA_VCC_ZIP;
 	const vccBillingProfile = useMemo(
@@ -838,6 +879,8 @@ const MoreDetails = ({
 		setVccManualCardNumber("");
 		setVccManualCardExpiry("");
 		setVccManualCardCvv("");
+		setIsBofaHealthLoading(false);
+		setBofaHealthState(null);
 		vccProceedWithoutRoomRef.current = false;
 		setVccPayPalOptions(null);
 		setVccPayPalInitError("");
@@ -891,8 +934,8 @@ const MoreDetails = ({
 		const fetchStatus = isBraintreeVccMode
 			? getReservationBraintreeVccStatus
 			: isBofaVccMode
-				? getReservationBofaVccStatus
-				: getReservationVccStatus;
+			  ? getReservationBofaVccStatus
+			  : getReservationVccStatus;
 		fetchStatus(reservation._id, token)
 			.then((data) => {
 				if (!active) return;
@@ -904,8 +947,8 @@ const MoreDetails = ({
 				const fallbackState = isBraintreeVccMode
 					? reservation?.braintree_payment
 					: isBofaVccMode
-						? reservation?.bofa_payment?.vcc
-						: reservation?.vcc_payment;
+					  ? reservation?.bofa_payment?.vcc
+					  : reservation?.vcc_payment;
 				setVccStatusState(
 					fallbackState
 						? {
@@ -1611,8 +1654,8 @@ const MoreDetails = ({
 	const reservationVccSnapshot = isBraintreeVccMode
 		? reservation?.braintree_payment
 		: isBofaVccMode
-			? reservation?.bofa_payment?.vcc
-			: reservation?.vcc_payment;
+		  ? reservation?.bofa_payment?.vcc
+		  : reservation?.vcc_payment;
 	const hasVccStatusSnapshot = vccStatusState !== null;
 	const vccAlreadyCharged = hasVccStatusSnapshot
 		? !!vccStatusState?.alreadyCharged
@@ -1733,12 +1776,20 @@ const MoreDetails = ({
 			apiResponse?.braintreeStatus ||
 			apiResponse?.bofaStatus ||
 			{};
+		const correlationId =
+			apiResponse?.transaction?.correlationId ||
+			apiResponse?.reservation?.bofa_payment?.vcc?.last_capture
+				?.correlationId ||
+			"";
 		const msg =
 			apiResponse?.message ||
 			err?.message ||
 			fallbackMessage ||
 			"VCC payment failed to process.";
 		toast.error(msg);
+		if (correlationId) {
+			toast.info(`BoA Correlation ID: ${correlationId}`);
+		}
 		if (apiResponse?.warningMessage) {
 			toast.error(apiResponse.warningMessage);
 		}
@@ -1763,6 +1814,68 @@ const MoreDetails = ({
 				prev?.warningMessage,
 		}));
 	}, []);
+
+	const handleRunBofaHealthCheck = useCallback(
+		async ({ silent = false } = {}) => {
+			if (!isBofaVccMode) return null;
+			setIsBofaHealthLoading(true);
+			try {
+				const data = await getBofaVccHealth({ token, probe: true });
+				setBofaHealthState(data || null);
+				if (!silent) {
+					if (data?.readyForCharge) {
+						toast.success(
+							"BoA health check passed. Endpoint/auth looks ready for VCC charge.",
+						);
+					} else {
+						toast.warn(
+							data?.probe?.classification?.message ||
+								data?.probe?.error?.message ||
+								data?.checks?.errors?.[0] ||
+								"BoA health check reported configuration issues.",
+						);
+					}
+					if (data?.probe?.correlationId) {
+						toast.info(`BoA Correlation ID: ${data.probe.correlationId}`);
+					}
+				}
+				return data;
+			} catch (healthErr) {
+				if (!silent) {
+					toast.error(
+						healthErr?.response?.message ||
+							healthErr?.message ||
+							"Failed to run BoA health check.",
+					);
+				}
+				return null;
+			} finally {
+				setIsBofaHealthLoading(false);
+			}
+		},
+		[isBofaVccMode, token],
+	);
+
+	useEffect(() => {
+		if (
+			!isPaymentBreakdownVisible ||
+			!isVccPanelVisible ||
+			vccStep !== "card" ||
+			!isBofaVccMode
+		) {
+			return;
+		}
+		if (isBofaHealthLoading || bofaHealthState) return;
+		handleRunBofaHealthCheck({ silent: true });
+	}, [
+		isPaymentBreakdownVisible,
+		isVccPanelVisible,
+		vccStep,
+		isBofaVccMode,
+		isBofaHealthLoading,
+		bofaHealthState,
+		handleRunBofaHealthCheck,
+	]);
 
 	const handleVccAmountContinue = () => {
 		const validation = validateVccChargeContext(true, true);
@@ -1951,11 +2064,19 @@ const MoreDetails = ({
 	]);
 
 	const handleBofaVccSubmit = useCallback(async () => {
+		const healthSnapshot = bofaHealthState;
+		if (!healthSnapshot || healthSnapshot?.readyForCharge !== true) {
+			const refreshedHealth = await handleRunBofaHealthCheck({ silent: false });
+			if (!refreshedHealth || refreshedHealth?.readyForCharge !== true) {
+				return;
+			}
+		}
+
 		const validation = validateVccChargeContext(true, true);
 		if (!validation.ok) return;
 
 		const cardNumber = normalizeVccCardNumber(vccManualCardNumber);
-		const cardExpiry = String(vccManualCardExpiry || "").trim();
+		const cardExpiry = normalizeVccExpiryForSubmit(vccManualCardExpiry);
 		const cardCVV = normalizeVccCvv(vccManualCardCvv);
 
 		if (cardNumber.length < 12 || cardNumber.length > 19) {
@@ -2022,8 +2143,7 @@ const MoreDetails = ({
 					  },
 			);
 			toast.success(
-				response?.message ||
-					"VCC payment completed via Bank of America.",
+				response?.message || "VCC payment completed via Bank of America.",
 			);
 			resetVccFlowState();
 		} catch (err) {
@@ -2035,6 +2155,8 @@ const MoreDetails = ({
 			setIsVccSubmitting(false);
 		}
 	}, [
+		bofaHealthState,
+		handleRunBofaHealthCheck,
 		validateVccChargeContext,
 		vccManualCardNumber,
 		vccManualCardExpiry,
@@ -2627,6 +2749,74 @@ const MoreDetails = ({
 													</>
 												) : isBofaVccMode ? (
 													<>
+														<div
+															style={{
+																fontSize: "0.88rem",
+																background: "#f8fafc",
+																padding: "10px 12px",
+																border: "1px solid #dbe4ef",
+																borderRadius: "10px",
+																marginBottom: "12px",
+															}}
+														>
+															<div className='d-flex justify-content-between align-items-center mb-1'>
+																<strong>BoA Health Check</strong>
+																<button
+																	type='button'
+																	className='btn btn-sm btn-outline-primary'
+																	onClick={() =>
+																		handleRunBofaHealthCheck({ silent: false })
+																	}
+																	disabled={
+																		isBofaHealthLoading || isVccSubmitting
+																	}
+																>
+																	{isBofaHealthLoading
+																		? "Checking..."
+																		: "Run Check"}
+																</button>
+															</div>
+															<div
+																style={{
+																	color:
+																		bofaHealthState?.readyForCharge === true
+																			? "#166534"
+																			: bofaHealthState?.readyForCharge ===
+																			    false
+																			  ? "#991b1b"
+																			  : "#334155",
+																	fontWeight:
+																		bofaHealthState?.readyForCharge === true ||
+																		bofaHealthState?.readyForCharge === false
+																			? 600
+																			: 500,
+																}}
+															>
+																{isBofaHealthLoading
+																	? "Running BoA probe..."
+																	: bofaHealthState
+																	  ? bofaHealthState?.readyForCharge
+																			? "Ready: endpoint/auth probe passed."
+																			: "Not ready: configuration/provisioning issue detected."
+																	  : "Run the BoA health check before submitting."}
+															</div>
+															{bofaHealthCode ? (
+																<div style={{ marginTop: "4px" }}>
+																	<strong>Code:</strong> {bofaHealthCode}
+																</div>
+															) : null}
+															{bofaHealthMessage ? (
+																<div style={{ marginTop: "4px" }}>
+																	<strong>Details:</strong> {bofaHealthMessage}
+																</div>
+															) : null}
+															{bofaProbeState?.correlationId ? (
+																<div style={{ marginTop: "4px" }}>
+																	<strong>Correlation ID:</strong>{" "}
+																	{bofaProbeState.correlationId}
+																</div>
+															) : null}
+														</div>
 														<div className='mb-3'>
 															<label style={{ fontWeight: "bold" }}>
 																Cardholder Name
@@ -2664,7 +2854,9 @@ const MoreDetails = ({
 														</div>
 														<div className='row'>
 															<div className='col-md-6 mb-3'>
-																<label style={{ fontWeight: "bold" }}>Expiry</label>
+																<label style={{ fontWeight: "bold" }}>
+																	Expiry
+																</label>
 																<input
 																	type='text'
 																	inputMode='numeric'
@@ -2680,7 +2872,9 @@ const MoreDetails = ({
 																/>
 															</div>
 															<div className='col-md-6 mb-3'>
-																<label style={{ fontWeight: "bold" }}>CVV</label>
+																<label style={{ fontWeight: "bold" }}>
+																	CVV
+																</label>
 																<input
 																	type='text'
 																	inputMode='numeric'
@@ -2709,13 +2903,30 @@ const MoreDetails = ({
 																type='button'
 																className='btn btn-success'
 																onClick={handleBofaVccSubmit}
-																disabled={isVccSubmitting}
+																disabled={
+																	isVccSubmitting ||
+																	isBofaHealthLoading ||
+																	shouldBlockBofaSubmit
+																}
 															>
 																{isVccSubmitting
 																	? "Processing..."
 																	: "Submit VCC Charge"}
 															</button>
 														</div>
+														{shouldBlockBofaSubmit ? (
+															<div
+																style={{
+																	marginTop: "8px",
+																	color: "#991b1b",
+																	fontSize: "0.88rem",
+																	fontWeight: 600,
+																}}
+															>
+																BoA health check is not ready. Fix configuration
+																and run check again before charging.
+															</div>
+														) : null}
 													</>
 												) : (
 													<>

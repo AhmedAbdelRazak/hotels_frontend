@@ -941,6 +941,18 @@ export const getReservationBofaVccStatus = (reservationId, token) => {
 	).then(parseJSON);
 };
 
+export const getBofaVccHealth = ({ token, probe = true } = {}) => {
+	const query = `probe=${probe ? "true" : "false"}`;
+	return fetch(`${process.env.REACT_APP_API_URL}/bofa/health?${query}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		},
+		credentials: "omit",
+	}).then(parseJSON);
+};
+
 export const createReservationVccOrder = ({
 	token,
 	reservationId,
