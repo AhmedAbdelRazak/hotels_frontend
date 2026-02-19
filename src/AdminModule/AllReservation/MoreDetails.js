@@ -276,7 +276,7 @@ const formatVccExpiry = (value) => {
 	const raw = String(value || "");
 	const byParts = raw
 		.trim()
-		.split(/[\/\-\s]+/)
+		.split(/[/\-\s]+/)
 		.filter(Boolean);
 	if (byParts.length >= 2) {
 		const monthDigits = byParts[0].replace(/\D/g, "").slice(0, 2);
