@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import {
 	Alert,
@@ -15,10 +21,12 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import moment from "moment-hijri";
+import { useHistory, useLocation } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import EnhancedContentTable from "../AllReservation/EnhancedContentTable";
 import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import MoreDetails from "../AllReservation/MoreDetails";
+import { singlePreReservationById } from "../../HotelModule/apiAdmin";
 import {
 	getHotelOccupancyCalendar,
 	getHotelOccupancyDayReservations,
@@ -45,6 +53,13 @@ const ModalZFix = createGlobalStyle`
 	.report-reservations-modal .ant-modal,
 	.report-reservations-modal .ant-modal-mask {
 		z-index: 4002 !important;
+	}
+	.payment-breakdown-modal .ant-modal,
+	.payment-breakdown-modal .ant-modal-wrap {
+		z-index: 50050 !important;
+	}
+	.payment-breakdown-modal .ant-modal-mask {
+		z-index: 50049 !important;
 	}
 `;
 
@@ -207,6 +222,83 @@ const roomHeaderSub = (rt = {}) => {
 	return "";
 };
 
+const QUERY_KEYS = {
+	hotelId: "invHotel",
+	calendarType: "invCal",
+	month: "invMonth",
+	hijriMonth: "invHMonth",
+	hijriYear: "invHYear",
+	start: "invStart",
+	end: "invEnd",
+	includeCancelled: "invIncCancelled",
+	paymentStatuses: "invPayStatuses",
+	bookingSources: "invBookingSources",
+	displayMode: "invDisplay",
+	warningsOpen: "invWarnOpen",
+	dayOpen: "invDayOpen",
+	dayDate: "invDayDate",
+	dayRoomKey: "invDayRoomKey",
+	dayRoomLabel: "invDayRoomLabel",
+	reportOpen: "invReportOpen",
+	reportDate: "invReportDate",
+	reportType: "invReportType",
+	reportPage: "invReportPage",
+	reportSize: "invReportSize",
+	reportSearch: "invReportSearch",
+	detailsOpen: "invDetailsOpen",
+	detailsReservationId: "invDetailsReservationId",
+};
+
+const toCleanString = (value) => String(value || "").trim();
+const isSameArray = (a = [], b = []) =>
+	a.length === b.length && a.every((item, idx) => item === b[idx]);
+const normalizeBoolFlag = (value) => {
+	const normalized = toCleanString(value).toLowerCase();
+	return normalized === "1" || normalized === "true" || normalized === "yes";
+};
+const normalizeCsvList = (value) =>
+	Array.from(
+		new Set(
+			toCleanString(value)
+				.split(",")
+				.map((entry) => toCleanString(entry))
+				.filter(Boolean),
+		),
+	);
+const normalizeBookingSourcesList = (values = []) =>
+	Array.from(
+		new Set(
+			(values || []).map((source) => toCleanString(source)).filter(Boolean),
+		),
+	).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+const normalizePaymentStatusesList = (values = []) => {
+	const set = new Set((values || []).map((item) => toCleanString(item)));
+	return PAYMENT_STATUS_OPTIONS.filter((status) => set.has(status));
+};
+const normalizeMonthParam = (value) => {
+	const normalized = toCleanString(value);
+	if (!/^\d{4}-\d{2}$/.test(normalized)) return "";
+	const parsed = dayjs(`${normalized}-01`);
+	return parsed.isValid() ? normalized : "";
+};
+const normalizeDateParam = (value) => {
+	const normalized = toCleanString(value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "";
+	return dayjs(normalized).isValid() ? normalized : "";
+};
+const normalizePositiveInt = (value, fallback, min = 1, max = 9999) => {
+	const parsed = Number.parseInt(String(value || ""), 10);
+	if (!Number.isFinite(parsed)) return fallback;
+	if (parsed < min || parsed > max) return fallback;
+	return parsed;
+};
+const normalizeCalendarType = (value, fallback = "gregorian") => {
+	const normalized = toCleanString(value).toLowerCase();
+	return normalized === "hijri" ? "hijri" : fallback;
+};
+const getReservationId = (reservation) =>
+	toCleanString(reservation?._id || reservation?.id || "");
+
 const HotelsInventoryMap = () => {
 	const { user, token } = isAuthenticated() || {};
 
@@ -222,44 +314,168 @@ const HotelsInventoryMap = () => {
 	const defaultHijriStart = supportsHijri
 		? nowHijri.clone().startOf("iMonth")
 		: null;
-	const defaultHijriEnd = supportsHijri
-		? nowHijri.clone().endOf("iMonth")
-		: null;
 
 	const pickerPopupStyle = { zIndex: 20010 };
 	const pickerContainerGetter = (trigger) =>
 		(trigger && trigger.parentNode) || document.body;
-
-	const [allHotels, setAllHotels] = useState([]);
-	const [selectedHotelId, setSelectedHotelId] = useState("");
-
-	const [monthValue, setMonthValue] = useState(() =>
-		defaultHijriStart
-			? dayjs(defaultHijriStart.toDate())
-			: dayjs().startOf("month"),
+	const history = useHistory();
+	const location = useLocation();
+	const initialQueryParamsRef = useRef(
+		new URLSearchParams(location.search || ""),
 	);
+	const initialQueryParams = initialQueryParamsRef.current;
 
-	const [calendarType, setCalendarType] = useState(
+	const initialCalendarFromQuery = normalizeCalendarType(
+		initialQueryParams.get(QUERY_KEYS.calendarType),
 		defaultHijriStart ? "hijri" : "gregorian",
 	);
-	const [hijriMonth, setHijriMonth] = useState(defaultHijriMonth);
-	const [hijriYear, setHijriYear] = useState(defaultHijriYear);
-
-	const [rangeOverride, setRangeOverride] = useState(() =>
-		defaultHijriStart
+	const initialCalendarType =
+		!supportsHijri && initialCalendarFromQuery === "hijri"
+			? "gregorian"
+			: initialCalendarFromQuery;
+	const initialHijriMonth = normalizePositiveInt(
+		initialQueryParams.get(QUERY_KEYS.hijriMonth),
+		defaultHijriMonth,
+		0,
+		11,
+	);
+	const initialHijriYear = normalizePositiveInt(
+		initialQueryParams.get(QUERY_KEYS.hijriYear),
+		defaultHijriYear,
+		1300,
+		1700,
+	);
+	const initialRangeStartParam = normalizeDateParam(
+		initialQueryParams.get(QUERY_KEYS.start),
+	);
+	const initialRangeEndParam = normalizeDateParam(
+		initialQueryParams.get(QUERY_KEYS.end),
+	);
+	const initialMonthParam = normalizeMonthParam(
+		initialQueryParams.get(QUERY_KEYS.month),
+	);
+	const initialHijriStartMoment =
+		supportsHijri && initialCalendarType === "hijri"
+			? moment()
+					.iYear(initialHijriYear)
+					.iMonth(initialHijriMonth)
+					.startOf("iMonth")
+			: null;
+	const initialHijriEndMoment =
+		supportsHijri && initialCalendarType === "hijri"
+			? moment()
+					.iYear(initialHijriYear)
+					.iMonth(initialHijriMonth)
+					.endOf("iMonth")
+			: null;
+	const initialRangeStart =
+		initialRangeStartParam ||
+		(initialHijriStartMoment
+			? dayjs(initialHijriStartMoment.toDate()).format("YYYY-MM-DD")
+			: "");
+	const initialRangeEnd =
+		initialRangeEndParam ||
+		(initialHijriEndMoment
+			? dayjs(initialHijriEndMoment.toDate()).format("YYYY-MM-DD")
+			: "");
+	const initialRangeOverride =
+		initialCalendarType === "hijri" && initialRangeStart && initialRangeEnd
 			? {
-					start: dayjs(defaultHijriStart.toDate()).format("YYYY-MM-DD"),
-					end: dayjs(defaultHijriEnd?.toDate()).format("YYYY-MM-DD"),
-					label: `${hijriMonthsEn[defaultHijriMonth]} ${defaultHijriYear}`,
+					start: initialRangeStart,
+					end: initialRangeEnd,
+					label: `${hijriMonthsEn[initialHijriMonth]} ${initialHijriYear}`,
 			  }
-			: null,
+			: null;
+	const initialMonthValue =
+		initialCalendarType === "gregorian" && initialMonthParam
+			? dayjs(`${initialMonthParam}-01`).startOf("month")
+			: initialRangeOverride?.start
+			  ? dayjs(initialRangeOverride.start)
+			  : defaultHijriStart
+			    ? dayjs(defaultHijriStart.toDate())
+			    : dayjs().startOf("month");
+	const initialDisplayMode =
+		toCleanString(initialQueryParams.get(QUERY_KEYS.displayMode)) === "roomType"
+			? "roomType"
+			: "displayName";
+	const initialIncludeCancelled = normalizeBoolFlag(
+		initialQueryParams.get(QUERY_KEYS.includeCancelled),
+	);
+	const initialPaymentStatuses = normalizePaymentStatusesList(
+		normalizeCsvList(initialQueryParams.get(QUERY_KEYS.paymentStatuses)),
+	);
+	const initialBookingSources = normalizeBookingSourcesList(
+		normalizeCsvList(initialQueryParams.get(QUERY_KEYS.bookingSources)),
+	);
+	const initialWarningsOpen = normalizeBoolFlag(
+		initialQueryParams.get(QUERY_KEYS.warningsOpen),
+	);
+	const initialDayOpen = normalizeBoolFlag(
+		initialQueryParams.get(QUERY_KEYS.dayOpen),
+	);
+	const initialDayContext = {
+		date: normalizeDateParam(initialQueryParams.get(QUERY_KEYS.dayDate)),
+		roomKey: toCleanString(initialQueryParams.get(QUERY_KEYS.dayRoomKey)),
+		roomLabel: toCleanString(initialQueryParams.get(QUERY_KEYS.dayRoomLabel)),
+	};
+	const initialReportTypeRaw = toCleanString(
+		initialQueryParams.get(QUERY_KEYS.reportType),
+	).toLowerCase();
+	const initialReportType =
+		initialReportTypeRaw === "checkin" ? "checkin" : "checkout";
+	const initialReportOpen = normalizeBoolFlag(
+		initialQueryParams.get(QUERY_KEYS.reportOpen),
+	);
+	const initialReportContext = {
+		date: normalizeDateParam(initialQueryParams.get(QUERY_KEYS.reportDate)),
+		dateType: initialReportType,
+	};
+	const initialReportPage = normalizePositiveInt(
+		initialQueryParams.get(QUERY_KEYS.reportPage),
+		1,
+		1,
+		2000,
+	);
+	const initialReportSize = normalizePositiveInt(
+		initialQueryParams.get(QUERY_KEYS.reportSize),
+		50,
+		1,
+		2000,
+	);
+	const initialReportSearch = toCleanString(
+		initialQueryParams.get(QUERY_KEYS.reportSearch),
+	);
+	const initialDetailsOpen = normalizeBoolFlag(
+		initialQueryParams.get(QUERY_KEYS.detailsOpen),
+	);
+	const initialDetailsReservationId = toCleanString(
+		initialQueryParams.get(QUERY_KEYS.detailsReservationId),
 	);
 
-	const [includeCancelled, setIncludeCancelled] = useState(false);
-	const [paymentStatuses, setPaymentStatuses] = useState([]);
-	const [bookingSources, setBookingSources] = useState([]);
+	const [allHotels, setAllHotels] = useState([]);
+	const [selectedHotelId, setSelectedHotelId] = useState(() =>
+		toCleanString(initialQueryParams.get(QUERY_KEYS.hotelId)),
+	);
+
+	const [monthValue, setMonthValue] = useState(() => initialMonthValue);
+
+	const [calendarType, setCalendarType] = useState(initialCalendarType);
+	const [hijriMonth, setHijriMonth] = useState(initialHijriMonth);
+	const [hijriYear, setHijriYear] = useState(initialHijriYear);
+
+	const [rangeOverride, setRangeOverride] = useState(
+		() => initialRangeOverride,
+	);
+
+	const [includeCancelled, setIncludeCancelled] = useState(
+		initialIncludeCancelled,
+	);
+	const [paymentStatuses, setPaymentStatuses] = useState(
+		initialPaymentStatuses,
+	);
+	const [bookingSources, setBookingSources] = useState(initialBookingSources);
 	const [allBookingSources, setAllBookingSources] = useState([]);
-	const [displayMode, setDisplayMode] = useState("displayName");
+	const [displayMode, setDisplayMode] = useState(initialDisplayMode);
 
 	const [data, setData] = useState(null);
 	const [bookingSourceSummary, setBookingSourceSummary] = useState(null);
@@ -268,27 +484,40 @@ const HotelsInventoryMap = () => {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
-	const [warningsModalOpen, setWarningsModalOpen] = useState(false);
+	const [warningsModalOpen, setWarningsModalOpen] =
+		useState(initialWarningsOpen);
 	const [warningsLoading, setWarningsLoading] = useState(false);
 	const [warningsData, setWarningsData] = useState([]);
 
-	const [dayDetailsOpen, setDayDetailsOpen] = useState(false);
-	const [dayDetailsLoading, setDayDetailsLoading] = useState(false);
+	const [dayDetailsOpen, setDayDetailsOpen] = useState(initialDayOpen);
+	const [dayDetailsLoading, setDayDetailsLoading] = useState(initialDayOpen);
 	const [dayDetails, setDayDetails] = useState(null);
 	const [dayDetailsError, setDayDetailsError] = useState("");
+	const [dayDetailsContext, setDayDetailsContext] = useState(initialDayContext);
 
-	const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+	const [detailsModalOpen, setDetailsModalOpen] = useState(initialDetailsOpen);
 	const [selectedReservation, setSelectedReservation] = useState(null);
-	const [reportModalOpen, setReportModalOpen] = useState(false);
-	const [reportModalLoading, setReportModalLoading] = useState(false);
+	const [detailsModalLoading, setDetailsModalLoading] =
+		useState(initialDetailsOpen);
+	const [detailsReservationId, setDetailsReservationId] = useState(
+		initialDetailsReservationId,
+	);
+	const [reportModalOpen, setReportModalOpen] = useState(initialReportOpen);
+	const [reportModalLoading, setReportModalLoading] =
+		useState(initialReportOpen);
+	const [reportModalContext, setReportModalContext] =
+		useState(initialReportContext);
 	const [reportModalData, setReportModalData] = useState({
 		data: [],
 		totalDocuments: 0,
 		scorecards: {},
 	});
-	const [reportCurrentPage, setReportCurrentPage] = useState(1);
-	const [reportPageSize, setReportPageSize] = useState(50);
-	const [reportSearchTerm, setReportSearchTerm] = useState("");
+	const [reportCurrentPage, setReportCurrentPage] = useState(initialReportPage);
+	const [reportPageSize, setReportPageSize] = useState(initialReportSize);
+	const [reportSearchTerm, setReportSearchTerm] = useState(initialReportSearch);
+	const dayRestoreKeyRef = useRef("");
+	const reportRestoreKeyRef = useRef("");
+	const detailsRestoreKeyRef = useRef("");
 
 	const formatInt = (val = 0) => Number(val || 0).toLocaleString("en-US");
 	const formatCurrency = (val = 0) =>
@@ -727,6 +956,352 @@ const HotelsInventoryMap = () => {
 		setMonthValue(dayjs(hStart.toDate()));
 	};
 
+	useEffect(() => {
+		const params = new URLSearchParams(location.search || "");
+		const nextHotelId = toCleanString(params.get(QUERY_KEYS.hotelId));
+		const nextCalendarRaw = normalizeCalendarType(
+			params.get(QUERY_KEYS.calendarType),
+			supportsHijri ? "hijri" : "gregorian",
+		);
+		const nextCalendarType =
+			!supportsHijri && nextCalendarRaw === "hijri"
+				? "gregorian"
+				: nextCalendarRaw;
+		const nextHijriMonth = normalizePositiveInt(
+			params.get(QUERY_KEYS.hijriMonth),
+			defaultHijriMonth,
+			0,
+			11,
+		);
+		const nextHijriYear = normalizePositiveInt(
+			params.get(QUERY_KEYS.hijriYear),
+			defaultHijriYear,
+			1300,
+			1700,
+		);
+		const nextDisplayMode =
+			toCleanString(params.get(QUERY_KEYS.displayMode)) === "roomType"
+				? "roomType"
+				: "displayName";
+		const nextIncludeCancelled = normalizeBoolFlag(
+			params.get(QUERY_KEYS.includeCancelled),
+		);
+		const nextPaymentStatuses = normalizePaymentStatusesList(
+			normalizeCsvList(params.get(QUERY_KEYS.paymentStatuses)),
+		);
+		const nextBookingSources = normalizeBookingSourcesList(
+			normalizeCsvList(params.get(QUERY_KEYS.bookingSources)),
+		);
+		const nextWarningsOpen = normalizeBoolFlag(
+			params.get(QUERY_KEYS.warningsOpen),
+		);
+		const nextDayOpen = normalizeBoolFlag(params.get(QUERY_KEYS.dayOpen));
+		const nextDayContext = {
+			date: normalizeDateParam(params.get(QUERY_KEYS.dayDate)),
+			roomKey: toCleanString(params.get(QUERY_KEYS.dayRoomKey)),
+			roomLabel: toCleanString(params.get(QUERY_KEYS.dayRoomLabel)),
+		};
+		const nextReportOpen = normalizeBoolFlag(params.get(QUERY_KEYS.reportOpen));
+		const nextReportTypeRaw = toCleanString(
+			params.get(QUERY_KEYS.reportType),
+		).toLowerCase();
+		const nextReportContext = {
+			date: normalizeDateParam(params.get(QUERY_KEYS.reportDate)),
+			dateType: nextReportTypeRaw === "checkin" ? "checkin" : "checkout",
+		};
+		const nextReportPage = normalizePositiveInt(
+			params.get(QUERY_KEYS.reportPage),
+			1,
+			1,
+			2000,
+		);
+		const nextReportSize = normalizePositiveInt(
+			params.get(QUERY_KEYS.reportSize),
+			50,
+			1,
+			2000,
+		);
+		const nextReportSearch = toCleanString(params.get(QUERY_KEYS.reportSearch));
+		const nextDetailsOpen = normalizeBoolFlag(
+			params.get(QUERY_KEYS.detailsOpen),
+		);
+		const nextDetailsReservationId = toCleanString(
+			params.get(QUERY_KEYS.detailsReservationId),
+		);
+
+		setSelectedHotelId((prev) => (prev === nextHotelId ? prev : nextHotelId));
+		setCalendarType((prev) =>
+			prev === nextCalendarType ? prev : nextCalendarType,
+		);
+		setHijriMonth((prev) => (prev === nextHijriMonth ? prev : nextHijriMonth));
+		setHijriYear((prev) => (prev === nextHijriYear ? prev : nextHijriYear));
+		setDisplayMode((prev) =>
+			prev === nextDisplayMode ? prev : nextDisplayMode,
+		);
+		setIncludeCancelled((prev) =>
+			prev === nextIncludeCancelled ? prev : nextIncludeCancelled,
+		);
+		setPaymentStatuses((prev) =>
+			isSameArray(prev, nextPaymentStatuses) ? prev : nextPaymentStatuses,
+		);
+		setBookingSources((prev) =>
+			isSameArray(prev, nextBookingSources) ? prev : nextBookingSources,
+		);
+		setWarningsModalOpen((prev) =>
+			prev === nextWarningsOpen ? prev : nextWarningsOpen,
+		);
+		setDayDetailsOpen((prev) => (prev === nextDayOpen ? prev : nextDayOpen));
+		setDayDetailsContext((prev) =>
+			prev?.date === nextDayContext.date &&
+			prev?.roomKey === nextDayContext.roomKey &&
+			prev?.roomLabel === nextDayContext.roomLabel
+				? prev
+				: nextDayContext,
+		);
+		setReportModalOpen((prev) =>
+			prev === nextReportOpen ? prev : nextReportOpen,
+		);
+		setReportModalContext((prev) =>
+			prev?.date === nextReportContext.date &&
+			prev?.dateType === nextReportContext.dateType
+				? prev
+				: nextReportContext,
+		);
+		setReportCurrentPage((prev) =>
+			prev === nextReportPage ? prev : nextReportPage,
+		);
+		setReportPageSize((prev) =>
+			prev === nextReportSize ? prev : nextReportSize,
+		);
+		setReportSearchTerm((prev) =>
+			prev === nextReportSearch ? prev : nextReportSearch,
+		);
+		setDetailsModalOpen((prev) =>
+			prev === nextDetailsOpen ? prev : nextDetailsOpen,
+		);
+		setDetailsReservationId((prev) =>
+			prev === nextDetailsReservationId ? prev : nextDetailsReservationId,
+		);
+
+		if (nextCalendarType === "hijri" && supportsHijri) {
+			const dateStart = normalizeDateParam(params.get(QUERY_KEYS.start));
+			const dateEnd = normalizeDateParam(params.get(QUERY_KEYS.end));
+			const fallbackStart = dayjs(
+				moment()
+					.iYear(nextHijriYear)
+					.iMonth(nextHijriMonth)
+					.startOf("iMonth")
+					.toDate(),
+			).format("YYYY-MM-DD");
+			const fallbackEnd = dayjs(
+				moment()
+					.iYear(nextHijriYear)
+					.iMonth(nextHijriMonth)
+					.endOf("iMonth")
+					.toDate(),
+			).format("YYYY-MM-DD");
+			const nextRange = {
+				start: dateStart || fallbackStart,
+				end: dateEnd || fallbackEnd,
+				label: `${hijriMonthsEn[nextHijriMonth]} ${nextHijriYear}`,
+			};
+			setRangeOverride((prev) =>
+				prev?.start === nextRange.start &&
+				prev?.end === nextRange.end &&
+				prev?.label === nextRange.label
+					? prev
+					: nextRange,
+			);
+			setMonthValue((prev) => {
+				const nextMonthDate = dayjs(nextRange.start);
+				return prev?.isSame(nextMonthDate, "day") ? prev : nextMonthDate;
+			});
+		} else {
+			const nextMonthParam = normalizeMonthParam(params.get(QUERY_KEYS.month));
+			const nextMonthDate = nextMonthParam
+				? dayjs(`${nextMonthParam}-01`).startOf("month")
+				: dayjs().startOf("month");
+			setRangeOverride((prev) => (prev === null ? prev : null));
+			setMonthValue((prev) =>
+				prev?.isSame(nextMonthDate, "month") ? prev : nextMonthDate,
+			);
+		}
+
+		if (!nextDayOpen) {
+			setDayDetailsLoading(false);
+			setDayDetailsError("");
+		}
+		if (!nextReportOpen) {
+			setReportModalLoading(false);
+		}
+		if (!nextDetailsOpen) {
+			setDetailsModalLoading(false);
+			setSelectedReservation(null);
+		}
+	}, [defaultHijriMonth, defaultHijriYear, location.search, supportsHijri]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search || "");
+		let changed = false;
+		const setParam = (key, value) => {
+			const normalized = toCleanString(value);
+			if (!normalized) {
+				if (params.has(key)) {
+					params.delete(key);
+					changed = true;
+				}
+				return;
+			}
+			if (params.get(key) !== normalized) {
+				params.set(key, normalized);
+				changed = true;
+			}
+		};
+		const deleteParam = (key) => {
+			if (params.has(key)) {
+				params.delete(key);
+				changed = true;
+			}
+		};
+
+		const normalizedBookingSources =
+			normalizeBookingSourcesList(bookingSources);
+		const normalizedPaymentStatuses =
+			normalizePaymentStatusesList(paymentStatuses);
+		const activeDayDate = normalizeDateParam(
+			dayDetailsContext?.date || dayDetails?.date || "",
+		);
+		const activeDayRoomKey = toCleanString(
+			dayDetailsContext?.roomKey || dayDetails?.roomKey || "",
+		);
+		const activeDayRoomLabel = toCleanString(
+			dayDetailsContext?.roomLabel || dayDetails?.roomLabel || "",
+		);
+		const activeReportDate = normalizeDateParam(reportModalContext?.date || "");
+		const activeReportType =
+			reportModalContext?.dateType === "checkin" ? "checkin" : "checkout";
+		const activeDetailsReservationId =
+			toCleanString(detailsReservationId) ||
+			getReservationId(selectedReservation);
+
+		setParam(QUERY_KEYS.hotelId, selectedHotelId);
+		setParam(
+			QUERY_KEYS.calendarType,
+			calendarType === "hijri" && supportsHijri ? "hijri" : "gregorian",
+		);
+		if (calendarType === "hijri" && supportsHijri) {
+			const fallbackHijriStart = dayjs(
+				moment().iYear(hijriYear).iMonth(hijriMonth).startOf("iMonth").toDate(),
+			).format("YYYY-MM-DD");
+			const fallbackHijriEnd = dayjs(
+				moment().iYear(hijriYear).iMonth(hijriMonth).endOf("iMonth").toDate(),
+			).format("YYYY-MM-DD");
+			setParam(QUERY_KEYS.hijriMonth, String(hijriMonth));
+			setParam(QUERY_KEYS.hijriYear, String(hijriYear));
+			setParam(QUERY_KEYS.start, rangeOverride?.start || fallbackHijriStart);
+			setParam(QUERY_KEYS.end, rangeOverride?.end || fallbackHijriEnd);
+			deleteParam(QUERY_KEYS.month);
+		} else {
+			setParam(QUERY_KEYS.month, monthValue?.format("YYYY-MM"));
+			deleteParam(QUERY_KEYS.hijriMonth);
+			deleteParam(QUERY_KEYS.hijriYear);
+			deleteParam(QUERY_KEYS.start);
+			deleteParam(QUERY_KEYS.end);
+		}
+		setParam(QUERY_KEYS.includeCancelled, includeCancelled ? "1" : "");
+		setParam(
+			QUERY_KEYS.paymentStatuses,
+			normalizedPaymentStatuses.length
+				? normalizedPaymentStatuses.join(",")
+				: "",
+		);
+		setParam(
+			QUERY_KEYS.bookingSources,
+			normalizedBookingSources.length ? normalizedBookingSources.join(",") : "",
+		);
+		setParam(
+			QUERY_KEYS.displayMode,
+			displayMode === "roomType" ? "roomType" : "",
+		);
+		setParam(QUERY_KEYS.warningsOpen, warningsModalOpen ? "1" : "");
+
+		if (dayDetailsOpen && activeDayDate) {
+			setParam(QUERY_KEYS.dayOpen, "1");
+			setParam(QUERY_KEYS.dayDate, activeDayDate);
+			setParam(QUERY_KEYS.dayRoomKey, activeDayRoomKey);
+			setParam(QUERY_KEYS.dayRoomLabel, activeDayRoomLabel);
+		} else {
+			deleteParam(QUERY_KEYS.dayOpen);
+			deleteParam(QUERY_KEYS.dayDate);
+			deleteParam(QUERY_KEYS.dayRoomKey);
+			deleteParam(QUERY_KEYS.dayRoomLabel);
+		}
+
+		if (reportModalOpen && activeReportDate) {
+			setParam(QUERY_KEYS.reportOpen, "1");
+			setParam(QUERY_KEYS.reportDate, activeReportDate);
+			setParam(QUERY_KEYS.reportType, activeReportType);
+			setParam(QUERY_KEYS.reportPage, String(reportCurrentPage || 1));
+			setParam(QUERY_KEYS.reportSize, String(reportPageSize || 50));
+			setParam(QUERY_KEYS.reportSearch, reportSearchTerm);
+		} else {
+			deleteParam(QUERY_KEYS.reportOpen);
+			deleteParam(QUERY_KEYS.reportDate);
+			deleteParam(QUERY_KEYS.reportType);
+			deleteParam(QUERY_KEYS.reportPage);
+			deleteParam(QUERY_KEYS.reportSize);
+			deleteParam(QUERY_KEYS.reportSearch);
+		}
+
+		if (detailsModalOpen && activeDetailsReservationId) {
+			setParam(QUERY_KEYS.detailsOpen, "1");
+			setParam(QUERY_KEYS.detailsReservationId, activeDetailsReservationId);
+		} else {
+			deleteParam(QUERY_KEYS.detailsOpen);
+			deleteParam(QUERY_KEYS.detailsReservationId);
+		}
+
+		if (!changed) return;
+		const nextSearch = params.toString();
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch ? `?${nextSearch}` : "",
+		});
+	}, [
+		bookingSources,
+		calendarType,
+		dayDetails?.date,
+		dayDetails?.roomKey,
+		dayDetails?.roomLabel,
+		dayDetailsContext?.date,
+		dayDetailsContext?.roomKey,
+		dayDetailsContext?.roomLabel,
+		dayDetailsOpen,
+		detailsModalOpen,
+		detailsReservationId,
+		displayMode,
+		history,
+		hijriMonth,
+		hijriYear,
+		includeCancelled,
+		location.pathname,
+		location.search,
+		monthValue,
+		paymentStatuses,
+		rangeOverride?.end,
+		rangeOverride?.start,
+		reportCurrentPage,
+		reportModalContext?.date,
+		reportModalContext?.dateType,
+		reportModalOpen,
+		reportPageSize,
+		reportSearchTerm,
+		selectedHotelId,
+		selectedReservation,
+		supportsHijri,
+		warningsModalOpen,
+	]);
+
 	// ------------------ Warnings ------------------
 	const fetchWarnings = useCallback(async () => {
 		if (!user?._id || !token || !selectedHotelId) return;
@@ -768,7 +1343,21 @@ const HotelsInventoryMap = () => {
 	// ------------------ Day details ------------------
 	const fetchDayDetails = useCallback(
 		async ({ date, roomType } = {}) => {
-			if (!user?._id || !token || !selectedHotelId || !date) return;
+			const normalizedDate = normalizeDateParam(date);
+			if (!user?._id || !token || !selectedHotelId || !normalizedDate) return;
+			const roomKey = toCleanString(roomType?.key);
+			const roomLabel = toCleanString(roomType?.label);
+			dayRestoreKeyRef.current = [
+				selectedHotelId,
+				normalizedDate,
+				roomKey,
+				roomLabel,
+			].join("|");
+			setDayDetailsContext({
+				date: normalizedDate,
+				roomKey,
+				roomLabel,
+			});
 
 			setDayDetailsOpen(true);
 			setDayDetailsLoading(true);
@@ -780,7 +1369,7 @@ const HotelsInventoryMap = () => {
 					token,
 					{
 						hotelId: selectedHotelId,
-						date,
+						date: normalizedDate,
 						roomKey: roomType?.key || null,
 						roomLabel: roomType?.label || null,
 						includeCancelled,
@@ -790,6 +1379,15 @@ const HotelsInventoryMap = () => {
 					},
 				);
 				setDayDetails(payload);
+				setDayDetailsContext((prev) => ({
+					date: toCleanString(payload?.date || prev?.date || normalizedDate),
+					roomKey: toCleanString(
+						payload?.roomKey || prev?.roomKey || roomType?.key || "",
+					),
+					roomLabel: toCleanString(
+						payload?.roomLabel || prev?.roomLabel || roomType?.label || "",
+					),
+				}));
 			} catch (err) {
 				setDayDetails(null);
 				setDayDetailsError(
@@ -851,18 +1449,119 @@ const HotelsInventoryMap = () => {
 		],
 	);
 
+	const normalizeReservationForDetails = useCallback((reservation) => {
+		if (!reservation) return null;
+		const customer = reservation?.customer_details || {};
+		return {
+			...reservation,
+			total_amount: reservation?.total_amount ?? 0,
+			paid_amount: reservation?.paid_amount ?? 0,
+			pickedRoomsType: Array.isArray(reservation?.pickedRoomsType)
+				? reservation.pickedRoomsType
+				: [],
+			customer_details: customer,
+			payment_details: reservation?.payment_details || {},
+			roomId: Array.isArray(reservation?.roomId)
+				? reservation.roomId
+				: reservation?.roomId
+				  ? [reservation.roomId]
+				  : [],
+			roomDetails: Array.isArray(reservation?.roomDetails)
+				? reservation.roomDetails
+				: [],
+			room_numbers: Array.isArray(reservation?.room_numbers)
+				? reservation.room_numbers
+				: [],
+			bedNumber: Array.isArray(reservation?.bedNumber)
+				? reservation.bedNumber
+				: [],
+			comment: reservation?.comment || "",
+			total_guests: reservation?.total_guests ?? customer?.total_guests ?? 0,
+			booked_at: reservation?.booked_at || reservation?.createdAt || null,
+		};
+	}, []);
+
+	const openReservationDetails = useCallback(
+		async (reservation) => {
+			if (!reservation) return;
+			const reservationId = getReservationId(reservation);
+			if (!reservationId) return;
+			detailsRestoreKeyRef.current = reservationId;
+			const initial = normalizeReservationForDetails({
+				...reservation,
+				_id: reservationId,
+			});
+			setSelectedReservation(initial);
+			setDetailsReservationId(reservationId);
+			setDetailsModalOpen(true);
+			setDetailsModalLoading(true);
+			try {
+				const full = await singlePreReservationById(reservationId);
+				if (full && !full?.error && !full?.message) {
+					const merged = normalizeReservationForDetails({
+						...initial,
+						...full,
+						hotelId: full?.hotelId || initial?.hotelId,
+					});
+					setSelectedReservation(merged);
+				}
+			} catch (err) {
+				console.error("Failed to fetch full reservation details", err);
+			} finally {
+				setDetailsModalLoading(false);
+			}
+		},
+		[normalizeReservationForDetails],
+	);
+
+	const openReservationDetailsById = useCallback(
+		async (reservationId) => {
+			const normalizedReservationId = toCleanString(reservationId);
+			if (!normalizedReservationId) return;
+			detailsRestoreKeyRef.current = normalizedReservationId;
+
+			setDetailsReservationId(normalizedReservationId);
+			setDetailsModalOpen(true);
+			setDetailsModalLoading(true);
+			try {
+				const full = await singlePreReservationById(normalizedReservationId);
+				if (full && !full?.error && !full?.message) {
+					setSelectedReservation(normalizeReservationForDetails(full));
+				} else {
+					setSelectedReservation(null);
+				}
+			} catch (err) {
+				console.error("Failed to fetch full reservation details", err);
+				setSelectedReservation(null);
+			} finally {
+				setDetailsModalLoading(false);
+			}
+		},
+		[normalizeReservationForDetails],
+	);
+
 	const handleReportSearch = useCallback(() => {
 		setReportCurrentPage(1);
 	}, []);
 
 	const openReportReservationsByDate = useCallback(
-		async ({ date, dateType } = {}) => {
-			if (!date || !dateType || !user?._id || !token) return;
+		async ({ date, dateType, preserveViewState = false } = {}) => {
+			const normalizedDate = normalizeDateParam(date);
+			if (!normalizedDate || !dateType || !user?._id || !token) return;
 
 			const safeType = dateType === "checkin" ? "checkin" : "checkout";
+			reportRestoreKeyRef.current = [
+				normalizedDate,
+				safeType,
+				selectedHotelName || "all",
+				includeCancelled ? "1" : "0",
+			].join("|");
 			const queryKey =
-				safeType === "checkin" ? `checkinDate_${date}` : `checkoutDate_${date}`;
+				safeType === "checkin"
+					? `checkinDate_${normalizedDate}`
+					: `checkoutDate_${normalizedDate}`;
 
+			setReportModalContext({ date: normalizedDate, dateType: safeType });
 			setReportModalLoading(true);
 			setReportModalOpen(true);
 
@@ -886,8 +1585,10 @@ const HotelsInventoryMap = () => {
 				};
 
 				setReportModalData(normalized);
-				setReportCurrentPage(1);
-				setReportSearchTerm("");
+				if (!preserveViewState) {
+					setReportCurrentPage(1);
+					setReportSearchTerm("");
+				}
 			} catch (err) {
 				setReportModalData({ data: [], totalDocuments: 0, scorecards: {} });
 				console.error("Failed to load reservation details", err);
@@ -897,6 +1598,93 @@ const HotelsInventoryMap = () => {
 		},
 		[includeCancelled, selectedHotelName, token, user?._id],
 	);
+
+	useEffect(() => {
+		if (!dayDetailsOpen || !dayDetailsContext?.date || !selectedHotelId) {
+			dayRestoreKeyRef.current = "";
+			return;
+		}
+		const restoreKey = [
+			selectedHotelId,
+			dayDetailsContext.date,
+			dayDetailsContext.roomKey || "",
+			dayDetailsContext.roomLabel || "",
+		].join("|");
+		if (dayRestoreKeyRef.current === restoreKey) return;
+		dayRestoreKeyRef.current = restoreKey;
+		fetchDayDetails({
+			date: dayDetailsContext.date,
+			roomType:
+				dayDetailsContext.roomKey || dayDetailsContext.roomLabel
+					? {
+							key: dayDetailsContext.roomKey || "",
+							label: dayDetailsContext.roomLabel || "",
+					  }
+					: null,
+		});
+	}, [
+		dayDetailsContext?.date,
+		dayDetailsContext?.roomKey,
+		dayDetailsContext?.roomLabel,
+		dayDetailsOpen,
+		fetchDayDetails,
+		selectedHotelId,
+	]);
+
+	useEffect(() => {
+		if (
+			!reportModalOpen ||
+			!reportModalContext?.date ||
+			!reportModalContext?.dateType
+		) {
+			reportRestoreKeyRef.current = "";
+			return;
+		}
+		const restoreKey = [
+			reportModalContext.date,
+			reportModalContext.dateType,
+			selectedHotelName || "all",
+			includeCancelled ? "1" : "0",
+		].join("|");
+		if (reportRestoreKeyRef.current === restoreKey) return;
+		reportRestoreKeyRef.current = restoreKey;
+		openReportReservationsByDate({
+			date: reportModalContext.date,
+			dateType: reportModalContext.dateType,
+			preserveViewState: true,
+		});
+	}, [
+		includeCancelled,
+		openReportReservationsByDate,
+		reportModalContext?.date,
+		reportModalContext?.dateType,
+		reportModalOpen,
+		selectedHotelName,
+	]);
+
+	useEffect(() => {
+		if (!detailsModalOpen || !detailsReservationId) {
+			detailsRestoreKeyRef.current = "";
+			return;
+		}
+		const selectedReservationId = getReservationId(selectedReservation);
+		if (
+			selectedReservationId &&
+			selectedReservationId === detailsReservationId &&
+			(selectedReservation?.hotelId || detailsModalLoading)
+		) {
+			return;
+		}
+		if (detailsRestoreKeyRef.current === detailsReservationId) return;
+		detailsRestoreKeyRef.current = detailsReservationId;
+		openReservationDetailsById(detailsReservationId);
+	}, [
+		detailsModalLoading,
+		detailsModalOpen,
+		detailsReservationId,
+		openReservationDetailsById,
+		selectedReservation,
+	]);
 
 	// ------------------ Payment filter buttons ------------------
 	const togglePaymentStatus = (status) => {
@@ -1932,7 +2720,11 @@ const HotelsInventoryMap = () => {
 			<Modal
 				title='Detailed Reservations List'
 				open={reportModalOpen}
-				onCancel={() => setReportModalOpen(false)}
+				onCancel={() => {
+					setReportModalOpen(false);
+					setReportModalLoading(false);
+					setReportModalContext({ date: "", dateType: "checkout" });
+				}}
 				footer={null}
 				width='85%'
 				style={{ top: "3%", left: "7%" }}
@@ -1968,6 +2760,9 @@ const HotelsInventoryMap = () => {
 				open={dayDetailsOpen}
 				onCancel={() => {
 					setDayDetailsOpen(false);
+					setDayDetailsLoading(false);
+					setDayDetails(null);
+					setDayDetailsContext({ date: "", roomKey: "", roomLabel: "" });
 					setDayDetailsError("");
 				}}
 				footer={null}
@@ -2109,10 +2904,7 @@ const HotelsInventoryMap = () => {
 													<td>
 														<Button
 															size='small'
-															onClick={() => {
-																setSelectedReservation(res);
-																setDetailsModalOpen(true);
-															}}
+															onClick={() => openReservationDetails(res)}
 														>
 															Show Details
 														</Button>
@@ -2142,6 +2934,8 @@ const HotelsInventoryMap = () => {
 				open={detailsModalOpen}
 				onCancel={() => {
 					setDetailsModalOpen(false);
+					setDetailsModalLoading(false);
+					setDetailsReservationId("");
 					setSelectedReservation(null);
 				}}
 				footer={null}
@@ -2155,25 +2949,17 @@ const HotelsInventoryMap = () => {
 				zIndex={3000}
 				wrapClassName='reservation-details-modal'
 			>
-				{selectedReservation && selectedReservation.hotelId ? (
+				{detailsModalLoading && !selectedReservation ? (
+					<div style={{ padding: "24px 0", textAlign: "center" }}>
+						<Spin tip='Loading reservation details...' />
+					</div>
+				) : selectedReservation && selectedReservation.hotelId ? (
 					<MoreDetails
-						selectedReservation={{
-							...selectedReservation,
-							total_amount: selectedReservation.total_amount ?? 0,
-							paid_amount: selectedReservation.paid_amount ?? 0,
-							pickedRoomsType: selectedReservation.pickedRoomsType || [],
-							customer_details: selectedReservation.customer_details || {},
-							payment_details: selectedReservation.payment_details || {},
-						}}
+						selectedReservation={normalizeReservationForDetails(
+							selectedReservation,
+						)}
 						hotelDetails={selectedReservation.hotelId}
-						reservation={{
-							...selectedReservation,
-							total_amount: selectedReservation.total_amount ?? 0,
-							paid_amount: selectedReservation.paid_amount ?? 0,
-							pickedRoomsType: selectedReservation.pickedRoomsType || [],
-							customer_details: selectedReservation.customer_details || {},
-							payment_details: selectedReservation.payment_details || {},
-						}}
+						reservation={normalizeReservationForDetails(selectedReservation)}
 						setReservation={setSelectedReservation}
 						onReservationUpdated={handleReservationUpdated}
 					/>
