@@ -51,6 +51,25 @@ const HotelRunnerReservationList = ({
 
 	// eslint-disable-next-line
 	const { user } = isAuthenticated();
+	const roleNumbers = [
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	].filter(Boolean);
+	const roleDescriptions = [
+		String(user?.roleDescription || "").toLowerCase(),
+		...(Array.isArray(user?.roleDescriptions)
+			? user.roleDescriptions.map((item) => String(item || "").toLowerCase())
+			: []),
+	];
+	const hasOrderTakingScope =
+		roleNumbers.includes(7000) ||
+		roleDescriptions.includes("ordertaker") ||
+		(Array.isArray(user?.accessTo) && user.accessTo.includes("ownReservations"));
+	const hasFullReservationScope =
+		[1000, 2000, 3000].some((role) => roleNumbers.includes(role)) ||
+		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("reception");
+	const isOrderTakingUser = hasOrderTakingScope && !hasFullReservationScope;
 
 	const formatDate = (date) => {
 		const d = new Date(date);
@@ -70,6 +89,7 @@ const HotelRunnerReservationList = ({
 		const filtersPayload = JSON.stringify({
 			selectedFilter,
 			searchQuery: activeSearchTerm || "",
+			createdByUserId: isOrderTakingUser ? user?._id : "",
 		});
 		reservationsList(
 			currentPage,
@@ -83,7 +103,9 @@ const HotelRunnerReservationList = ({
 					console.log(data.error);
 				} else {
 					setAllPreReservations(data && data.length > 0 ? data : []);
-					getReservationSummary(hotelDetails._id, dateToUse).then((data2) => {
+					getReservationSummary(hotelDetails._id, dateToUse, {
+						createdByUserId: isOrderTakingUser ? user?._id : "",
+					}).then((data2) => {
 						if (data2 && data2.error) {
 							console.log("Error summary");
 						} else {
@@ -148,6 +170,7 @@ const HotelRunnerReservationList = ({
 		const filtersPayload = JSON.stringify({
 			selectedFilter,
 			searchQuery: searchTerm || "",
+			createdByUserId: isOrderTakingUser ? user?._id : "",
 		});
 
 		// Fetch total records
@@ -308,7 +331,30 @@ const HotelRunnerReservationList = ({
 export default HotelRunnerReservationList;
 
 const HotelRunnerReservationListWrapper = styled.div`
-	margin-top: 50px;
-	margin-bottom: 50px;
-	margin-right: 20px;
+	margin: 0 0 32px;
+	min-width: 0;
+
+	> div {
+		min-width: 0;
+	}
+
+	.btn {
+		border-radius: 8px;
+		font-weight: 800;
+	}
+
+	@media (max-width: 760px) {
+		.mx-auto.mb-5.mt-4.text-center {
+			display: grid;
+			gap: 8px;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			margin: 0 0 12px !important;
+		}
+
+		.mx-auto.mb-5.mt-4.text-center .btn {
+			margin: 0 !important;
+			min-width: 0;
+			white-space: normal;
+		}
+	}
 `;

@@ -1,8 +1,15 @@
 import React from "react";
 import * as XLSX from "xlsx";
 import moment from "moment";
+import styled from "styled-components";
 
-const DownloadExcel = ({ data, columns, currentPage, recordsPerPage }) => {
+const DownloadExcel = ({
+	data,
+	columns,
+	currentPage,
+	recordsPerPage,
+	chosenLanguage,
+}) => {
 	const downloadExcelDocument = () => {
 		// Create a new workbook
 		const workbook = XLSX.utils.book_new();
@@ -59,10 +66,35 @@ const DownloadExcel = ({ data, columns, currentPage, recordsPerPage }) => {
 	};
 
 	return (
-		<button onClick={downloadExcelDocument} className='btn btn-info float-left'>
-			Download Report To Excel
-		</button>
+		<DownloadButton onClick={downloadExcelDocument} type='button'>
+			{chosenLanguage === "Arabic"
+				? "تنزيل التقرير إلى Excel"
+				: "Download Report To Excel"}
+		</DownloadButton>
 	);
 };
 
 export default DownloadExcel;
+
+const DownloadButton = styled.button`
+	background: #17a2b8;
+	border: 0;
+	border-radius: 8px;
+	color: #fff;
+	cursor: pointer;
+	font-weight: 800;
+	min-height: 40px;
+	padding: 9px 14px;
+	text-align: center;
+	width: 100%;
+
+	&:hover {
+		background: #0f8ea2;
+	}
+
+	@media (max-width: 520px) {
+		font-size: 12px;
+		min-height: 36px;
+		padding: 8px 10px;
+	}
+`;

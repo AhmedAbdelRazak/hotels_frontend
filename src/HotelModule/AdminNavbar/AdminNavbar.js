@@ -63,12 +63,59 @@ const AdminNavbar = ({
 	const { user } = isAuthenticated();
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
-	const userId = selectedHotel.belongsTo._id
-		? selectedHotel.belongsTo._id
-		: user._id;
-	const hotelId = selectedHotel._id;
+	const ownerIdFromHotel =
+		selectedHotel?.belongsTo && typeof selectedHotel.belongsTo === "object"
+			? selectedHotel.belongsTo._id
+			: selectedHotel?.belongsTo;
+	const userId = ownerIdFromHotel || user?.belongsToId || user?._id;
+	const hotelId =
+		selectedHotel?._id ||
+		user?.hotelIdWork ||
+		(Array.isArray(user?.hotelsToSupport)
+			? user.hotelsToSupport[0]?._id || user.hotelsToSupport[0]
+			: "");
 
 	const roomCountDetails = selectedHotel.roomCountDetails || [];
+	const roleNumbers = [
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	].filter(Boolean);
+	const roleDescriptions = [
+		String(user?.roleDescription || "").toLowerCase(),
+		...(Array.isArray(user?.roleDescriptions)
+			? user.roleDescriptions.map((item) => String(item || "").toLowerCase())
+			: []),
+	];
+	const hasRole = (role) => roleNumbers.includes(Number(role));
+	const hasRoleDescription = (description) =>
+		roleDescriptions.includes(String(description || "").toLowerCase());
+	const isManagerOrAdmin =
+		hasRole(1000) || hasRole(2000) || hasRoleDescription("hotelmanager");
+	const hasReception = hasRole(3000) || hasRoleDescription("reception");
+	const hasOrderTaker = hasRole(7000) || hasRoleDescription("ordertaker");
+	const hasFinance = hasRole(6000) || hasRoleDescription("finance");
+	const hasHousekeeping =
+		hasRole(4000) ||
+		hasRole(5000) ||
+		hasRoleDescription("housekeepingmanager") ||
+		hasRoleDescription("housekeeping");
+	const isLimitedOrderTaker = hasOrderTaker && !hasReception && !isManagerOrAdmin;
+	const reservationPath = `/hotel-management/new-reservation/${userId}/${hotelId}${
+		isLimitedOrderTaker ? "?newReservation" : ""
+	}`;
+	const canShowNavItem = (key) => {
+		if (["signout"].includes(key)) return true;
+		if (["divider1", "divider2"].includes(key)) return isManagerOrAdmin;
+		if (key === "sub1") return isManagerOrAdmin || hasFinance || hasRole(4000);
+		if (key === "sub3") return isManagerOrAdmin || hasReception || hasOrderTaker;
+		if (key === "sub4" || key === "sub18") return isManagerOrAdmin || hasFinance;
+		if (key === "sub6" || key === "sub8") return isManagerOrAdmin;
+		if (key === "sub7") return isManagerOrAdmin || hasHousekeeping;
+		if (["sub13", "sub14", "sub15", "sub16", "sub17"].includes(key)) {
+			return isManagerOrAdmin;
+		}
+		return true;
+	};
 
 	const applyMenuCollapsedState = useCallback(
 		(nextCollapsed) => {
@@ -144,7 +191,7 @@ const AdminNavbar = ({
 			<PieChartOutlined />
 		),
 		getItem(
-			<Link to={`/hotel-management/new-reservation/${userId}/${hotelId}`}>
+			<Link to={reservationPath}>
 				Reservations
 			</Link>,
 			"sub3",
@@ -272,30 +319,17 @@ const AdminNavbar = ({
 				/>
 			)}
 			<AdminNavbarWrapper
-				show={collapsed}
-				show2={clickedOn}
+				$show={collapsed}
+				$show2={clickedOn}
 				style={{
 					width: collapsed ? 80 : isMobileMenu ? "min(90vw, 340px)" : 285,
 				}}
 				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			>
 				<Button
+					className='menu-toggle-button'
 					type='primary'
 					onClick={toggleCollapsed}
-					style={{
-						marginBottom: 8,
-						textAlign: "center",
-						marginLeft: isMobileMenu
-							? 8
-							: chosenLanguage === "Arabic"
-							  ? 200
-							  : 5,
-						marginTop: 10,
-						position: isMobileMenu ? "sticky" : undefined,
-						top: isMobileMenu ? 8 : collapsed ? "10px" : "",
-						left: isMobileMenu ? 8 : collapsed ? "10px" : "",
-						zIndex: isMobileMenu ? 20001 : collapsed ? 1000 : "",
-					}}
 				>
 					{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
 				</Button>
@@ -328,7 +362,7 @@ const AdminNavbar = ({
 					mode='inline'
 					theme='dark'
 					inlineCollapsed={collapsed}
-					items={items}
+					items={items.filter((item) => canShowNavItem(item?.key))}
 					onClick={(e) => {
 						if (e.key === "signout") {
 							handleSignout(history);
@@ -365,36 +399,55 @@ const MobileMenuBackdrop = styled.button`
 		width: 100vw;
 		height: calc(100vh - 70px);
 		background: rgba(7, 10, 20, 0.45);
-		z-index: 19999;
+		z-index: 890;
 		cursor: pointer;
 	}
 `;
 
 const AdminNavbarWrapper = styled.div`
 	margin-bottom: 15px;
-	background: ${(props) => (props.show ? "" : "#262639")};
-	top: ${(props) => (props.show ? "20px" : "69px")} !important;
-	z-index: 20000;
-	overflow: auto;
+	background: #1e1e2d;
+	top: 70px !important;
+	z-index: 1100;
+	overflow: hidden;
 	position: absolute;
 	padding: 0px !important;
 	position: fixed; // Add this line
-	top: 0; // Adjust as needed
 	left: 0; // Since the menu is on the left hand side
-	height: 100vh; // Make it full height
+	height: calc(100vh - 70px); // Make it full height below the top navbar
+	width: ${(props) => (props.$show ? "80px" : "286px")};
+
+	.menu-toggle-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 56px;
+		height: 34px;
+		margin: ${(props) =>
+			props.$show ? "8px auto 8px" : "8px auto 8px 12px"};
+		position: sticky;
+		top: 8px;
+		border-radius: 8px;
+		box-shadow: 0 6px 14px rgba(13, 110, 253, 0.22);
+		z-index: 1200;
+	}
 
 	ul {
-		height: 90vh !important;
+		height: calc(100% - 50px) !important;
+		min-height: 0 !important;
+		width: 100% !important;
+		padding: 0 6px 8px !important;
+		margin: 0 !important;
+		overflow: hidden !important;
 	}
 
 	.logoClass {
-		display: ${(props) => (props.show ? "none " : "block")} !important;
+		display: ${(props) => (props.$show ? "none " : "block")} !important;
 	}
 
 	li {
-		/* margin: 20px auto; */
-		font-size: 0.9rem;
-		margin-bottom: ${(props) => (props.show ? "20px " : "15px")};
+		font-size: ${(props) => (props.$show ? "0.86rem" : "0.88rem")};
+		margin-bottom: 3px !important;
 		color: white;
 		font-weight: bolder;
 		svg {
@@ -408,8 +461,41 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.ant-menu.ant-menu-inline-collapsed {
-		min-height: 850px;
-		/* position: fixed; */
+		min-height: 0 !important;
+	}
+
+	.ant-menu-item,
+	.ant-menu-submenu-title {
+		height: clamp(29px, 4.05vh, 38px) !important;
+		line-height: clamp(29px, 4.05vh, 38px) !important;
+		margin: 0 4px 3px !important;
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.ant-menu-item-divider {
+		height: 1px !important;
+		line-height: 1px !important;
+		min-height: 1px !important;
+		margin: 2px 10px 4px !important;
+		background: rgba(255, 255, 255, 0.12) !important;
+	}
+
+	.margin-divider {
+		height: 1px;
+		margin: 0;
+	}
+
+	.ant-menu-inline-collapsed > .ant-menu-item,
+	.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title {
+		padding-inline: 0 !important;
+		text-align: center;
+	}
+
+	.ant-menu-inline-collapsed .ant-menu-item-icon,
+	.ant-menu-inline-collapsed .anticon {
+		margin-inline: auto !important;
+		font-size: 17px !important;
 	}
 
 	.ant-menu.ant-menu-dark,
@@ -422,11 +508,13 @@ const AdminNavbarWrapper = styled.div`
 	.ant-menu.ant-menu-dark,
 	.ant-menu.ant-menu-dark {
 		color: rgba(255, 255, 255, 0.65);
-		background: ${(props) => (props.show ? "" : "#262639")};
+		background: #1e1e2d !important;
+		width: 100% !important;
+		border-inline-end: 0 !important;
 	}
 
 	.ant-menu-item-selected {
-		background: ${(props) => (props.show2 ? "none !important" : "")};
+		background: ${(props) => (props.$show2 ? "none !important" : "")};
 	}
 
 	.black-bg {
@@ -450,16 +538,24 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 1650px) {
-		background: ${(props) => (props.show ? "" : "transparent")};
+		background: #1e1e2d;
 
 		ul {
-			width: 250px;
-			padding: 0px !important;
+			width: 100% !important;
+			padding: 0 6px 8px !important;
 			margin: 0px !important;
 		}
 
 		ul > li {
-			font-size: 0.8rem !important;
+			font-size: 0.78rem !important;
+			margin-bottom: 2px !important;
+		}
+
+		.ant-menu-item,
+		.ant-menu-submenu-title {
+			height: clamp(28px, 3.95vh, 36px) !important;
+			line-height: clamp(28px, 3.95vh, 36px) !important;
+			margin-bottom: 2px !important;
 		}
 	}
 
@@ -467,44 +563,73 @@ const AdminNavbarWrapper = styled.div`
 		top: 70px !important;
 		left: 0;
 		height: calc(100vh - 70px);
-		width: ${(props) => (props.show ? "80px" : "min(90vw, 340px)")} !important;
-		background: ${(props) => (props.show ? "transparent" : "#1e1e2d")};
+		width: ${(props) =>
+			props.$show ? "80px" : "min(90vw, 340px)"} !important;
+		background: #1e1e2d;
 		border-right: ${(props) =>
-			props.show ? "none" : "1px solid rgba(255, 255, 255, 0.08)"};
+			props.$show ? "none" : "1px solid rgba(255, 255, 255, 0.08)"};
 		box-shadow: ${(props) =>
-			props.show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
+			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
 		transition: width 0.22s ease, box-shadow 0.22s ease;
-		overflow-y: auto;
-		overflow-x: hidden;
+		overflow: hidden;
 
 		ul {
-			display: ${(props) => (props.show ? "none" : "block")};
+			display: ${(props) => (props.$show ? "none" : "block")};
 			width: 100%;
-			height: auto !important;
-			min-height: calc(100vh - 150px);
-			margin-top: 6px !important;
+			height: calc(100% - 50px) !important;
+			min-height: 0 !important;
+			margin-top: 4px !important;
 			top: 0 !important;
-			padding: 0 0 20px !important;
+			padding: 0 6px 8px !important;
+			overflow: hidden !important;
 		}
 
 		li {
-			margin-bottom: 8px;
-			font-size: 0.88rem !important;
+			margin-bottom: 2px !important;
+			font-size: 0.8rem !important;
+		}
+
+		.ant-menu-item,
+		.ant-menu-submenu-title {
+			height: clamp(27px, 3.85vh, 35px) !important;
+			line-height: clamp(27px, 3.85vh, 35px) !important;
+			margin-bottom: 2px !important;
 		}
 
 		.ant-menu.ant-menu-dark,
 		.ant-menu-dark .ant-menu-sub,
 		.ant-menu.ant-menu-dark .ant-menu-sub {
-			background: ${(props) => (props.show ? "transparent" : "#1e1e2d")}
+			background: ${(props) => (props.$show ? "transparent" : "#1e1e2d")}
 				!important;
 		}
 
-		button {
+		.menu-toggle-button {
 			margin: 8px !important;
 			top: 8px !important;
 			left: 8px !important;
+			position: sticky;
 			border-radius: 10px;
 			box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+			z-index: 1200;
+		}
+	}
+
+	@media (max-width: 560px) {
+		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
+			!important;
+		background: ${(props) => (props.$show ? "transparent" : "#1e1e2d")};
+		box-shadow: ${(props) =>
+			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
+		pointer-events: ${(props) => (props.$show ? "none" : "auto")};
+
+		.menu-toggle-button {
+			position: fixed !important;
+			left: 8px !important;
+			top: 13px !important;
+			min-width: 44px;
+			width: 44px;
+			z-index: 1205;
+			pointer-events: auto;
 		}
 	}
 `;

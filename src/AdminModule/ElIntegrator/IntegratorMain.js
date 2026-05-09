@@ -6,6 +6,7 @@ import styled from "styled-components";
 import ContentOfIntegrator from "./ContentOfIntegrator";
 import { isAuthenticated } from "../../auth";
 import { gettingHotelDetailsForAdminAll, readUserId } from "../apiAdmin";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const IntegratorMain = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -58,7 +59,8 @@ const IntegratorMain = ({ chosenLanguage }) => {
 	const isSuperAdmin =
 		!getUser?.accessTo ||
 		getUser?.accessTo.length === 0 ||
-		getUser?.accessTo.includes("all");
+		getUser?.accessTo.includes("all") ||
+		isSuperAdminUser(getUser);
 
 	// Validate user and handle access control
 	useEffect(() => {

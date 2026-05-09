@@ -1,4 +1,14 @@
-export const SUPER_USER_IDS = [
-	"6553f1c6d06c5cea2f98a838",
-	"6969d80da28c78c6280171df",
-];
+export const SUPER_ADMIN_ID = (
+	process.env.REACT_APP_SUPER_ADMIN_ID || ""
+).trim();
+
+export const SUPER_USER_IDS = SUPER_ADMIN_ID ? [SUPER_ADMIN_ID] : [];
+
+export const isSuperAdminUser = (userOrId) => {
+	const userId =
+		typeof userOrId === "string" ? userOrId : userOrId?._id || userOrId?.id;
+
+	return Boolean(
+		SUPER_ADMIN_ID && String(userId || "").trim() === SUPER_ADMIN_ID
+	);
+};

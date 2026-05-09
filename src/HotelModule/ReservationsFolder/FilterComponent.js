@@ -4,36 +4,56 @@ import { Modal, DatePicker, Button } from "antd";
 
 const FiltersContainer = styled.div`
 	display: flex;
-	justify-content: space-around;
-	background: #f8f8f8;
+	background: #fff;
+	border: 1px solid rgba(16, 24, 40, 0.08);
+	border-radius: 8px;
+	margin-bottom: 12px;
+	min-width: 0;
+	overflow-x: auto;
 	padding: 10px;
-	border-bottom: 2px solid #e1e1e1;
+	scrollbar-width: thin;
 `;
 
 const FilterGroup = styled.div`
 	display: flex;
-	gap: 10px;
 	align-items: center;
+	gap: 8px;
+	min-width: max-content;
 `;
 
 const FilterButton = styled(Button)`
 	&.ant-btn {
-		background: ${({ active }) => (active ? "lightgrey" : "white")};
-		border: 1px solid #ccc;
+		background: ${({ $active }) => ($active ? "#e3f2fd" : "#fff")};
+		border: 1px solid ${({ $active }) => ($active ? "#9ecdf8" : "#d0d5dd")};
+		border-radius: 8px;
+		color: #18212f;
+		height: 34px;
+		padding: 0 12px;
 		position: relative; // For notification positioning
-		font-weight: ${({ active }) => (active ? "bold" : "normal")};
+		font-weight: ${({ $active }) => ($active ? "800" : "700")};
+		white-space: nowrap;
+	}
+
+	@media (max-width: 560px) {
+		&.ant-btn {
+			font-size: 12px;
+			height: 32px;
+			padding: 0 10px;
+		}
 	}
 `;
 
 const Notification = styled.span`
-	background-color: #00468b;
+	background-color: #1e88e5;
 	border-radius: 50%;
 	color: white;
 	padding: 2px 6px;
 	font-size: 12px;
 	position: absolute;
-	top: -20px;
-	right: -0px;
+	top: -9px;
+	right: -5px;
+	min-width: 24px;
+	text-align: center;
 `;
 
 const FilterComponent = ({
@@ -137,7 +157,7 @@ const FilterComponent = ({
 				{Object.entries(filterLabels).map(([key, label]) => (
 					<FilterButton
 						key={key}
-						active={selectedFilter === key}
+						$active={selectedFilter === key}
 						onClick={() => handleFilterClick(key)}
 					>
 						{label}
@@ -161,6 +181,8 @@ const FilterComponent = ({
 				open={isModalVisible}
 				onOk={handleOk}
 				onCancel={handleCancel}
+				centered
+				width='min(420px, 94vw)'
 			>
 				<DatePicker onChange={handleDateChange} />
 			</Modal>
@@ -174,6 +196,8 @@ const FilterComponent = ({
 				open={isModalVisible2}
 				onOk={handleOk2}
 				onCancel={handleCancel2}
+				centered
+				width='min(420px, 94vw)'
 			>
 				<DatePicker onChange={handleDateChange2} />
 			</Modal>

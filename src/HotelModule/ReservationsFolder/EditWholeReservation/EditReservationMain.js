@@ -21,6 +21,7 @@ import {
 	PlusOutlined,
 	MinusOutlined,
 	EditOutlined,
+	DeleteOutlined,
 	CheckCircleTwoTone,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -955,6 +956,26 @@ export const EditReservationMain = ({
 		setIsRoomCountModalOpen(false);
 		setIsPricingModalOpen(false);
 	};
+	const removeRoomAtIndex = (indexToRemove) => {
+		const confirmMessage =
+			chosenLanguage === "Arabic"
+				? "\u0647\u0644 \u062a\u0631\u064a\u062f \u062d\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0633\u0637\u0631 \u0645\u0646 \u0627\u0644\u062d\u062c\u0632\u061f"
+				: "Remove this room from the reservation?";
+		if (!window.confirm(confirmMessage)) return;
+
+		setReservation((currentReservation) => ({
+			...currentReservation,
+			pickedRoomsType: (currentReservation.pickedRoomsType || []).filter(
+				(_, index) => index !== indexToRemove,
+			),
+		}));
+		setHasRoomLineEdits(true);
+		if (selectedRoomIndex === indexToRemove) {
+			setSelectedRoomIndex(null);
+			setIsRoomCountModalOpen(false);
+			setIsPricingModalOpen(false);
+		}
+	};
 
 	const flattenRoomsForSave = (rooms = []) => {
 		const flattened = [];
@@ -1380,7 +1401,7 @@ export const EditReservationMain = ({
 	};
 	return (
 		<div>
-			<Wrapper arabic={chosenLanguage === "Arabic"} zIndex={Z_TOP}>
+			<Wrapper $arabic={chosenLanguage === "Arabic"}>
 				<Modal
 					title={
 						selectedRoomLine
@@ -2120,7 +2141,7 @@ export const EditReservationMain = ({
 										return (
 											<RoomChip
 												key={key}
-												active={active}
+												$active={active}
 												onClick={() => toggleChip(key)}
 												title={`${resolvedDisplayName} (${room.room_type})`}
 											>
@@ -2229,6 +2250,17 @@ export const EditReservationMain = ({
 													</Button>
 													<Button
 														size='small'
+														danger
+														className='delete-room-btn'
+														icon={<DeleteOutlined />}
+														onClick={() => removeRoomAtIndex(index)}
+													>
+														{chosenLanguage === "Arabic"
+															? "\u062d\u0630\u0641"
+															: "Delete"}
+													</Button>
+													<Button
+														size='small'
 														onClick={() => openPricingModal(index)}
 													>
 														{chosenLanguage === "Arabic" ? "السعر" : "Pricing"}
@@ -2296,13 +2328,33 @@ export const EditReservationMain = ({
 
 const Wrapper = styled.div`
 	position: relative;
-	text-align: ${(p) => (p.arabic ? "right" : "left")};
-	direction: ${(p) => (p.arabic ? "rtl" : "ltr")};
+	--update-blue: #1476ef;
+	--update-blue-soft: #e4f3ff;
+	--update-blue-border: #b8dcff;
+	--update-green: #08a85a;
+	--update-green-soft: #ecfff4;
+	--update-amber: #df7a00;
+	--update-amber-soft: #fff7ec;
+	--update-border: #d7e6f5;
+	--update-text: #111827;
+	--update-muted: #64748b;
+	background: #f6f8fc;
+	color: var(--update-text);
+	padding: 12px;
+	text-align: ${(p) => (p.$arabic ? "right" : "left")};
+	direction: ${(p) => (p.$arabic ? "rtl" : "ltr")};
 
 	.warn {
-		text-transform: uppercase;
-		color: darkcyan;
+		background: linear-gradient(90deg, #e4f3ff, #f7fcff);
+		border: 1px solid var(--update-blue-border);
+		border-inline-start: 4px solid var(--update-blue);
+		border-radius: 10px;
+		color: #05707b;
+		font-size: 0.92rem;
 		font-weight: 700;
+		margin: 0 0 12px;
+		padding: 9px 12px;
+		text-transform: none;
 	}
 
 	input[type="text"],
@@ -2314,26 +2366,58 @@ const Wrapper = styled.div`
 	textarea {
 		display: block;
 		width: 100%;
-		padding: 0.55rem 0.6rem;
-		font-size: 1rem;
-		border: 1px solid #ccc;
+		min-height: 40px;
+		padding: 0.45rem 0.6rem;
+		font-size: 0.92rem;
+		border: 1px solid var(--update-border);
 		border-radius: 8px;
 		background: #fff;
+		color: var(--update-text);
+		box-shadow: none;
+		outline: none;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+
+	input:focus,
+	select:focus,
+	textarea:focus,
+	.ant-picker-focused,
+	.ant-select-focused .ant-select-selector {
+		border-color: var(--update-blue) !important;
+		box-shadow: 0 0 0 3px rgba(20, 118, 239, 0.12) !important;
+	}
+
+	textarea {
+		min-height: 78px;
+		resize: vertical;
 	}
 
 	.ant-picker,
 	.ant-field {
 		width: 100% !important;
-		min-width: 240px;
+		min-width: 0 !important;
 		border-radius: 10px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+		box-shadow: none;
+	}
+
+	.ant-picker {
+		border-color: var(--update-border);
+		min-height: 40px;
+	}
+
+	.ant-select-selector {
+		align-items: center;
+		border-color: var(--update-border) !important;
+		min-height: 40px !important;
 	}
 
 	.selectlike {
 		width: 100%;
 		padding: 10px;
 		border-radius: 10px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+		box-shadow: none;
 	}
 
 	.pill-inline {
@@ -2344,25 +2428,31 @@ const Wrapper = styled.div`
 	}
 
 	h4.headline {
-		font-size: 1.35rem;
+		font-size: 1.1rem;
 		font-weight: 800;
-		margin: 10px 0 16px;
+		margin: 0 0 12px;
 	}
 
 	h4.total {
-		color: #006ad1;
+		color: var(--update-blue);
 		text-align: center;
-		margin: 14px 0;
+		margin: 12px 0 8px;
 		font-weight: 800;
 	}
 
 	.cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
 		font-weight: 700;
 		font-size: 1.1rem;
+		line-height: 1.2;
 		letter-spacing: 0.2px;
-		padding: 12px 18px;
+		padding: 0 18px;
 		border-radius: 12px;
 		box-shadow: 0 10px 20px rgba(0, 106, 209, 0.25);
+		white-space: nowrap;
 		transition:
 			transform 0.15s ease,
 			box-shadow 0.15s ease;
@@ -2374,10 +2464,11 @@ const Wrapper = styled.div`
 	}
 
 	.cta-panel {
-		background: #f7faff;
-		border: 1px solid #cfe2ff;
-		border-radius: 16px;
-		padding: 16px;
+		background: #ffffff;
+		border: 1px solid var(--update-blue-border);
+		border-top: 4px solid var(--update-blue);
+		border-radius: 14px;
+		padding: 14px;
 		box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
 	}
 
@@ -2391,32 +2482,130 @@ const Wrapper = styled.div`
 		font-size: 0.9rem;
 		color: #555;
 	}
+
+	.total-amount {
+		background: #ffffff;
+		border: 1px solid var(--update-blue-border);
+		border-top: 4px solid var(--update-green);
+		border-radius: 14px;
+		box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+		padding: 14px;
+	}
+
+	.total-amount h5,
+	.total-amount h4,
+	.total-amount h3 {
+		font-weight: 900;
+		margin-bottom: 8px;
+		text-align: center;
+	}
+
+	.total-amount h5 {
+		color: var(--update-blue);
+		font-size: 1rem;
+	}
+
+	.total-amount h4 {
+		color: var(--update-text);
+		font-size: 0.96rem;
+	}
+
+	.total-amount h3 {
+		color: var(--update-green);
+		font-size: 1.15rem;
+	}
+
+	.total-amount .room-list {
+		display: grid;
+		gap: 8px;
+	}
+
+	.total-amount .room-item {
+		background: #f8fbff;
+		border: 1px solid var(--update-blue-border);
+		border-radius: 12px;
+		padding: 10px;
+	}
+
+	.total-amount .room-item .text {
+		font-weight: 800;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.total-amount .room-item .actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		justify-content: flex-end;
+	}
+
+	.total-amount .room-item .actions .delete-room-btn {
+		background: #fff5f5;
+		border-color: #f3b4b4;
+		color: #b42318;
+		font-weight: 800;
+	}
+
+	.total-amount .room-item .actions .delete-room-btn:hover {
+		background: #dc3545;
+		border-color: #dc3545;
+		color: #ffffff;
+	}
+
+	.container {
+		max-width: 100%;
+		padding-left: 0;
+		padding-right: 0;
+	}
+
+	@media (max-width: 768px) {
+		padding: 8px;
+
+		.warn {
+			font-size: 0.84rem;
+			padding: 8px 10px;
+		}
+
+		.total-amount .room-item {
+			padding: 8px;
+		}
+	}
 `;
 
 const Label = styled.label`
 	font-weight: 700;
-	font-size: 0.95rem;
-	color: #32322b;
+	font-size: 0.86rem;
+	color: #263445;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 6px;
+	margin-bottom: 5px;
 `;
 
 const Grid = styled.div`
 	display: grid;
-	grid-template-columns: 2fr 1fr;
-	gap: 16px;
+	grid-template-columns: minmax(0, 1.9fr) minmax(300px, 0.72fr);
+	gap: 14px;
+	align-items: start;
 	@media (max-width: 1200px) {
 		grid-template-columns: 1fr;
 	}
 `;
 
 const Left = styled.div`
+	background: #ffffff;
+	border: 1px solid var(--update-blue-border);
+	border-top: 4px solid var(--update-blue);
+	border-radius: 14px;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+	padding: 14px;
+
 	.row {
 		display: grid;
 		grid-template-columns: repeat(12, 1fr);
-		gap: 12px;
+		gap: 11px;
 	}
 	.col {
 		grid-column: span 4;
@@ -2430,6 +2619,17 @@ const Left = styled.div`
 		}
 	}
 	@media (max-width: 768px) {
+		padding: 10px;
+
+		.col {
+			grid-column: span 6;
+		}
+		.col-span-2 {
+			grid-column: span 12;
+		}
+	}
+
+	@media (max-width: 430px) {
 		.col,
 		.col-span-2 {
 			grid-column: span 12;
@@ -2438,16 +2638,16 @@ const Left = styled.div`
 `;
 
 const Block = styled.div`
-	margin-top: 18px;
-	background: #f6f7f9;
-	border: 1px solid #e9edf4;
-	border-radius: 10px;
-	padding: 14px;
+	margin-top: 12px;
+	background: #f8fbff;
+	border: 1px solid var(--update-blue-border);
+	border-radius: 12px;
+	padding: 12px;
 
 	.row {
 		display: grid;
 		grid-template-columns: repeat(12, 1fr);
-		gap: 12px;
+		gap: 11px;
 	}
 	.col {
 		grid-column: span 3;
@@ -2464,6 +2664,17 @@ const Block = styled.div`
 		}
 	}
 	@media (max-width: 768px) {
+		padding: 10px;
+
+		.col {
+			grid-column: span 6;
+		}
+		.col-span-2 {
+			grid-column: span 12;
+		}
+	}
+
+	@media (max-width: 430px) {
 		.col,
 		.col-span-2 {
 			grid-column: span 12;
@@ -2472,16 +2683,18 @@ const Block = styled.div`
 `;
 
 const Right = styled.div`
-	background: #fff;
-	border-radius: 8px;
-	padding: 14px;
-	border: 1px solid #eee;
+	background: linear-gradient(180deg, var(--update-green-soft), #ffffff 68%);
+	border: 1px solid #a7efc7;
+	border-top: 4px solid var(--update-green);
+	border-radius: 14px;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 	min-height: 250px;
+	padding: 14px;
 
 	.summary-list {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 12px;
+		gap: 9px;
 		margin-bottom: 8px;
 	}
 	.total-meta {
@@ -2494,13 +2707,26 @@ const Right = styled.div`
 		text-align: center;
 	}
 	.item {
-		background: #fafafa;
-		border: 1px solid #f0f0f0;
-		border-radius: 8px;
-		padding: 10px 12px;
+		background: rgba(255, 255, 255, 0.88);
+		border: 1px solid #cdeedf;
+		border-radius: 10px;
+		padding: 8px 10px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.item span {
+		color: var(--update-muted);
+		font-size: 0.78rem;
+		font-weight: 800;
+	}
+	.item strong,
+	.item .pill {
+		direction: ltr;
+		font-weight: 900;
+		text-align: end;
 	}
 	.price {
 		color: darkgoldenrod;
@@ -2522,6 +2748,12 @@ const Right = styled.div`
 
 	@media (max-width: 768px) {
 		.summary-list {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 430px) {
+		.summary-list {
 			grid-template-columns: 1fr;
 		}
 	}
@@ -2529,16 +2761,17 @@ const Right = styled.div`
 
 const RoomGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(410px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
 	gap: 10px;
+	margin-top: 8px;
 `;
 
 const RoomChip = styled.button`
 	appearance: none;
-	border: 1px solid ${(p) => (p.active ? "#1a9f42" : "#e5e7eb")};
-	background: ${(p) => (p.active ? "#e7f7ed" : "#ffffff")};
+	border: 1px solid ${(p) => (p.$active ? "#1a9f42" : "#d7e6f5")};
+	background: ${(p) => (p.$active ? "#e7f7ed" : "#ffffff")};
 	color: #111827;
-	padding: 10px 12px;
+	padding: 9px 10px;
 	border-radius: 10px;
 	display: grid;
 	grid-template-columns: auto 1fr auto auto auto;
@@ -2556,9 +2789,11 @@ const RoomChip = styled.button`
 	}
 
 	.icon {
-		font-size: 18px;
+		color: var(--update-blue);
+		font-size: 17px;
 	}
 	.text {
+		font-size: 0.9rem;
 		font-weight: 700;
 		white-space: nowrap;
 		overflow: hidden;
@@ -2577,5 +2812,14 @@ const RoomChip = styled.button`
 	.avail {
 		font-size: 12px;
 		opacity: 0.8;
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: auto 1fr auto;
+		gap: 6px;
+
+		.avail {
+			grid-column: 2 / -1;
+		}
 	}
 `;

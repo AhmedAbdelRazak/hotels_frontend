@@ -4,6 +4,7 @@ import { Card } from "antd";
 import Chart from "react-apexcharts";
 
 const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
+	const isArabic = chosenLanguage === "Arabic";
 	// 1) Extract data
 	const { availableRooms = 0, totalRooms = 0 } = DonutChartCard;
 	const availableRoomsSafe = Number.isFinite(Number(availableRooms))
@@ -31,6 +32,8 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 
 	// 3) Donut chart setup
 	const usedRooms = Math.max(totalRoomsSafe - availableRoomsSafe, 0);
+	const formatNumber = (value) =>
+		new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 
 	const pieChartOptions = {
 		chart: {
@@ -57,9 +60,9 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 	const pieChartSeries = [availableRoomsSafe, usedRooms];
 
 	return (
-		<CardContainer>
+		<CardContainer dir={isArabic ? "rtl" : "ltr"}>
 			<StyledCard>
-				<ChartWrapper>
+				<ChartWrapper dir='ltr'>
 					<Chart
 						options={pieChartOptions}
 						series={pieChartSeries}
@@ -68,9 +71,10 @@ const DonutChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 					/>
 				</ChartWrapper>
 				<CardContent>
-					<CountText>{availableRoomsSafe}</CountText>
+					<CountText>{formatNumber(availableRoomsSafe)}</CountText>
 					<CardTitle>
-						{title} ({availableRoomsSafe} / {totalRoomsSafe})
+						{title} ({formatNumber(availableRoomsSafe)} /{" "}
+						{formatNumber(totalRoomsSafe)})
 					</CardTitle>
 				</CardContent>
 			</StyledCard>
@@ -85,10 +89,14 @@ export default DonutChartCard;
 const CardContainer = styled.div``;
 
 const StyledCard = styled(Card)`
-	border-radius: 12px;
+	border-radius: 8px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	min-width: 0;
 	text-align: center;
-	padding: 20px;
+
+	.ant-card-body {
+		padding: 16px;
+	}
 `;
 
 const ChartWrapper = styled.div`
@@ -110,5 +118,6 @@ const CountText = styled.div`
 const CardTitle = styled.div`
 	font-size: 16px;
 	color: #888;
+	overflow-wrap: anywhere;
 `;
 

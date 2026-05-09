@@ -4,6 +4,7 @@ import React from "react";
 import { ConfigProvider } from "antd";
 import { Route, Redirect } from "react-router-dom";
 import { isAuthenticated } from "./index";
+import { isSuperAdminUser } from "../AdminModule/utils/superUsers";
 
 const resolvePopupContainer = (triggerNode) => {
 	if (typeof document === "undefined") {
@@ -19,8 +20,15 @@ const resolvePopupContainer = (triggerNode) => {
 const AdminRoute = ({ component: Component, ...rest }) => (
 	<Route
 		{...rest}
-		render={(props) =>
-			isAuthenticated() && isAuthenticated().user.role === 1000 ? (
+		render={(props) => {
+			const auth = isAuthenticated();
+			const user = auth?.user;
+			const hasAdminAccess =
+				auth &&
+				user?.activeUser !== false &&
+				(user.role === 1000 || isSuperAdminUser(user));
+
+			return hasAdminAccess ? (
 				<ConfigProvider getPopupContainer={resolvePopupContainer}>
 					<Component {...props} />
 				</ConfigProvider>
@@ -31,8 +39,8 @@ const AdminRoute = ({ component: Component, ...rest }) => (
 						state: { from: props.location },
 					}}
 				/>
-			)
-		}
+			);
+		}}
 	/>
 );
 

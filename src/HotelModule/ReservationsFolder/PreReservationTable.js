@@ -1,7 +1,7 @@
 // PreReservationTable.js
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import moment from "moment";
 import { Tooltip, Modal, Button, Pagination } from "antd"; // Ensure Pagination is correctly imported
 import FilterComponent from "./FilterComponent";
@@ -467,59 +467,56 @@ const PreReservationTable = ({
 
 	return (
 		<>
-			<PreReservationTableWrapper isArabic={chosenLanguage === "Arabic"}>
-				{/* Search Form */}
-				<div className='form-group mx-3 text-center'>
-					<form className='form' onSubmit={searchSubmit}>
-						<label
-							className='mt-2 mx-3'
-							style={{
-								fontWeight: "bold",
-								fontSize: "1.05rem",
-								color: "black",
-							}}
-						>
-							Search
-						</label>
-						<input
-							className='p-2 my-2 search-input w-50 form-control mx-auto'
-							type='text'
-							value={q}
-							onChange={(e) => setQ(e.target.value.toLowerCase())}
-							placeholder={
-								chosenLanguage === "Arabic"
-									? "البحث حسب هاتف العميل، اسم العميل، البريد الإلكتروني، رقم التأكيد، حالة الدفع"
-									: "Search By Client Phone, Client Name, Email, Confirmation #, Payment Status"
-							}
-							aria-label='Search'
+			<ReservationDetailsModalGlobalStyle />
+			<PreReservationTableWrapper $isArabic={chosenLanguage === "Arabic"}>
+				<ReservationToolbar>
+					<SearchCard>
+						<SearchTitle>
+							{chosenLanguage === "Arabic" ? "البحث" : "Search"}
+						</SearchTitle>
+						<SearchForm onSubmit={searchSubmit}>
+							<SearchInput
+								type='text'
+								value={q}
+								onChange={(e) => setQ(e.target.value.toLowerCase())}
+								placeholder={
+									chosenLanguage === "Arabic"
+										? "هاتف، اسم، بريد، رقم التأكيد، أو حالة الدفع"
+										: "Phone, guest, email, confirmation, or payment status"
+								}
+								aria-label='Search'
+							/>
+							<SearchButton type='submit'>
+								{chosenLanguage === "Arabic" ? "بحث" : "Search"}
+							</SearchButton>
+						</SearchForm>
+					</SearchCard>
+
+					<ToolbarSide>
+						<DownloadExcel
+							data={allPreReservations}
+							columns={columns2}
+							title={"Reservations Report"}
+							currentPage={currentPage}
+							recordsPerPage={recordsPerPage}
+							chosenLanguage={chosenLanguage}
 						/>
-						<button className='btn btn-success mx-2' type='submit'>
-							Search
-						</button>
-					</form>
-				</div>
-
-				{/* Download Excel */}
-				<DownloadExcel
-					data={allPreReservations}
-					columns={columns2}
-					title={"Reservations Report"}
-					currentPage={currentPage}
-					recordsPerPage={recordsPerPage}
-				/>
-
-				{/* Pagination */}
-				<div
-					className='my-4'
-					onClick={() => window.scrollTo({ top: 20, behavior: "smooth" })}
-				>
-					<Pagination
-						current={currentPage}
-						pageSize={recordsPerPage}
-						total={totalRecords}
-						onChange={handlePageChange}
-					/>
-				</div>
+						<PaginationShell
+							onClick={() => window.scrollTo({ top: 20, behavior: "smooth" })}
+						>
+							<Pagination
+								current={currentPage}
+								pageSize={recordsPerPage}
+								total={totalRecords}
+								onChange={handlePageChange}
+								showLessItems
+								showSizeChanger={false}
+								responsive
+								size='small'
+							/>
+						</PaginationShell>
+					</ToolbarSide>
+				</ReservationToolbar>
 
 				{/* Filter Component */}
 				<FilterComponent
@@ -533,7 +530,7 @@ const PreReservationTable = ({
 
 				{/* Custom HTML Table */}
 				<TableWrapper>
-					<StyledTable isArabic={chosenLanguage === "Arabic"}>
+					<StyledTable $isArabic={chosenLanguage === "Arabic"}>
 						<thead>
 							<tr>
 								<th>#</th>
@@ -778,19 +775,25 @@ const PreReservationTable = ({
 				{/* Modal */}
 				<Modal
 					key={modalKey} // Add the key here
-					title={
-						chosenLanguage === "Arabic" ? "تفاصيل الحجز" : "Reservation Details"
-					}
+					title={null}
 					open={isModalVisible}
 					onOk={handleOk}
 					onCancel={handleCancel}
-					width='84.5%' // Set the width to 84.5%
-					style={{
-						// If Arabic, align to the left, else align to the right
-						position: "absolute",
-						left: chosenLanguage === "Arabic" ? "1%" : "auto",
-						right: chosenLanguage === "Arabic" ? "auto" : "5%",
-						top: "1%",
+					width='min(94vw, calc(100vw - 220px))'
+					centered
+					className='reservation-details-modal'
+					styles={{
+						header: {
+							display: "none",
+						},
+						content: {
+							padding: "6px 10px 8px",
+						},
+						body: {
+							maxHeight: "86vh",
+							overflowY: "auto",
+							padding: "0",
+						},
 					}}
 				>
 					{selectedReservation && (
@@ -810,9 +813,166 @@ export default PreReservationTable;
 
 /* ------------------ STYLES ------------------ */
 
+const ReservationDetailsModalGlobalStyle = createGlobalStyle`
+	.reservation-details-modal {
+		max-width: min(94vw, calc(100vw - 220px));
+	}
+
+	.reservation-details-modal .ant-modal-close {
+		align-items: center;
+		background: #7f1d1d;
+		border: 1px solid #991b1b;
+		border-radius: 999px;
+		color: #fff;
+		display: inline-flex;
+		height: 30px;
+		justify-content: center;
+		right: 8px;
+		top: 6px;
+		width: 30px;
+		z-index: 5;
+	}
+
+	.reservation-details-modal .ant-modal-close:hover {
+		background: #991b1b;
+		border-color: #b91c1c;
+	}
+
+	.reservation-details-modal .ant-modal-close-x,
+	.reservation-details-modal .ant-modal-close-icon {
+		color: #fff;
+		font-size: 14px;
+		line-height: 1;
+	}
+
+	.reservation-details-modal .ant-modal-body {
+		padding-top: 0 !important;
+	}
+
+	@media (max-width: 900px) {
+		.reservation-details-modal {
+			max-width: calc(100vw - 12px);
+			width: calc(100vw - 12px) !important;
+		}
+	}
+`;
+
+const ReservationToolbar = styled.div`
+	align-items: stretch;
+	display: grid;
+	gap: 12px;
+	grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+	margin-bottom: 12px;
+	min-width: 0;
+
+	@media (max-width: 920px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const SearchCard = styled.div`
+	background: #e3f2fd;
+	border: 1px solid #cfe5fb;
+	border-radius: 8px;
+	min-width: 0;
+	padding: 12px;
+`;
+
+const SearchTitle = styled.div`
+	color: #18212f;
+	font-size: 15px;
+	font-weight: 800;
+	margin-bottom: 8px;
+	text-align: start;
+`;
+
+const SearchForm = styled.form`
+	display: grid;
+	gap: 8px;
+	grid-template-columns: minmax(0, 1fr) auto;
+	min-width: 0;
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const SearchInput = styled.input`
+	background: #fff;
+	border: 1px solid #d0d5dd;
+	border-radius: 8px;
+	color: #101828;
+	font-size: 14px;
+	height: 38px;
+	min-width: 0;
+	outline: none;
+	padding: 0 12px;
+	width: 100%;
+
+	&:focus {
+		border-color: #1e88e5;
+		box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.12);
+	}
+
+	@media (max-width: 520px) {
+		font-size: 12px;
+		height: 36px;
+	}
+`;
+
+const SearchButton = styled.button`
+	background: #1e88e5;
+	border: 0;
+	border-radius: 8px;
+	color: #fff;
+	cursor: pointer;
+	font-weight: 800;
+	height: 38px;
+	padding: 0 18px;
+	white-space: nowrap;
+
+	&:hover {
+		background: #0f6fc3;
+	}
+
+	@media (max-width: 520px) {
+		height: 36px;
+		width: 100%;
+	}
+`;
+
+const ToolbarSide = styled.div`
+	align-content: start;
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+
+	@media (max-width: 920px) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+`;
+
+const PaginationShell = styled.div`
+	align-items: center;
+	background: #fff;
+	border: 1px solid rgba(16, 24, 40, 0.08);
+	border-radius: 8px;
+	display: flex;
+	justify-content: center;
+	min-height: 40px;
+	min-width: 0;
+	overflow-x: auto;
+	padding: 6px;
+
+	.ant-pagination {
+		white-space: nowrap;
+	}
+`;
+
 const PreReservationTableWrapper = styled.div`
-	text-align: ${(props) => (props.isArabic ? "right" : "left")};
-	padding: 20px;
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+	min-width: 0;
+	padding: 0;
 
 	td,
 	tr,
@@ -821,11 +981,20 @@ const PreReservationTableWrapper = styled.div`
 		font-size: 12px;
 	}
 
+	td .ant-btn {
+		border-color: #9ecdf8;
+		border-radius: 999px;
+		color: #1e88e5;
+		font-weight: 800;
+		height: 30px;
+		padding: 0 12px;
+	}
+
 	thead th {
 		position: sticky;
 		top: 0;
 		z-index: 10; /* Ensure the header is above other content when scrolling */
-		background-color: white; /* Match the header background color */
+		background-color: #f8fafc; /* Match the header background color */
 	}
 
 	table {
@@ -834,71 +1003,154 @@ const PreReservationTableWrapper = styled.div`
 
 	th,
 	td {
-		padding: 4px 8px;
-		text-align: ${(props) => (props.isArabic ? "right" : "left")};
+		padding: 8px 10px;
+		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 		white-space: nowrap;
-		border: 1px solid #f0f0f0;
+		border: 1px solid #edf2f7;
 		font-size: 12px;
 		text-transform: capitalize;
-		line-height: 1.2;
+		line-height: 1.3;
 	}
 
 	th {
-		background-color: #fafafa;
+		background-color: #f8fafc;
 		position: sticky;
 		top: 0;
 		z-index: 1;
+		color: #344054;
+		font-weight: 800;
 	}
 
 	@media (max-width: 768px) {
 		th,
 		td {
-			padding: 2px 4px;
-			font-size: 10px;
+			padding: 6px 8px;
+			font-size: 11px;
 		}
 	}
 
 	tr:hover td {
-		background: #f5f5f5; /* Add a hover effect if needed */
+		background: #f7fbff; /* Add a hover effect if needed */
 	}
 `;
 
 // Custom Table Wrapper enables both vertical and horizontal scrolling
 const TableWrapper = styled.div`
+	background: #fff;
+	border: 1px solid rgba(16, 24, 40, 0.08);
+	border-radius: 8px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
 	max-height: 700px;
-	overflow-y: auto;
-	overflow-x: auto;
 	margin-bottom: 16px;
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: auto;
+	width: 100%;
+
+	@media (max-width: 768px) {
+		max-height: 62vh;
+	}
 `;
 
 // StyledTable with media queries to adjust cell sizes on smaller screens
 const StyledTable = styled.table`
-	width: 100%;
 	border-collapse: collapse;
+	table-layout: fixed;
+	min-width: 0;
+	width: 100%;
 
 	th,
 	td {
-		padding: 4px 8px;
-		text-align: ${(props) => (props.isArabic ? "right" : "left")};
+		padding: 8px 10px;
+		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 		white-space: nowrap;
-		border: 1px solid #f0f0f0;
+		border: 1px solid #edf2f7;
 		font-size: 12px;
 		text-transform: capitalize;
-		line-height: 1.2;
+		line-height: 1.3;
+		max-width: 220px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	th:nth-child(1),
+	td:nth-child(1) {
+		width: 42px;
+	}
+
+	th:nth-child(2),
+	td:nth-child(2) {
+		width: 12%;
+	}
+
+	th:nth-child(3),
+	td:nth-child(3) {
+		width: 11%;
+	}
+
+	th:nth-child(4),
+	td:nth-child(4) {
+		width: 7%;
+	}
+
+	th:nth-child(5),
+	td:nth-child(5) {
+		width: 8%;
+	}
+
+	th:nth-child(6),
+	td:nth-child(6) {
+		width: 8%;
+	}
+
+	th:nth-child(7),
+	td:nth-child(7),
+	th:nth-child(8),
+	td:nth-child(8) {
+		width: 6.5%;
+	}
+
+	th:nth-child(9),
+	td:nth-child(9),
+	th:nth-child(10),
+	td:nth-child(10) {
+		width: 7%;
+	}
+
+	th:nth-child(11),
+	td:nth-child(11) {
+		width: 8%;
+	}
+
+	th:nth-child(12),
+	td:nth-child(12) {
+		width: 5%;
+	}
+
+	th:nth-child(13),
+	td:nth-child(13),
+	th:nth-child(14),
+	td:nth-child(14) {
+		width: 6%;
 	}
 
 	th {
-		background-color: #fafafa;
+		background-color: #f8fafc;
+		color: #344054;
+		font-weight: 800;
 		position: sticky;
 		top: 0;
 		z-index: 1;
 	}
 
 	@media (max-width: 768px) {
+		min-width: 980px;
+		table-layout: auto;
+
 		th,
 		td {
-			padding: 2px 4px;
-			font-size: 10px;
+			padding: 6px 8px;
+			font-size: 11px;
 		}
 	}
 `;
@@ -906,10 +1158,17 @@ const StyledTable = styled.table`
 // Pagination wrapper styling remains mostly unchanged
 const PaginationWrapper = styled.div`
 	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	align-items: center;
+	justify-content: center;
 	margin-top: 16px;
 	button {
-		margin-right: 8px;
+		margin: 0;
+	}
+
+	@media (max-width: 520px) {
+		font-size: 12px;
 	}
 `;
 
@@ -917,7 +1176,7 @@ const PaginationWrapper = styled.div`
 const StatusSpan = styled.span`
 	display: inline-block;
 	padding: 5px 10px;
-	border-radius: 5px;
+	border-radius: 999px;
 	background-color: ${(props) =>
 		props.status?.toLowerCase() === "cancelled"
 			? "darkred"

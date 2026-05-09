@@ -11,6 +11,14 @@ const FifthRow = ({
 		bookingLine = { categories: [], checkIn: [], checkOut: [] },
 		visitorsLine = { categories: [], yesterday: [], today: [] },
 	} = adminDashboardReport;
+	const numberFormatter = new Intl.NumberFormat("en-US", {
+		maximumFractionDigits: 0,
+	});
+	const formatAxisDate = (value) => {
+		const text = String(value || "");
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+		return (bookingLine.categories || []).length > 45 ? text.slice(5) : text;
+	};
 
 	// 1) Booking line chart (Check In / Check Out)
 	const bookingOptions = {
@@ -24,10 +32,22 @@ const FifthRow = ({
 		},
 		xaxis: {
 			categories: bookingLine.categories, // e.g. ["2025-02-02", "2025-02-03", ...]
+			tickAmount: (bookingLine.categories || []).length > 14 ? 8 : undefined,
+			labels: {
+				rotate: (bookingLine.categories || []).length > 10 ? -35 : 0,
+				hideOverlappingLabels: true,
+				trim: true,
+				formatter: formatAxisDate,
+				style: { fontSize: "11px" },
+			},
 		},
 		yaxis: {
 			title: {
 				text: "",
+			},
+			forceNiceScale: true,
+			labels: {
+				formatter: (value) => numberFormatter.format(value || 0),
 			},
 		},
 		tooltip: {
@@ -64,10 +84,17 @@ const FifthRow = ({
 		},
 		xaxis: {
 			categories: visitorsLine.categories || [], // e.g. ["10am","2pm","6pm","11pm"]
+			labels: {
+				style: { fontSize: "11px" },
+			},
 		},
 		yaxis: {
 			title: {
 				text: "",
+			},
+			forceNiceScale: true,
+			labels: {
+				formatter: (value) => numberFormatter.format(value || 0),
 			},
 		},
 		tooltip: {
@@ -153,9 +180,14 @@ export default FifthRow;
 
 const FifthRowWrapper = styled.div`
 	display: grid;
-	grid-template-columns: 65% 35%;
-	gap: 16px;
+	grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+	gap: 14px;
 	background-color: #f7f8fc;
+	min-width: 0;
+
+	@media (max-width: 1080px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const ChartCardLarge = styled.div`
@@ -165,6 +197,8 @@ const ChartCardLarge = styled.div`
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
 `;
 
 const ChartCardSmall = styled.div`
@@ -175,6 +209,8 @@ const ChartCardSmall = styled.div`
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	min-width: 0;
+	overflow: hidden;
 `;
 
 const ChartHeader = styled.div`
@@ -182,12 +218,20 @@ const ChartHeader = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	gap: 12px;
+
+	@media (max-width: 640px) {
+		align-items: flex-start;
+		flex-direction: column;
+	}
 `;
 
 const ChartTitle = styled.h2`
 	margin: 0;
 	font-size: 18px;
 	font-weight: bold;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
 `;
 
 const ChartSubtitle = styled.p`

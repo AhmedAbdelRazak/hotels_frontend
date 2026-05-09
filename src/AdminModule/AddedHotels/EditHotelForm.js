@@ -12,11 +12,18 @@ import {
 	Tabs,
 	message,
 	Switch,
+	Checkbox,
+	Alert,
+	Modal,
 } from "antd";
 import styled from "styled-components";
 import axios from "axios";
 import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons";
 import { isAuthenticated } from "../../auth";
+import {
+	gettingAllHotelAccounts,
+	reassignHotelOwner as reassignHotelOwnerApi,
+} from "../apiAdmin";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -45,9 +52,20 @@ const EditHotelForm = ({
 
 	/* ==== OWNER (belongsTo) FORM STATE ==== */
 	const [formUser] = Form.useForm();
+	const [ownerAccounts, setOwnerAccounts] = useState([]);
+	const [ownersLoading, setOwnersLoading] = useState(false);
+	const [reassignOwnerId, setReassignOwnerId] = useState("");
+	const [transferExistingReservations, setTransferExistingReservations] =
+		useState(true);
+	const [reassigningOwner, setReassigningOwner] = useState(false);
 	const belongsToId = useMemo(
-		() => hotelData?.belongsTo?._id || hotelData?.belongsTo || null,
-		[hotelData]
+		() =>
+			hotel?.belongsTo?._id ||
+			hotel?.belongsTo ||
+			hotelData?.belongsTo?._id ||
+			hotelData?.belongsTo ||
+			null,
+		[hotel, hotelData]
 	);
 	const initialOwner = useMemo(
 		() => ({
@@ -67,8 +85,24 @@ const EditHotelForm = ({
 			aiToRespond: !!hotelData?.aiToRespond,
 		});
 		formUser.setFieldsValue(initialOwner);
+		setReassignOwnerId(hotelData?.belongsTo?._id || hotelData?.belongsTo || "");
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [hotelData]);
+
+	useEffect(() => {
+		if (!token || !adminId) return;
+		setOwnersLoading(true);
+		gettingAllHotelAccounts(adminId, token)
+			.then((data) => {
+				if (data && data.error) {
+					message.error(data.error);
+					setOwnerAccounts([]);
+					return;
+				}
+				setOwnerAccounts(Array.isArray(data) ? data : []);
+			})
+			.finally(() => setOwnersLoading(false));
+	}, [adminId, token]);
 
 	/* =================== HOTEL: submit =================== */
 	const handleHotelChange = (fieldName) => (eventOrValue) => {
@@ -161,6 +195,63 @@ const EditHotelForm = ({
 				"Update failed";
 			message.error(apiMsg);
 		}
+	};
+
+	const handleReassignOwner = async () => {
+		if (!hotel?._id) return message.error("Hotel record is missing");
+		if (!reassignOwnerId) return message.error("Please select the new owner");
+		if (String(reassignOwnerId) === String(belongsToId || "")) {
+			return message.info("This property is already assigned to this owner");
+		}
+		if (!token || !adminId) {
+			return message.error("Missing admin authentication");
+		}
+
+		const selectedOwner = ownerAccounts.find(
+			(owner) => String(owner._id) === String(reassignOwnerId)
+		);
+		if (!selectedOwner) {
+			return message.error("Selected owner account was not found");
+		}
+
+		Modal.confirm({
+			title: "Reassign this property?",
+			content:
+				"This will move the property to the selected owner and update the linked reservations/rooms so the new owner can see this hotel's PMS data.",
+			okText: "Reassign Property",
+			okButtonProps: { danger: true },
+			cancelText: "Cancel",
+			onOk: async () => {
+				try {
+					setReassigningOwner(true);
+					const data = await reassignHotelOwnerApi(hotel._id, adminId, token, {
+						newOwnerId: reassignOwnerId,
+						transferExistingReservations,
+					});
+					if (data?.error) throw new Error(data.error);
+
+					const reassignedHotel = data?.hotel || {};
+					const nextOwner = reassignedHotel.belongsTo || selectedOwner;
+					setHotel((h) => ({
+						...h,
+						belongsTo: nextOwner,
+					}));
+					formUser.setFieldsValue({
+						name: nextOwner?.name || "",
+						email: nextOwner?.email || "",
+						password: "",
+						password2: "",
+					});
+					message.success(data?.message || "Property reassigned");
+					if (typeof refreshList === "function") refreshList();
+					if (typeof gettingHotelData === "function") gettingHotelData();
+				} catch (err) {
+					message.error(err?.message || "Property reassignment failed");
+				} finally {
+					setReassigningOwner(false);
+				}
+			},
+		});
 	};
 
 	return (
@@ -345,6 +436,55 @@ const EditHotelForm = ({
 
 			{/* ====== TAB 2: OWNER ACCOUNT ====== */}
 			<TabPane tab='Owner Account' key='2'>
+				<OwnerAssignmentPanel>
+					<Title level={4}>Assign Property Owner</Title>
+					<Alert
+						type='info'
+						showIcon
+						message='Assign this property to another existing hotel owner.'
+						description='The selected owner will receive this property in their hotel list. Existing reservation and room records for this hotel are transferred so the new owner can see the correct PMS data.'
+					/>
+					<div className='assignment-row'>
+						<Select
+							showSearch
+							loading={ownersLoading}
+							value={reassignOwnerId || undefined}
+							placeholder='Select owner account'
+							optionFilterProp='children'
+							onChange={setReassignOwnerId}
+							filterOption={(input, option) =>
+								String(option?.children || "")
+									.toLowerCase()
+									.includes(input.toLowerCase())
+							}
+						>
+							{ownerAccounts.map((owner) => (
+								<Option key={owner._id} value={owner._id}>
+									{owner.name} | {owner.email}
+								</Option>
+							))}
+						</Select>
+						<Button
+							type='primary'
+							danger
+							loading={reassigningOwner}
+							disabled={
+								!reassignOwnerId ||
+								String(reassignOwnerId) === String(belongsToId || "")
+							}
+							onClick={handleReassignOwner}
+						>
+							Reassign Property
+						</Button>
+					</div>
+					<Checkbox
+						checked={transferExistingReservations}
+						onChange={(e) => setTransferExistingReservations(e.target.checked)}
+					>
+						Transfer existing reservations and reports to the new owner
+					</Checkbox>
+				</OwnerAssignmentPanel>
+
 				<Form
 					form={formUser}
 					onFinish={handleSubmitUser}
@@ -444,6 +584,33 @@ const AiStateText = styled.span`
 	font-weight: 700;
 	letter-spacing: 0.1px;
 	color: ${(p) => (p.enabled ? "#52c41a" : "#6b7280")};
+`;
+
+const OwnerAssignmentPanel = styled.div`
+	margin: 1rem 0 1.25rem;
+	padding: 14px;
+	border: 1px solid #b8dcff;
+	border-top: 4px solid #1476ef;
+	border-radius: 12px;
+	background: #f4f9ff;
+
+	.assignment-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 10px;
+		align-items: center;
+		margin: 12px 0 8px;
+	}
+
+	.ant-select {
+		width: 100%;
+	}
+
+	@media (max-width: 640px) {
+		.assignment-row {
+			grid-template-columns: 1fr;
+		}
+	}
 `;
 
 const StyledButton = styled(Button)`

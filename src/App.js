@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import "./App.css";
 import "react-quill/dist/quill.snow.css";
-import { Route, Switch, useLocation } from "react-router-dom";
+import { Redirect, Route, Switch, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useCartContext } from "./cart_context";
@@ -40,31 +40,64 @@ import HouseKeepingMain from "./HotelModule/HouseKeeping/HouseKeepingMain";
 import HotelReportsMain from "./HotelModule/HotelReports/HotelReportsMain";
 import MainHotelDashboard from "./HotelModule/MainHotelDashboard";
 import CustomerServiceHotelMain from "./HotelModule/CustomerService/CustomerServiceHotelMain";
+import { isAuthenticated } from "./auth";
 
-// Reception Routes
-import ReceptionRoute from "./auth/ReceptionRoute";
-import NewReservationMainReception from "./ReceptionModule/NewReservationMain";
-
-// Housekeeping Management
-import HouseKeepingManagerRoute from "./auth/HouseKeepingManagerRoute";
-import HouseKeepingMainManagement from "./HouseKeepingManager/HouseKeepingMain";
-
-// Housekeeping Employee
-import HouseKeepingEmployeeRoute from "./auth/HouseKeepingEmployeeRoute";
-import HouseKeepingEmployeeMain from "./HouseKeepingEmployee/HouseKeepingEmployeeMain";
-
-// Finance
-import FinanceRoute from "./auth/FinanceRoute";
-import PaymentMainFinance from "./Finance/Payment/PaymentMainFinance";
-
-// Owner
-import OwnerRoute from "./auth/OwnerRoute";
-import OwnerDashboardMain from "./OwnerContent/OwnerDashboardMain";
 import Navmenu from "./pages/Navmenu";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminPaymentMain from "./AdminModule/Payment/AdminPaymentMain";
 import FinancialMain from "./AdminModule/Financials/FinancialMain";
+
+const getUserHotelId = (user = {}) => {
+	if (user.hotelIdWork) return user.hotelIdWork;
+	if (Array.isArray(user.hotelsToSupport) && user.hotelsToSupport.length) {
+		return user.hotelsToSupport[0]?._id || user.hotelsToSupport[0];
+	}
+	return "";
+};
+
+const getLegacyReceptionQuery = (search = "") => {
+	const params = new URLSearchParams(search || "");
+	if (params.has("newReservation")) return "?newReservation";
+	if (params.has("list")) return "?list=&page=1";
+	if (params.has("heatmap")) return "?heatmap";
+	if (params.has("housingreport")) return "?housingreport";
+	return "?reserveARoom";
+};
+
+const LegacyReceptionRedirect = ({ location }) => {
+	const auth = isAuthenticated();
+	const user = auth?.user;
+	if (!user) return <Redirect to='/' />;
+
+	const ownerId = user.belongsToId || user._id;
+	const hotelId = getUserHotelId(user);
+	if (!ownerId || !hotelId) {
+		return <Redirect to='/hotel-management/main-dashboard' />;
+	}
+
+	return (
+		<Redirect
+			to={`/hotel-management/new-reservation/${ownerId}/${hotelId}${getLegacyReceptionQuery(
+				location?.search
+			)}`}
+		/>
+	);
+};
+
+const LegacyScopedHotelRedirect = ({ route }) => {
+	const auth = isAuthenticated();
+	const user = auth?.user;
+	if (!user) return <Redirect to='/' />;
+
+	const ownerId = user.belongsToId || user._id;
+	const hotelId = getUserHotelId(user);
+	if (!ownerId || !hotelId) {
+		return <Redirect to='/hotel-management/main-dashboard' />;
+	}
+
+	return <Redirect to={`/hotel-management/${route}/${ownerId}/${hotelId}`} />;
+};
 
 function App() {
 	const { languageToggle, chosenLanguage } = useCartContext();
@@ -250,38 +283,38 @@ function App() {
 				/>
 
 				{/* ============== HouseKeeping Manager ============== */}
-				<HouseKeepingManagerRoute
+				<Route
 					path='/house-keeping-management/house-keeping'
 					exact
-					component={HouseKeepingMainManagement}
+					render={() => <LegacyScopedHotelRedirect route='house-keeping' />}
 				/>
 
-				{/* ============== Reception Module ============== */}
-				<ReceptionRoute
+				{/* ============== Legacy Reception Redirect ============== */}
+				<Route
 					path='/reception-management/new-reservation'
 					exact
-					component={NewReservationMainReception}
+					component={LegacyReceptionRedirect}
 				/>
 
 				{/* ============== HouseKeeping Employee ============== */}
-				<HouseKeepingEmployeeRoute
+				<Route
 					path='/house-keeping-employee/house-keeping'
 					exact
-					component={HouseKeepingEmployeeMain}
+					render={() => <LegacyScopedHotelRedirect route='house-keeping' />}
 				/>
 
 				{/* ============== Finance ============== */}
-				<FinanceRoute
+				<Route
 					path='/finance/overview'
 					exact
-					component={PaymentMainFinance}
+					render={() => <LegacyScopedHotelRedirect route='dashboard' />}
 				/>
 
 				{/* ============== Owner ============== */}
-				<OwnerRoute
+				<Route
 					path='/owner-dashboard'
 					exact
-					component={OwnerDashboardMain}
+					render={() => <Redirect to='/hotel-management/main-dashboard' />}
 				/>
 			</Switch>
 			{!hideFooter && <Footer />}

@@ -101,7 +101,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [chosenRooms, setChosenRooms] = useState([]);
 	const [selectedHotelDetails, setSelectedHotelDetails] = useState("");
-	const [sendEmail, setSendEmail] = useState(true);
+	const [sendEmail, setSendEmail] = useState(false);
 
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");

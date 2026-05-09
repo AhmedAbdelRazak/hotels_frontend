@@ -40,7 +40,7 @@ const getBreakdownTotal = (breakdown = {}) => {
 		"paid_no_show",
 		"paid_at_hotel_cash",
 		"paid_at_hotel_card",
-		"paid_to_zad",
+		"paid_to_hotel",
 		"paid_online_jannatbooking",
 		"paid_online_other_platforms",
 	];

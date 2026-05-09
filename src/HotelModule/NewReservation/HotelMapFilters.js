@@ -36,8 +36,11 @@ const HotelMapFilters = ({
 	};
 
 	return (
-		<Wrapper dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
-			<div className='col-md-5'>
+		<Wrapper
+			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+			$filtersOnly={fromComponent === "Taskeen"}
+		>
+			<SearchSlot $hidden={fromComponent === "Taskeen"}>
 				{fromComponent === "Taskeen" ? null : (
 					<SearchContainer dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 						<Input
@@ -51,7 +54,7 @@ const HotelMapFilters = ({
 						/>
 					</SearchContainer>
 				)}
-			</div>
+			</SearchSlot>
 
 			<FiltersContainer>
 				<StyledSelect
@@ -61,7 +64,6 @@ const HotelMapFilters = ({
 					}
 					onChange={handleRoomTypeChange}
 					value={selectedRoomType}
-					style={{ width: "200px" }}
 					dir={chosenLanguage === "Arabic" ? "ltr" : "ltr"}
 				>
 					<Select.Option value='all'>
@@ -101,7 +103,6 @@ const HotelMapFilters = ({
 					}
 					onChange={handleAvailabilityChange}
 					value={selectedAvailability}
-					style={{ width: "140px" }}
 				>
 					<Select.Option value='all'>
 						{chosenLanguage === "Arabic" ? "الكل" : "All"}
@@ -118,7 +119,6 @@ const HotelMapFilters = ({
 					placeholder={chosenLanguage === "Arabic" ? "الطابق" : "Floor"}
 					onChange={handleFloorChange}
 					value={selectedFloor}
-					style={{ width: "140px" }}
 				>
 					<Select.Option value='all'>
 						{chosenLanguage === "Arabic" ? "الكل" : "All"}
@@ -136,7 +136,6 @@ const HotelMapFilters = ({
 					}
 					onChange={handleRoomStatusChange}
 					value={selectedRoomStatus}
-					style={{ width: "140px" }}
 				>
 					<Select.Option value='all'>
 						{chosenLanguage === "Arabic" ? "الكل" : "All"}
@@ -158,31 +157,100 @@ const HotelMapFilters = ({
 
 export default HotelMapFilters;
 
-// Styled components
 const Wrapper = styled.div`
-	background-color: white;
-	padding: 15px;
-	border-radius: 5px;
-	display: flex;
-	justify-content: space-between;
+	background: #ffffff;
+	padding: 12px;
+	border-radius: 8px;
+	border: 1px solid #e6edf5;
+	display: grid;
+	grid-template-columns: ${({ $filtersOnly }) =>
+		$filtersOnly
+			? "1fr"
+			: "minmax(220px, 0.75fr) minmax(0, 1.25fr)"};
+	gap: 10px;
 	align-items: center;
+	margin-bottom: 16px;
+	box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+	min-width: 0;
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
+
+	@media (max-width: 560px) {
+		padding: 10px;
+		gap: 8px;
+	}
+`;
+
+const SearchSlot = styled.div`
+	display: ${({ $hidden }) => ($hidden ? "none" : "block")};
+	min-width: 0;
 `;
 
 const SearchContainer = styled.div`
-	flex: 1;
-	margin-right: 20px;
+	min-width: 0;
+
+	.ant-input-affix-wrapper {
+		height: 38px;
+		border-radius: 8px;
+		border-color: #d7e0ea;
+	}
+
+	.ant-input-prefix {
+		color: #475569;
+	}
 `;
 
 const FiltersContainer = styled.div`
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 8px;
 	align-items: center;
-	gap: 3px; /* Set the gap between the elements */
+	min-width: 0;
+
+	@media (max-width: 1180px) {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
 `;
 
 const StyledSelect = styled(Select)`
-	width: 180px; /* Adjust width to be longer */
+	width: 100% !important;
+	min-width: 0;
+
+	.ant-select-selector {
+		height: 38px !important;
+		border-radius: 8px !important;
+		border-color: #d7e0ea !important;
+		display: flex;
+		align-items: center;
+	}
+
+	.ant-select-selection-placeholder,
+	.ant-select-selection-item {
+		font-size: 0.86rem;
+		font-weight: 700;
+		color: #334155;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 `;
 
 const StyledButton = styled(Button)`
-	height: 40px;
+	width: 100%;
+	height: 38px;
+	border-radius: 8px;
+	border-color: #bfdbfe;
+	color: #0f5795;
+	font-weight: 800;
+
+	@media (max-width: 560px) {
+		grid-column: 1 / -1;
+	}
 `;

@@ -80,7 +80,7 @@ const EditReservationMain = ({
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
-	const [sendEmail, setSendEmail] = useState(true);
+	const [sendEmail, setSendEmail] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 
 	const { user, token } = isAuthenticated();

@@ -3,12 +3,18 @@
 import React from "react";
 import { Route, Redirect } from "react-router-dom";
 import { isAuthenticated } from "./index";
+import { isSuperAdminUser } from "../AdminModule/utils/superUsers";
 
 const HouseKeepingEmployeeRoute = ({ component: Component, ...rest }) => (
 	<Route
 		{...rest}
-		render={(props) =>
-			isAuthenticated() && isAuthenticated().user.role === 5000 ? (
+		render={(props) => {
+			const auth = isAuthenticated();
+			const user = auth?.user;
+			const allowedRoles = [1000, 2000, 4000, 5000];
+			return auth &&
+				user?.activeUser !== false &&
+				(allowedRoles.includes(Number(user.role)) || isSuperAdminUser(user)) ? (
 				<Component {...props} />
 			) : (
 				<Redirect
@@ -17,8 +23,8 @@ const HouseKeepingEmployeeRoute = ({ component: Component, ...rest }) => (
 						state: { from: props.location },
 					}}
 				/>
-			)
-		}
+			);
+		}}
 	/>
 );
 

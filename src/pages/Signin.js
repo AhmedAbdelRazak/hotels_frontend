@@ -30,6 +30,89 @@ const normaliseCredential = (value) => {
 	return v;
 };
 
+const getRoleDescriptions = (user = {}) => [
+	String(user.roleDescription || "").toLowerCase(),
+	...(Array.isArray(user.roleDescriptions)
+		? user.roleDescriptions.map((item) => String(item || "").toLowerCase())
+		: []),
+];
+
+const hasRoleDescription = (user, description) =>
+	getRoleDescriptions(user).includes(String(description || "").toLowerCase());
+
+const normalizeAssignedHotelId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
+
+const getAssignedHotelIds = (user = {}) => [
+	...new Set(
+		[
+			user.hotelIdWork,
+			...(Array.isArray(user.hotelIdsWork) ? user.hotelIdsWork : []),
+			...(Array.isArray(user.hotelsToSupport) ? user.hotelsToSupport : []),
+		]
+			.map(normalizeAssignedHotelId)
+			.filter(Boolean)
+	),
+];
+
+const getScopedHotelPath = (user, route, query = "") => {
+	const ownerId = user?.belongsToId || user?._id;
+	const hotelId =
+		normalizeAssignedHotelId(user?.hotelIdWork) ||
+		(Array.isArray(user?.hotelsToSupport)
+			? normalizeAssignedHotelId(user.hotelsToSupport[0])
+			: "");
+
+	if (!ownerId || !hotelId) return "/hotel-management/main-dashboard";
+	return `/hotel-management/${route}/${ownerId}/${hotelId}${query}`;
+};
+
+const getSigninRedirectPath = (user = {}) => {
+	const role = Number(user.role);
+	if (role === 1000) return "/admin/dashboard";
+	if (role === 10000) return "/hotel-management/main-dashboard";
+
+	const assignedHotelIds = getAssignedHotelIds(user);
+	const isScopedHotelRole =
+		[2000, 3000, 4000, 5000, 6000, 7000].includes(role) ||
+		[
+			"hotelmanager",
+			"reception",
+			"housekeepingmanager",
+			"housekeeping",
+			"finance",
+			"ordertaker",
+		].some((description) => hasRoleDescription(user, description));
+
+	if (isScopedHotelRole && assignedHotelIds.length > 1) {
+		return "/hotel-management/main-dashboard";
+	}
+
+	if (role === 7000 || hasRoleDescription(user, "ordertaker")) {
+		return getScopedHotelPath(user, "new-reservation", "?newReservation");
+	}
+	if (role === 3000 || hasRoleDescription(user, "reception")) {
+		return getScopedHotelPath(user, "new-reservation", "?reserveARoom");
+	}
+	if (
+		role === 4000 ||
+		role === 5000 ||
+		hasRoleDescription(user, "housekeepingmanager") ||
+		hasRoleDescription(user, "housekeeping")
+	) {
+		return getScopedHotelPath(user, "house-keeping");
+	}
+	if (role === 6000 || hasRoleDescription(user, "finance")) {
+		return getScopedHotelPath(user, "dashboard");
+	}
+
+	if (role === 2000) return "/hotel-management/main-dashboard";
+	return "/hotel-management/main-dashboard";
+};
+
 /* ───────────── localised strings ───────────── */
 const txt = {
 	en: {
@@ -127,21 +210,15 @@ const Signin = ({ history }) => {
 	};
 
 	/* redirect after login */
-	if (redirect) history.push("/hotel-management/main-dashboard");
+	if (redirect) {
+		const signedInUser = isAuthenticated()?.user;
+		history.push(getSigninRedirectPath(signedInUser));
+	}
 
 	/* roles guard */
 	const user = isAuthenticated()?.user;
 	if (user) {
-		const paths = {
-			2000: "/hotel-management/main-dashboard",
-			1000: "/admin/dashboard",
-			10000: "/owner-dashboard",
-			3000: "/reception-management/new-reservation",
-			4000: "/house-keeping-management/house-keeping",
-			5000: "/house-keeping-employee/house-keeping",
-			6000: "/finance/overview",
-		};
-		if (paths[user.role]) history.push(paths[user.role]);
+		history.push(getSigninRedirectPath(user));
 	}
 
 	return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import styled from "styled-components";
 import { DatePicker, Spin } from "antd";
 import HotelOverviewReservation from "./HotelOverviewReservation";
@@ -121,12 +121,17 @@ const ZReservationForm = ({
 	setCurrentRoom,
 	pricingByDay,
 	setPricingByDay,
+	sidebarCollapsed = false,
 }) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
 	const [taskeenClicked, setTaskeenClicked] = useState(false);
 	const [selectedTodayReservationId, setSelectedTodayReservationId] =
 		useState("");
+	const taskeenSummaryRef = useRef(null);
+	const reviewPanelRef = useRef(null);
+	const hotelMapRef = useRef(null);
+	const [mobileMapActionVisible, setMobileMapActionVisible] = useState(false);
 
 	const [isFixed, setIsFixed] = useState(false);
 
@@ -247,6 +252,36 @@ const ZReservationForm = ({
 			window.removeEventListener("scroll", handleScroll);
 		};
 	}, []);
+
+	useEffect(() => {
+		if (
+			!taskeenClicked ||
+			typeof window === "undefined" ||
+			window.innerWidth > 760
+		) {
+			setMobileMapActionVisible(false);
+			return undefined;
+		}
+
+		const mapNode = hotelMapRef.current;
+		if (!mapNode || typeof IntersectionObserver === "undefined") {
+			setMobileMapActionVisible(false);
+			return undefined;
+		}
+
+		const observer = new IntersectionObserver(
+			([entry]) => {
+				setMobileMapActionVisible(entry.isIntersecting);
+			},
+			{
+				threshold: 0.08,
+				rootMargin: "-72px 0px -32% 0px",
+			},
+		);
+
+		observer.observe(mapNode);
+		return () => observer.disconnect();
+	}, [taskeenClicked]);
 
 	const toDayjs = (value) => {
 		if (!value) return null;
@@ -474,9 +509,20 @@ const ZReservationForm = ({
 			);
 		}
 		setTaskeenClicked(true);
+		const isCompactScreen = window.innerWidth <= 760;
 		setTimeout(() => {
+			if (isCompactScreen) {
+				const target =
+					hotelMapRef.current || reviewPanelRef.current || taskeenSummaryRef.current;
+				if (!target) return;
+				target.scrollIntoView({
+					behavior: "smooth",
+					block: "start",
+				});
+				return;
+			}
 			window.scrollTo({ top: 760, behavior: "smooth" });
-		}, 1000);
+		}, isCompactScreen ? 180 : 1000);
 	};
 
 	const handleFileUpload = (uploadFunction) => {
@@ -509,8 +555,8 @@ const ZReservationForm = ({
 
 	return (
 		<ZReservationFormWrapper
-			arabic={chosenLanguage === "Arabic"}
-			is_Fixed={isFixed}
+			$arabic={chosenLanguage === "Arabic"}
+			$sidebarCollapsed={sidebarCollapsed}
 		>
 			{loading ? (
 				<>
@@ -576,7 +622,7 @@ const ZReservationForm = ({
 
 					<div className='row'>
 						<div className='col-md-8 mx-auto'>
-							<div className='my-1'>
+							<div className='today-checkins-field my-1'>
 								<label style={{ fontWeight: "bold" }}>
 									{chosenLanguage === "Arabic"
 										? "حجوزات الوصول اليوم (حسب اسم الضيف)"
@@ -607,8 +653,8 @@ const ZReservationForm = ({
 									})}
 								</select>
 							</div>
-							<div className='my-4'>
-								<div className='row'>
+							<div className='reservation-search-field my-4'>
+								<div className='row reservation-search-grid'>
 									<div className='col-md-9 my-auto'>
 										<input
 											type='text'
@@ -641,8 +687,8 @@ const ZReservationForm = ({
 								</div>
 							</div>
 
-							<div className='row'>
-								<div className='col-md-4'>
+							<div className='row guest-details-grid'>
+								<div className='col-md-4 guest-name-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -664,7 +710,7 @@ const ZReservationForm = ({
 										/>
 									</div>
 								</div>
-								<div className='col-md-4'>
+								<div className='col-md-4 guest-phone-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -686,7 +732,7 @@ const ZReservationForm = ({
 										/>
 									</div>
 								</div>
-								<div className='col-md-4'>
+								<div className='col-md-4 guest-email-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -710,7 +756,7 @@ const ZReservationForm = ({
 									</div>
 								</div>
 
-								<div className='col-md-3'>
+								<div className='col-md-3 guest-passport-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -735,7 +781,7 @@ const ZReservationForm = ({
 									</div>
 								</div>
 
-								<div className='col-md-3'>
+								<div className='col-md-3 guest-passport-copy-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -760,7 +806,7 @@ const ZReservationForm = ({
 									</div>
 								</div>
 
-								<div className='col-md-3'>
+								<div className='col-md-3 guest-birth-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -784,7 +830,7 @@ const ZReservationForm = ({
 									</div>
 								</div>
 
-								<div className='col-md-3'>
+								<div className='col-md-3 guest-nationality-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -809,8 +855,8 @@ const ZReservationForm = ({
 								<div
 									className={
 										customer_details.hasCar === "yes"
-											? "col-md-4"
-											: "col-md-8 mx-auto"
+											? "col-md-4 guest-car-question-field"
+											: "col-md-8 mx-auto guest-car-question-field"
 									}
 								>
 									<div
@@ -930,7 +976,7 @@ const ZReservationForm = ({
 									</>
 								)}
 
-								<div className='col-md-6'>
+								<div className='col-md-6 stay-date-field checkin-date-field'>
 									<label
 										className='dataPointsReview mt-3'
 										style={{
@@ -967,7 +1013,7 @@ const ZReservationForm = ({
 									/>
 								</div>
 
-								<div className='col-md-6'>
+								<div className='col-md-6 stay-date-field checkout-date-field'>
 									<label
 										className='dataPointsReview mt-3'
 										style={{
@@ -1004,14 +1050,18 @@ const ZReservationForm = ({
 							</div>
 
 							<div
-								className='row my-4 mx-auto'
+								className={`row my-4 mx-auto payment-details-grid ${
+									booking_source !== "manual" && booking_source
+										? "has-confirmation"
+										: "no-confirmation"
+								}`}
 								style={{
 									background: "#ededed",
 									width: "99%",
 									minHeight: "250px",
 								}}
 							>
-								<div className='col-md-6 mx-auto my-2'>
+								<div className='col-md-6 mx-auto my-2 booking-source-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -1047,7 +1097,7 @@ const ZReservationForm = ({
 								</div>
 
 								{booking_source !== "manual" && booking_source && (
-									<div className='col-md-6 mx-auto my-2'>
+									<div className='col-md-6 mx-auto my-2 confirmation-number-field'>
 										<div
 											className='form-group'
 											style={{
@@ -1071,7 +1121,7 @@ const ZReservationForm = ({
 									</div>
 								)}
 
-								<div className='col-md-6 mx-auto my-auto'>
+								<div className='col-md-6 mx-auto my-auto payment-method-field'>
 									<div className='form-group'>
 										<label style={{ fontWeight: "bold" }}>
 											{chosenLanguage === "Arabic"
@@ -1100,7 +1150,7 @@ const ZReservationForm = ({
 									</div>
 								</div>
 
-								<div className='col-md-6 mx-auto my-2'>
+								<div className='col-md-6 mx-auto my-2 booking-comment-field'>
 									<div
 										className='form-group'
 										style={{ marginTop: "10px", marginBottom: "10px" }}
@@ -1223,7 +1273,7 @@ const ZReservationForm = ({
 								end_date &&
 								displayPickedRoomsType.length > 0 ? (
 									<>
-										<div className='total-amount my-3'>
+										<div className='total-amount my-3' ref={taskeenSummaryRef}>
 											{chosenLanguage === "Arabic" ? (
 												<h5 style={{ fontWeight: "bold" }}>
 													أيام الإقامة: {days_of_residence} يوم /
@@ -1311,6 +1361,7 @@ const ZReservationForm = ({
 					{customer_details.name && start_date && end_date && taskeenClicked ? (
 						<>
 							<div
+								ref={reviewPanelRef}
 								className={isFixed ? "fixed-section visible" : "fixed-section"}
 							>
 								<div className='review-grid'>
@@ -1587,9 +1638,7 @@ const ZReservationForm = ({
 										</h4>
 									) : null}
 
-									{!searchedReservation &&
-									!searchedReservation.confirmation_number &&
-									finalTotalByRoom() ? (
+									{!searchedReservation && finalTotalByRoom() ? (
 										<h4
 											className='mt-3'
 											style={{
@@ -1612,6 +1661,7 @@ const ZReservationForm = ({
 								</div>
 							</div>
 
+							<div className='hotel-map-section' ref={hotelMapRef}>
 							<div className='col-md-8 mx-auto mt-5'>
 								<hr />
 							</div>
@@ -1655,6 +1705,25 @@ const ZReservationForm = ({
 								pricingByDay={pricingByDay}
 								setPricingByDay={setPricingByDay}
 							/>
+							</div>
+
+							<div
+								className={`mobile-map-booking-action ${
+									mobileMapActionVisible ? "is-visible" : ""
+								}`}
+							>
+								<button
+									className='btn btn-success'
+									onClick={() => {
+										clickSubmit();
+									}}
+									style={{ fontWeight: "bold" }}
+								>
+									{chosenLanguage === "Arabic"
+										? "احجز الآن..."
+										: "Reserve Now..."}
+								</button>
+							</div>
 						</>
 					) : null}
 				</>
@@ -1666,20 +1735,47 @@ const ZReservationForm = ({
 export default ZReservationForm;
 //Ensure that review
 const ZReservationFormWrapper = styled.div`
-	margin-top: 40px;
-	margin-right: ${(props) => (props.is_Fixed ? "" : "20px")};
+	margin-top: 18px;
+	margin-inline: 0;
+	color: #172033;
+
+	> .row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+		gap: 14px;
+		align-items: start;
+		margin: 0;
+	}
+
+	> .row > .col-md-8.mx-auto,
+	> .row > .taskeen {
+		width: 100%;
+		max-width: none;
+		margin: 0 !important;
+	}
+
+	> .row > .col-md-8.mx-auto {
+		background: #ffffff;
+		border: 1px solid #e4edf7;
+		border-radius: 8px;
+		padding: 14px;
+		box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+	}
 
 	h4 {
-		font-size: 1.35rem;
-		font-weight: bolder;
+		font-size: clamp(1.05rem, 2vw, 1.35rem);
+		font-weight: 900;
+		color: #0f172a;
+		line-height: 1.25;
 	}
 
 	h5 {
-		font-size: 1.2rem;
-		font-weight: bold;
-		text-decoration: underline;
-		cursor: pointer;
-		margin-top: 20px;
+		font-size: clamp(0.95rem, 1.7vw, 1.12rem);
+		font-weight: 800;
+		text-decoration: none;
+		cursor: default;
+		margin-top: 14px;
+		color: #334155;
 	}
 
 	input[type="text"],
@@ -1690,10 +1786,24 @@ const ZReservationFormWrapper = styled.div`
 	textarea {
 		display: block;
 		width: 100%;
-		padding: 0.5rem;
-		font-size: 1rem;
-		border: 1px solid #ccc;
+		min-height: 42px;
+		padding: 0.55rem 0.7rem;
+		font-size: 0.94rem;
+		border: 1px solid #d7e0ea;
+		border-radius: 8px;
+		background: #ffffff;
+		color: #0f172a;
+		box-shadow: none !important;
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease;
 	}
+
+	textarea {
+		min-height: 88px;
+		resize: vertical;
+	}
+
 	input[type="text"]:focus,
 	input[type="email"]:focus,
 	input[type="password"]:focus,
@@ -1702,40 +1812,192 @@ const ZReservationFormWrapper = styled.div`
 	textarea:focus,
 	label:focus {
 		outline: none;
-		border: 1px solid var(--primaryColor);
-
-		box-shadow: 5px 8px 3px 0px rgba(0, 0, 0, 0.3);
+		border-color: #0d6efd;
+		box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.13) !important;
 		transition: var(--mainTransition);
-		font-weight: bold;
+	}
+
+	input[type="radio"] {
+		width: 16px;
+		height: 16px;
+		min-height: 0;
+		margin-inline: 6px;
+		vertical-align: middle;
+	}
+
+	label {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 0.9rem;
+		font-weight: 800 !important;
+		color: #1e293b;
+	}
+
+	.form-group {
+		margin-top: 8px !important;
+		margin-bottom: 8px !important;
+	}
+
+	.form-control {
+		min-height: 42px;
+		border-radius: 8px;
+		border-color: #d7e0ea;
+		box-shadow: none;
+	}
+
+	.ant-picker.inputFields {
+		min-height: 44px;
+		padding: 9px 12px !important;
+		border-radius: 8px !important;
+		border-color: #d7e0ea !important;
+		box-shadow: none !important;
+	}
+
+	.ant-picker.inputFields:hover,
+	.ant-picker.inputFields.ant-picker-focused {
+		border-color: #0d6efd !important;
+		box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.13) !important;
+	}
+
+	.btn {
+		border-radius: 8px;
+		font-weight: 800;
+		min-height: 40px;
+		padding-inline: 16px;
+		box-shadow: none !important;
+	}
+
+	.btn-success {
+		background: #05a857;
+		border-color: #05a857;
+	}
+
+	.btn-info {
+		background: #0d6efd;
+		border-color: #0d6efd;
+		color: #ffffff;
 	}
 
 	.taskeen {
-		background-color: white;
+		position: sticky;
+		top: 84px;
+		background: #ffffff;
 		min-height: 250px;
-		border-radius: 5px;
+		border: 1px solid #dbeafe;
+		border-radius: 8px;
+		padding: 16px;
+		box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+		overflow: hidden;
 	}
 
-	text-align: ${(props) => (props.arabic ? "right" : "")};
+	.taskeen h4 {
+		text-align: center;
+		margin-bottom: 12px;
+	}
+
+	.taskeen > .row {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		margin: 0;
+		padding: 0 !important;
+	}
+
+	.taskeen > .row > [class*="col-"] {
+		width: 100%;
+		max-width: 100%;
+		margin: 0 !important;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: #f8fafc;
+		min-height: 38px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center !important;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.taskeen > .row > [style*="darkred"],
+	.taskeen > .row > [style*="darkgreen"] {
+		color: #ffffff !important;
+		font-weight: 900;
+	}
+
+	.taskeen > .row > [style*="darkred"] {
+		background: #b42318 !important;
+	}
+
+	.taskeen > .row > [style*="darkgreen"] {
+		background: #067647 !important;
+	}
+
+	.taskeen h4[style] {
+		color: #0d6efd !important;
+		margin: 14px 0 !important;
+		font-size: clamp(1rem, 2vw, 1.2rem);
+	}
+
+	.taskeen .btn-info {
+		width: 100%;
+		min-height: 44px;
+		font-size: 1rem !important;
+	}
+
+	.taskeen .total-amount {
+		background: #eef8ff;
+		border: 1px solid #c8e7ff;
+		border-radius: 8px;
+		padding: 12px;
+		margin-top: 14px !important;
+	}
+
+	.room-list .room-item {
+		background: #ffffff;
+		border: 1px solid #e4edf7;
+		border-radius: 8px;
+		padding: 8px 10px;
+		font-size: 0.88rem;
+		line-height: 1.35;
+	}
+
+	.hotel-map-section {
+		scroll-margin-top: 86px;
+	}
+
+	.mobile-map-booking-action {
+		display: none;
+	}
+
+	text-align: ${(props) => (props.$arabic ? "right" : "")};
 
 	label,
 	div {
-		text-align: ${(props) => (props.arabic ? "right" : "")};
+		text-align: ${(props) => (props.$arabic ? "right" : "")};
 	}
 
 	.review-grid {
 		display: grid;
-		grid-template-columns: 40% 38%;
-		padding: 20px;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 12px;
+		padding: 12px;
 	}
 
 	.fixed-section {
 		position: fixed;
 		top: 70px;
-		width: 100%;
-		background-color: lightgrey;
-		z-index: 10;
+		left: ${(props) =>
+			props.$arabic ? "0" : props.$sidebarCollapsed ? "80px" : "286px"};
+		right: ${(props) =>
+			props.$arabic ? (props.$sidebarCollapsed ? "80px" : "286px") : "0"};
+		width: auto;
+		background: #eef8ff;
+		border-bottom: 1px solid #c8e7ff;
+		z-index: 850;
 		opacity: 0;
 		transition: opacity 0.5s ease-in-out;
+		box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 	}
 
 	.visible {
@@ -1744,12 +2006,16 @@ const ZReservationFormWrapper = styled.div`
 
 	.inner-grid {
 		display: grid;
-		grid-template-columns: 170px 300px 80px 150px 100px;
+		grid-template-columns: minmax(130px, 170px) minmax(180px, 300px) 80px minmax(120px, 150px) 100px;
+		gap: 6px;
+		min-width: 780px;
 	}
 
 	.inner-grid2 {
 		display: grid;
-		grid-template-columns: 0px 300px 80px 150px 80px;
+		grid-template-columns: 0 minmax(180px, 300px) 80px minmax(120px, 150px) 80px;
+		gap: 6px;
+		min-width: 640px;
 	}
 
 	.inner-grid > div > div {
@@ -1760,5 +2026,384 @@ const ZReservationFormWrapper = styled.div`
 	.inner-grid2 > div > div {
 		text-align: center;
 		font-weight: bold;
+	}
+
+	> .row > .col-md-8.mx-auto > .row.my-4.mx-auto {
+		background: #f8fafc !important;
+		border: 1px solid #e4edf7;
+		border-radius: 8px;
+		padding: 10px;
+		width: 100% !important;
+		min-height: 0 !important;
+	}
+
+	> .row > .col-md-8.mx-auto > .row.my-4.mx-auto > [class*="col-"] {
+		padding-inline: 8px;
+	}
+
+	.guest-details-grid,
+	.payment-details-grid {
+		display: grid !important;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px 12px;
+		align-items: start;
+		margin-inline: 0 !important;
+	}
+
+	.guest-details-grid > [class*="col-"],
+	.payment-details-grid > [class*="col-"] {
+		width: 100% !important;
+		max-width: 100% !important;
+		flex: none !important;
+		margin: 0 !important;
+		padding-inline: 0 !important;
+		min-width: 0;
+	}
+
+	.today-checkins-field {
+		margin-bottom: 12px !important;
+	}
+
+	.confirmation-number-field {
+		grid-column: 1 / -1;
+	}
+
+	.stay-date-field .dataPointsReview {
+		font-size: 0.9rem !important;
+		line-height: 1.25;
+		min-height: 34px;
+		display: flex;
+		align-items: flex-end;
+	}
+
+	.stay-date-field br {
+		display: none;
+	}
+
+	@media (min-width: 561px) {
+		.booking-source-field {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.confirmation-number-field {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.payment-details-grid.has-confirmation .payment-method-field {
+			grid-column: 3;
+			grid-row: 1;
+		}
+
+		.payment-details-grid.no-confirmation .payment-method-field {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.booking-comment-field {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			width: min(100%, 560px) !important;
+			justify-self: center;
+		}
+
+		.guest-name-field {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.guest-phone-field {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.guest-email-field {
+			grid-column: 3;
+			grid-row: 1;
+		}
+
+		.guest-passport-field {
+			grid-column: 1;
+			grid-row: 2;
+		}
+
+		.guest-passport-copy-field {
+			grid-column: 2;
+			grid-row: 2;
+		}
+
+		.guest-nationality-field {
+			grid-column: 3;
+			grid-row: 2;
+		}
+
+		.checkin-date-field {
+			grid-column: 1;
+			grid-row: 3;
+		}
+
+		.checkout-date-field {
+			grid-column: 2;
+			grid-row: 3;
+		}
+
+		.guest-car-question-field {
+			grid-column: 3;
+			grid-row: 3;
+			align-self: end;
+		}
+
+		.guest-birth-field {
+			grid-column: 1;
+			grid-row: 4;
+		}
+	}
+
+	@media (max-width: 1180px) {
+		> .row {
+			grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+		}
+	}
+
+	@media (max-width: 991px) {
+		> .row {
+			grid-template-columns: 1fr;
+		}
+
+		.taskeen {
+			position: static;
+		}
+	}
+
+	@media (max-width: 760px) {
+		margin-top: 12px;
+
+		> .row {
+			gap: 10px;
+		}
+
+		> .row > .col-md-8.mx-auto,
+		> .row > .taskeen {
+			padding: 12px;
+		}
+
+		> .row > .col-md-8.mx-auto > .my-4 .row {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 8px;
+			margin: 0;
+		}
+
+		> .row > .col-md-8.mx-auto > .my-4 .row > [class*="col-"] {
+			width: 100%;
+			max-width: 100%;
+			padding: 0;
+		}
+
+		.btn {
+			width: 100%;
+		}
+
+		.fixed-section {
+			display: block;
+			position: static;
+			top: auto;
+			left: auto;
+			right: auto;
+			width: 100%;
+			opacity: 1 !important;
+			margin: 12px 0;
+			padding: 10px;
+			border: 1px solid #c8e7ff;
+			border-radius: 8px;
+			background: #eef8ff;
+			box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+			scroll-margin-top: 82px;
+			z-index: auto;
+		}
+
+		.hotel-map-section {
+			scroll-margin-top: 78px;
+			padding-bottom: 78px;
+		}
+
+		.hotel-map-section > h4,
+		.hotel-map-section > h5 {
+			text-align: center;
+			margin-inline: auto;
+			max-width: 320px;
+		}
+
+		.fixed-section .review-grid {
+			grid-template-columns: 1fr;
+			gap: 8px;
+			padding: 0;
+		}
+
+		.fixed-section .review-grid > div {
+			max-height: none !important;
+			overflow: visible !important;
+			border: 0 !important;
+			padding: 0 !important;
+		}
+
+		.fixed-section .inner-grid,
+		.fixed-section .inner-grid2 {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			min-width: 0;
+			gap: 6px;
+			margin-bottom: 8px;
+			padding: 8px;
+			background: #ffffff;
+			border: 1px solid #dbeafe;
+			border-radius: 8px;
+		}
+
+		.fixed-section .inner-grid > div:first-child,
+		.fixed-section .inner-grid2 > div:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.fixed-section .inner-grid > div:empty,
+		.fixed-section .inner-grid2 > div:empty {
+			display: none;
+		}
+
+		.fixed-section .inner-grid > div > div,
+		.fixed-section .inner-grid2 > div > div {
+			text-align: center !important;
+			font-size: 0.78rem !important;
+			line-height: 1.3;
+			overflow-wrap: anywhere;
+		}
+
+		.fixed-section .inner-grid .mx-auto,
+		.fixed-section .inner-grid2 .mx-auto {
+			width: 100% !important;
+			margin-top: 4px !important;
+			border: 1px solid #e4edf7;
+			border-radius: 6px;
+			min-height: 32px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.fixed-section > .px-5 {
+			display: none !important;
+		}
+
+		.fixed-section h4 {
+			font-size: 0.98rem;
+			line-height: 1.35;
+			text-align: center;
+		}
+
+		.mobile-map-booking-action {
+			display: block;
+			position: fixed;
+			left: 10px;
+			right: 10px;
+			bottom: 10px;
+			z-index: 880;
+			padding: 8px;
+			border-radius: 12px;
+			background: rgba(238, 248, 255, 0.96);
+			border: 1px solid #b9ddff;
+			box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+			opacity: 0;
+			pointer-events: none;
+			transform: translateY(14px);
+			transition:
+				opacity 0.2s ease,
+				transform 0.2s ease;
+		}
+
+		.mobile-map-booking-action.is-visible {
+			opacity: 1;
+			pointer-events: auto;
+			transform: translateY(0);
+		}
+
+		.mobile-map-booking-action .btn-success {
+			width: 100%;
+			min-height: 46px;
+			font-size: 0.98rem !important;
+			border-radius: 10px;
+			background: #05a857;
+			border-color: #05a857;
+		}
+	}
+
+	@media (max-width: 560px) {
+		input[type="text"],
+		input[type="email"],
+		input[type="password"],
+		input[type="date"],
+		select,
+		textarea,
+		.form-control,
+		.ant-picker.inputFields {
+			font-size: 0.88rem;
+			min-height: 40px;
+		}
+
+		label {
+			font-size: 0.82rem;
+			margin-bottom: 4px;
+		}
+
+		.guest-details-grid,
+		.payment-details-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.guest-name-field,
+		.guest-phone-field,
+		.guest-email-field,
+		.guest-passport-field,
+		.guest-passport-copy-field,
+		.guest-nationality-field,
+		.checkin-date-field,
+		.checkout-date-field,
+		.guest-car-question-field,
+		.guest-birth-field,
+		.booking-source-field,
+		.confirmation-number-field,
+		.payment-method-field,
+		.booking-comment-field {
+			grid-column: auto;
+			grid-row: auto;
+			width: 100% !important;
+			justify-self: stretch;
+		}
+
+		.stay-date-field .dataPointsReview {
+			font-size: 0.76rem !important;
+			min-height: 30px;
+		}
+
+		.taskeen > .row {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 6px;
+		}
+
+		.taskeen > .row > [class*="col-"] {
+			min-height: 34px;
+			padding: 6px 8px;
+			font-size: 0.78rem;
+		}
+
+		.taskeen h4[style] {
+			font-size: 0.98rem;
+			line-height: 1.35;
+		}
+
+		.room-list .room-item {
+			font-size: 0.78rem;
+		}
 	}
 `;

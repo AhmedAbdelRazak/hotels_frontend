@@ -121,6 +121,8 @@ const ThirdRow = ({
 					dataSource={roomsTable}
 					columns={columns}
 					pagination={false}
+					scroll={{ x: 780 }}
+					size='small'
 				/>
 			</TableWrapper>
 
@@ -167,8 +169,13 @@ export default ThirdRow;
 
 const ThirdRowWrapper = styled.div`
 	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 16px;
+	grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+	gap: 14px;
+	min-width: 0;
+
+	@media (max-width: 980px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const TableWrapper = styled.div`
@@ -176,17 +183,25 @@ const TableWrapper = styled.div`
 	background-color: white;
 	border-radius: 8px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	min-width: 0;
+	overflow: hidden;
 `;
 
 const TableTitle = styled.h2`
 	margin: 0 0 16px 0;
 	font-size: 18px;
 	font-weight: bold;
+	text-align: start;
 `;
 
 const StyledTable = styled(Table)`
+	min-width: 0;
+
 	.ant-table {
 		background-color: transparent;
+	}
+	.ant-table-thead > tr > th {
+		white-space: nowrap;
 	}
 	.ant-table-tbody > tr:nth-child(odd) {
 		background-color: #f7f8fa; /* Light grey for odd rows */
@@ -204,6 +219,7 @@ const ChartWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	min-width: 0;
 `;
 
 const ChartHeader = styled.div`
@@ -211,12 +227,15 @@ const ChartHeader = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
 `;
 
 const ChartTitle = styled.h2`
 	margin: 0;
 	font-size: 18px;
 	font-weight: bold;
+	text-align: start;
 `;
 
 const ShowAllLink = styled.a`
@@ -232,13 +251,15 @@ const LegendList = styled.div`
 	align-items: flex-start;
 	width: 100%;
 	margin-top: 16px;
+	gap: 6px;
 `;
 
 const LegendItem = styled.div`
 	display: flex;
 	align-items: center;
 	font-size: 14px;
-	margin: 4px 0;
+	gap: 8px;
+	margin: 0;
 `;
 
 const LegendDot = styled.div`
@@ -246,6 +267,6 @@ const LegendDot = styled.div`
 	height: 12px;
 	border-radius: 50%;
 	background-color: ${(props) => props.color};
-	margin-right: 8px;
+	flex: 0 0 auto;
 `;
 

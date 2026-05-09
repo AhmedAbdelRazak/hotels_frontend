@@ -31,9 +31,9 @@ const DigitalClock = () => {
 			<TimeBox>{timeFormatted.hours}</TimeBox>
 			<Separator>:</Separator>
 			<TimeBox>{timeFormatted.minutes}</TimeBox>
-			<Separator>:</Separator>
-			<TimeBox>{timeFormatted.seconds}</TimeBox>
-			<DateBox>{formatDate(time)}</DateBox>
+			<Separator className='seconds-separator'>:</Separator>
+			<TimeBox className='seconds-box'>{timeFormatted.seconds}</TimeBox>
+			<DateBox className='date-box'>{formatDate(time)}</DateBox>
 		</ClockWrapper>
 	);
 };
@@ -45,6 +45,24 @@ const ClockWrapper = styled.div`
 	align-items: center;
 	color: #000;
 	font-size: 16px;
+	white-space: nowrap;
+
+	@media (max-width: 560px) {
+		font-size: 13px;
+	}
+
+	@media (max-width: 430px) {
+		.seconds-box,
+		.seconds-separator {
+			display: none;
+		}
+	}
+
+	@media (max-width: 360px) {
+		.date-box {
+			display: none;
+		}
+	}
 `;
 
 const TimeBox = styled.div`
@@ -52,11 +70,20 @@ const TimeBox = styled.div`
 	border-radius: 5px;
 	padding: 4px 8px;
 	margin: 0 2px;
+
+	@media (max-width: 560px) {
+		padding: 3px 6px;
+		margin: 0 1px;
+	}
 `;
 
 const Separator = styled.div`
 	margin: 0 2px;
 	color: white;
+
+	@media (max-width: 560px) {
+		margin: 0 1px;
+	}
 `;
 
 const DateBox = styled.div`
@@ -66,4 +93,9 @@ const DateBox = styled.div`
 	margin-left: 8px;
 	font-weight: bold;
 	text-transform: capitalize;
+
+	@media (max-width: 560px) {
+		padding: 3px 6px;
+		margin-left: 5px;
+	}
 `;

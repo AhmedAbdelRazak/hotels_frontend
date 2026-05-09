@@ -91,7 +91,7 @@ function ZOffersMonthly({
 
 	// Hijri support guard (true when using moment-hijri)
 	const supportsHijri =
-		!!moment.fn &&
+		!!moment?.fn &&
 		typeof moment.fn.iMonth === "function" &&
 		typeof moment.fn.iYear === "function";
 

@@ -1212,6 +1212,16 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			paid_amount, // online paid OR authorized amount if 'credit/ debit'
 			commission: Number(totalCommission.toFixed(2)),
 			commissionPaid: false,
+			createdByUserId: effectiveUserId || "",
+			orderTakeId: effectiveUserId || "",
+			orderTaker: {
+				_id: effectiveUserId || "",
+				name: effectiveUser?.name || effectiveUser?.email || "",
+				email: effectiveUser?.email || "",
+				role: effectiveUser?.role || "",
+				roleDescription: effectiveUser?.roleDescription || "",
+			},
+			orderTakenAt: new Date(),
 			paymentDetails: {
 				cardNumber: "",
 				cardExpiryDate: "",

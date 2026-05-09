@@ -52,6 +52,15 @@ const ReservationsMain = () => {
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
 	const { chosenLanguage, languageToggle } = useCartContext();
+	const isOrderTakingUser =
+		Number(user?.role) === 7000 ||
+		(Array.isArray(user?.roles) && user.roles.map(Number).includes(7000)) ||
+		String(user?.roleDescription || "").toLowerCase() === "ordertaker" ||
+		(Array.isArray(user?.roleDescriptions) &&
+			user.roleDescriptions
+				.map((item) => String(item || "").toLowerCase())
+				.includes("ordertaker")) ||
+		(Array.isArray(user?.accessTo) && user.accessTo.includes("ownReservations"));
 
 	const formatDate = (date) => {
 		const d = new Date(date);
@@ -84,6 +93,7 @@ const ReservationsMain = () => {
 							const filtersPayload = JSON.stringify({
 								selectedFilter,
 								searchQuery: activeSearchTerm || "",
+								createdByUserId: isOrderTakingUser ? user?._id : "",
 							});
 
 							reservationsList(

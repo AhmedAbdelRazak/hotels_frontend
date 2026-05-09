@@ -214,6 +214,93 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 	const { user, token } = isAuthenticated();
 	const [loading, setLoading] = useState(false);
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = isArabic
+		? {
+				loading: "\u062c\u0627\u0631\u064a\u0020\u062a\u062d\u0645\u064a\u0644\u0020\u0627\u0644\u062a\u0642\u0627\u0631\u064a\u0631...",
+				includeCancelled:
+					"\u062a\u0636\u0645\u064a\u0646\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u0644\u063a\u0627\u0629",
+				excludeCancelled:
+					"\u0627\u0633\u062a\u0628\u0639\u0627\u062f\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u0644\u063a\u0627\u0629",
+				reservationsByDay:
+					"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u062d\u0633\u0628\u0020\u0627\u0644\u064a\u0648\u0645",
+				monthOverMonth:
+					"\u0645\u0642\u0627\u0631\u0646\u0629\u0020\u0634\u0647\u0631\u064a\u0629",
+				dailyView: "\u0639\u0631\u0636\u0020\u064a\u0648\u0645\u064a",
+				count: "\u0627\u0644\u0639\u062f\u062f",
+				totalAmount: "\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u0645\u0628\u0644\u063a",
+				total: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+				all: "\u0627\u0644\u0643\u0644",
+				month: "\u0627\u0644\u0634\u0647\u0631",
+				quarter: "\u0627\u0644\u0631\u0628\u0639",
+				totalReservations:
+					"\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+				commission: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+				noData: "\u0644\u0627\u0020\u062a\u0648\u062c\u062f\u0020\u0628\u064a\u0627\u0646\u0627\u062a",
+				checkinsCheckouts:
+					"\u062a\u0633\u062c\u064a\u0644\u0020\u0627\u0644\u0648\u0635\u0648\u0644\u0020\u0648\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+				checkinsByDay:
+					"\u062a\u0633\u062c\u064a\u0644\u0627\u062a\u0020\u0627\u0644\u0648\u0635\u0648\u0644\u0020\u062d\u0633\u0628\u0020\u0627\u0644\u064a\u0648\u0645",
+				checkoutsByDay:
+					"\u062a\u0633\u062c\u064a\u0644\u0627\u062a\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629\u0020\u062d\u0633\u0628\u0020\u0627\u0644\u064a\u0648\u0645",
+				totalCheckins:
+					"\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u0648\u0635\u0648\u0644",
+				totalCheckouts:
+					"\u0625\u062c\u0645\u0627\u0644\u064a\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+				bookingStatusTopHotels:
+					"\u062d\u0627\u0644\u0629\u0020\u0627\u0644\u062d\u062c\u0632\u0020\u0648\u0623\u0639\u0644\u0649\u0020\u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+				reservationsByStatus:
+					"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u062d\u0633\u0628\u0020\u0627\u0644\u062d\u0627\u0644\u0629",
+				topHotelsByReservations:
+					"\u0623\u0639\u0644\u0649\u0020\u0627\u0644\u0641\u0646\u0627\u062f\u0642\u0020\u062d\u0633\u0628\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+				reservationsCount:
+					"\u0639\u062f\u062f\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+				checkinsCount:
+					"\u0639\u062f\u062f\u0020\u062a\u0633\u062c\u064a\u0644\u0627\u062a\u0020\u0627\u0644\u0648\u0635\u0648\u0644",
+				checkoutsCount:
+					"\u0639\u062f\u062f\u0020\u062a\u0633\u062c\u064a\u0644\u0627\u062a\u0020\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+				detailedReservationsList:
+					"\u0642\u0627\u0626\u0645\u0629\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u062a\u0641\u0635\u064a\u0644\u064a\u0629",
+				loadingShort: "\u062c\u0627\u0631\u064a\u0020\u0627\u0644\u062a\u062d\u0645\u064a\u0644...",
+				noReservationsFound:
+					"\u0644\u0627\u0020\u062a\u0648\u062c\u062f\u0020\u062d\u062c\u0648\u0632\u0627\u062a",
+				unknown: "\u063a\u064a\u0631\u0020\u0645\u0639\u0631\u0648\u0641",
+				clickedHotel:
+					"\u062a\u0645\u0020\u0627\u0644\u0636\u063a\u0637\u0020\u0639\u0644\u0649\u0020\u0627\u0644\u0641\u0646\u062f\u0642: ",
+		  }
+		: {
+				loading: "Loading Reports...",
+				includeCancelled: "Include Cancelled Reservations",
+				excludeCancelled: "Exclude Cancelled Reservations",
+				reservationsByDay: "Reservations By Day",
+				monthOverMonth: "Month Over Month",
+				dailyView: "Daily View",
+				count: "Count",
+				totalAmount: "Total Amount",
+				total: "Total",
+				all: "All",
+				month: "Month",
+				quarter: "Quarter",
+				totalReservations: "Total Reservations",
+				commission: "Commission",
+				noData: "No data found",
+				checkinsCheckouts: "Check-ins & Check-outs By Day",
+				checkinsByDay: "Check-ins By Day",
+				checkoutsByDay: "Check-outs By Day",
+				totalCheckins: "Total Check-ins",
+				totalCheckouts: "Total Check-outs",
+				bookingStatusTopHotels: "Booking Status & Top 5 Hotels",
+				reservationsByStatus: "Reservations By Status",
+				topHotelsByReservations: "Top 5 Hotels By Reservations",
+				reservationsCount: "Reservations Count",
+				checkinsCount: "Check-ins Count",
+				checkoutsCount: "Check-outs Count",
+				detailedReservationsList: "Detailed Reservations List",
+				loadingShort: "Loading...",
+				noReservationsFound: "No reservations found",
+				unknown: "Unknown",
+				clickedHotel: "Clicked on hotel: ",
+		  };
 
 	// Raw data
 	const [reservationsByDay, setReservationsByDay] = useState([]);
@@ -466,9 +553,12 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 
 	const reservationsByDayChartConfig = {
 		options: {
+			colors: ["#0d6efd"],
 			chart: {
 				id: "reservations-by-day-chart",
 				height: 300,
+				toolbar: { show: true },
+				foreColor: "#334155",
 				events: {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
@@ -492,26 +582,68 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 					},
 				},
 			},
-			xaxis: { categories: dayCategories },
+			dataLabels: {
+				enabled: true,
+				formatter: (val) => formatForDisplay(val, measureDay),
+				style: { fontSize: "11px", fontWeight: 800, colors: ["#ffffff"] },
+				background: { enabled: false },
+			},
+			xaxis: {
+				categories: dayCategories,
+				labels: {
+					rotate: -45,
+					rotateAlways: dayCategories.length > 8,
+					hideOverlappingLabels: true,
+					trim: false,
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
+				axisBorder: { color: "#cbd5e1" },
+				axisTicks: { color: "#cbd5e1" },
+			},
 			yaxis: {
-				labels: { formatter: createYAxisFormatter(measureDay) },
+				labels: {
+					formatter: createYAxisFormatter(measureDay),
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
 				min: 0,
 			},
-			plotOptions: { bar: { borderRadius: 4 } },
-			title: {
-				text: "Reservations By Day",
-				align: "center",
-				style: { fontSize: "16px" },
+			grid: { borderColor: "#e5e7eb", strokeDashArray: 3 },
+			plotOptions: {
+				bar: { borderRadius: 5, columnWidth: "48%", dataLabels: { position: "center" } },
 			},
+			tooltip: {
+				y: { formatter: (val) => formatForDisplay(val, measureDay) },
+			},
+			title: {
+				text: labels.reservationsByDay,
+				align: "center",
+				style: { fontSize: "16px", fontWeight: 800, color: "#18212f" },
+			},
+			responsive: [
+				{
+					breakpoint: 768,
+					options: {
+						chart: { height: 320, toolbar: { show: false } },
+						plotOptions: { bar: { columnWidth: "58%" } },
+						xaxis: {
+							labels: {
+								rotate: -55,
+								style: { fontSize: "10px", fontWeight: 700 },
+							},
+						},
+						title: { style: { fontSize: "14px", fontWeight: 800 } },
+					},
+				},
+			],
 		},
 		series: [
 			{
 				name:
 					measureDay === "count"
-						? "Reservations Count"
+						? labels.reservationsCount
 						: measureDay === "total"
-						  ? "Total Amount"
-						  : "Commission",
+						  ? labels.totalAmount
+						  : labels.commission,
 				data: daySeriesData,
 			},
 		],
@@ -548,9 +680,12 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 
 	const checkinsByDayChartConfig = {
 		options: {
+			colors: ["#05a857"],
 			chart: {
 				id: "checkins-by-day-chart",
 				height: 300,
+				toolbar: { show: true },
+				foreColor: "#334155",
 				events: {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
@@ -573,26 +708,68 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 					},
 				},
 			},
-			xaxis: { categories: checkinsCategories },
+			dataLabels: {
+				enabled: true,
+				formatter: (val) => formatForDisplay(val, measureCheckin),
+				style: { fontSize: "11px", fontWeight: 800, colors: ["#ffffff"] },
+				background: { enabled: false },
+			},
+			xaxis: {
+				categories: checkinsCategories,
+				labels: {
+					rotate: -45,
+					rotateAlways: checkinsCategories.length > 8,
+					hideOverlappingLabels: true,
+					trim: false,
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
+				axisBorder: { color: "#cbd5e1" },
+				axisTicks: { color: "#cbd5e1" },
+			},
 			yaxis: {
-				labels: { formatter: createYAxisFormatter(measureCheckin) },
+				labels: {
+					formatter: createYAxisFormatter(measureCheckin),
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
 				min: 0,
 			},
-			plotOptions: { bar: { borderRadius: 4 } },
-			title: {
-				text: "Check-ins By Day",
-				align: "center",
-				style: { fontSize: "16px" },
+			grid: { borderColor: "#e5e7eb", strokeDashArray: 3 },
+			plotOptions: {
+				bar: { borderRadius: 5, columnWidth: "48%", dataLabels: { position: "center" } },
 			},
+			tooltip: {
+				y: { formatter: (val) => formatForDisplay(val, measureCheckin) },
+			},
+			title: {
+				text: labels.checkinsByDay,
+				align: "center",
+				style: { fontSize: "16px", fontWeight: 800, color: "#18212f" },
+			},
+			responsive: [
+				{
+					breakpoint: 768,
+					options: {
+						chart: { height: 320, toolbar: { show: false } },
+						plotOptions: { bar: { columnWidth: "58%" } },
+						xaxis: {
+							labels: {
+								rotate: -55,
+								style: { fontSize: "10px", fontWeight: 700 },
+							},
+						},
+						title: { style: { fontSize: "14px", fontWeight: 800 } },
+					},
+				},
+			],
 		},
 		series: [
 			{
 				name:
 					measureCheckin === "count"
-						? "Check-ins Count"
+						? labels.checkinsCount
 						: measureCheckin === "total"
-						  ? "Total Amount"
-						  : "Commission",
+						  ? labels.totalAmount
+						  : labels.commission,
 				data: checkinsSeriesData,
 			},
 		],
@@ -628,9 +805,12 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 
 	const checkoutsByDayChartConfig = {
 		options: {
+			colors: ["#7c3aed"],
 			chart: {
 				id: "checkouts-by-day-chart",
 				height: 300,
+				toolbar: { show: true },
+				foreColor: "#334155",
 				events: {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
@@ -653,26 +833,68 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 					},
 				},
 			},
-			xaxis: { categories: checkoutCategories },
+			dataLabels: {
+				enabled: true,
+				formatter: (val) => formatForDisplay(val, measureCheckout),
+				style: { fontSize: "11px", fontWeight: 800, colors: ["#ffffff"] },
+				background: { enabled: false },
+			},
+			xaxis: {
+				categories: checkoutCategories,
+				labels: {
+					rotate: -45,
+					rotateAlways: checkoutCategories.length > 8,
+					hideOverlappingLabels: true,
+					trim: false,
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
+				axisBorder: { color: "#cbd5e1" },
+				axisTicks: { color: "#cbd5e1" },
+			},
 			yaxis: {
-				labels: { formatter: createYAxisFormatter(measureCheckout) },
+				labels: {
+					formatter: createYAxisFormatter(measureCheckout),
+					style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				},
 				min: 0,
 			},
-			plotOptions: { bar: { borderRadius: 4 } },
-			title: {
-				text: "Check-outs By Day",
-				align: "center",
-				style: { fontSize: "16px" },
+			grid: { borderColor: "#e5e7eb", strokeDashArray: 3 },
+			plotOptions: {
+				bar: { borderRadius: 5, columnWidth: "48%", dataLabels: { position: "center" } },
 			},
+			tooltip: {
+				y: { formatter: (val) => formatForDisplay(val, measureCheckout) },
+			},
+			title: {
+				text: labels.checkoutsByDay,
+				align: "center",
+				style: { fontSize: "16px", fontWeight: 800, color: "#18212f" },
+			},
+			responsive: [
+				{
+					breakpoint: 768,
+					options: {
+						chart: { height: 320, toolbar: { show: false } },
+						plotOptions: { bar: { columnWidth: "58%" } },
+						xaxis: {
+							labels: {
+								rotate: -55,
+								style: { fontSize: "10px", fontWeight: 700 },
+							},
+						},
+						title: { style: { fontSize: "14px", fontWeight: 800 } },
+					},
+				},
+			],
 		},
 		series: [
 			{
 				name:
 					measureCheckout === "count"
-						? "Check-outs Count"
+						? labels.checkoutsCount
 						: measureCheckout === "total"
-						  ? "Total Amount"
-						  : "Commission",
+						  ? labels.totalAmount
+						  : labels.commission,
 				data: checkoutSeriesData,
 			},
 		],
@@ -697,7 +919,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 		statusQuarterSelected
 	);
 	const bookingStatusLabels = filteredStatus.map(
-		(item) => item.reservation_status || "Unknown"
+		(item) => item.reservation_status || labels.unknown
 	);
 	const bookingStatusValues = filteredStatus.map((item) =>
 		getMeasureValue(item, measureBookingStatus)
@@ -712,6 +934,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 			chart: {
 				id: "booking-status-chart",
 				height: 300,
+				foreColor: "#334155",
 				events: {
 					dataPointSelection: (event, chartContext, config) => {
 						const idx = config.dataPointIndex;
@@ -726,16 +949,28 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 			},
 			labels: bookingStatusLabels,
 			colors: bookingStatusColors,
+			legend: {
+				position: "bottom",
+				fontSize: "12px",
+				fontWeight: 700,
+				labels: { colors: ["#334155"] },
+			},
+			dataLabels: {
+				style: { fontSize: "12px", fontWeight: 800 },
+				dropShadow: { enabled: false },
+			},
 			title: {
-				text: "Reservations By Status",
+				text: labels.reservationsByStatus,
 				align: "center",
-				style: { fontSize: "16px" },
+				style: { fontSize: "16px", fontWeight: 800, color: "#18212f" },
 			},
 			responsive: [
 				{
 					breakpoint: 768,
 					options: {
-						legend: { position: "bottom" },
+						chart: { height: 310 },
+						legend: { position: "bottom", fontSize: "11px" },
+						title: { style: { fontSize: "14px", fontWeight: 800 } },
 					},
 				},
 			],
@@ -755,31 +990,63 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 	);
 	const top5 = sortedTopAll.slice(0, 5);
 
-	const top5HotelNames = top5.map((item) => item.hotelName || "Unknown");
+	const top5HotelNames = top5.map((item) => item.hotelName || labels.unknown);
 	const top5Data = top5.map((item) => item.reservationsCount ?? 0);
 
 	const topHotelsChartOptions = {
+		colors: ["#0d6efd"],
 		chart: {
 			id: "top-5-hotels-chart",
 			height: 300,
+			toolbar: { show: true },
+			foreColor: "#334155",
 			events: {
 				dataPointSelection: (event, chartContext, config) => {
 					const idx = config.dataPointIndex;
 					if (idx >= 0) {
 						message.info(
-							"Clicked on hotel: " + (top5[idx].hotelName || "Unknown")
+							labels.clickedHotel + (top5[idx].hotelName || labels.unknown)
 						);
 					}
 				},
 			},
 		},
-		xaxis: { categories: top5HotelNames },
-		plotOptions: { bar: { horizontal: true, borderRadius: 3 } },
-		title: {
-			text: "Top 5 Hotels By Reservations",
-			align: "center",
-			style: { fontSize: "16px" },
+		xaxis: {
+			categories: top5HotelNames,
+			labels: {
+				style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+				formatter: (val) => Number(val || 0).toLocaleString("en-US"),
+			},
 		},
+		yaxis: {
+			labels: {
+				minWidth: 110,
+				maxWidth: 190,
+				style: { fontSize: "11px", fontWeight: 700, colors: ["#475569"] },
+			},
+		},
+		dataLabels: {
+			enabled: true,
+			formatter: (val) => Number(val || 0).toLocaleString("en-US"),
+			style: { fontSize: "11px", fontWeight: 800, colors: ["#ffffff"] },
+		},
+		grid: { borderColor: "#e5e7eb", strokeDashArray: 3 },
+		plotOptions: { bar: { horizontal: true, borderRadius: 5, barHeight: "55%" } },
+		title: {
+			text: labels.topHotelsByReservations,
+			align: "center",
+			style: { fontSize: "16px", fontWeight: 800, color: "#18212f" },
+		},
+		responsive: [
+			{
+				breakpoint: 768,
+				options: {
+					chart: { height: 310, toolbar: { show: false } },
+					yaxis: { labels: { minWidth: 90, maxWidth: 130 } },
+					title: { style: { fontSize: "14px", fontWeight: 800 } },
+				},
+			},
+		],
 	};
 
 	const handleSearch = () => {
@@ -790,33 +1057,36 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 	const modalRows = Array.isArray(modalData?.data) ? modalData.data : [];
 	return (
 		<ReservationsOverviewWrapper
-			dir={chosenLanguage === "Arabic" ? "ltr" : "ltr"}
+			dir={isArabic ? "rtl" : "ltr"}
+			$isArabic={isArabic}
 		>
 			{loading ? (
-				<Spin tip='Loading Reports...' size='large' />
+				<Spin tip={labels.loading} size='large' />
 			) : (
 				<>
-					<div style={{ marginBottom: "20px" }}>
+					<div className='report-actions'>
 						{/* NEW BUTTON: Exclude/Include Cancelled */}
 						<Button
-							style={{ marginTop: 10 }}
+							className='cancel-toggle'
 							onClick={() => setExcludeCancelled(!excludeCancelled)}
 						>
 							{excludeCancelled
-								? "Include Cancelled Reservations"
-								: "Exclude Cancelled Reservations"}
+								? labels.includeCancelled
+								: labels.excludeCancelled}
 						</Button>
 					</div>
 
 					<Collapse defaultActiveKey={["1", "2", "3"]} expandIconPosition='end'>
 						{/* ==================== PANEL 1 ==================== */}
-						<Panel header='Reservations By Day' key='1'>
+						<Panel header={labels.reservationsByDay} key='1'>
 							<div className='panel-controls'>
 								<Button
 									onClick={handleDayMonthOverMonth}
 									style={{ marginRight: 8 }}
 								>
-									{dayChartMode === "daily" ? "Month Over Month" : "Daily View"}
+									{dayChartMode === "daily"
+										? labels.monthOverMonth
+										: labels.dailyView}
 								</Button>
 
 								<Radio.Group
@@ -824,8 +1094,10 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 									onChange={(e) => setMeasureDay(e.target.value)}
 									style={{ marginRight: 8 }}
 								>
-									<Radio.Button value='count'>Count</Radio.Button>
-									<Radio.Button value='total'>Total Amount</Radio.Button>
+									<Radio.Button value='count'>{labels.count}</Radio.Button>
+									<Radio.Button value='total'>
+										{labels.totalAmount}
+									</Radio.Button>
 									{/* <Radio.Button value='commission'>Commission</Radio.Button> */}
 								</Radio.Group>
 
@@ -835,9 +1107,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 									style={{ width: 120, marginRight: 8 }}
 									disabled={dayChartMode === "monthly"}
 								>
-									<Option value='all'>All</Option>
-									<Option value='month'>Month</Option>
-									<Option value='quarter'>Quarter</Option>
+									<Option value='all'>{labels.all}</Option>
+									<Option value='month'>{labels.month}</Option>
+									<Option value='quarter'>{labels.quarter}</Option>
 								</Select>
 
 								{rangeDay === "month" && (
@@ -872,12 +1144,12 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 
 							<Card size='small' className='sum-card'>
 								<b>
-									Total{" "}
+									{measureDay === "count" ? labels.totalReservations : labels.total}{" "}
 									{measureDay === "count"
-										? "Reservations"
+										? ""
 										: measureDay === "total"
-										  ? "Amount"
-										  : "Commission"}
+										  ? labels.totalAmount
+										  : labels.commission}
 									:
 								</b>{" "}
 								{formatForDisplay(
@@ -886,9 +1158,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 								)}
 							</Card>
 
-							<div className='chart-container container'>
+							<div className='chart-container chart-scroll container'>
 								{dayDataForChart.length === 0 ? (
-									<p>No data found</p>
+									<p>{labels.noData}</p>
 								) : (
 									<Chart
 										options={reservationsByDayChartConfig.options}
@@ -901,7 +1173,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 						</Panel>
 
 						{/* ==================== PANEL 2 ==================== */}
-						<Panel header='Check-ins & Check-outs By Day' key='2'>
+						<Panel header={labels.checkinsCheckouts} key='2'>
 							<div className='checkins-checkouts-wrapper'>
 								{/* Check-ins */}
 								<div className='subchart'>
@@ -911,8 +1183,8 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											style={{ marginRight: 8 }}
 										>
 											{checkinChartMode === "daily"
-												? "Month Over Month"
-												: "Daily View"}
+												? labels.monthOverMonth
+												: labels.dailyView}
 										</Button>
 
 										<Radio.Group
@@ -920,8 +1192,10 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											onChange={(e) => setMeasureCheckin(e.target.value)}
 											style={{ marginRight: 8 }}
 										>
-											<Radio.Button value='count'>Count</Radio.Button>
-											<Radio.Button value='total'>Total Amount</Radio.Button>
+											<Radio.Button value='count'>{labels.count}</Radio.Button>
+											<Radio.Button value='total'>
+												{labels.totalAmount}
+											</Radio.Button>
 											{/* <Radio.Button value='commission'>Commission</Radio.Button> */}
 										</Radio.Group>
 
@@ -931,9 +1205,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											style={{ width: 120, marginRight: 8 }}
 											disabled={checkinChartMode === "monthly"}
 										>
-											<Option value='all'>All</Option>
-											<Option value='month'>Month</Option>
-											<Option value='quarter'>Quarter</Option>
+											<Option value='all'>{labels.all}</Option>
+											<Option value='month'>{labels.month}</Option>
+											<Option value='quarter'>{labels.quarter}</Option>
 										</Select>
 
 										{rangeCheckin === "month" && (
@@ -967,16 +1241,16 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 									</div>
 
 									<Card size='small' className='sum-card-green'>
-										<b>Total Check-ins:</b>{" "}
+										<b>{labels.totalCheckins}:</b>{" "}
 										{formatForDisplay(
 											sumOfMeasure(checkinDataForChart, measureCheckin),
 											measureCheckin
 										)}
 									</Card>
 
-									<div className='chart-container container'>
+									<div className='chart-container chart-scroll container'>
 										{checkinDataForChart.length === 0 ? (
-											<p>No data found</p>
+											<p>{labels.noData}</p>
 										) : (
 											<Chart
 												options={checkinsByDayChartConfig.options}
@@ -996,8 +1270,8 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											style={{ marginRight: 8 }}
 										>
 											{checkoutChartMode === "daily"
-												? "Month Over Month"
-												: "Daily View"}
+												? labels.monthOverMonth
+												: labels.dailyView}
 										</Button>
 
 										<Radio.Group
@@ -1005,8 +1279,10 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											onChange={(e) => setMeasureCheckout(e.target.value)}
 											style={{ marginRight: 8 }}
 										>
-											<Radio.Button value='count'>Count</Radio.Button>
-											<Radio.Button value='total'>Total Amount</Radio.Button>
+											<Radio.Button value='count'>{labels.count}</Radio.Button>
+											<Radio.Button value='total'>
+												{labels.totalAmount}
+											</Radio.Button>
 											{/* <Radio.Button value='commission'>Commission</Radio.Button> */}
 										</Radio.Group>
 
@@ -1016,9 +1292,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											style={{ width: 120, marginRight: 8 }}
 											disabled={checkoutChartMode === "monthly"}
 										>
-											<Option value='all'>All</Option>
-											<Option value='month'>Month</Option>
-											<Option value='quarter'>Quarter</Option>
+											<Option value='all'>{labels.all}</Option>
+											<Option value='month'>{labels.month}</Option>
+											<Option value='quarter'>{labels.quarter}</Option>
 										</Select>
 
 										{rangeCheckout === "month" && (
@@ -1052,16 +1328,16 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 									</div>
 
 									<Card size='small' className='sum-card-purple'>
-										<b>Total Check-outs:</b>{" "}
+										<b>{labels.totalCheckouts}:</b>{" "}
 										{formatForDisplay(
 											sumOfMeasure(checkoutDataForChart, measureCheckout),
 											measureCheckout
 										)}
 									</Card>
 
-									<div className='chart-container container'>
+									<div className='chart-container chart-scroll container'>
 										{checkoutDataForChart.length === 0 ? (
-											<p>No data found</p>
+											<p>{labels.noData}</p>
 										) : (
 											<Chart
 												options={checkoutsByDayChartConfig.options}
@@ -1076,7 +1352,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 						</Panel>
 
 						{/* ==================== PANEL 3 ==================== */}
-						<Panel header='Booking Status & Top 5 Hotels' key='3'>
+						<Panel header={labels.bookingStatusTopHotels} key='3'>
 							<div className='status-hotel-wrapper'>
 								{/* Booking Status (Pie) */}
 								<div className='subchart'>
@@ -1086,8 +1362,8 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											onChange={(e) => setMeasureBookingStatus(e.target.value)}
 											style={{ marginRight: 8 }}
 										>
-											<Radio.Button value='count'>Count</Radio.Button>
-											<Radio.Button value='total'>Total</Radio.Button>
+											<Radio.Button value='count'>{labels.count}</Radio.Button>
+											<Radio.Button value='total'>{labels.total}</Radio.Button>
 											{/* <Radio.Button value='commission'>Commission</Radio.Button> */}
 										</Radio.Group>
 										<Select
@@ -1095,9 +1371,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											onChange={(val) => setRangeBookingStatus(val)}
 											style={{ width: 120, marginRight: 8 }}
 										>
-											<Option value='all'>All</Option>
-											<Option value='month'>Month</Option>
-											<Option value='quarter'>Quarter</Option>
+											<Option value='all'>{labels.all}</Option>
+											<Option value='month'>{labels.month}</Option>
+											<Option value='quarter'>{labels.quarter}</Option>
 										</Select>
 
 										{rangeBookingStatus === "month" && (
@@ -1129,16 +1405,16 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 									</div>
 
 									<Card size='small' className='sum-card-red'>
-										<b>Total:</b>{" "}
+										<b>{labels.total}:</b>{" "}
 										{formatForDisplay(
 											sumOfMeasure(filteredStatus, measureBookingStatus),
 											measureBookingStatus
 										)}
 									</Card>
 
-									<div className='chart-container container'>
+									<div className='chart-container chart-pie container'>
 										{filteredStatus.length === 0 ? (
-											<p>No data found</p>
+											<p>{labels.noData}</p>
 										) : (
 											<Chart
 												options={bookingStatusChartConfig.options}
@@ -1158,9 +1434,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 											onChange={(val) => setRangeTop(val)}
 											style={{ width: 120, marginRight: 8 }}
 										>
-											<Option value='all'>All</Option>
-											<Option value='month'>Month</Option>
-											<Option value='quarter'>Quarter</Option>
+											<Option value='all'>{labels.all}</Option>
+											<Option value='month'>{labels.month}</Option>
+											<Option value='quarter'>{labels.quarter}</Option>
 										</Select>
 
 										{rangeTop === "month" && (
@@ -1191,21 +1467,23 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 										)}
 									</div>
 
-									{top5.length === 0 ? (
-										<p>No data found</p>
-									) : (
-										<Chart
-											options={topHotelsChartOptions}
-											series={[
-												{
-													name: "Reservations Count",
-													data: top5Data,
-												},
-											]}
-											type='bar'
-											height={300}
-										/>
-									)}
+									<div className='chart-container chart-horizontal container'>
+										{top5.length === 0 ? (
+											<p>{labels.noData}</p>
+										) : (
+											<Chart
+												options={topHotelsChartOptions}
+												series={[
+													{
+														name: labels.reservationsCount,
+														data: top5Data,
+													},
+												]}
+												type='bar'
+												height={300}
+											/>
+										)}
+									</div>
 								</div>
 							</div>
 						</Panel>
@@ -1216,7 +1494,7 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 			{/* ===================== MODAL to display reservations list ===================== */}
 			<Modal
 				className='custom-reservations-modal'
-				title='Detailed Reservations List'
+				title={labels.detailedReservationsList}
 				open={modalVisible}
 				onCancel={() => setModalVisible(false)}
 				footer={null}
@@ -1228,9 +1506,9 @@ const ReservationsOverview = ({ chosenLanguage }) => {
 				}}
 			>
 				{modalLoading ? (
-					<Spin tip='Loading...' />
+					<Spin tip={labels.loadingShort} />
 				) : modalRows.length === 0 ? (
-					<p>No reservations found</p>
+					<p>{labels.noReservationsFound}</p>
 				) : (
 					<EnhancedContentTable
 						// We pass only the subset after user-based filtering
@@ -1262,21 +1540,70 @@ export default ReservationsOverview;
 const ReservationsOverviewWrapper = styled.div`
 	width: 100%;
 	margin-top: 10px;
+	min-width: 0;
+	--report-blue: #0d6efd;
+	--report-blue-deep: #0b5ed7;
+	--report-green: #05a857;
+	--report-purple: #7c3aed;
+	--report-red: #ef4444;
+	--report-border: #cfe5fb;
+	--report-text: #18212f;
+	--report-muted: #64748b;
+
+	.report-actions {
+		display: flex;
+		justify-content: flex-start;
+		margin-bottom: 12px;
+	}
+
+	.cancel-toggle {
+		min-height: 38px;
+		border: 1px solid var(--report-border);
+		border-radius: 8px;
+		color: var(--report-blue-deep);
+		font-weight: 800;
+		box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+	}
 
 	.ant-collapse {
-		border-radius: 6px;
+		border: 1px solid var(--report-border);
+		border-radius: 10px;
+		background: #f7fbff;
+		overflow: hidden;
 	}
 	.ant-collapse-header {
-		font-weight: bold;
+		align-items: center !important;
+		background: #ffffff;
+		color: var(--report-text) !important;
+		font-weight: 800;
 		font-size: 16px;
+		line-height: 1.3;
+	}
+	.ant-collapse-content {
+		border-top-color: #d9e9fb;
+	}
+	.ant-collapse-content-box {
+		padding: 14px !important;
+		background: #f7fbff;
 	}
 	.chart-container,
 	.table-container {
 		width: 100%;
-		border: 1px solid #e0e0e0;
-		padding: 0.5rem;
+		min-width: 0;
+		border: 1px solid var(--report-border);
+		border-radius: 8px;
+		padding: 0.75rem;
 		margin-bottom: 1rem;
 		background-color: #fff;
+		box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+		direction: ltr;
+		overflow: hidden;
+	}
+	.chart-container p {
+		margin: 0;
+		color: var(--report-muted);
+		font-weight: 700;
+		text-align: center;
 	}
 	.panel-controls {
 		margin-bottom: 1rem;
@@ -1284,6 +1611,22 @@ const ReservationsOverviewWrapper = styled.div`
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
+	}
+	.panel-controls > * {
+		margin: 0 !important;
+	}
+	.panel-controls .ant-btn,
+	.panel-controls .ant-radio-button-wrapper,
+	.panel-controls .ant-select-selector {
+		border-radius: 8px;
+		font-weight: 700;
+	}
+	.panel-controls .ant-radio-group {
+		display: inline-flex;
+		flex-wrap: nowrap;
+	}
+	.panel-controls .ant-select {
+		min-width: 128px;
 	}
 	.checkins-checkouts-wrapper,
 	.status-hotel-wrapper {
@@ -1293,47 +1636,137 @@ const ReservationsOverviewWrapper = styled.div`
 	}
 	.subchart {
 		flex: 1;
-		min-width: 300px;
+		min-width: min(100%, 360px);
 		display: flex;
 		flex-direction: column;
 	}
-	.sum-card {
-		margin-bottom: 1rem;
-		background-color: #fffde7;
-		border: 1px solid #e0e0e0;
-	}
-	.sum-card-green {
-		margin-bottom: 1rem;
-		background-color: #66bb6a;
-		border: 1px solid #e0e0e0;
-		color: #fff;
-	}
-	.sum-card-purple {
-		margin-bottom: 1rem;
-		background-color: #b39ddb;
-		border: 1px solid #e0e0e0;
-		color: #fff;
-	}
-	.sum-card-red {
-		margin-bottom: 1rem;
-		background-color: #ff8a80;
-		border: 1px solid #e0e0e0;
-	}
+	.sum-card,
+	.sum-card-green,
+	.sum-card-purple,
+	.sum-card-red,
 	.sum-card-pink {
 		margin-bottom: 1rem;
-		background-color: #f3e5f5;
-		border: 1px solid #e0e0e0;
+		border: 1px solid var(--report-border);
+		border-radius: 8px;
+		color: var(--report-text);
+		font-size: 0.95rem;
+		box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 	}
+	.sum-card {
+		background-color: #fffbea;
+		border-color: #f6de86;
+	}
+	.sum-card-green {
+		background-color: #e8f8ef;
+		border-color: #9ee5bb;
+	}
+	.sum-card-purple {
+		background-color: #f2eafe;
+		border-color: #cbb6f6;
+	}
+	.sum-card-red {
+		background-color: #fff0f0;
+		border-color: #fecaca;
+	}
+	.sum-card-pink {
+		background-color: #f3e5f5;
+		border-color: #e9c7ef;
+	}
+	.apexcharts-title-text {
+		font-weight: 800;
+	}
+	.apexcharts-menu-icon svg {
+		fill: #64748b;
+	}
+
+	.custom-reservations-modal .ant-modal {
+		z-index: 9999 !important;
+	}
+
 	@media (max-width: 768px) {
 		.ant-collapse-header {
-			font-size: 14px;
+			font-size: 0.9rem;
+			padding: 11px 12px !important;
+		}
+		.ant-collapse-content-box {
+			padding: 10px !important;
 		}
 		.checkins-checkouts-wrapper,
 		.status-hotel-wrapper {
 			flex-direction: column;
+			gap: 10px;
+		}
+		.panel-controls {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+		.panel-controls .ant-btn,
+		.panel-controls .ant-select,
+		.panel-controls .ant-radio-group {
+			width: 100% !important;
+			min-width: 0;
+		}
+		.panel-controls .ant-radio-group {
+			grid-column: 1 / -1;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.panel-controls .ant-radio-button-wrapper {
+			text-align: center;
+			padding-inline: 6px;
+			font-size: 0.78rem;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.chart-container {
+			padding: 0.55rem;
+		}
+		.chart-scroll,
+		.chart-horizontal {
+			overflow-x: auto;
+			overflow-y: hidden;
+		}
+		.chart-scroll .apexcharts-canvas {
+			min-width: 560px;
+		}
+		.chart-horizontal .apexcharts-canvas {
+			min-width: 500px;
+		}
+		.chart-pie .apexcharts-canvas {
+			max-width: 100%;
+			margin-inline: auto;
+		}
+		.sum-card,
+		.sum-card-green,
+		.sum-card-purple,
+		.sum-card-red,
+		.sum-card-pink {
+			font-size: 0.83rem;
+			margin-bottom: 10px;
+		}
+		.report-actions {
+			margin-bottom: 10px;
+		}
+		.cancel-toggle {
+			width: 100%;
+			font-size: 0.82rem;
+			white-space: normal;
+			height: auto;
+			min-height: 38px;
 		}
 	}
-	.custom-reservations-modal .ant-modal {
-		z-index: 9999 !important;
+
+	@media (max-width: 420px) {
+		.panel-controls {
+			grid-template-columns: 1fr 1fr;
+		}
+		.panel-controls .ant-radio-button-wrapper {
+			font-size: 0.74rem;
+		}
+		.chart-scroll .apexcharts-canvas {
+			min-width: 520px;
+		}
 	}
 `;

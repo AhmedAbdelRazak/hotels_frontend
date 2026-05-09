@@ -241,6 +241,30 @@ export const gettingAllHotelAccounts = (userId, token) => {
 		.catch((err) => console.log(err));
 };
 
+export const reassignHotelOwner = (
+	hotelId,
+	userId,
+	token,
+	{ newOwnerId, transferExistingReservations = true },
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/reassign-owner/${hotelId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify({ newOwnerId, transferExistingReservations }),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+		});
+};
+
 // Create a new support case
 export const createSupportCase = async (data) => {
 	try {
@@ -1272,6 +1296,22 @@ export const readUserId = (userId, token) => {
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
 
+const attachReservationActor = (reservation = {}) => {
+	if (reservation.requestingUserId) return reservation;
+
+	try {
+		const storedAuth = JSON.parse(localStorage.getItem("jwt") || "{}");
+		const actorId = storedAuth?.user?._id;
+		if (actorId) {
+			return { ...reservation, requestingUserId: actorId };
+		}
+	} catch (error) {
+		// Keep the update usable even if local storage is unavailable.
+	}
+
+	return reservation;
+};
+
 export const updateSingleReservation = (reservationId, reservation) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservation-update/${reservationId}`,
@@ -1283,7 +1323,7 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				Accept: "application/json",
 				// Authorization: `Bearer ${token}`,
 			},
-			body: JSON.stringify(reservation),
+			body: JSON.stringify(attachReservationActor(reservation)),
 		},
 	)
 		.then((response) => {

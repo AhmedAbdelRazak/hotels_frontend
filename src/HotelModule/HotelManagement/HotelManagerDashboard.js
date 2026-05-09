@@ -15,9 +15,10 @@ import PasscodeModal from "./PasscodeModal";
 import AdminDashboard from "./AdminDashboard";
 import { getStoredMenuCollapsed } from "../utils/menuState";
 
-const HotelManagerDashboard = () => {
+const HotelManagerDashboard = ({ match }) => {
 	// eslint-disable-next-line
 	const history = useHistory();
+	const { userId: routeUserId, hotelId: routeHotelId } = match?.params || {};
 
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [modalVisiblePasscode, setModalVisiblePasscode] = useState(false);
@@ -57,7 +58,68 @@ const HotelManagerDashboard = () => {
 		return [year, month.padStart(2, "0"), day.padStart(2, "0")].join("-");
 	}
 
+	const loadHotelDashboardSupportData = (accountData, selectedHotel) => {
+		if (!accountData?._id || !selectedHotel?._id) return;
+
+		setHotelDetails(selectedHotel);
+
+		const today = new Date();
+		const formattedToday = formatDate(today);
+		const yesterday = new Date(today);
+		yesterday.setDate(yesterday.getDate() - 1);
+		const formattedYesterday = formatDate(yesterday);
+
+		gettingDateReport(formattedToday, selectedHotel._id, accountData._id).then(
+			(data3) => {
+				if (data3 && data3.error) {
+					console.log(data3.error);
+				} else {
+					setReservationsToday(
+						data3.filter((i) => !i.reservation_status.includes("cancelled"))
+					);
+				}
+			}
+		);
+
+		gettingDateReport(formattedYesterday, selectedHotel._id, accountData._id).then(
+			(data4) => {
+				if (data4 && data4.error) {
+					console.log(data4.error);
+				} else {
+					setReservationsYesterday(
+						data4.filter((i) => !i.reservation_status.includes("cancelled"))
+					);
+				}
+			}
+		);
+
+		gettingDayOverDayInventory(accountData._id, selectedHotel._id).then(
+			(data5) => {
+				if (data5 && data5.error) {
+					console.log("Data not received");
+				} else {
+					setDayOverDayInventory(data5);
+				}
+			}
+		);
+	};
+
 	const gettingHotelData = () => {
+		if (routeHotelId) {
+			getHotelDetails(routeHotelId).then((hotelData) => {
+				if (hotelData && hotelData.error) {
+					console.log(hotelData.error, "Error rendering");
+					return;
+				}
+
+				loadHotelDashboardSupportData(
+					{ _id: routeUserId || user?._id },
+					hotelData
+				);
+			});
+			return;
+		}
+
 		hotelAccount(user._id, token, user._id).then((data) => {
 			if (data && data.error) {
 				console.log(data.error, "Error rendering");
@@ -66,58 +128,7 @@ const HotelManagerDashboard = () => {
 					if (data2 && data2.error) {
 						console.log(data2.error, "Error rendering");
 					} else {
-						if (data && data.name && data._id && data2 && data2.length > 0) {
-							setHotelDetails(data2[0]);
-
-							// Format today's date
-							const today = new Date();
-							const formattedToday = formatDate(today);
-
-							// Get yesterday's date
-							const yesterday = new Date(today);
-							yesterday.setDate(yesterday.getDate() - 1);
-							const formattedYesterday = formatDate(yesterday);
-
-							// Get today's report
-							gettingDateReport(formattedToday, data2[0]._id, data._id).then(
-								(data3) => {
-									if (data3 && data3.error) {
-										console.log(data3.error);
-									} else {
-										setReservationsToday(
-											data3.filter(
-												(i) => !i.reservation_status.includes("cancelled")
-											)
-										);
-									}
-								}
-							);
-
-							// Get yesterday's report
-							gettingDateReport(
-								formattedYesterday,
-								data2[0]._id,
-								data._id
-							).then((data4) => {
-								if (data4 && data4.error) {
-									console.log(data4.error);
-								} else {
-									setReservationsYesterday(
-										data4.filter(
-											(i) => !i.reservation_status.includes("cancelled")
-										)
-									);
-								}
-							});
-						}
-
-						gettingDayOverDayInventory(data._id, data2[0]._id).then((data5) => {
-							if (data5 && data5.error) {
-								console.log("Data not received");
-							} else {
-								setDayOverDayInventory(data5);
-							}
-						});
+						loadHotelDashboardSupportData(data, data2);
 					}
 				});
 			}
@@ -166,22 +177,6 @@ const HotelManagerDashboard = () => {
 					<AdminDashboard chosenLanguage={chosenLanguage} />
 
 					{/* <WorldClocks /> */}
-
-					<div
-						onClick={() => {
-							setModalVisiblePasscode(true);
-						}}
-						className='mx-2'
-						style={{
-							position: "absolute",
-							top: 230,
-							right: chosenLanguage === "Arabic" ? "96%" : "",
-							padding: "2px",
-							color: "#f7f8fc",
-						}}
-					>
-						hello
-					</div>
 				</div>
 			</div>
 		</HotelManagerDashboardWrapper>
@@ -192,14 +187,44 @@ export default HotelManagerDashboard;
 
 const HotelManagerDashboardWrapper = styled.div`
 	overflow-x: hidden;
-	/* background: #ededed; */
 	margin-top: 70px;
-	min-height: 715px;
+	min-height: calc(100vh - 70px);
 	text-align: ${(props) => (props.isArabic ? "right" : "")};
 
 	.grid-container-main {
+		direction: ltr;
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "5% 90%" : "15% 84%")};
+		grid-template-columns: ${(props) =>
+			props.isArabic
+				? props.show
+					? "minmax(0, 1fr) 80px"
+					: "minmax(0, 1fr) 286px"
+				: props.show
+				  ? "80px minmax(0, 1fr)"
+				  : "286px minmax(0, 1fr)"};
+		min-width: 0;
+	}
+
+	.navcontent {
+		grid-column: ${(props) => (props.isArabic ? "2" : "1")};
+		grid-row: 1;
+	}
+
+	.otherContentWrapper {
+		grid-column: ${(props) => (props.isArabic ? "1" : "2")};
+		grid-row: 1;
+	}
+
+	.navcontent,
+	.otherContentWrapper {
+		min-width: 0;
+	}
+
+	.otherContentWrapper {
+		background: #f7f8fc;
+		direction: ${(props) => (props.isArabic ? "rtl" : "ltr")};
+		overflow: hidden;
+		width: 100%;
 	}
 
 	.container-wrapper {
@@ -217,5 +242,27 @@ const HotelManagerDashboardWrapper = styled.div`
 
 	@media (max-width: 1400px) {
 		background: white;
+	}
+
+	@media (max-width: 1200px) {
+		.grid-container-main {
+			display: block;
+		}
+
+		.otherContentWrapper {
+			min-height: calc(100vh - 70px);
+			padding-inline-start: ${(props) =>
+				!props.isArabic && props.show ? "72px" : "0"};
+			padding-inline-end: ${(props) =>
+				props.isArabic && props.show ? "72px" : "0"};
+			transition: padding 0.22s ease;
+		}
+	}
+
+	@media (max-width: 560px) {
+		.otherContentWrapper {
+			padding-inline-start: 0;
+			padding-inline-end: 0;
+		}
 	}
 `;

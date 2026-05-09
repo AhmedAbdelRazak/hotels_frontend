@@ -1,5 +1,15 @@
 import axios from "axios";
 
+const getStoredAuthHeaders = () => {
+	try {
+		const raw = typeof window !== "undefined" ? localStorage.getItem("jwt") : null;
+		const parsed = raw ? JSON.parse(raw) : null;
+		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
+	} catch (err) {
+		return {};
+	}
+};
+
 export const hotelAccount = (userId, token, accountId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
@@ -52,6 +62,78 @@ export const getHotelDetails = (userId) => {
 		.then((response) => {
 			return response.json();
 		})
+		.catch((err) => console.log(err));
+};
+
+export const getHotelMainDashboardStats = (hotelId, userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/stats/${hotelId}/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getHotelDashboardOpenReservations = (
+	hotelId,
+	userId,
+	token,
+	params = {},
+) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/open-reservations/${hotelId}/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getHotelDashboardIncompleteReservations = (
+	hotelId,
+	userId,
+	token,
+	params = {},
+) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/incomplete-reservations/${hotelId}/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 
@@ -382,6 +464,10 @@ export const reservationsList = (page, records, filters, hotelId, date) => {
 		`${process.env.REACT_APP_API_URL}/reservations/list/${page}/${records}/${filters}/${hotelId}/${date}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -474,11 +560,22 @@ export const getGeneralReportReservations = (
 		.catch((err) => console.log(err));
 };
 
-export const getReservationSummary = (hotelId, date) => {
+export const getReservationSummary = (hotelId, date, filters = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(filters || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/reservations-summary/${hotelId}/${date}`,
+		`${process.env.REACT_APP_API_URL}/reservations-summary/${hotelId}/${date}${queryString}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -498,6 +595,10 @@ export const reservationsTotalRecords = (
 		`${process.env.REACT_APP_API_URL}/reservations/get-total-records/${page}/${records}/${filters}/${hotelId}/${date}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -552,6 +653,22 @@ export const singlePreReservationById = (reservationId) => {
 		.catch((err) => console.log(err));
 };
 
+const attachReservationActor = (reservation = {}) => {
+	if (reservation.requestingUserId) return reservation;
+
+	try {
+		const storedAuth = JSON.parse(localStorage.getItem("jwt") || "{}");
+		const actorId = storedAuth?.user?._id;
+		if (actorId) {
+			return { ...reservation, requestingUserId: actorId };
+		}
+	} catch (error) {
+		// Keep the update usable even if local storage is unavailable.
+	}
+
+	return reservation;
+};
+
 export const updateSingleReservation = (reservationId, reservation) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservation-update/${reservationId}`,
@@ -563,7 +680,20 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				Accept: "application/json",
 				// Authorization: `Bearer ${token}`,
 			},
-			body: JSON.stringify(reservation),
+			body: JSON.stringify(attachReservationActor(reservation)),
+		},
+	)
+		.then((response) => {
+			return response.json();
+		})
+		.catch((err) => console.log(err));
+};
+
+export const getOpenFinanceCycleNotifications = (hotelId, userId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/open-finance-cycles/${hotelId}/${userId}`,
+		{
+			method: "GET",
 		},
 	)
 		.then((response) => {
@@ -950,6 +1080,16 @@ export const getSubscriptionData = (userId, token, subscriptionId) => {
 		.catch((err) => console.log(err));
 };
 
+const buildHousekeepingQueryString = (filters = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(filters || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	return query.toString() ? `?${query.toString()}` : "";
+};
+
 export const createNewHouseKeepingTask = (hotelId, housekeeping) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/house-keeping/create/${hotelId}`,
@@ -958,6 +1098,7 @@ export const createNewHouseKeepingTask = (hotelId, housekeeping) => {
 			headers: {
 				Accept: "application/json",
 				"Content-Type": "application/json",
+				...getStoredAuthHeaders(),
 			},
 			body: JSON.stringify(housekeeping),
 		},
@@ -970,13 +1111,15 @@ export const createNewHouseKeepingTask = (hotelId, housekeeping) => {
 		});
 };
 
-export const getAllHouseKeepingTasks = (page, records, hotelId) => {
+export const getAllHouseKeepingTasks = (page, records, hotelId, filters = {}) => {
+	const queryString = buildHousekeepingQueryString(filters);
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/house-keeping-list/${page}/${records}/${hotelId}`,
+		`${process.env.REACT_APP_API_URL}/house-keeping-list/${page}/${records}/${hotelId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -986,13 +1129,15 @@ export const getAllHouseKeepingTasks = (page, records, hotelId) => {
 		.catch((err) => console.log(err));
 };
 
-export const getAllHouseKeepingTotalRecords = (hotelId) => {
+export const getAllHouseKeepingTotalRecords = (hotelId, filters = {}) => {
+	const queryString = buildHousekeepingQueryString(filters);
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/house-keeping-total-records/${hotelId}`,
+		`${process.env.REACT_APP_API_URL}/house-keeping-total-records/${hotelId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -1009,6 +1154,7 @@ export const getHouseKeepingStaff = (hotelId) => {
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -1027,6 +1173,7 @@ export const updatingHouseKeepingTask = (taskId, task) => {
 				// content type?
 				"Content-Type": "application/json",
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 			body: JSON.stringify(task),
 		},
@@ -1037,19 +1184,81 @@ export const updatingHouseKeepingTask = (taskId, task) => {
 		.catch((err) => console.log(err));
 };
 
-export const getEmployeeWorkLoad = (userId) => {
+export const getEmployeeWorkLoad = (userId, filters = {}) => {
+	const queryString = buildHousekeepingQueryString(filters);
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/house-keeping-employee/${userId}`,
+		`${process.env.REACT_APP_API_URL}/house-keeping-employee/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
 		.then((response) => {
 			return response.json();
 		})
+		.catch((err) => console.log(err));
+};
+
+export const getHousekeepingSupplies = (hotelId) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/house-keeping-supplies/${hotelId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			...getStoredAuthHeaders(),
+		},
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const saveHousekeepingSupplyItem = (hotelId, item) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/house-keeping-supplies/${hotelId}/item`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...getStoredAuthHeaders(),
+		},
+		body: JSON.stringify(item),
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const createHousekeepingSupplyRequest = (hotelId, request) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/house-keeping-supplies/${hotelId}/request`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(request),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateHousekeepingSupplyRequest = (requestId, payload) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/house-keeping-supplies/request/${requestId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 
@@ -1361,9 +1570,17 @@ export const markAllMessagesAsSeenByHotel = async (caseId, userId) => {
 		});
 };
 
-export const gettingAdminDashboardFigures = (hotelId) => {
+export const gettingAdminDashboardFigures = (hotelId, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/admin-dashboard-reports/${hotelId}`,
+		`${process.env.REACT_APP_API_URL}/admin-dashboard-reports/${hotelId}${queryString}`,
 		{
 			method: "GET",
 		},

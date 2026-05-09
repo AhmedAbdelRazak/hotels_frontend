@@ -4,6 +4,7 @@ import { Card } from "antd";
 import Chart from "react-apexcharts";
 
 const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
+	const isArabic = chosenLanguage === "Arabic";
 	const translations = {
 		English: {
 			title: "Check-ins Today",
@@ -31,6 +32,11 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 	const finishCount = Number.isFinite(Number(DonutChartCard.finish))
 		? Number(DonutChartCard.finish)
 		: 0;
+	const maxCount = Math.max(pendingCount, doneCount, finishCount, 1);
+	const formatNumber = (value) =>
+		new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+			Number.isFinite(Number(value)) ? Number(value) : 0
+		);
 
 	const barChartOptions = {
 		chart: {
@@ -48,7 +54,11 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 		},
 		xaxis: {
 			categories: [pending, done, finish],
+			min: 0,
+			max: maxCount,
+			tickAmount: Math.min(maxCount, 4),
 			labels: {
+				formatter: formatNumber,
 				style: {
 					colors: ["#000", "#000", "#000"],
 					fontSize: "14px",
@@ -96,10 +106,10 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 	];
 
 	return (
-		<CardContainer dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+		<CardContainer dir={isArabic ? "rtl" : "ltr"}>
 			<StyledCard>
 				<ChartTitle>{title}</ChartTitle>
-				<ChartWrapper>
+				<ChartWrapper dir='ltr'>
 					<Chart
 						options={barChartOptions}
 						series={barChartSeries}
@@ -117,7 +127,7 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 							/>
 							<LegendText>{pending}</LegendText>
 						</LegendLabel>
-						<LegendValue>{pendingCount}</LegendValue>
+						<LegendValue>{formatNumber(pendingCount)}</LegendValue>
 					</LegendItem>
 					<LegendItem>
 						<LegendLabel>
@@ -128,7 +138,7 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 							/>
 							<LegendText>{done}</LegendText>
 						</LegendLabel>
-						<LegendValue>{doneCount}</LegendValue>
+						<LegendValue>{formatNumber(doneCount)}</LegendValue>
 					</LegendItem>
 					<LegendItem>
 						<LegendLabel>
@@ -139,7 +149,7 @@ const HorizontalBarChartCard = ({ chosenLanguage, DonutChartCard = {} }) => {
 							/>
 							<LegendText>{finish}</LegendText>
 						</LegendLabel>
-						<LegendValue>{finishCount}</LegendValue>
+						<LegendValue>{formatNumber(finishCount)}</LegendValue>
 					</LegendItem>
 				</Legend>
 			</StyledCard>
@@ -152,16 +162,21 @@ export default HorizontalBarChartCard;
 const CardContainer = styled.div``;
 
 const StyledCard = styled(Card)`
-	border-radius: 12px;
+	border-radius: 8px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-	padding: 20px;
+	min-width: 0;
 	text-align: center;
+
+	.ant-card-body {
+		padding: 16px;
+	}
 `;
 
 const ChartTitle = styled.div`
 	font-size: 18px;
 	font-weight: bold;
 	margin-bottom: 10px;
+	overflow-wrap: anywhere;
 `;
 
 const ChartWrapper = styled.div`
@@ -172,6 +187,8 @@ const Legend = styled.div`
 	display: flex;
 	justify-content: space-around;
 	margin-top: 10px;
+	gap: 8px;
+	flex-wrap: wrap;
 `;
 
 const LegendItem = styled.div`
@@ -184,17 +201,20 @@ const LegendItem = styled.div`
 const LegendLabel = styled.div`
 	display: flex;
 	align-items: center;
+	gap: 4px;
+	min-width: 0;
 `;
 
 const LegendColor = styled.div`
 	width: 12px;
 	height: 12px;
 	border-radius: 50%;
-	margin-right: 4px;
+	flex: 0 0 auto;
 `;
 
 const LegendText = styled.div`
-	margin-right: 4px;
+	overflow-wrap: anywhere;
+	text-align: start;
 `;
 
 const LegendValue = styled.span`

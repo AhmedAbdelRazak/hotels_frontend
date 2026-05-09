@@ -729,7 +729,7 @@ const HotelHeatMap = ({
 	};
 
 	return (
-		<HotelOverviewWrapper fixIt={fixIt}>
+		<HotelOverviewWrapper $fixIt={fixIt}>
 			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 				<HotelMapCards chosenLanguage={chosenLanguage} />
 			</div>
@@ -751,7 +751,7 @@ const HotelHeatMap = ({
 					<FloorsContainer>
 						{selectedFloor === null
 							? floorsDesc.map((floor, index) => (
-									<Floor key={index} delay={index * 0.3}>
+									<Floor key={index} $delay={index * 0.3}>
 										<h2
 											className='mb-4'
 											style={{
@@ -762,7 +762,7 @@ const HotelHeatMap = ({
 										>
 											{chosenLanguage === "Arabic" ? "الطابق" : "Floor"} {floor}
 										</h2>
-										<div style={{ display: "flex", flexWrap: "wrap" }}>
+										<RoomsGrid>
 											{filteredRooms &&
 												filteredRooms
 													.filter((room) => room.floor === floor)
@@ -867,15 +867,15 @@ const HotelHeatMap = ({
 															>
 																<RoomSquare
 																	key={idx}
-																	color={roomInfo.color}
-																	picked={""}
-																	reserved={
+																	$color={roomInfo.color}
+																	$picked={false}
+																	$reserved={
 																		bookingStatus.isBooked && !isBedRoom
 																	}
-																	inactive={isInactive}
-																	due={bookingStatus.isDue}
-																	overdue={bookingStatus.isOverdue}
-																	clickable={
+																	$inactive={isInactive}
+																	$due={bookingStatus.isDue}
+																	$overdue={bookingStatus.isOverdue}
+																	$clickable={
 																		bookingStatus.isBooked || isBedRoom
 																	}
 																	style={{
@@ -942,13 +942,13 @@ const HotelHeatMap = ({
 															</Tooltip>
 														);
 													})}
-										</div>
+										</RoomsGrid>
 									</Floor>
 							  ))
 							: floorsDesc
 									.filter((floor) => floor === selectedFloor)
 									.map((floor, index) => (
-										<Floor key={index} delay={index * 0.3}>
+										<Floor key={index} $delay={index * 0.3}>
 											<h2
 												className='mb-4'
 												style={{ fontWeight: "bolder", fontSize: "1.3rem" }}
@@ -956,7 +956,7 @@ const HotelHeatMap = ({
 												{chosenLanguage === "Arabic" ? "الطابق" : "Floor"}{" "}
 												{floor}
 											</h2>
-											<div style={{ display: "flex", flexWrap: "wrap" }}>
+											<RoomsGrid>
 												{filteredRooms &&
 													filteredRooms
 														.filter((room) => room.floor === floor)
@@ -1066,15 +1066,15 @@ const HotelHeatMap = ({
 																>
 																	<RoomSquare
 																		key={idx}
-																		color={roomInfo.color}
-																		picked={""}
-																		reserved={
+																		$color={roomInfo.color}
+																		$picked={false}
+																		$reserved={
 																			bookingStatus.isBooked && !isBedRoom
 																		}
-																		inactive={isInactive}
-																		due={bookingStatus.isDue}
-																		overdue={bookingStatus.isOverdue}
-																		clickable={
+																		$inactive={isInactive}
+																		$due={bookingStatus.isDue}
+																		$overdue={bookingStatus.isOverdue}
+																		$clickable={
 																			bookingStatus.isBooked || isBedRoom
 																		}
 																		style={{
@@ -1143,7 +1143,7 @@ const HotelHeatMap = ({
 																</Tooltip>
 															);
 														})}
-											</div>
+											</RoomsGrid>
 										</Floor>
 									))}
 						{parkingLot && <ParkingLot>Parking Lot</ParkingLot>}
@@ -1208,9 +1208,9 @@ const HotelHeatMap = ({
 						return (
 							<BedSquare
 								key={index}
-								booked={isBooked}
-								overdue={isOverdue}
-								clickable={!!reservation}
+								$booked={isBooked}
+								$overdue={isOverdue}
+								$clickable={!!reservation}
 								onClick={() => handleBedClick(reservation)}
 							>
 								{isOverdue && <CheckoutBadge>Checkout</CheckoutBadge>}
@@ -1289,13 +1289,13 @@ const bedStripePulse = keyframes`
   }
 `;
 
-const resolvePulseAnimation = ({ overdue, due }) => {
-	if (overdue) {
+const resolvePulseAnimation = ({ $overdue, $due }) => {
+	if ($overdue) {
 		return css`
 			animation: ${overduePulse} 1.6s ease-in-out infinite;
 		`;
 	}
-	if (due) {
+	if ($due) {
 		return css`
 			animation: ${duePulse} 1.7s ease-in-out infinite;
 		`;
@@ -1321,6 +1321,7 @@ const HotelOverviewWrapper = styled.div`
 	.canvas-grid {
 		display: grid;
 		grid-template-columns: 95% 5%;
+		min-width: 0;
 	}
 
 	.colors-grid {
@@ -1331,9 +1332,21 @@ const HotelOverviewWrapper = styled.div`
 		position: sticky;
 		top: 0;
 		align-self: start;
-		position: ${(props) => (props.fixIt ? "fixed" : "")};
-		top: ${(props) => (props.fixIt ? "20%" : "")};
-		left: ${(props) => (props.fixIt ? "2%" : "")};
+		position: ${(props) => (props.$fixIt ? "fixed" : "")};
+		top: ${(props) => (props.$fixIt ? "20%" : "")};
+		left: ${(props) => (props.$fixIt ? "2%" : "")};
+	}
+
+	@media (max-width: 760px) {
+		margin-top: 18px;
+
+		.canvas-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.colors-grid {
+			display: none;
+		}
 	}
 `;
 
@@ -1341,21 +1354,53 @@ const FloorsContainer = styled.div`
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	width: 100%;
+	min-width: 0;
 `;
 
 const Floor = styled.div`
-	margin: 10px;
-	padding: 30px;
-	background-color: rgba(237, 237, 237, 0.3);
-	border: 1px solid rgba(237, 237, 237, 1);
+	margin: 10px 0;
+	padding: clamp(18px, 2.4vw, 30px);
+	background: #f8fafc;
+	border: 1px solid #e6edf5;
+	border-radius: 8px;
 	width: 100%;
 	text-align: center;
 	font-weight: bold;
 	cursor: pointer;
 	animation: ${fadeIn} 0.5s ease forwards;
-	animation-delay: ${({ delay }) => delay}s;
+	animation-delay: ${({ $delay }) => $delay}s;
 	opacity: 0;
 	font-size: 1.1rem;
+	overflow: hidden;
+
+	> h2 {
+		margin-bottom: 18px !important;
+	}
+
+	@media (max-width: 560px) {
+		margin: 8px 0;
+		padding: 16px 10px;
+
+		> h2 {
+			font-size: 1.1rem !important;
+			margin-bottom: 14px !important;
+		}
+	}
+`;
+
+const RoomsGrid = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+
+	@media (max-width: 560px) {
+		gap: 6px;
+	}
 `;
 
 const ParkingLot = styled.div`
@@ -1366,27 +1411,33 @@ const ParkingLot = styled.div`
 	width: 75%;
 	text-align: center;
 	font-weight: bold;
+
+	@media (max-width: 560px) {
+		width: 100%;
+		padding: 20px;
+		border-radius: 8px;
+	}
 `;
 
 const RoomSquare = styled.div`
 	position: relative;
-	width: ${({ picked }) => (picked ? "40px" : "35px")};
-	height: ${({ picked }) => (picked ? "40px" : "35px")};
-	background-color: ${({ color, picked }) => (picked ? "#000" : color)};
+	width: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	height: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	background-color: ${({ $color, $picked }) => ($picked ? "#000" : $color)};
 	border: 1px solid #000;
-	color: ${({ picked, reserved }) =>
-		picked ? "lightgrey" : reserved ? "black" : "white"};
-	margin: 5px;
+	color: ${({ $picked, $reserved }) =>
+		$picked ? "lightgrey" : $reserved ? "black" : "white"};
+	margin: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: ${({ picked }) => (picked ? "0.9rem" : "0.7rem")};
-	cursor: ${({ clickable }) => (clickable ? "pointer" : "default")};
+	font-size: ${({ $picked }) => ($picked ? "0.9rem" : "0.7rem")};
+	cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
 	transform-origin: center;
 	will-change: transform;
-	filter: ${({ inactive }) => (inactive ? "grayscale(1)" : "none")};
-	box-shadow: ${({ reserved }) =>
-		reserved ? "0 0 4px rgba(0, 0, 0, 0.2)" : "none"};
+	filter: ${({ $inactive }) => ($inactive ? "grayscale(1)" : "none")};
+	box-shadow: ${({ $reserved }) =>
+		$reserved ? "0 0 4px rgba(0, 0, 0, 0.2)" : "none"};
 	transition:
 		width 1s,
 		height 1s,
@@ -1400,8 +1451,14 @@ const RoomSquare = styled.div`
 		animation: none;
 	}
 
-	${({ reserved }) =>
-		reserved &&
+	@media (max-width: 560px) {
+		width: ${({ $picked }) => ($picked ? "34px" : "32px")};
+		height: ${({ $picked }) => ($picked ? "34px" : "32px")};
+		font-size: ${({ $picked }) => ($picked ? "0.72rem" : "0.62rem")};
+	}
+
+	${({ $reserved }) =>
+		$reserved &&
 		`
     &:after {
       content: '';
@@ -1501,15 +1558,15 @@ const CheckoutBadge = styled.div`
 const BedSquare = styled.div`
 	width: 70px;
 	height: 100px;
-	background-color: ${({ booked }) => (booked ? "#e7e7e7" : "#f0f0f0")};
+	background-color: ${({ $booked }) => ($booked ? "#e7e7e7" : "#f0f0f0")};
 	border: 1px solid #000;
-	color: ${({ booked }) => (booked ? "black" : "black")};
+	color: ${({ $booked }) => ($booked ? "black" : "black")};
 	margin: 5px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 0.9rem;
-	cursor: ${({ clickable }) => (clickable ? "pointer" : "default")};
+	cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
 	transition: all 0.3s;
 	margin: auto;
 	position: relative;
@@ -1518,12 +1575,12 @@ const BedSquare = styled.div`
 	${resolvePulseAnimation};
 
 	&:hover {
-		background-color: ${({ booked, clickable }) =>
-			clickable ? (booked ? "#e1e1e1" : "#dcdcdc") : "#f0f0f0"};
+		background-color: ${({ $booked, $clickable }) =>
+			$clickable ? ($booked ? "#e1e1e1" : "#dcdcdc") : "#f0f0f0"};
 	}
 
-	${({ booked }) =>
-		booked &&
+	${({ $booked }) =>
+		$booked &&
 		`
         &:after {
             content: '';

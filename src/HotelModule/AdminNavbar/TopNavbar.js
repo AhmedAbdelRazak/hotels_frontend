@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import styled from "styled-components";
-import { Menu, Dropdown } from "antd";
+import { Dropdown } from "antd";
 import {
 	UserOutlined,
 	LogoutOutlined,
@@ -18,6 +18,7 @@ import DigitalClock from "./DigitalClock";
 import { isAuthenticated, signout } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
 import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
+import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
 
 const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -37,13 +38,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 	const hotelId = selectedHotel._id;
 
-	const userId =
-		user.role === 2000
-			? user._id
-			: selectedHotel.belongsTo?._id || selectedHotel.belongsTo;
+	const isOwnerManager = user.role === 2000 && !user.belongsToId;
+	const userId = isOwnerManager
+		? user._id
+		: selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId;
 
 	// eslint-disable-next-line
-	const userDetails = user.role === 2000 ? user : selectedHotel.belongsTo;
+	const userDetails = isOwnerManager ? user : selectedHotel.belongsTo;
 
 	// Detect whether path contains both ids to show hotel name
 	useEffect(() => {
@@ -70,10 +71,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const handleMenuClick = ({ key }) => {
 		switch (key) {
 			case "profile":
-				if (user.role === 1000) {
+				if (user.role === 1000 || isSuperAdminUser(user)) {
 					history.push("/admin/dashboard"); // admin redirect (as-is)
 				} else {
-					openSelfUpdateModal(); // non-admin modal
+					history.push("/hotel-management/main-dashboard");
 				}
 				break;
 			case "inbox":
@@ -92,24 +93,32 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	};
 
 	// Build profile dropdown menu (hide "Update Account" for admin)
-	const profileMenu = (
-		<Menu onClick={handleMenuClick}>
-			<Menu.Item key='profile' icon={<UserOutlined />}>
-				Profile
-			</Menu.Item>
-			<Menu.Item key='inbox' icon={<MailOutlined />}>
-				Inbox
-			</Menu.Item>
-			{user.role !== 1000 && (
-				<Menu.Item key='update' icon={<UserOutlined />}>
-					Update Account
-				</Menu.Item>
-			)}
-			<Menu.Item key='logout' icon={<LogoutOutlined />}>
-				Logout
-			</Menu.Item>
-		</Menu>
-	);
+	const profileMenuItems = [
+		{
+			key: "profile",
+			icon: <UserOutlined />,
+			label: "Profile",
+		},
+		{
+			key: "inbox",
+			icon: <MailOutlined />,
+			label: "Inbox",
+		},
+		...(user.role !== 1000
+			? [
+					{
+						key: "update",
+						icon: <UserOutlined />,
+						label: "Update Account",
+					},
+			  ]
+			: []),
+		{
+			key: "logout",
+			icon: <LogoutOutlined />,
+			label: "Logout",
+		},
+	];
 
 	// Room types dropdown
 	const handleRoomClick = ({ key }) => {
@@ -117,28 +126,29 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		window.location.href = `/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
 	};
 
-	const menuRoomTypes = (
-		<Menu onClick={handleRoomClick}>
-			{roomCountDetails && roomCountDetails.length > 0 ? (
-				roomCountDetails.map((room, index) => {
-					const key =
-						room?._id ||
-						room?.roomType ||
-						room?.displayName ||
-						String(index);
-					return <Menu.Item key={key}>{room.displayName}</Menu.Item>;
-				})
-			) : (
-				<Menu.Item disabled>No rooms available</Menu.Item>
-			)}
-		</Menu>
-	);
+	const roomTypeMenuItems =
+		roomCountDetails && roomCountDetails.length > 0
+			? roomCountDetails.map((room, index) => ({
+					key: room?._id || room?.roomType || room?.displayName || String(index),
+					label: room.displayName,
+			  }))
+			: [
+					{
+						key: "no-rooms",
+						label: "No rooms available",
+						disabled: true,
+					},
+			  ];
 
 	// Settings & chat
 	const handleSettingsClick = () => {
 		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userIdLocal = user._id;
+		const userIdLocal =
+			selectedHotelLocal.belongsTo?._id ||
+			selectedHotelLocal.belongsTo ||
+			user.belongsToId ||
+			user._id;
 		const hotelIdLocal = selectedHotelLocal._id;
 
 		const ok =
@@ -153,7 +163,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const handleChatClick = () => {
 		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userIdLocal = user._id;
+		const userIdLocal =
+			selectedHotelLocal.belongsTo?._id ||
+			selectedHotelLocal.belongsTo ||
+			user.belongsToId ||
+			user._id;
 		const hotelIdLocal = selectedHotelLocal._id;
 
 		const ok =
@@ -163,6 +177,14 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		if (ok) {
 			window.location.href = `/hotel-management/customer-service/${userIdLocal}/${hotelIdLocal}`;
 		}
+	};
+
+	const toggleLanguage = () => {
+		languageToggle(chosenLanguage === "English" ? "Arabic" : "English");
+	};
+
+	const handleNotificationsClick = () => {
+		// Notification center placeholder. The button is ready for the next workflow.
 	};
 
 	// Target user for modal (self)
@@ -175,9 +197,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		user.role === 1000 ? "Superadmin" : user.role === 2000 ? "Owner" : "User";
 
 	return (
-		<NavbarWrapper isArabic={chosenLanguage === "Arabic"}>
+		<NavbarWrapper $isArabic={chosenLanguage === "Arabic"}>
 			<LeftSection>
-				<Logo show={collapsed} isArabic2={chosenLanguage === "Arabic"}>
+				<Logo $show={collapsed} $isArabic={chosenLanguage === "Arabic"}>
 					<img
 						src='https://res.cloudinary.com/infiniteapps/image/upload/v1732323307/janat/1732323307087.png'
 						alt='jannatbooking'
@@ -197,15 +219,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				<Icons>
 					<IconWrapper
 						style={{ width: "25%" }}
-						onClick={() =>
-							languageToggle(
-								chosenLanguage === "English" ? "Arabic" : "English"
-							)
-						}
+						onClick={toggleLanguage}
+						role='button'
+						aria-label='Toggle language'
 					>
 						<GlobalOutlined className='mx-2' />
 						<LanguageText>
-							{chosenLanguage === "English" ? "عربي" : "En"}
+							{chosenLanguage === "English" ? "AR" : "En"}
 						</LanguageText>
 					</IconWrapper>
 
@@ -215,7 +235,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 					<IconWrapper style={{ width: "25%" }}>
 						<Dropdown
-							overlay={menuRoomTypes}
+							menu={{
+								items: roomTypeMenuItems,
+								onClick: handleRoomClick,
+							}}
 							trigger={["click"]}
 							open={roomTypesDropdown}
 							onOpenChange={(flag) => setRoomTypesDropdown(flag)}
@@ -238,7 +261,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						<NotificationDot2 />
 					</IconWrapper>
 
-					<IconWrapper>
+					<IconWrapper
+						onClick={handleNotificationsClick}
+						role='button'
+						aria-label={
+							chosenLanguage === "Arabic" ? "الإشعارات" : "Notifications"
+						}
+					>
 						<BellOutlined />
 						<NotificationDot />
 					</IconWrapper>
@@ -251,7 +280,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 				<ProfileMenu>
 					<Dropdown
-						overlay={profileMenu}
+						menu={{
+							items: profileMenuItems,
+							onClick: handleMenuClick,
+						}}
 						trigger={["click"]}
 						open={profileMenuOpen}
 						onOpenChange={(flag) => setProfileMenuOpen(flag)}
@@ -272,6 +304,27 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					</Dropdown>
 				</ProfileMenu>
 			</RightSection>
+
+			<MobileActions>
+				<MobileTopButton
+					type='button'
+					onClick={toggleLanguage}
+					aria-label='Toggle language'
+				>
+					<GlobalOutlined />
+					<span>{chosenLanguage === "English" ? "AR" : "En"}</span>
+				</MobileTopButton>
+				<MobileTopButton
+					type='button'
+					onClick={handleNotificationsClick}
+					aria-label={
+						chosenLanguage === "Arabic" ? "الإشعارات" : "Notifications"
+					}
+				>
+					<BellOutlined />
+					<NotificationDot />
+				</MobileTopButton>
+			</MobileActions>
 
 			{/* ===== Account Update Modal (self) for non-admins ===== */}
 			{user.role !== 1000 && (
@@ -309,45 +362,131 @@ const NavbarWrapper = styled.div`
 	padding: 0 20px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	z-index: 1000;
-	direction: ${(props) => (props.isArabic ? "rtl" : "")} !important;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "")} !important;
+	min-width: 0;
+	overflow: hidden;
+
+	@media (max-width: 760px) {
+		direction: ltr !important;
+		gap: 10px;
+		justify-content: flex-start;
+		padding: ${(props) =>
+			props.$isArabic ? "0 62px 0 10px" : "0 10px 0 62px"};
+	}
 `;
 
 const LeftSection = styled.div`
 	display: flex;
 	align-items: center;
+	flex: 0 0 auto;
+	min-width: 0;
 `;
 
 const Logo = styled.div`
 	display: flex;
 	align-items: center;
 	margin-right: ${(props) =>
-		props.show && props.isArabic2 ? "50px" : ""} !important;
+		props.$show && props.$isArabic ? "50px" : ""} !important;
 
 	img {
 		width: 100% !important;
 		margin: auto 20px;
 	}
+
+	@media (max-width: 980px) {
+		img {
+			width: 120px !important;
+			margin: auto 8px;
+		}
+	}
+
+	@media (max-width: 760px) {
+		display: none;
+	}
 `;
 
 const DigitalClockWrapper = styled.div`
 	margin-left: 20px;
+
+	@media (max-width: 760px) {
+		margin-left: 0;
+	}
 `;
 
 const MiddleSection = styled.div`
 	flex: 1;
+	min-width: 0;
 	text-align: center;
 	text-transform: capitalize;
+
+	@media (max-width: 760px) {
+		order: -1;
+		text-align: start;
+	}
 `;
 
 const HotelName = styled.span`
 	font-weight: bold;
 	color: white;
 	font-size: 24px;
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	@media (max-width: 760px) {
+		font-size: 16px;
+		line-height: 1.2;
+	}
 `;
 
 const RightSection = styled.div`
 	display: flex;
 	align-items: center;
+	flex: 0 0 auto;
+	min-width: 0;
+
+	@media (max-width: 760px) {
+		display: none;
+	}
+`;
+
+const MobileActions = styled.div`
+	display: none;
+
+	@media (max-width: 760px) {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex: 0 0 auto;
+	}
+`;
+
+const MobileTopButton = styled.button`
+	position: relative;
+	min-width: 36px;
+	height: 34px;
+	padding: 0 9px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	background: #0d6efd;
+	color: #fff;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	font-weight: 800;
+	line-height: 1;
+
+	svg {
+		font-size: 16px;
+		color: #fff;
+	}
+
+	span {
+		font-size: 0.76rem;
+	}
 `;
 
 const Icons = styled.div`

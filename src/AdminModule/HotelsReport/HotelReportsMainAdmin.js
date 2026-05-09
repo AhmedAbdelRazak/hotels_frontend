@@ -10,23 +10,27 @@ import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const HotelReportsMainAdmin = ({ chosenLanguage }) => {
+	const { user, token } = isAuthenticated() || {};
+	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
-	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [isPasswordVerified, setIsPasswordVerified] = useState(
+		isConfiguredSuperAdmin
+	);
 	const [activeTab, setActiveTab] = useState("reservations");
 	const [getUser, setGetUser] = useState(null);
 	const accessList = useMemo(() => {
 		return Array.isArray(getUser?.accessTo) ? getUser.accessTo : [];
 	}, [getUser?.accessTo]);
 	const isSuperAdmin =
-		!!getUser && (accessList.length === 0 || accessList.includes("all"));
-
-	const { user, token } = isAuthenticated() || {};
+		isConfiguredSuperAdmin ||
+		isSuperAdminUser(getUser) ||
+		(!!getUser && (accessList.length === 0 || accessList.includes("all")));
 	const location = useLocation();
 	const history = useHistory();
 
@@ -60,7 +64,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 		const accessTo = accessList;
 
-		const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
+		const isSuperUser = isConfiguredSuperAdmin || isSuperAdminUser(getUser);
 
 		// If user has HotelReports in access, or is super/admin, skip password
 		if (accessTo.includes("HotelReports") || isSuperUser || isSuperAdmin) {
@@ -86,7 +90,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 				history.push("/");
 				break;
 		}
-	}, [accessList, getUser, history, isSuperAdmin]);
+	}, [accessList, getUser, history, isConfiguredSuperAdmin, isSuperAdmin]);
 
 	/* ------------------ 3) Init & localStorage ------------------ */
 	useEffect(() => {
@@ -100,6 +104,14 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	}, []);
 
 	useEffect(() => {
+		if (isConfiguredSuperAdmin) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			return;
+		}
+
+		if (!getUser) return;
+
 		const adminReportsPasswordVerified =
 			localStorage.getItem("ReportsVerified");
 		if (adminReportsPasswordVerified || (getUser && isSuperAdmin)) {
@@ -108,7 +120,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [getUser, isSuperAdmin]);
+	}, [getUser, isConfiguredSuperAdmin, isSuperAdmin]);
 
 	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {
@@ -145,28 +157,30 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 			show={collapsed}
 		>
 			{/* Password Modal */}
-			<Modal
-				title='Enter Password'
-				open={isModalVisible}
-				footer={null}
-				closable={false}
-			>
-				<Input.Password
-					placeholder='Enter password'
-					value={password}
-					onChange={(e) => setPassword(e.target.value)}
-					iconRender={(visible) =>
-						visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-					}
-				/>
-				<Button
-					type='primary'
-					style={{ marginTop: "10px", width: "100%" }}
-					onClick={handlePasswordVerification}
+			{!isConfiguredSuperAdmin && (
+				<Modal
+					title='Enter Password'
+					open={isModalVisible}
+					footer={null}
+					closable={false}
 				>
-					Verify Password
-				</Button>
-			</Modal>
+					<Input.Password
+						placeholder='Enter password'
+						value={password}
+						onChange={(e) => setPassword(e.target.value)}
+						iconRender={(visible) =>
+							visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
+						}
+					/>
+					<Button
+						type='primary'
+						style={{ marginTop: "10px", width: "100%" }}
+						onClick={handlePasswordVerification}
+					>
+						Verify Password
+					</Button>
+				</Modal>
+			)}
 
 			{/* Main Content */}
 			{isPasswordVerified && (

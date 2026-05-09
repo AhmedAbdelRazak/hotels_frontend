@@ -303,8 +303,8 @@ const HotelsInventoryMap = () => {
 	const { user, token } = isAuthenticated() || {};
 
 	const supportsHijri =
-		typeof moment.fn?.iMonth === "function" &&
-		typeof moment.fn?.iYear === "function";
+		typeof moment?.fn?.iMonth === "function" &&
+		typeof moment?.fn?.iYear === "function";
 
 	const nowHijri = supportsHijri ? moment() : null;
 	const defaultHijriMonth = supportsHijri ? nowHijri.iMonth() : 0;
@@ -1742,7 +1742,7 @@ const HotelsInventoryMap = () => {
 						}}
 					>
 						<Option value='gregorian'>Gregorian</Option>
-						<Option value='hijri' disabled={!moment.fn?.iMonth}>
+					<Option value='hijri' disabled={!moment?.fn?.iMonth}>
 							Hijri
 						</Option>
 					</Select>
@@ -1751,7 +1751,7 @@ const HotelsInventoryMap = () => {
 				<div className='control month-picker'>
 					<label>{calendarType === "hijri" ? "Hijri Month" : "Month"}</label>
 
-					{calendarType === "hijri" && moment.fn?.iMonth ? (
+					{calendarType === "hijri" && moment?.fn?.iMonth ? (
 						<div className='hijri-controls'>
 							<div className='hijri-row'>
 								<Select

@@ -1144,7 +1144,7 @@ const HotelOverviewReservation = ({
 	};
 
 	return (
-		<HotelOverviewWrapper fixIt={fixIt}>
+		<HotelOverviewWrapper $fixIt={fixIt}>
 			<HotelMapFilters
 				chosenLanguage={chosenLanguage}
 				distinctRoomTypesWithColors={distinctRoomTypesWithColors}
@@ -1162,7 +1162,7 @@ const HotelOverviewReservation = ({
 					<FloorsContainer>
 						{selectedFloor === null
 							? floorsDesc.map((floor, index) => (
-									<Floor key={index} delay={index * 0.3}>
+									<Floor key={index} $delay={index * 0.3}>
 										<h2
 											className='mb-4'
 											style={{
@@ -1173,7 +1173,7 @@ const HotelOverviewReservation = ({
 										>
 											{chosenLanguage === "Arabic" ? "الطابق" : "Floor"} {floor}
 										</h2>
-										<div style={{ display: "flex", flexWrap: "wrap" }}>
+										<RoomsGrid>
 											{filteredRooms &&
 												filteredRooms
 													.filter((room) => room.floor === floor)
@@ -1262,9 +1262,9 @@ const HotelOverviewReservation = ({
 															>
 																<RoomSquare
 																	key={roomKey}
-																	color={roomInfo.color}
-																	picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
-																	reserved={isBooked}
+																	$color={roomInfo.color}
+																	$picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
+																	$reserved={isBooked}
 																	style={{
 																		cursor: isBooked
 																			? "not-allowed"
@@ -1285,13 +1285,13 @@ const HotelOverviewReservation = ({
 															</Tooltip>
 														);
 													})}
-										</div>
+										</RoomsGrid>
 									</Floor>
 							  ))
 							: floorsDesc
 									.filter((floor) => floor === selectedFloor)
 									.map((floor, index) => (
-										<Floor key={index} delay={index * 0.3}>
+										<Floor key={index} $delay={index * 0.3}>
 											<h2
 												className='mb-4'
 												style={{
@@ -1303,7 +1303,7 @@ const HotelOverviewReservation = ({
 												{chosenLanguage === "Arabic" ? "الطابق" : "Floor"}{" "}
 												{floor}
 											</h2>
-											<div style={{ display: "flex", flexWrap: "wrap" }}>
+											<RoomsGrid>
 												{filteredRooms &&
 													filteredRooms
 														.filter((room) => room.floor === floor)
@@ -1404,9 +1404,9 @@ const HotelOverviewReservation = ({
 																>
 																	<RoomSquare
 																		key={roomKey}
-																		color={roomInfo.color}
-																		picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
-																		reserved={isBooked}
+																		$color={roomInfo.color}
+																		$picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
+																		$reserved={isBooked}
 																		style={{
 																			cursor: isBooked
 																				? "not-allowed"
@@ -1427,7 +1427,7 @@ const HotelOverviewReservation = ({
 																</Tooltip>
 															);
 														})}
-											</div>
+											</RoomsGrid>
 										</Floor>
 									))}
 						{parkingLot && <ParkingLot>Parking Lot</ParkingLot>}
@@ -1544,6 +1544,7 @@ const HotelOverviewReservation = ({
 								columns={columns}
 								rowKey='date'
 								pagination={false}
+								scroll={{ x: true }}
 							/>
 						</div>
 
@@ -1642,8 +1643,8 @@ const HotelOverviewReservation = ({
 								<BedSquare
 									key={index}
 									onClick={() => handleBedSelection(bed)}
-									selected={selectedBeds.includes(bed)}
-									booked={bookedBeds.includes(bed)}
+									$selected={selectedBeds.includes(bed)}
+									$booked={bookedBeds.includes(bed)}
 								>
 									{bed}
 								</BedSquare>
@@ -1677,10 +1678,15 @@ const HotelOverviewWrapper = styled.div`
 	.canvas-grid {
 		display: grid;
 		grid-template-columns: 1fr;
+		min-width: 0;
 	}
 
 	.colors-grid {
 		display: none;
+	}
+
+	@media (max-width: 760px) {
+		margin-top: 18px;
 	}
 `;
 
@@ -1688,21 +1694,53 @@ const FloorsContainer = styled.div`
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	width: 100%;
+	min-width: 0;
 `;
 
 const Floor = styled.div`
-	margin: 10px;
-	padding: 30px;
-	background-color: rgba(237, 237, 237, 0.3);
-	border: 1px solid rgba(237, 237, 237, 1);
+	margin: 10px 0;
+	padding: clamp(18px, 2.4vw, 30px);
+	background: #f8fafc;
+	border: 1px solid #e6edf5;
+	border-radius: 8px;
 	width: 100%;
 	text-align: center;
 	font-weight: bold;
 	cursor: pointer;
 	animation: ${fadeIn} 0.5s ease forwards;
-	animation-delay: ${({ delay }) => delay}s;
+	animation-delay: ${({ $delay }) => $delay}s;
 	opacity: 0;
 	font-size: 1.1rem;
+	overflow: hidden;
+
+	> h2 {
+		margin-bottom: 18px !important;
+	}
+
+	@media (max-width: 560px) {
+		margin: 8px 0;
+		padding: 16px 10px;
+
+		> h2 {
+			font-size: 1.1rem !important;
+			margin-bottom: 14px !important;
+		}
+	}
+`;
+
+const RoomsGrid = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+
+	@media (max-width: 560px) {
+		gap: 6px;
+	}
 `;
 
 const ParkingLot = styled.div`
@@ -1713,30 +1751,53 @@ const ParkingLot = styled.div`
 	width: 75%;
 	text-align: center;
 	font-weight: bold;
+
+	@media (max-width: 560px) {
+		width: 100%;
+		padding: 20px;
+		border-radius: 8px;
+	}
 `;
 
 const RoomSquare = styled.div`
 	position: relative;
-	width: ${({ picked }) => (picked ? "40px" : "35px")};
-	height: ${({ picked }) => (picked ? "40px" : "35px")};
-	background-color: ${({ color, picked }) => (picked ? "#000" : color)};
-	border: 1px solid #000;
-	color: ${({ picked, reserved }) =>
-		picked ? "lightgrey" : reserved ? "black" : "white"};
-	margin: 5px;
+	width: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	height: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	background-color: ${({ $color, $picked }) => ($picked ? "#000" : $color)};
+	border: 1px solid ${({ $picked }) => ($picked ? "#22c55e" : "#0f172a")};
+	border-radius: 4px;
+	color: ${({ $picked, $reserved }) =>
+		$picked ? "lightgrey" : $reserved ? "black" : "white"};
+	margin: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: ${({ picked }) => (picked ? "0.9rem" : "0.7rem")};
-	cursor: ${({ reserved }) => (reserved ? "not-allowed" : "pointer")};
+	font-size: ${({ $picked }) => ($picked ? "0.9rem" : "0.7rem")};
+	font-weight: 900;
+	cursor: ${({ $reserved }) => ($reserved ? "not-allowed" : "pointer")};
+	touch-action: manipulation;
+	box-shadow: ${({ $picked }) =>
+		$picked ? "0 0 0 3px rgba(34, 197, 94, 0.22)" : "none"};
 	transition:
 		width 1s,
 		height 1s,
 		background-color 1s,
-		color 1s;
+		color 1s,
+		box-shadow 0.2s ease,
+		transform 0.2s ease;
 
-	${({ reserved }) =>
-		reserved &&
+	&:hover {
+		transform: translateY(-1px);
+	}
+
+	@media (max-width: 560px) {
+		width: ${({ $picked }) => ($picked ? "36px" : "34px")};
+		height: ${({ $picked }) => ($picked ? "36px" : "34px")};
+		font-size: ${({ $picked }) => ($picked ? "0.72rem" : "0.62rem")};
+	}
+
+	${({ $reserved }) =>
+		$reserved &&
 		`
     &:after {
       content: '';
@@ -1760,28 +1821,28 @@ const RoomSquare = styled.div`
 const BedSquare = styled.div`
 	width: 70px;
 	height: 100px;
-	background-color: ${({ selected, booked }) =>
-		selected ? "darkgreen" : booked ? "#e7e7e7" : "#f0f0f0"};
+	background-color: ${({ $selected, $booked }) =>
+		$selected ? "darkgreen" : $booked ? "#e7e7e7" : "#f0f0f0"};
 	border: 1px solid #000;
-	color: ${({ selected, booked }) =>
-		selected ? "white" : booked ? "black" : "black"};
+	color: ${({ $selected, $booked }) =>
+		$selected ? "white" : $booked ? "black" : "black"};
 	margin: 5px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 0.9rem;
-	cursor: ${({ booked }) => (booked ? "not-allowed" : "pointer")};
+	cursor: ${({ $booked }) => ($booked ? "not-allowed" : "pointer")};
 	transition: all 0.3s;
 	margin: auto;
 	position: relative;
 
 	&:hover {
-		background-color: ${({ selected, booked }) =>
-			selected ? "darkgreen" : booked ? "#e7e7e7" : "#dcdcdc"};
+		background-color: ${({ $selected, $booked }) =>
+			$selected ? "darkgreen" : $booked ? "#e7e7e7" : "#dcdcdc"};
 	}
 
-	${({ booked }) =>
-		booked &&
+	${({ $booked }) =>
+		$booked &&
 		`
         &:after {
             content: '';

@@ -33,7 +33,7 @@ const breakdownKeys = [
 	"paid_online_via_link",
 	"paid_at_hotel_cash",
 	"paid_at_hotel_card",
-	"paid_to_zad",
+	"paid_to_hotel",
 	"paid_online_jannatbooking",
 	"paid_online_other_platforms",
 	"paid_online_via_instapay",
@@ -152,7 +152,9 @@ const PaidReportHotel = ({ collapsed = false }) => {
 				paid_at_hotel_card: isArabic
 					? "مدفوع في الفندق (بطاقة)"
 					: "Paid at Hotel (Card)",
-				paid_to_zad: isArabic ? "مدفوع إلى زاد" : "Paid to ZAD",
+				paid_to_hotel: isArabic
+					? "\u0645\u062f\u0641\u0648\u0639 \u0625\u0644\u0649 \u0627\u0644\u0641\u0646\u062f\u0642"
+					: "Paid To Hotel",
 				paid_online_jannatbooking: isArabic
 					? "مدفوع أونلاين (جنات بوكينغ)"
 					: "Paid Online (Jannat Booking)",

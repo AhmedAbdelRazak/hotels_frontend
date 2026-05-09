@@ -1,6 +1,72 @@
 import React from "react";
 import styled from "styled-components";
 
+const roleOptions = [
+	{
+		value: "reception",
+		en: "Reception",
+		ar: "موظف الاستقبال",
+	},
+	{
+		value: "housekeepingmanager",
+		en: "Housekeeping Manager",
+		ar: "مدير النظافة",
+	},
+	{
+		value: "housekeeping",
+		en: "Housekeeping Staff",
+		ar: "طاقم النظافة",
+	},
+	{
+		value: "hotelmanager",
+		en: "Hotel Manager",
+		ar: "مدير الفندق",
+	},
+	{
+		value: "finance",
+		en: "Finance",
+		ar: "المالية",
+	},
+];
+
+const copy = {
+	Arabic: {
+		name: "اسم الموظف",
+		email: "البريد الإلكتروني",
+		emailHint: "اختياري، ويمكن للموظف تسجيل الدخول برقم الهاتف.",
+		phone: "رقم الهاتف",
+		role: "القسم",
+		password: "كلمة المرور",
+		password2: "تأكيد كلمة المرور",
+		required: "مطلوب",
+		optional: "اختياري",
+		selectRole: "اختر القسم",
+		submit: "تسجيل الموظف",
+	},
+	English: {
+		name: "Staff Name",
+		email: "Email Address",
+		emailHint: "Optional. The staff member can sign in with their phone number.",
+		phone: "Phone Number",
+		role: "Department",
+		password: "Password",
+		password2: "Confirm Password",
+		required: "Required",
+		optional: "Optional",
+		selectRole: "Select department",
+		submit: "Register Staff",
+	},
+};
+
+const FieldLabel = ({ children, required, optional, labels }) => (
+	<label>
+		<span>{children}</span>
+		<small className={required ? "required" : "optional"}>
+			{required ? labels.required : optional ? labels.optional : ""}
+		</small>
+	</label>
+);
+
 const ZSignupForm = ({
 	chosenLanguage,
 	clickSubmit,
@@ -9,253 +75,99 @@ const ZSignupForm = ({
 	roleDescription,
 	setRoleDescription,
 }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = isArabic ? copy.Arabic : copy.English;
+
 	return (
-		<ZSignupFormWrapper isArabic={chosenLanguage === "Arabic"}>
-			{chosenLanguage === "Arabic" ? (
-				<form onSubmit={clickSubmit}>
-					<div className='row my-5'>
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='name' style={{ fontWeight: "bold" }}>
-										اسم المستخدم
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='name'
-									value={values && values.name}
-									onChange={handleChange("name")}
-									required
-								/>
-							</div>
-						</div>
+		<ZSignupFormWrapper $isArabic={isArabic}>
+			<form onSubmit={clickSubmit} className='staff-create-form'>
+				<div className='staff-field'>
+					<FieldLabel required labels={labels}>
+						{labels.name}
+					</FieldLabel>
+					<input
+						type='text'
+						name='name'
+						value={values?.name || ""}
+						onChange={handleChange("name")}
+						required
+					/>
+				</div>
 
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='email' style={{ fontWeight: "bold" }}>
-										البريد الإلكتروني
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='email'
-									value={values && values.email}
-									onChange={handleChange("email")}
-									required
-								/>
-							</div>
-						</div>
+				<div className='staff-field'>
+					<FieldLabel optional labels={labels}>
+						{labels.email}
+					</FieldLabel>
+					<input
+						type='email'
+						name='email'
+						value={values?.email || ""}
+						onChange={handleChange("email")}
+					/>
+					<p className='field-help'>{labels.emailHint}</p>
+				</div>
 
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='phone' style={{ fontWeight: "bold" }}>
-										رقم الهاتف
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='phone'
-									value={values && values.phone}
-									onChange={handleChange("phone")}
-									required
-								/>
-							</div>
-						</div>
+				<div className='staff-field'>
+					<FieldLabel required labels={labels}>
+						{labels.phone}
+					</FieldLabel>
+					<input
+						type='tel'
+						name='phone'
+						value={values?.phone || ""}
+						onChange={handleChange("phone")}
+						required
+					/>
+				</div>
 
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='role' style={{ fontWeight: "bold" }}>
-										القسم
-									</label>
-								</React.Fragment>
-								<select onChange={(e) => setRoleDescription(e.target.value)}>
-									<option value=''>Please Select</option>
-									<option value='reception'>Reception</option>
-									<option value='housekeepingmanager'>
-										House Keeping Manager
-									</option>
-									<option value='housekeeping'>House Keeping Staff</option>
-									<option value='hotelmanager'>Hotel Manager</option>
-									<option value='finance'>Finance</option>
-								</select>
-							</div>
-						</div>
+				<div className='staff-field'>
+					<FieldLabel required labels={labels}>
+						{labels.role}
+					</FieldLabel>
+					<select
+						value={roleDescription || ""}
+						onChange={(e) => setRoleDescription(e.target.value)}
+						required
+					>
+						<option value=''>{labels.selectRole}</option>
+						{roleOptions.map((option) => (
+							<option value={option.value} key={option.value}>
+								{isArabic ? option.ar : option.en}
+							</option>
+						))}
+					</select>
+				</div>
 
-						<div className='col-md-4'>
-							<div className='form-group ' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='password' style={{ fontWeight: "bold" }}>
-										كلمة المرور
-									</label>
-								</React.Fragment>
-								<input
-									type='password'
-									name='password'
-									value={values && values.password}
-									onChange={handleChange("password")}
-									required
-								/>
-							</div>
-						</div>
+				<div className='staff-field'>
+					<FieldLabel required labels={labels}>
+						{labels.password}
+					</FieldLabel>
+					<input
+						type='password'
+						name='password'
+						value={values?.password || ""}
+						onChange={handleChange("password")}
+						required
+					/>
+				</div>
 
-						<div className='col-md-4'>
-							<div
-								className='form-group'
-								style={{ marginTop: "10px", marginBottom: "10px" }}
-							>
-								<React.Fragment>
-									<label htmlFor='password2' style={{ fontWeight: "bold" }}>
-										تأكيد كلمة المرور
-									</label>
-								</React.Fragment>
-								<input
-									background='red'
-									type='password'
-									name='password2'
-									value={values && values.password2}
-									onChange={handleChange("password2")}
-									required
-								/>
-							</div>
-						</div>
-					</div>
+				<div className='staff-field'>
+					<FieldLabel required labels={labels}>
+						{labels.password2}
+					</FieldLabel>
+					<input
+						type='password'
+						name='password2'
+						value={values?.password2 || ""}
+						onChange={handleChange("password2")}
+						required
+					/>
+				</div>
 
-					<React.Fragment>
-						<input
-							type='submit'
-							value='تسجيل'
-							className='btn btn-primary w-75 btn-block mx-auto'
-							//onClick={sendEmail}
-						/>
-					</React.Fragment>
-				</form>
-			) : (
-				<form onSubmit={clickSubmit}>
-					<div className='row'>
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='name' style={{ fontWeight: "bold" }}>
-										User Name (Hotel Manager/ Owner)
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='name'
-									value={values && values.name}
-									onChange={handleChange("name")}
-									required
-								/>
-							</div>
-						</div>
-
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='email' style={{ fontWeight: "bold" }}>
-										Email Address
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='email'
-									value={values && values.email}
-									onChange={handleChange("email")}
-									required
-								/>
-							</div>
-						</div>
-
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='phone' style={{ fontWeight: "bold" }}>
-										Phone Number
-									</label>
-								</React.Fragment>
-								<input
-									type='text'
-									name='phone'
-									value={values && values.phone}
-									onChange={handleChange("phone")}
-									required
-								/>
-							</div>
-						</div>
-
-						<div className='col-md-4'>
-							<div className='form-group' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='role' style={{ fontWeight: "bold" }}>
-										Department
-									</label>
-								</React.Fragment>
-								<select>
-									<option value=''>Please Select</option>
-									<option value='reception'>Reception</option>
-									<option value='housekeepingmanager'>
-										House Keeping Manager
-									</option>
-									<option value='housekeeping'>House Keeping Staff</option>
-									<option value='hotelmanager'>Hotel Manager</option>
-								</select>
-							</div>
-						</div>
-
-						<div className='col-md-4'>
-							<div className='form-group ' style={{ marginTop: "10px" }}>
-								<React.Fragment>
-									<label htmlFor='password' style={{ fontWeight: "bold" }}>
-										Password
-									</label>
-								</React.Fragment>
-								<input
-									type='password'
-									name='password'
-									value={values && values.password}
-									onChange={handleChange("password")}
-									required
-								/>
-							</div>
-						</div>
-
-						<div className='col-md-4'>
-							<div
-								className='form-group'
-								style={{ marginTop: "10px", marginBottom: "10px" }}
-							>
-								<React.Fragment>
-									<label htmlFor='password2' style={{ fontWeight: "bold" }}>
-										{" "}
-										Confirm Password
-									</label>
-								</React.Fragment>
-								<input
-									background='red'
-									type='password'
-									name='password2'
-									value={values && values.password2}
-									onChange={handleChange("password2")}
-									required
-								/>
-							</div>
-						</div>
-					</div>
-
-					<React.Fragment>
-						<input
-							type='submit'
-							value='Register'
-							className='btn btn-primary w-75 btn-block mx-auto'
-							//onClick={sendEmail}
-						/>
-					</React.Fragment>
-				</form>
-			)}
+				<button type='submit' className='staff-submit'>
+					{labels.submit}
+				</button>
+			</form>
 		</ZSignupFormWrapper>
 	);
 };
@@ -263,37 +175,111 @@ const ZSignupForm = ({
 export default ZSignupForm;
 
 const ZSignupFormWrapper = styled.div`
-	text-align: ${(props) => (props.isArabic ? "right" : "")};
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 
-	input[type="text"],
-	input[type="email"],
-	input[type="password"],
-	input[type="date"],
-	select,
-	textarea {
+	.staff-create-form {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 14px 18px;
+		padding: 18px;
+		border: 1px solid #cfe5fb;
+		border-radius: 14px;
+		background: linear-gradient(135deg, #f8fbff, #eef7ff);
+	}
+
+	.staff-field {
+		min-width: 0;
+	}
+
+	label {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		margin-bottom: 6px;
+		color: #172033;
+		font-weight: 900;
+	}
+
+	label small {
+		flex: 0 0 auto;
+		padding: 2px 8px;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 900;
+	}
+
+	label small.required {
+		color: #b42318;
+		background: #fff1f0;
+		border: 1px solid #ffccc7;
+	}
+
+	label small.optional {
+		color: #075985;
+		background: #e0f2fe;
+		border: 1px solid #bae6fd;
+	}
+
+	input,
+	select {
 		display: block;
 		width: 100%;
-		padding: 0.5rem;
+		min-height: 44px;
+		padding: 0 12px;
 		font-size: 1rem;
-		border: 1px solid #ccc;
+		border: 1px solid #bfd8f2;
+		border-radius: 10px;
+		background: #ffffff;
+		color: #172033;
+		transition: border-color 0.2s ease, box-shadow 0.2s ease;
 	}
-	input[type="text"]:focus,
-	input[type="email"]:focus,
-	input[type="password"]:focus,
-	input[type="date"]:focus,
-	select:focus,
-	textarea:focus,
-	label:focus {
+
+	input:focus,
+	select:focus {
 		outline: none;
-		border: 1px solid var(--primaryColor);
-
-		box-shadow: 5px 8px 3px 0px rgba(0, 0, 0, 0.3);
-		transition: var(--mainTransition);
-		font-weight: bold;
+		border-color: #1476ef;
+		box-shadow: 0 0 0 3px rgba(20, 118, 239, 0.14);
 	}
 
-	.form-container {
-		margin-left: 20px;
-		margin-right: 20px;
+	.field-help {
+		margin: 6px 0 0;
+		color: #52657d;
+		font-size: 0.78rem;
+		font-weight: 700;
+		line-height: 1.45;
+	}
+
+	.staff-submit {
+		grid-column: 1 / -1;
+		justify-self: center;
+		width: min(100%, 420px);
+		min-height: 46px;
+		border: 0;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #0f6fe8, #1684f7);
+		color: #ffffff;
+		font-weight: 900;
+		letter-spacing: 0;
+		box-shadow: 0 10px 20px rgba(20, 118, 239, 0.2);
+	}
+
+	.staff-submit:hover {
+		background: linear-gradient(135deg, #0c5fc8, #1476ef);
+	}
+
+	@media (max-width: 1050px) {
+		.staff-create-form {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 620px) {
+		.staff-create-form {
+			grid-template-columns: 1fr;
+			gap: 12px;
+			padding: 12px;
+		}
 	}
 `;

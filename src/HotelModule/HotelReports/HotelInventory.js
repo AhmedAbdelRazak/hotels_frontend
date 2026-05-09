@@ -72,8 +72,8 @@ const hijriMonthsAr = [
 const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 	const { hotelId } = useParams();
 	const supportsHijri =
-		typeof moment.fn?.iMonth === "function" &&
-		typeof moment.fn?.iYear === "function";
+		typeof moment?.fn?.iMonth === "function" &&
+		typeof moment?.fn?.iYear === "function";
 
 	const nowHijri = supportsHijri ? moment() : null;
 	const defaultHijriMonth = supportsHijri ? nowHijri.iMonth() : 0;

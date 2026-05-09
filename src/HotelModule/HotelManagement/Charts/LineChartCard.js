@@ -4,6 +4,7 @@ import { Card } from "antd";
 import Chart from "react-apexcharts";
 
 const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
+	const isArabic = chosenLanguage === "Arabic";
 	const translations = {
 		English: {
 			title: "Check-in/Check-out Trend",
@@ -59,6 +60,18 @@ const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 
 	const totalCheckIn = checkInData.reduce((sum, value) => sum + value, 0);
 	const totalCheckOut = checkOutData.reduce((sum, value) => sum + value, 0);
+	const numberFormatter = new Intl.NumberFormat("en-US", {
+		maximumFractionDigits: 0,
+	});
+	const formatAxisDate = (value) => {
+		const text = String(value || "");
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+		return categories.length > 45 ? text.slice(5) : text;
+	};
+	const displaySubtitle =
+		categories.length > 8
+			? `${categories[0]} - ${categories[categories.length - 1]}`
+			: subtitle;
 
 	const chartOptions = {
 		chart: {
@@ -69,6 +82,23 @@ const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 		},
 		xaxis: {
 			categories,
+			tickAmount: categories.length > 14 ? 8 : undefined,
+			labels: {
+				rotate: categories.length > 10 ? -35 : 0,
+				hideOverlappingLabels: true,
+				trim: true,
+				formatter: formatAxisDate,
+				style: {
+					fontSize: "11px",
+				},
+			},
+			tooltip: { enabled: false },
+		},
+		yaxis: {
+			forceNiceScale: true,
+			labels: {
+				formatter: (value) => numberFormatter.format(value || 0),
+			},
 		},
 		stroke: {
 			curve: "smooth",
@@ -105,23 +135,23 @@ const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 	];
 
 	return (
-		<StyledCard>
+		<StyledCard dir={isArabic ? "rtl" : "ltr"}>
 			<CardHeader>
 				<HeaderContent>
 					<div>
 						<ChartTitle>{title}</ChartTitle>
-						<Subtitle>{subtitle}</Subtitle>
+						<Subtitle>{displaySubtitle}</Subtitle>
 					</div>
 					<Stats>
 						<StatItem>
 							<StatNumber className='mx-2'>
-								{totalCheckIn.toLocaleString()}
+								{numberFormatter.format(totalCheckIn)}
 							</StatNumber>{" "}
 							{checkIn}
 						</StatItem>
 						<StatItem>
 							<StatNumber className='mx-2'>
-								{totalCheckOut.toLocaleString()}
+								{numberFormatter.format(totalCheckOut)}
 							</StatNumber>{" "}
 							{checkOut}
 						</StatItem>
@@ -129,12 +159,12 @@ const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 				</HeaderContent>
 			</CardHeader>
 
-			<ChartWrapper>
+			<ChartWrapper dir='ltr'>
 				<Chart
 					options={chartOptions}
 					series={chartSeries}
 					type='area'
-					height={480} // Adjust height to match combined height of the charts on the right
+					height={360}
 				/>
 			</ChartWrapper>
 		</StyledCard>
@@ -144,30 +174,43 @@ const LineChartCard = ({ chosenLanguage, bookingLine = {} }) => {
 export default LineChartCard;
 
 const StyledCard = styled(Card)`
-	border-radius: 12px;
+	border-radius: 8px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-	padding: 0; // Remove extra padding
+	min-width: 0;
 	text-align: center;
+
+	.ant-card-body {
+		padding: 0;
+	}
 `;
 
 const CardHeader = styled.div`
 	padding: 20px; // Add padding for header
+	text-align: start;
 `;
 
 const HeaderContent = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	gap: 16px;
+
+	@media (max-width: 720px) {
+		align-items: flex-start;
+		flex-direction: column;
+	}
 `;
 
 const ChartTitle = styled.div`
 	font-size: 18px;
 	font-weight: bold;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
 `;
 
 const Subtitle = styled.div`
 	font-size: 14px;
-	text-align: center;
+	text-align: start;
 	color: #888;
 	margin-bottom: 8px;
 `;
@@ -176,21 +219,28 @@ const Stats = styled.div`
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
+	gap: 4px;
+
+	@media (max-width: 720px) {
+		align-items: flex-start;
+	}
 `;
 
 const StatItem = styled.div`
 	display: flex;
 	align-items: center;
 	color: #888;
+	flex-wrap: wrap;
 `;
 
 const StatNumber = styled.span`
 	font-size: 18px;
 	color: #000;
 	font-weight: bold;
-	margin-right: 4px;
+	margin-inline-end: 4px;
 `;
 
 const ChartWrapper = styled.div`
 	width: 100%; // Ensure chart takes full width
+	min-width: 0;
 `;

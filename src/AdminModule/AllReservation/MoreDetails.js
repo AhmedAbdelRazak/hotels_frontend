@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useEffect,
   useState,
   useRef,
@@ -298,8 +298,8 @@ const paymentBreakdownFields = [
     group: "offline",
   },
   {
-    key: "paid_to_zad",
-    label: "Paid to ZAD",
+    key: "paid_to_hotel",
+    label: "Paid To Hotel",
     group: "online",
   },
   {
@@ -324,7 +324,7 @@ const buildPaymentBreakdown = (breakdown) => ({
   paid_no_show: safeNumber(breakdown?.paid_no_show),
   paid_at_hotel_cash: safeNumber(breakdown?.paid_at_hotel_cash),
   paid_at_hotel_card: safeNumber(breakdown?.paid_at_hotel_card),
-  paid_to_zad: safeNumber(breakdown?.paid_to_zad),
+  paid_to_hotel: safeNumber(breakdown?.paid_to_hotel ?? breakdown?.paid_to_zad),
   paid_online_jannatbooking: safeNumber(breakdown?.paid_online_jannatbooking),
   paid_online_other_platforms: safeNumber(
     breakdown?.paid_online_other_platforms,

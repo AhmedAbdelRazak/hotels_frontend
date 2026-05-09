@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 // eslint-disable-next-line
 import { Link, useHistory, useLocation } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
@@ -92,33 +92,69 @@ const NewReservationMain = () => {
 	});
 
 	const { user, token } = isAuthenticated();
+	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
+	const canShowReservationTab = (tab) =>
+		!limitedOrderTakerAccount || ["newReservation", "list"].includes(tab);
+	const orderTakerSnapshot = {
+		_id: user?._id || "",
+		name: user?.name || user?.email || "",
+		email: user?.email || "",
+		role: user?.role || "",
+		roleDescription: user?.roleDescription || "",
+	};
 	const selectedHotelLocalStorage =
 		JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
-	const { languageToggle, chosenLanguage } = useCartContext();
+	const { chosenLanguage } = useCartContext();
 
 	const history = useHistory();
 	const location = useLocation();
 	const lastAutoSearchRef = useRef("");
 
 	useEffect(() => {
-		if (window.location.search.includes("reserveARoom")) {
-			setActiveTab("reserveARoom");
-		} else if (window.location.search.includes("newReservation")) {
-			setActiveTab("newReservation");
-		} else if (window.location.search.includes("list")) {
-			setActiveTab("list");
-		} else if (window.location.search.includes("inventory")) {
-			setActiveTab("inventory");
-		} else if (window.location.search.includes("heatmap")) {
-			setActiveTab("heatmap");
-		} else if (window.location.search.includes("housingreport")) {
-			setActiveTab("housingreport");
-		} else {
-			setActiveTab("list");
+		if (
+			limitedOrderTakerAccount &&
+			!isOrderTakerReservationSearchAllowed(location.search)
+		) {
+			if (location.search !== "?newReservation") {
+				history.replace({
+					pathname: location.pathname,
+					search: "?newReservation",
+				});
+			}
+			if (activeTab !== "newReservation") {
+				setActiveTab("newReservation");
+			}
+			return;
 		}
-		// eslint-disable-next-line
-	}, [activeTab]);
+
+		const nextTab = getReservationTabFromSearch(location.search);
+		if (
+			limitedOrderTakerAccount &&
+			!["newReservation", "list"].includes(nextTab)
+		) {
+			if (location.search !== "?newReservation") {
+				history.replace({
+					pathname: location.pathname,
+					search: "?newReservation",
+				});
+			}
+			if (activeTab !== "newReservation") {
+				setActiveTab("newReservation");
+			}
+			return;
+		}
+
+		if (activeTab !== nextTab) {
+			setActiveTab(nextTab);
+		}
+	}, [
+		activeTab,
+		history,
+		limitedOrderTakerAccount,
+		location.pathname,
+		location.search,
+	]);
 
 	useEffect(() => {
 		const confirmationFromUrl = getConfirmationFromSearch(location.search);
@@ -644,6 +680,11 @@ const NewReservationMain = () => {
 			booking_source,
 			belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
 			hotelId: hotelDetails._id,
+			requestingUserId: user?._id,
+			createdByUserId: user?._id,
+			orderTakeId: user?._id,
+			orderTaker: orderTakerSnapshot,
+			orderTakenAt: new Date(),
 			roomId: pickedHotelRooms,
 			sendEmail,
 			booked_at:
@@ -750,6 +791,7 @@ const NewReservationMain = () => {
 			updateSingleReservation(searchedReservation._id, {
 				...updatePayload,
 				inhouse_date: new Date(),
+				requestingUserId: user?._id,
 			}).then((data) => {
 				if (data && data.error) {
 					console.log(data.error);
@@ -805,12 +847,10 @@ const NewReservationMain = () => {
 	return (
 		<NewReservationMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-			show={collapsed}
-			showList={
-				window.location.search.includes("list") ||
-				window.location.search.includes("housingreport")
-			}
+			$show={collapsed}
+			$isArabic={chosenLanguage === "Arabic"}
 		>
+			<ReservationModalLayerStyles />
 			<div className='grid-container-main'>
 				<div className='navcontent'>
 					{chosenLanguage === "Arabic" ? (
@@ -835,25 +875,11 @@ const NewReservationMain = () => {
 				</div>
 
 				<div className='otherContentWrapper'>
-					<div
-						style={{
-							textAlign: chosenLanguage === "Arabic" ? "left" : "right",
-							fontWeight: "bold",
-							textDecoration: "underline",
-							cursor: "pointer",
-						}}
-						onClick={() => {
-							if (chosenLanguage === "English") languageToggle("Arabic");
-							else languageToggle("English");
-						}}
-					>
-						{chosenLanguage === "English" ? "ARABIC" : "English"}
-					</div>
-
-					<div style={{ background: "#ededed", padding: "1px" }}>
-						<div className='my-2 tab-grid col-md-9  mr-3'>
+					<TabsShell $wide={activeTab === "list"}>
+						<div className='tab-grid'>
 							<Tab
-								isActive={activeTab === "heatmap"}
+								$isHidden={!canShowReservationTab("heatmap")}
+								$isActive={activeTab === "heatmap"}
 								onClick={() => {
 									setActiveTab("heatmap");
 									history.push(
@@ -870,7 +896,8 @@ const NewReservationMain = () => {
 									: "Hotel Heat Map"}
 							</Tab>
 							<Tab
-								isActive={activeTab === "reserveARoom"}
+								$isHidden={!canShowReservationTab("reserveARoom")}
+								$isActive={activeTab === "reserveARoom"}
 								onClick={() => {
 									setActiveTab("reserveARoom");
 									history.push(
@@ -886,7 +913,7 @@ const NewReservationMain = () => {
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "newReservation"}
+								$isActive={activeTab === "newReservation"}
 								onClick={() => {
 									setActiveTab("newReservation");
 									history.push(
@@ -899,12 +926,12 @@ const NewReservationMain = () => {
 								}}
 							>
 								{chosenLanguage === "Arabic"
-									? "حجز جديد (بدون غرف)"
+									? "حجز جديد"
 									: "New Reservation"}
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "list"}
+								$isActive={activeTab === "list"}
 								onClick={() => {
 									setActiveTab("list");
 									history.push(
@@ -912,7 +939,7 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?list`,
+										}/${selectedHotelLocalStorage._id}?list=&page=1`,
 									);
 								}}
 							>
@@ -922,7 +949,8 @@ const NewReservationMain = () => {
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "housingreport"}
+								$isHidden={!canShowReservationTab("housingreport")}
+								$isActive={activeTab === "housingreport"}
 								onClick={() => {
 									setActiveTab("housingreport");
 									history.push(
@@ -939,9 +967,13 @@ const NewReservationMain = () => {
 									: "In House Report"}
 							</Tab>
 						</div>
-					</div>
+					</TabsShell>
 
-					<div className='container-wrapper'>
+					<div
+						className={`container-wrapper ${
+							activeTab === "list" ? "is-reservation-list" : ""
+						}`}
+					>
 						{activeTab === "reserveARoom" ? (
 							<>
 								{loading ? (
@@ -1001,6 +1033,7 @@ const NewReservationMain = () => {
 												setCurrentRoom={setCurrentRoom}
 												pricingByDay={pricingByDay}
 												setPricingByDay={setPricingByDay}
+												sidebarCollapsed={collapsed}
 											/>
 										) : null}
 									</>
@@ -1103,25 +1136,125 @@ function getConfirmationFromSearch(search = "") {
 	);
 }
 
+function getReservationTabFromSearch(search = "") {
+	const params = new URLSearchParams(search || "");
+	if (params.has("reserveARoom")) return "reserveARoom";
+	if (params.has("newReservation")) return "newReservation";
+	if (params.has("list")) return "list";
+	if (params.has("inventory")) return "inventory";
+	if (params.has("heatmap")) return "heatmap";
+	if (params.has("housingreport")) return "housingreport";
+	return "list";
+}
+
+function isOrderTakerReservationSearchAllowed(search = "") {
+	const params = new URLSearchParams(search || "");
+	return params.has("newReservation") || params.has("list");
+}
+
+function getAccountRoleNumbers(account = {}) {
+	return [
+		Number(account?.role),
+		...(Array.isArray(account?.roles) ? account.roles.map(Number) : []),
+	].filter(Boolean);
+}
+
+function getAccountRoleDescriptions(account = {}) {
+	return [
+		String(account?.roleDescription || "").toLowerCase(),
+		...(Array.isArray(account?.roleDescriptions)
+			? account.roleDescriptions.map((item) => String(item || "").toLowerCase())
+			: []),
+	];
+}
+
+function isLimitedOrderTakerAccount(account = {}) {
+	const roleNumbers = getAccountRoleNumbers(account);
+	const roleDescriptions = getAccountRoleDescriptions(account);
+	const hasOrderTakingScope =
+		roleNumbers.includes(7000) ||
+		roleDescriptions.includes("ordertaker") ||
+		(Array.isArray(account?.accessTo) &&
+			account.accessTo.includes("ownReservations"));
+	const hasFullReservationScope =
+		[1000, 2000, 3000].some((role) => roleNumbers.includes(role)) ||
+		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("reception");
+	return hasOrderTakingScope && !hasFullReservationScope;
+}
+
+const ReservationModalLayerStyles = createGlobalStyle`
+	body .ant-modal-root .ant-modal-mask {
+		z-index: 30049 !important;
+	}
+
+	body .ant-modal-root .ant-modal-wrap {
+		z-index: 30050 !important;
+	}
+
+	body .ant-select-dropdown,
+	body .ant-picker-dropdown,
+	body .ant-dropdown {
+		z-index: 30060 !important;
+	}
+`;
+
 const NewReservationMainWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 46px;
-	min-height: 750px;
+	margin-top: 70px;
+	min-height: calc(100vh - 70px);
+	background: #f7f8fc;
 
 	.grid-container-main {
+		direction: ltr;
 		display: grid;
 		grid-template-columns: ${(props) =>
-			props.show ? "5% 90%" : props.showList ? "13% 87%" : "15% 80%"};
+			props.$isArabic
+				? props.$show
+					? "minmax(0, 1fr) 80px"
+					: "minmax(0, 1fr) 286px"
+				: props.$show
+				  ? "80px minmax(0, 1fr)"
+				  : "286px minmax(0, 1fr)"};
+		min-width: 0;
+	}
+
+	.navcontent {
+		grid-column: ${(props) => (props.$isArabic ? "2" : "1")};
+		grid-row: 1;
+	}
+
+	.otherContentWrapper {
+		background: #f7f8fc;
+		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+		grid-column: ${(props) => (props.$isArabic ? "1" : "2")};
+		grid-row: 1;
+		min-width: 0;
+		overflow: hidden;
+		width: 100%;
 	}
 
 	.container-wrapper {
-		padding: 20px;
-		border-radius: 20px;
-		margin: 0px 10px;
+		max-width: 1360px;
+		margin: 0 auto;
+		min-width: 0;
+		padding: clamp(10px, 1.4vw, 18px);
+	}
+
+	.container-wrapper.is-reservation-list {
+		max-width: none;
+		width: 100%;
+		padding-inline: clamp(8px, 1vw, 14px);
 	}
 
 	.tab-grid {
 		display: flex;
+		gap: 8px;
+		min-width: 0;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 2px 0 4px;
+		scrollbar-width: thin;
 	}
 
 	h3 {
@@ -1134,29 +1267,96 @@ const NewReservationMainWrapper = styled.div`
 	@media (max-width: 1600px) {
 		.grid-container-main {
 			grid-template-columns: ${(props) =>
-				props.show ? "5% 90%" : props.showList ? "13% 87%" : "19% 81%"};
+				props.$isArabic
+					? props.$show
+						? "minmax(0, 1fr) 80px"
+						: "minmax(0, 1fr) 286px"
+					: props.$show
+					  ? "80px minmax(0, 1fr)"
+					  : "286px minmax(0, 1fr)"};
+		}
+	}
+
+	@media (max-width: 1200px) {
+		.grid-container-main {
+			display: block;
+		}
+
+		.otherContentWrapper {
+			min-height: calc(100vh - 70px);
+			padding-inline-start: ${(props) =>
+				!props.$isArabic && props.$show ? "72px" : "0"};
+			padding-inline-end: ${(props) =>
+				props.$isArabic && props.$show ? "72px" : "0"};
+		}
+	}
+
+	@media (max-width: 560px) {
+		.container-wrapper {
+			padding: 8px;
+		}
+
+		.otherContentWrapper {
+			padding-inline-start: 0;
+			padding-inline-end: 0;
 		}
 	}
 `;
 
+const TabsShell = styled.div`
+	background: #e3f2fd;
+	border: 1px solid #cfe5fb;
+	border-radius: 8px;
+	margin: 8px auto 0;
+	max-width: ${(props) => (props.$wide ? "none" : "1360px")};
+	padding: 8px;
+	min-width: 0;
+	width: calc(100% - clamp(16px, 2.8vw, 36px));
+
+	@media (max-width: 560px) {
+		margin: 8px 8px 0;
+		width: auto;
+		padding: 7px;
+	}
+`;
+
 const Tab = styled.div`
+	display: ${(props) => (props.$isHidden ? "none" : "flex")};
 	cursor: pointer;
-	margin: 0 3px;
-	padding: 15px 5px;
+	flex: 1 0 138px;
+	margin: 0;
+	padding: 11px 10px;
 	font-weight: bold;
-	background-color: ${(props) => (props.isActive ? "transparent" : "#e0e0e0")};
+	background-color: ${(props) => (props.$isActive ? "#fff" : "#f3f7fb")};
+	border: 1px solid
+		${(props) => (props.$isActive ? "#9ecdf8" : "rgba(16, 24, 40, 0.08)")};
+	border-radius: 8px;
 	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
+		props.$isActive ? "0 6px 16px rgba(30, 136, 229, 0.16)" : "none"};
 	transition: all 0.3s ease;
-	min-width: 25px;
-	width: 100%;
+	min-width: 0;
 	text-align: center;
 	z-index: 100;
-	font-size: 1.2rem;
-	color: black;
+	font-size: 0.95rem;
+	color: #18212f;
+	line-height: 1.25;
+	align-items: center;
+	justify-content: center;
+	min-height: 52px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 
 	@media (max-width: 1600px) {
-		font-size: 1rem;
-		padding: 10px 1px;
+		font-size: 0.88rem;
+		padding: 10px 8px;
+	}
+
+	@media (max-width: 760px) {
+		flex: 0 0 auto;
+		font-size: 0.74rem;
+		min-width: 92px;
+		min-height: 48px;
+		padding: 8px 10px;
 	}
 `;

@@ -3,17 +3,19 @@ import styled from "styled-components";
 
 import ThirdRow from "./ThirdRow";
 import FourthRow from "./FourthRow";
-import FifthRow from "./FifthRow";
 import SecondRow from "./SecondRow";
 
 // Use the existing translations object
 const translations = {
 	English: {
 		arrivals: "Arrivals Today",
+		arrivalsRange: "Arrivals",
 		departures: "Departures Today",
+		departuresRange: "Departures",
 		inHouse: "In-house Now",
 		arrivingTomorrow: "Arrivals Tomorrow", // We'll use this label for tomorrowArrivals
 		todaysReservations: "Bookings Today",
+		reservationsRange: "Bookings",
 		allReservations: "Active Reservations",
 		cancellations: "Cancellations Today",
 		noShow: "No-shows Today",
@@ -37,10 +39,13 @@ const translations = {
 	},
 	Arabic: {
 		arrivals: "وصول اليوم",
+		arrivalsRange: "الوصول",
 		departures: "مغادرة اليوم",
+		departuresRange: "المغادرة",
 		inHouse: "نزلاء مقيمون الآن",
 		arrivingTomorrow: "وصول الغد", // We'll use this label for tomorrowArrivals
 		todaysReservations: "حجوزات اليوم",
+		reservationsRange: "الحجوزات",
 		allReservations: "الحجوزات النشطة",
 		cancellations: "إلغاءات اليوم",
 		noShow: "عدم الحضور اليوم",
@@ -66,6 +71,7 @@ const translations = {
 
 const Dashboard = ({ chosenLanguage = "English", adminDashboardReport }) => {
 	const t = translations[chosenLanguage] || translations.English;
+	const isCustomRange = Boolean(adminDashboardReport?.meta?.hasCustomDateRange);
 
 	// Safely extract the firstRow data
 	const {
@@ -84,13 +90,15 @@ const Dashboard = ({ chosenLanguage = "English", adminDashboardReport }) => {
 				{/* Arrivals */}
 				<InfoCard backgroundColor='#E3F2FD'>
 					<CardNumber>{arrivals}</CardNumber>
-					<CardTitle>{t.arrivals}</CardTitle>
+					<CardTitle>{isCustomRange ? t.arrivalsRange : t.arrivals}</CardTitle>
 				</InfoCard>
 
 				{/* Departures */}
 				<InfoCard backgroundColor='#F3E5F5'>
 					<CardNumber>{departures}</CardNumber>
-					<CardTitle>{t.departures}</CardTitle>
+					<CardTitle>
+						{isCustomRange ? t.departuresRange : t.departures}
+					</CardTitle>
 				</InfoCard>
 
 				{/* In-House */}
@@ -108,7 +116,9 @@ const Dashboard = ({ chosenLanguage = "English", adminDashboardReport }) => {
 				{/* Today's Bookings */}
 				<InfoCard backgroundColor='#FFFDE7'>
 					<CardNumber>{booking}</CardNumber>
-					<CardTitle>{t.todaysReservations}</CardTitle>
+					<CardTitle>
+						{isCustomRange ? t.reservationsRange : t.todaysReservations}
+					</CardTitle>
 				</InfoCard>
 
 				{/* Overall Bookings (used as "OverBookings" label) */}
@@ -139,12 +149,6 @@ const Dashboard = ({ chosenLanguage = "English", adminDashboardReport }) => {
 				adminDashboardReport={adminDashboardReport.fourthRow}
 			/>
 
-			{/* FIFTH ROW */}
-			<FifthRow
-				chosenLanguage={chosenLanguage}
-				translations={translations}
-				adminDashboardReport={adminDashboardReport.fifthRow}
-			/>
 		</DashboardWrapper>
 	);
 };
@@ -154,42 +158,82 @@ export default Dashboard;
 // ---------------- STYLES ----------------
 
 const DashboardWrapper = styled.div`
-	padding: 24px;
 	background-color: #f7f8fc;
 	display: grid;
 	grid-template-rows: auto auto auto;
-	gap: 24px;
+	gap: 18px;
+	min-width: 0;
 `;
 
 const FirstRow = styled.div`
 	display: grid;
-	grid-template-columns: repeat(6, 1fr);
-	gap: 16px;
+	grid-template-columns: repeat(6, minmax(135px, 1fr));
+	gap: 12px;
+	grid-auto-rows: 1fr;
+	min-width: 0;
+
+	@media (max-width: 1380px) {
+		grid-template-columns: repeat(3, minmax(150px, 1fr));
+	}
+
+	@media (max-width: 760px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 480px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
 `;
 
 const InfoCard = styled.div`
 	background-color: ${(props) => props.backgroundColor};
 	border-radius: 8px;
-	padding: 16px;
+	min-width: 0;
+	min-height: 104px;
+	padding: 14px;
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	position: relative; // allows you to position Badge absolutely if you bring it back
+
+	@media (max-width: 480px) {
+		min-height: 76px;
+		padding: 8px;
+	}
 `;
 
 const CardTitle = styled.div`
-	font-size: 18px;
+	font-size: clamp(13px, 1.1vw, 17px);
 	font-weight: bold;
 	color: black;
-	margin: auto 10px !important;
+	line-height: 1.3;
+	margin: 6px 0 0 !important;
+	overflow-wrap: anywhere;
+
+	@media (max-width: 480px) {
+		font-size: 11px;
+		line-height: 1.25;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 `;
 
 const CardNumber = styled.div`
-	font-size: 25px;
+	font-size: clamp(22px, 2vw, 28px);
 	font-weight: bold;
 	color: black;
-	margin: auto 10px !important;
+	line-height: 1.1;
+	margin: 0 !important;
+
+	@media (max-width: 480px) {
+		font-size: clamp(18px, 5.6vw, 22px);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 `;
 
 /** Uncomment if you want a Badge somewhere

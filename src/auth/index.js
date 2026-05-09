@@ -24,6 +24,58 @@ export const signup = (userData) => {
 		});
 };
 
+export const signupHotelStaff = (userId, token, userData) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/hotel-staff/create/${userId}`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(userData),
+	})
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			throw err;
+		});
+};
+
+export const getHotelStaffUsers = (userId, token, hotelId) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/hotel-staff/${hotelId}/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+	})
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			throw err;
+		});
+};
+
+export const updateHotelStaffUser = (userId, token, hotelId, staffId, userData) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-staff/${staffId}/${hotelId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(userData),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			throw err;
+		});
+};
+
 export const signin = (user) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/signin`, {
 		method: "POST",

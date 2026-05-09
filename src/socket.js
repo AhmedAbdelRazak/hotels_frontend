@@ -1,7 +1,13 @@
 // socket.js (frontend)
 import io from "socket.io-client";
 
-const socket = io(process.env.REACT_APP_API_URL_MAIN, {
+const apiUrl = process.env.REACT_APP_API_URL || "";
+const socketUrl =
+	process.env.REACT_APP_SOCKET_URL ||
+	(apiUrl ? apiUrl.replace(/\/api\/?$/, "") : "") ||
+	process.env.REACT_APP_API_URL_MAIN;
+
+const socket = io(socketUrl, {
 	transports: ["websocket"],
 	reconnectionAttempts: 5,
 	timeout: 20000,

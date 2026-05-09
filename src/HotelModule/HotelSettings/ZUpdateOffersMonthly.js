@@ -91,7 +91,7 @@ function ZUpdateOffersMonthly({
 	const monthLabelsHijri = isArabic ? hijriMonthsAr : hijriMonthsEn;
 
 	const supportsHijri =
-		!!moment.fn &&
+		!!moment?.fn &&
 		typeof moment.fn.iMonth === "function" &&
 		typeof moment.fn.iYear === "function";
 

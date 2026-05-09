@@ -1,5 +1,5 @@
 // src/HotelModule/NewReservation/ZReservationForm2.js
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import styled from "styled-components";
 import {
 	DatePicker,
@@ -17,6 +17,7 @@ import {
 	MinusOutlined,
 	CalendarOutlined,
 	EditOutlined,
+	DeleteOutlined,
 	CheckCircleTwoTone,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -144,6 +145,7 @@ const ZReservationForm2 = ({
 	const [selectedRoomIndex, setSelectedRoomIndex] = useState(null);
 	const [updatedRoomCount, setUpdatedRoomCount] = useState(1);
 	const [totalDistribute, setTotalDistribute] = useState("");
+	const roomSelectionRef = useRef(null);
 
 	const selectedKeys = useMemo(
 		() =>
@@ -342,6 +344,19 @@ const ZReservationForm2 = ({
 			prev.filter((_, i) => i !== selectedRoomIndex)
 		);
 		closeRoomCountModal();
+	};
+	const removeRoomAtIndex = (idx) => {
+		const confirmMessage =
+			chosenLanguage === "Arabic"
+				? "\u0647\u0644 \u062a\u0631\u064a\u062f \u062d\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0633\u0637\u0631 \u0645\u0646 \u0627\u0644\u062d\u062c\u0632\u061f"
+				: "Remove this room from the reservation?";
+		if (!window.confirm(confirmMessage)) return;
+		setPickedRoomsType((prev) => prev.filter((_, i) => i !== idx));
+		if (selectedRoomIndex === idx) {
+			setSelectedRoomIndex(null);
+			closeRoomCountModal();
+			closePricingModal();
+		}
 	};
 
 	const incCount = (idx) =>
@@ -566,7 +581,7 @@ const ZReservationForm2 = ({
 					<p>Loading...</p>
 				</div>
 			) : (
-				<Wrapper arabic={chosenLanguage === "Arabic"} zIndex={Z_TOP}>
+				<Wrapper $arabic={chosenLanguage === "Arabic"}>
 					{/* Count modal */}
 					<Modal
 						title={
@@ -749,7 +764,7 @@ const ZReservationForm2 = ({
 						{/* Left column */}
 						<Left>
 							<div className='row'>
-								<div className='col'>
+								<div className='col field-name'>
 									<Label>
 										{chosenLanguage === "Arabic" ? "الاسم" : "Guest Name"}
 									</Label>
@@ -764,7 +779,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-phone'>
 									<Label>
 										{chosenLanguage === "Arabic" ? "الهاتف" : "Guest Phone"}
 									</Label>
@@ -779,7 +794,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-email'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "البريد الإلكتروني"
@@ -797,7 +812,7 @@ const ZReservationForm2 = ({
 									/>
 								</div>
 
-								<div className='col'>
+								<div className='col field-passport'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "رقم جواز السفر"
@@ -814,7 +829,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-copy'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "نسخة جواز السفر"
@@ -831,7 +846,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-birthdate'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "تاريخ الميلاد"
@@ -853,7 +868,7 @@ const ZReservationForm2 = ({
 										}
 										getPopupContainer={() => document.body}
 										popupStyle={{ zIndex: Z_TOP + 5 }}
-										style={{ width: "100%", minWidth: 240 }}
+										style={{ width: "100%" }}
 										placeholder={
 											chosenLanguage === "Arabic"
 												? "اختر التاريخ"
@@ -861,7 +876,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-nationality'>
 									<Label>
 										{chosenLanguage === "Arabic" ? "الجنسية" : "Nationality"}
 									</Label>
@@ -897,7 +912,7 @@ const ZReservationForm2 = ({
 									</Select>
 								</div>
 
-								<div className='col'>
+								<div className='col field-checkin'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "تاريخ الوصول"
@@ -919,7 +934,7 @@ const ZReservationForm2 = ({
 										onChange={onStartDateChange}
 										getPopupContainer={() => document.body}
 										popupStyle={{ zIndex: Z_TOP + 5 }}
-										style={{ width: "100%", minWidth: 240 }}
+										style={{ width: "100%" }}
 										placeholder={
 											chosenLanguage === "Arabic"
 												? "اختر التاريخ"
@@ -927,7 +942,7 @@ const ZReservationForm2 = ({
 										}
 									/>
 								</div>
-								<div className='col'>
+								<div className='col field-checkout'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "تاريخ المغادرة"
@@ -949,7 +964,7 @@ const ZReservationForm2 = ({
 										onChange={onEndDateChange}
 										getPopupContainer={() => document.body}
 										popupStyle={{ zIndex: Z_TOP + 5 }}
-										style={{ width: "100%", minWidth: 240 }}
+										style={{ width: "100%" }}
 										placeholder={
 											chosenLanguage === "Arabic"
 												? "اختر التاريخ"
@@ -961,7 +976,7 @@ const ZReservationForm2 = ({
 
 							<Block>
 								<div className='row'>
-									<div className='col'>
+									<div className='col booking-source-field'>
 										<Label>
 											{chosenLanguage === "Arabic"
 												? "مصدر الحجز"
@@ -989,7 +1004,7 @@ const ZReservationForm2 = ({
 									</div>
 
 									{booking_source && booking_source !== "manual" && (
-										<div className='col'>
+										<div className='col confirmation-field'>
 											<Label>
 												{chosenLanguage === "Arabic"
 													? "رقم التأكيد"
@@ -1003,7 +1018,7 @@ const ZReservationForm2 = ({
 										</div>
 									)}
 
-									<div className='col'>
+									<div className='col payment-field'>
 										<Label>
 											{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}
 										</Label>
@@ -1038,7 +1053,7 @@ const ZReservationForm2 = ({
 										)}
 									</div>
 
-									<div className='col'>
+									<div className='col guests-field'>
 										<Label>
 											{chosenLanguage === "Arabic"
 												? "عدد الضيوف"
@@ -1052,7 +1067,7 @@ const ZReservationForm2 = ({
 										/>
 									</div>
 
-									<div className='col'>
+									<div className='col email-toggle-field'>
 										<Label>
 											{chosenLanguage === "Arabic"
 												? "إرسال بريد إلكتروني"
@@ -1068,7 +1083,7 @@ const ZReservationForm2 = ({
 										</div>
 									</div>
 
-									<div className='col col-span-2'>
+									<div className='col col-span-2 comment-field'>
 										<Label>
 											{chosenLanguage === "Arabic" ? "تعليق الضيف" : "Comment"}
 										</Label>
@@ -1136,7 +1151,10 @@ const ZReservationForm2 = ({
 								<Button
 									type='default'
 									onClick={() =>
-										window.scrollTo({ top: 1000, behavior: "smooth" })
+										roomSelectionRef.current?.scrollIntoView({
+											behavior: "smooth",
+											block: "start",
+										})
 									}
 								>
 									{chosenLanguage === "Arabic"
@@ -1148,7 +1166,7 @@ const ZReservationForm2 = ({
 					</Grid>
 
 					{/* Room selection chips */}
-					<div className='container'>
+					<div className='container room-selection-container' ref={roomSelectionRef}>
 						<div className='row'>
 							{Array.isArray(roomInventory) && roomInventory.length > 0 && (
 								<div className='col-12' style={{ margin: "20px 0" }}>
@@ -1176,7 +1194,7 @@ const ZReservationForm2 = ({
 											return (
 												<RoomChip
 													key={key}
-													active={active}
+													$active={active}
 													onClick={() => toggleChip(key)}
 													title={`${resolvedDisplayName} (${room.room_type})`}
 												>
@@ -1288,6 +1306,17 @@ const ZReservationForm2 = ({
 													</Button>
 													<Button
 														size='small'
+														danger
+														className='delete-room-btn'
+														icon={<DeleteOutlined />}
+														onClick={() => removeRoomAtIndex(index)}
+													>
+														{chosenLanguage === "Arabic"
+															? "\u062d\u0630\u0641"
+															: "Delete"}
+													</Button>
+													<Button
+														size='small'
 														onClick={() => openPricingModal(index)}
 													>
 														{chosenLanguage === "Arabic" ? "السعر" : "Pricing"}
@@ -1311,7 +1340,7 @@ const ZReservationForm2 = ({
 									)}
 								</div>
 
-								<div className='mt-5 mx-auto text-center col-md-6'>
+								<div className='reservation-submit-wrap mt-5 mx-auto text-center col-md-6'>
 									<Button
 										className='cta'
 										type='primary'
@@ -1337,15 +1366,33 @@ export default ZReservationForm2;
 
 /* ───────── styles ───────── */
 
-const Wrapper = styled.div`
+const Wrapper = styled.div.withConfig({
+	shouldForwardProp: (prop) => !["arabic", "$arabic", "zIndex"].includes(prop),
+})`
 	position: relative;
-	text-align: ${(p) => (p.arabic ? "right" : "left")};
-	direction: ${(p) => (p.arabic ? "rtl" : "ltr")};
+	width: min(100%, 1320px);
+	max-width: 1320px;
+	margin: 0 auto;
+	padding-bottom: 26px;
+	text-align: ${(p) => (p.$arabic ? "right" : "left")};
+	direction: ${(p) => (p.$arabic ? "rtl" : "ltr")};
+	--pms-blue: #0d6efd;
+	--pms-blue-soft: #e3f2fd;
+	--pms-border: #cfe5fb;
+	--pms-text: #18212f;
+	--pms-muted: #64748b;
+	--pms-green: #05a857;
 
 	.warn {
-		text-transform: uppercase;
-		color: darkcyan;
+		margin: 0 0 12px;
+		padding: 10px 12px;
+		border: 1px solid #99e6e6;
+		border-inline-start: 4px solid #0e9f9f;
+		border-radius: 8px;
+		background: #e9fbfb;
+		color: #067a7a;
 		font-weight: 700;
+		line-height: 1.35;
 	}
 
 	input[type="text"],
@@ -1357,26 +1404,73 @@ const Wrapper = styled.div`
 	textarea {
 		display: block;
 		width: 100%;
-		padding: 0.55rem 0.6rem;
-		font-size: 1rem;
-		border: 1px solid #ccc;
+		min-width: 0;
+		height: 42px;
+		padding: 0.5rem 0.65rem;
+		font-size: 0.95rem;
+		font-weight: 500;
+		color: var(--pms-text);
+		border: 1px solid #d6e3f3;
 		border-radius: 8px;
 		background: #fff;
+		text-align: inherit;
+		outline: none;
+		transition:
+			border-color 0.16s ease,
+			box-shadow 0.16s ease;
+	}
+
+	input:focus,
+	select:focus,
+	textarea:focus {
+		border-color: #80bdff;
+		box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+	}
+
+	textarea {
+		height: auto;
+		min-height: 86px;
+		resize: vertical;
 	}
 
 	.ant-picker,
 	.ant-field {
 		width: 100% !important;
-		min-width: 240px;
-		border-radius: 10px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+		min-width: 0;
+		height: 42px;
+		border-radius: 8px;
+		border-color: #d6e3f3;
+		box-shadow: none;
+	}
+
+	.ant-picker-input > input {
+		height: 32px;
+		font-size: 0.95rem;
+		font-weight: 500;
+		text-align: inherit;
+	}
+
+	.ant-select-selector {
+		min-height: 42px !important;
+		border-radius: 8px !important;
+		border-color: #d6e3f3 !important;
+		align-items: center;
+	}
+
+	.ant-select-selection-search-input,
+	.ant-select-selection-item,
+	.ant-select-selection-placeholder {
+		line-height: 40px !important;
+		font-size: 0.95rem;
 	}
 
 	.selectlike {
 		width: 100%;
-		padding: 10px;
-		border-radius: 10px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+		height: 42px;
+		padding: 0 10px;
+		border-radius: 8px;
+		border: 1px solid #d6e3f3;
+		box-shadow: none;
 	}
 
 	.pill-inline {
@@ -1384,12 +1478,14 @@ const Wrapper = styled.div`
 		padding: 2px 6px;
 		border-radius: 6px;
 		margin-inline-start: 6px;
+		white-space: nowrap;
 	}
 
 	h4.headline {
-		font-size: 1.35rem;
+		font-size: 1.2rem;
 		font-weight: 800;
 		margin: 10px 0 16px;
+		color: var(--pms-text);
 	}
 
 	h4.total {
@@ -1400,32 +1496,270 @@ const Wrapper = styled.div`
 	}
 
 	.cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		height: 40px;
 		font-weight: 700;
 		font-size: 1.05rem;
-		padding: 10px 18px;
+		line-height: 1.2;
+		padding: 0 22px;
+		min-width: 230px;
+		border-radius: 8px;
+		background: var(--pms-blue);
+		border-color: var(--pms-blue);
+		white-space: nowrap;
+	}
+
+	.container {
+		max-width: 100%;
+		padding-inline: 0;
+	}
+
+	.container > .row {
+		margin-inline: 0;
+	}
+
+	.container > .row > [class*="col"] {
+		padding-inline: 0;
+	}
+
+	.room-selection-container {
+		scroll-margin-top: 92px;
+		margin-top: 10px;
+	}
+
+	.total-amount {
+		background: var(--pms-blue-soft);
+		border: 1px solid var(--pms-border);
+		border-radius: 10px;
+		padding: 14px;
+		box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+	}
+
+	.total-amount h5,
+	.total-amount h4,
+	.total-amount h3 {
+		margin-bottom: 8px;
+		line-height: 1.35;
+	}
+
+	.total-amount h5,
+	.total-amount h4 {
+		text-align: ${(p) => (p.$arabic ? "right" : "left")};
+	}
+
+	.total-amount h3 {
+		font-size: 1.65rem;
+		text-align: center;
+	}
+
+	.room-list {
+		display: grid;
+		gap: 8px;
+	}
+
+	.room-item {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 8px;
+		background: #ffffff;
+		border: 1px solid #cfe5fb;
+		border-radius: 8px;
+		padding: 8px 10px;
+	}
+
+	.room-item .text {
+		min-width: 0;
+		font-weight: 650;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.room-item .price {
+		color: #006ad1;
+		font-weight: 800;
+	}
+
+	.room-item .actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 5px;
+	}
+
+	.room-item .actions > * {
+		margin: 0;
+	}
+
+	.room-item .actions .delete-room-btn {
+		background: #fff5f5;
+		border-color: #f3b4b4;
+		color: #b42318;
+		font-weight: 800;
+	}
+
+	.room-item .actions .delete-room-btn:hover {
+		background: #dc3545;
+		border-color: #dc3545;
+		color: #ffffff;
+	}
+
+	@media (max-width: 768px) {
+		width: 100%;
+		max-width: 100%;
+		padding-bottom: 12px;
+
+		.warn {
+			margin-bottom: 10px;
+			padding: 8px 10px;
+			font-size: 0.82rem;
+		}
+
+		input[type="text"],
+		input[type="email"],
+		input[type="password"],
+		input[type="date"],
+		input[type="number"],
+		select,
+		textarea,
+		.selectlike,
+		.ant-picker,
+		.ant-field {
+			height: 38px;
+			font-size: 0.84rem;
+			border-radius: 7px;
+		}
+
+		textarea {
+			height: auto;
+			min-height: 74px;
+		}
+
+		.ant-picker-input > input,
+		.ant-select-selection-search-input,
+		.ant-select-selection-item,
+		.ant-select-selection-placeholder {
+			font-size: 0.84rem;
+			line-height: 36px !important;
+		}
+
+		.ant-select-selector {
+			min-height: 38px !important;
+		}
+
+		.pill-inline {
+			display: none;
+		}
+
+		h4.headline {
+			font-size: 1rem;
+			margin-bottom: 10px;
+		}
+
+		h4.total {
+			font-size: 0.98rem;
+		}
+
+		.total-amount {
+			padding: 10px;
+		}
+
+		.total-amount h5,
+		.total-amount h4,
+		.total-amount h3 {
+			font-size: 0.98rem;
+			text-align: ${(p) => (p.$arabic ? "right" : "left")};
+		}
+
+		.room-item {
+			grid-template-columns: 1fr;
+			padding: 9px;
+		}
+
+		.room-item .text {
+			white-space: normal;
+		}
+
+		.room-item .actions {
+			justify-content: stretch;
+		}
+
+		.room-item .actions .ant-btn {
+			flex: 1 1 auto;
+			min-width: 64px;
+		}
+
+		.reservation-submit-wrap {
+			position: sticky;
+			bottom: 8px;
+			z-index: 40;
+			width: 100%;
+			max-width: 100%;
+			margin-top: 16px !important;
+			padding: 8px;
+			background: rgba(227, 242, 253, 0.94);
+			border: 1px solid var(--pms-border);
+			border-radius: 10px;
+			backdrop-filter: blur(8px);
+		}
+
+		.cta {
+			height: 40px;
+			width: 100%;
+			min-width: 0;
+			font-size: 0.94rem;
+			line-height: 1.2;
+			padding: 0 12px;
+		}
 	}
 `;
 
 const Label = styled.label`
 	font-weight: 700;
 	font-size: 0.95rem;
-	color: #32322b;
+	color: #26364a;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 	margin-bottom: 6px;
+	max-width: 100%;
+	line-height: 1.25;
+
+	@media (max-width: 768px) {
+		font-size: 0.76rem;
+		gap: 4px;
+		margin-bottom: 4px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 `;
 
 const Grid = styled.div`
 	display: grid;
 	grid-template-columns: 2fr 1fr;
 	gap: 16px;
+	align-items: start;
 	@media (max-width: 1200px) {
 		grid-template-columns: 1fr;
+	}
+
+	@media (max-width: 768px) {
+		gap: 10px;
 	}
 `;
 
 const Left = styled.div`
+	min-width: 0;
+	background: #ffffff;
+	border: 1px solid #d9e9fb;
+	border-radius: 10px;
+	padding: 16px;
+	box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+
 	.row {
 		display: grid;
 		grid-template-columns: repeat(12, 1fr);
@@ -1433,6 +1767,7 @@ const Left = styled.div`
 	}
 	.col {
 		grid-column: span 4;
+		min-width: 0;
 	}
 	.col-span-2 {
 		grid-column: span 12;
@@ -1443,7 +1778,18 @@ const Left = styled.div`
 		}
 	}
 	@media (max-width: 768px) {
-		.col,
+		padding: 10px;
+
+		.row {
+			gap: 8px;
+		}
+
+		.col {
+			grid-column: span 6;
+		}
+
+		.field-name,
+		.field-email,
 		.col-span-2 {
 			grid-column: span 12;
 		}
@@ -1452,8 +1798,8 @@ const Left = styled.div`
 
 const Block = styled.div`
 	margin-top: 18px;
-	background: #f6f7f9;
-	border: 1px solid #e9edf4;
+	background: #f4f9ff;
+	border: 1px solid #d9e9fb;
 	border-radius: 10px;
 	padding: 14px;
 
@@ -1464,9 +1810,22 @@ const Block = styled.div`
 	}
 	.col {
 		grid-column: span 3;
+		min-width: 0;
 	}
 	.col-span-2 {
 		grid-column: span 6;
+	}
+	.booking-source-field,
+	.confirmation-field,
+	.payment-field {
+		grid-column: span 4;
+	}
+	.guests-field,
+	.email-toggle-field {
+		grid-column: span 3;
+	}
+	.comment-field {
+		grid-column: 4 / span 6;
 	}
 	@media (max-width: 1200px) {
 		.col {
@@ -1477,7 +1836,22 @@ const Block = styled.div`
 		}
 	}
 	@media (max-width: 768px) {
+		margin-top: 10px;
+		padding: 10px;
+
+		.row {
+			gap: 8px;
+		}
+
 		.col,
+		.booking-source-field,
+		.confirmation-field,
+		.payment-field,
+		.guests-field,
+		.email-toggle-field {
+			grid-column: span 6;
+		}
+
 		.col-span-2 {
 			grid-column: span 12;
 		}
@@ -1485,11 +1859,17 @@ const Block = styled.div`
 `;
 
 const Right = styled.div`
-	background: #fff;
-	border-radius: 8px;
+	background: #e3f2fd;
+	border-radius: 10px;
 	padding: 14px;
-	border: 1px solid #eee;
+	border: 1px solid #cfe5fb;
 	min-height: 250px;
+	box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+
+	@media (min-width: 1201px) {
+		position: sticky;
+		top: 84px;
+	}
 
 	.summary-list {
 		display: grid;
@@ -1498,13 +1878,28 @@ const Right = styled.div`
 		margin-bottom: 8px;
 	}
 	.item {
-		background: #fafafa;
-		border: 1px solid #f0f0f0;
+		background: #ffffff;
+		border: 1px solid #d9e9fb;
 		border-radius: 8px;
 		padding: 10px 12px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.item span {
+		color: #53657c;
+		font-weight: 700;
+		font-size: 0.82rem;
+	}
+	.item strong,
+	.item .pill {
+		min-width: 0;
+		font-size: 0.92rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.price {
 		color: darkgoldenrod;
@@ -1525,27 +1920,53 @@ const Right = styled.div`
 	}
 
 	@media (max-width: 768px) {
+		padding: 10px;
+
 		.summary-list {
-			grid-template-columns: 1fr;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.item {
+			display: grid;
+			gap: 4px;
+			padding: 8px;
+		}
+
+		.item span {
+			font-size: 0.72rem;
+		}
+
+		.item strong,
+		.item .pill {
+			font-size: 0.78rem;
 		}
 	}
 `;
 
 const RoomGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(410px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr));
 	gap: 10px;
+
+	@media (max-width: 768px) {
+		grid-template-columns: 1fr;
+		gap: 8px;
+	}
 `;
 
-const RoomChip = styled.button`
+const RoomChip = styled.button.withConfig({
+	shouldForwardProp: (prop) => !["active", "$active"].includes(prop),
+})`
 	appearance: none;
-	border: 1px solid ${(p) => (p.active ? "#1a9f42" : "#e5e7eb")};
-	background: ${(p) => (p.active ? "#e7f7ed" : "#ffffff")};
+	border: 1px solid ${(p) => (p.$active ? "#1a9f42" : "#d9e9fb")};
+	background: ${(p) => (p.$active ? "#e7f7ed" : "#ffffff")};
 	color: #111827;
-	padding: 10px 12px;
+	min-height: 48px;
+	padding: 8px 10px;
 	border-radius: 10px;
 	display: grid;
-	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-columns: auto minmax(0, 1fr) auto auto auto;
 	align-items: center;
 	gap: 8px;
 	cursor: pointer;
@@ -1560,10 +1981,12 @@ const RoomChip = styled.button`
 	}
 
 	.icon {
-		font-size: 18px;
+		font-size: 16px;
 	}
 	.text {
+		font-size: 0.9rem;
 		font-weight: 700;
+		min-width: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1581,5 +2004,31 @@ const RoomChip = styled.button`
 	.avail {
 		font-size: 12px;
 		opacity: 0.8;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 768px) {
+		padding: 8px;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 6px;
+
+		.icon {
+			font-size: 16px;
+		}
+
+		.text {
+			font-size: 0.78rem;
+		}
+
+		.badge {
+			width: 10px;
+			height: 10px;
+		}
+
+		.avail {
+			grid-column: 2 / 4;
+			font-size: 0.7rem;
+			justify-self: start;
+		}
 	}
 `;

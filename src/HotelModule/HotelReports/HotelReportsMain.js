@@ -22,6 +22,21 @@ const HotelReportsMain = () => {
 	const { user, token } = isAuthenticated();
 	const location = useLocation();
 	const history = useHistory();
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = {
+		reservations:
+			chosenLanguage === "Arabic"
+				? "\u0646\u0638\u0631\u0629\u0020\u0639\u0627\u0645\u0629\u0020\u0639\u0644\u0649\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a"
+				: "Reservations Overview",
+		inventory:
+			chosenLanguage === "Arabic"
+				? "\u0645\u062e\u0632\u0648\u0646\u0020\u0627\u0644\u0641\u0646\u062f\u0642"
+				: "Hotels' Inventory",
+		paidOverview:
+			chosenLanguage === "Arabic"
+				? "\u062a\u0642\u0631\u064a\u0631\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629"
+				: "Paid Reservations Overview",
+	};
 
 	/* ------------------ 1) Fetch User Details ------------------ */
 	const gettingUserId = useCallback(() => {
@@ -68,8 +83,9 @@ const HotelReportsMain = () => {
 
 	return (
 		<HotelReportsMainWrapper
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-			show={collapsed}
+			dir={isArabic ? "rtl" : "ltr"}
+			$show={collapsed}
+			$isArabic={isArabic}
 		>
 			{/* --------------- Main Content --------------- */}
 			<div className='grid-container-main'>
@@ -103,26 +119,26 @@ const HotelReportsMain = () => {
 								className={activeTab === "reservations" ? "active" : ""}
 								onClick={() => handleTabChange("reservations")}
 							>
-								Reservations Overview
+								{labels.reservations}
 							</button>
 							<button
 								className={activeTab === "inventory" ? "active" : ""}
 								onClick={() => handleTabChange("inventory")}
 							>
-								Hotels' Inventory
+								{labels.inventory}
 							</button>
 							<button
 								className={activeTab === "paid-overview" ? "active" : ""}
 								onClick={() => handleTabChange("paid-overview")}
 							>
-								Paid Reservations Overview
+								{labels.paidOverview}
 							</button>
 						</TabNavigation>
 
 						{/* --------------- Tab Content --------------- */}
 						{activeTab === "reservations" && (
 							<div>
-								<h3>Reservations Overview</h3>
+								<h3>{labels.reservations}</h3>
 								<ReservationsOverview
 									getUser={getUser}
 									chosenLanguage={chosenLanguage}
@@ -141,7 +157,7 @@ const HotelReportsMain = () => {
 
 						{activeTab === "paid-overview" && (
 							<div>
-								<h3>Paid Reservations Overview</h3>
+								<h3>{labels.paidOverview}</h3>
 								<PaidReportHotel collapsed={collapsed} />
 							</div>
 						)}
@@ -157,62 +173,142 @@ export default HotelReportsMain;
 /* ---------------------------------- STYLES ---------------------------------- */
 
 const HotelReportsMainWrapper = styled.div`
-	margin-top: 80px;
-	min-height: 715px;
+	overflow-x: hidden;
+	margin-top: 70px;
+	min-height: calc(100vh - 70px);
+	background: #f7f8fc;
 
 	.grid-container-main {
+		direction: ltr;
 		display: grid;
-		grid-template-columns: ${(props) => (props.show ? "5% 75%" : "17% 83%")};
+		grid-template-columns: ${(props) =>
+			props.$isArabic
+				? props.$show
+					? "minmax(0, 1fr) 80px"
+					: "minmax(0, 1fr) 286px"
+				: props.$show
+				  ? "80px minmax(0, 1fr)"
+				  : "286px minmax(0, 1fr)"};
+		min-width: 0;
+	}
+
+	.navcontent {
+		grid-column: ${(props) => (props.$isArabic ? "2" : "1")};
+		grid-row: 1;
+	}
+
+	.otherContentWrapper {
+		background: #f7f8fc;
+		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+		grid-column: ${(props) => (props.$isArabic ? "1" : "2")};
+		grid-row: 1;
+		min-width: 0;
+		overflow: hidden;
+		width: 100%;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 0px 10px;
+		border: 1px solid #cfe5fb;
+		padding: clamp(10px, 1.4vw, 18px);
+		border-radius: 10px;
+		background: #ffffff;
+		margin: clamp(8px, 1.4vw, 18px);
+		box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+		min-width: 0;
 	}
 
-	@media (max-width: 768px) {
+	h3 {
+		margin: 4px 0 16px;
+		color: #18212f;
+		font-size: clamp(1.25rem, 2.2vw, 1.9rem);
+		font-weight: 800;
+		line-height: 1.2;
+	}
+
+	@media (max-width: 1200px) {
 		.grid-container-main {
-			grid-template-columns: 1fr;
+			display: block;
+		}
+
+		.otherContentWrapper {
+			min-height: calc(100vh - 70px);
+			padding-inline-start: ${(props) =>
+				!props.$isArabic && props.$show ? "72px" : "0"};
+			padding-inline-end: ${(props) =>
+				props.$isArabic && props.$show ? "72px" : "0"};
+		}
+	}
+
+	@media (max-width: 560px) {
+		.container-wrapper {
+			margin: 8px;
+			padding: 8px;
+		}
+
+		.otherContentWrapper {
+			padding-inline-start: 0;
+			padding-inline-end: 0;
 		}
 	}
 `;
 
 const TabNavigation = styled.div`
 	display: flex;
-	gap: 10px;
-	margin-bottom: 20px;
+	gap: 8px;
+	margin-bottom: 18px;
+	padding: 8px;
+	background: #e3f2fd;
+	border: 1px solid #cfe5fb;
+	border-radius: 8px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: thin;
 
 	button {
-		padding: 10px 20px;
-		border: none;
-		background-color: #ddd;
+		flex: 1 0 148px;
+		min-height: 52px;
+		padding: 10px 12px;
+		border: 1px solid rgba(16, 24, 40, 0.08);
+		background-color: #f8fbff;
 		cursor: pointer;
-		font-weight: bold;
-		border-radius: 5px;
-		flex: 1; /* so the buttons share the row's space */
+		font-weight: 800;
+		border-radius: 8px;
+		color: #18212f;
+		line-height: 1.25;
+		white-space: normal;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			color 0.18s ease;
 
 		&.active {
-			background-color: #006ad1;
+			background-color: #0d6efd;
+			border-color: #0d6efd;
 			color: white;
+			box-shadow: 0 8px 18px rgba(13, 110, 253, 0.24);
 		}
 
 		&:hover {
-			background-color: #bbb;
+			border-color: #80bdff;
+			background-color: #ffffff;
+		}
+
+		&.active:hover {
+			background-color: #0b5ed7;
+			color: white;
 		}
 	}
 
-	/* ------------- MOBILE TABS: 2 PER ROW ------------- */
 	@media (max-width: 768px) {
-		flex-wrap: wrap;
-		gap: 8px;
+		padding: 7px;
 
 		button {
-			width: 48%;
-			padding: 8px;
-			font-size: 0.9rem;
+			flex: 0 0 118px;
+			min-height: 48px;
+			padding: 8px 9px;
+			font-size: 0.78rem;
+			white-space: normal;
 		}
 	}
 `;

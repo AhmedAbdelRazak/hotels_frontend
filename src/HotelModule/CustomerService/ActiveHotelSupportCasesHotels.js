@@ -15,6 +15,7 @@ import {
 	markAllMessagesAsSeenByHotel,
 } from "../apiAdmin";
 import StarRatings from "react-star-ratings";
+import { SUPER_ADMIN_ID } from "../../AdminModule/utils/superUsers";
 
 const { TextArea } = Input;
 
@@ -129,7 +130,7 @@ const ActiveHotelSupportCasesHotels = () => {
 		try {
 			const response = await createSupportCase(
 				{
-					supporterId: "6553f1c6d06c5cea2f98a838", // Hardcoded Super Admin ID
+					supporterId: SUPER_ADMIN_ID,
 					ownerId: user._id,
 					hotelId: selectedHotel,
 					inquiryAbout,

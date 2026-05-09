@@ -8,23 +8,27 @@ import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import FinancialReport from "./FinancialReport";
 import ExpensesManagement from "./ExpensesManagement";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const FinancialMain = ({ chosenLanguage }) => {
+	const { user, token } = isAuthenticated() || {};
+	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [password, setPassword] = useState("");
-	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+	const [isPasswordVerified, setIsPasswordVerified] = useState(
+		isConfiguredSuperAdmin
+	);
 	const [activeTab, setActiveTab] = useState("expenses");
 	const [getUser, setGetUser] = useState(null);
 	const isSuperAdmin =
-		!!getUser &&
-		(!getUser?.accessTo ||
-			getUser?.accessTo.length === 0 ||
-			getUser?.accessTo.includes("all"));
-
-	const { user, token } = isAuthenticated() || {};
+		isConfiguredSuperAdmin ||
+		isSuperAdminUser(getUser) ||
+		(!!getUser &&
+			(!getUser?.accessTo ||
+				getUser?.accessTo.length === 0 ||
+				getUser?.accessTo.includes("all")));
 	const location = useLocation();
 	const history = useHistory();
 
@@ -51,7 +55,7 @@ const FinancialMain = ({ chosenLanguage }) => {
 
 		const accessTo = getUser.accessTo || [];
 
-		const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
+		const isSuperUser = isConfiguredSuperAdmin || isSuperAdminUser(getUser);
 
 		// If user has HotelReports in access, or is super/admin, skip password
 		if (accessTo.includes("HotelReports") || isSuperUser || isSuperAdmin) {
@@ -77,7 +81,7 @@ const FinancialMain = ({ chosenLanguage }) => {
 				history.push("/");
 				break;
 		}
-	}, [getUser, history, isSuperAdmin]);
+	}, [getUser, history, isConfiguredSuperAdmin, isSuperAdmin]);
 
 	/* ------------------ 3) Init & localStorage ------------------ */
 	useEffect(() => {
@@ -86,6 +90,16 @@ const FinancialMain = ({ chosenLanguage }) => {
 		if (typeof window !== "undefined" && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
+	}, [gettingUserId]);
+
+	useEffect(() => {
+		if (isConfiguredSuperAdmin) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			return;
+		}
+
+		if (!getUser) return;
 
 		const adminReportsPasswordVerified =
 			localStorage.getItem("ReportsVerified");
@@ -95,7 +109,7 @@ const FinancialMain = ({ chosenLanguage }) => {
 		} else {
 			setIsModalVisible(true);
 		}
-	}, [gettingUserId, getUser, getUser?._id, isSuperAdmin]);
+	}, [getUser, isConfiguredSuperAdmin, isSuperAdmin]);
 
 	/* ------------------ 4) Password Verification ------------------ */
 	const handlePasswordVerification = () => {
@@ -132,28 +146,30 @@ const FinancialMain = ({ chosenLanguage }) => {
 			show={collapsed}
 		>
 			{/* Password Modal */}
-			<Modal
-				title='Enter Password'
-				open={isModalVisible}
-				footer={null}
-				closable={false}
-			>
-				<Input.Password
-					placeholder='Enter password'
-					value={password}
-					onChange={(e) => setPassword(e.target.value)}
-					iconRender={(visible) =>
-						visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-					}
-				/>
-				<Button
-					type='primary'
-					style={{ marginTop: "10px", width: "100%" }}
-					onClick={handlePasswordVerification}
+			{!isConfiguredSuperAdmin && (
+				<Modal
+					title='Enter Password'
+					open={isModalVisible}
+					footer={null}
+					closable={false}
 				>
-					Verify Password
-				</Button>
-			</Modal>
+					<Input.Password
+						placeholder='Enter password'
+						value={password}
+						onChange={(e) => setPassword(e.target.value)}
+						iconRender={(visible) =>
+							visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
+						}
+					/>
+					<Button
+						type='primary'
+						style={{ marginTop: "10px", width: "100%" }}
+						onClick={handlePasswordVerification}
+					>
+						Verify Password
+					</Button>
+				</Modal>
+			)}
 
 			{/* Main Content */}
 			{isPasswordVerified && (
