@@ -3,6 +3,48 @@ import axios from "axios";
 const authHeaders = (token) =>
 	token ? { Authorization: `Bearer ${token}` } : {};
 
+const getStoredActiveAuthHeaders = () => {
+	try {
+		if (typeof window === "undefined") return {};
+		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
+		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		if (preview?.auth?.token) {
+			return { Authorization: `Bearer ${preview.auth.token}` };
+		}
+		const raw = localStorage.getItem("jwt");
+		const parsed = raw ? JSON.parse(raw) : null;
+		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
+	} catch (error) {
+		return {};
+	}
+};
+
+const getStoredLanguage = () => {
+	try {
+		if (typeof window === "undefined") return "";
+		const raw = localStorage.getItem("lang");
+		return raw ? JSON.parse(raw) : "";
+	} catch (error) {
+		return "";
+	}
+};
+
+const localizeApiError = (
+	data = {},
+	fallback = "Request failed. Please try again."
+) => {
+	const isArabic = getStoredLanguage() === "Arabic";
+	const localized = isArabic
+		? data?.errorArabic || data?.messageArabic || data?.error || data?.message
+		: data?.error || data?.message || data?.errorArabic || data?.messageArabic;
+	return {
+		...data,
+		error:
+			localized ||
+			(isArabic ? "تعذر إكمال الطلب. يرجى المحاولة مرة أخرى." : fallback),
+	};
+};
+
 export const hotelAccount = (userId, token, accountId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
@@ -1297,6 +1339,24 @@ export const readUserId = (userId, token) => {
 };
 
 const attachReservationActor = (reservation = {}) => {
+	try {
+		const previewAuth = JSON.parse(
+			localStorage.getItem("dashboardPreviewAuth") || "null"
+		);
+		const previewUserId = previewAuth?.auth?.user?._id;
+		if (previewUserId) {
+			return {
+				...reservation,
+				requestingUserId: previewUserId,
+				__previewAudit: true,
+				__previewAuditActorId:
+					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
+			};
+		}
+	} catch (error) {
+		// Keep the update usable even if preview storage is unavailable.
+	}
+
 	if (reservation.requestingUserId) return reservation;
 
 	try {
@@ -1321,15 +1381,24 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				// content type?
 				"Content-Type": "application/json",
 				Accept: "application/json",
-				// Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
 			},
 			body: JSON.stringify(attachReservationActor(reservation)),
 		},
 	)
-		.then((response) => {
-			return response.json();
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return localizeApiError(
+					{ ...data, status: response.status },
+					`Reservation update failed (${response.status})`
+				);
+			}
+			return data;
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => ({
+			error: err?.message || "Network error while updating reservation.",
+		}));
 };
 
 // Start of reports for the admin

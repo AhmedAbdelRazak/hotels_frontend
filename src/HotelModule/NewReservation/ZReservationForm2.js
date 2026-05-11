@@ -40,6 +40,10 @@ const safeParseFloat = (v, fb = 0) => {
 	const n = parseFloat(v);
 	return Number.isNaN(n) ? fb : n;
 };
+const positiveNumber = (v, fb = 0) => {
+	const n = safeParseFloat(v, NaN);
+	return Number.isFinite(n) && n > 0 ? n : fb;
+};
 const pct = (v) => (v > 1 ? v / 100 : v);
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -67,12 +71,16 @@ const buildPricingByDay = ({
 	for (let d = start.clone(); d.isSameOrBefore(end, "day"); d.add(1, "day")) {
 		const ds = d.format("YYYY-MM-DD");
 		const rate = (pricingRate || []).find((r) => r.calendarDate === ds) || {};
-		const price = safeParseFloat(rate.price, basePrice);
-		const rootPrice = safeParseFloat(
-			rate.rootPrice ?? rate.defaultCost,
-			defaultCost
+		const blockedOnCalendar = calendarRateIsBlocked(rate);
+		const effectiveRate = blockedOnCalendar ? {} : rate;
+		const fallbackPrice = positiveNumber(basePrice, positiveNumber(defaultCost, 0));
+		const fallbackRoot = positiveNumber(defaultCost, fallbackPrice);
+		const price = positiveNumber(effectiveRate.price, fallbackPrice);
+		const rootPrice = positiveNumber(
+			effectiveRate.rootPrice ?? effectiveRate.defaultCost,
+			fallbackRoot || price
 		);
-		const c = safeParseFloat(rate.commissionRate, comm);
+		const c = positiveNumber(effectiveRate.commissionRate, comm);
 		const finalWithComm = price + rootPrice * pct(c);
 		rows.push({
 			date: ds,
@@ -81,6 +89,7 @@ const buildPricingByDay = ({
 			commissionRate: c,
 			totalPriceWithCommission: finalWithComm,
 			totalPriceWithoutCommission: price,
+			calendarBlocked: blockedOnCalendar,
 		});
 	}
 	return rows;
@@ -239,7 +248,7 @@ const ZReservationForm2 = ({
 
 	const getBlockedDatesForRoom = useCallback(
 		(room_type, displayName) => {
-			if (!limitedOrderTakerAccount || !start_date || !end_date) return [];
+			if (!start_date || !end_date) return [];
 			const detail = findRoomDetail(room_type, displayName);
 			if (!detail) return [];
 			const stayDates = buildStayDateKeysForCalendar(start_date, end_date);
@@ -249,7 +258,37 @@ const ZReservationForm2 = ({
 				return calendarRateIsBlocked(rate);
 			});
 		},
-		[limitedOrderTakerAccount, start_date, end_date, findRoomDetail]
+		[start_date, end_date, findRoomDetail]
+	);
+
+	const getInventoryForRoom = useCallback(
+		(room_type, displayName) => {
+			const targetType = String(room_type || "").toLowerCase();
+			const targetDisplay = String(displayName || "").toLowerCase();
+			return (Array.isArray(roomInventory) ? roomInventory : []).find((room) => {
+				const roomType = String(room.room_type || room.roomType || "").toLowerCase();
+				const roomDisplay = String(
+					room.displayName || room.display_name || ""
+				).toLowerCase();
+				return (
+					roomType === targetType &&
+					(!targetDisplay || !roomDisplay || roomDisplay === targetDisplay)
+				);
+			});
+		},
+		[roomInventory]
+	);
+
+	const getAvailableCountForRoom = useCallback(
+		(room_type, displayName) => {
+			const inventory = getInventoryForRoom(room_type, displayName);
+			if (!inventory) return Infinity;
+			const available = Number(
+				inventory.available ?? inventory.total_available ?? 0
+			);
+			return Number.isFinite(available) ? available : 0;
+		},
+		[getInventoryForRoom]
 	);
 
 	const commissionForRoom = useCallback(
@@ -311,8 +350,11 @@ const ZReservationForm2 = ({
 				pricingRate: detail.pricingRate || [],
 				startDate: start_date,
 				endDate: end_date,
-				basePrice: safeParseFloat(detail?.price?.basePrice, 0),
-				defaultCost: safeParseFloat(detail?.defaultCost, 0),
+				basePrice: positiveNumber(detail?.price?.basePrice, 0),
+				defaultCost: positiveNumber(
+					detail?.defaultCost,
+					positiveNumber(detail?.price?.basePrice, 0)
+				),
 				commissionRate: commissionForRoom(room_type, displayName),
 			});
 
@@ -367,6 +409,7 @@ const ZReservationForm2 = ({
 		const { room_type, displayName } = splitRoomKey(key);
 		const exists = selectedKeys.includes(key);
 		const blockedDates = getBlockedDatesForRoom(room_type, displayName);
+		const availableCount = getAvailableCountForRoom(room_type, displayName);
 		if (exists) {
 			setPickedRoomsType((prev) =>
 				prev.filter(
@@ -375,13 +418,27 @@ const ZReservationForm2 = ({
 				)
 			);
 		} else {
-			if (blockedDates.length > 0) {
+			if (limitedOrderTakerAccount && blockedDates.length > 0) {
 				toast.error(
 					chosenLanguage === "Arabic"
 						? `هذه الغرفة محجوبة في تقويم الفندق خلال ${blockedDates.join(", ")} ولا يمكن للوكيل حجزها.`
 						: `This room is blocked on the hotel calendar for ${blockedDates.join(", ")} and cannot be booked by an agent.`
 				);
 				return;
+			}
+			if (limitedOrderTakerAccount && availableCount <= 0) {
+				toast.error(
+					"No available inventory for this room type on the selected dates."
+				);
+				return;
+			}
+			if (!limitedOrderTakerAccount && blockedDates.length > 0) {
+				toast.warn(
+					`Warning: this room is blocked on the calendar for ${blockedDates.join(", ")}.`
+				);
+			}
+			if (!limitedOrderTakerAccount && availableCount <= 0) {
+				toast.warn("Warning: this selection may overbook the room type.");
 			}
 			const built = buildRoomLine(room_type, displayName);
 			if (built) setPickedRoomsType((prev) => [...prev, built]);
@@ -399,9 +456,26 @@ const ZReservationForm2 = ({
 		if (selectedRoomIndex == null) return;
 		setPickedRoomsType((prev) => {
 			const next = [...prev];
+			const line = next[selectedRoomIndex] || {};
+			const requestedCount = Math.max(1, Number(updatedRoomCount || 1));
+			const availableCount = getAvailableCountForRoom(
+				line.room_type,
+				line.displayName || line.display_name
+			);
+			const nextCount =
+				limitedOrderTakerAccount && Number.isFinite(availableCount)
+					? Math.min(requestedCount, Math.max(availableCount, 1))
+					: requestedCount;
+			if (limitedOrderTakerAccount && requestedCount > availableCount) {
+				toast.error(
+					`Agents can reserve up to ${Math.max(availableCount, 0)} available room(s) for this type.`
+				);
+			} else if (!limitedOrderTakerAccount && requestedCount > availableCount) {
+				toast.warn("Warning: this count may overbook the room type.");
+			}
 			next[selectedRoomIndex] = {
-				...next[selectedRoomIndex],
-				count: Math.max(1, Number(updatedRoomCount || 1)),
+				...line,
+				count: nextCount,
 			};
 			return next;
 		});
@@ -431,7 +505,22 @@ const ZReservationForm2 = ({
 	const incCount = (idx) =>
 		setPickedRoomsType((prev) => {
 			const next = [...prev];
-			next[idx] = { ...next[idx], count: (next[idx].count || 1) + 1 };
+			const line = next[idx] || {};
+			const availableCount = getAvailableCountForRoom(
+				line.room_type,
+				line.displayName || line.display_name
+			);
+			const requestedCount = (line.count || 1) + 1;
+			if (limitedOrderTakerAccount && requestedCount > availableCount) {
+				toast.error(
+					`Agents can reserve up to ${Math.max(availableCount, 0)} available room(s) for this type.`
+				);
+				return next;
+			}
+			if (!limitedOrderTakerAccount && requestedCount > availableCount) {
+				toast.warn("Warning: this count may overbook the room type.");
+			}
+			next[idx] = { ...line, count: requestedCount };
 			return next;
 		});
 	const decCount = (idx) =>
@@ -1298,14 +1387,22 @@ const ZReservationForm2 = ({
 											);
 											const blockedForAgent =
 												limitedOrderTakerAccount && blockedDates.length > 0;
+											const unavailableForAgent =
+												limitedOrderTakerAccount && availableCount <= 0;
 											return (
 												<RoomChip
 													key={key}
 													$active={active}
-													$blocked={blockedForAgent}
-													disabled={blockedForAgent}
+													$blocked={blockedForAgent || unavailableForAgent}
+													disabled={blockedForAgent || unavailableForAgent}
 													data-blocked-label={
-														chosenLanguage === "Arabic" ? "محجوبة" : "Blocked"
+														unavailableForAgent
+															? chosenLanguage === "Arabic"
+																? "\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u062e\u0632\u0648\u0646"
+																: "No stock"
+															: chosenLanguage === "Arabic"
+															? "\u0645\u062d\u062c\u0648\u0628\u0629"
+															: "Blocked"
 													}
 													onClick={() => toggleChip(key)}
 													title={
@@ -1315,6 +1412,8 @@ const ZReservationForm2 = ({
 																		? "محجوبة في التقويم"
 																		: "Blocked on calendar"
 															  }: ${blockedDates.join(", ")}`
+															: unavailableForAgent
+															? "No available inventory for agents"
 															: `${resolvedDisplayName} (${room.room_type})`
 													}
 												>

@@ -18,6 +18,7 @@ import {
 	DatabaseOutlined,
 	UploadOutlined,
 	DeleteOutlined,
+	EyeOutlined,
 	WalletOutlined,
 } from "@ant-design/icons";
 
@@ -25,7 +26,9 @@ import { useCartContext } from "../cart_context";
 import {
 	getHotelStaffUsers,
 	isAuthenticated,
+	previewHotelStaffDashboard,
 	signupHotelStaff,
+	startDashboardPreview,
 	updateHotelStaffUser,
 } from "../auth";
 import {
@@ -1938,8 +1941,10 @@ const OwnerAccountsModal = ({
 	WORDS,
 	isRTL,
 }) => {
+	const history = useHistory();
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
+	const [previewingAccountId, setPreviewingAccountId] = useState("");
 	const [accounts, setAccounts] = useState([]);
 	const [activeAccountTab, setActiveAccountTab] = useState("new");
 	const [form, setForm] = useState({
@@ -2517,6 +2522,79 @@ const OwnerAccountsModal = ({
 		});
 	};
 
+	const getPreviewHotelId = (account = {}) => {
+		const possibleIds = [
+			account.hotelId,
+			account.hotelIdWork,
+			...(Array.isArray(account.hotelScopeIds) ? account.hotelScopeIds : []),
+			...(Array.isArray(account.hotelsToSupport) ? account.hotelsToSupport : []),
+		];
+		return possibleIds.map(normalizeHotelId).find(Boolean) || "";
+	};
+
+	const buildPreviewSelectedHotel = (account = {}, hotelId, preview = {}) => {
+		const hotel =
+			hotelOptions.find((item) => normalizeHotelId(item._id) === hotelId) || {};
+		const ownerId =
+			preview.ownerId ||
+			normalizeHotelId(hotel.belongsTo?._id || hotel.belongsTo) ||
+			normalizeHotelId(account.belongsToId);
+		return {
+			...hotel,
+			_id: hotelId,
+			hotelName:
+				hotel.hotelName ||
+				(Array.isArray(account.hotelNames) ? account.hotelNames[0] : "") ||
+				account.hotelName ||
+				preview.hotelName ||
+				"Hotel",
+			belongsTo: ownerId
+				? {
+						...(hotel.belongsTo && typeof hotel.belongsTo === "object"
+							? hotel.belongsTo
+							: {}),
+						_id: ownerId,
+				  }
+				: hotel.belongsTo,
+		};
+	};
+
+	const startAccountPreview = (account) => {
+		const hotelId = getPreviewHotelId(account);
+		if (!hotelId) {
+			message.error("Hotel scope was not found for this account.");
+			return;
+		}
+		setPreviewingAccountId(account._id);
+		previewHotelStaffDashboard(userId, token, hotelId, account._id)
+			.then((data) => {
+				if (data?.error || !data?.token || !data?.user) {
+					message.error(data?.error || "Unable to start account preview.");
+					return;
+				}
+				const selectedHotel = buildPreviewSelectedHotel(
+					account,
+					hotelId,
+					data.preview
+				);
+				startDashboardPreview({
+					auth: { token: data.token, user: data.user },
+					preview: data.preview,
+					selectedHotel,
+				});
+				const roleKey = getPrimaryScopedRole(data.user);
+				const ownerId =
+					normalizeHotelId(data.preview?.ownerId) ||
+					normalizeHotelId(data.user?.belongsToId);
+				message.success(
+					isRTL ? "تم فتح معاينة الحساب." : "Account preview opened."
+				);
+				onClose?.();
+				history.push(getScopedRouteForRole(roleKey, ownerId, hotelId));
+			})
+			.finally(() => setPreviewingAccountId(""));
+	};
+
 	const columns = [
 		{
 			title: WORDS.accountName,
@@ -2525,7 +2603,15 @@ const OwnerAccountsModal = ({
 			width: 210,
 			render: (name, row) => (
 				<AccountNameCell>
-					<strong>{name}</strong>
+					<AccountPreviewButton
+						type='button'
+						onClick={() => startAccountPreview(row)}
+						disabled={previewingAccountId === row._id}
+						title={isRTL ? "معاينة لوحة هذا الحساب" : "Preview this account dashboard"}
+					>
+						<EyeOutlined />
+						<strong>{name}</strong>
+					</AccountPreviewButton>
 					<span dir='ltr'>{row.email}</span>
 				</AccountNameCell>
 			),
@@ -4563,6 +4649,36 @@ const AccountNameCell = styled.div`
 		font-size: 0.8rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+`;
+
+const AccountPreviewButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.32rem;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: #0f4c81;
+	font: inherit;
+	font-weight: 900;
+	cursor: pointer;
+	padding: 0;
+
+	strong {
+		color: inherit;
+	}
+
+	&:hover {
+		color: #0b74de;
+		text-decoration: underline;
+	}
+
+	&:disabled {
+		cursor: wait;
+		opacity: 0.65;
+		text-decoration: none;
 	}
 `;
 

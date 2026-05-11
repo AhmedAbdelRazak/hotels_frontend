@@ -100,6 +100,17 @@ const NewReservationMain = () => {
 	const { user, token } = isAuthenticated();
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
 	const canConfirmReservations = canAccessPendingConfirmation(user);
+	const roleNumbers = getAccountRoleNumbers(user);
+	const roleDescriptions = getAccountRoleDescriptions(user);
+	const financeOnlyReservationView =
+		(roleNumbers.includes(6000) || roleDescriptions.includes("finance")) &&
+		![1000, 2000, 3000, 7000, 8000].some((role) =>
+			roleNumbers.includes(role),
+		) &&
+		!roleDescriptions.includes("hotelmanager") &&
+		!roleDescriptions.includes("reception") &&
+		!roleDescriptions.includes("ordertaker") &&
+		!roleDescriptions.includes("reservationemployee");
 	const agentDefaultBookingSource = defaultAgentBookingSource(user);
 	const canShowReservationTab = (tab) => {
 		if (limitedOrderTakerAccount) return ["newReservation", "list"].includes(tab);
@@ -648,6 +659,50 @@ const NewReservationMain = () => {
 		return out;
 	};
 
+	const getAvailableCountForRoom = (line = {}) => {
+		const targetType = String(line.room_type || line.roomType || "").toLowerCase();
+		const targetDisplay = String(
+			line.displayName || line.display_name || ""
+		).toLowerCase();
+		const inventory = (Array.isArray(roomInventory) ? roomInventory : []).find(
+			(room) => {
+				const roomType = String(room.room_type || room.roomType || "").toLowerCase();
+				const roomDisplay = String(
+					room.displayName || room.display_name || ""
+				).toLowerCase();
+				return (
+					roomType === targetType &&
+					(!targetDisplay || !roomDisplay || roomDisplay === targetDisplay)
+				);
+			},
+		);
+		if (!inventory) return Infinity;
+		const available = Number(inventory.available ?? inventory.total_available ?? 0);
+		return Number.isFinite(available) ? available : 0;
+	};
+
+	const findInventoryIssue = () =>
+		(pickedRoomsType || []).find((line) => {
+			const requested = Number(line.count || 1);
+			const available = getAvailableCountForRoom(line);
+			return requested > available;
+		});
+
+	const showReservationWarnings = (warnings = []) => {
+		const messages = (Array.isArray(warnings) ? warnings : [])
+			.map((warning) =>
+				typeof warning === "string" ? warning : warning?.message || ""
+			)
+			.map((message) => message.trim())
+			.filter(Boolean);
+		[...new Set(messages)].slice(0, 3).forEach((message) => {
+			toast.warn(message, { autoClose: 7000 });
+		});
+		if (messages.length > 3) {
+			toast.warn(`${messages.length - 3} more reservation warning(s) were logged.`);
+		}
+	};
+
 	const clickSubmit = () => {
 		if (!customer_details.name) return toast.error("Name is required");
 		if (!customer_details.phone) return toast.error("Phone is required");
@@ -680,6 +735,21 @@ const NewReservationMain = () => {
 		);
 		if (invalidRoomCount && activeTab === "newReservation") {
 			return toast.error("Room count must be greater than 0");
+		}
+		const inventoryIssue = findInventoryIssue();
+		if (inventoryIssue && limitedOrderTakerAccount) {
+			return toast.error(
+				`Not enough inventory for ${
+					inventoryIssue.displayName || inventoryIssue.room_type || "selected room"
+				}. Agents cannot overbook.`
+			);
+		}
+		if (inventoryIssue && activeTab === "newReservation") {
+			toast.warn(
+				`Warning: ${
+					inventoryIssue.displayName || inventoryIssue.room_type || "selected room"
+				} may be overbooked.`
+			);
 		}
 
 		const selectedHotelLS =
@@ -840,6 +910,7 @@ const NewReservationMain = () => {
 					);
 					console.log(data.error);
 				} else {
+					showReservationWarnings(data?.warnings);
 					toast.success("Checkin Was Successfully Processed!");
 					setTimeout(() => window.location.reload(false), 1500);
 				}
@@ -859,6 +930,7 @@ const NewReservationMain = () => {
 					);
 					console.log(data.error, "error create new reservation");
 				} else {
+					showReservationWarnings(data?.warnings);
 					toast.success("Reservation Was Successfully Booked!");
 					setTimeout(() => window.location.reload(false), 1500);
 				}
@@ -1038,6 +1110,8 @@ const NewReservationMain = () => {
 							>
 								{chosenLanguage === "Arabic"
 									? "تأكيد الحجوزات"
+									: financeOnlyReservationView
+									? "Commission Review"
 									: "Pending Confirmation"}
 								{pendingConfirmationCount > 0 ? (
 									<TabBadge>{pendingConfirmationCount}</TabBadge>

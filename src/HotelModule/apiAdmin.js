@@ -2,12 +2,44 @@ import axios from "axios";
 
 const getStoredAuthHeaders = () => {
 	try {
-		const raw = typeof window !== "undefined" ? localStorage.getItem("jwt") : null;
+		if (typeof window === "undefined") return {};
+		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
+		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		if (preview?.auth?.token) {
+			return { Authorization: `Bearer ${preview.auth.token}` };
+		}
+		const raw = localStorage.getItem("jwt");
 		const parsed = raw ? JSON.parse(raw) : null;
 		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
 	} catch (err) {
 		return {};
 	}
+};
+
+const getStoredLanguage = () => {
+	try {
+		if (typeof window === "undefined") return "";
+		const raw = localStorage.getItem("lang");
+		return raw ? JSON.parse(raw) : "";
+	} catch (error) {
+		return "";
+	}
+};
+
+const localizeApiError = (
+	data = {},
+	fallback = "Request failed. Please try again."
+) => {
+	const isArabic = getStoredLanguage() === "Arabic";
+	const localized = isArabic
+		? data?.errorArabic || data?.messageArabic || data?.error || data?.message
+		: data?.error || data?.message || data?.errorArabic || data?.messageArabic;
+	return {
+		...data,
+		error:
+			localized ||
+			(isArabic ? "تعذر إكمال الطلب. يرجى المحاولة مرة أخرى." : fallback),
+	};
 };
 
 export const hotelAccount = (userId, token, accountId) => {
@@ -835,6 +867,24 @@ export const singlePreReservationById = (reservationId) => {
 };
 
 const attachReservationActor = (reservation = {}) => {
+	try {
+		const previewAuth = JSON.parse(
+			localStorage.getItem("dashboardPreviewAuth") || "null"
+		);
+		const previewUserId = previewAuth?.auth?.user?._id;
+		if (previewUserId) {
+			return {
+				...reservation,
+				requestingUserId: previewUserId,
+				__previewAudit: true,
+				__previewAuditActorId:
+					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
+			};
+		}
+	} catch (error) {
+		// Keep the update usable even if preview storage is unavailable.
+	}
+
 	if (reservation.requestingUserId) return reservation;
 
 	try {
@@ -859,15 +909,24 @@ export const updateSingleReservation = (reservationId, reservation) => {
 				// content type?
 				"Content-Type": "application/json",
 				Accept: "application/json",
-				// Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 			body: JSON.stringify(attachReservationActor(reservation)),
 		},
 	)
-		.then((response) => {
-			return response.json();
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return localizeApiError(
+					{ ...data, status: response.status },
+					`Reservation update failed (${response.status})`
+				);
+			}
+			return data;
 		})
-		.catch((err) => console.log(err));
+		.catch((err) => ({
+			error: err?.message || "Network error while updating reservation.",
+		}));
 };
 
 export const getOpenFinanceCycleNotifications = (hotelId, userId) => {
@@ -1498,8 +1557,19 @@ export const updatePendingConfirmationReservation = ({
 			body: JSON.stringify(payload),
 		},
 	)
-		.then((response) => response.json())
-		.catch((err) => console.log(err));
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return localizeApiError(
+					{ ...data, status: response.status },
+					`Reservation status update failed (${response.status})`
+				);
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Network error while updating reservation status.",
+		}));
 };
 
 export const pendingConfirmationNotificationFeed = ({

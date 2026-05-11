@@ -76,6 +76,25 @@ export const updateHotelStaffUser = (userId, token, hotelId, staffId, userData) 
 		});
 };
 
+export const previewHotelStaffDashboard = (userId, token, hotelId, staffId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-staff/${staffId}/${hotelId}/${userId}/preview-dashboard`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			throw err;
+		});
+};
+
 export const signin = (user) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/signin`, {
 		method: "POST",
@@ -106,6 +125,7 @@ export const removeLocalStorage = (key) => {
 export const authenticate = (data, next) => {
 	if (typeof window !== "undefined") {
 		localStorage.setItem("jwt", JSON.stringify(data));
+		localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
 		next();
 	}
 };
@@ -114,12 +134,14 @@ export const authenticate2 = (response, next) => {
 	console.log("AUTHENTICATE HELPER ON SIGNIN RESPONSE", response);
 	// setCookie("token", response.data.token);
 	setLocalStorage("jwt", response.data);
+	localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
 	next();
 };
 
 export const signout = (next) => {
 	if (typeof window !== "undefined") {
 		localStorage.removeItem("jwt");
+		localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
 		localStorage.removeItem("product");
 		next();
 		return fetch(`${process.env.REACT_APP_API_URL}/signout`, {
@@ -132,12 +154,78 @@ export const signout = (next) => {
 	}
 };
 
+const DASHBOARD_PREVIEW_STORAGE_KEY = "dashboardPreviewAuth";
+
+const safeParseLocalJson = (key) => {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = localStorage.getItem(key);
+		return raw ? JSON.parse(raw) : null;
+	} catch (error) {
+		return null;
+	}
+};
+
+export const getDashboardPreview = () => {
+	const preview = safeParseLocalJson(DASHBOARD_PREVIEW_STORAGE_KEY);
+	if (!preview?.auth?.token || !preview?.auth?.user) return null;
+	return preview;
+};
+
+export const startDashboardPreview = ({ auth, preview, selectedHotel }) => {
+	if (typeof window === "undefined" || !auth?.token || !auth?.user) return;
+	const baseAuth = safeParseLocalJson("jwt");
+	const originalSelectedHotel = safeParseLocalJson("selectedHotel");
+	localStorage.setItem(
+		DASHBOARD_PREVIEW_STORAGE_KEY,
+		JSON.stringify({
+			auth,
+			preview: preview || {},
+			actor: baseAuth?.user || null,
+			originalSelectedHotel,
+			startedAt: new Date().toISOString(),
+		}),
+	);
+	if (selectedHotel) {
+		localStorage.setItem("selectedHotel", JSON.stringify(selectedHotel));
+	}
+};
+
+export const stopDashboardPreview = () => {
+	if (typeof window === "undefined") return null;
+	const preview = getDashboardPreview();
+	localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
+	if (preview && Object.prototype.hasOwnProperty.call(preview, "originalSelectedHotel")) {
+		if (preview.originalSelectedHotel) {
+			localStorage.setItem(
+				"selectedHotel",
+				JSON.stringify(preview.originalSelectedHotel),
+			);
+		} else {
+			localStorage.removeItem("selectedHotel");
+		}
+	}
+	return preview;
+};
+
 export const isAuthenticated = () => {
 	if (typeof window == "undefined") {
 		return false;
 	}
 	if (localStorage.getItem("jwt")) {
-		return JSON.parse(localStorage.getItem("jwt"));
+		const baseAuth = JSON.parse(localStorage.getItem("jwt"));
+		const preview = getDashboardPreview();
+		if (preview?.auth?.token && preview?.auth?.user) {
+			return {
+				...preview.auth,
+				dashboardPreview: {
+					...(preview.preview || {}),
+					actor: preview.actor || baseAuth?.user || null,
+					startedAt: preview.startedAt,
+				},
+			};
+		}
+		return baseAuth;
 	} else {
 		return false;
 	}

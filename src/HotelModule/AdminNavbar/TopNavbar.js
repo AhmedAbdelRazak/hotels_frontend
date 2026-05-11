@@ -15,7 +15,7 @@ import {
 } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import DigitalClock from "./DigitalClock";
-import { isAuthenticated, signout } from "../../auth";
+import { isAuthenticated, signout, stopDashboardPreview } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
 import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
@@ -67,6 +67,39 @@ const isAgentNotificationUser = (user = {}) => {
 	);
 };
 
+const isManagerOrAdminNotificationUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	return (
+		isSuperAdminUser(user) ||
+		roles.includes(1000) ||
+		roles.includes(2000) ||
+		descriptions.includes("hotelmanager")
+	);
+};
+
+const isFinanceNotificationUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	return roles.includes(6000) || descriptions.includes("finance");
+};
+
+const isReservationEmployeeNotificationUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	return roles.includes(8000) || descriptions.includes("reservationemployee");
+};
+
+const isFinanceOnlyNotificationUser = (user = {}) =>
+	isFinanceNotificationUser(user) &&
+	!isManagerOrAdminNotificationUser(user) &&
+	!isReservationEmployeeNotificationUser(user);
+
+const isReservationEmployeeOnlyNotificationUser = (user = {}) =>
+	isReservationEmployeeNotificationUser(user) &&
+	!isManagerOrAdminNotificationUser(user) &&
+	!isFinanceNotificationUser(user);
+
 const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 	if (reason === "agent_pending_review") {
 		return isArabic
@@ -116,13 +149,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	});
 
 	const { languageToggle, chosenLanguage } = useCartContext();
+	const isArabic = chosenLanguage === "Arabic";
 
 	const [hotelName, setHotelName] = useState("");
 
 	const location = useLocation();
 	const history = useHistory();
 
-	const { user, token } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const { user, token } = auth;
+	const dashboardPreview = auth.dashboardPreview;
 
 	// Selected hotel context
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
@@ -158,8 +194,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		selectedHotelOwnerId ||
 		(isOwnerManager ? user._id : user.belongsToId);
 	const canUsePendingNotifications =
-		canSeePendingConfirmationNotifications(user);
+		canSeePendingConfirmationNotifications(user) &&
+		(!isReservationEmployeeOnlyNotificationUser(user) ||
+			new URLSearchParams(location.search || "").has("pendingConfirmation"));
 	const isAgentNotificationAudience = isAgentNotificationUser(user);
+	const isFinanceNotificationAudience = isFinanceOnlyNotificationUser(user);
 
 	// eslint-disable-next-line
 	const userDetails = isOwnerManager ? user : selectedHotel.belongsTo;
@@ -271,6 +310,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		signout(() => history.push("/"));
 	};
 
+	const stopPreview = () => {
+		stopDashboardPreview();
+		history.push("/hotel-management/main-dashboard");
+		window.location.reload();
+	};
+
 	const openSelfUpdateModal = () => {
 		// For non-admin users only; admin keeps redirect behavior
 		if (user.role === 1000) return;
@@ -314,6 +359,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			case "update":
 				if (user.role !== 1000) openSelfUpdateModal();
 				break;
+			case "stop-preview":
+				stopPreview();
+				break;
 			case "logout":
 				handleSignout();
 				break;
@@ -341,6 +389,15 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						key: "update",
 						icon: <UserOutlined />,
 						label: "Update Account",
+					},
+			  ]
+			: []),
+		...(dashboardPreview
+			? [
+					{
+						key: "stop-preview",
+						icon: <LogoutOutlined />,
+						label: isArabic ? "إنهاء المعاينة" : "Exit preview",
 					},
 			  ]
 			: []),
@@ -448,7 +505,6 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 	const roleLabel =
 		user.role === 1000 ? "Superadmin" : user.role === 2000 ? "Owner" : "User";
-	const isArabic = chosenLanguage === "Arabic";
 	const notificationCount = Number(notificationFeed.total || 0);
 	const notificationPanel = (
 		<NotificationPanel $isArabic={isArabic}>
@@ -459,6 +515,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							? isArabic
 								? "تحديثات الحجوزات"
 								: "Reservation Updates"
+							: isFinanceNotificationAudience
+							? isArabic
+								? "Commission Reviews"
+								: "Commission Reviews"
 							: isArabic
 							? "تأكيد الحجوزات"
 							: "Reservation Confirmations"}
@@ -468,6 +528,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							? isArabic
 								? "تظهر لك فقط تحديثات حجوزاتك."
 								: "Only updates for your own reservations."
+							: isFinanceNotificationAudience
+							? isArabic
+								? "Reservations waiting for commission assignment."
+								: "Reservations waiting for commission assignment."
 							: notificationHotelId
 							? isArabic
 								? "تنبيهات الفندق المحدد فقط."
@@ -491,9 +555,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							? item.pendingReasons
 							: [];
 						const visibleReasons =
-							item.notificationType === "agent_review"
+							item.notificationType === "agent_review" && !reasons.length
 								? ["agent_pending_review"]
-								: reasons;
+								: reasons.length
+								? reasons
+								: item.notificationType === "agent_review"
+								? ["agent_pending_review"]
+								: [];
 						const agentDecisionText =
 							item.decisionStatus === "rejected"
 								? isArabic
@@ -589,6 +657,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			</MiddleSection>
 
 			<RightSection>
+				{dashboardPreview && (
+					<PreviewChip>
+						<span>
+							{isArabic ? "معاينة:" : "Previewing:"} {user?.name || ""}
+						</span>
+						<button type='button' onClick={stopPreview}>
+							{isArabic ? "إنهاء" : "Exit"}
+						</button>
+					</PreviewChip>
+				)}
 				<Icons>
 					<IconWrapper
 						style={{ width: "25%" }}
@@ -827,10 +905,46 @@ const HotelName = styled.span`
 const RightSection = styled.div`
 	display: flex;
 	align-items: center;
+	gap: 0.75rem;
 	flex: 0 0 auto;
 	min-width: 0;
 
 	@media (max-width: 760px) {
+		display: none;
+	}
+`;
+
+const PreviewChip = styled.div`
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	max-width: 260px;
+	padding: 0.34rem 0.48rem;
+	border: 1px solid rgba(253, 230, 138, 0.8);
+	border-radius: 8px;
+	background: #fef3c7;
+	color: #713f12;
+	font-size: 0.78rem;
+	font-weight: 900;
+
+	span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	button {
+		border: 0;
+		border-radius: 6px;
+		background: #92400e;
+		color: #fff;
+		font-size: 0.72rem;
+		font-weight: 900;
+		padding: 0.2rem 0.46rem;
+		cursor: pointer;
+	}
+
+	@media (max-width: 920px) {
 		display: none;
 	}
 `;

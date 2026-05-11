@@ -50,6 +50,59 @@ const splitRoomKey = (key = "") => {
 	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
 };
 
+const dateOnlyKey = (value) => {
+	if (!value) return "";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+		return value.slice(0, 10);
+	}
+	const parsed = moment(value);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
+};
+
+const buildStayDateKeysForCalendar = (startDate, endDate) => {
+	const start = moment(startDate).startOf("day");
+	const endExclusive = moment(endDate).startOf("day");
+	if (!start.isValid() || !endExclusive.isValid() || !endExclusive.isAfter(start)) {
+		return [];
+	}
+	const dates = [];
+	for (
+		const day = start.clone();
+		day.isBefore(endExclusive, "day");
+		day.add(1, "day")
+	) {
+		dates.push(day.format("YYYY-MM-DD"));
+	}
+	return dates;
+};
+
+const calendarRateIsBlocked = (rate = {}) => {
+	if (!rate || typeof rate !== "object") return false;
+	const price = Number(rate.price);
+	const rootPrice = Number(rate.rootPrice);
+	const color = String(rate.color || "").toLowerCase();
+	return (
+		(Number.isFinite(price) && price <= 0) ||
+		(Number.isFinite(rootPrice) && rootPrice <= 0 && color === "black") ||
+		color === "black"
+	);
+};
+
+const formatCalendarDateForDisplay = (date) => {
+	const parsed = moment(date, "YYYY-MM-DD", true);
+	return parsed.isValid() ? parsed.format("DD-MM-YYYY") : String(date || "");
+};
+
+const summarizeDateList = (dates = [], maxVisible = 4) => {
+	const uniqueDates = Array.from(new Set(dates.filter(Boolean)));
+	const visible = uniqueDates
+		.slice(0, maxVisible)
+		.map(formatCalendarDateForDisplay)
+		.join(", ");
+	const remaining = uniqueDates.length - maxVisible;
+	return remaining > 0 ? `${visible} +${remaining}` : visible;
+};
+
 export const EditReservationMain = ({
 	chosenLanguage,
 	reservation,
@@ -73,6 +126,56 @@ export const EditReservationMain = ({
 	const [pendingRoomIds, setPendingRoomIds] = useState([]);
 	const [hasRoomLineEdits, setHasRoomLineEdits] = useState(false);
 	const [hasDateEdits, setHasDateEdits] = useState(false);
+	const isArabic = chosenLanguage === "Arabic";
+	const blockedCalendarMessageFromResponse = (response) => {
+		const blockedRooms =
+			response?.blockedCalendar?.blockedRooms ||
+			response?.details?.blockedRooms ||
+			[];
+		if (Array.isArray(blockedRooms) && blockedRooms.length > 0) {
+			return blockedRooms
+				.map((item) => {
+					const roomLabel =
+						item.displayName || item.room_type || item.roomType || "Room";
+					const datesText = summarizeDateList(item.blockedDates || [], 6);
+					return isArabic
+						? `\u0627\u0644\u063a\u0631\u0641\u0629 ${roomLabel} \u0645\u062d\u062c\u0648\u0628\u0629 \u062e\u0644\u0627\u0644 ${datesText}.`
+						: `${roomLabel} is blocked on ${datesText}.`;
+				})
+				.join(" ");
+		}
+		if (response?.code === "calendar_date_blocked" && response?.details?.date) {
+			const roomLabel =
+				response?.details?.displayName ||
+				response?.details?.room_type ||
+				"Room";
+			const dateText = summarizeDateList([response.details.date], 1);
+			return isArabic
+				? `\u0627\u0644\u063a\u0631\u0641\u0629 ${roomLabel} \u0645\u062d\u062c\u0648\u0628\u0629 \u0628\u062a\u0627\u0631\u064a\u062e ${dateText}.`
+				: `${roomLabel} is blocked on ${dateText}.`;
+		}
+		return "";
+	};
+	const apiErrorMessage = (
+		response,
+		englishFallback = "An error occurred while updating the reservation",
+		arabicFallback = "حدث خطأ أثناء تحديث الحجز"
+	) => {
+		const blockedCalendarMessage = blockedCalendarMessageFromResponse(response);
+		if (blockedCalendarMessage) return blockedCalendarMessage;
+		return isArabic
+			? response?.errorArabic ||
+			  response?.messageArabic ||
+			  response?.error ||
+			  response?.message ||
+			  arabicFallback
+			: response?.error ||
+			  response?.message ||
+			  response?.errorArabic ||
+			  response?.messageArabic ||
+			  englishFallback;
+	};
+	const successMessage = (english, arabic) => (isArabic ? arabic : english);
 
 	const { user } = isAuthenticated();
 	const hotelIdValue =
@@ -145,6 +248,45 @@ export const EditReservationMain = ({
 			return detail.displayName || roomType || "";
 		},
 		[chosenLanguage, findRoomDetail],
+	);
+
+	const getBlockedDatesForRoom = useCallback(
+		(roomType, displayName) => {
+			if (!reservation?.checkin_date || !reservation?.checkout_date) return [];
+			const detail = findRoomDetail(roomType, displayName);
+			if (!detail) return [];
+			const stayDates = buildStayDateKeysForCalendar(
+				reservation.checkin_date,
+				reservation.checkout_date,
+			);
+			const rates = Array.isArray(detail.pricingRate) ? detail.pricingRate : [];
+			return stayDates.filter((date) => {
+				const rate = rates.find(
+					(item) => dateOnlyKey(item?.calendarDate) === date,
+				);
+				return calendarRateIsBlocked(rate);
+			});
+		},
+		[
+			findRoomDetail,
+			reservation?.checkin_date,
+			reservation?.checkout_date,
+		],
+	);
+
+	const formatBlockedRoomMessage = useCallback(
+		(roomLabel, blockedDates, forAgent = basicEditOnly) => {
+			const datesText = summarizeDateList(blockedDates, 6);
+			if (chosenLanguage === "Arabic") {
+				return forAgent
+					? `\u0627\u0644\u063a\u0631\u0641\u0629 ${roomLabel} \u0645\u062d\u062c\u0648\u0628\u0629 \u0641\u064a \u062a\u0642\u0648\u064a\u0645 \u0627\u0644\u0641\u0646\u062f\u0642 \u062e\u0644\u0627\u0644 ${datesText}. \u0644\u0627 \u064a\u0645\u0643\u0646 \u0644\u0644\u0648\u0643\u064a\u0644 \u062d\u062c\u0632\u0647\u0627 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e.`
+					: `\u062a\u0646\u0628\u064a\u0647: \u0627\u0644\u063a\u0631\u0641\u0629 ${roomLabel} \u0645\u062d\u062c\u0648\u0628\u0629 \u0641\u064a \u062a\u0642\u0648\u064a\u0645 \u0627\u0644\u0641\u0646\u062f\u0642 \u062e\u0644\u0627\u0644 ${datesText}.`;
+			}
+			return forAgent
+				? `${roomLabel} is blocked on the hotel calendar for ${datesText}. Agents cannot book this room on those dates.`
+				: `Warning: ${roomLabel} is blocked on the hotel calendar for ${datesText}.`;
+		},
+		[basicEditOnly, chosenLanguage],
 	);
 
 	const commissionForRoom = useCallback(
@@ -253,17 +395,20 @@ export const EditReservationMain = ({
 				const dateString = d.format("YYYY-MM-DD");
 				const rate =
 					Array.isArray(detail.pricingRate) &&
-					detail.pricingRate.find((r) => r.calendarDate === dateString);
+					detail.pricingRate.find(
+						(r) => dateOnlyKey(r?.calendarDate) === dateString,
+					);
+				const calendarBlocked = calendarRateIsBlocked(rate);
 				const basePrice = safeParseFloat(
-					rate?.price,
+					calendarBlocked ? undefined : rate?.price,
 					safeParseFloat(detail?.price?.basePrice, 0),
 				);
 				const rootPrice = safeParseFloat(
-					rate?.rootPrice ?? rate?.defaultCost,
+					calendarBlocked ? undefined : rate?.rootPrice ?? rate?.defaultCost,
 					safeParseFloat(detail?.defaultCost, 0),
 				);
 				const commissionRate = safeParseFloat(
-					rate?.commissionRate,
+					calendarBlocked ? undefined : rate?.commissionRate,
 					fallbackCommission,
 				);
 				const totalPriceWithCommission =
@@ -273,6 +418,7 @@ export const EditReservationMain = ({
 					price: basePrice,
 					rootPrice,
 					commissionRate,
+					calendarBlocked,
 					totalPriceWithCommission,
 					totalPriceWithoutCommission: basePrice,
 				});
@@ -865,7 +1011,7 @@ export const EditReservationMain = ({
 		],
 	);
 
-	const toggleChip = (key) => {
+	const toggleChip = (key, options = {}) => {
 		if (!reservation?.checkin_date || !reservation?.checkout_date) {
 			toast.info(
 				chosenLanguage === "Arabic"
@@ -876,6 +1022,31 @@ export const EditReservationMain = ({
 		}
 		const { room_type, displayName } = splitRoomKey(key);
 		const exists = selectedKeys.includes(key);
+		const calendarBlockedDates = Array.isArray(options.calendarBlockedDates)
+			? options.calendarBlockedDates
+			: [];
+		const inventoryBlocked = !!options.inventoryBlocked;
+		const roomLabel =
+			options.roomLabel || resolveDisplayLabelForType(room_type, displayName);
+		if (calendarBlockedDates.length > 0 && !exists) {
+			if (basicEditOnly) {
+				toast.error(
+					formatBlockedRoomMessage(roomLabel, calendarBlockedDates, true),
+				);
+				return;
+			}
+			toast.warn(
+				formatBlockedRoomMessage(roomLabel, calendarBlockedDates, false),
+			);
+		}
+		if (inventoryBlocked && !exists) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "لا توجد غرف متاحة من هذا النوع في التواريخ المحددة."
+					: "No inventory is available for this room type on the selected dates.",
+			);
+			return;
+		}
 		setHasRoomLineEdits(true);
 		if (exists) {
 			setReservation((prev) => ({
@@ -1066,8 +1237,111 @@ export const EditReservationMain = ({
 		return flattened;
 	};
 
+	const buildRoomPricingUpdatePayload = () => {
+		const dateStart = normalizeDate(reservation.checkin_date);
+		const dateEnd = normalizeDate(reservation.checkout_date);
+		const hasValidDates = !!dateStart && !!dateEnd;
+		const nightsCount = hasValidDates
+			? Math.max(dateEnd.diff(dateStart, "days"), 0)
+			: 0;
+		const totalPerDay = calculateTotalAmountPerDay();
+		const totalAmount = Number(
+			(totalPerDay * Number(nightsCount)).toFixed(2),
+		);
+		const normalizedPickedRoomsType = Array.isArray(
+			reservation.pickedRoomsType,
+		)
+			? reservation.pickedRoomsType.map((room) => {
+					const displayName = resolveDisplayNameForType(
+						room.room_type,
+						room.displayName || room.display_name,
+					);
+					const nightlyPrice = Number(room.chosenPrice) || 0;
+					return {
+						...room,
+						displayName,
+						chosenPrice: nightlyPrice,
+						pricingByDay: getPricingByDayForRoom(
+							nightlyPrice,
+							room.pricingByDay,
+							room.room_type,
+							displayName,
+						),
+					};
+			  })
+			: [];
+
+		const totalRoomsFromTypes = normalizedPickedRoomsType.reduce(
+			(sum, room) => sum + (Number(room.count) || 1),
+			0,
+		);
+		const daysOfResidence = hasValidDates
+			? Math.max(nightsCount, 0)
+			: Number(reservation.days_of_residence) || 0;
+		const flattenedRooms = flattenRoomsForSave(normalizedPickedRoomsType);
+
+		return {
+			pickedRoomsType: flattenedRooms,
+			pickedRoomsPricing: flattenedRooms,
+			total_rooms: totalRoomsFromTypes,
+			days_of_residence: daysOfResidence,
+			total_amount: totalAmount,
+			sub_total: totalAmount,
+		};
+	};
+
+	const getSelectedCalendarBlockedIssues = useCallback(() => {
+		const rooms = Array.isArray(reservation.pickedRoomsType)
+			? reservation.pickedRoomsType
+			: [];
+		return rooms
+			.map((room) => {
+				const displayName = resolveDisplayNameForType(
+					room.room_type,
+					room.displayName || room.display_name,
+				);
+				const blockedDates = getBlockedDatesForRoom(
+					room.room_type,
+					displayName,
+				);
+				if (!blockedDates.length) return null;
+				return {
+					room_type: room.room_type,
+					displayName,
+					blockedDates,
+					count: Number(room.count) || 1,
+				};
+			})
+			.filter(Boolean);
+	}, [
+		getBlockedDatesForRoom,
+		reservation.pickedRoomsType,
+		resolveDisplayNameForType,
+	]);
+
 	const UpdateReservation = () => {
-		const confirmationMessage = `Are you sure you want to update this reservation?`;
+		const calendarBlockedIssues = getSelectedCalendarBlockedIssues();
+		if (calendarBlockedIssues.length > 0) {
+			const issue = calendarBlockedIssues[0];
+			const roomLabel = resolveDisplayLabelForType(
+				issue.room_type,
+				issue.displayName,
+			);
+			const message = formatBlockedRoomMessage(
+				roomLabel,
+				issue.blockedDates,
+				basicEditOnly,
+			);
+			if (basicEditOnly) {
+				toast.error(message);
+				return;
+			}
+			toast.warn(message);
+		}
+		const confirmationMessage = successMessage(
+			"Are you sure you want to update this reservation?",
+			"هل أنت متأكد أنك تريد تحديث هذا الحجز؟"
+		);
 		if (window.confirm(confirmationMessage)) {
 			if (basicEditOnly) {
 				const updateData = {
@@ -1082,17 +1356,23 @@ export const EditReservationMain = ({
 					booking_comment: reservation.booking_comment || reservation.comment,
 					requestingUserId: user?._id,
 				};
+				if (hasRoomLineEdits || hasDateEdits) {
+					Object.assign(updateData, buildRoomPricingUpdatePayload());
+				}
 
 				updateSingleReservation(reservation._id, updateData).then((response) => {
 					if (!response || response.error) {
 						console.error(response?.error || response);
-						toast.error(
-							response?.error || "An error occurred while updating the reservation",
-						);
+						toast.error(apiErrorMessage(response));
 						return;
 					}
 					const updatedReservation = response?.reservation || response;
-					toast.success("Reservation was successfully updated");
+					toast.success(
+						successMessage(
+							"Reservation was successfully updated",
+							"تم تحديث الحجز بنجاح"
+						)
+					);
 					if (updatedReservation) {
 						setReservation(updatedReservation);
 						if (typeof onReservationSaved === "function") {
@@ -1138,54 +1418,7 @@ export const EditReservationMain = ({
 			}
 
 			if (hasRoomLineEdits || hasDateEdits) {
-				const dateStart = normalizeDate(reservation.checkin_date);
-				const dateEnd = normalizeDate(reservation.checkout_date);
-				const hasValidDates = !!dateStart && !!dateEnd;
-				const nightsCount = hasValidDates
-					? Math.max(dateEnd.diff(dateStart, "days"), 0)
-					: 0;
-				const totalPerDay = calculateTotalAmountPerDay();
-				const totalAmount = Number(
-					(totalPerDay * Number(nightsCount)).toFixed(2),
-				);
-				const normalizedPickedRoomsType = Array.isArray(
-					reservation.pickedRoomsType,
-				)
-					? reservation.pickedRoomsType.map((room) => {
-							const displayName = resolveDisplayNameForType(
-								room.room_type,
-								room.displayName || room.display_name,
-							);
-							const nightlyPrice = Number(room.chosenPrice) || 0;
-							return {
-								...room,
-								displayName,
-								chosenPrice: nightlyPrice,
-								pricingByDay: getPricingByDayForRoom(
-									nightlyPrice,
-									room.pricingByDay,
-									room.room_type,
-									displayName,
-								),
-							};
-					  })
-					: [];
-
-				const totalRoomsFromTypes = normalizedPickedRoomsType.reduce(
-					(sum, room) => sum + (Number(room.count) || 1),
-					0,
-				);
-				const daysOfResidence = hasValidDates
-					? Math.max(nightsCount, 0)
-					: Number(reservation.days_of_residence) || 0;
-				const flattenedRooms = flattenRoomsForSave(normalizedPickedRoomsType);
-
-				updateData.pickedRoomsType = flattenedRooms;
-				updateData.pickedRoomsPricing = flattenedRooms;
-				updateData.total_rooms = totalRoomsFromTypes;
-				updateData.days_of_residence = daysOfResidence;
-				updateData.total_amount = totalAmount;
-				updateData.sub_total = totalAmount;
+				Object.assign(updateData, buildRoomPricingUpdatePayload());
 			} else {
 				delete updateData.pickedRoomsType;
 				delete updateData.pickedRoomsPricing;
@@ -1200,11 +1433,23 @@ export const EditReservationMain = ({
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(
-						response?.error || "An error occurred while updating the status",
+						apiErrorMessage(
+							response,
+							"An error occurred while updating the status",
+							"حدث خطأ أثناء تحديث حالة الحجز"
+						)
 					);
 				} else {
 					toast.success(
-						"Reservation was successfully updated & Email was sent to the guest",
+						sendEmail
+							? successMessage(
+									"Reservation updated successfully and email was sent.",
+									"تم تحديث الحجز بنجاح وتم إرسال البريد الإلكتروني."
+							  )
+							: successMessage(
+									"Reservation updated successfully.",
+									"تم تحديث الحجز بنجاح."
+							  )
 					);
 					setIsRoomCountModalOpen(false);
 					setIsPricingModalOpen(false);
@@ -1395,6 +1640,10 @@ export const EditReservationMain = ({
 	const selectedRoomPricing = selectedRoomLine
 		? ensurePricingByDay(selectedRoomLine)
 		: [];
+	const selectedCalendarBlockedIssues = useMemo(
+		() => getSelectedCalendarBlockedIssues(),
+		[getSelectedCalendarBlockedIssues],
+	);
 	const totalPerDay = useMemo(() => {
 		if (!Array.isArray(reservation.pickedRoomsType)) return 0;
 		return reservation.pickedRoomsType.reduce(
@@ -2176,8 +2425,7 @@ export const EditReservationMain = ({
 
 				<div className='container'>
 					<div className='row'>
-						{!basicEditOnly &&
-						Array.isArray(roomInventory) && roomInventory.length > 0 && (
+						{Array.isArray(roomInventory) && roomInventory.length > 0 && (
 							<div className='col-12' style={{ margin: "20px 0" }}>
 								<Label>
 									{chosenLanguage === "Arabic" ? "نوع الغرفة" : "Room Type"}
@@ -2200,12 +2448,51 @@ export const EditReservationMain = ({
 										const active = selectedKeys.includes(key);
 										const availableCount =
 											room.available ?? room.total_available ?? 0;
+										const localBlockedDates = getBlockedDatesForRoom(
+											room.room_type,
+											resolvedDisplayName,
+										);
+										const endpointBlockedDates = Array.isArray(room.blockedDates)
+											? room.blockedDates
+											: Array.isArray(room.pricingByDay)
+											  ? room.pricingByDay
+														.filter((day) => day?.calendarBlocked)
+														.map((day) => day.date)
+											  : [];
+										const calendarBlockedDates = localBlockedDates.length
+											? localBlockedDates
+											: endpointBlockedDates;
+										const calendarBlocked =
+											calendarBlockedDates.length > 0;
+										const agentInventoryBlocked =
+											basicEditOnly && !active && Number(availableCount || 0) <= 0;
+										const agentCalendarBlocked =
+											basicEditOnly && !active && calendarBlocked;
+										const disabledForAgent =
+											agentInventoryBlocked || agentCalendarBlocked;
 										return (
 											<RoomChip
 												key={key}
 												$active={active}
-												onClick={() => toggleChip(key)}
-												title={`${resolvedDisplayName} (${room.room_type})`}
+												$disabled={disabledForAgent}
+												$calendarBlocked={calendarBlocked}
+												aria-disabled={disabledForAgent}
+												onClick={() =>
+													toggleChip(key, {
+														inventoryBlocked: agentInventoryBlocked,
+														calendarBlockedDates,
+														roomLabel: resolvedDisplayName,
+													})
+												}
+												title={
+													calendarBlocked
+														? formatBlockedRoomMessage(
+																resolvedDisplayName,
+																calendarBlockedDates,
+																basicEditOnly,
+														  )
+														: `${resolvedDisplayName} (${room.room_type})`
+												}
 											>
 												<span className='icon'>
 													<HomeOutlined />
@@ -2221,6 +2508,14 @@ export const EditReservationMain = ({
 													{chosenLanguage === "Arabic" ? "المتاح" : "Available"}
 													: {availableCount}
 												</span>
+												{calendarBlocked && (
+													<span className='calendar-block'>
+														{chosenLanguage === "Arabic"
+															? "\u0645\u062d\u062c\u0648\u0628"
+															: "Blocked"}
+														: {summarizeDateList(calendarBlockedDates, 3)}
+													</span>
+												)}
 												{active && (
 													<CheckCircleTwoTone
 														twoToneColor='#52c41a'
@@ -2243,6 +2538,32 @@ export const EditReservationMain = ({
 					Array.isArray(reservation.pickedRoomsType) &&
 					reservation.pickedRoomsType.length > 0 ? (
 						<>
+							{selectedCalendarBlockedIssues.length > 0 && (
+								<CalendarBlockNotice>
+									<strong>
+										{chosenLanguage === "Arabic"
+											? "\u062a\u0646\u0628\u064a\u0647 \u062a\u0642\u0648\u064a\u0645"
+											: "Calendar warning"}
+									</strong>
+									{selectedCalendarBlockedIssues.map((issue) => {
+										const roomLabel = resolveDisplayLabelForType(
+											issue.room_type,
+											issue.displayName,
+										);
+										return (
+											<div
+												key={`${issue.room_type}-${issue.displayName}`}
+											>
+												{formatBlockedRoomMessage(
+													roomLabel,
+													issue.blockedDates,
+													basicEditOnly,
+												)}
+											</div>
+										);
+									})}
+								</CalendarBlockNotice>
+							)}
 							<div className='total-amount my-3'>
 								<h5>
 									{chosenLanguage === "Arabic"
@@ -2292,7 +2613,6 @@ export const EditReservationMain = ({
 													x {Number(room.count) || 1}{" "}
 													{chosenLanguage === "Arabic" ? "غرف" : "rooms"}
 												</div>
-												{!basicEditOnly ? (
 												<div className='actions'>
 													<Button
 														size='small'
@@ -2329,7 +2649,6 @@ export const EditReservationMain = ({
 														{chosenLanguage === "Arabic" ? "السعر" : "Pricing"}
 													</Button>
 												</div>
-												) : null}
 											</div>
 										);
 									})}
@@ -2830,26 +3149,50 @@ const RoomGrid = styled.div`
 	margin-top: 8px;
 `;
 
+const CalendarBlockNotice = styled.div`
+	background: #fff7ed;
+	border: 1px solid #fdba74;
+	border-inline-start: 4px solid #ea580c;
+	border-radius: 10px;
+	color: #7c2d12;
+	display: grid;
+	gap: 5px;
+	font-size: 0.9rem;
+	font-weight: 700;
+	margin: 10px 0;
+	padding: 10px 12px;
+
+	strong {
+		color: #9a3412;
+		font-size: 0.95rem;
+	}
+`;
+
 const RoomChip = styled.button`
 	appearance: none;
-	border: 1px solid ${(p) => (p.$active ? "#1a9f42" : "#d7e6f5")};
-	background: ${(p) => (p.$active ? "#e7f7ed" : "#ffffff")};
+	border: 1px solid
+		${(p) =>
+			p.$calendarBlocked ? "#fb923c" : p.$active ? "#1a9f42" : "#d7e6f5"};
+	background: ${(p) =>
+		p.$calendarBlocked ? "#fff7ed" : p.$active ? "#e7f7ed" : "#ffffff"};
 	color: #111827;
 	padding: 9px 10px;
 	border-radius: 10px;
 	display: grid;
-	grid-template-columns: auto 1fr auto auto auto;
+	grid-template-columns: auto 1fr auto auto auto auto;
 	align-items: center;
 	gap: 8px;
-	cursor: pointer;
+	cursor: ${(p) => (p.$disabled ? "not-allowed" : "pointer")};
 	transition:
 		box-shadow 0.2s ease,
 		transform 0.05s ease;
 	text-align: start;
+	opacity: ${(p) => (p.$disabled ? 0.55 : 1)};
 
 	&:hover {
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-		transform: translateY(-1px);
+		box-shadow: ${(p) =>
+			p.$disabled ? "none" : "0 2px 8px rgba(0, 0, 0, 0.08)"};
+		transform: ${(p) => (p.$disabled ? "none" : "translateY(-1px)")};
 	}
 
 	.icon {
@@ -2877,12 +3220,26 @@ const RoomChip = styled.button`
 		font-size: 12px;
 		opacity: 0.8;
 	}
+	.calendar-block {
+		background: #ffedd5;
+		border: 1px solid #fdba74;
+		border-radius: 999px;
+		color: #9a3412;
+		font-size: 11px;
+		font-weight: 800;
+		max-width: 150px;
+		overflow: hidden;
+		padding: 2px 7px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 
 	@media (max-width: 520px) {
 		grid-template-columns: auto 1fr auto;
 		gap: 6px;
 
-		.avail {
+		.avail,
+		.calendar-block {
 			grid-column: 2 / -1;
 		}
 	}

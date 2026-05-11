@@ -102,7 +102,12 @@ const AdminNavbar = ({
 		hasRoleDescription("housekeepingmanager") ||
 		hasRoleDescription("housekeeping");
 	const isLimitedOrderTaker = hasOrderTaker && !hasReception && !isManagerOrAdmin;
-	const isFinanceOnly = hasFinance && !isManagerOrAdmin && !hasReception && !hasOrderTaker;
+	const isFinanceOnly =
+		hasFinance &&
+		!isManagerOrAdmin &&
+		!hasReception &&
+		!hasOrderTaker &&
+		!hasReservationEmployee;
 	const isReservationEmployeeOnly =
 		hasReservationEmployee &&
 		!isManagerOrAdmin &&
@@ -115,7 +120,7 @@ const AdminNavbar = ({
 			: isReservationEmployeeOnly
 			  ? "?pendingConfirmation"
 			  : isFinanceOnly
-			    ? "?list=&page=1"
+			    ? "?pendingConfirmation"
 			    : ""
 	}`;
 	const canShowNavItem = (key) => {

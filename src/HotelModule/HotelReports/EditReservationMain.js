@@ -84,6 +84,24 @@ const EditReservationMain = ({
 	const [isLoading, setIsLoading] = useState(false);
 
 	const { user, token } = isAuthenticated();
+	const isArabic = chosenLanguage === "Arabic";
+	const apiErrorMessage = (
+		response,
+		englishFallback = "Error updating reservation.",
+		arabicFallback = "حدث خطأ أثناء تحديث الحجز."
+	) =>
+		isArabic
+			? response?.errorArabic ||
+			  response?.messageArabic ||
+			  response?.error ||
+			  response?.message ||
+			  arabicFallback
+			: response?.error ||
+			  response?.message ||
+			  response?.errorArabic ||
+			  response?.messageArabic ||
+			  englishFallback;
+	const successMessage = (english, arabic) => (isArabic ? arabic : english);
 
 	// Keep track of previous values
 	const prevValues = useRef({
@@ -857,18 +875,26 @@ const EditReservationMain = ({
 				reservationData
 			);
 			if (response?.message === "Reservation updated successfully") {
-				message.success("Reservation updated successfully!");
+				message.success(
+					successMessage(
+						"Reservation updated successfully!",
+						"تم تحديث الحجز بنجاح!"
+					)
+				);
 				setReservationCreated(true);
 				setReservation(response.reservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
-				message.error(
-					response?.error || response?.message || "Error updating reservation."
-				);
+				message.error(apiErrorMessage(response));
 			}
 		} catch (error) {
 			console.error("Error updating reservation:", error);
-			message.error("An error occurred while updating the reservation.");
+			message.error(
+				successMessage(
+					"An error occurred while updating the reservation.",
+					"حدث خطأ أثناء تحديث الحجز."
+				)
+			);
 		} finally {
 			setIsLoading(false);
 		}

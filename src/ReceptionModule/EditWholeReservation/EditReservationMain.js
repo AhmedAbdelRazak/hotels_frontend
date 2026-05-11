@@ -30,6 +30,24 @@ export const EditReservationMain = ({
 	const [roomInventory, setRoomInventory] = useState("");
 
 	const { user } = isAuthenticated();
+	const isArabic = chosenLanguage === "Arabic";
+	const apiErrorMessage = (
+		response,
+		englishFallback = "An error occurred while updating the reservation",
+		arabicFallback = "حدث خطأ أثناء تحديث الحجز"
+	) =>
+		isArabic
+			? response?.errorArabic ||
+			  response?.messageArabic ||
+			  response?.error ||
+			  response?.message ||
+			  arabicFallback
+			: response?.error ||
+			  response?.message ||
+			  response?.errorArabic ||
+			  response?.messageArabic ||
+			  englishFallback;
+	const successMessage = (english, arabic) => (isArabic ? arabic : english);
 
 	const formatDate = (date) => {
 		if (!date) return "";
@@ -288,7 +306,10 @@ export const EditReservationMain = ({
 	};
 
 	const UpdateReservation = () => {
-		const confirmationMessage = `Are you sure you want to update this reservation?`;
+		const confirmationMessage = successMessage(
+			"Are you sure you want to update this reservation?",
+			"هل أنت متأكد أنك تريد تحديث هذا الحجز؟"
+		);
 		if (window.confirm(confirmationMessage)) {
 			const updateData = {
 				...reservation,
@@ -304,10 +325,19 @@ export const EditReservationMain = ({
 			updateSingleReservation(reservation._id, updateData).then((response) => {
 				if (response.error) {
 					console.error(response.error);
-					toast.error("An error occurred while updating the status");
+					toast.error(
+						apiErrorMessage(
+							response,
+							"An error occurred while updating the status",
+							"حدث خطأ أثناء تحديث حالة الحجز"
+						)
+					);
 				} else {
 					toast.success(
-						"Reservation was successfully updated & Email was sent to the guest"
+						successMessage(
+							"Reservation was successfully updated & Email was sent to the guest",
+							"تم تحديث الحجز بنجاح وتم إرسال البريد الإلكتروني إلى النزيل"
+						)
 					);
 					setIsModalVisible(false);
 

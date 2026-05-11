@@ -80,6 +80,305 @@ const isLimitedOrderTakerAccount = (account = {}) => {
 	return hasOrderTakingScope && !hasFullReservationScope;
 };
 
+const isOrderTakerEditableReservation = (reservation = {}) => {
+	const status = String(
+		reservation?.reservation_status || reservation?.state || "",
+	)
+		.trim()
+		.toLowerCase();
+	const pendingStatus = String(reservation?.pendingConfirmation?.status || "")
+		.trim()
+		.toLowerCase();
+	const agentDecisionStatus = String(
+		reservation?.agentDecisionSnapshot?.status || "",
+	)
+		.trim()
+		.toLowerCase();
+
+	if (["confirmed", "rejected"].includes(agentDecisionStatus)) return false;
+	if (["confirmed", "rejected"].includes(pendingStatus)) return false;
+	if (
+		/(confirmed|inhouse|checked[_\s-]?in|checked[_\s-]?out|cancel|reject|no[_\s-]?show|relocated)/i.test(
+			status,
+		)
+	) {
+		return false;
+	}
+	return /pending[\s_-]?confirmation/i.test(status) || pendingStatus === "pending";
+};
+
+const AUDIT_FIELD_LABELS = {
+	agentDecisionSnapshot: "Agent decision",
+	agentWalletSnapshot: "Agent wallet",
+	commissionData: "Commission",
+	commissionPaid: "Commission paid",
+	commissionStatus: "Commission status",
+	customer_details: "Customer",
+	days_of_residence: "Nights",
+	financial_cycle: "Finance cycle",
+	moneyTransferredToHotel: "Hotel payout",
+	paid_amount: "Paid amount",
+	paid_amount_breakdown: "Payment breakdown",
+	pendingConfirmation: "Pending confirmation",
+	pickedRoomsPricing: "Room pricing",
+	pickedRoomsType: "Selected rooms",
+	reservation_status: "Reservation status",
+	sub_total: "Subtotal",
+	total_amount: "Total amount",
+	total_rooms: "Total rooms",
+};
+
+const AUDIT_ACTION_LABELS = {
+	finance_update: "Finance update",
+	housing_update: "Housing update",
+	reservation_created: "Reservation created",
+	reservation_update: "Reservation update",
+};
+
+const AUDIT_OBJECT_PATHS = {
+	agentDecisionSnapshot: ["status", "reason", "decidedAt", "decidedBy.name"],
+	agentWalletSnapshot: [
+		"captured",
+		"reservationAmount",
+		"balanceBeforeReservation",
+		"balanceAfterReservation",
+		"commissionAmount",
+		"capturedAt",
+		"capturedBy.name",
+	],
+	commissionData: ["assigned", "amount", "status", "assignedAt", "assignedBy.name"],
+	customer_details: [
+		"name",
+		"phone",
+		"email",
+		"nationality",
+		"passport",
+		"passportExpiry",
+		"hasCar",
+		"carLicensePlate",
+	],
+	financial_cycle: [
+		"collectionModel",
+		"status",
+		"commissionType",
+		"commissionValue",
+		"commissionAmount",
+		"pmsCollectedAmount",
+		"hotelCollectedAmount",
+		"hotelPayoutDue",
+		"commissionDueToPms",
+		"commissionAssigned",
+		"lastUpdatedAt",
+		"lastUpdatedBy.name",
+		"notes",
+	],
+	paid_amount_breakdown: [
+		"paid_online_via_link",
+		"paid_at_hotel_cash",
+		"paid_at_hotel_card",
+		"paid_to_hotel",
+		"paid_online_jannatbooking",
+		"paid_online_other_platforms",
+		"paid_online_via_instapay",
+		"paid_no_show",
+		"payment_comments",
+	],
+	pendingConfirmation: [
+		"status",
+		"rejectionReason",
+		"confirmationReason",
+		"confirmedAt",
+		"rejectedAt",
+		"revertedAt",
+		"lastUpdatedAt",
+		"lastUpdatedBy.name",
+	],
+};
+
+const AUDIT_MONEY_PATH_PATTERN =
+	/(amount|commission|payout|paid|price|total|balance|collected|due)/i;
+
+const titleizeAuditKey = (value = "") =>
+	String(value || "")
+		.replace(/_/g, " ")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^./, (char) => char.toUpperCase());
+
+const formatAuditFieldLabel = (field = "") =>
+	AUDIT_FIELD_LABELS[field] || titleizeAuditKey(field || "Change");
+
+const formatAuditActionLabel = (action = "") =>
+	AUDIT_ACTION_LABELS[action] || titleizeAuditKey(action || "Reservation update");
+
+const getAuditPathValue = (value, path = "") =>
+	String(path)
+		.split(".")
+		.reduce((current, key) => {
+			if (current === null || current === undefined) return undefined;
+			return current[key];
+		}, value);
+
+const auditPathExists = (value, path = "") =>
+	getAuditPathValue(value, path) !== undefined;
+
+const isAuditObject = (value) =>
+	value !== null &&
+	value !== undefined &&
+	typeof value === "object" &&
+	!(value instanceof Date);
+
+const formatAuditScalar = (value, path = "") => {
+	if (value === undefined || value === null || value === "") return "-";
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime())
+			? "-"
+			: moment(value).format("YYYY-MM-DD HH:mm");
+	}
+	if (typeof value === "boolean") return value ? "Yes" : "No";
+	if (typeof value === "number") {
+		const normalized = Number(value.toFixed(2));
+		return AUDIT_MONEY_PATH_PATTERN.test(path)
+			? `${normalized.toLocaleString()} SAR`
+			: String(normalized);
+	}
+	if (typeof value === "string") {
+		const text = value.trim();
+		if (!text) return "-";
+		if (/(date|at|time|expiry)$/i.test(path) && moment(text).isValid()) {
+			return moment(text).format("YYYY-MM-DD HH:mm");
+		}
+		return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+	}
+	if (isAuditObject(value)) {
+		return (
+			value.name ||
+			value.email ||
+			value.roleDescription ||
+			value.role ||
+			value._id ||
+			value.id ||
+			"-"
+		);
+	}
+	return String(value);
+};
+
+const collectAuditPaths = (value, prefix = "", depth = 0) => {
+	if (!isAuditObject(value) || Array.isArray(value) || depth > 2) return [];
+	return Object.keys(value).flatMap((key) => {
+		if (["__v", "_id", "id"].includes(key)) return [];
+		const path = prefix ? `${prefix}.${key}` : key;
+		const nextValue = value[key];
+		if (Array.isArray(nextValue)) return [path];
+		if (isAuditObject(nextValue)) {
+			return collectAuditPaths(nextValue, path, depth + 1);
+		}
+		return [path];
+	});
+};
+
+const formatAuditRoom = (room = {}) => {
+	const label =
+		room.displayName ||
+		room.display_name ||
+		room.room_type ||
+		room.roomType ||
+		"Room";
+	const count = Number(room.count || 1);
+	const nightly = Number(room.chosenPrice || 0);
+	const total = Number(room.totalPriceWithCommission || room.price || 0);
+	return [
+		`${label} x${count}`,
+		nightly > 0 ? `${nightly.toFixed(2)} SAR/night` : "",
+		total > 0 ? `${total.toFixed(2)} SAR total` : "",
+	]
+		.filter(Boolean)
+		.join(" | ");
+};
+
+const formatAuditValue = (field, value, path = field) => {
+	if (Array.isArray(value)) {
+		if (["pickedRoomsType", "pickedRoomsPricing"].includes(field)) {
+			return value.length ? value.map(formatAuditRoom).join("; ") : "-";
+		}
+		if (!value.length) return "-";
+		return value
+			.slice(0, 4)
+			.map((item) =>
+				isAuditObject(item)
+					? formatAuditObjectSummary(field, item)
+					: formatAuditScalar(item, path),
+			)
+			.join("; ");
+	}
+	if (isAuditObject(value)) return formatAuditObjectSummary(field, value);
+	return formatAuditScalar(value, path);
+};
+
+function formatAuditObjectSummary(field, value = {}) {
+	const paths =
+		AUDIT_OBJECT_PATHS[field] ||
+		collectAuditPaths(value).filter((path) => path.split(".").length <= 2);
+	const parts = paths
+		.filter((path) => auditPathExists(value, path))
+		.map((path) => {
+			const label = titleizeAuditKey(path.split(".").pop());
+			return `${label}: ${formatAuditScalar(getAuditPathValue(value, path), path)}`;
+		})
+		.filter((part) => !part.endsWith(": -"));
+	if (!parts.length) return formatAuditScalar(value);
+	return parts.slice(0, 6).join("; ");
+}
+
+const buildAuditObjectChangeParts = (field, fromValue = {}, toValue = {}) => {
+	const preferredPaths = AUDIT_OBJECT_PATHS[field];
+	const paths = preferredPaths || [
+		...new Set([
+			...collectAuditPaths(fromValue),
+			...collectAuditPaths(toValue),
+		]),
+	];
+	return paths
+		.filter(
+			(path) => auditPathExists(fromValue, path) || auditPathExists(toValue, path),
+		)
+		.map((path) => {
+			const fromText = formatAuditScalar(getAuditPathValue(fromValue, path), path);
+			const toText = formatAuditScalar(getAuditPathValue(toValue, path), path);
+			if (fromText === toText) return null;
+			return `${titleizeAuditKey(path.split(".").pop())}: ${fromText} -> ${toText}`;
+		})
+		.filter(Boolean);
+};
+
+const formatAuditEntryDetail = (entry = {}) => {
+	const field = entry.field || "change";
+	const label = formatAuditFieldLabel(field);
+	const fromValue = entry.from;
+	const toValue = entry.to;
+	const hasObjectValue =
+		isAuditObject(fromValue) ||
+		isAuditObject(toValue) ||
+		Array.isArray(fromValue) ||
+		Array.isArray(toValue);
+
+	if (hasObjectValue && !Array.isArray(fromValue) && !Array.isArray(toValue)) {
+		const parts = buildAuditObjectChangeParts(field, fromValue || {}, toValue || {});
+		if (parts.length) {
+			const visible = parts.slice(0, 6).join("; ");
+			const extra = parts.length > 6 ? `; +${parts.length - 6} more` : "";
+			return `${label}: ${visible}${extra}`;
+		}
+	}
+
+	return `${label}: ${formatAuditValue(field, fromValue)} -> ${formatAuditValue(
+		field,
+		toValue,
+	)}`;
+};
+
 const AR_LABELS = {
 	guestName: "\u0627\u0633\u0645 \u0627\u0644\u0636\u064a\u0641",
 	email: "\u0627\u0644\u0628\u0631\u064a\u062f",
@@ -111,6 +410,10 @@ const AR_LABELS = {
 	currency: "\u0631\u064a\u0627\u0644",
 	reservationStatus:
 		"\u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u062c\u0632",
+	reservationWorkflow:
+		"\u062f\u0648\u0631\u0629 \u0627\u0644\u062d\u062c\u0632",
+	lastUpdate:
+		"\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b",
 	bookingSource:
 		"\u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632",
 	bookingDate:
@@ -1501,6 +1804,259 @@ const ContentSection = styled.div`
 		min-height: 0;
 	}
 
+	.middle-operation-shell > .middle-operation-top,
+	.middle-operation-shell > .payment-method-preview {
+		display: none;
+	}
+
+	.workflow-source-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.workflow-source-card,
+	.workflow-status-card,
+	.workflow-money-card {
+		background: rgba(255, 255, 255, 0.88);
+		border: 1px solid #fed7aa;
+		border-radius: 8px;
+		box-shadow: 0 6px 14px rgba(217, 119, 6, 0.06);
+	}
+
+	.workflow-source-card {
+		align-items: center;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 8px;
+		min-height: 58px;
+		padding: 8px;
+	}
+
+	.workflow-source-card > div {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.workflow-source-card span:not(.detail-icon) {
+		color: var(--pms-muted);
+		font-size: 0.74rem;
+		font-weight: 900;
+	}
+
+	.workflow-source-card strong {
+		color: var(--pms-text);
+		font-size: 0.94rem;
+		font-weight: 950;
+		line-height: 1.24;
+		overflow-wrap: anywhere;
+	}
+
+	.workflow-status-card {
+		align-items: stretch;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(142px, 0.52fr);
+		overflow: hidden;
+	}
+
+	.workflow-status-card.accepted {
+		border-color: #86efac;
+	}
+
+	.workflow-status-card.rejected {
+		border-color: #fecaca;
+	}
+
+	.workflow-status-card.pending {
+		border-color: #fbbf24;
+	}
+
+	.workflow-status-main {
+		display: grid;
+		gap: 4px;
+		padding: 10px;
+		text-align: center;
+	}
+
+	.workflow-status-main span,
+	.workflow-status-meta span,
+	.workflow-card-heading,
+	.workflow-account-line small,
+	.workflow-ledger-row span {
+		color: var(--pms-muted);
+		font-size: 0.76rem;
+		font-weight: 900;
+	}
+
+	.workflow-status-main strong {
+		font-size: 1rem;
+		font-weight: 950;
+		line-height: 1.2;
+		text-transform: uppercase;
+	}
+
+	.workflow-status-card.accepted .workflow-status-main strong {
+		color: var(--pms-green);
+	}
+
+	.workflow-status-card.rejected .workflow-status-main strong {
+		color: #dc2626;
+	}
+
+	.workflow-status-card.pending .workflow-status-main strong {
+		color: #b45309;
+	}
+
+	.workflow-status-main small {
+		color: #475569;
+		font-size: 0.76rem;
+		font-weight: 800;
+		line-height: 1.25;
+	}
+
+	.workflow-status-meta {
+		background: #fff7ed;
+		border-inline-start: 1px solid #fed7aa;
+		display: grid;
+		gap: 2px;
+		place-items: center;
+		padding: 8px;
+		text-align: center;
+	}
+
+	.workflow-status-meta strong {
+		color: var(--pms-text);
+		font-size: 0.78rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	.workflow-status-meta em {
+		color: #92400e;
+		font-size: 0.72rem;
+		font-style: normal;
+		font-weight: 900;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
+	}
+
+	.workflow-money-card {
+		display: grid;
+		gap: 8px;
+		padding: 10px;
+	}
+
+	.workflow-card-heading {
+		align-items: center;
+		display: inline-flex;
+		gap: 6px;
+		justify-content: center;
+	}
+
+	.workflow-card-heading .anticon {
+		color: var(--pms-amber);
+	}
+
+	.workflow-account-line {
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 8px;
+		display: grid;
+		gap: 3px;
+		padding: 7px 9px;
+		text-align: center;
+	}
+
+	.workflow-account-line > span {
+		color: var(--pms-text);
+		font-size: 0.9rem;
+		font-weight: 950;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+	}
+
+	.workflow-ledger-grid {
+		display: grid;
+		gap: 6px;
+	}
+
+	.workflow-ledger-row {
+		align-items: center;
+		background: #ffffff;
+		border: 1px solid #e2e8f0;
+		border-radius: 7px;
+		display: grid;
+		gap: 8px;
+		grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+		padding: 7px 9px;
+	}
+
+	.workflow-ledger-row strong {
+		background: #f8fafc;
+		border: 1px solid #dbeafe;
+		border-radius: 6px;
+		color: var(--pms-text);
+		font-size: 0.88rem;
+		font-weight: 950;
+		padding: 4px 7px;
+		text-align: center;
+	}
+
+	.workflow-ledger-row strong.negative {
+		background: #fef2f2;
+		border-color: #fecaca;
+		color: #dc2626;
+	}
+
+	.workflow-ledger-row strong.positive {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		color: var(--pms-green);
+	}
+
+	.workflow-loading {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		min-height: 70px;
+	}
+
+	.workflow-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.workflow-action {
+		border: 0;
+		border-radius: 8px;
+		color: #ffffff;
+		cursor: pointer;
+		font-size: 0.88rem;
+		font-weight: 950;
+		min-height: 40px;
+		padding: 7px 10px;
+	}
+
+	.workflow-action:disabled {
+		cursor: not-allowed;
+		opacity: 0.65;
+	}
+
+	.workflow-action.reject {
+		background: #dc2626;
+	}
+
+	.workflow-action.accept {
+		background: var(--pms-blue);
+	}
+
+	.workflow-action.pending {
+		background: #f59e0b;
+		grid-column: 1 / -1;
+	}
+
 	.middle-operation-top,
 	.middle-operation-bottom {
 		display: grid;
@@ -1828,12 +2384,27 @@ const ContentSection = styled.div`
 		grid-column: 1 / -1;
 	}
 
-	.payment-preview-ref {
+	.payment-preview-meta {
+		background: #ffffff;
+		border: 1px solid #fed7aa;
+		border-radius: 8px;
+		display: grid;
+		gap: 2px;
+		min-width: 132px;
+		padding: 6px 8px;
+		text-align: center;
+	}
+
+	.payment-preview-meta span {
+		color: var(--pms-muted);
+		font-size: 0.7rem;
+		font-weight: 900;
+	}
+
+	.payment-preview-meta strong {
 		color: var(--pms-text);
-		font-size: 0.86rem;
+		font-size: 0.78rem;
 		font-weight: 950;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
@@ -2887,6 +3458,19 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
 	const canFullManageReservation =
 		isSuperAdminUser(user) || !limitedOrderTakerAccount;
+	const canLimitedOrderTakerEditReservation =
+		!limitedOrderTakerAccount || isOrderTakerEditableReservation(reservation);
+	const openEditReservationModal = () => {
+		if (limitedOrderTakerAccount && !canLimitedOrderTakerEditReservation) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "تم تأكيد هذا الحجز أو إغلاقه بالفعل. يمكن لموظفي الفندق فقط تحديثه الآن."
+					: "This reservation is already confirmed or closed. Only hotel staff can update it now.",
+			);
+			return;
+		}
+		setIsModalVisible2(true);
+	};
 	const activeRoleNumbers = getAccountRoleNumbers(user);
 	const activeRoleDescriptions = getAccountRoleDescriptions(user);
 	const canSeeReservationTracker =
@@ -2895,6 +3479,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			activeRoleNumbers.some((role) => [1000, 2000, 6000, 8000].includes(role)) ||
 			activeRoleDescriptions.some((role) =>
 				["hotelmanager", "finance", "reservationemployee"].includes(role),
+			));
+	const canManagePendingDecision =
+		user?.activeUser !== false &&
+		canFullManageReservation &&
+		(isSuperAdminUser(user) ||
+			activeRoleNumbers.some((role) => [1000, 2000, 8000].includes(role)) ||
+			activeRoleDescriptions.some((role) =>
+				["hotelmanager", "reservationemployee"].includes(role),
 			));
 
 	const normalizeNumber = useCallback((value, fallback = 0) => {
@@ -3356,7 +3948,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		const commissionReviewed =
 			reservation?.financial_cycle?.commissionAssigned === true ||
 			reservation?.commissionData?.assigned === true ||
-			Boolean(String(reservation?.commissionStatus || "").trim()) ||
+			["commission due", "commission paid", "no commission due"].includes(
+				String(reservation?.commissionStatus || "").trim().toLowerCase(),
+			) ||
 			commissionAmount > 0;
 		const commissionSideClosed =
 			!!reservation?.commissionPaid || (commissionReviewed && commissionAmount <= 0);
@@ -3460,10 +4054,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [reservation?.booked_at, reservation?.createdAt]);
 	const pendingDecisionTone = /reject/.test(pendingWorkflowStatus)
 		? "rejected"
-		: /confirm/.test(pendingWorkflowStatus)
-		? "accepted"
 		: /pending/.test(pendingWorkflowStatus)
 		? "pending"
+		: /confirm|accept|approve/.test(pendingWorkflowStatus)
+		? "accepted"
 		: "neutral";
 	const pendingDecisionReason =
 		reservation?.pendingConfirmation?.rejectionReason ||
@@ -3486,20 +4080,40 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			: pendingDecisionTone === "pending"
 			? "Pending confirmation"
 			: reservation?.reservation_status || "N/A";
+	const workflowUpdatedAt =
+		reservation?.pendingConfirmation?.lastUpdatedAt ||
+		reservation?.agentDecisionSnapshot?.decidedAt ||
+		reservation?.adminLastUpdatedAt ||
+		reservation?.updatedAt ||
+		reservation?.createdAt ||
+		"";
+	const workflowUpdatedBy =
+		reservation?.pendingConfirmation?.lastUpdatedBy?.name ||
+		reservation?.agentDecisionSnapshot?.decidedBy?.name ||
+		reservation?.adminLastUpdatedBy?.name ||
+		reservation?.orderTaker?.name ||
+		reservation?.createdBy?.name ||
+		"";
+	const agentAccountLabel = formatLeadingCapital(
+		agentWalletSnapshot?.agent?.companyName ||
+			agentWalletSnapshot?.agent?.name ||
+			reservation?.orderTaker?.companyName ||
+			reservation?.orderTaker?.name ||
+			reservation?.createdBy?.companyName ||
+			reservation?.createdBy?.name ||
+			reservation?.booking_source ||
+			"N/A",
+	);
 	const agentWalletRows = useMemo(() => {
 		if (isAgentReservationPreview) {
 			const before = normalizeNumber(
 				agentWalletSnapshot?.balanceBeforeReservation,
 				0,
 			);
-			const reservationAmount = normalizeNumber(
-				agentWalletSnapshot?.reservationAmount ?? totalAmountValue,
-				totalAmountValue,
-			);
-			const after = normalizeNumber(
-				agentWalletSnapshot?.balanceAfterReservation,
-				before - reservationAmount,
-			);
+			// The wallet before-balance is a fixed snapshot, but the reservation value
+			// must always reflect the latest edited stay/room pricing.
+			const reservationAmount = totalAmountValue;
+			const after = normalizeNumber(before - reservationAmount, 0);
 			return [
 				{
 					label:
@@ -3724,7 +4338,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			rows.push({
 				at: at ? new Date(at) : null,
 				title: title || "Reservation update",
-				by: by?.name || by?.email || by || "-",
+				by: formatAuditScalar(by, "by"),
 				detail: detail || "",
 			});
 		};
@@ -3733,11 +4347,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			(entry) => {
 				pushRow({
 					at: entry.at || entry.createdAt || entry.updatedAt,
-					title: entry.action || entry.field || "Reservation update",
+					title: formatAuditActionLabel(entry.action || entry.field),
 					by: entry.by,
-					detail: entry.field
-						? `${entry.field}: ${entry.from ?? "-"} -> ${entry.to ?? "-"}`
-						: entry.note || "",
+					detail: entry.field ? formatAuditEntryDetail(entry) : entry.note || "",
 				});
 			},
 		);
@@ -4308,9 +4920,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			};
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-					toast.error("An error occurred while updating the status");
+				if (!response || response.error) {
+					console.error(response?.error || response);
+					toast.error(response?.error || "Reservation relocation failed.");
 				} else {
 					toast.success("Reservation was successfully relocated");
 					setIsModalVisible4(false);
@@ -5624,7 +6236,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								color: "darkgoldenrod",
 							}}
 							onClick={() => {
-								setIsModalVisible2(true);
+								openEditReservationModal();
 							}}
 						>
 							<EditOutlined />
@@ -5785,7 +6397,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							<Section className='top-request-card'>
 								<button
 									className='top-request-button'
-									onClick={() => setIsModalVisible2(true)}
+									onClick={openEditReservationModal}
 								>
 									{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
 								</button>
@@ -6670,9 +7282,175 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									<div className='detail-panel-heading'>
 										<BankOutlined />
 										<span>
-											{chosenLanguage === "Arabic" ? AR_LABELS.bookingSource : "Reservation"}
+											{chosenLanguage === "Arabic"
+												? AR_LABELS.reservationWorkflow
+												: "Reservation Workflow"}
 										</span>
 									</div>
+									<div className='workflow-source-grid'>
+										<div className='workflow-source-card'>
+											<span className='detail-icon'>
+												<BankOutlined />
+											</span>
+											<div>
+												<span>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.bookingSource
+														: "Booking Source"}
+												</span>
+												<strong>
+													{formatLeadingCapital(
+														reservation?.booking_source || "N/A",
+													)}
+												</strong>
+											</div>
+										</div>
+										<div className='workflow-source-card'>
+											<span className='detail-icon'>
+												<CalendarOutlined />
+											</span>
+											<div>
+												<span>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.bookingDate
+														: "Booking Date"}
+												</span>
+												<strong className='detail-value-ltr'>
+													{reservation?.booked_at
+														? moment(reservation.booked_at).format("DD/MM/YYYY")
+														: "N/A"}
+												</strong>
+											</div>
+										</div>
+									</div>
+									<div className={`workflow-status-card ${pendingDecisionTone}`}>
+										<div className='workflow-status-main'>
+											<span>
+												{chosenLanguage === "Arabic"
+													? AR_LABELS.reservationStatus
+													: "Reservation Status"}
+											</span>
+											<strong>{pendingDecisionLabel}</strong>
+											{pendingDecisionReason ? (
+												<small>
+													{pendingDecisionTone === "rejected"
+														? chosenLanguage === "Arabic"
+															? AR_LABELS.rejectionReason
+															: "Reason"
+														: chosenLanguage === "Arabic"
+															? AR_LABELS.confirmationReason
+															: "Reason"}
+													: {pendingDecisionReason}
+												</small>
+											) : null}
+										</div>
+										<div className='workflow-status-meta'>
+											<span>
+												{chosenLanguage === "Arabic"
+													? AR_LABELS.lastUpdate
+													: "Last Update"}
+											</span>
+											<strong className='detail-value-ltr'>
+												{workflowUpdatedAt
+													? moment(workflowUpdatedAt).format("DD/MM/YYYY HH:mm")
+													: "N/A"}
+											</strong>
+											{workflowUpdatedBy ? <em>{workflowUpdatedBy}</em> : null}
+										</div>
+									</div>
+									<div className='workflow-money-card'>
+										<div className='workflow-card-heading'>
+											{isAgentReservationPreview ? (
+												<DollarCircleOutlined />
+											) : (
+												<CreditCardOutlined />
+											)}
+											<span>
+												{isAgentReservationPreview
+													? chosenLanguage === "Arabic"
+														? AR_LABELS.agentAccount
+														: "Agent Account"
+													: chosenLanguage === "Arabic"
+														? AR_LABELS.hotelBookingSummary
+														: "Hotel Booking Summary"}
+											</span>
+										</div>
+										<div className='workflow-account-line'>
+											<span>
+												{isAgentReservationPreview
+													? agentAccountLabel
+													: paymentStatusLabel}
+											</span>
+											{hasAgentWalletSnapshot && (
+												<small className='detail-value-ltr'>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.capturedSnapshotAt
+														: "Snapshot"}
+													:{" "}
+													{agentWalletSnapshot?.snapshotAt
+														? moment(agentWalletSnapshot.snapshotAt).format(
+																"DD/MM/YYYY HH:mm",
+														  )
+														: "N/A"}
+												</small>
+											)}
+										</div>
+										<div className='workflow-ledger-grid'>
+											{agentSnapshotState.loading ? (
+												<div className='workflow-loading'>
+													<Spin size='small' />
+												</div>
+											) : (
+												agentWalletRows.map((row) => (
+													<div className='workflow-ledger-row' key={row.label}>
+														<span>{row.label}</span>
+														<strong className={`detail-value-ltr ${row.tone}`}>
+															{formatMoney(row.value)} SAR
+														</strong>
+													</div>
+												))
+											)}
+										</div>
+									</div>
+									{canManagePendingDecision && newProcessReservation ? (
+										<div className='workflow-actions'>
+											{pendingDecisionTone === "pending" ? (
+												<>
+													<button
+														className='workflow-action reject'
+														type='button'
+														disabled={pendingDecisionLoading}
+														onClick={openRejectDecisionModal}
+													>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.reject
+															: "Reject"}
+													</button>
+													<button
+														className='workflow-action accept'
+														type='button'
+														disabled={pendingDecisionLoading}
+														onClick={openConfirmDecisionModal}
+													>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.accept
+															: "Accept"}
+													</button>
+												</>
+											) : (
+												<button
+													className='workflow-action pending'
+													type='button'
+													disabled={pendingDecisionLoading}
+													onClick={openRevertDecisionModal}
+												>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.revertToPending
+														: "Revert to pending"}
+												</button>
+											)}
+										</div>
+									) : null}
 									<div className='middle-operation-top'>
 										<div className='detail-item'>
 											<span className='detail-icon'>
@@ -6845,16 +7623,28 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													</div>
 												) : null}
 											</div>
-											<div className='payment-preview-ref top-ltr-value'>
-												BR{reservation?.confirmation_number || "N/A"}
+											<div className='payment-preview-meta'>
+												<span>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.lastUpdate
+														: "Last update"}
+												</span>
+												<strong className='detail-value-ltr'>
+													{reservation?.adminLastUpdatedAt || reservation?.updatedAt
+														? moment(
+																reservation?.adminLastUpdatedAt ||
+																	reservation?.updatedAt,
+														  ).format("DD/MM/YYYY HH:mm")
+														: "N/A"}
+												</strong>
 											</div>
 										</div>
 									</div>
 
 								</div>
 								<div
-									className='row mt-5'
-									style={{ fontWeight: "bold", fontSize: "16px" }}
+									className='legacy-middle-details'
+									style={{ display: "none" }}
 								>
 									<div className='col-md-4'>
 										{chosenLanguage === "Arabic"

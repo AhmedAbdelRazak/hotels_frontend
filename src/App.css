@@ -24,6 +24,13 @@ body {
 	z-index: 20000 !important;
 }
 
+.Toastify__toast-container,
+.Toastify__toast,
+.ant-message,
+.ant-notification {
+	z-index: 2147483647 !important;
+}
+
 .edit-pricing-modal .ant-modal,
 .edit-pricing-modal .ant-modal-wrap {
 	z-index: 25000 !important;

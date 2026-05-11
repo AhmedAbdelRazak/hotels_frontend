@@ -178,7 +178,44 @@ const hasCommissionAssignment = (reservation = {}) =>
 	getCommissionValue(reservation) > 0 ||
 	reservation?.commissionData?.assigned === true ||
 	reservation?.financial_cycle?.commissionAssigned === true ||
-	Boolean(String(reservation?.commissionStatus || "").trim());
+	["commission due", "commission paid", "no commission due"].includes(
+		String(reservation?.commissionStatus || "").trim().toLowerCase(),
+	);
+
+const getAccountRoleNumbers = (account = {}) =>
+	[
+		Number(account?.role),
+		...(Array.isArray(account?.roles) ? account.roles.map(Number) : []),
+	].filter(Boolean);
+
+const getAccountRoleDescriptions = (account = {}) => [
+	String(account?.roleDescription || "").toLowerCase(),
+	...(Array.isArray(account?.roleDescriptions)
+		? account.roleDescriptions.map((item) => String(item || "").toLowerCase())
+		: []),
+];
+
+const getPendingWorkflowPermissions = (account = {}) => {
+	const roles = getAccountRoleNumbers(account);
+	const descriptions = getAccountRoleDescriptions(account);
+	const isManagerOrAdmin =
+		roles.includes(1000) ||
+		roles.includes(2000) ||
+		descriptions.includes("hotelmanager");
+	const isFinance =
+		roles.includes(6000) || descriptions.includes("finance");
+	const isReservationEmployee =
+		roles.includes(8000) || descriptions.includes("reservationemployee");
+	const financeOnly = isFinance && !isManagerOrAdmin && !isReservationEmployee;
+	const reservationEmployeeOnly =
+		isReservationEmployee && !isManagerOrAdmin && !isFinance;
+	return {
+		canReviewStatus: !financeOnly,
+		canReviewCommission: !reservationEmployeeOnly,
+		financeOnly,
+		reservationEmployeeOnly,
+	};
+};
 
 const getAgentIdFromReservation = (reservation = {}) =>
 	String(
@@ -212,6 +249,10 @@ const PendingConfirmationReport = ({
 	const isArabic = chosenLanguage === "Arabic";
 	const txt = labels[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated();
+	const workflowPermissions = useMemo(
+		() => getPendingWorkflowPermissions(user),
+		[user],
+	);
 	const history = useHistory();
 	const location = useLocation();
 	const [rows, setRows] = useState([]);
@@ -318,6 +359,11 @@ const PendingConfirmationReport = ({
 	};
 
 	const openStatusModal = (reservation) => {
+		if (!workflowPermissions.canReviewStatus) {
+			message.info("Finance users can review commission only.");
+			openReservation(reservation);
+			return;
+		}
 		setStatusModal({
 			open: true,
 			reservation,
@@ -388,6 +434,10 @@ const PendingConfirmationReport = ({
 
 	const submitRevertToPending = (reservation) => {
 		if (!reservation?._id || !user?._id) return;
+		if (!workflowPermissions.canReviewStatus) {
+			message.error(txt.updateError);
+			return;
+		}
 		Modal.confirm({
 			title: txt.revertTitle,
 			content: txt.revertQuestion.replace(
@@ -413,6 +463,10 @@ const PendingConfirmationReport = ({
 	};
 
 	const openFinanceModal = (reservation) => {
+		if (!workflowPermissions.canReviewCommission) {
+			message.info("Commission review is handled by finance or management.");
+			return;
+		}
 		const commission = getCommissionValue(reservation);
 		const commissionPaid = !!reservation.commissionPaid;
 		const commissionAssigned = hasCommissionAssignment(reservation);
@@ -546,7 +600,9 @@ const PendingConfirmationReport = ({
 							$isRejected={isRejected}
 							$isConfirmed={isConfirmed}
 							onClick={() =>
-								isPending
+								!workflowPermissions.canReviewStatus
+									? openReservation(record)
+									: isPending
 									? openStatusModal(record)
 									: isConfirmed
 									? submitRevertToPending(record)
@@ -579,8 +635,17 @@ const PendingConfirmationReport = ({
 						<CommissionButton
 							type='button'
 							$needsAttention={!assigned}
-							onClick={() => openFinanceModal(record)}
-							title={txt.adjustCommission}
+							disabled={!workflowPermissions.canReviewCommission}
+							onClick={() =>
+								workflowPermissions.canReviewCommission
+									? openFinanceModal(record)
+									: undefined
+							}
+							title={
+								workflowPermissions.canReviewCommission
+									? txt.adjustCommission
+									: txt.confirmTitle
+							}
 						>
 							{assigned ? (
 								<strong>{formatMoney(commission)} SAR</strong>
@@ -618,7 +683,14 @@ const PendingConfirmationReport = ({
 			},
 		],
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[isArabic, page, records, txt],
+		[
+			isArabic,
+			page,
+			records,
+			txt,
+			workflowPermissions.canReviewCommission,
+			workflowPermissions.canReviewStatus,
+		],
 	);
 
 	return (

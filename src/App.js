@@ -142,6 +142,7 @@ function App() {
 		<>
 			<ToastContainer
 				position='top-center'
+				style={{ zIndex: 2147483647 }}
 				toastStyle={{ width: "auto", minWidth: "400px" }}
 			/>
 			{showNav && <Navmenu />}
