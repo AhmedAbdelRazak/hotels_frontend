@@ -28,6 +28,22 @@ const predefinedColors = [
 let colorIndex = 0;
 const priceColorMapping = new Map();
 
+const normalizeId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
+
+const getStoredOwnerId = () => {
+	try {
+		const selectedHotel =
+			JSON.parse(localStorage.getItem("selectedHotel") || "{}") || {};
+		return normalizeId(selectedHotel.belongsTo);
+	} catch (error) {
+		return "";
+	}
+};
+
 const ZUpdateHotelDetailsForm2 = ({
 	existingRoomDetails,
 	hotelDetails,
@@ -131,9 +147,11 @@ const ZUpdateHotelDetailsForm2 = ({
 					roomCountDetails: updatedRoomCountDetails,
 				}));
 
-				const updatedUrl = `/hotel-management/settings/${
-					hotelDetails.belongsTo
-				}/${hotelDetails._id}?activeTab=roomcount&currentStep=${
+				const ownerId =
+					normalizeId(hotelDetails.belongsTo) || getStoredOwnerId();
+				const updatedUrl = `/hotel-management/settings/${ownerId}/${
+					hotelDetails._id
+				}?activeTab=roomcount&currentStep=${
 					currentStep + 1
 				}&selectedRoomType=${selectedRoomType}`;
 				history.push(updatedUrl);

@@ -12,6 +12,11 @@ const getRoomDisplayKey = (displayName, roomType) => {
 	if (displayKey) return displayKey;
 	return normalizeDisplayName(roomType);
 };
+const normalizeId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
 
 const FloorsModal = ({
 	modalVisible,
@@ -28,7 +33,13 @@ const FloorsModal = ({
 
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
-	const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+	const userId =
+		(Number(user?.role) === 2000 && !user?.belongsToId
+			? normalizeId(user?._id)
+			: "") ||
+		normalizeId(selectedHotel.belongsTo) ||
+		normalizeId(user?.belongsToId) ||
+		normalizeId(user?._id);
 	const roomDetailsByKey = useMemo(() => {
 		const map = new Map();
 		const details = Array.isArray(hotelDetails?.roomCountDetails)

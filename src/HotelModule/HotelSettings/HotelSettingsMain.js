@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
-import { useHistory } from "react-router-dom";
+import { useHistory, useLocation, useParams } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
 import {
 	createRooms,
@@ -37,8 +37,31 @@ const roomTypeColors = {
 	familyRooms: "#A52A2A", // Brown
 };
 
+const readSelectedHotel = () => {
+	try {
+		return JSON.parse(localStorage.getItem("selectedHotel") || "{}") || {};
+	} catch (error) {
+		return {};
+	}
+};
+
+const normalizeId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
+
+const getHotelOwnerId = (hotel = {}) =>
+	normalizeId(
+		hotel.belongsTo && typeof hotel.belongsTo === "object"
+			? hotel.belongsTo._id
+			: hotel.belongsTo
+	);
+
 const HotelSettingsMain = () => {
 	const history = useHistory();
+	const location = useLocation();
+	const { userId: routeUserId, hotelId: routeHotelId } = useParams();
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
 		getStoredMenuCollapsed();
@@ -53,6 +76,29 @@ const HotelSettingsMain = () => {
 	const [currentStep, setCurrentStep] = useState(0);
 	const [selectedRoomType, setSelectedRoomType] = useState("");
 	const [roomTypeSelected, setRoomTypeSelected] = useState(false);
+
+	const getSettingsOwnerId = () => {
+		const selectedHotel = readSelectedHotel();
+		return (
+			normalizeId(routeUserId) ||
+			getHotelOwnerId(selectedHotel) ||
+			normalizeId(user?.belongsToId) ||
+			normalizeId(user?._id)
+		);
+	};
+
+	const getSettingsHotelId = () => {
+		const selectedHotel = readSelectedHotel();
+		return (
+			normalizeId(hotelDetails?._id) ||
+			normalizeId(routeHotelId) ||
+			normalizeId(selectedHotel?._id) ||
+			normalizeId(user?.hotelIdWork)
+		);
+	};
+
+	const buildSettingsPath = (search = "") =>
+		`/hotel-management/settings/${getSettingsOwnerId()}/${getSettingsHotelId()}${search}`;
 
 	//For Rooms
 	const [floorDetails, setFloorDetails] = useState({
@@ -119,7 +165,7 @@ const HotelSettingsMain = () => {
 	};
 
 	useEffect(() => {
-		const searchParams = new URLSearchParams(window.location.search);
+		const searchParams = new URLSearchParams(location.search);
 		const step = searchParams.get("currentStep");
 		const roomType = searchParams.get("selectedRoomType");
 
@@ -130,24 +176,30 @@ const HotelSettingsMain = () => {
 		if (roomType) {
 			setSelectedRoomType(roomType);
 		}
-	}, []);
+	}, [location.search]);
 
 	useEffect(() => {
-		if (window.location.search.includes("hoteldetails")) {
+		const search = String(location.search || "").toLowerCase();
+		const params = new URLSearchParams(location.search);
+		const tabParam = String(params.get("activeTab") || "").toLowerCase();
+
+		if (tabParam === "hoteldetails" || search.includes("hoteldetails")) {
 			setActiveTab("HotelDetails");
-		} else if (window.location.search.includes("roomdetails")) {
+		} else if (tabParam === "roomdetails" || search.includes("roomdetails")) {
 			setActiveTab("RoomDetails");
-		} else if (window.location.search.includes("pricing")) {
+		} else if (tabParam === "pricingcalendar" || search.includes("pricing")) {
 			setActiveTab("PricingCalendar");
-		} else if (window.location.search.includes("roomcount")) {
+		} else if (tabParam === "roomcount" || search.includes("roomcount")) {
 			setActiveTab("UpdateRoomCount");
-		} else if (window.location.search.includes("paymentsettings")) {
+		} else if (
+			tabParam === "paymentsettings" ||
+			search.includes("paymentsettings")
+		) {
 			setActiveTab("PaymentSettings");
 		} else {
 			setActiveTab("HotelDetails");
 		}
-		// eslint-disable-next-line
-	}, [activeTab]);
+	}, [location.search]);
 
 	useEffect(() => {
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
@@ -233,19 +285,24 @@ const HotelSettingsMain = () => {
 	];
 
 	const gettingHotelData = () => {
-		const selectedHotel =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
+		const selectedHotel = readSelectedHotel();
+		const ownerId =
+			(Number(user?.role) === 2000 && !user?.belongsToId
+				? normalizeId(user?._id)
+				: "") ||
+			getHotelOwnerId(selectedHotel) ||
+			getSettingsOwnerId();
+		const selectedHotelId = normalizeId(selectedHotel?._id) || routeHotelId;
 
 		// Fetching user account details
-		hotelAccount(user._id, token, userId).then((data) => {
+		hotelAccount(user._id, token, ownerId).then((data) => {
 			if (data && data.error) {
 				console.log(data.error, "Error rendering");
 			} else {
 				setValues(data);
 
 				// Fetching hotel details by hotelId
-				getHotelById(selectedHotel._id).then((data2) => {
+				getHotelById(selectedHotelId).then((data2) => {
 					if (data2 && data2.error) {
 						console.log(data2.error, "Error rendering");
 					} else {
@@ -266,7 +323,7 @@ const HotelSettingsMain = () => {
 							);
 
 							// Fetching hotel rooms
-							getHotelRooms(data2._id, userId).then((data4) => {
+							getHotelRooms(data2._id, ownerId).then((data4) => {
 								if (data4 && data4.error) {
 									console.log(data4.error);
 								} else {
@@ -314,10 +371,8 @@ const HotelSettingsMain = () => {
 
 	const hotelDetailsUpdate = (fromPage, updatedDetailsParam) => {
 		// Get the currently selected hotel information
-		const selectedHotel =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userId = user.role === 2000 ? user._id : selectedHotel.belongsTo._id;
-		const hotelId = hotelDetails._id; // Make sure hotelDetails contains an _id
+		const ownerId = getSettingsOwnerId();
+		const hotelId = getSettingsHotelId(); // Make sure hotelDetails contains an _id
 
 		// If fromPage is "paymentSettings", use the passed-in updatedDetails; otherwise, merge from the existing state
 		const detailsToUpdate =
@@ -349,7 +404,7 @@ const HotelSettingsMain = () => {
 						setFinalStepModal(true);
 					} else {
 						setTimeout(() => {
-							window.location.href = `/hotel-management/settings/${userId}/${hotelDetails._id}?activeTab=roomcount`;
+							window.location.href = `/hotel-management/settings/${ownerId}/${hotelId}?activeTab=roomcount`;
 						}, 2000);
 					}
 				}
@@ -421,8 +476,8 @@ const HotelSettingsMain = () => {
 				setStep={setCurrentStep}
 				setSelectedRoomType={setSelectedRoomType}
 				setRoomTypeSelected={setRoomTypeSelected}
-				userId={user._id}
-				hotelId={hotelDetails._id}
+				userId={getSettingsOwnerId()}
+				hotelId={getSettingsHotelId()}
 			/>
 			<div className='grid-container-main'>
 				<div className='navcontent'>
@@ -474,7 +529,7 @@ const HotelSettingsMain = () => {
 									setActiveTab("HotelDetails");
 									setCurrentStep(0);
 									history.push(
-										`/hotel-management/settings/${user._id}/${hotelDetails._id}?activeTab=HotelDetails&currentStep=0`
+										buildSettingsPath("?activeTab=HotelDetails&currentStep=0")
 									); // Programmatic navigation
 								}}
 							>
@@ -489,7 +544,7 @@ const HotelSettingsMain = () => {
 									setActiveTab("UpdateRoomCount");
 									setCurrentStep(1);
 									history.push(
-										`/hotel-management/settings/${user._id}/${hotelDetails._id}?activeTab=roomcount&currentStep=1`
+										buildSettingsPath("?activeTab=roomcount&currentStep=1")
 									); // Programmatic navigation
 								}}
 							>
@@ -502,9 +557,7 @@ const HotelSettingsMain = () => {
 								isActive={activeTab === "RoomDetails"}
 								onClick={() => {
 									setActiveTab("RoomDetails");
-									history.push(
-										`/hotel-management/settings/${user._id}/${hotelDetails._id}?roomdetails`
-									); // Programmatic navigation
+									history.push(buildSettingsPath("?roomdetails")); // Programmatic navigation
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -517,7 +570,7 @@ const HotelSettingsMain = () => {
 								onClick={() => {
 									setActiveTab("PaymentSettings");
 									history.push(
-										`/hotel-management/settings/${user._id}/${hotelDetails._id}?paymentsettings`
+										buildSettingsPath("?paymentsettings")
 									); // Programmatic navigation
 								}}
 							>

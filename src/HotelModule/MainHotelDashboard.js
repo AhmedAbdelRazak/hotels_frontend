@@ -1932,6 +1932,31 @@ const normalizeCompanyDocuments = (documents = []) =>
 			notes: document.notes || "",
 		}));
 
+const getCompanyDocumentSource = (document = {}) =>
+	document.dataUrl || document.url || document.fileUrl || document.secure_url || "";
+
+const isCompanyDocumentPdf = (document = {}) => {
+	const fileType = String(document.fileType || document.type || "").toLowerCase();
+	const fileName = String(document.fileName || document.name || "").toLowerCase();
+	const source = String(getCompanyDocumentSource(document)).toLowerCase();
+	return (
+		fileType.includes("pdf") ||
+		fileName.endsWith(".pdf") ||
+		source.startsWith("data:application/pdf")
+	);
+};
+
+const isCompanyDocumentImage = (document = {}) => {
+	const fileType = String(document.fileType || document.type || "").toLowerCase();
+	const fileName = String(document.fileName || document.name || "").toLowerCase();
+	const source = String(getCompanyDocumentSource(document)).toLowerCase();
+	return (
+		fileType.startsWith("image/") ||
+		/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileName) ||
+		source.startsWith("data:image/")
+	);
+};
+
 const OwnerAccountsModal = ({
 	open,
 	onClose,
@@ -1947,6 +1972,7 @@ const OwnerAccountsModal = ({
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
 	const [accounts, setAccounts] = useState([]);
 	const [activeAccountTab, setActiveAccountTab] = useState("new");
+	const [documentPreview, setDocumentPreview] = useState(null);
 	const [form, setForm] = useState({
 		hotelIds: [],
 		name: "",
@@ -1993,6 +2019,11 @@ const OwnerAccountsModal = ({
 						passwordHint: "اتركها فارغة إذا لا تريد تغيير كلمة المرور.",
 						activeUser: "الحساب نشط",
 						updated: "تم تحديث الحساب بنجاح.",
+						previewDocument: "عرض المرفق",
+						openDocument: "فتح في تبويب جديد",
+						close: "إغلاق",
+						previewUnavailable:
+							"لا يمكن عرض هذا المرفق. احذفه ثم ارفعه مرة اخرى اذا كان ملفا قديما.",
 						confirmDeactivate: "هل تريد تعطيل هذا الحساب؟",
 						confirmActivate: "هل تريد تفعيل هذا الحساب؟",
 				  }
@@ -2008,6 +2039,11 @@ const OwnerAccountsModal = ({
 						passwordHint: "Leave blank if you do not want to change it.",
 						activeUser: "Account is active",
 						updated: "Account updated successfully.",
+						previewDocument: "Preview attachment",
+						openDocument: "Open in new tab",
+						close: "Close",
+						previewUnavailable:
+							"This attachment has no saved preview file. Remove it and upload it again if it is an older record.",
 						confirmDeactivate: "Deactivate this account?",
 						confirmActivate: "Activate this account?",
 				  },
@@ -2175,6 +2211,10 @@ const OwnerAccountsModal = ({
 		refreshAccounts();
 	}, [hotelOptions, open, refreshAccounts]);
 
+	useEffect(() => {
+		if (!open) setDocumentPreview(null);
+	}, [open]);
+
 	const updateForm = (field, value) => {
 		setForm((prev) => ({ ...prev, [field]: value }));
 	};
@@ -2185,7 +2225,11 @@ const OwnerAccountsModal = ({
 		if (!files.length) return;
 		const oversized = files.find((file) => file.size > ACCOUNT_DOCUMENT_MAX_BYTES);
 		if (oversized) {
-			message.error(`${oversized.name} is larger than 3 MB.`);
+			message.error(
+				isRTL
+					? `${oversized.name} أكبر من 3 ميجابايت.`
+					: `${oversized.name} is larger than 3 MB.`
+			);
 			return;
 		}
 		try {
@@ -2199,7 +2243,11 @@ const OwnerAccountsModal = ({
 				].slice(0, 8),
 			}));
 		} catch (error) {
-			message.error("Could not read one of the selected files.");
+			message.error(
+				isRTL
+					? "تعذر قراءة أحد الملفات المحددة."
+					: "Could not read one of the selected files."
+			);
 		}
 	};
 
@@ -2212,6 +2260,42 @@ const OwnerAccountsModal = ({
 			),
 		}));
 	};
+
+	const openCompanyDocumentPreview = (document) => {
+		const normalizedDocument =
+			normalizeCompanyDocuments([document])[0] || document || {};
+		setDocumentPreview({
+			...normalizedDocument,
+			dataUrl: getCompanyDocumentSource(normalizedDocument),
+			fileName: normalizedDocument.fileName || "Company document",
+		});
+	};
+
+	const renderCompanyDocuments = (documents, target = "new") => (
+		<DocumentList>
+			{normalizeCompanyDocuments(documents).map((document, index) => (
+				<DocumentChip key={`${document.fileName}-${index}`}>
+					<DocumentPreviewButton
+						type='button'
+						onClick={() => openCompanyDocumentPreview(document)}
+						title={accountText.previewDocument}
+						aria-label={`${accountText.previewDocument}: ${document.fileName}`}
+					>
+						<EyeOutlined />
+						<span>{document.fileName}</span>
+					</DocumentPreviewButton>
+					<DocumentRemoveButton
+						type='button'
+						onClick={() => removeCompanyDocument(index, target)}
+						aria-label={WORDS.removeDocument}
+						title={WORDS.removeDocument}
+					>
+						<DeleteOutlined />
+					</DocumentRemoveButton>
+				</DocumentChip>
+			))}
+		</DocumentList>
+	);
 
 	const toggleRole = (value) => {
 		setForm((prev) => ({
@@ -2712,6 +2796,16 @@ const OwnerAccountsModal = ({
 		},
 	];
 
+	const documentPreviewSource = documentPreview
+		? getCompanyDocumentSource(documentPreview)
+		: "";
+	const documentPreviewIsPdf = documentPreview
+		? isCompanyDocumentPdf(documentPreview)
+		: false;
+	const documentPreviewIsImage = documentPreview
+		? isCompanyDocumentImage(documentPreview)
+		: false;
+
 	return (
 		<Modal
 			open={open}
@@ -2896,22 +2990,7 @@ const OwnerAccountsModal = ({
 											/>
 										</UploadButton>
 										<FieldHint>{WORDS.documentLimitHint}</FieldHint>
-										<DocumentList>
-											{normalizeCompanyDocuments(form.companyDocuments).map(
-												(document, index) => (
-													<DocumentChip key={`${document.fileName}-${index}`}>
-														<span>{document.fileName}</span>
-														<button
-															type='button'
-															onClick={() => removeCompanyDocument(index)}
-															aria-label={WORDS.removeDocument}
-														>
-															<DeleteOutlined />
-														</button>
-													</DocumentChip>
-												),
-											)}
-										</DocumentList>
+										{renderCompanyDocuments(form.companyDocuments)}
 									</DocumentUploadBlock>
 									<label>
 										<FieldLabel>
@@ -3120,22 +3199,7 @@ const OwnerAccountsModal = ({
 								/>
 							</UploadButton>
 							<FieldHint>{WORDS.documentLimitHint}</FieldHint>
-							<DocumentList>
-								{normalizeCompanyDocuments(editForm.companyDocuments).map(
-									(document, index) => (
-										<DocumentChip key={`${document.fileName}-${index}`}>
-											<span>{document.fileName}</span>
-											<button
-												type='button'
-												onClick={() => removeCompanyDocument(index, "edit")}
-												aria-label={WORDS.removeDocument}
-											>
-												<DeleteOutlined />
-											</button>
-										</DocumentChip>
-									),
-								)}
-							</DocumentList>
+							{renderCompanyDocuments(editForm.companyDocuments, "edit")}
 						</DocumentUploadBlock>
 						<label>
 							<FieldLabel>
@@ -3203,6 +3267,81 @@ const OwnerAccountsModal = ({
 							</div>
 						</AccessPicker>
 					</StaffEditForm>
+				</Modal>
+				<Modal
+					open={!!documentPreview}
+					title={documentPreview?.fileName || accountText.previewDocument}
+					onCancel={() => setDocumentPreview(null)}
+					width='min(94vw, 920px)'
+					zIndex={2600}
+					destroyOnClose
+					footer={
+						documentPreviewSource
+							? [
+									<Button
+										key='close'
+										onClick={() => setDocumentPreview(null)}
+									>
+										{accountText.close}
+									</Button>,
+									<Button
+										key='open'
+										type='primary'
+										onClick={() =>
+											window.open(
+												documentPreviewSource,
+												"_blank",
+												"noopener,noreferrer"
+											)
+										}
+									>
+										{accountText.openDocument}
+									</Button>,
+							  ]
+							: [
+									<Button
+										key='close'
+										type='primary'
+										onClick={() => setDocumentPreview(null)}
+									>
+										{accountText.close}
+									</Button>,
+							  ]
+					}
+				>
+					<DocumentPreviewBody>
+						{documentPreviewSource && documentPreviewIsImage ? (
+							<DocumentPreviewImage
+								src={documentPreviewSource}
+								alt={documentPreview?.fileName || accountText.previewDocument}
+							/>
+						) : documentPreviewSource && documentPreviewIsPdf ? (
+							<DocumentPreviewFrame
+								src={documentPreviewSource}
+								title={documentPreview?.fileName || accountText.previewDocument}
+							/>
+						) : documentPreviewSource ? (
+							<DocumentPreviewUnavailable>
+								<p>{accountText.previewUnavailable}</p>
+								<Button
+									type='primary'
+									onClick={() =>
+										window.open(
+											documentPreviewSource,
+											"_blank",
+											"noopener,noreferrer"
+										)
+									}
+								>
+									{accountText.openDocument}
+								</Button>
+							</DocumentPreviewUnavailable>
+						) : (
+							<DocumentPreviewUnavailable>
+								<p>{accountText.previewUnavailable}</p>
+							</DocumentPreviewUnavailable>
+						)}
+					</DocumentPreviewBody>
 				</Modal>
 			</AccountsModalShell>
 		</Modal>
@@ -4916,25 +5055,97 @@ const DocumentChip = styled.span`
 	color: #19324d;
 	font-size: 0.78rem;
 	font-weight: 800;
+`;
 
-	> span {
-		max-width: min(46vw, 300px);
+const DocumentPreviewButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	min-width: 0;
+	max-width: min(50vw, 330px);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+
+	svg {
+		flex: 0 0 auto;
+		color: #1677ff;
+	}
+
+	span {
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
 	}
 
-	button {
-		border: 0;
-		background: #fff;
-		color: #b42318;
-		border-radius: 999px;
-		width: 22px;
-		height: 22px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
+	&:hover span,
+	&:focus-visible span {
+		text-decoration: underline;
+	}
+`;
+
+const DocumentRemoveButton = styled.button`
+	border: 0;
+	background: #fff;
+	color: #b42318;
+	border-radius: 999px;
+	width: 28px;
+	height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	flex: 0 0 auto;
+	font-size: 0.92rem;
+
+	&:hover,
+	&:focus-visible {
+		background: #fee4e2;
+	}
+`;
+
+const DocumentPreviewBody = styled.div`
+	min-height: min(60vh, 520px);
+	display: grid;
+	place-items: center;
+	background: #f8fbff;
+	border: 1px solid #d9e9fb;
+	border-radius: 12px;
+	padding: 0.75rem;
+`;
+
+const DocumentPreviewImage = styled.img`
+	display: block;
+	max-width: 100%;
+	max-height: min(70vh, 620px);
+	object-fit: contain;
+	border-radius: 10px;
+	background: #fff;
+`;
+
+const DocumentPreviewFrame = styled.iframe`
+	width: 100%;
+	height: min(72vh, 650px);
+	border: 1px solid #d3e4f6;
+	border-radius: 10px;
+	background: #fff;
+`;
+
+const DocumentPreviewUnavailable = styled.div`
+	display: grid;
+	place-items: center;
+	gap: 0.75rem;
+	min-height: 240px;
+	text-align: center;
+	color: #31445f;
+	font-weight: 800;
+
+	p {
+		max-width: 540px;
+		margin: 0;
 	}
 `;
 
