@@ -32,6 +32,8 @@ import {
 	janatData,
 } from "../apiAdmin";
 import { countryListWithAbbreviations } from "../../AdminModule/CustomerService/utils";
+import { paymentMethodOptionsWithCurrent } from "../utils/paymentMethods";
+import ExcelReservationImportModal from "./ExcelReservationImportModal";
 
 /* ───────── helpers ───────── */
 const safeParseFloat = (v, fb = 0) => {
@@ -84,6 +86,35 @@ const buildPricingByDay = ({
 	return rows;
 };
 
+const buildStayDateKeysForCalendar = (startDate, endDate) => {
+	const start = moment(startDate).startOf("day");
+	const endExclusive = moment(endDate).startOf("day");
+	if (!start.isValid() || !endExclusive.isValid() || !endExclusive.isAfter(start)) {
+		return [];
+	}
+	const dates = [];
+	for (
+		const day = start.clone();
+		day.isBefore(endExclusive, "day");
+		day.add(1, "day")
+	) {
+		dates.push(day.format("YYYY-MM-DD"));
+	}
+	return dates;
+};
+
+const calendarRateIsBlocked = (rate = {}) => {
+	if (!rate || typeof rate !== "object") return false;
+	const price = Number(rate.price);
+	const rootPrice = Number(rate.rootPrice);
+	const color = String(rate.color || "").toLowerCase();
+	return (
+		(Number.isFinite(price) && price <= 0) ||
+		(Number.isFinite(rootPrice) && rootPrice <= 0 && color === "black") ||
+		color === "black"
+	);
+};
+
 /* Back-solve price & rootPrice from final nightly using saved ratio & commission */
 const fromFinalUsingRatio = (
 	finalValue,
@@ -134,6 +165,7 @@ const ZReservationForm2 = ({
 	paidAmount,
 	setPaidAmount,
 	isBoss,
+	limitedOrderTakerAccount = false,
 	pickedRoomPricing, // kept for parity
 	setPickedRoomPricing,
 }) => {
@@ -205,6 +237,21 @@ const ZReservationForm2 = ({
 		[hotelDetails?.roomCountDetails]
 	);
 
+	const getBlockedDatesForRoom = useCallback(
+		(room_type, displayName) => {
+			if (!limitedOrderTakerAccount || !start_date || !end_date) return [];
+			const detail = findRoomDetail(room_type, displayName);
+			if (!detail) return [];
+			const stayDates = buildStayDateKeysForCalendar(start_date, end_date);
+			const rates = Array.isArray(detail.pricingRate) ? detail.pricingRate : [];
+			return stayDates.filter((date) => {
+				const rate = rates.find((item) => item?.calendarDate === date);
+				return calendarRateIsBlocked(rate);
+			});
+		},
+		[limitedOrderTakerAccount, start_date, end_date, findRoomDetail]
+	);
+
 	const commissionForRoom = useCallback(
 		(room_type, displayName) => {
 			const matched = findRoomDetail(room_type, displayName);
@@ -253,6 +300,12 @@ const ZReservationForm2 = ({
 			if (!detail) return null;
 			const resolvedDisplayName =
 				displayName || detail?.displayName || room_type;
+			if (
+				limitedOrderTakerAccount &&
+				getBlockedDatesForRoom(room_type, resolvedDisplayName).length > 0
+			) {
+				return null;
+			}
 
 			const rows = buildPricingByDay({
 				pricingRate: detail.pricingRate || [],
@@ -291,7 +344,14 @@ const ZReservationForm2 = ({
 				commissionRate: commissionForRoom(room_type, displayName),
 			};
 		},
-		[start_date, end_date, findRoomDetail, commissionForRoom]
+		[
+			start_date,
+			end_date,
+			findRoomDetail,
+			commissionForRoom,
+			limitedOrderTakerAccount,
+			getBlockedDatesForRoom,
+		]
 	);
 
 	/* Toggle room chips */
@@ -306,6 +366,7 @@ const ZReservationForm2 = ({
 		}
 		const { room_type, displayName } = splitRoomKey(key);
 		const exists = selectedKeys.includes(key);
+		const blockedDates = getBlockedDatesForRoom(room_type, displayName);
 		if (exists) {
 			setPickedRoomsType((prev) =>
 				prev.filter(
@@ -314,6 +375,14 @@ const ZReservationForm2 = ({
 				)
 			);
 		} else {
+			if (blockedDates.length > 0) {
+				toast.error(
+					chosenLanguage === "Arabic"
+						? `هذه الغرفة محجوبة في تقويم الفندق خلال ${blockedDates.join(", ")} ولا يمكن للوكيل حجزها.`
+						: `This room is blocked on the hotel calendar for ${blockedDates.join(", ")} and cannot be booked by an agent.`
+				);
+				return;
+			}
 			const built = buildRoomLine(room_type, displayName);
 			if (built) setPickedRoomsType((prev) => [...prev, built]);
 		}
@@ -702,6 +771,20 @@ const ZReservationForm2 = ({
 						</div>
 					</Modal>
 
+					<div className='excel-import-tools mx-auto mb-3 mt-4 text-center'>
+						<ExcelReservationImportModal
+							hotelDetails={hotelDetails}
+							chosenLanguage={chosenLanguage}
+							onImported={() =>
+								toast.success(
+									chosenLanguage === "Arabic"
+										? "تم استيراد الحجوزات بنجاح."
+										: "Reservations were imported successfully."
+								)
+							}
+						/>
+					</div>
+
 					{/* Boss tools */}
 					{isBoss ? (
 						<div className='mx-auto mb-5 mt-4 text-center'>
@@ -992,6 +1075,19 @@ const ZReservationForm2 = ({
 													? "الرجاء الاختيار"
 													: "Please Select"}
 											</option>
+											{booking_source &&
+											![
+												"janat",
+												"affiliate",
+												"manual",
+												"booking.com",
+												"trivago",
+												"expedia",
+												"hotel.com",
+												"airbnb",
+											].includes(String(booking_source).toLowerCase()) ? (
+												<option value={booking_source}>{booking_source}</option>
+											) : null}
 											<option value='janat'>Janat</option>
 											<option value='affiliate'>Affiliate</option>
 											<option value='manual'>Manual Reservation</option>
@@ -1032,10 +1128,15 @@ const ZReservationForm2 = ({
 													? "الرجاء الاختيار"
 													: "Please Select"}
 											</option>
-											<option value='not paid'>Not Paid</option>
-											<option value='credit/ debit'>Credit/ Debit</option>
-											<option value='cash'>Cash</option>
-											<option value='deposit'>Deposit</option>
+											{paymentMethodOptionsWithCurrent(paymentStatus).map(
+												(option) => (
+													<option key={option.value} value={option.value}>
+														{chosenLanguage === "Arabic"
+															? option.arLabel
+															: option.label}
+													</option>
+												),
+											)}
 										</select>
 										{paymentStatus === "deposit" && (
 											<div className='mt-2'>
@@ -1191,12 +1292,31 @@ const ZReservationForm2 = ({
 											const active = selectedKeys.includes(key);
 											const availableCount =
 												room.available ?? room.total_available ?? 0;
+											const blockedDates = getBlockedDatesForRoom(
+												room.room_type,
+												resolvedDisplayName
+											);
+											const blockedForAgent =
+												limitedOrderTakerAccount && blockedDates.length > 0;
 											return (
 												<RoomChip
 													key={key}
 													$active={active}
+													$blocked={blockedForAgent}
+													disabled={blockedForAgent}
+													data-blocked-label={
+														chosenLanguage === "Arabic" ? "محجوبة" : "Blocked"
+													}
 													onClick={() => toggleChip(key)}
-													title={`${resolvedDisplayName} (${room.room_type})`}
+													title={
+														blockedForAgent
+															? `${
+																	chosenLanguage === "Arabic"
+																		? "محجوبة في التقويم"
+																		: "Blocked on calendar"
+															  }: ${blockedDates.join(", ")}`
+															: `${resolvedDisplayName} (${room.room_type})`
+													}
 												>
 													<span className='icon'>
 														<HomeOutlined />
@@ -1956,12 +2076,15 @@ const RoomGrid = styled.div`
 `;
 
 const RoomChip = styled.button.withConfig({
-	shouldForwardProp: (prop) => !["active", "$active"].includes(prop),
+	shouldForwardProp: (prop) =>
+		!["active", "$active", "$blocked"].includes(prop),
 })`
 	appearance: none;
-	border: 1px solid ${(p) => (p.$active ? "#1a9f42" : "#d9e9fb")};
-	background: ${(p) => (p.$active ? "#e7f7ed" : "#ffffff")};
-	color: #111827;
+	border: 1px solid
+		${(p) => (p.$blocked ? "#f59e0b" : p.$active ? "#1a9f42" : "#d9e9fb")};
+	background: ${(p) =>
+		p.$blocked ? "#fff7ed" : p.$active ? "#e7f7ed" : "#ffffff"};
+	color: ${(p) => (p.$blocked ? "#92400e" : "#111827")};
 	min-height: 48px;
 	padding: 8px 10px;
 	border-radius: 10px;
@@ -1975,7 +2098,32 @@ const RoomChip = styled.button.withConfig({
 		transform 0.05s ease;
 	text-align: start;
 
-	&:hover {
+	&:disabled {
+		cursor: not-allowed;
+		opacity: 0.78;
+	}
+
+	${(p) =>
+		p.$blocked
+			? `
+		.avail {
+			display: none;
+		}
+		&::after {
+			content: attr(data-blocked-label);
+			justify-self: end;
+			padding: 4px 9px;
+			border-radius: 999px;
+			background: #fed7aa;
+			color: #9a3412;
+			font-size: 0.72rem;
+			font-weight: 900;
+			white-space: nowrap;
+		}
+	`
+			: ""}
+
+	&:hover:not(:disabled) {
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 		transform: translateY(-1px);
 	}

@@ -77,7 +77,7 @@ const getSigninRedirectPath = (user = {}) => {
 
 	const assignedHotelIds = getAssignedHotelIds(user);
 	const isScopedHotelRole =
-		[2000, 3000, 4000, 5000, 6000, 7000].includes(role) ||
+		[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role) ||
 		[
 			"hotelmanager",
 			"reception",
@@ -85,6 +85,7 @@ const getSigninRedirectPath = (user = {}) => {
 			"housekeeping",
 			"finance",
 			"ordertaker",
+			"reservationemployee",
 		].some((description) => hasRoleDescription(user, description));
 
 	if (isScopedHotelRole && assignedHotelIds.length > 1) {
@@ -93,6 +94,9 @@ const getSigninRedirectPath = (user = {}) => {
 
 	if (role === 7000 || hasRoleDescription(user, "ordertaker")) {
 		return getScopedHotelPath(user, "new-reservation", "?newReservation");
+	}
+	if (role === 8000 || hasRoleDescription(user, "reservationemployee")) {
+		return getScopedHotelPath(user, "new-reservation", "?pendingConfirmation");
 	}
 	if (role === 3000 || hasRoleDescription(user, "reception")) {
 		return getScopedHotelPath(user, "new-reservation", "?reserveARoom");

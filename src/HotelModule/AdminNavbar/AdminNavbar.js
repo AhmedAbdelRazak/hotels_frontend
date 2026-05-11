@@ -94,23 +94,50 @@ const AdminNavbar = ({
 	const hasReception = hasRole(3000) || hasRoleDescription("reception");
 	const hasOrderTaker = hasRole(7000) || hasRoleDescription("ordertaker");
 	const hasFinance = hasRole(6000) || hasRoleDescription("finance");
+	const hasReservationEmployee =
+		hasRole(8000) || hasRoleDescription("reservationemployee");
 	const hasHousekeeping =
 		hasRole(4000) ||
 		hasRole(5000) ||
 		hasRoleDescription("housekeepingmanager") ||
 		hasRoleDescription("housekeeping");
 	const isLimitedOrderTaker = hasOrderTaker && !hasReception && !isManagerOrAdmin;
+	const isFinanceOnly = hasFinance && !isManagerOrAdmin && !hasReception && !hasOrderTaker;
+	const isReservationEmployeeOnly =
+		hasReservationEmployee &&
+		!isManagerOrAdmin &&
+		!hasReception &&
+		!hasOrderTaker &&
+		!hasFinance;
 	const reservationPath = `/hotel-management/new-reservation/${userId}/${hotelId}${
-		isLimitedOrderTaker ? "?newReservation" : ""
+		isLimitedOrderTaker
+			? "?newReservation"
+			: isReservationEmployeeOnly
+			  ? "?pendingConfirmation"
+			  : isFinanceOnly
+			    ? "?list=&page=1"
+			    : ""
 	}`;
 	const canShowNavItem = (key) => {
 		if (["signout"].includes(key)) return true;
-		if (["divider1", "divider2"].includes(key)) return isManagerOrAdmin;
+		if (["divider1", "divider2"].includes(key)) {
+			return isManagerOrAdmin || hasFinance || hasOrderTaker;
+		}
 		if (key === "sub1") return isManagerOrAdmin || hasFinance || hasRole(4000);
-		if (key === "sub3") return isManagerOrAdmin || hasReception || hasOrderTaker;
+		if (key === "sub3") {
+			return (
+				isManagerOrAdmin ||
+				hasReception ||
+				hasOrderTaker ||
+				hasFinance ||
+				hasReservationEmployee
+			);
+		}
 		if (key === "sub4" || key === "sub18") return isManagerOrAdmin || hasFinance;
-		if (key === "sub6" || key === "sub8") return isManagerOrAdmin;
+		if (key === "sub6") return isManagerOrAdmin || hasReservationEmployee;
+		if (key === "sub8") return isManagerOrAdmin;
 		if (key === "sub7") return isManagerOrAdmin || hasHousekeeping;
+		if (key === "sub16") return isManagerOrAdmin || hasFinance || hasOrderTaker;
 		if (["sub13", "sub14", "sub15", "sub16", "sub17"].includes(key)) {
 			return isManagerOrAdmin;
 		}
@@ -261,7 +288,9 @@ const AdminNavbar = ({
 			"black-bg"
 		),
 		getItem(
-			"Financials",
+			<Link to={`/hotel-management/financials/${userId}/${hotelId}`}>
+				Financials
+			</Link>,
 			"sub16",
 			<DollarCircleOutlined />,
 			null,
@@ -354,6 +383,8 @@ const AdminNavbar = ({
 							              ? "sub8"
 							              : fromPage === "Payment"
 							                ? "sub18"
+							                : fromPage === "Financials"
+							                  ? "sub16"
 							                : fromPage === "CouponManagement"
 							                  ? "sub12"
 							                  : "sub1"
@@ -366,6 +397,9 @@ const AdminNavbar = ({
 					onClick={(e) => {
 						if (e.key === "signout") {
 							handleSignout(history);
+						}
+						if (e.key === "sub16") {
+							history.push(`/hotel-management/financials/${userId}/${hotelId}`);
 						}
 
 						if (e.key === "StoreLogo") {

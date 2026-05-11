@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
-import styled, { createGlobalStyle } from "styled-components";
+import styled, { createGlobalStyle, keyframes } from "styled-components";
 // eslint-disable-next-line
 import { Link, useHistory, useLocation } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
@@ -20,6 +20,7 @@ import {
 	getHotelInventoryAvailability,
 	getHotelById,
 	getTodaysCheckins,
+	pendingConfirmationReservationList,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
@@ -28,8 +29,12 @@ import { Spin } from "antd";
 import HotelRunnerReservationList from "./HotelRunnerReservationList";
 import useBoss from "../useBoss";
 import HotelHeatMap from "./HotelHeatMap";
-import InHouseReport from "./InHouseReport";
+import PendingConfirmationReport from "./PendingConfirmationReport";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import { normalizePaymentMethod } from "../utils/paymentMethods";
+
+const defaultAgentBookingSource = (user) =>
+	String(user?.companyName || user?.name || user?.email || "").trim();
 
 const NewReservationMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -40,7 +45,7 @@ const NewReservationMain = () => {
 	const [hotelRooms, setHotelRooms] = useState("");
 	const [hotelDetails, setHotelDetails] = useState("");
 	const [roomsSummary, setRoomsSummary] = useState("");
-	const [payment_status, setPaymentStatus] = useState("Not Paid");
+	const [payment_status, setPaymentStatus] = useState("not paid");
 	const [booking_comment, setBookingComment] = useState("");
 	const [confirmation_number, setConfirmationNumber] = useState("");
 	const [booking_source, setBookingSource] = useState("");
@@ -67,6 +72,7 @@ const NewReservationMain = () => {
 	const [paidAmount, setPaidAmount] = useState("");
 	const [currentRoom, setCurrentRoom] = useState(null);
 	const [pricingByDay, setPricingByDay] = useState([]);
+	const [pendingConfirmationCount, setPendingConfirmationCount] = useState(0);
 	const [isBoss] = useBoss();
 	const lastReservationKeyRef = useRef(null);
 	const lastInhouseAppliedRef = useRef(null);
@@ -93,8 +99,13 @@ const NewReservationMain = () => {
 
 	const { user, token } = isAuthenticated();
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
-	const canShowReservationTab = (tab) =>
-		!limitedOrderTakerAccount || ["newReservation", "list"].includes(tab);
+	const canConfirmReservations = canAccessPendingConfirmation(user);
+	const agentDefaultBookingSource = defaultAgentBookingSource(user);
+	const canShowReservationTab = (tab) => {
+		if (limitedOrderTakerAccount) return ["newReservation", "list"].includes(tab);
+		if (tab === "housingreport") return canConfirmReservations;
+		return true;
+	};
 	const orderTakerSnapshot = {
 		_id: user?._id || "",
 		name: user?.name || user?.email || "",
@@ -110,6 +121,11 @@ const NewReservationMain = () => {
 	const history = useHistory();
 	const location = useLocation();
 	const lastAutoSearchRef = useRef("");
+
+	useEffect(() => {
+		if (!limitedOrderTakerAccount || !agentDefaultBookingSource) return;
+		setBookingSource((previous) => previous || agentDefaultBookingSource);
+	}, [agentDefaultBookingSource, limitedOrderTakerAccount]);
 
 	useEffect(() => {
 		if (
@@ -144,12 +160,25 @@ const NewReservationMain = () => {
 			}
 			return;
 		}
+		if (nextTab === "housingreport" && !canConfirmReservations) {
+			if (location.search !== "?list=&page=1") {
+				history.replace({
+					pathname: location.pathname,
+					search: "?list=&page=1",
+				});
+			}
+			if (activeTab !== "list") {
+				setActiveTab("list");
+			}
+			return;
+		}
 
 		if (activeTab !== nextTab) {
 			setActiveTab(nextTab);
 		}
 	}, [
 		activeTab,
+		canConfirmReservations,
 		history,
 		limitedOrderTakerAccount,
 		location.pathname,
@@ -356,11 +385,15 @@ const NewReservationMain = () => {
 					const duration = checkout.diff(checkin, "days") + 1;
 
 					setDays_of_residence(duration);
-					setPaymentStatus(data.payment_status);
+					setPaymentStatus(
+						normalizePaymentMethod(data.payment_status || data.payment)
+					);
 					setBookingComment(data.comment);
-					setBookingSource(data.booking_source);
+					setBookingSource(data.booking_source || agentDefaultBookingSource);
 					setConfirmationNumber(data.confirmation_number);
-					setPaymentStatus(data.payment_status);
+					setPaymentStatus(
+						normalizePaymentMethod(data.payment_status || data.payment)
+					);
 					setSearchedReservation(data);
 					setLoading(false);
 				} else {
@@ -630,7 +663,9 @@ const NewReservationMain = () => {
 		) {
 			return toast.error("Please Pick Up Rooms To Reserve");
 		}
-		if (!booking_source) return toast.error("Booking Source is required");
+		const resolvedBookingSource =
+			booking_source || (limitedOrderTakerAccount ? agentDefaultBookingSource : "");
+		if (!resolvedBookingSource) return toast.error("Booking Source is required");
 
 		if (
 			total_amount === 0 &&
@@ -677,7 +712,7 @@ const NewReservationMain = () => {
 				Number(total_amount) !== 0
 					? Number(total_amount) * nights
 					: total_amount_calculated,
-			booking_source,
+			booking_source: resolvedBookingSource,
 			belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
 			hotelId: hotelDetails._id,
 			requestingUserId: user?._id,
@@ -705,7 +740,11 @@ const NewReservationMain = () => {
 			pickedRoomsType: apiPickedRooms, // also identical
 
 			payment: payment_status,
-			reservation_status: pickedHotelRooms.length > 0 ? "InHouse" : "Confirmed",
+			reservation_status: limitedOrderTakerAccount
+				? "Pending Confirmation"
+				: pickedHotelRooms.length > 0
+				  ? "InHouse"
+				  : "Confirmed",
 			total_rooms: pickedHotelRooms.length,
 			total_guests: total_guests ? total_guests : pickedHotelRooms.length,
 			booking_comment,
@@ -752,7 +791,7 @@ const NewReservationMain = () => {
 				days_of_residence,
 				payment_status,
 				payment: payment_status,
-				booking_source,
+				booking_source: resolvedBookingSource,
 				belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
 				hotelId: hotelDetails._id,
 				roomId: pickedHotelRooms,
@@ -794,6 +833,11 @@ const NewReservationMain = () => {
 				requestingUserId: user?._id,
 			}).then((data) => {
 				if (data && data.error) {
+					toast.error(
+						chosenLanguage === "Arabic" && data.errorArabic
+							? data.errorArabic
+							: data.error
+					);
 					console.log(data.error);
 				} else {
 					toast.success("Checkin Was Successfully Processed!");
@@ -808,6 +852,11 @@ const NewReservationMain = () => {
 				new_reservation,
 			).then((data) => {
 				if (data && data.error) {
+					toast.error(
+						chosenLanguage === "Arabic" && data.errorArabic
+							? data.errorArabic
+							: data.error
+					);
 					console.log(data.error, "error create new reservation");
 				} else {
 					toast.success("Reservation Was Successfully Booked!");
@@ -843,6 +892,31 @@ const NewReservationMain = () => {
 		if (start_date && end_date) getRoomInventory();
 		// eslint-disable-next-line
 	}, [start_date, end_date]);
+
+	useEffect(() => {
+		if (!canConfirmReservations || !hotelDetails?._id || !user?._id) {
+			setPendingConfirmationCount(0);
+			return undefined;
+		}
+		let isMounted = true;
+		const loadPendingConfirmationCount = () => {
+			pendingConfirmationReservationList({
+				page: 1,
+				records: 1,
+				hotelId: hotelDetails._id,
+				userId: user._id,
+			}).then((data) => {
+				if (!isMounted) return;
+				setPendingConfirmationCount(Number(data?.total || 0));
+			});
+		};
+		loadPendingConfirmationCount();
+		const timer = setInterval(loadPendingConfirmationCount, 45000);
+		return () => {
+			isMounted = false;
+			clearInterval(timer);
+		};
+	}, [canConfirmReservations, hotelDetails?._id, user?._id]);
 
 	return (
 		<NewReservationMainWrapper
@@ -958,13 +1032,16 @@ const NewReservationMain = () => {
 											user.role === 2000
 												? user._id
 												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?housingreport`,
+										}/${selectedHotelLocalStorage._id}?pendingConfirmation`,
 									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
-									? "تقرير التسكين"
-									: "In House Report"}
+									? "تأكيد الحجوزات"
+									: "Pending Confirmation"}
+								{pendingConfirmationCount > 0 ? (
+									<TabBadge>{pendingConfirmationCount}</TabBadge>
+								) : null}
 							</Tab>
 						</div>
 					</TabsShell>
@@ -1040,10 +1117,10 @@ const NewReservationMain = () => {
 								)}
 							</>
 						) : activeTab === "housingreport" ? (
-							<InHouseReport
+							<PendingConfirmationReport
 								hotelDetails={hotelDetails}
 								chosenLanguage={chosenLanguage}
-								isBoss={isBoss}
+								onTotalChange={setPendingConfirmationCount}
 							/>
 						) : activeTab === "list" ? (
 							hotelDetails && hotelDetails._id ? (
@@ -1104,6 +1181,7 @@ const NewReservationMain = () => {
 								setSendEmail={setSendEmail}
 								sendEmail={sendEmail}
 								isBoss={isBoss}
+								limitedOrderTakerAccount={limitedOrderTakerAccount}
 								paidAmount={paidAmount}
 								setPaidAmount={setPaidAmount}
 								setCurrentRoom={setCurrentRoom}
@@ -1143,6 +1221,7 @@ function getReservationTabFromSearch(search = "") {
 	if (params.has("list")) return "list";
 	if (params.has("inventory")) return "inventory";
 	if (params.has("heatmap")) return "heatmap";
+	if (params.has("pendingConfirmation")) return "housingreport";
 	if (params.has("housingreport")) return "housingreport";
 	return "list";
 }
@@ -1177,10 +1256,22 @@ function isLimitedOrderTakerAccount(account = {}) {
 		(Array.isArray(account?.accessTo) &&
 			account.accessTo.includes("ownReservations"));
 	const hasFullReservationScope =
-		[1000, 2000, 3000].some((role) => roleNumbers.includes(role)) ||
+		[1000, 2000, 3000, 8000].some((role) => roleNumbers.includes(role)) ||
 		roleDescriptions.includes("hotelmanager") ||
-		roleDescriptions.includes("reception");
+		roleDescriptions.includes("reception") ||
+		roleDescriptions.includes("reservationemployee");
 	return hasOrderTakingScope && !hasFullReservationScope;
+}
+
+function canAccessPendingConfirmation(account = {}) {
+	const roleNumbers = getAccountRoleNumbers(account);
+	const roleDescriptions = getAccountRoleDescriptions(account);
+	return (
+		[1000, 2000, 6000, 8000].some((role) => roleNumbers.includes(role)) ||
+		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("finance") ||
+		roleDescriptions.includes("reservationemployee")
+	);
 }
 
 const ReservationModalLayerStyles = createGlobalStyle`
@@ -1358,5 +1449,43 @@ const Tab = styled.div`
 		min-width: 92px;
 		min-height: 48px;
 		padding: 8px 10px;
+	}
+`;
+
+const tabBadgeBeat = keyframes`
+	0%,
+	100% {
+		transform: scale(1);
+		box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35);
+	}
+	18% {
+		transform: scale(1.08);
+	}
+	38% {
+		transform: scale(1);
+	}
+	70% {
+		box-shadow: 0 0 0 9px rgba(239, 68, 68, 0);
+	}
+`;
+
+const TabBadge = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 22px;
+	height: 22px;
+	margin-inline-start: 8px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #ef4444;
+	color: #fff;
+	font-size: 0.72rem;
+	font-weight: 900;
+	line-height: 1;
+	animation: ${tabBadgeBeat} 1.8s ease-in-out infinite;
+
+	@media (prefers-reduced-motion: reduce) {
+		animation: none;
 	}
 `;

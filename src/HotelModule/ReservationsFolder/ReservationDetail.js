@@ -28,11 +28,13 @@ import {
 	UserOutlined,
 } from "@ant-design/icons";
 import {
+	getReservationAgentWalletSnapshot,
 	getHotelRooms,
 	sendPaymnetLinkToTheClient,
 	sendReservationConfirmationEmail,
 	sendReservationConfirmationSMSManualHotel,
 	sendReservationPaymentLinkSMSManualHotel,
+	updatePendingConfirmationReservation,
 	updateSingleReservation,
 } from "../apiAdmin";
 import { toast } from "react-toastify";
@@ -43,6 +45,40 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
 import { relocationArray1 } from "./ReservationAssets";
+
+const getAccountRoleNumbers = (account = {}) =>
+	[
+		Number(account?.role),
+		...(Array.isArray(account?.roles) ? account.roles.map(Number) : []),
+	].filter(Boolean);
+
+const getAccountRoleDescriptions = (account = {}) =>
+	[
+		String(account?.roleDescription || "").toLowerCase(),
+		...(Array.isArray(account?.roleDescriptions)
+			? account.roleDescriptions.map((item) => String(item || "").toLowerCase())
+			: []),
+	];
+
+const isLimitedOrderTakerAccount = (account = {}) => {
+	const roleNumbers = getAccountRoleNumbers(account);
+	const roleDescriptions = getAccountRoleDescriptions(account);
+	const hasOrderTakingScope =
+		roleNumbers.includes(7000) ||
+		roleDescriptions.some((description) =>
+			/(ordertaker|order taker|external agent|agent)/i.test(description),
+		);
+	const hasFullReservationScope =
+		roleNumbers.some((role) =>
+			[1000, 2000, 3000, 4000, 5000, 6000, 8000].includes(role)
+		) ||
+		roleDescriptions.some((description) =>
+			/(manager|reception|front desk|finance|reservationemployee|reservation employee|housekeeping|house keeping)/i.test(
+				description,
+			),
+		);
+	return hasOrderTakingScope && !hasFullReservationScope;
+};
 
 const AR_LABELS = {
 	guestName: "\u0627\u0633\u0645 \u0627\u0644\u0636\u064a\u0641",
@@ -141,6 +177,32 @@ const AR_LABELS = {
 		"\u0631\u0635\u064a\u062f \u0628\u0639\u062f \u0627\u0644\u0642\u0628\u0648\u0644",
 	accept: "\u0642\u0628\u0648\u0644",
 	reject: "\u0631\u0641\u0636",
+	walletSnapshot:
+		"\u0644\u0642\u0637\u0629 \u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u0648\u0643\u064a\u0644",
+	agentAccount:
+		"\u062d\u0633\u0627\u0628 \u0627\u0644\u0648\u0643\u064a\u0644",
+	walletBefore:
+		"\u0627\u0644\u0631\u0635\u064a\u062f \u0642\u0628\u0644 \u0627\u0644\u062d\u062c\u0632",
+	walletAfter:
+		"\u0627\u0644\u0631\u0635\u064a\u062f \u0628\u0639\u062f \u0627\u0644\u062d\u062c\u0632",
+	hotelBookingSummary:
+		"\u0645\u0644\u062e\u0635 \u062a\u0634\u063a\u064a\u0644\u064a \u0644\u0644\u062d\u062c\u0632",
+	capturedSnapshotAt:
+		"\u0648\u0642\u062a \u062a\u062b\u0628\u064a\u062a \u0627\u0644\u0644\u0642\u0637\u0629",
+	acceptedStatus:
+		"\u062a\u0645 \u0627\u0644\u0642\u0628\u0648\u0644",
+	rejectedStatus:
+		"\u062a\u0645 \u0627\u0644\u0631\u0641\u0636",
+	pendingStatus:
+		"\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+	revertToPending:
+		"\u0625\u0631\u062c\u0627\u0639 \u0644\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+	confirmationReason:
+		"\u0633\u0628\u0628 \u0627\u0644\u0642\u0628\u0648\u0644",
+	rejectionReason:
+		"\u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636",
+	optionalReason:
+		"\u0633\u0628\u0628 \u0627\u062e\u062a\u064a\u0627\u0631\u064a",
 	paidAmount:
 		"\u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u0645\u062f\u0641\u0648\u0639",
 	totalPaid:
@@ -172,7 +234,7 @@ const AR_LABELS = {
 	pmsOwesHotel:
 		"\u0627\u0644\u0645\u0646\u0635\u0629 \u0645\u0637\u0644\u0648\u0628 \u0645\u0646\u0647\u0627 \u062a\u062d\u0648\u064a\u0644 \u0644\u0644\u0641\u0646\u062f\u0642",
 	commissionReceived:
-		"\u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+		"\u062a\u0645 \u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 	hotelPayoutDone:
 		"\u062a\u0645 \u062a\u062d\u0648\u064a\u0644 \u062d\u0642 \u0627\u0644\u0641\u0646\u062f\u0642",
 	reconciliationNotes:
@@ -316,6 +378,18 @@ const Wrapper = styled.div`
 	margin-top: 0;
 	padding: 8px;
 	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	@keyframes pms-attention-pulse {
+		0%,
+		100% {
+			box-shadow: 0 0 0 rgba(245, 158, 11, 0);
+			transform: scale(1);
+		}
+		50% {
+			box-shadow: 0 8px 22px rgba(245, 158, 11, 0.2);
+			transform: scale(1.01);
+		}
+	}
 
 	.otherContentWrapper {
 		min-width: 0;
@@ -1602,11 +1676,24 @@ const ContentSection = styled.div`
 		color: var(--pms-text);
 	}
 
+	.payment-preview-amount.positive {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		color: var(--pms-green);
+	}
+
 	.payment-preview-label {
 		color: var(--pms-text);
 		font-size: 0.86rem;
 		font-weight: 900;
 		line-height: 1.25;
+	}
+
+	.payment-preview-loading {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		min-height: 90px;
 	}
 
 	.payment-preview-account {
@@ -1632,11 +1719,77 @@ const ContentSection = styled.div`
 		line-height: 1.25;
 	}
 
+	.payment-preview-stamp {
+		color: #64748b !important;
+		font-size: 0.7rem !important;
+	}
+
 	.payment-preview-bottom {
 		align-items: center;
 		display: grid;
 		gap: 8px;
-		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.payment-preview-decision-stack {
+		display: grid;
+		gap: 6px;
+		min-width: 0;
+	}
+
+	.payment-preview-decision {
+		align-items: center;
+		background: #f8fafc;
+		border: 1px solid #d6e3f3;
+		border-radius: 8px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		justify-content: center;
+		min-height: 34px;
+		padding: 5px 8px;
+		text-align: center;
+	}
+
+	.payment-preview-decision span {
+		color: var(--pms-text);
+		font-size: 0.84rem;
+		font-weight: 950;
+	}
+
+	.payment-preview-decision small {
+		color: #475569;
+		font-size: 0.72rem;
+		font-weight: 850;
+		line-height: 1.25;
+	}
+
+	.payment-preview-decision.accepted {
+		background: #ecfdf5;
+		border-color: #86efac;
+	}
+
+	.payment-preview-decision.accepted span {
+		color: var(--pms-green);
+	}
+
+	.payment-preview-decision.rejected {
+		background: #fef2f2;
+		border-color: #fecaca;
+	}
+
+	.payment-preview-decision.rejected span {
+		color: #dc2626;
+	}
+
+	.payment-preview-decision.pending {
+		animation: pms-attention-pulse 1.7s ease-in-out infinite;
+		background: #fff7ed;
+		border-color: #fed7aa;
+	}
+
+	.payment-preview-decision.pending span {
+		color: #b45309;
 	}
 
 	.payment-preview-actions {
@@ -1646,13 +1799,20 @@ const ContentSection = styled.div`
 	}
 
 	.payment-preview-action {
+		border: 0;
 		border-radius: 5px;
 		color: #fff;
+		cursor: pointer;
 		display: inline-flex;
 		font-size: 0.8rem;
 		font-weight: 950;
 		justify-content: center;
 		padding: 5px 9px;
+	}
+
+	.payment-preview-action:disabled {
+		cursor: not-allowed;
+		opacity: 0.68;
 	}
 
 	.payment-preview-action.reject {
@@ -1661,6 +1821,11 @@ const ContentSection = styled.div`
 
 	.payment-preview-action.accept {
 		background: var(--pms-green);
+	}
+
+	.payment-preview-action.pending {
+		background: #f59e0b;
+		grid-column: 1 / -1;
 	}
 
 	.payment-preview-ref {
@@ -2209,6 +2374,57 @@ const FinanceCycleEditor = styled.div`
 	}
 `;
 
+const CycleTrackerList = styled.div`
+	display: grid;
+	gap: 10px;
+	max-height: min(62vh, 560px);
+	overflow: auto;
+
+	.cycle-tracker-row {
+		position: relative;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 10px;
+		padding: 10px 12px;
+		border: 1px solid #d7e8fb;
+		border-radius: 8px;
+		background: #f8fbff;
+	}
+
+	.cycle-tracker-dot {
+		width: 12px;
+		height: 12px;
+		margin-top: 5px;
+		border-radius: 999px;
+		background: #1677ff;
+		box-shadow: 0 0 0 4px #dbeafe;
+	}
+
+	strong,
+	span,
+	small {
+		display: block;
+	}
+
+	strong {
+		color: #0f2742;
+		font-weight: 950;
+	}
+
+	span {
+		margin-top: 2px;
+		color: #475569;
+		font-size: 0.88rem;
+		font-weight: 700;
+	}
+
+	small {
+		margin-top: 4px;
+		color: #64748b;
+		font-weight: 700;
+	}
+`;
+
 const PricingBreakdownToggle = styled(PaymentBreakdownToggle)`
 	border-color: #93c5fd !important;
 	background: linear-gradient(135deg, #eff6ff, #dbeafe) !important;
@@ -2635,6 +2851,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		buildPaymentBreakdown(reservation?.paid_amount_breakdown),
 	);
 	const [financeCycleModalOpen, setFinanceCycleModalOpen] = useState(false);
+	const [cycleTrackerModalOpen, setCycleTrackerModalOpen] = useState(false);
 	const [financeCycleDraft, setFinanceCycleDraft] = useState({
 		commission: reservation?.commission || 0,
 		commissionPaid: !!reservation?.commissionPaid,
@@ -2648,6 +2865,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const editModalSnapshotRef = useRef("");
 	const paymentBreakdownRef = useRef(reservation?.paid_amount_breakdown);
 	const reservationRef = useRef(reservation);
+	const [agentSnapshotState, setAgentSnapshotState] = useState({
+		loading: false,
+		isAgentReservation: false,
+		snapshot: null,
+	});
+	const [pendingDecisionLoading, setPendingDecisionLoading] = useState(false);
 	const statusModalSnapshotRef = useRef({
 		selectedStatus: "",
 		sendEmail: false,
@@ -2661,6 +2884,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
+	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
+	const canFullManageReservation =
+		isSuperAdminUser(user) || !limitedOrderTakerAccount;
+	const activeRoleNumbers = getAccountRoleNumbers(user);
+	const activeRoleDescriptions = getAccountRoleDescriptions(user);
+	const canSeeReservationTracker =
+		user?.activeUser !== false &&
+		(isSuperAdminUser(user) ||
+			activeRoleNumbers.some((role) => [1000, 2000, 6000, 8000].includes(role)) ||
+			activeRoleDescriptions.some((role) =>
+				["hotelmanager", "finance", "reservationemployee"].includes(role),
+			));
 
 	const normalizeNumber = useCallback((value, fallback = 0) => {
 		if (value === null || value === undefined) return fallback;
@@ -2776,6 +3011,57 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	useEffect(() => {
 		reservationRef.current = reservation;
 	}, [reservation]);
+
+	useEffect(() => {
+		if (!reservation?._id || !user?._id || !canSeeReservationTracker) {
+			setAgentSnapshotState({
+				loading: false,
+				isAgentReservation: false,
+				snapshot: null,
+			});
+			return;
+		}
+
+		if (reservation?.agentWalletSnapshot?.captured) {
+			setAgentSnapshotState({
+				loading: false,
+				isAgentReservation: true,
+				snapshot: reservation.agentWalletSnapshot,
+			});
+			return;
+		}
+
+		let mounted = true;
+		setAgentSnapshotState((prev) => ({ ...prev, loading: true }));
+		getReservationAgentWalletSnapshot({
+			reservationId: reservation._id,
+			userId: user._id,
+		}).then((response) => {
+			if (!mounted) return;
+			if (!response || response.error) {
+				setAgentSnapshotState({
+					loading: false,
+					isAgentReservation: false,
+					snapshot: null,
+				});
+				return;
+			}
+			setAgentSnapshotState({
+				loading: false,
+				isAgentReservation: !!response.isAgentReservation,
+				snapshot: response.snapshot || null,
+			});
+		});
+
+		return () => {
+			mounted = false;
+		};
+	}, [
+		canSeeReservationTracker,
+		reservation?._id,
+		reservation?.agentWalletSnapshot,
+		user?._id,
+	]);
 
 	useEffect(() => {
 		if (!isModalVisible2) return;
@@ -3067,14 +3353,21 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			collectionModel === "hotel_collected" || collectionModel === "mixed"
 				? commissionAmount
 				: 0;
+		const commissionReviewed =
+			reservation?.financial_cycle?.commissionAssigned === true ||
+			reservation?.commissionData?.assigned === true ||
+			Boolean(String(reservation?.commissionStatus || "").trim()) ||
+			commissionAmount > 0;
+		const commissionSideClosed =
+			!!reservation?.commissionPaid || (commissionReviewed && commissionAmount <= 0);
 		const isClosed =
 			collectionModel === "pms_collected"
 				? !!reservation?.moneyTransferredToHotel
 				: collectionModel === "hotel_collected"
-				  ? !!reservation?.commissionPaid
+				  ? commissionSideClosed
 				  : collectionModel === "mixed"
 				    ? !!reservation?.moneyTransferredToHotel &&
-				      !!reservation?.commissionPaid
+				      commissionSideClosed
 				    : reservation?.financial_cycle?.status === "closed";
 		return {
 			collectionModel,
@@ -3124,7 +3417,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		};
 	}, [
 		reservation?.financial_cycle?.collectionModel,
+		reservation?.financial_cycle?.commissionAssigned,
 		reservation?.financial_cycle?.status,
+		reservation?.commissionData?.assigned,
+		reservation?.commissionStatus,
 		reservation?.moneyTransferredToHotel,
 		reservation?.commissionPaid,
 		pmsCollectedAmount,
@@ -3135,9 +3431,392 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		chosenLanguage,
 	]);
 	const canManageFinanceCycle =
+		canFullManageReservation &&
 		user?.activeUser !== false &&
-		([1000, 2000, 6000].includes(Number(user?.role)) ||
-			isSuperAdminUser(user));
+		canSeeReservationTracker;
+	const agentWalletSnapshot = useMemo(() => {
+		if (reservation?.agentWalletSnapshot?.captured) {
+			return reservation.agentWalletSnapshot;
+		}
+		return agentSnapshotState.snapshot;
+	}, [agentSnapshotState.snapshot, reservation?.agentWalletSnapshot]);
+	const hasAgentWalletSnapshot = !!agentWalletSnapshot?.captured;
+	const isAgentReservationPreview =
+		hasAgentWalletSnapshot || !!agentSnapshotState.isAgentReservation;
+	const pendingWorkflowStatus = String(
+		reservation?.pendingConfirmation?.status ||
+			reservation?.reservation_status ||
+			reservation?.state ||
+			"",
+	).toLowerCase();
+	const newProcessReservation = useMemo(() => {
+		const processDate = reservation?.booked_at || reservation?.createdAt;
+		if (!processDate) return false;
+		const parsed = new Date(processDate);
+		return (
+			!Number.isNaN(parsed.getTime()) &&
+			parsed >= new Date("2026-05-08T00:00:00.000Z")
+		);
+	}, [reservation?.booked_at, reservation?.createdAt]);
+	const pendingDecisionTone = /reject/.test(pendingWorkflowStatus)
+		? "rejected"
+		: /confirm/.test(pendingWorkflowStatus)
+		? "accepted"
+		: /pending/.test(pendingWorkflowStatus)
+		? "pending"
+		: "neutral";
+	const pendingDecisionReason =
+		reservation?.pendingConfirmation?.rejectionReason ||
+		reservation?.pendingConfirmation?.confirmationReason ||
+		reservation?.agentDecisionSnapshot?.reason ||
+		"";
+	const pendingDecisionLabel =
+		chosenLanguage === "Arabic"
+			? pendingDecisionTone === "accepted"
+				? AR_LABELS.acceptedStatus
+				: pendingDecisionTone === "rejected"
+				? AR_LABELS.rejectedStatus
+				: pendingDecisionTone === "pending"
+				? AR_LABELS.pendingStatus
+				: reservation?.reservation_status || "N/A"
+			: pendingDecisionTone === "accepted"
+			? "Accepted"
+			: pendingDecisionTone === "rejected"
+			? "Rejected"
+			: pendingDecisionTone === "pending"
+			? "Pending confirmation"
+			: reservation?.reservation_status || "N/A";
+	const agentWalletRows = useMemo(() => {
+		if (isAgentReservationPreview) {
+			const before = normalizeNumber(
+				agentWalletSnapshot?.balanceBeforeReservation,
+				0,
+			);
+			const reservationAmount = normalizeNumber(
+				agentWalletSnapshot?.reservationAmount ?? totalAmountValue,
+				totalAmountValue,
+			);
+			const after = normalizeNumber(
+				agentWalletSnapshot?.balanceAfterReservation,
+				before - reservationAmount,
+			);
+			return [
+				{
+					label:
+						chosenLanguage === "Arabic"
+							? AR_LABELS.walletBefore
+							: "Wallet before reservation",
+					value: before,
+					tone: before < 0 ? "negative" : "neutral",
+				},
+				{
+					label:
+						chosenLanguage === "Arabic"
+							? AR_LABELS.reservationValue
+							: "This reservation",
+					value: reservationAmount,
+					tone: "neutral",
+				},
+				{
+					label:
+						chosenLanguage === "Arabic"
+							? AR_LABELS.walletAfter
+							: "Wallet after reservation",
+					value: after,
+					tone: after < 0 ? "negative" : "positive",
+				},
+			];
+		}
+		return [
+			{
+				label:
+					chosenLanguage === "Arabic"
+						? AR_LABELS.totalPaid
+						: "Recorded paid amount",
+				value: displayedTotalPaid,
+				tone: displayedTotalPaid > 0 ? "positive" : "neutral",
+			},
+			{
+				label:
+					chosenLanguage === "Arabic" ? AR_LABELS.amountDue : "Amount due",
+				value: amountDue,
+				tone: amountDue > 0 ? "negative" : "positive",
+			},
+			{
+				label:
+					chosenLanguage === "Arabic" ? AR_LABELS.commission : "Commission",
+				value: commissionAmount,
+				tone: commissionAmount > 0 ? "neutral" : "positive",
+			},
+		];
+	}, [
+		agentWalletSnapshot,
+		amountDue,
+		chosenLanguage,
+		commissionAmount,
+		displayedTotalPaid,
+		isAgentReservationPreview,
+		normalizeNumber,
+		totalAmountValue,
+	]);
+	const updatePendingDecision = useCallback(
+		async (payload = {}) => {
+			if (!reservation?._id || !user?._id) return false;
+			setPendingDecisionLoading(true);
+			try {
+				const response = await updatePendingConfirmationReservation({
+					reservationId: reservation._id,
+					userId: user._id,
+					payload,
+				});
+				if (!response || response.error) {
+					toast.error(response?.error || "Could not update reservation status.");
+					return false;
+				}
+				const updated = response?.reservation || response;
+				if (updated?._id) {
+					setReservation(updated);
+					if (updated?.agentWalletSnapshot?.captured) {
+						setAgentSnapshotState({
+							loading: false,
+							isAgentReservation: true,
+							snapshot: updated.agentWalletSnapshot,
+						});
+					}
+				}
+				toast.success("Reservation status was updated.");
+				return true;
+			} finally {
+				setPendingDecisionLoading(false);
+			}
+		},
+		[reservation?._id, setReservation, user?._id],
+	);
+	const openConfirmDecisionModal = useCallback(() => {
+		let confirmationReason = "";
+		Modal.confirm({
+			title:
+				chosenLanguage === "Arabic"
+					? "\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062d\u062c\u0632"
+					: "Confirm reservation",
+			content: (
+				<div className='pending-decision-modal'>
+					<p>
+						{chosenLanguage === "Arabic"
+							? `\u0647\u0644 \u062a\u0631\u064a\u062f \u062a\u0623\u0643\u064a\u062f \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u062f\u0629 ${daysOfResidence} \u0644\u064a\u0644\u0629 / \u0644\u064a\u0627\u0644\u064a \u0628\u0625\u062c\u0645\u0627\u0644\u064a ${formatMoney(totalAmountValue)} SAR\u061f`
+							: `Would you like to confirm this reservation for ${daysOfResidence} night(s) at ${formatMoney(totalAmountValue)} SAR?`}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={
+							chosenLanguage === "Arabic"
+								? AR_LABELS.optionalReason
+								: "Optional reason"
+						}
+						onChange={(event) => {
+							confirmationReason = event.target.value;
+						}}
+					/>
+				</div>
+			),
+			okText: chosenLanguage === "Arabic" ? AR_LABELS.accept : "Confirm",
+			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
+			centered: true,
+			zIndex: 3000,
+			onOk: () =>
+				updatePendingDecision({
+					action: "confirm",
+					confirmationReason,
+				}),
+		});
+	}, [
+		chosenLanguage,
+		daysOfResidence,
+		formatMoney,
+		totalAmountValue,
+		updatePendingDecision,
+	]);
+	const openRejectDecisionModal = useCallback(() => {
+		let rejectionReason = "";
+		Modal.confirm({
+			title:
+				chosenLanguage === "Arabic"
+					? "\u0631\u0641\u0636 \u0627\u0644\u062d\u062c\u0632"
+					: "Reject reservation",
+			content: (
+				<div className='pending-decision-modal'>
+					<p>
+						{chosenLanguage === "Arabic"
+							? "\u0627\u0643\u062a\u0628 \u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636 \u0628\u0648\u0636\u0648\u062d \u0644\u064a\u0638\u0647\u0631 \u0644\u0644\u0648\u0643\u064a\u0644."
+							: "Write a clear rejection reason so the agent can see it."}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={
+							chosenLanguage === "Arabic"
+								? AR_LABELS.rejectionReason
+								: "Rejection reason"
+						}
+						onChange={(event) => {
+							rejectionReason = event.target.value;
+						}}
+					/>
+				</div>
+			),
+			okText: chosenLanguage === "Arabic" ? AR_LABELS.reject : "Reject",
+			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
+			centered: true,
+			zIndex: 3000,
+			onOk: () => {
+				if (!String(rejectionReason || "").trim()) {
+					toast.error(
+						chosenLanguage === "Arabic"
+							? "\u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636 \u0645\u0637\u0644\u0648\u0628."
+							: "Rejection reason is required.",
+					);
+					return Promise.reject(new Error("rejection reason required"));
+				}
+				return updatePendingDecision({
+					action: "reject",
+					rejectionReason,
+				});
+			},
+		});
+	}, [chosenLanguage, updatePendingDecision]);
+	const openRevertDecisionModal = useCallback(() => {
+		let revertReason = "";
+		Modal.confirm({
+			title:
+				chosenLanguage === "Arabic"
+					? AR_LABELS.revertToPending
+					: "Revert to pending confirmation",
+			content: (
+				<Input.TextArea
+					rows={3}
+					placeholder={
+						chosenLanguage === "Arabic"
+							? AR_LABELS.optionalReason
+							: "Optional reason"
+					}
+					onChange={(event) => {
+						revertReason = event.target.value;
+					}}
+				/>
+			),
+			okText:
+				chosenLanguage === "Arabic"
+					? AR_LABELS.revertToPending
+					: "Revert",
+			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
+			centered: true,
+			zIndex: 3000,
+			onOk: () =>
+				updatePendingDecision({
+					action: "revert_to_pending",
+					confirmationReason: revertReason,
+				}),
+		});
+	}, [chosenLanguage, updatePendingDecision]);
+	const reservationCycleRows = useMemo(() => {
+		const rows = [];
+		const pushRow = ({ at, title, by, detail }) => {
+			if (!at && !title && !detail) return;
+			rows.push({
+				at: at ? new Date(at) : null,
+				title: title || "Reservation update",
+				by: by?.name || by?.email || by || "-",
+				detail: detail || "",
+			});
+		};
+
+		(reservation?.reservationAuditLog || reservation?.adminChangeLog || []).forEach(
+			(entry) => {
+				pushRow({
+					at: entry.at || entry.createdAt || entry.updatedAt,
+					title: entry.action || entry.field || "Reservation update",
+					by: entry.by,
+					detail: entry.field
+						? `${entry.field}: ${entry.from ?? "-"} -> ${entry.to ?? "-"}`
+						: entry.note || "",
+				});
+			},
+		);
+
+		const pending = reservation?.pendingConfirmation || {};
+		if (pending.confirmedAt) {
+			pushRow({
+				at: pending.confirmedAt,
+				title:
+					chosenLanguage === "Arabic"
+						? "تم تأكيد الحجز"
+						: "Reservation confirmed",
+				by: pending.lastUpdatedBy,
+			});
+		}
+		if (pending.rejectedAt) {
+			pushRow({
+				at: pending.rejectedAt,
+				title:
+					chosenLanguage === "Arabic"
+						? "تم رفض الحجز"
+						: "Reservation rejected",
+				by: pending.lastUpdatedBy,
+				detail: pending.rejectionReason || "",
+			});
+		}
+		if (reservation?.housedBy?.name || reservation?.inhouse_date) {
+			pushRow({
+				at: reservation?.inhouse_date,
+				title: chosenLanguage === "Arabic" ? "تم التسكين" : "Guest housed",
+				by: reservation?.housedBy,
+			});
+		}
+		if (reservation?.financial_cycle?.commissionAssigned) {
+			pushRow({
+				at: reservation?.financial_cycle?.commissionAssignedAt,
+				title:
+					chosenLanguage === "Arabic"
+						? "تم تحديد العمولة"
+						: "Commission assigned",
+				by: reservation?.financial_cycle?.commissionAssignedBy,
+				detail: `${formatMoney(
+					reservation?.financial_cycle?.commissionAmount || reservation?.commission || 0,
+				)} SAR`,
+			});
+		}
+		if (reservation?.commissionPaid) {
+			pushRow({
+				at: reservation?.commissionPaidAt,
+				title:
+					chosenLanguage === "Arabic"
+						? "تم دفع العمولة"
+						: "Commission paid",
+				by: reservation?.adminLastUpdatedBy,
+			});
+		}
+		if (reservation?.moneyTransferredToHotel) {
+			pushRow({
+				at: reservation?.moneyTransferredAt || reservation?.adminLastUpdatedAt,
+				title:
+					chosenLanguage === "Arabic"
+						? "تم تسليم مبلغ الحجز للفندق"
+						: "Hotel payout completed",
+				by: reservation?.adminLastUpdatedBy,
+			});
+		}
+
+		return rows.sort((a, b) => {
+			const aTime =
+				a.at instanceof Date && !Number.isNaN(a.at.getTime())
+					? a.at.getTime()
+					: 0;
+			const bTime =
+				b.at instanceof Date && !Number.isNaN(b.at.getTime())
+					? b.at.getTime()
+					: 0;
+			return bTime - aTime;
+		});
+	}, [chosenLanguage, formatMoney, reservation]);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		if (key === "paid_at_hotel_cash" && isCashLocked) {
@@ -3209,20 +3888,30 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		const nextCommission = normalizeNumber(financeCycleDraft.commission, 0);
 		const nextMoneyTransferred = !!financeCycleDraft.moneyTransferredToHotel;
 		const nextCommissionPaid = !!financeCycleDraft.commissionPaid;
+		const nextCommissionStatus = nextCommissionPaid
+			? "commission paid"
+			: nextCommission <= 0
+			? "no commission due"
+			: "commission due";
+		const nextCommissionSideClosed = nextCommissionPaid || nextCommission <= 0;
 		const nextClosed =
 			financeCycleSummary.collectionModel === "pms_collected"
 				? nextMoneyTransferred
 				: financeCycleSummary.collectionModel === "hotel_collected"
-				  ? nextCommissionPaid
+				  ? nextCommissionSideClosed
 				  : financeCycleSummary.collectionModel === "mixed"
-				    ? nextMoneyTransferred && nextCommissionPaid
+				    ? nextMoneyTransferred && nextCommissionSideClosed
 				    : false;
 		const updateData = {
 			commission: nextCommission,
 			commissionPaid: nextCommissionPaid,
-			commissionStatus: nextCommissionPaid
-				? "commission paid"
-				: "commission due",
+			commissionStatus: nextCommissionStatus,
+			commissionData: {
+				...(reservation?.commissionData || {}),
+				assigned: true,
+				amount: nextCommission,
+				status: nextCommissionStatus,
+			},
 			moneyTransferredToHotel: nextMoneyTransferred,
 			financial_cycle: {
 				...(reservation?.financial_cycle || {}),
@@ -3231,6 +3920,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				commissionType: "amount",
 				commissionValue: nextCommission,
 				commissionAmount: nextCommission,
+				commissionAssigned: true,
 				pmsCollectedAmount,
 				hotelCollectedAmount,
 				hotelPayoutDue: Math.max(totalAmountValue - nextCommission, 0),
@@ -3422,6 +4112,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	};
 
 	const handleStatusModalOpen = () => {
+		if (!canFullManageReservation) {
+			toast.info(
+				chosenLanguage === "Arabic"
+					? "هذا الحساب يمكنه تعديل بيانات الضيف والتواريخ فقط."
+					: "This account can only update guest details and stay dates.",
+			);
+			return;
+		}
 		setSelectedStatus("");
 		setSendEmail(false);
 		statusModalSnapshotRef.current = { selectedStatus: "", sendEmail: false };
@@ -3627,7 +4325,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		if (!hotelIdValue || !user?._id) return;
 		getHotelRooms(hotelIdValue, user._id).then((data3) => {
 			if (data3 && data3.error) {
-				console.log(data3.error);
+				return;
 			} else {
 				const roomIds = getReservationRoomIds(roomIdValue);
 				const filteredRooms = Array.isArray(data3)
@@ -4005,6 +4703,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
 								onReservationSaved={handleEditReservationSaved}
+								basicEditOnly={limitedOrderTakerAccount}
 							/>
 						)}
 					</Modal>
@@ -4409,6 +5108,46 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					<Modal
 						title={
 							chosenLanguage === "Arabic"
+								? "تتبع دورة الحجز"
+								: "Reservation Cycle Tracker"
+						}
+						open={cycleTrackerModalOpen}
+						onCancel={() => setCycleTrackerModalOpen(false)}
+						footer={null}
+						width={720}
+						centered
+					>
+						<CycleTrackerList dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
+							{reservationCycleRows.length ? (
+								reservationCycleRows.map((item, index) => (
+									<div className='cycle-tracker-row' key={`${item.title}-${index}`}>
+										<div className='cycle-tracker-dot' />
+										<div>
+											<strong>{item.title}</strong>
+											<span>
+												{item.at && !Number.isNaN(item.at.getTime())
+													? moment(item.at).format("YYYY-MM-DD HH:mm")
+													: "-"}
+												{" • "}
+												{item.by}
+											</span>
+											{item.detail ? <small>{item.detail}</small> : null}
+										</div>
+									</div>
+								))
+							) : (
+								<p>
+									{chosenLanguage === "Arabic"
+										? "لا توجد حركات مسجلة لهذا الحجز حتى الآن."
+										: "No tracker entries have been recorded for this reservation yet."}
+								</p>
+							)}
+						</CycleTrackerList>
+					</Modal>
+
+					<Modal
+						title={
+							chosenLanguage === "Arabic"
 								? AR_LABELS.financeCycle
 								: "Finance Cycle"
 						}
@@ -4487,7 +5226,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								>
 									{chosenLanguage === "Arabic"
 										? AR_LABELS.commissionReceived
-										: "Commission received"}
+										: "Commission paid"}
 								</Checkbox>
 								<Checkbox
 									checked={financeCycleDraft.moneyTransferredToHotel}
@@ -5046,15 +5785,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								>
 									{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
 								</button>
-								<div className='top-document-actions'>
-									<button onClick={() => setIsModalVisible3(true)}>
-										{chosenLanguage === "Arabic" ? AR_LABELS.invoice : "Invoice"}
-									</button>
-									<button onClick={() => setIsModalVisible5(true)}>
-										{chosenLanguage === "Arabic" ? AR_LABELS.operationOrder : "Operation Order"}
-									</button>
-								</div>
-								<div className='top-payment-actions'>
+								{canFullManageReservation ? (
+									<div className='top-document-actions'>
+										<button onClick={() => setIsModalVisible3(true)}>
+											{chosenLanguage === "Arabic" ? AR_LABELS.invoice : "Invoice"}
+										</button>
+										<button onClick={() => setIsModalVisible5(true)}>
+											{chosenLanguage === "Arabic" ? AR_LABELS.operationOrder : "Operation Order"}
+										</button>
+									</div>
+								) : null}
+								{canFullManageReservation ? (
+									<div className='top-payment-actions'>
 									{linkGenerate ? (
 										<>
 											<button
@@ -5105,14 +5847,17 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											{chosenLanguage === "Arabic" ? AR_LABELS.generatePaymentLink : "Generate Payment Link"}
 										</button>
 									)}
-								</div>
+									</div>
+								) : null}
 								<div className='top-status-block'>
 									<span className='top-status-label'>
 										{chosenLanguage === "Arabic" ? AR_LABELS.reservationStatus : "Reservation Status"}
-										<EditOutlined
-											onClick={handleStatusModalOpen}
-											style={{ cursor: "pointer" }}
-										/>
+										{canFullManageReservation ? (
+											<EditOutlined
+												onClick={handleStatusModalOpen}
+												style={{ cursor: "pointer" }}
+											/>
+										) : null}
 									</span>
 									<span
 										className='top-status-pill'
@@ -5138,7 +5883,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										{reservation?.reservation_status || "N/A"}
 									</span>
 								</div>
-								{relocationArray1 &&
+								{canFullManageReservation &&
+									relocationArray1 &&
 									relocationArray1.some(
 										(hotel) =>
 											hotel._id === hotelDetails._id &&
@@ -5194,6 +5940,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 								</div>
 							</Section>
+							{canFullManageReservation ? (
 							<Section className='top-secondary-actions'>
 								<div className='top-document-actions'>
 									<button onClick={() => setIsModalVisible3(true)}>
@@ -5271,10 +6018,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								<div className='top-status-block'>
 									<span className='top-status-label'>
 										{chosenLanguage === "Arabic" ? AR_LABELS.reservationStatus : "Reservation Status"}
-										<EditOutlined
-											onClick={handleStatusModalOpen}
-											style={{ cursor: "pointer" }}
-										/>
+										{canFullManageReservation ? (
+											<EditOutlined
+												onClick={handleStatusModalOpen}
+												style={{ cursor: "pointer" }}
+											/>
+										) : null}
 									</span>
 									<span
 										className='top-status-pill'
@@ -5301,6 +6050,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</span>
 								</div>
 							</Section>
+							) : null}
+							{canFullManageReservation ? (
 							<Section className='reservation-command-panel'>
 								{/* Left side of the header */}
 								<div className='row'>
@@ -5454,14 +6205,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										}}
 									>
 										{chosenLanguage === "Arabic" ? AR_LABELS.reservationStatus : "Reservation Status"}
-										<EditOutlined
-											onClick={handleStatusModalOpen}
-											style={{
-												marginLeft: "5px",
-												marginRight: "5px",
-												cursor: "pointer",
-											}}
-										/>
+										{canFullManageReservation ? (
+											<EditOutlined
+												onClick={handleStatusModalOpen}
+												style={{
+													marginLeft: "5px",
+													marginRight: "5px",
+													cursor: "pointer",
+												}}
+											/>
+										) : null}
 										<div
 											className=''
 											style={{
@@ -5494,6 +6247,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 								</div>
 							</Section>
+							) : null}
 
 							<Section className='guest-command-panel'>
 								{/* Right side of the header */}
@@ -5711,8 +6465,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													)}
 												</div>
 											</div>
-										</div>
-										<div className='guest-action-comment-row'>
+									</div>
+									<div className='guest-action-comment-row'>
+										{canFullManageReservation ? (
 											<AssignRoomCallout
 												type='button'
 												onClick={handleAssignRoomClick}
@@ -5729,6 +6484,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: "Open housing screen"}
 												</AssignRoomHint>
 											</AssignRoomCallout>
+										) : null}
 											<div className='detail-item guest-comment-card'>
 												<span className='detail-icon'>
 													<FileTextOutlined />
@@ -5953,74 +6709,140 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 									<div className='payment-method-preview'>
 										<div className='payment-preview-heading'>
-											<CreditCardOutlined />
+											{isAgentReservationPreview ? (
+												<DollarCircleOutlined />
+											) : (
+												<CreditCardOutlined />
+											)}
 											<span>
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.paymentMethod
-													: "Payment Method"}
+												{isAgentReservationPreview
+													? chosenLanguage === "Arabic"
+														? AR_LABELS.walletSnapshot
+														: "Agent wallet snapshot"
+													: chosenLanguage === "Arabic"
+														? AR_LABELS.hotelBookingSummary
+														: "Hotel booking summary"}
 											</span>
 										</div>
 										<div className='payment-preview-body'>
 											<div className='payment-preview-ledger'>
-												<div className='payment-preview-row'>
-													<div className='payment-preview-amount negative detail-value-ltr'>
-														-6,588 SAR
+												{agentSnapshotState.loading ? (
+													<div className='payment-preview-loading'>
+														<Spin size='small' />
 													</div>
-													<div className='payment-preview-label'>
-														{chosenLanguage === "Arabic"
-															? AR_LABELS.reservationValue
-															: "Reservation"}
-													</div>
-												</div>
-												<div className='payment-preview-row'>
-													<div className='payment-preview-amount neutral detail-value-ltr'>
-														{formatMoney(totalAmountValue)} SAR
-													</div>
-													<div className='payment-preview-label'>
-														{chosenLanguage === "Arabic"
-															? AR_LABELS.reservationValue
-															: "Booking value"}
-													</div>
-												</div>
-												<div className='payment-preview-row'>
-													<div className='payment-preview-amount negative detail-value-ltr'>
-														-7,376 SAR
-													</div>
-													<div className='payment-preview-label'>
-														{chosenLanguage === "Arabic"
-															? AR_LABELS.balanceAfterApproval
-															: "Balance after approval"}
-													</div>
-												</div>
+												) : (
+													agentWalletRows.map((row) => (
+														<div className='payment-preview-row' key={row.label}>
+															<div
+																className={`payment-preview-amount ${row.tone} detail-value-ltr`}
+															>
+																{formatMoney(row.value)} SAR
+															</div>
+															<div className='payment-preview-label'>
+																{row.label}
+															</div>
+														</div>
+													))
+												)}
 											</div>
 											<div className='payment-preview-account'>
 												<span>
-													{chosenLanguage === "Arabic"
-														? AR_LABELS.companyAccount
-														: "Company Account"}
+													{isAgentReservationPreview
+														? chosenLanguage === "Arabic"
+															? AR_LABELS.agentAccount
+															: "Agent account"
+														: chosenLanguage === "Arabic"
+															? AR_LABELS.paymentStatus
+															: "Payment status"}
 												</span>
 												<strong>
-													{chosenLanguage === "Arabic"
-														? AR_LABELS.jannatBookingCompany
-														: "Jannat Hotel Booking Company"}
+													{isAgentReservationPreview
+														? formatLeadingCapital(
+																agentWalletSnapshot?.agent?.companyName ||
+																	agentWalletSnapshot?.agent?.name ||
+																	reservation?.orderTaker?.companyName ||
+																	reservation?.orderTaker?.name ||
+																	reservation?.booking_source ||
+																	"N/A",
+														  )
+														: paymentStatusLabel}
 												</strong>
+												{hasAgentWalletSnapshot && (
+													<span className='payment-preview-stamp detail-value-ltr'>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.capturedSnapshotAt
+															: "Snapshot"}
+														:{" "}
+														{agentWalletSnapshot?.snapshotAt
+															? moment(agentWalletSnapshot.snapshotAt).format(
+																	"DD/MM/YYYY HH:mm",
+															  )
+															: "N/A"}
+													</span>
+												)}
 											</div>
 										</div>
 										<div className='payment-preview-bottom'>
-											<div className='payment-preview-actions'>
-												<span className='payment-preview-action reject'>
-													{chosenLanguage === "Arabic"
-														? AR_LABELS.reject
-														: "Reject"}
-												</span>
-												<span className='payment-preview-action accept'>
-													{chosenLanguage === "Arabic"
-														? AR_LABELS.accept
-														: "Accept"}
-												</span>
+											<div className='payment-preview-decision-stack'>
+												<div
+													className={`payment-preview-decision ${pendingDecisionTone}`}
+												>
+													<span>{pendingDecisionLabel}</span>
+													{pendingDecisionReason ? (
+														<small>
+															{pendingDecisionTone === "rejected"
+																? chosenLanguage === "Arabic"
+																	? AR_LABELS.rejectionReason
+																	: "Reason"
+																: chosenLanguage === "Arabic"
+																	? AR_LABELS.confirmationReason
+																	: "Reason"}
+															: {pendingDecisionReason}
+														</small>
+													) : null}
+												</div>
+												{canManageFinanceCycle && newProcessReservation ? (
+													<div className='payment-preview-actions'>
+														{pendingDecisionTone === "pending" ? (
+															<>
+																<button
+																	className='payment-preview-action reject'
+																	type='button'
+																	disabled={pendingDecisionLoading}
+																	onClick={openRejectDecisionModal}
+																>
+																	{chosenLanguage === "Arabic"
+																		? AR_LABELS.reject
+																		: "Reject"}
+																</button>
+																<button
+																	className='payment-preview-action accept'
+																	type='button'
+																	disabled={pendingDecisionLoading}
+																	onClick={openConfirmDecisionModal}
+																>
+																	{chosenLanguage === "Arabic"
+																		? AR_LABELS.accept
+																		: "Accept"}
+																</button>
+															</>
+														) : (
+															<button
+																className='payment-preview-action pending'
+																type='button'
+																disabled={pendingDecisionLoading}
+																onClick={openRevertDecisionModal}
+															>
+																{chosenLanguage === "Arabic"
+																	? AR_LABELS.revertToPending
+																	: "Revert to pending"}
+															</button>
+														)}
+													</div>
+												) : null}
 											</div>
 											<div className='payment-preview-ref top-ltr-value'>
-												BR{reservation?.confirmation_number || "52478963254"}
+												BR{reservation?.confirmation_number || "N/A"}
 											</div>
 										</div>
 									</div>
@@ -6088,6 +6910,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<div>{reservation && reservation.comment}</div>
 									</div>
 
+									{canFullManageReservation ? (
+										<>
 									<div className='col-md-12'>
 										<PaymentBreakdownToggle
 											type='button'
@@ -6117,6 +6941,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</AssignRoomHint>
 										</AssignRoomCallout>
 									</div>
+										</>
+									) : null}
 
 									{roomTableRows && roomTableRows.length > 0 ? (
 										<div className='table-responsive'>
@@ -6237,41 +7063,55 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: "Adjust Commission"}
 											</button>
 										) : null}
+										{canSeeReservationTracker ? (
+											<button
+												type='button'
+												onClick={() => setCycleTrackerModalOpen(true)}
+											>
+												{chosenLanguage === "Arabic"
+													? "تتبع الدورة"
+													: "Cycle Tracker"}
+											</button>
+										) : null}
 									</div>
 
 									<div className='payment-summary-actions'>
-										<PaymentBreakdownToggle
-											type='button'
-											onClick={() => setIsPaymentBreakdownVisible(true)}
-											$isArabic={chosenLanguage === "Arabic"}
-										>
-											<span>
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.paymentBreakdown
-													: "Payment Breakdown"}
-											</span>
-											<PaymentBreakdownHint>
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.clickToUpdate
-													: "Click to update"}
-											</PaymentBreakdownHint>
-										</PaymentBreakdownToggle>
-										<PricingBreakdownToggle
-											type='button'
-											onClick={() => setPricingBreakdownModalOpen(true)}
-											$isArabic={chosenLanguage === "Arabic"}
-										>
-											<span>
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.dailyPrices
-													: "Daily Prices"}
-											</span>
-											<PaymentBreakdownHint>
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.viewDetails
-													: "View details"}
-											</PaymentBreakdownHint>
-										</PricingBreakdownToggle>
+										{canFullManageReservation ? (
+											<>
+												<PaymentBreakdownToggle
+													type='button'
+													onClick={() => setIsPaymentBreakdownVisible(true)}
+													$isArabic={chosenLanguage === "Arabic"}
+												>
+													<span>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.paymentBreakdown
+															: "Payment Breakdown"}
+													</span>
+													<PaymentBreakdownHint>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.clickToUpdate
+															: "Click to update"}
+													</PaymentBreakdownHint>
+												</PaymentBreakdownToggle>
+												<PricingBreakdownToggle
+													type='button'
+													onClick={() => setPricingBreakdownModalOpen(true)}
+													$isArabic={chosenLanguage === "Arabic"}
+												>
+													<span>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.dailyPrices
+															: "Daily Prices"}
+													</span>
+													<PaymentBreakdownHint>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.viewDetails
+															: "View details"}
+													</PaymentBreakdownHint>
+												</PricingBreakdownToggle>
+											</>
+										) : null}
 									</div>
 
 									<div className='payment-total-grid'>

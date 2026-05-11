@@ -16,6 +16,9 @@ import {
 	CalendarOutlined,
 	WarningOutlined,
 	DatabaseOutlined,
+	UploadOutlined,
+	DeleteOutlined,
+	WalletOutlined,
 } from "@ant-design/icons";
 
 import { useCartContext } from "../cart_context";
@@ -30,6 +33,9 @@ import {
 	getHotelDashboardIncompleteReservations,
 	getHotelDashboardOpenReservations,
 	getHotelMainDashboardStats,
+	getAgentWalletSummary,
+	getManagerExecutiveIncompleteReservations,
+	getManagerExecutiveSummary,
 	getReservationSummary,
 	hotelAccount,
 	updateHotelDetails,
@@ -38,7 +44,9 @@ import {
 import TopNavbar from "./AdminNavbar/TopNavbar";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
+import ManagerFinancialsModal from "./Financials/ManagerFinancialsModal";
 import { getStoredMenuCollapsed } from "./utils/menuState";
+import { isSuperAdminUser } from "../AdminModule/utils/superUsers";
 
 /* 🔑  step‑modal registry */
 import { STEP_MODAL_REGISTRY } from "./utils/hotel‑setup‑modals";
@@ -126,7 +134,7 @@ Object.assign(WORDS.en, {
 	sourceTitle: "Booking sources",
 	openModalTitle: "Open confirmed reservations",
 	incompleteModalTitle: "Incomplete reservations",
-	searchPlaceholder: "Search confirmation or guest name",
+	searchPlaceholder: "Search confirmation, guest name, or hotel name",
 	search: "Search",
 	reset: "Reset",
 	from: "From",
@@ -146,11 +154,21 @@ Object.assign(WORDS.en, {
 	exporting: "Exporting...",
 	noRows: "No open reservations found.",
 	noIncompleteRows: "No incomplete reservations found.",
+	executiveSummary: "Executive summary",
+	executiveSummarySubtitle:
+		"All assigned properties in one operational snapshot.",
+	allRooms: "All rooms",
+	allAvailableRooms: "Available rooms",
+	reservationsPastThreeMonths: "Reservations",
+	pastThreeMonths: "Past 3 months",
+	allIncompleteReservations: "Incomplete reservations",
+	historicalData: "Historical",
+	hotelName: "Hotel",
 });
 Object.assign(WORDS.ar, {
 	sourceTitle: "مصادر الحجز",
 	openModalTitle: "الحجوزات المؤكدة المفتوحة",
-	searchPlaceholder: "ابحث برقم التأكيد أو اسم الضيف",
+	searchPlaceholder: "ابحث برقم التأكيد أو اسم الضيف أو اسم الفندق",
 	search: "بحث",
 	reset: "مسح",
 	from: "من",
@@ -174,8 +192,22 @@ WORDS.ar.exportExcel = "تصدير إكسل";
 WORDS.ar.exporting = "جاري التصدير...";
 WORDS.ar.noIncompleteRows = "لا توجد حجوزات غير مكتملة.";
 
+Object.assign(WORDS.ar, {
+	executiveSummary: "الملخص التنفيذي",
+	executiveSummarySubtitle:
+		"نظرة تشغيلية عامة على كل الفنادق المخصصة.",
+	allRooms: "كل الغرف",
+	allAvailableRooms: "الغرف المتاحة",
+	reservationsPastThreeMonths: "الحجوزات",
+	pastThreeMonths: "آخر 3 أشهر",
+	allIncompleteReservations: "الحجوزات غير المكتملة",
+	historicalData: "كل البيانات",
+	hotelName: "الفندق",
+});
+
 Object.assign(WORDS.en, {
 	accountsButton: "Manager Hotel Accounts",
+	financialsButton: "Financials",
 	accountsTitle: "Manager Hotel Accounts",
 	accountsSubtitle:
 		"Create and review hotel-level accounts across all properties owned by this manager.",
@@ -185,6 +217,9 @@ Object.assign(WORDS.en, {
 	accountEmail: "Email",
 	accountPhone: "Phone",
 	accountCompany: "Company name",
+	accountOfficialName: "Official company name",
+	accountEin: "Company EIN / tax number",
+	accountDocuments: "Company attachments",
 	accountRole: "Role",
 	accountRoles: "Roles",
 	accountHotel: "Hotels",
@@ -216,6 +251,12 @@ Object.assign(WORDS.en, {
 	emailHint: "Required. This is the login email.",
 	phoneHint: "Required. Use a reachable phone number.",
 	companyHint: "Optional. Useful for contractor or company accounts.",
+	officialNameHint: "Optional. Use the legal company name when it differs from the display name.",
+	einHint: "Optional. Add the EIN, VAT, CR, or tax number if available.",
+	documentsHint: "Optional. Upload bank-account PDFs, screenshots, EIN files, or official company documents.",
+	uploadDocuments: "Upload documents",
+	documentLimitHint: "PDF or image files, up to 3 MB each.",
+	removeDocument: "Remove",
 	passwordHint: "Required. The user can update it later.",
 	confirmPasswordHint: "Required. Must match the password.",
 	allAccountsNote:
@@ -316,6 +357,22 @@ Object.assign(WORDS.ar, {
 		"يمكن ربط الحساب بفندق واحد أو عدة فنادق. الوكيل الخارجي يرى فقط الحجوزات التي أنشأها.",
 });
 
+Object.assign(WORDS.ar, {
+	accountOfficialName: "الاسم الرسمي للشركة",
+	accountEin: "الرقم الضريبي / السجل",
+	accountDocuments: "مرفقات الشركة",
+	officialNameHint:
+		"اختياري. اكتب الاسم القانوني للشركة إذا كان مختلفاً عن اسم العرض.",
+	einHint: "اختياري. أضف الرقم الضريبي أو السجل التجاري إن وجد.",
+	documentsHint:
+		"اختياري. ارفع ملفات الحساب البنكي أو السجل أو صور المستندات الرسمية.",
+	uploadDocuments: "رفع المرفقات",
+	documentLimitHint: "PDF أو صور، بحد أقصى 3 ميجابايت لكل ملف.",
+	removeDocument: "حذف",
+});
+
+WORDS.ar.financialsButton = WORDS.ar.financialsButton || "المالية";
+
 const ManagerMainHotelDashboard = () => {
 	const history = useHistory();
 	const location = useLocation();
@@ -334,6 +391,23 @@ const ManagerMainHotelDashboard = () => {
 	const [editVisible, setEditVisible] = useState(false);
 	const [currentHotel, setCurrentHotel] = useState(null);
 	const [accountsVisible, setAccountsVisible] = useState(false);
+	const [financialsVisible, setFinancialsVisible] = useState(false);
+	const [executiveSummary, setExecutiveSummary] = useState(null);
+	const [executiveLoading, setExecutiveLoading] = useState(false);
+	const [executiveIncompleteVisible, setExecutiveIncompleteVisible] =
+		useState(false);
+	const [executiveIncompleteRows, setExecutiveIncompleteRows] = useState([]);
+	const [executiveIncompleteTotal, setExecutiveIncompleteTotal] = useState(0);
+	const [executiveIncompletePage, setExecutiveIncompletePage] = useState(1);
+	const [executiveIncompleteLoading, setExecutiveIncompleteLoading] =
+		useState(false);
+	const [executiveIncompleteExporting, setExecutiveIncompleteExporting] =
+		useState(false);
+	const [executiveSearch, setExecutiveSearch] = useState("");
+	const [executiveDateFrom, setExecutiveDateFrom] = useState("");
+	const [executiveDateTo, setExecutiveDateTo] = useState("");
+	const [executiveSortBy, setExecutiveSortBy] = useState("booked_at");
+	const executiveListLimit = 10;
 
 	/* onboarding modals */
 	const [stepModalIdx, setStepModalIdx] = useState(null);
@@ -341,6 +415,28 @@ const ManagerMainHotelDashboard = () => {
 
 	const { user, token } = isAuthenticated();
 	const userId = user?._id;
+	const isConfiguredSuperAdmin = isSuperAdminUser(user);
+	const queryDashboardOwnerId = useMemo(() => {
+		const params = new URLSearchParams(location.search);
+		return normalizeDashboardId(params.get("ownerId"));
+	}, [location.search]);
+	const storedDashboardOwnerId = useMemo(() => {
+		if (!isConfiguredSuperAdmin || typeof window === "undefined") return "";
+		try {
+			const selectedHotel =
+				JSON.parse(localStorage.getItem("selectedHotel") || "{}") || {};
+			return normalizeDashboardId(
+				selectedHotel.belongsTo?._id ||
+					selectedHotel.belongsTo ||
+					selectedHotel.ownerId
+			);
+		} catch (error) {
+			return "";
+		}
+	}, [isConfiguredSuperAdmin]);
+	const dashboardOwnerId = isConfiguredSuperAdmin
+		? queryDashboardOwnerId || storedDashboardOwnerId || userId
+		: userId;
 	const assignedHotelId = user?.hotelIdWork || "";
 	const assignedOwnerId = user?.belongsToId || "";
 	const isSingleHotelUser = Boolean(assignedHotelId && assignedOwnerId);
@@ -377,6 +473,11 @@ const ManagerMainHotelDashboard = () => {
 			dateFrom: "",
 			dateTo: "",
 			sortBy: "",
+			executiveListPage: "",
+			executiveListSearch: "",
+			executiveDateFrom: "",
+			executiveDateTo: "",
+			executiveSortBy: "",
 		});
 	}, [updateDashboardQuery]);
 
@@ -397,14 +498,168 @@ const ManagerMainHotelDashboard = () => {
 
 	/* fetch hotels owned by this admin */
 	const fetchHotels = useCallback(() => {
-		if (isSingleHotelUser) return;
-		hotelAccount(userId, token, userId).then((d) => {
-			if (d?.error) console.log(d.error);
-			else setUserData(d);
+		if (isSingleHotelUser || !userId || !dashboardOwnerId) return;
+		hotelAccount(userId, token, dashboardOwnerId).then((d) => {
+			if (!d?.error) setUserData(d);
 		});
-	}, [isSingleHotelUser, token, userId]);
+	}, [dashboardOwnerId, isSingleHotelUser, token, userId]);
 
 	useEffect(fetchHotels, [fetchHotels]);
+
+	const fetchExecutiveSummary = useCallback(() => {
+		if (isSingleHotelUser || !dashboardOwnerId || !token) return;
+		setExecutiveLoading(true);
+		getManagerExecutiveSummary(dashboardOwnerId, token)
+			.then((data) => {
+				if (!data || data.error) {
+					setExecutiveSummary(null);
+					return;
+				}
+				setExecutiveSummary(data);
+			})
+			.finally(() => setExecutiveLoading(false));
+	}, [dashboardOwnerId, isSingleHotelUser, token]);
+
+	useEffect(fetchExecutiveSummary, [fetchExecutiveSummary]);
+
+	const syncExecutiveIncompleteQuery = useCallback(
+		(page = executiveIncompletePage, overrides = {}) => {
+			updateDashboardQuery({
+				modal: "executive-incomplete",
+				executiveListPage: page,
+				executiveListSearch: overrides.search ?? executiveSearch,
+				executiveDateFrom: overrides.dateFrom ?? executiveDateFrom,
+				executiveDateTo: overrides.dateTo ?? executiveDateTo,
+				executiveSortBy: overrides.sortBy ?? executiveSortBy,
+			});
+		},
+		[
+			executiveDateFrom,
+			executiveDateTo,
+			executiveIncompletePage,
+			executiveSearch,
+			executiveSortBy,
+			updateDashboardQuery,
+		]
+	);
+
+	const loadExecutiveIncompleteReservations = useCallback(
+		(page = executiveIncompletePage, overrides = {}) => {
+			if (!dashboardOwnerId || !token) return;
+			setExecutiveIncompleteLoading(true);
+			getManagerExecutiveIncompleteReservations(dashboardOwnerId, token, {
+				page,
+				limit: executiveListLimit,
+				search: overrides.search ?? executiveSearch,
+				dateFrom: overrides.dateFrom ?? executiveDateFrom,
+				dateTo: overrides.dateTo ?? executiveDateTo,
+				sortBy: overrides.sortBy ?? executiveSortBy,
+				sortOrder: "asc",
+			})
+				.then((data) => {
+					if (!data || data.error) {
+						setExecutiveIncompleteRows([]);
+						setExecutiveIncompleteTotal(0);
+						return;
+					}
+					setExecutiveIncompleteRows(
+						Array.isArray(data.reservations) ? data.reservations : []
+					);
+					setExecutiveIncompleteTotal(Number(data.total || 0));
+					setExecutiveIncompletePage(Number(data.page || page));
+				})
+				.finally(() => setExecutiveIncompleteLoading(false));
+		},
+		[
+			executiveDateFrom,
+			executiveDateTo,
+			executiveIncompletePage,
+			executiveSearch,
+			executiveSortBy,
+			dashboardOwnerId,
+			token,
+		]
+	);
+
+	const handleExportExecutiveIncomplete = useCallback(() => {
+		if (!dashboardOwnerId || !token) return;
+		setExecutiveIncompleteExporting(true);
+		getManagerExecutiveIncompleteReservations(dashboardOwnerId, token, {
+			page: 1,
+			exportAll: true,
+			search: executiveSearch,
+			dateFrom: executiveDateFrom,
+			dateTo: executiveDateTo,
+			sortBy: executiveSortBy,
+			sortOrder: "asc",
+		})
+			.then((data) => {
+				const rows = Array.isArray(data?.reservations) ? data.reservations : [];
+				if (!rows.length) {
+					message.info(TXT.noIncompleteRows);
+					return;
+				}
+				const exportRows = rows.map((reservation, index) => ({
+					[TXT.index]: index + 1,
+					[TXT.hotelName]: reservation.hotelName || "",
+					[TXT.confirmation]: reservation.confirmation_number || "",
+					[TXT.guest]: reservation.customer_details?.name || "",
+					[TXT.source]: reservation.booking_source || "",
+					[TXT.bookedAt]: formatShortDate(reservation.booked_at),
+					[TXT.checkin]: formatShortDate(reservation.checkin_date),
+					[TXT.checkout]: formatShortDate(reservation.checkout_date),
+					[TXT.total]: `${formatMoney(reservation.total_amount)} SAR`,
+					[TXT.reason]: getReservationReasonText(reservation, isRTL),
+					[TXT.cycle]: reservation.financial_cycle?.status || "incomplete",
+				}));
+				const worksheet = XLSX.utils.json_to_sheet(exportRows);
+				const workbook = XLSX.utils.book_new();
+				XLSX.utils.book_append_sheet(workbook, worksheet, "Incomplete");
+				const fileDate = new Date().toISOString().slice(0, 10);
+				XLSX.writeFile(
+					workbook,
+					`executive-incomplete-reservations-${fileDate}.xlsx`
+				);
+			})
+			.catch(() => {
+				message.error("Unable to export reservations right now.");
+			})
+			.finally(() => setExecutiveIncompleteExporting(false));
+	}, [
+		TXT,
+		executiveDateFrom,
+		executiveDateTo,
+		executiveSearch,
+		executiveSortBy,
+		dashboardOwnerId,
+		isRTL,
+		token,
+	]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		if (params.get("modal") !== "executive-incomplete") {
+			if (executiveIncompleteVisible) setExecutiveIncompleteVisible(false);
+			return;
+		}
+		setExecutiveSearch(params.get("executiveListSearch") || "");
+		setExecutiveDateFrom(params.get("executiveDateFrom") || "");
+		setExecutiveDateTo(params.get("executiveDateTo") || "");
+		setExecutiveSortBy(params.get("executiveSortBy") || "booked_at");
+		setExecutiveIncompletePage(
+			Math.max(parseInt(params.get("executiveListPage"), 10) || 1, 1)
+		);
+		setExecutiveIncompleteVisible(true);
+	}, [executiveIncompleteVisible, location.search]);
+
+	useEffect(() => {
+		if (!executiveIncompleteVisible) return;
+		loadExecutiveIncompleteReservations(executiveIncompletePage);
+	}, [
+		executiveIncompletePage,
+		executiveIncompleteVisible,
+		loadExecutiveIncompleteReservations,
+	]);
 
 	/* navigation helpers */
 	const gotoHotelDashboard = (hotel) => {
@@ -414,7 +669,28 @@ const ManagerMainHotelDashboard = () => {
 			);
 		}
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
-		window.location.href = `/hotel-management/dashboard/${user._id}/${hotel._id}`;
+		const ownerId =
+			normalizeDashboardId(hotel?.belongsTo?._id || hotel?.belongsTo) ||
+			normalizeDashboardId(dashboardOwnerId || user?._id);
+		window.location.href = `/hotel-management/dashboard/${ownerId}/${hotel._id}`;
+	};
+
+	const goToExecutiveReservationDetails = (reservation = {}) => {
+		const ownerId = normalizeDashboardId(
+			reservation.hotelOwnerId || dashboardOwnerId || user?._id
+		);
+		const hotelId = normalizeDashboardId(reservation.hotelId);
+		if (!ownerId || !hotelId) return;
+		const params = new URLSearchParams();
+		params.set("list", "");
+		params.set("page", "1");
+		if (reservation.confirmation_number) {
+			params.set("search", String(reservation.confirmation_number));
+		}
+		if (reservation.reservationId || reservation._id) {
+			params.set("reservationId", String(reservation.reservationId || reservation._id));
+		}
+		window.location.href = `/hotel-management/new-reservation/${ownerId}/${hotelId}?${params.toString()}`;
 	};
 
 	const handleStepClick = (idx, hotel) => {
@@ -438,6 +714,7 @@ const ManagerMainHotelDashboard = () => {
 			: null;
 
 		setAccountsVisible(modal === "accounts");
+		setFinancialsVisible(modal === "financials");
 		setAddVisible(modal === "add-property");
 
 		if (modal === "edit-property" && matchingHotel) {
@@ -482,7 +759,104 @@ const ManagerMainHotelDashboard = () => {
 				>
 					{TXT.accountsButton}
 				</ManageAccountsButton>
+				<ManageAccountsButton
+					$variant='financials'
+					onClick={() => {
+						setFinancialsVisible(true);
+						updateDashboardQuery({ modal: "financials" });
+					}}
+				>
+					<WalletOutlined />
+					{TXT.financialsButton}
+				</ManageAccountsButton>
 			</PageActions>
+
+			<ExecutiveSummaryPanel className='container' $isRTL={isRTL}>
+				<ExecutiveSummaryHeader>
+					<div>
+						<strong>{TXT.executiveSummary}</strong>
+						<span>{TXT.executiveSummarySubtitle}</span>
+					</div>
+					<small>
+						{executiveSummary?.period?.reservationsFrom
+							? `${formatShortDate(
+									executiveSummary.period.reservationsFrom
+							  )} - ${formatShortDate(executiveSummary.period.reservationsTo)}`
+							: ""}
+					</small>
+				</ExecutiveSummaryHeader>
+				<ExecutiveSummaryGrid>
+					<ExecutiveSummaryCard $tone='blue'>
+						<HomeOutlined />
+						<strong>
+							{executiveLoading
+								? "..."
+								: Number(executiveSummary?.stats?.totalRooms || 0)}
+						</strong>
+						<span>{TXT.allRooms}</span>
+					</ExecutiveSummaryCard>
+					<ExecutiveSummaryCard $tone='green'>
+						<DatabaseOutlined />
+						<strong>
+							{executiveLoading
+								? "..."
+								: Number(executiveSummary?.stats?.availableRooms || 0)}
+						</strong>
+						<span>{TXT.allAvailableRooms}</span>
+					</ExecutiveSummaryCard>
+					<ExecutiveSummaryCard $tone='purple'>
+						<CalendarOutlined />
+						<strong>
+							{executiveLoading
+								? "..."
+								: Number(
+										executiveSummary?.stats
+											?.reservationsPastThreeMonths || 0
+								  )}
+						</strong>
+						<span>{TXT.reservationsPastThreeMonths}</span>
+						<em>{TXT.pastThreeMonths}</em>
+					</ExecutiveSummaryCard>
+					<ExecutiveSummaryCard
+						$tone='red'
+						$clickable
+						role='button'
+						tabIndex={0}
+						onClick={() => {
+							setExecutiveIncompleteRows([]);
+							setExecutiveSearch("");
+							setExecutiveDateFrom("");
+							setExecutiveDateTo("");
+							setExecutiveSortBy("booked_at");
+							setExecutiveIncompletePage(1);
+							setExecutiveIncompleteVisible(true);
+							syncExecutiveIncompleteQuery(1, {
+								search: "",
+								dateFrom: "",
+								dateTo: "",
+								sortBy: "booked_at",
+							});
+						}}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault();
+								event.currentTarget.click();
+							}
+						}}
+					>
+						<WarningOutlined />
+						<strong>
+							{executiveLoading
+								? "..."
+								: Number(
+										executiveSummary?.stats?.incompleteReservations || 0
+								  )}
+						</strong>
+						<span>{TXT.allIncompleteReservations}</span>
+						<em>{TXT.historicalData}</em>
+					</ExecutiveSummaryCard>
+				</ExecutiveSummaryGrid>
+			</ExecutiveSummaryPanel>
 
 			<CardsGrid className='container'>
 				{userData?.hotelIdsOwner?.length ? (
@@ -579,6 +953,184 @@ const ManagerMainHotelDashboard = () => {
 				isRTL={isRTL}
 			/>
 
+			<ManagerFinancialsModal
+				open={financialsVisible}
+				onCancel={() => {
+					setFinancialsVisible(false);
+					clearDashboardModalQuery();
+				}}
+				hotels={userData?.hotelIdsOwner || []}
+				userId={user?._id}
+				token={token}
+				isArabic={isRTL}
+			/>
+
+			<Modal
+				title={TXT.allIncompleteReservations}
+				open={executiveIncompleteVisible}
+				onCancel={() => {
+					setExecutiveIncompleteVisible(false);
+					clearDashboardModalQuery();
+				}}
+				footer={null}
+				width='min(96vw, 1160px)'
+				destroyOnClose
+			>
+				<OpenReservationsPanel $isRTL={isRTL}>
+					<OpenFilters
+						onSubmit={(event) => {
+							event.preventDefault();
+							setExecutiveIncompletePage(1);
+							syncExecutiveIncompleteQuery(1);
+							loadExecutiveIncompleteReservations(1);
+						}}
+					>
+						<input
+							value={executiveSearch}
+							onChange={(event) => setExecutiveSearch(event.target.value)}
+							placeholder={TXT.searchPlaceholder}
+						/>
+						<label>
+							<span>{TXT.from}</span>
+							<input
+								type='date'
+								value={executiveDateFrom}
+								onChange={(event) => setExecutiveDateFrom(event.target.value)}
+							/>
+						</label>
+						<label>
+							<span>{TXT.to}</span>
+							<input
+								type='date'
+								value={executiveDateTo}
+								onChange={(event) => setExecutiveDateTo(event.target.value)}
+							/>
+						</label>
+						<label>
+							<span>{TXT.sortBy}</span>
+							<select
+								value={executiveSortBy}
+								onChange={(event) => setExecutiveSortBy(event.target.value)}
+							>
+								<option value='booked_at'>{TXT.bookedAt}</option>
+								<option value='checkin_date'>{TXT.checkin}</option>
+								<option value='checkout_date'>{TXT.checkout}</option>
+							</select>
+						</label>
+						<button type='submit'>{TXT.search}</button>
+						<button
+							type='button'
+							onClick={() => {
+								setExecutiveSearch("");
+								setExecutiveDateFrom("");
+								setExecutiveDateTo("");
+								setExecutiveSortBy("booked_at");
+								setExecutiveIncompletePage(1);
+								syncExecutiveIncompleteQuery(1, {
+									search: "",
+									dateFrom: "",
+									dateTo: "",
+									sortBy: "booked_at",
+								});
+								loadExecutiveIncompleteReservations(1, {
+									search: "",
+									dateFrom: "",
+									dateTo: "",
+									sortBy: "booked_at",
+								});
+							}}
+						>
+							{TXT.reset}
+						</button>
+						<button
+							type='button'
+							onClick={handleExportExecutiveIncomplete}
+							disabled={executiveIncompleteExporting}
+							className='export-btn'
+						>
+							{executiveIncompleteExporting
+								? TXT.exporting
+								: TXT.exportExcel}
+						</button>
+					</OpenFilters>
+
+					<OpenTableWrap>
+						<OpenTable>
+							<thead>
+								<tr>
+									<th>{TXT.index}</th>
+									<th>{TXT.hotelName}</th>
+									<th>{TXT.confirmation}</th>
+									<th>{TXT.guest}</th>
+									<th>{TXT.source}</th>
+									<th>{TXT.bookedAt}</th>
+									<th>{TXT.checkin}</th>
+									<th>{TXT.checkout}</th>
+									<th>{TXT.total}</th>
+									<th>{TXT.reason}</th>
+									<th>{TXT.cycle}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{executiveIncompleteLoading ? (
+									<tr>
+										<td colSpan='11'>Loading...</td>
+									</tr>
+								) : executiveIncompleteRows.length ? (
+									executiveIncompleteRows.map((reservation, index) => (
+										<tr key={reservation._id || reservation.confirmation_number}>
+											<td>
+												{(executiveIncompletePage - 1) *
+													executiveListLimit +
+													index +
+													1}
+											</td>
+											<td>{reservation.hotelName || "-"}</td>
+											<td>
+												<ConfirmationButton
+													type='button'
+													onClick={() =>
+														goToExecutiveReservationDetails(reservation)
+													}
+												>
+													{reservation.confirmation_number || "-"}
+												</ConfirmationButton>
+											</td>
+											<td>{reservation.customer_details?.name || "-"}</td>
+											<SourceCell>{reservation.booking_source || "-"}</SourceCell>
+											<td>{formatShortDate(reservation.booked_at)}</td>
+											<td>{formatShortDate(reservation.checkin_date)}</td>
+											<td>{formatShortDate(reservation.checkout_date)}</td>
+											<td>{formatMoney(reservation.total_amount)} SAR</td>
+											<ReasonCell dir={isRTL ? "rtl" : "ltr"}>
+												{getReservationReasonText(reservation, isRTL)}
+											</ReasonCell>
+											<td>{reservation.financial_cycle?.status || "incomplete"}</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td colSpan='11'>{TXT.noIncompleteRows}</td>
+									</tr>
+								)}
+							</tbody>
+						</OpenTable>
+					</OpenTableWrap>
+
+					<Pagination
+						current={executiveIncompletePage}
+						pageSize={executiveListLimit}
+						total={executiveIncompleteTotal}
+						onChange={(page) => {
+							setExecutiveIncompletePage(page);
+							syncExecutiveIncompleteQuery(page);
+						}}
+						showSizeChanger={false}
+						size='small'
+					/>
+				</OpenReservationsPanel>
+			</Modal>
+
 			{/* dynamic step modal (resolved from registry) */}
 			{stepModalIdx !== null &&
 				stepModalHotel &&
@@ -627,8 +1179,10 @@ const isLimitedOrderTakerDashboardUser = (user = {}) => {
 	const roleNumbers = getDashboardRoleNumbers(user);
 	const roleDescriptions = getDashboardRoleDescriptions(user);
 	const isFullHotelUser =
-		roleNumbers.some((role) => [1000, 2000, 3000].includes(role)) ||
-		roleDescriptions.some((role) => ["hotelmanager", "reception"].includes(role));
+		roleNumbers.some((role) => [1000, 2000, 3000, 8000].includes(role)) ||
+		roleDescriptions.some((role) =>
+			["hotelmanager", "reception", "reservationemployee"].includes(role)
+		);
 	const isOrderTaker =
 		roleNumbers.includes(7000) ||
 		roleDescriptions.includes("ordertaker") ||
@@ -646,7 +1200,9 @@ const isScopedRoleDashboardUser = (user = {}) => {
 		Array.isArray(user.hotelIdsOwner) &&
 		user.hotelIdsOwner.length > 0;
 	const hasScopedRole =
-		roleNumbers.some((role) => [2000, 3000, 4000, 5000, 6000, 7000].includes(role)) ||
+		roleNumbers.some((role) =>
+			[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role)
+		) ||
 		roleDescriptions.some((role) =>
 			[
 				"hotelmanager",
@@ -655,6 +1211,7 @@ const isScopedRoleDashboardUser = (user = {}) => {
 				"housekeeping",
 				"finance",
 				"ordertaker",
+				"reservationemployee",
 			].includes(role)
 		);
 	const hasHotelScope =
@@ -691,6 +1248,8 @@ const getPrimaryScopedRole = (user = {}) => {
 	}
 	if (hasRole(5000) || hasRoleDescription("housekeeping")) return "housekeeping";
 	if (hasRole(6000) || hasRoleDescription("finance")) return "finance";
+	if (hasRole(8000) || hasRoleDescription("reservationemployee"))
+		return "reservationemployee";
 	if (hasRole(7000) || hasRoleDescription("ordertaker")) return "ordertaker";
 	return "user";
 };
@@ -703,6 +1262,9 @@ const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") =>
 	if (!ownerId || !hotelId) return "/hotel-management/main-dashboard";
 
 	if (roleKey === "ordertaker") {
+		if (action === "finance") {
+			return `/hotel-management/financials/${ownerId}/${hotelId}`;
+		}
 		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
 			action === "list" ? "?list=&page=1" : "?newReservation"
 		}`;
@@ -712,13 +1274,24 @@ const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") =>
 			action === "list" ? "?list=&page=1" : "?reserveARoom"
 		}`;
 	}
+	if (roleKey === "reservationemployee") {
+		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
+			action === "list"
+				? "?list=&page=1"
+				: action === "newReservation"
+				  ? "?newReservation"
+				  : "?pendingConfirmation"
+		}`;
+	}
 	if (roleKey === "housekeeping" || roleKey === "housekeepingmanager") {
 		return `/hotel-management/house-keeping/${ownerId}/${hotelId}`;
 	}
 	if (roleKey === "finance") {
 		return action === "payment"
 			? `/hotel-management-payment/${ownerId}/${hotelId}`
-			: `/hotel-management/hotel-reports/${ownerId}/${hotelId}`;
+			: action === "reservations"
+			  ? `/hotel-management/new-reservation/${ownerId}/${hotelId}?list=&page=1`
+			  : `/hotel-management/financials/${ownerId}/${hotelId}`;
 	}
 
 	if (action === "reservations") {
@@ -796,6 +1369,8 @@ const SCOPED_DASHBOARD_WORDS = {
 		housekeeping: "Housekeeping",
 		settings: "Settings",
 		payments: "Payments",
+		financials: "Financials",
+		walletBalance: "Wallet balance",
 		openHotel: "Open hotel",
 		loading: "Loading assigned hotels...",
 		noHotels: "No hotels are assigned to this account yet.",
@@ -806,6 +1381,7 @@ const SCOPED_DASHBOARD_WORDS = {
 			hotelmanager: "Hotel manager workspace",
 			reception: "Reception workspace",
 			ordertaker: "External agent workspace",
+			reservationemployee: "Reservations employee workspace",
 			finance: "Finance workspace",
 			housekeepingmanager: "Housekeeping manager workspace",
 			housekeeping: "Housekeeping workspace",
@@ -852,6 +1428,11 @@ SCOPED_DASHBOARD_WORDS.ar = {
 	},
 };
 
+SCOPED_DASHBOARD_WORDS.ar.financials = "المالية";
+SCOPED_DASHBOARD_WORDS.ar.walletBalance = "رصيد المحفظة";
+SCOPED_DASHBOARD_WORDS.ar.roleLabels.reservationemployee =
+	"مساحة مسؤول الحجوزات";
+
 const ScopedUserMainDashboard = ({ user, token }) => {
 	const history = useHistory();
 	const { chosenLanguage } = useCartContext();
@@ -863,6 +1444,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [hotels, setHotels] = useState([]);
 	const [summaries, setSummaries] = useState({});
+	const [walletSummaries, setWalletSummaries] = useState({});
 	const [loading, setLoading] = useState(false);
 	const [summaryLoading, setSummaryLoading] = useState(false);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
@@ -950,6 +1532,31 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		};
 	}, [hotels, isOrderTakerOnly, today, user?._id]);
 
+	useEffect(() => {
+		if (!hotels.length || !user?._id || !token || roleKey !== "ordertaker") {
+			setWalletSummaries({});
+			return;
+		}
+		let isMounted = true;
+		Promise.all(
+			hotels.map((hotel) =>
+				getAgentWalletSummary(hotel._id, user._id, token, {
+					agentId: user._id,
+				}).then((wallet) => [hotel._id, wallet?.agents?.[0] || {}])
+			)
+		)
+			.then((entries) => {
+				if (isMounted) setWalletSummaries(Object.fromEntries(entries));
+			})
+			.catch(() => {
+				if (isMounted) setWalletSummaries({});
+			});
+
+		return () => {
+			isMounted = false;
+		};
+	}, [hotels, roleKey, token, user?._id]);
+
 	const orderedHotels = useMemo(() => {
 		if (!selectedHotelId) return hotels;
 		return [
@@ -1003,6 +1610,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 			return [
 				{ action: "primary", label: TXT.newReservation, icon: <PlusOutlined /> },
 				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
+				{ action: "finance", label: TXT.financials, icon: <WalletOutlined /> },
 			];
 		}
 		if (roleKey === "reception") {
@@ -1011,9 +1619,25 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 			];
 		}
+		if (roleKey === "reservationemployee") {
+			return [
+				{
+					action: "primary",
+					label: isRTL ? "تأكيد الحجوزات" : "Confirm reservations",
+					icon: <DatabaseOutlined />,
+				},
+				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
+				{
+					action: "newReservation",
+					label: TXT.newReservation,
+					icon: <PlusOutlined />,
+				},
+			];
+		}
 		if (roleKey === "finance") {
 			return [
-				{ action: "primary", label: TXT.reports || "Reports", icon: <DatabaseOutlined /> },
+				{ action: "primary", label: TXT.financials || "Financials", icon: <WalletOutlined /> },
+				{ action: "reservations", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 				{ action: "payment", label: TXT.payments || "Payments", icon: <CalendarOutlined /> },
 			];
 		}
@@ -1165,6 +1789,16 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 											</strong>
 											<span>{TXT.incomplete}</span>
 										</AgentMiniStat>
+										{roleKey === "ordertaker" && (
+											<AgentMiniStat>
+												<strong>
+													{Number(
+														walletSummaries[hotel._id]?.balance || 0
+													).toLocaleString("en-US")}
+												</strong>
+												<span>{TXT.walletBalance || "Wallet balance"}</span>
+											</AgentMiniStat>
+										)}
 									</AgentCardStats>
 									<AgentCardActions>
 										{getHotelActions().map((item) => (
@@ -1215,6 +1849,12 @@ const accountRoleOptions = [
 	},
 	{ value: "finance", role: 6000, en: "Finance", ar: "المالية" },
 	{
+		value: "reservationemployee",
+		role: 8000,
+		en: "Reservations Officer",
+		ar: "مسؤول الحجوزات",
+	},
+	{
 		value: "housekeepingmanager",
 		role: 4000,
 		en: "Housekeeping Manager",
@@ -1243,7 +1883,10 @@ const getDefaultAccess = (roleDescription) => {
 	if (roleDescription === "hotelmanager") {
 		return accountAccessOptions.map((option) => option.value);
 	}
-	if (roleDescription === "finance") return ["dashboard", "finance", "reports"];
+	if (roleDescription === "finance")
+		return ["dashboard", "reservations", "reports", "finance"];
+	if (roleDescription === "reservationemployee")
+		return ["reservations", "newReservation", "settings"];
 	if (roleDescription === "housekeepingmanager")
 		return ["dashboard", "housekeeping"];
 	if (roleDescription === "housekeeping") return ["housekeeping"];
@@ -1256,6 +1899,35 @@ const getDefaultAccess = (roleDescription) => {
 const getDefaultAccessForRoles = (roleDescriptions = []) => [
 	...new Set(roleDescriptions.flatMap((role) => getDefaultAccess(role))),
 ];
+
+const ACCOUNT_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
+
+const fileToCompanyDocument = (file) =>
+	new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () =>
+			resolve({
+				fileName: file.name,
+				fileType: file.type || "application/octet-stream",
+				fileSize: file.size || 0,
+				dataUrl: reader.result,
+				uploadedAt: new Date().toISOString(),
+			});
+		reader.onerror = reject;
+		reader.readAsDataURL(file);
+	});
+
+const normalizeCompanyDocuments = (documents = []) =>
+	(Array.isArray(documents) ? documents : [])
+		.filter((document) => document && (document.fileName || document.url || document.dataUrl))
+		.map((document) => ({
+			fileName: String(document.fileName || document.name || "Company document"),
+			fileType: String(document.fileType || document.type || ""),
+			fileSize: Number(document.fileSize || document.size || 0),
+			dataUrl: document.dataUrl || document.url || "",
+			uploadedAt: document.uploadedAt || new Date().toISOString(),
+			notes: document.notes || "",
+		}));
 
 const OwnerAccountsModal = ({
 	open,
@@ -1276,6 +1948,9 @@ const OwnerAccountsModal = ({
 		email: "",
 		phone: "",
 		companyName: "",
+		companyOfficialName: "",
+		companyEin: "",
+		companyDocuments: [],
 		password: "",
 		password2: "",
 		roleDescriptions: ["reception"],
@@ -1289,6 +1964,9 @@ const OwnerAccountsModal = ({
 		email: "",
 		phone: "",
 		companyName: "",
+		companyOfficialName: "",
+		companyEin: "",
+		companyDocuments: [],
 		password: "",
 		roleDescriptions: ["reception"],
 		accessTo: getDefaultAccessForRoles(["reception"]),
@@ -1496,6 +2174,40 @@ const OwnerAccountsModal = ({
 		setForm((prev) => ({ ...prev, [field]: value }));
 	};
 
+	const handleDocumentUpload = async (event, target = "new") => {
+		const files = Array.from(event.target.files || []);
+		event.target.value = "";
+		if (!files.length) return;
+		const oversized = files.find((file) => file.size > ACCOUNT_DOCUMENT_MAX_BYTES);
+		if (oversized) {
+			message.error(`${oversized.name} is larger than 3 MB.`);
+			return;
+		}
+		try {
+			const documents = await Promise.all(files.map(fileToCompanyDocument));
+			const setter = target === "edit" ? setEditForm : setForm;
+			setter((prev) => ({
+				...prev,
+				companyDocuments: [
+					...normalizeCompanyDocuments(prev.companyDocuments),
+					...documents,
+				].slice(0, 8),
+			}));
+		} catch (error) {
+			message.error("Could not read one of the selected files.");
+		}
+	};
+
+	const removeCompanyDocument = (index, target = "new") => {
+		const setter = target === "edit" ? setEditForm : setForm;
+		setter((prev) => ({
+			...prev,
+			companyDocuments: normalizeCompanyDocuments(prev.companyDocuments).filter(
+				(_, itemIndex) => itemIndex !== index
+			),
+		}));
+	};
+
 	const toggleRole = (value) => {
 		setForm((prev) => ({
 			...prev,
@@ -1554,6 +2266,9 @@ const OwnerAccountsModal = ({
 			email: "",
 			phone: "",
 			companyName: "",
+			companyOfficialName: "",
+			companyEin: "",
+			companyDocuments: [],
 			password: "",
 			password2: "",
 			roleDescriptions: ["reception"],
@@ -1595,6 +2310,9 @@ const OwnerAccountsModal = ({
 			email: form.email,
 			phone: form.phone,
 			companyName: form.companyName,
+			companyOfficialName: form.companyOfficialName,
+			companyEin: form.companyEin,
+			companyDocuments: normalizeCompanyDocuments(form.companyDocuments),
 			password: form.password,
 			password2: form.password2,
 			role: primaryRole.role,
@@ -1643,6 +2361,9 @@ const OwnerAccountsModal = ({
 			email: account.email || "",
 			phone: account.phone || "",
 			companyName: account.companyName || "",
+			companyOfficialName: account.companyOfficialName || "",
+			companyEin: account.companyEin || "",
+			companyDocuments: normalizeCompanyDocuments(account.companyDocuments),
 			password: "",
 			roleDescriptions: normalizedRoles.length ? normalizedRoles : ["reception"],
 			accessTo: Array.isArray(account.accessTo)
@@ -1720,6 +2441,9 @@ const OwnerAccountsModal = ({
 			email: editForm.email,
 			phone: editForm.phone,
 			companyName: editForm.companyName,
+			companyOfficialName: editForm.companyOfficialName,
+			companyEin: editForm.companyEin,
+			companyDocuments: normalizeCompanyDocuments(editForm.companyDocuments),
 			role: primaryRole.role,
 			roleDescription: primaryRole.value,
 			roles: selectedRoles.map((item) => item.role),
@@ -2044,6 +2768,67 @@ const OwnerAccountsModal = ({
 									</label>
 									<label>
 										<FieldLabel>
+											<span>{WORDS.accountOfficialName}</span>
+											<Requirement>{WORDS.optional}</Requirement>
+										</FieldLabel>
+										<input
+											value={form.companyOfficialName}
+											onChange={(event) =>
+												updateForm("companyOfficialName", event.target.value)
+											}
+										/>
+										<FieldHint>{WORDS.officialNameHint}</FieldHint>
+									</label>
+									<label>
+										<FieldLabel>
+											<span>{WORDS.accountEin}</span>
+											<Requirement>{WORDS.optional}</Requirement>
+										</FieldLabel>
+										<input
+											dir='ltr'
+											value={form.companyEin}
+											onChange={(event) =>
+												updateForm("companyEin", event.target.value)
+											}
+										/>
+										<FieldHint>{WORDS.einHint}</FieldHint>
+									</label>
+									<DocumentUploadBlock>
+										<SelectionHeader>
+											<span>{WORDS.accountDocuments}</span>
+											<Requirement>{WORDS.optional}</Requirement>
+										</SelectionHeader>
+										<FieldHint>{WORDS.documentsHint}</FieldHint>
+										<UploadButton type='button'>
+											<UploadOutlined />
+											<span>{WORDS.uploadDocuments}</span>
+											<input
+												type='file'
+												accept='image/*,.pdf,application/pdf'
+												multiple
+												onChange={(event) => handleDocumentUpload(event)}
+											/>
+										</UploadButton>
+										<FieldHint>{WORDS.documentLimitHint}</FieldHint>
+										<DocumentList>
+											{normalizeCompanyDocuments(form.companyDocuments).map(
+												(document, index) => (
+													<DocumentChip key={`${document.fileName}-${index}`}>
+														<span>{document.fileName}</span>
+														<button
+															type='button'
+															onClick={() => removeCompanyDocument(index)}
+															aria-label={WORDS.removeDocument}
+														>
+															<DeleteOutlined />
+														</button>
+													</DocumentChip>
+												),
+											)}
+										</DocumentList>
+									</DocumentUploadBlock>
+									<label>
+										<FieldLabel>
 											<span>{WORDS.password}</span>
 											<Requirement $required>{WORDS.required}</Requirement>
 										</FieldLabel>
@@ -2208,6 +2993,64 @@ const OwnerAccountsModal = ({
 								}
 							/>
 						</label>
+						<label>
+							<FieldLabel>
+								<span>{WORDS.accountOfficialName}</span>
+								<Requirement>{WORDS.optional}</Requirement>
+							</FieldLabel>
+							<input
+								value={editForm.companyOfficialName}
+								onChange={(event) =>
+									updateEditForm("companyOfficialName", event.target.value)
+								}
+							/>
+						</label>
+						<label>
+							<FieldLabel>
+								<span>{WORDS.accountEin}</span>
+								<Requirement>{WORDS.optional}</Requirement>
+							</FieldLabel>
+							<input
+								dir='ltr'
+								value={editForm.companyEin}
+								onChange={(event) =>
+									updateEditForm("companyEin", event.target.value)
+								}
+							/>
+						</label>
+						<DocumentUploadBlock>
+							<SelectionHeader>
+								<span>{WORDS.accountDocuments}</span>
+								<Requirement>{WORDS.optional}</Requirement>
+							</SelectionHeader>
+							<UploadButton type='button'>
+								<UploadOutlined />
+								<span>{WORDS.uploadDocuments}</span>
+								<input
+									type='file'
+									accept='image/*,.pdf,application/pdf'
+									multiple
+									onChange={(event) => handleDocumentUpload(event, "edit")}
+								/>
+							</UploadButton>
+							<FieldHint>{WORDS.documentLimitHint}</FieldHint>
+							<DocumentList>
+								{normalizeCompanyDocuments(editForm.companyDocuments).map(
+									(document, index) => (
+										<DocumentChip key={`${document.fileName}-${index}`}>
+											<span>{document.fileName}</span>
+											<button
+												type='button'
+												onClick={() => removeCompanyDocument(index, "edit")}
+												aria-label={WORDS.removeDocument}
+											>
+												<DeleteOutlined />
+											</button>
+										</DocumentChip>
+									),
+								)}
+							</DocumentList>
+						</DocumentUploadBlock>
 						<label>
 							<FieldLabel>
 								<span>{accountText.password}</span>
@@ -2986,6 +3829,9 @@ const CardsGrid = styled.div`
 const PageActions = styled.div`
 	display: flex;
 	justify-content: ${(p) => (p.$isRTL ? "flex-end" : "flex-start")};
+	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
+	gap: 0.65rem;
+	flex-wrap: wrap;
 	margin: 1rem auto 1.2rem;
 
 	@media (max-width: 640px) {
@@ -2994,13 +3840,23 @@ const PageActions = styled.div`
 `;
 
 const ManageAccountsButton = styled.button`
-	border: 1px solid #98ceff;
-	background: linear-gradient(135deg, #e8f4ff 0%, #ffffff 100%);
-	color: #0b5fa8;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+	border: 1px solid ${(p) => (p.$variant === "financials" ? "#6dd4a4" : "#98ceff")};
+	background: ${(p) =>
+		p.$variant === "financials"
+			? "linear-gradient(135deg, #ecfff5 0%, #ffffff 100%)"
+			: "linear-gradient(135deg, #e8f4ff 0%, #ffffff 100%)"};
+	color: ${(p) => (p.$variant === "financials" ? "#087047" : "#0b5fa8")};
 	border-radius: 12px;
 	padding: 0.74rem 1rem;
 	font-weight: 900;
-	box-shadow: 0 10px 24px rgba(13, 110, 200, 0.12);
+	box-shadow: ${(p) =>
+		p.$variant === "financials"
+			? "0 10px 24px rgba(8, 112, 71, 0.12)"
+			: "0 10px 24px rgba(13, 110, 200, 0.12)"};
 	transition: transform 0.18s ease, box-shadow 0.18s ease;
 
 	&:hover {
@@ -3011,6 +3867,148 @@ const ManageAccountsButton = styled.button`
 	@media (max-width: 640px) {
 		width: 100%;
 		min-height: 44px;
+	}
+`;
+
+const ExecutiveSummaryPanel = styled.section`
+	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
+	margin: 0 auto 1.25rem;
+	padding: 1rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 16px;
+	background: linear-gradient(135deg, #f3faff 0%, #ffffff 100%);
+	box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+`;
+
+const ExecutiveSummaryHeader = styled.div`
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.85rem;
+	margin-bottom: 0.85rem;
+
+	div {
+		display: grid;
+		gap: 0.18rem;
+	}
+
+	strong {
+		color: #102033;
+		font-size: clamp(1.05rem, 1.6vw, 1.28rem);
+		font-weight: 950;
+	}
+
+	span,
+	small {
+		color: #58708c;
+		font-size: 0.82rem;
+		font-weight: 800;
+	}
+
+	small {
+		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		flex-direction: column;
+	}
+`;
+
+const ExecutiveSummaryGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.75rem;
+
+	@media (max-width: 992px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 480px) {
+		gap: 0.55rem;
+	}
+`;
+
+const executiveTone = {
+	blue: { bg: "#e8f4ff", border: "#91caff", color: "#0b63b6" },
+	green: { bg: "#eafaf0", border: "#9ee3b4", color: "#0b7a3d" },
+	purple: { bg: "#f1ecff", border: "#c8b6ff", color: "#5b21b6" },
+	red: { bg: "#fff0f2", border: "#ffb3bd", color: "#be123c" },
+};
+
+const ExecutiveSummaryCard = styled.div`
+	${(p) => {
+		const tone = executiveTone[p.$tone] || executiveTone.blue;
+		return css`
+			background: ${tone.bg};
+			border-color: ${tone.border};
+			color: ${tone.color};
+		`;
+	}}
+	position: relative;
+	min-height: 108px;
+	border-width: 1px;
+	border-style: solid;
+	border-radius: 14px;
+	padding: 0.9rem;
+	display: grid;
+	align-content: center;
+	justify-items: start;
+	gap: 0.25rem;
+	cursor: ${(p) => (p.$clickable ? "pointer" : "default")};
+	box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+	transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+	> .anticon {
+		position: absolute;
+		inset-inline-end: 0.85rem;
+		top: 0.85rem;
+		width: 34px;
+		height: 34px;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.78);
+	}
+
+	strong {
+		font-size: clamp(1.45rem, 3vw, 2.1rem);
+		line-height: 1;
+		color: #071526;
+		font-weight: 950;
+		font-variant-numeric: tabular-nums;
+	}
+
+	span {
+		color: #17324d;
+		font-size: 0.84rem;
+		font-weight: 900;
+		line-height: 1.2;
+	}
+
+	em {
+		color: #58708c;
+		font-size: 0.72rem;
+		font-style: normal;
+		font-weight: 800;
+	}
+
+	&:hover {
+		transform: ${(p) => (p.$clickable ? "translateY(-2px)" : "none")};
+		box-shadow: ${(p) =>
+			p.$clickable
+				? "0 16px 30px rgba(15, 23, 42, 0.12)"
+				: "0 10px 22px rgba(15, 23, 42, 0.05)"};
+	}
+
+	&:focus-visible {
+		outline: 3px solid rgba(24, 144, 255, 0.28);
+		outline-offset: 2px;
+	}
+
+	@media (max-width: 480px) {
+		min-height: 96px;
+		padding: 0.75rem;
 	}
 `;
 
@@ -3749,6 +4747,81 @@ const FieldHint = styled.small`
 	font-weight: 700;
 `;
 
+const DocumentUploadBlock = styled.div`
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.48rem;
+	padding: 0.75rem;
+	border: 1px dashed #b9d8f5;
+	border-radius: 12px;
+	background: #ffffff;
+`;
+
+const UploadButton = styled.button`
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+	min-height: 38px;
+	width: fit-content;
+	padding: 0 0.95rem;
+	border: 1px solid #96c8f6;
+	border-radius: 999px;
+	background: linear-gradient(135deg, #eef8ff 0%, #ffffff 100%);
+	color: #075ca8;
+	font-weight: 900;
+	cursor: pointer;
+
+	input {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		cursor: pointer;
+	}
+`;
+
+const DocumentList = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	min-height: 4px;
+`;
+
+const DocumentChip = styled.span`
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	max-width: 100%;
+	padding: 0.35rem 0.5rem;
+	border-radius: 999px;
+	border: 1px solid #cfe8ff;
+	background: #f4fbff;
+	color: #19324d;
+	font-size: 0.78rem;
+	font-weight: 800;
+
+	> span {
+		max-width: min(46vw, 300px);
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	button {
+		border: 0;
+		background: #fff;
+		color: #b42318;
+		border-radius: 999px;
+		width: 22px;
+		height: 22px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+`;
+
 const SelectionBlock = styled.div`
 	grid-column: 1 / -1;
 	display: grid;
@@ -4174,7 +5247,7 @@ const OpenTableWrap = styled.div`
 
 const OpenTable = styled.table`
 	width: 100%;
-	min-width: 980px;
+	min-width: 1080px;
 	border-collapse: collapse;
 	font-size: 0.82rem;
 

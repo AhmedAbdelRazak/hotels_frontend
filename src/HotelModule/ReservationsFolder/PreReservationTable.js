@@ -87,6 +87,13 @@ const summarizePaymentStatus = (reservation = {}) => {
 	return "Not Captured";
 };
 
+const getPendingRejectionReason = (reservation = {}) =>
+	String(
+		reservation?.pendingConfirmation?.rejectionReason ||
+			reservation?.pending_confirmation_rejection_reason ||
+			"",
+	).trim();
+
 const PreReservationTable = ({
 	allPreReservations,
 	q,
@@ -269,13 +276,14 @@ const PreReservationTable = ({
 				title: chosenLanguage === "Arabic" ? "حالة الحجز" : "Status",
 				dataIndex: "reservation_status",
 				key: "reservation_status",
-				render: (reservation_status) => {
+				render: (reservation_status, record) => {
 					let style = {};
 					switch (reservation_status.toLowerCase()) {
 						case "cancelled_by_guest":
 						case "cancelled by guest":
 						case "canceled":
 						case "cancelled":
+						case "rejected":
 							style = {
 								background: "red",
 								color: "white",
@@ -312,7 +320,18 @@ const PreReservationTable = ({
 						default:
 							style = { padding: "4px", textAlign: "center" };
 					}
-					return <div style={style}>{reservation_status}</div>;
+					const rejectionReason = getPendingRejectionReason(record);
+					return (
+						<div>
+							<div style={style}>{reservation_status}</div>
+							{rejectionReason ? (
+								<RejectionReason title={rejectionReason}>
+									{chosenLanguage === "Arabic" ? "سبب الرفض: " : "Rejection: "}
+									{rejectionReason}
+								</RejectionReason>
+							) : null}
+						</div>
+					);
 				},
 			},
 			{
@@ -615,6 +634,16 @@ const PreReservationTable = ({
 										<StatusSpan status={reservation.reservation_status}>
 											{reservation.reservation_status}
 										</StatusSpan>
+										{getPendingRejectionReason(reservation) ? (
+											<RejectionReason
+												title={getPendingRejectionReason(reservation)}
+											>
+												{chosenLanguage === "Arabic"
+													? "سبب الرفض: "
+													: "Rejection: "}
+												{getPendingRejectionReason(reservation)}
+											</RejectionReason>
+										) : null}
 									</td>
 									<td>
 										{/* Room Types */}
@@ -1180,12 +1209,27 @@ const StatusSpan = styled.span`
 	background-color: ${(props) =>
 		props.status?.toLowerCase() === "cancelled"
 			? "darkred"
+			: props.status?.toLowerCase() === "rejected"
+			  ? "#b42318"
 			: props.status?.toLowerCase() === "not paid"
 			  ? "#222"
 			  : "transparent"};
 	color: ${(props) =>
 		props.status?.toLowerCase() === "cancelled" ||
+		props.status?.toLowerCase() === "rejected" ||
 		props.status?.toLowerCase() === "not paid"
 			? "#fff"
 			: "inherit"};
+`;
+
+const RejectionReason = styled.div`
+	margin-top: 4px;
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #b42318;
+	font-size: 11px;
+	font-weight: 900;
+	text-transform: none;
 `;

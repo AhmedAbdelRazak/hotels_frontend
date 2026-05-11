@@ -46,7 +46,8 @@ import Navmenu from "./pages/Navmenu";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminPaymentMain from "./AdminModule/Payment/AdminPaymentMain";
-import FinancialMain from "./AdminModule/Financials/FinancialMain";
+import AdminFinancialMain from "./AdminModule/Financials/FinancialMain";
+import HotelFinancialMain from "./HotelModule/Financials/FinancialMain";
 
 const getUserHotelId = (user = {}) => {
 	if (user.hotelIdWork) return user.hotelIdWork;
@@ -213,7 +214,7 @@ function App() {
 				<AdminRoute
 					path='/admin/expenses-financials'
 					exact
-					component={FinancialMain}
+					component={AdminFinancialMain}
 				/>
 
 				<AdminRoute
@@ -267,6 +268,11 @@ function App() {
 					path='/hotel-management-payment/:userId/:hotelId'
 					exact
 					component={PaymentMain}
+				/>
+				<HotelRoute
+					path='/hotel-management/financials/:userId/:hotelId'
+					exact
+					component={HotelFinancialMain}
 				/>
 				<HotelRoute
 					path='/hotel-management/house-keeping/:userId/:hotelId'

@@ -32,10 +32,22 @@ const roleOptions = [
 		ar: "\u0627\u0644\u0627\u0633\u062a\u0642\u0628\u0627\u0644",
 	},
 	{
+		value: "ordertaker",
+		role: 7000,
+		en: "External Agent / Order Taker",
+		ar: "\u0648\u0643\u064a\u0644 \u062e\u0627\u0631\u062c\u064a / \u0645\u0633\u062a\u0644\u0645 \u062d\u062c\u0648\u0632\u0627\u062a",
+	},
+	{
 		value: "finance",
 		role: 6000,
 		en: "Finance",
 		ar: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	},
+	{
+		value: "reservationemployee",
+		role: 8000,
+		en: "Reservations Officer",
+		ar: "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 	},
 	{
 		value: "housekeepingmanager",
@@ -55,6 +67,30 @@ const getRoleOption = (roleDescription, role) =>
 	roleOptions.find((option) => option.value === roleDescription) ||
 	roleOptions.find((option) => option.role === Number(role)) ||
 	roleOptions[0];
+
+const getDefaultAccessForRole = (roleDescription) => {
+	if (roleDescription === "hotelmanager") {
+		return [
+			"dashboard",
+			"reservations",
+			"newReservation",
+			"reports",
+			"finance",
+			"housekeeping",
+			"settings",
+		];
+	}
+	if (roleDescription === "reception") return ["reservations", "newReservation"];
+	if (roleDescription === "ordertaker")
+		return ["newReservation", "ownReservations"];
+	if (roleDescription === "finance") return ["dashboard", "finance", "reports"];
+	if (roleDescription === "reservationemployee")
+		return ["reservations", "newReservation", "settings"];
+	if (roleDescription === "housekeepingmanager")
+		return ["dashboard", "housekeeping"];
+	if (roleDescription === "housekeeping") return ["housekeeping"];
+	return [];
+};
 
 const isPlaceholderStaffEmail = (email) =>
 	String(email || "").toLowerCase().endsWith("@staff.jannatbooking.local");
@@ -268,23 +304,18 @@ const SignupNew = () => {
 				return;
 			}
 			setValues({ ...values, error: false, misMatch: false });
+			const selectedRole = getRoleOption(roleDescription);
 			signupHotelStaff(user._id, token, {
 				name: trimmedName,
 				email: trimmedEmail,
 				password: values.password,
 				password2: values.password2,
 				misMatch: values.misMatch,
-				role:
-					roleDescription === "reception"
-						? 3000
-						: roleDescription === "housekeepingmanager"
-						  ? 4000
-						  : roleDescription === "housekeeping"
-						    ? 5000
-						    : roleDescription === "finance"
-						      ? 6000
-						      : 2000,
-				roleDescription: roleDescription,
+				role: selectedRole.role,
+				roleDescription: selectedRole.value,
+				roles: [selectedRole.role],
+				roleDescriptions: [selectedRole.value],
+				accessTo: getDefaultAccessForRole(selectedRole.value),
 				phone: trimmedPhone,
 				hotelName:
 					hotelDetails.hotelName || hotelDetails.belongsTo?.hotelName || "",
@@ -360,6 +391,14 @@ const SignupNew = () => {
 			return;
 		}
 		const option = getRoleOption(editValues.roleDescription);
+		const currentRole = getRoleOption(
+			editingStaff.roleDescription,
+			editingStaff.role
+		);
+		const roleChanged = currentRole.value !== option.value;
+		const currentAccess = Array.isArray(editingStaff.accessTo)
+			? editingStaff.accessTo
+			: [];
 		setStaffSaving(true);
 		updateHotelStaffUser(user._id, token, targetHotelId, editingStaff._id, {
 			name: trimmedName,
@@ -367,6 +406,12 @@ const SignupNew = () => {
 			phone: trimmedPhone,
 			role: option.role,
 			roleDescription: option.value,
+			roles: [option.role],
+			roleDescriptions: [option.value],
+			accessTo:
+				roleChanged || currentAccess.length === 0
+					? getDefaultAccessForRole(option.value)
+					: currentAccess,
 			password: editValues.password,
 			activeUser: editValues.activeUser,
 		})

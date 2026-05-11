@@ -82,7 +82,12 @@ const isFullReservationAccessUser = (user) =>
 	hasRole(user, 1000) ||
 	hasRole(user, 2000) ||
 	hasRole(user, 3000) ||
-	hasAnyRoleDescription(user, ["hotelmanager", "reception"]);
+	hasRole(user, 8000) ||
+	hasAnyRoleDescription(user, [
+		"hotelmanager",
+		"reception",
+		"reservationemployee",
+	]);
 
 const isLimitedOrderTakerUser = (user) => {
 	const isOrderTaker =
@@ -102,7 +107,7 @@ const isScopedHotelUser = (user) =>
 	Boolean(user?.hotelIdWork) &&
 	Boolean(user?.belongsToId) &&
 	getUserRoles(user).some((role) =>
-		[2000, 3000, 4000, 5000, 6000, 7000].includes(role)
+		[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role)
 	);
 
 const pathAllowsRole = (pathname = "", user, search = "") => {
@@ -122,7 +127,22 @@ const pathAllowsRole = (pathname = "", user, search = "") => {
 		if (isLimitedOrderTakerUser(user)) {
 			return isOrderTakerReservationSearchAllowed(search);
 		}
-		return hasRole(user, 3000) || hasRole(user, 7000);
+		return (
+			hasRole(user, 3000) ||
+			hasRole(user, 6000) ||
+			hasRole(user, 7000) ||
+			hasRole(user, 8000)
+		);
+	}
+	if (pathname.includes("/hotel-management/financials")) {
+		return (
+			hasRole(user, 6000) ||
+			hasRoleDescription(user, "finance") ||
+			isLimitedOrderTakerUser(user)
+		);
+	}
+	if (pathname.includes("/hotel-management/settings")) {
+		return hasRole(user, 8000) || hasRoleDescription(user, "reservationemployee");
 	}
 	if (
 		pathname.includes("/hotel-management/reservation-history") ||
@@ -165,8 +185,13 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 		!hasRole(user, 1000) &&
 		!hasRole(user, 2000);
 	const isOrderTakerOnly = isLimitedOrderTakerUser(user);
+	const isReservationEmployeeOnly =
+		(hasRole(user, 8000) || hasRoleDescription(user, "reservationemployee")) &&
+		!hasRole(user, 1000) &&
+		!hasRole(user, 2000);
 
-	if (!isReceptionOnly && !isOrderTakerOnly) return null;
+	if (!isReceptionOnly && !isOrderTakerOnly && !isReservationEmployeeOnly)
+		return null;
 
 	const isNewReservationPath = pathname.includes("/hotel-management/new-reservation");
 	if (
@@ -189,7 +214,11 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 
 	return {
 		pathname: `/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}`,
-		search: isOrderTakerOnly ? "?newReservation" : "?reserveARoom",
+		search: isOrderTakerOnly
+			? "?newReservation"
+			: isReservationEmployeeOnly
+			  ? "?pendingConfirmation"
+			  : "?reserveARoom",
 	};
 };
 

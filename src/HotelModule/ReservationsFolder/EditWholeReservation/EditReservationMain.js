@@ -35,6 +35,11 @@ import {
 import { isAuthenticated } from "../../../auth";
 import { toast } from "react-toastify";
 import { countryListWithAbbreviations } from "../../../AdminModule/CustomerService/utils";
+import {
+	getPaymentMethodLabel,
+	normalizePaymentMethod,
+	paymentMethodOptionsWithCurrent,
+} from "../../utils/paymentMethods";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -51,6 +56,7 @@ export const EditReservationMain = ({
 	setReservation,
 	hotelDetails,
 	onReservationSaved,
+	basicEditOnly = false,
 }) => {
 	const [isRoomCountModalOpen, setIsRoomCountModalOpen] = useState(false);
 	const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
@@ -1053,6 +1059,39 @@ export const EditReservationMain = ({
 	const UpdateReservation = () => {
 		const confirmationMessage = `Are you sure you want to update this reservation?`;
 		if (window.confirm(confirmationMessage)) {
+			if (basicEditOnly) {
+				const updateData = {
+					customer_details: reservation.customer_details || {},
+					checkin_date: reservation.checkin_date,
+					checkout_date: reservation.checkout_date,
+					days_of_residence: reservation.days_of_residence,
+					total_guests: reservation.total_guests,
+					adults: reservation.adults,
+					children: reservation.children,
+					comment: reservation.comment,
+					booking_comment: reservation.booking_comment || reservation.comment,
+					requestingUserId: user?._id,
+				};
+
+				updateSingleReservation(reservation._id, updateData).then((response) => {
+					if (!response || response.error) {
+						console.error(response?.error || response);
+						toast.error("An error occurred while updating the reservation");
+						return;
+					}
+					const updatedReservation = response?.reservation || response;
+					toast.success("Reservation was successfully updated");
+					if (updatedReservation) {
+						setReservation(updatedReservation);
+						if (typeof onReservationSaved === "function") {
+							onReservationSaved(updatedReservation);
+						}
+					}
+					setTimeout(() => window.location.reload(false), 1000);
+				});
+				return;
+			}
+
 			const normalizedRoomIds = Array.isArray(selectedRoomIds)
 				? selectedRoomIds
 				: [];
@@ -1074,6 +1113,7 @@ export const EditReservationMain = ({
 				roomId: normalizedRoomIds,
 				hotelName: hotelDetails.hotelName,
 				sendEmail: sendEmail,
+				requestingUserId: user?._id,
 			};
 			if (shouldSetInhouse) {
 				updateData.reservation_status = "inhouse";
@@ -1383,22 +1423,7 @@ export const EditReservationMain = ({
 		"hotel.com": "Hotel.com",
 		airbnb: "Airbnb",
 	};
-	const paymentOptions = [
-		"not paid",
-		"credit/ debit",
-		"cash",
-		"deposit",
-		"paid online",
-		"paid offline",
-	];
-	const paymentLabels = {
-		"not paid": "Not Paid",
-		"credit/ debit": "Credit/ Debit",
-		cash: "Cash",
-		deposit: "Deposit",
-		"paid online": "Paid Online",
-		"paid offline": "Paid Offline",
-	};
+	const paymentOptions = paymentMethodOptionsWithCurrent(reservation.payment);
 	return (
 		<div>
 			<Wrapper $arabic={chosenLanguage === "Arabic"}>
@@ -1792,6 +1817,7 @@ export const EditReservationMain = ({
 											: "Booking Source"}
 									</Label>
 									<select
+										disabled={basicEditOnly}
 										onChange={(e) =>
 											setReservation({
 												...reservation,
@@ -1822,7 +1848,8 @@ export const EditReservationMain = ({
 									</select>
 								</div>
 
-								{reservation.booking_source &&
+								{!basicEditOnly &&
+								reservation.booking_source &&
 								reservation.booking_source !== "manual" ? (
 									<div className='col'>
 										<Label>
@@ -1848,6 +1875,7 @@ export const EditReservationMain = ({
 										{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}
 									</Label>
 									<select
+										disabled={basicEditOnly}
 										onChange={(e) =>
 											setReservation({
 												...reservation,
@@ -1855,7 +1883,7 @@ export const EditReservationMain = ({
 											})
 										}
 										className='selectlike'
-										value={reservation.payment || ""}
+										value={normalizePaymentMethod(reservation.payment, "")}
 									>
 										<option value=''>
 											{chosenLanguage === "Arabic"
@@ -1863,14 +1891,21 @@ export const EditReservationMain = ({
 												: "Please Select"}
 										</option>
 										{reservation.payment &&
-										!paymentOptions.includes(reservation.payment) ? (
+										!paymentOptions.some(
+											(option) =>
+												option.value ===
+												normalizePaymentMethod(reservation.payment, ""),
+										) ? (
 											<option value={reservation.payment}>
 												{reservation.payment}
 											</option>
 										) : null}
 										{paymentOptions.map((option) => (
-											<option key={option} value={option}>
-												{paymentLabels[option] || option}
+											<option key={option.value} value={option.value}>
+												{getPaymentMethodLabel(
+													option.value,
+													chosenLanguage === "Arabic",
+												)}
 											</option>
 										))}
 									</select>
@@ -1914,7 +1949,8 @@ export const EditReservationMain = ({
 									/>
 								</div>
 
-								<div className='col'>
+								{!basicEditOnly ? (
+									<div className='col'>
 									<Label>
 										{chosenLanguage === "Arabic"
 											? "إرسال بريد إلكتروني"
@@ -1928,7 +1964,8 @@ export const EditReservationMain = ({
 											style={{ width: 20, height: 20 }}
 										/>
 									</div>
-								</div>
+									</div>
+								) : null}
 
 								<div className='col col-span-2'>
 									<Label>
@@ -1949,6 +1986,7 @@ export const EditReservationMain = ({
 							</div>
 						</Block>
 
+						{!basicEditOnly ? (
 						<Block>
 							<div className='row'>
 								<div className='col col-span-2'>
@@ -2033,8 +2071,10 @@ export const EditReservationMain = ({
 								</div>
 							</div>
 						</Block>
+						) : null}
 					</Left>
 
+					{!basicEditOnly ? (
 					<Right>
 						<h4 className='headline'>
 							{chosenLanguage === "Arabic"
@@ -2111,11 +2151,13 @@ export const EditReservationMain = ({
 							</Button>
 						</div>
 					</Right>
+					) : null}
 				</Grid>
 
 				<div className='container'>
 					<div className='row'>
-						{Array.isArray(roomInventory) && roomInventory.length > 0 && (
+						{!basicEditOnly &&
+						Array.isArray(roomInventory) && roomInventory.length > 0 && (
 							<div className='col-12' style={{ margin: "20px 0" }}>
 								<Label>
 									{chosenLanguage === "Arabic" ? "نوع الغرفة" : "Room Type"}
@@ -2230,6 +2272,7 @@ export const EditReservationMain = ({
 													x {Number(room.count) || 1}{" "}
 													{chosenLanguage === "Arabic" ? "غرف" : "rooms"}
 												</div>
+												{!basicEditOnly ? (
 												<div className='actions'>
 													<Button
 														size='small'
@@ -2266,6 +2309,7 @@ export const EditReservationMain = ({
 														{chosenLanguage === "Arabic" ? "السعر" : "Pricing"}
 													</Button>
 												</div>
+												) : null}
 											</div>
 										);
 									})}

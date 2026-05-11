@@ -1,8 +1,8 @@
 /** @format */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import styled from "styled-components";
-import { Dropdown } from "antd";
+import { Badge, Dropdown, Empty, Spin } from "antd";
 import {
 	UserOutlined,
 	LogoutOutlined,
@@ -19,11 +19,101 @@ import { isAuthenticated, signout } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
 import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
+import { pendingConfirmationNotificationFeed } from "../apiAdmin";
+import socket from "../../socket";
+
+const normalizeTopNavId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
+
+const getUserRoles = (user = {}) => [
+	Number(user.role),
+	...(Array.isArray(user.roles) ? user.roles.map(Number) : []),
+];
+
+const getUserRoleDescriptions = (user = {}) => [
+	String(user.roleDescription || "").toLowerCase(),
+	...(Array.isArray(user.roleDescriptions)
+		? user.roleDescriptions.map((item) => String(item || "").toLowerCase())
+		: []),
+];
+
+const canSeePendingConfirmationNotifications = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	return (
+		isSuperAdminUser(user) ||
+		[1000, 2000, 6000, 8000].some((role) => roles.includes(role)) ||
+		roles.includes(7000) ||
+		descriptions.includes("hotelmanager") ||
+		descriptions.includes("finance") ||
+		descriptions.includes("reservationemployee") ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownReservations")
+	);
+};
+
+const isAgentNotificationUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	return (
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownReservations")
+	);
+};
+
+const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
+	if (reason === "agent_pending_review") {
+		return isArabic
+			? "الحجز بانتظار مراجعة الفندق"
+			: "Waiting for hotel review";
+	}
+	if (reason === "commission_missing") {
+		return isArabic
+			? isAgent
+				? "مراجعة الفندق المالية قيد التنفيذ"
+				: "العمولة تحتاج مراجعة"
+			: isAgent
+			? "Hotel financial review"
+			: "Commission needs review";
+	}
+	const labels = {
+		pending_confirmation: isArabic
+			? "بانتظار تأكيد الحجز"
+			: "Pending confirmation",
+		commission_missing: isArabic ? "العمولة غير محددة" : "Commission missing",
+		pending_rejected: isArabic ? "مرفوضة وتحتاج متابعة" : "Rejected follow-up",
+	};
+	return labels[reason] || reason;
+};
+
+const formatNotificationMoney = (value) =>
+	Number(value || 0).toLocaleString("en-US", {
+		maximumFractionDigits: 2,
+	});
+
+const formatNotificationDate = (value) => {
+	if (!value) return "";
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return "";
+	return parsed.toISOString().slice(0, 10);
+};
 
 const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
 	const [accountModalOpen, setAccountModalOpen] = useState(false);
+	const [notificationsOpen, setNotificationsOpen] = useState(false);
+	const [notificationsLoading, setNotificationsLoading] = useState(false);
+	const [notificationFeed, setNotificationFeed] = useState({
+		total: 0,
+		data: [],
+	});
 
 	const { languageToggle, chosenLanguage } = useCartContext();
 
@@ -37,11 +127,39 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	// Selected hotel context
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 	const hotelId = selectedHotel._id;
+	const routeHotelContext = useMemo(() => {
+		const match = (location.pathname || "").match(
+			/^\/hotel-management\/[^/]+\/([^/]+)\/([^/?#]+)/
+		);
+		return {
+			routeOwnerId: match?.[1] || "",
+			routeHotelId: match?.[2] || "",
+		};
+	}, [location.pathname]);
+	const queryOwnerId = useMemo(() => {
+		return new URLSearchParams(location.search || "").get("ownerId") || "";
+	}, [location.search]);
 
 	const isOwnerManager = user.role === 2000 && !user.belongsToId;
 	const userId = isOwnerManager
 		? user._id
 		: selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId;
+	const selectedHotelOwnerId = normalizeTopNavId(
+		selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId
+	);
+	const isMainHotelDashboard =
+		location.pathname === "/hotel-management/main-dashboard";
+	const notificationHotelId = isMainHotelDashboard
+		? ""
+		: routeHotelContext.routeHotelId || hotelId || "";
+	const notificationOwnerId =
+		queryOwnerId ||
+		routeHotelContext.routeOwnerId ||
+		selectedHotelOwnerId ||
+		(isOwnerManager ? user._id : user.belongsToId);
+	const canUsePendingNotifications =
+		canSeePendingConfirmationNotifications(user);
+	const isAgentNotificationAudience = isAgentNotificationUser(user);
 
 	// eslint-disable-next-line
 	const userDetails = isOwnerManager ? user : selectedHotel.belongsTo;
@@ -56,6 +174,97 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		setHotelName(show ? selectedHotel.hotelName : "");
 	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
+	const refreshNotifications = useCallback(
+		async ({ silent = false } = {}) => {
+			if (!canUsePendingNotifications || !user?._id) {
+				setNotificationFeed({ total: 0, data: [] });
+				return;
+			}
+			if (!silent) setNotificationsLoading(true);
+			try {
+				const data = await pendingConfirmationNotificationFeed({
+					userId: user._id,
+					hotelId: notificationHotelId,
+					ownerId: notificationOwnerId,
+					limit: 8,
+				});
+				if (data?.error) {
+					setNotificationFeed({ total: 0, data: [] });
+				} else {
+					setNotificationFeed({
+						total: Number(data?.total || 0),
+						data: Array.isArray(data?.data) ? data.data : [],
+					});
+				}
+			} catch (error) {
+				console.error("Failed to load notification feed", error);
+				setNotificationFeed({ total: 0, data: [] });
+			} finally {
+				if (!silent) setNotificationsLoading(false);
+			}
+		},
+		[
+			canUsePendingNotifications,
+			notificationHotelId,
+			notificationOwnerId,
+			user?._id,
+		]
+	);
+
+	useEffect(() => {
+		refreshNotifications();
+		const timer = setInterval(
+			() => refreshNotifications({ silent: true }),
+			60000
+		);
+		return () => clearInterval(timer);
+	}, [refreshNotifications]);
+
+	useEffect(() => {
+		if (!canUsePendingNotifications) return undefined;
+		if (notificationHotelId) {
+			socket.emit("joinHotelNotifications", { hotelId: notificationHotelId });
+		} else if (notificationOwnerId) {
+			socket.emit("joinOwnerNotifications", { ownerId: notificationOwnerId });
+		}
+
+		const handleRefresh = (payload = {}) => {
+			const payloadHotelId = normalizeTopNavId(payload.hotelId);
+			const payloadOwnerId = normalizeTopNavId(payload.ownerId);
+			if (
+				notificationHotelId &&
+				payloadHotelId &&
+				payloadHotelId !== notificationHotelId
+			) {
+				return;
+			}
+			if (
+				!notificationHotelId &&
+				notificationOwnerId &&
+				payloadOwnerId &&
+				payloadOwnerId !== notificationOwnerId
+			) {
+				return;
+			}
+			refreshNotifications({ silent: true });
+		};
+
+		socket.on("hotelNotificationsUpdated", handleRefresh);
+		return () => {
+			socket.off("hotelNotificationsUpdated", handleRefresh);
+			if (notificationHotelId) {
+				socket.emit("leaveHotelNotifications", { hotelId: notificationHotelId });
+			} else if (notificationOwnerId) {
+				socket.emit("leaveOwnerNotifications", { ownerId: notificationOwnerId });
+			}
+		};
+	}, [
+		canUsePendingNotifications,
+		notificationHotelId,
+		notificationOwnerId,
+		refreshNotifications,
+	]);
+
 	/* ===== actions ===== */
 
 	const handleSignout = () => {
@@ -68,14 +277,36 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		setAccountModalOpen(true);
 	};
 
+	const getProfileDestination = () => {
+		const pathname = location?.pathname || "";
+		const configuredSuperAdmin = isSuperAdminUser(user);
+		const selectedHotelOwnerId = normalizeTopNavId(
+			selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId
+		);
+
+		if (configuredSuperAdmin) {
+			if (pathname === "/hotel-management/main-dashboard") {
+				return "/admin/dashboard";
+			}
+			if (pathname.startsWith("/hotel-management")) {
+				return `/hotel-management/main-dashboard${
+					selectedHotelOwnerId ? `?ownerId=${selectedHotelOwnerId}` : ""
+				}`;
+			}
+			return "/admin/dashboard";
+		}
+
+		if (user.role === 1000) {
+			return "/admin/dashboard";
+		}
+
+		return "/hotel-management/main-dashboard";
+	};
+
 	const handleMenuClick = ({ key }) => {
 		switch (key) {
 			case "profile":
-				if (user.role === 1000 || isSuperAdminUser(user)) {
-					history.push("/admin/dashboard"); // admin redirect (as-is)
-				} else {
-					history.push("/hotel-management/main-dashboard");
-				}
+				history.push(getProfileDestination());
 				break;
 			case "inbox":
 				// keep as-is or route where you want
@@ -183,8 +414,30 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		languageToggle(chosenLanguage === "English" ? "Arabic" : "English");
 	};
 
-	const handleNotificationsClick = () => {
-		// Notification center placeholder. The button is ready for the next workflow.
+	const handleNotificationOpenChange = (flag) => {
+		setNotificationsOpen(flag);
+		if (flag) refreshNotifications({ silent: true });
+	};
+
+	const goToPendingNotification = (item = {}) => {
+		const targetHotelId = item.hotelId || notificationHotelId || hotelId;
+		const targetOwnerId = item.hotelOwnerId || notificationOwnerId || userId;
+		if (!targetHotelId || !targetOwnerId) return;
+		if (
+			isAgentNotificationAudience ||
+			item.notificationType === "agent_decision" ||
+			item.notificationType === "agent_review"
+		) {
+			history.push(
+				`/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}?list=&page=1&reservationId=${item._id}`
+			);
+			setNotificationsOpen(false);
+			return;
+		}
+		history.push(
+			`/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}?pendingConfirmation`
+		);
+		setNotificationsOpen(false);
 	};
 
 	// Target user for modal (self)
@@ -195,6 +448,126 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 	const roleLabel =
 		user.role === 1000 ? "Superadmin" : user.role === 2000 ? "Owner" : "User";
+	const isArabic = chosenLanguage === "Arabic";
+	const notificationCount = Number(notificationFeed.total || 0);
+	const notificationPanel = (
+		<NotificationPanel $isArabic={isArabic}>
+			<NotificationHeader>
+				<div>
+					<NotificationTitle>
+						{isAgentNotificationAudience
+							? isArabic
+								? "تحديثات الحجوزات"
+								: "Reservation Updates"
+							: isArabic
+							? "تأكيد الحجوزات"
+							: "Reservation Confirmations"}
+					</NotificationTitle>
+					<NotificationSubtitle>
+						{isAgentNotificationAudience
+							? isArabic
+								? "تظهر لك فقط تحديثات حجوزاتك."
+								: "Only updates for your own reservations."
+							: notificationHotelId
+							? isArabic
+								? "تنبيهات الفندق المحدد فقط."
+								: "Alerts for this hotel only."
+							: isArabic
+							? "تنبيهات كل الفنادق التي يمكنك إدارتها."
+							: "Alerts across the hotels you can manage."}
+					</NotificationSubtitle>
+				</div>
+				<NotificationPill>{notificationCount}</NotificationPill>
+			</NotificationHeader>
+
+			{notificationsLoading ? (
+				<NotificationLoading>
+					<Spin size='small' />
+				</NotificationLoading>
+			) : notificationFeed.data.length ? (
+				<NotificationList>
+					{notificationFeed.data.map((item) => {
+						const reasons = Array.isArray(item.pendingReasons)
+							? item.pendingReasons
+							: [];
+						const visibleReasons =
+							item.notificationType === "agent_review"
+								? ["agent_pending_review"]
+								: reasons;
+						const agentDecisionText =
+							item.decisionStatus === "rejected"
+								? isArabic
+									? "تم رفض الحجز"
+									: "Reservation rejected"
+								: item.decisionStatus === "confirmed"
+								? isArabic
+									? "تم قبول الحجز"
+									: "Reservation confirmed"
+								: "";
+						return (
+							<NotificationItem
+								key={item._id}
+								type='button'
+								onClick={() => goToPendingNotification(item)}
+							>
+								<NotificationItemTop>
+									<strong>{item.confirmation_number || "N/A"}</strong>
+									<span>{formatNotificationMoney(item.total_amount)} SAR</span>
+								</NotificationItemTop>
+								<NotificationGuest>
+									{item.guestName || (isArabic ? "ضيف بدون اسم" : "Unnamed guest")}
+								</NotificationGuest>
+								<NotificationMeta>
+									<span>{item.hotelName || item.booking_source || "Hotel"}</span>
+									<span>
+										{formatNotificationDate(item.checkin_date)}
+										{item.checkout_date ? " - " : ""}
+										{formatNotificationDate(item.checkout_date)}
+									</span>
+								</NotificationMeta>
+								<NotificationReasons>
+									{item.notificationType === "agent_decision" ? (
+										<span>{agentDecisionText}</span>
+									) : (
+										visibleReasons.slice(0, 2).map((reason) => (
+											<span key={reason}>
+												{notificationReasonLabel(
+													reason,
+													isArabic,
+													isAgentNotificationAudience
+												)}
+											</span>
+										))
+									)}
+								</NotificationReasons>
+							</NotificationItem>
+						);
+					})}
+				</NotificationList>
+			) : (
+				<NotificationEmpty>
+					<Empty
+						image={Empty.PRESENTED_IMAGE_SIMPLE}
+						description={
+							isArabic ? "لا توجد حجوزات تحتاج تأكيداً." : "No pending items."
+						}
+					/>
+				</NotificationEmpty>
+			)}
+		</NotificationPanel>
+	);
+
+	const renderNotificationsDropdown = (trigger) => (
+		<Dropdown
+			trigger={["click"]}
+			open={notificationsOpen}
+			onOpenChange={handleNotificationOpenChange}
+			dropdownRender={() => notificationPanel}
+			placement={isArabic ? "bottomLeft" : "bottomRight"}
+		>
+			{trigger}
+		</Dropdown>
+	);
 
 	return (
 		<NavbarWrapper $isArabic={chosenLanguage === "Arabic"}>
@@ -261,16 +634,21 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						<NotificationDot2 />
 					</IconWrapper>
 
-					<IconWrapper
-						onClick={handleNotificationsClick}
-						role='button'
-						aria-label={
-							chosenLanguage === "Arabic" ? "الإشعارات" : "Notifications"
-						}
-					>
-						<BellOutlined />
-						<NotificationDot />
-					</IconWrapper>
+					{renderNotificationsDropdown(
+						<IconWrapper
+							role='button'
+							aria-label={isArabic ? "الإشعارات" : "Notifications"}
+						>
+							<Badge
+								count={canUsePendingNotifications ? notificationCount : 0}
+								size='small'
+								overflowCount={99}
+								offset={[1, -2]}
+							>
+								<BellOutlined />
+							</Badge>
+						</IconWrapper>
+					)}
 
 					<IconWrapper onClick={handleChatClick}>
 						<MessageOutlined />
@@ -314,16 +692,21 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					<GlobalOutlined />
 					<span>{chosenLanguage === "English" ? "AR" : "En"}</span>
 				</MobileTopButton>
-				<MobileTopButton
-					type='button'
-					onClick={handleNotificationsClick}
-					aria-label={
-						chosenLanguage === "Arabic" ? "الإشعارات" : "Notifications"
-					}
-				>
-					<BellOutlined />
-					<NotificationDot />
-				</MobileTopButton>
+				{renderNotificationsDropdown(
+					<MobileTopButton
+						type='button'
+						aria-label={isArabic ? "الإشعارات" : "Notifications"}
+					>
+						<Badge
+							count={canUsePendingNotifications ? notificationCount : 0}
+							size='small'
+							overflowCount={99}
+							offset={[4, -4]}
+						>
+							<BellOutlined />
+						</Badge>
+					</MobileTopButton>
+				)}
 			</MobileActions>
 
 			{/* ===== Account Update Modal (self) for non-admins ===== */}
@@ -487,6 +870,153 @@ const MobileTopButton = styled.button`
 	span {
 		font-size: 0.76rem;
 	}
+`;
+
+const NotificationPanel = styled.div`
+	width: min(380px, calc(100vw - 24px));
+	max-height: min(520px, calc(100vh - 90px));
+	overflow: auto;
+	padding: 12px;
+	border: 1px solid #b9dcff;
+	border-radius: 12px;
+	background: #ffffff;
+	box-shadow: 0 16px 38px rgba(15, 23, 42, 0.22);
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	@media (max-width: 760px) {
+		width: calc(100vw - 18px);
+		max-height: calc(100vh - 86px);
+	}
+`;
+
+const NotificationHeader = styled.div`
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px;
+	border-radius: 10px;
+	background: #eaf6ff;
+	border: 1px solid #c7e5ff;
+`;
+
+const NotificationTitle = styled.div`
+	font-size: 1rem;
+	font-weight: 900;
+	color: #0f2a45;
+`;
+
+const NotificationSubtitle = styled.div`
+	margin-top: 3px;
+	font-size: 0.78rem;
+	font-weight: 700;
+	color: #52708c;
+`;
+
+const NotificationPill = styled.span`
+	min-width: 34px;
+	height: 28px;
+	padding: 0 9px;
+	border-radius: 999px;
+	background: #1677ff;
+	color: #fff;
+	font-weight: 900;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+`;
+
+const NotificationLoading = styled.div`
+	min-height: 120px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+`;
+
+const NotificationList = styled.div`
+	display: grid;
+	gap: 8px;
+	margin-top: 10px;
+`;
+
+const NotificationItem = styled.button`
+	width: 100%;
+	padding: 10px;
+	border: 1px solid #cfe4ff;
+	border-radius: 10px;
+	background: #fbfdff;
+	text-align: inherit;
+	cursor: pointer;
+	transition: border-color 0.15s ease, transform 0.15s ease,
+		box-shadow 0.15s ease;
+
+	&:hover {
+		border-color: #1677ff;
+		box-shadow: 0 10px 22px rgba(22, 119, 255, 0.12);
+		transform: translateY(-1px);
+	}
+`;
+
+const NotificationItemTop = styled.div`
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 0.9rem;
+	color: #0f172a;
+
+	strong,
+	span {
+		direction: ltr;
+		unicode-bidi: plaintext;
+	}
+`;
+
+const NotificationGuest = styled.div`
+	margin-top: 5px;
+	font-size: 0.86rem;
+	font-weight: 800;
+	color: #1e3a5f;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+`;
+
+const NotificationMeta = styled.div`
+	margin-top: 5px;
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 0.74rem;
+	font-weight: 700;
+	color: #64748b;
+
+	span {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+`;
+
+const NotificationReasons = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin-top: 8px;
+
+	span {
+		border: 1px solid #ffbf8a;
+		background: #fff7ed;
+		color: #c2410c;
+		border-radius: 999px;
+		padding: 3px 8px;
+		font-size: 0.7rem;
+		font-weight: 900;
+	}
+`;
+
+const NotificationEmpty = styled.div`
+	padding: 12px 0 2px;
 `;
 
 const Icons = styled.div`

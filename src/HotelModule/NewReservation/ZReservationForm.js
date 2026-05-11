@@ -13,6 +13,10 @@ import {
 	janatData,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+import {
+	normalizePaymentMethod,
+	paymentMethodOptionsWithCurrent,
+} from "../utils/paymentMethods";
 
 dayjs.extend(utc);
 
@@ -356,10 +360,12 @@ const ZReservationForm = ({
 		setBookingComment(reservation.comment || "");
 		setConfirmationNumber(reservation.confirmation_number || "");
 		setPaymentStatus(
-			reservation.payment ||
-				reservation.payment_status ||
-				reservation.financeStatus ||
+			normalizePaymentMethod(
+				reservation.payment ||
+					reservation.payment_status ||
+					reservation.financeStatus,
 				"",
+			),
 		);
 		const roomsFromType = Array.isArray(reservation.pickedRoomsType)
 			? reservation.pickedRoomsType
@@ -1084,6 +1090,19 @@ const ZReservationForm = ({
 											<option value=''>
 												{booking_source ? booking_source : "Please Select"}
 											</option>
+											{booking_source &&
+											![
+												"janat",
+												"affiliate",
+												"manual",
+												"booking.com",
+												"trivago",
+												"expedia",
+												"hotel.com",
+												"airbnb",
+											].includes(String(booking_source).toLowerCase()) ? (
+												<option value={booking_source}>{booking_source}</option>
+											) : null}
 											<option value='janat'>Janat</option>
 											<option value='affiliate'>Affiliate</option>
 											<option value='manual'>Manual Reservation</option>
@@ -1143,9 +1162,15 @@ const ZReservationForm = ({
 													? searchedReservation.payment
 													: "Please Select"}
 											</option>
-											<option value='not paid'>Not Paid</option>
-											<option value='credit/ debit'>Credit/ Debit</option>
-											<option value='cash'>Cash</option>
+											{paymentMethodOptionsWithCurrent(payment_status).map(
+												(option) => (
+													<option key={option.value} value={option.value}>
+														{chosenLanguage === "Arabic"
+															? option.arLabel
+															: option.label}
+													</option>
+												),
+											)}
 										</select>
 									</div>
 								</div>

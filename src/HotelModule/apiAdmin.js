@@ -55,6 +55,51 @@ export const createNewReservation = (
 		});
 };
 
+export const previewReservationExcelImport = ({
+	userId,
+	hotelId,
+	file,
+	answers = {},
+}) => {
+	const formData = new FormData();
+	formData.append("file", file);
+	formData.append("answers", JSON.stringify(answers || {}));
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/import-excel/${userId}/${hotelId}/preview`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: formData,
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const commitReservationExcelImport = ({
+	userId,
+	hotelId,
+	rows = [],
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/import-excel/${userId}/${hotelId}/commit`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify({ rows }),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getHotelDetails = (userId) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${userId}`, {
 		method: "GET",
@@ -74,6 +119,142 @@ export const getHotelMainDashboardStats = (hotelId, userId, token) => {
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getManagerExecutiveSummary = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/executive-summary/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getManagerExecutiveIncompleteReservations = (
+	userId,
+	token,
+	params = {},
+) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/executive-incomplete-reservations/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getAgentWalletSummary = (hotelId, userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/summary/${hotelId}/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const createAgentWalletTransaction = (
+	hotelId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateAgentWalletTransaction = (
+	hotelId,
+	userId,
+	token,
+	transactionId,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}/${transactionId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const deleteAgentWalletTransaction = (
+	hotelId,
+	userId,
+	token,
+	transactionId,
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}/${transactionId}`,
+		{
+			method: "DELETE",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -1275,6 +1456,92 @@ export const pendingPaymentReservationList = (page, records, hotelId) => {
 		.then((response) => {
 			return response.json();
 		})
+		.catch((err) => console.log(err));
+};
+
+export const pendingConfirmationReservationList = ({
+	page = 1,
+	records = 50,
+	hotelId,
+	userId,
+	search = "",
+}) => {
+	const query = search ? `?search=${encodeURIComponent(search)}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/pending-confirmation/${page}/${records}/${hotelId}/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updatePendingConfirmationReservation = ({
+	reservationId,
+	userId,
+	payload = {},
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/pending-confirmation/${reservationId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const pendingConfirmationNotificationFeed = ({
+	userId,
+	hotelId = "",
+	ownerId = "",
+	limit = 8,
+}) => {
+	const query = new URLSearchParams();
+	if (hotelId) query.append("hotelId", hotelId);
+	if (ownerId) query.append("ownerId", ownerId);
+	if (limit) query.append("limit", limit);
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getReservationAgentWalletSnapshot = ({
+	reservationId,
+	userId,
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/agent-wallet-snapshot/${reservationId}/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 

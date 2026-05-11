@@ -8,6 +8,16 @@ const roleOptions = [
 		ar: "موظف الاستقبال",
 	},
 	{
+		value: "ordertaker",
+		en: "External Agent / Order Taker",
+		ar: "\u0648\u0643\u064a\u0644 \u062e\u0627\u0631\u062c\u064a / \u0645\u0633\u062a\u0644\u0645 \u062d\u062c\u0648\u0632\u0627\u062a",
+	},
+	{
+		value: "reservationemployee",
+		en: "Reservations Officer",
+		ar: "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+	},
+	{
 		value: "housekeepingmanager",
 		en: "Housekeeping Manager",
 		ar: "مدير النظافة",
