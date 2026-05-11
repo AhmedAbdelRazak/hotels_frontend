@@ -315,15 +315,18 @@ export const EditReservationMain = ({
 					}));
 				}
 			}
-			const templateRows = buildPricingByDayFromDetail(roomType, displayName);
-			if (templateRows.length > 0) {
-				return templateRows;
-			}
 			const template = Array.isArray(existingPricingByDay)
 				? existingPricingByDay[0]
 				: null;
-			if (template) {
+			if (nightlyPrice > 0 && template) {
 				return buildPricingByNightly(nightlyPrice, nightsCount, start, template);
+			}
+			if (nightlyPrice > 0) {
+				return buildPricingByNightly(nightlyPrice, nightsCount, start);
+			}
+			const templateRows = buildPricingByDayFromDetail(roomType, displayName);
+			if (templateRows.length > 0) {
+				return templateRows;
 			}
 			return buildPricingByNightly(nightlyPrice, nightsCount, start);
 		},
@@ -1083,7 +1086,9 @@ export const EditReservationMain = ({
 				updateSingleReservation(reservation._id, updateData).then((response) => {
 					if (!response || response.error) {
 						console.error(response?.error || response);
-						toast.error("An error occurred while updating the reservation");
+						toast.error(
+							response?.error || "An error occurred while updating the reservation",
+						);
 						return;
 					}
 					const updatedReservation = response?.reservation || response;
@@ -1181,12 +1186,22 @@ export const EditReservationMain = ({
 				updateData.days_of_residence = daysOfResidence;
 				updateData.total_amount = totalAmount;
 				updateData.sub_total = totalAmount;
+			} else {
+				delete updateData.pickedRoomsType;
+				delete updateData.pickedRoomsPricing;
+				delete updateData.total_rooms;
+				delete updateData.days_of_residence;
+				delete updateData.total_amount;
+				delete updateData.sub_total;
+				delete updateData.commission;
 			}
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-					toast.error("An error occurred while updating the status");
+				if (!response || response.error) {
+					console.error(response?.error || response);
+					toast.error(
+						response?.error || "An error occurred while updating the status",
+					);
 				} else {
 					toast.success(
 						"Reservation was successfully updated & Email was sent to the guest",

@@ -353,6 +353,7 @@ const EditReservationMain = ({
 				roomType: room.room_type || "",
 				displayName: room.displayName || "",
 				count: room.count || 1,
+				chosenPrice: safeParseFloat(room.chosenPrice, 0),
 				pricingByDay: room.pricingByDay || [],
 			}));
 			setSelectedRooms(
@@ -488,6 +489,55 @@ const EditReservationMain = ({
 		},
 		[calculatePricingByDayWithCommission, selectedHotel?.commission]
 	);
+
+	const buildPricingFromCurrentNightly = useCallback(
+		(room, expectedDates = []) => {
+			const rows = Array.isArray(room?.pricingByDay) ? room.pricingByDay : [];
+			const averageNight =
+				rows.length > 0
+					? rows.reduce(
+							(sum, day) =>
+								sum +
+								safeParseFloat(
+									day.totalPriceWithCommission ?? day.price,
+									0
+								),
+							0
+					  ) / rows.length
+					: 0;
+			const chosenNightly = safeParseFloat(room?.chosenPrice, 0);
+			const nightly = chosenNightly > 0 ? chosenNightly : averageNight;
+			if (!(nightly > 0) || expectedDates.length === 0) return [];
+			const firstTemplate = rows[0] || {};
+			return expectedDates.map((date, index) => {
+				const template =
+					rows.find(
+						(day) =>
+							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") ===
+							date
+					) ||
+					rows[index] ||
+					firstTemplate;
+				const totalPriceWithoutCommission = safeParseFloat(
+					template.totalPriceWithoutCommission ?? template.price,
+					nightly
+				);
+				return {
+					...template,
+					date,
+					price: nightly,
+					rootPrice: safeParseFloat(
+						template.rootPrice,
+						totalPriceWithoutCommission || nightly
+					),
+					commissionRate: safeParseFloat(template.commissionRate, 0),
+					totalPriceWithCommission: nightly,
+					totalPriceWithoutCommission,
+				};
+			});
+		},
+		[]
+	);
 	// ---------------------------------------------------------
 
 	/** Totals recompute */
@@ -520,18 +570,29 @@ const EditReservationMain = ({
 						(day, index) =>
 							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") !==
 							expectedDates[index]
-					);
+				);
 				if (lengthMismatch || dateMismatch) {
-					const matchedRoom = getMatchedRoom(room.roomType, room.displayName);
-					if (matchedRoom) {
+					const projectedPricing = buildPricingFromCurrentNightly(
+						room,
+						expectedDates
+					);
+					if (projectedPricing.length > 0) {
 						room = {
 							...room,
-							pricingByDay: buildPricingForRoom(
-								matchedRoom,
-								startDate,
-								endDate
-							),
+							pricingByDay: projectedPricing,
 						};
+					} else {
+						const matchedRoom = getMatchedRoom(room.roomType, room.displayName);
+						if (matchedRoom) {
+							room = {
+								...room,
+								pricingByDay: buildPricingForRoom(
+									matchedRoom,
+									startDate,
+									endDate
+								),
+							};
+						}
 					}
 				}
 
@@ -582,6 +643,7 @@ const EditReservationMain = ({
 			selectedHotel,
 			getMatchedRoom,
 			buildPricingForRoom,
+			buildPricingFromCurrentNightly,
 		]
 	);
 
@@ -992,7 +1054,9 @@ const EditReservationMain = ({
 				onReservationUpdated(mergedReservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
-				message.error(response?.message || "Error updating reservation.");
+				message.error(
+					response?.error || response?.message || "Error updating reservation."
+				);
 			}
 		} catch (error) {
 			console.error("Error updating reservation:", error);

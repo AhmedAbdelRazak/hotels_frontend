@@ -250,6 +250,7 @@ const EditReservationMain = ({
 					roomType: room.room_type || "",
 					displayName: room.displayName || "",
 					count: room.count || 1,
+					chosenPrice: safeParseFloat(room.chosenPrice, 0),
 					pricingByDay: room.pricingByDay || [],
 				}));
 				setSelectedRooms(mappedRooms);
@@ -332,6 +333,48 @@ const EditReservationMain = ({
 		},
 		[calculatePricingByDay]
 	);
+
+	const buildPricingFromCurrentNightly = useCallback((room, expectedDates = []) => {
+		const rows = Array.isArray(room?.pricingByDay) ? room.pricingByDay : [];
+		const averageNight =
+			rows.length > 0
+				? rows.reduce(
+						(sum, day) =>
+							sum +
+							safeParseFloat(day.totalPriceWithCommission ?? day.price, 0),
+						0
+				  ) / rows.length
+				: 0;
+		const chosenNightly = safeParseFloat(room?.chosenPrice, 0);
+		const nightly = chosenNightly > 0 ? chosenNightly : averageNight;
+		if (!(nightly > 0) || expectedDates.length === 0) return [];
+		const firstTemplate = rows[0] || {};
+		return expectedDates.map((date, index) => {
+			const template =
+				rows.find(
+					(day) =>
+						(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") === date
+				) ||
+				rows[index] ||
+				firstTemplate;
+			const totalPriceWithoutCommission = safeParseFloat(
+				template.totalPriceWithoutCommission ?? template.price,
+				nightly
+			);
+			return {
+				...template,
+				date,
+				price: nightly,
+				rootPrice: safeParseFloat(
+					template.rootPrice,
+					totalPriceWithoutCommission || nightly
+				),
+				commissionRate: safeParseFloat(template.commissionRate, 0),
+				totalPriceWithCommission: nightly,
+				totalPriceWithoutCommission,
+			};
+		});
+	}, []);
 	// ===========================================================================
 
 	/**
@@ -398,27 +441,35 @@ const EditReservationMain = ({
 					}
 					return room;
 				} else {
-					// We need to recalc from the DB's base pricing
-					const matchedRoom = selectedHotel.roomCountDetails?.find(
-						(r) =>
-							r.roomType.trim() === room.roomType.trim() &&
-							r.displayName.trim() === room.displayName.trim()
+					const projectedPricing = buildPricingFromCurrentNightly(
+						room,
+						expectedDates
 					);
-					if (!matchedRoom) {
-						console.warn("No matching room found for", room);
-						return room;
-					}
+					let recalculated = projectedPricing;
 
-					const recalculated = calculatePricingByDayWithCommission(
-						matchedRoom.pricingRate || [],
-						startDate,
-						endDate,
-						safeParseFloat(matchedRoom.price?.basePrice, 0),
-						safeParseFloat(matchedRoom.defaultCost, 0),
-						safeParseFloat(
-							matchedRoom.roomCommission ?? selectedHotel.commission ?? 0.1
-						)
-					);
+					if (recalculated.length === 0) {
+						// Last fallback: recalc from the DB's base pricing.
+						const matchedRoom = selectedHotel.roomCountDetails?.find(
+							(r) =>
+								r.roomType.trim() === room.roomType.trim() &&
+								r.displayName.trim() === room.displayName.trim()
+						);
+						if (!matchedRoom) {
+							console.warn("No matching room found for", room);
+							return room;
+						}
+
+						recalculated = calculatePricingByDayWithCommission(
+							matchedRoom.pricingRate || [],
+							startDate,
+							endDate,
+							safeParseFloat(matchedRoom.price?.basePrice, 0),
+							safeParseFloat(matchedRoom.defaultCost, 0),
+							safeParseFloat(
+								matchedRoom.roomCommission ?? selectedHotel.commission ?? 0.1
+							)
+						);
+					}
 
 					const roomTotalRoot = recalculated.reduce(
 						(acc, d) => acc + safeParseFloat(d.rootPrice),
@@ -466,6 +517,7 @@ const EditReservationMain = ({
 			checkOutDate,
 			selectedRooms,
 			selectedHotel,
+			buildPricingFromCurrentNightly,
 			calculatePricingByDayWithCommission,
 		]
 	);
@@ -810,7 +862,9 @@ const EditReservationMain = ({
 				setReservation(response.reservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
-				message.error(response.message || "Error updating reservation.");
+				message.error(
+					response?.error || response?.message || "Error updating reservation."
+				);
 			}
 		} catch (error) {
 			console.error("Error updating reservation:", error);

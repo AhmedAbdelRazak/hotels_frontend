@@ -3879,7 +3879,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			toast.success("Payment breakdown was successfully updated");
 			setIsPaymentBreakdownVisible(false);
 			setReservation(merged);
-			setTimeout(() => window.location.reload(false), 1500);
 		});
 	};
 
@@ -4210,6 +4209,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			const updateData = {
 				reservation_status: selectedStatus,
 				hotelName: hotelDetails.hotelName,
+				requestingUserId: user?._id,
 				sendEmail, // ✅ mirror MoreDetails
 			};
 
@@ -4231,14 +4231,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			}
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-					toast.error("An error occurred while updating the status");
+				if (!response || response.error) {
+					console.error(response?.error || response);
+					toast.error(response?.error || "An error occurred while updating the status");
 				} else {
+					const updatedReservation = response?.reservation || response;
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(response.reservation);
-					setTimeout(() => window.location.reload(false), 1500);
+					setReservation(updatedReservation);
 				}
 			});
 		}
@@ -4251,7 +4251,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 		const confirmationMessage = `Are you sure you want to change the status of the reservation to ${selectedStatus}?`;
 		if (window.confirm(confirmationMessage)) {
-			const updateData = { reservation_status: selectedStatus };
+			const updateData = {
+				reservation_status: selectedStatus,
+				requestingUserId: user?._id,
+			};
 
 			if (selectedStatus === "early_checked_out") {
 				const newCheckoutDate = new Date();
@@ -4273,14 +4276,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			}
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
-				if (response.error) {
-					console.error(response.error);
-					toast.error("An error occurred while updating the status");
+				if (!response || response.error) {
+					console.error(response?.error || response);
+					toast.error(response?.error || "An error occurred while updating the status");
 				} else {
+					const updatedReservation = response?.reservation || response;
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(response);
-					setTimeout(() => window.location.reload(false), 1500);
+					setReservation(updatedReservation);
 				}
 			});
 		}
@@ -4301,6 +4304,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				belongsTo: selectedHotelDetails.belongsTo,
 				hotelId: selectedHotelDetails._id,
 				state: "relocated",
+				requestingUserId: user?._id,
 			};
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
