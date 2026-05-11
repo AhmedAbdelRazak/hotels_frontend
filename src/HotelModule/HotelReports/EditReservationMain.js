@@ -347,6 +347,9 @@ const EditReservationMain = ({
 			const endDate = dayjs(checkOutDate).startOf("day");
 			let nights = endDate.diff(startDate, "day");
 			if (nights < 1) nights = 1; // min 1 night
+			const expectedDates = Array.from({ length: nights }, (_, index) =>
+				startDate.add(index, "day").format("YYYY-MM-DD")
+			);
 
 			let sumHotelCost = 0;
 			let sumGrandTotal = 0;
@@ -356,7 +359,16 @@ const EditReservationMain = ({
 			const updatedRooms = rooms.map((room) => {
 				if (!room.roomType || !room.displayName) return room;
 
-				if (room.pricingByDay && room.pricingByDay.length) {
+				const pricingMatchesStay =
+					Array.isArray(room.pricingByDay) &&
+					room.pricingByDay.length === nights &&
+					room.pricingByDay.every(
+						(day, index) =>
+							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") ===
+							expectedDates[index]
+					);
+
+				if (pricingMatchesStay) {
 					// Already have day-by-day; sum them directly
 					const roomTotalRoot = room.pricingByDay.reduce(
 						(acc, day) => acc + safeParseFloat(day.rootPrice),
@@ -513,7 +525,7 @@ const EditReservationMain = ({
 				const newCheckOut = newDate.add(oldNights, "day");
 				setCheckOutDate(newCheckOut);
 			}
-		} else if (checkOutDate && newDate.isSameOrAfter(checkOutDate, "day")) {
+		} else if (checkOutDate && !newDate.isBefore(checkOutDate, "day")) {
 			// If no old from date but we had a checkOut, ensure checkOut is after
 			setCheckOutDate(null);
 		}
@@ -765,7 +777,10 @@ const EditReservationMain = ({
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
 			commission: totalCommission,
-			commissionPaid: reservation.payment_details?.commissionPaid || false,
+			commissionPaid:
+				reservation.commissionPaid ??
+				reservation.payment_details?.commissionPaid ??
+				false,
 			paymentDetails: {
 				cardNumber: reservation.payment_details?.cardNumber || "",
 				cardExpiryDate: reservation.payment_details?.cardExpiryDate || "",
@@ -794,9 +809,6 @@ const EditReservationMain = ({
 				setReservationCreated(true);
 				setReservation(response.reservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
-				setTimeout(() => {
-					window.location.reload(false);
-				}, 1500);
 			} else {
 				message.error(response.message || "Error updating reservation.");
 			}

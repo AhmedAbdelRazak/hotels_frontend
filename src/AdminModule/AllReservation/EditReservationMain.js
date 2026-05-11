@@ -500,6 +500,9 @@ const EditReservationMain = ({
 			const endDate = dayjs(checkOutDate).startOf("day");
 			let nights = endDate.diff(startDate, "day");
 			if (nights < 1) nights = 1;
+			const expectedDates = Array.from({ length: nights }, (_, index) =>
+				startDate.add(index, "day").format("YYYY-MM-DD")
+			);
 
 			let sumHotelCost = 0;
 			let sumGrandTotal = 0;
@@ -511,7 +514,14 @@ const EditReservationMain = ({
 
 				const lengthMismatch =
 					!room.pricingByDay || room.pricingByDay.length !== nights;
-				if (lengthMismatch) {
+				const dateMismatch =
+					Array.isArray(room.pricingByDay) &&
+					room.pricingByDay.some(
+						(day, index) =>
+							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") !==
+							expectedDates[index]
+					);
+				if (lengthMismatch || dateMismatch) {
 					const matchedRoom = getMatchedRoom(room.roomType, room.displayName);
 					if (matchedRoom) {
 						room = {
@@ -623,7 +633,7 @@ const EditReservationMain = ({
 			if (oldNights > 0) {
 				setCheckOutDate(newDate.add(oldNights, "day"));
 			}
-		} else if (checkOutDate && newDate.isSameOrAfter(checkOutDate, "day")) {
+		} else if (checkOutDate && !newDate.isBefore(checkOutDate, "day")) {
 			setCheckOutDate(null);
 		}
 		setCheckInDate(newDate);
@@ -941,7 +951,10 @@ const EditReservationMain = ({
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
 			commission: totalCommission,
-			commissionPaid: reservation.payment_details?.commissionPaid || false,
+			commissionPaid:
+				reservation.commissionPaid ??
+				reservation.payment_details?.commissionPaid ??
+				false,
 			paymentDetails: {
 				cardNumber: reservation.payment_details?.cardNumber || "",
 				cardExpiryDate: reservation.payment_details?.cardExpiryDate || "",

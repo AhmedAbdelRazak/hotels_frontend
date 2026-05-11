@@ -247,7 +247,7 @@ export const EditReservationMain = ({
 			const rows = [];
 			for (
 				let d = start.clone();
-				d.isSameOrBefore(end, "day");
+				d.isBefore(end, "day") || d.isSame(end, "day");
 				d.add(1, "day")
 			) {
 				const dateString = d.format("YYYY-MM-DD");
@@ -299,24 +299,31 @@ export const EditReservationMain = ({
 				Array.isArray(existingPricingByDay) &&
 				existingPricingByDay.length > 0
 			) {
-				if (existingPricingByDay.length === nightsCount) {
+				const expectedDates = Array.from({ length: nightsCount }, (_, idx) =>
+					start.clone().add(idx, "day").format("YYYY-MM-DD")
+				);
+				const pricingDatesMatch =
+					existingPricingByDay.length === nightsCount &&
+					existingPricingByDay.every(
+						(day, idx) =>
+							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") ===
+							expectedDates[idx]
+					);
+				if (pricingDatesMatch) {
 					return existingPricingByDay.map((day) => ({
 						...buildDayRow(day.date, nightlyPrice, day),
 					}));
 				}
-				const template = existingPricingByDay[0];
-				return buildPricingByNightly(
-					nightlyPrice,
-					nightsCount,
-					start,
-					template,
-				);
 			}
 			const templateRows = buildPricingByDayFromDetail(roomType, displayName);
 			if (templateRows.length > 0) {
-				return templateRows.map((day) =>
-					buildDayRow(day.date, nightlyPrice, day),
-				);
+				return templateRows;
+			}
+			const template = Array.isArray(existingPricingByDay)
+				? existingPricingByDay[0]
+				: null;
+			if (template) {
+				return buildPricingByNightly(nightlyPrice, nightsCount, start, template);
 			}
 			return buildPricingByNightly(nightlyPrice, nightsCount, start);
 		},
@@ -762,7 +769,7 @@ export const EditReservationMain = ({
 					: currentReservation.checkout_date,
 				days_of_residence:
 					dateAtMidnight && nextCheckout
-						? Math.max(nextCheckout.diff(dateAtMidnight, "day"), 0) + 1
+						? Math.max(nextCheckout.diff(dateAtMidnight, "day"), 0)
 						: currentReservation.days_of_residence,
 			};
 		});
@@ -784,7 +791,7 @@ export const EditReservationMain = ({
 			return {
 				...currentReservation,
 				checkout_date: adjustedDate ? adjustedDate.toISOString() : null, // Store as ISO string or null if no date
-				days_of_residence: duration >= 0 ? duration + 1 : 0,
+				days_of_residence: duration >= 0 ? duration : 0,
 			};
 		});
 	};
@@ -1087,7 +1094,6 @@ export const EditReservationMain = ({
 							onReservationSaved(updatedReservation);
 						}
 					}
-					setTimeout(() => window.location.reload(false), 1000);
 				});
 				return;
 			}
@@ -1165,7 +1171,7 @@ export const EditReservationMain = ({
 					0,
 				);
 				const daysOfResidence = hasValidDates
-					? Math.max(nightsCount + 1, 1)
+					? Math.max(nightsCount, 0)
 					: Number(reservation.days_of_residence) || 0;
 				const flattenedRooms = flattenRoomsForSave(normalizedPickedRoomsType);
 
@@ -1201,7 +1207,6 @@ export const EditReservationMain = ({
 					}
 					setHasRoomLineEdits(false);
 					setHasDateEdits(false);
-					setTimeout(() => window.location.reload(false), 1500);
 				}
 			});
 		}
