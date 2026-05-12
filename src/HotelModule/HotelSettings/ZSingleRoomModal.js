@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { Modal } from "antd";
+import { Button, Modal } from "antd";
 import { toast } from "react-toastify";
 import { isAuthenticated } from "../../auth";
-import { updateSingleRoom } from "../apiAdmin";
+import { deleteSingleRoom, updateSingleRoom } from "../apiAdmin";
 import {
 	roomTypeColors,
 	BedSizes,
@@ -21,12 +21,51 @@ const ZSingleRoomModal = ({
 	hotelDetails,
 	setHelperRender,
 	helperRender,
+	chosenLanguage,
 }) => {
 	const { user, token } = isAuthenticated();
-	const [bedCount, setBedCount] = useState(clickedRoom.bedsNumber?.length || 0);
+	const [bedCount, setBedCount] = useState(clickedRoom?.bedsNumber?.length || 0);
+	const [isRemoving, setIsRemoving] = useState(false);
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = {
+		editRoom: isArabic ? "تعديل الغرفة" : "Edit Room",
+		floor: isArabic ? "الطابق" : "Floor",
+		displayName: isArabic ? "اسم العرض" : "Display Name",
+		roomType: isArabic ? "نوع الغرفة" : "Room Type",
+		select: isArabic ? "الرجاء الاختيار" : "Please Select",
+		bedsCount: isArabic ? "كم عدد الأسرة؟" : "How many beds?",
+		bedSize: isArabic ? "حجم السرير" : "Bed Size",
+		roomView: isArabic ? "إطلالة الغرفة" : "Room View",
+		smoking: isArabic ? "التدخين" : "Smoking",
+		smokingAllowed: isArabic ? "مسموح بالتدخين" : "For Smokers",
+		noSmoking: isArabic ? "ممنوع التدخين" : "No Smoking",
+		accessible: isArabic ? "غرفة لذوي الاحتياجات" : "Accessible Room",
+		vip: isArabic ? "غرفة VIP" : "VIP Room",
+		openHousing: isArabic ? "متاحة للتسكين" : "Open for Housing",
+		remove: isArabic ? "حذف الغرفة" : "Remove Room",
+		update: isArabic ? "تحديث الغرفة" : "Update Room",
+		apply: isArabic ? "تطبيق التغييرات" : "Apply Changes",
+		cannotRemove: (roomNumber) =>
+			isArabic
+				? `الغرفة رقم ${roomNumber} مستخدمة حاليا ولا يمكن حذفها.`
+				: `Room #${roomNumber} is currently in use and cannot be removed.`,
+		confirmRemove: (roomNumber) =>
+			isArabic
+				? `هل تريد حذف الغرفة رقم ${roomNumber} من خريطة هذا الطابق؟`
+				: `Remove room #${roomNumber} from this floor map?`,
+		removed: (roomNumber) =>
+			isArabic
+				? `تم حذف الغرفة رقم ${roomNumber}.`
+				: `Room #${roomNumber} was removed.`,
+		updated: (roomNumber) =>
+			isArabic
+				? `تم تحديث الغرفة رقم ${roomNumber} بنجاح.`
+				: `Room #${roomNumber} Was Successfully Updated`,
+		updateError: isArabic ? "تعذر تحديث الغرفة." : "Could not update the room.",
+	};
 
 	useEffect(() => {
-		if (clickedRoom.room_type === "individualBed" && clickedRoom.bedsNumber) {
+		if (clickedRoom?.room_type === "individualBed" && clickedRoom?.bedsNumber) {
 			setBedCount(clickedRoom.bedsNumber.length);
 		}
 	}, [clickedRoom]);
@@ -48,47 +87,54 @@ const ZSingleRoomModal = ({
 		roomColor: detail.roomColor || roomTypeColors[detail.roomType] || "#000",
 	}));
 	const selectedDisplayKey = getDisplayKey(
-		clickedRoom.display_name ||
-			roomDetails.find((detail) => detail.roomType === clickedRoom.room_type)
+		clickedRoom?.display_name ||
+			roomDetails.find((detail) => detail.roomType === clickedRoom?.room_type)
 				?.displayName,
-		clickedRoom.room_type
+		clickedRoom?.room_type
 	);
 
 	const updatingSingleRoom = () => {
+		if (!clickedRoom?._id) return;
+		const roomToUpdate = { ...clickedRoom };
 		// Update the bedsNumber array and individualBeds flag if the room type is individualBed
-		if (clickedRoom.room_type === "individualBed") {
+		if (roomToUpdate.room_type === "individualBed") {
 			const bedsNumber = Array.from(
 				{ length: bedCount },
-				(_, i) => `${clickedRoom.room_number}${String.fromCharCode(97 + i)}`
+				(_, i) => `${roomToUpdate.room_number}${String.fromCharCode(97 + i)}`
 			);
-			clickedRoom.bedsNumber = bedsNumber;
-			clickedRoom.individualBeds = true;
+			roomToUpdate.bedsNumber = bedsNumber;
+			roomToUpdate.individualBeds = true;
 		}
 
-		console.log("Updating Room:", clickedRoom);
-
-		updateSingleRoom(clickedRoom._id, user._id, token, clickedRoom)
+		updateSingleRoom(roomToUpdate._id, user._id, token, roomToUpdate)
 			.then((data) => {
 				if (data && data.error) {
-					console.error(data.error, "Error Updating A Room");
+					toast.error(data.error || labels.updateError);
 				} else {
-					toast.success(
-						`Room #${clickedRoom.room_number} Was Successfully Updated`
+					const savedRoom = data && !data.error ? data : roomToUpdate;
+					setRooms(
+						(Array.isArray(rooms) ? rooms : []).map((room) =>
+							String(room._id || `${room.floor}-${room.room_number}`) ===
+							String(roomToUpdate._id)
+								? { ...room, ...savedRoom }
+								: room
+						)
 					);
+					toast.success(labels.updated(roomToUpdate.room_number));
 					setTimeout(() => {
 						setModalVisible(false);
+						setClickedRoom("");
 					}, 1000);
-					setTimeout(() => {
-						window.location.reload(false);
-					}, 1500);
 				}
 			})
 			.catch((error) => {
 				console.error("Error occurred:", error);
+				toast.error(labels.updateError);
 			});
 	};
 
 	const updateRoomState = () => {
+		if (!clickedRoom) return;
 		// Close the modal
 		setModalVisible(false);
 
@@ -117,7 +163,54 @@ const ZSingleRoomModal = ({
 		// after updating the rooms, you can call setHelperRender or other state setters here.
 	};
 
+	const removeRoomFromState = () => {
+		if (!clickedRoom) return;
+		const roomIdentifier = clickedRoom._id
+			? clickedRoom._id
+			: `${clickedRoom.floor}-${clickedRoom.room_number}`;
+		setRooms(
+			rooms.filter((room) => {
+				const currentRoomIdentifier = room._id
+					? room._id
+					: `${room.floor}-${room.room_number}`;
+				return currentRoomIdentifier !== roomIdentifier;
+			})
+		);
+		setClickedRoom("");
+		setModalVisible(false);
+	};
+
+	const removeClickedRoom = () => {
+		if (!clickedRoom) return;
+		if (clickedRoom.isCurrentlyHoused || clickedRoom.isOccupied) {
+			toast.error(labels.cannotRemove(clickedRoom.room_number));
+			return;
+		}
+		const confirmed = window.confirm(labels.confirmRemove(clickedRoom.room_number));
+		if (!confirmed) return;
+
+		if (!clickedRoom._id) {
+			removeRoomFromState();
+			toast.success(labels.removed(clickedRoom.room_number));
+			return;
+		}
+
+		setIsRemoving(true);
+		deleteSingleRoom(clickedRoom._id, user._id, token)
+			.then((data) => {
+				if (data?.error) {
+					toast.error(data.error);
+					return;
+				}
+				removeRoomFromState();
+				toast.success(labels.removed(clickedRoom.room_number));
+			})
+			.catch(() => toast.error(labels.updateError))
+			.finally(() => setIsRemoving(false));
+	};
+
 	const handleBedCountChange = (e) => {
+		if (!clickedRoom) return;
 		const count = parseInt(e.target.value, 10);
 		setBedCount(count);
 		const bedsNumber = Array.from(
@@ -129,14 +222,10 @@ const ZSingleRoomModal = ({
 			bedsNumber,
 			individualBeds: true,
 		});
-		console.log("Updated Room for Bed Count Change:", {
-			...clickedRoom,
-			bedsNumber,
-			individualBeds: true,
-		});
 	};
 
 	const mainForm = () => {
+		if (!clickedRoom) return null;
 		return (
 			<InputFieldStylingWrapper className='mx-auto text-center'>
 				<h3
@@ -147,7 +236,8 @@ const ZSingleRoomModal = ({
 						fontWeight: "bold",
 					}}
 				>
-					Edit Room #{clickedRoom.room_number} Floor #{clickedFloor}
+					{labels.editRoom} #{clickedRoom.room_number} {labels.floor} #
+					{clickedFloor}
 				</h3>
 
 				<div className='row'>
@@ -160,7 +250,7 @@ const ZSingleRoomModal = ({
 								textAlign: "center",
 							}}
 						>
-							Display Name
+							{labels.displayName}
 						</label>
 						<select
 							style={{ textTransform: "capitalize" }}
@@ -186,7 +276,7 @@ const ZSingleRoomModal = ({
 								});
 							}}
 						>
-							<option value=''>Please Select</option>
+							<option value=''>{labels.select}</option>
 							{roomDisplayOptions.map((option, i) => (
 								<option key={i} value={option.key}>
 									{option.displayName}
@@ -194,7 +284,7 @@ const ZSingleRoomModal = ({
 							))}
 						</select>
 						<div style={{ fontSize: "11px", marginTop: "6px" }}>
-							Room Type:{" "}
+							{labels.roomType}:{" "}
 							<span style={{ textTransform: "capitalize" }}>
 								{clickedRoom.room_type || "N/A"}
 							</span>
@@ -211,7 +301,7 @@ const ZSingleRoomModal = ({
 									textAlign: "center",
 								}}
 							>
-								How many beds?
+								{labels.bedsCount}
 							</label>
 							<input
 								type='number'
@@ -231,7 +321,7 @@ const ZSingleRoomModal = ({
 								textAlign: "center",
 							}}
 						>
-							Bed Size
+							{labels.bedSize}
 						</label>
 						<select
 							style={{ textTransform: "capitalize" }}
@@ -246,7 +336,7 @@ const ZSingleRoomModal = ({
 								});
 							}}
 						>
-							<option value=''>Please Select</option>
+							<option value=''>{labels.select}</option>
 							{BedSizes.map((b, i) => (
 								<option key={i} value={b}>
 									{b}
@@ -264,7 +354,7 @@ const ZSingleRoomModal = ({
 								textAlign: "center",
 							}}
 						>
-							Room View
+							{labels.roomView}
 						</label>
 						<select
 							style={{ textTransform: "capitalize" }}
@@ -279,7 +369,7 @@ const ZSingleRoomModal = ({
 								});
 							}}
 						>
-							<option value=''>Please Select</option>
+							<option value=''>{labels.select}</option>
 							{Views.map((b, i) => (
 								<option key={i} value={b}>
 									{b}
@@ -297,7 +387,7 @@ const ZSingleRoomModal = ({
 								textAlign: "center",
 							}}
 						>
-							Smoking
+							{labels.smoking}
 						</label>
 						<select
 							style={{ textTransform: "capitalize" }}
@@ -313,8 +403,8 @@ const ZSingleRoomModal = ({
 								});
 							}}
 						>
-							<option value={true}>For Smokers</option>
-							<option value={false}>No Smoking</option>
+							<option value={true}>{labels.smokingAllowed}</option>
+							<option value={false}>{labels.noSmoking}</option>
 						</select>
 					</div>
 				</div>
@@ -330,7 +420,7 @@ const ZSingleRoomModal = ({
 								display: "block",
 							}}
 						>
-							Handicapped Room
+							{labels.accessible}
 						</label>
 						<input
 							id='isHandicapped'
@@ -355,7 +445,7 @@ const ZSingleRoomModal = ({
 								display: "block",
 							}}
 						>
-							VIP Room
+							{labels.vip}
 						</label>
 						<input
 							id='isVip'
@@ -380,7 +470,7 @@ const ZSingleRoomModal = ({
 								display: "block",
 							}}
 						>
-							Open for Housing
+							{labels.openHousing}
 						</label>
 						<input
 							id='active'
@@ -397,16 +487,20 @@ const ZSingleRoomModal = ({
 					</div>
 				</div>
 
-				{clickedRoom && clickedRoom._id && (
-					<div>
-						<button
-							className='btn btn-outline-success'
-							onClick={updatingSingleRoom}
-						>
-							Update Room #{clickedRoom.room_number}
-						</button>
-					</div>
-				)}
+				<ModalActions>
+					<Button danger loading={isRemoving} onClick={removeClickedRoom}>
+						{labels.remove} #{clickedRoom.room_number}
+					</Button>
+					{clickedRoom && clickedRoom._id ? (
+						<Button type='primary' onClick={updatingSingleRoom}>
+							{labels.update} #{clickedRoom.room_number}
+						</Button>
+					) : (
+						<Button type='primary' onClick={updateRoomState}>
+							{labels.apply}
+						</Button>
+					)}
+				</ModalActions>
 			</InputFieldStylingWrapper>
 		);
 	};
@@ -422,16 +516,17 @@ const ZSingleRoomModal = ({
 							fontWeight: "bold",
 							fontSize: "1.3rem",
 						}}
-					>{`Edit Room #${clickedRoom.room_number}`}</div>
+					>
+						{labels.editRoom} #{clickedRoom?.room_number || ""}
+					</div>
 				}
 				open={modalVisible}
-				onOk={updateRoomState}
-				cancelButtonProps={{ style: { display: "none" } }}
+				footer={null}
 				onCancel={() => {
 					setModalVisible(false);
 				}}
 			>
-				{!clickedRoom && !clickedRoom._id ? setModalVisible(false) : mainForm()}
+				{mainForm()}
 			</Modal>
 		</ZSingleRoomModalWrapper>
 	);
@@ -441,6 +536,14 @@ export default ZSingleRoomModal;
 
 const ZSingleRoomModalWrapper = styled.div`
 	z-index: 18000 !important;
+`;
+
+const ModalActions = styled.div`
+	display: flex;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 1rem;
 `;
 
 const InputFieldStylingWrapper = styled.div`

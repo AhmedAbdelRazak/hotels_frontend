@@ -193,7 +193,7 @@ const ReservationCalculator = () => {
 			checkOutDate,
 			parseFloat(room.price.basePrice),
 			parseFloat(room.defaultCost),
-			parseFloat(room.roomCommission || hotel.commission || 10)
+			parseFloat(room.roomCommission ?? hotel.commission ?? 10)
 		);
 
 		const totalAmount = pricingByDay.reduce(

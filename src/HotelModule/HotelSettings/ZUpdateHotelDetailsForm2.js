@@ -76,6 +76,11 @@ const ZUpdateHotelDetailsForm2 = ({
 	// NEW: tabs inside step 3
 	const [activePricingTab, setActivePricingTab] = useState("custom"); // "custom" | "offers" | "monthly"
 	const isArabic = chosenLanguage === "Arabic";
+	const steps = [
+		isArabic ? "تفاصيل الغرفة" : "Room Details",
+		isArabic ? "صور الغرفة" : "Room Photos",
+		isArabic ? "التقويم والتسعير" : "Calendar & Pricing",
+	];
 
 	const getColorForPrice = useCallback((price, dateRange) => {
 		const key = `${price}-${dateRange}`;
@@ -290,6 +295,18 @@ const ZUpdateHotelDetailsForm2 = ({
 				initialValues={existingRoomDetails || {}}
 				onFinish={handleFinish}
 			>
+				<StepStrip>
+					{steps.map((stepLabel, index) => (
+						<StepDot
+							key={stepLabel}
+							$isActive={currentStep === index + 1}
+							$isDone={currentStep > index + 1}
+						>
+							<span>{index + 1}</span>
+							<strong>{stepLabel}</strong>
+						</StepDot>
+					))}
+				</StepStrip>
 				{renderStepContent()}
 				<div className='steps-action'>
 					{currentStep > 1 && (
@@ -388,13 +405,68 @@ const ZUpdateHotelDetailsForm2Wrapper = styled.div`
 
 	text-align: ${(props) => (props.isArabic ? "right" : "left")};
 	.steps-action {
+		position: sticky;
+		bottom: 12px;
+		z-index: 35;
 		display: flex;
 		justify-content: center;
-		margin-top: 20px;
+		gap: 0.7rem;
+		width: fit-content;
+		margin: 20px auto 0;
+		padding: 0.65rem;
+		border: 1px solid #d7e7f8;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.96);
+		box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
 	}
 
 	button {
 		text-transform: capitalize !important;
+	}
+`;
+
+const StepStrip = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(120px, 1fr));
+	gap: 0.55rem;
+	margin-bottom: 1rem;
+`;
+
+const StepDot = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 46px;
+	padding: 0.45rem 0.75rem;
+	border-radius: 14px;
+	border: 1px solid
+		${(p) => (p.$isActive || p.$isDone ? "#1677ff" : "#d7e7f8")};
+	background: ${(p) =>
+		p.$isActive
+			? "linear-gradient(135deg, #e8f4ff, #ffffff)"
+			: p.$isDone
+			  ? "#f0f9ff"
+			  : "#ffffff"};
+	color: ${(p) => (p.$isActive || p.$isDone ? "#0b5fa8" : "#53657c")};
+	font-weight: 900;
+
+	span {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 25px;
+		height: 25px;
+		border-radius: 999px;
+		background: ${(p) => (p.$isActive || p.$isDone ? "#1677ff" : "#e8eef6")};
+		color: ${(p) => (p.$isActive || p.$isDone ? "#fff" : "#53657c")};
+		font-size: 0.75rem;
+	}
+
+	strong {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 `;
 

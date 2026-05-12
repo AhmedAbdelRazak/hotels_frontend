@@ -110,7 +110,7 @@ const EquivalentHotels = ({
 						const basePrice = safeParseFloat(room.price?.basePrice, 0);
 						const defaultCost = safeParseFloat(room.defaultCost, 0);
 						const commissionRate = safeParseFloat(
-							room.roomCommission || hotel.commission || 10,
+							room.roomCommission ?? hotel.commission ?? 10,
 							10 // Default to 10%
 						);
 

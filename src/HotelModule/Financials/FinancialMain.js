@@ -141,6 +141,15 @@ const labels = {
 		walletAdded: "Wallet added",
 		walletUsed: "Reservation deductions",
 		balance: "Current balance",
+		outstandingReservations: "Outstanding reservations",
+		availableWallet: "Available wallet",
+		commercialModel: "Model",
+		commissionOnly: "Commission only",
+		walletInventory: "Inventory wallet",
+		mixedModel: "Wallet + commission",
+		openingCredit: "Opening credit",
+		noWalletAgent:
+			"This agent is commission-only. Reservations are visible for commission review and do not create wallet debt.",
 		reservations: "Reservations",
 		reservationValue: "Reservation value",
 		commission: "Commission",
@@ -279,6 +288,18 @@ Object.assign(labels.ar, {
 	deleted: "تم حذف حركة المحفظة.",
 });
 
+Object.assign(labels.ar, {
+	outstandingReservations: "قيمة حجوزات معلقة",
+	availableWallet: "رصيد متاح",
+	commercialModel: "النموذج",
+	commissionOnly: "عمولة فقط",
+	walletInventory: "محفظة مخزون",
+	mixedModel: "محفظة وعمولة",
+	openingCredit: "رصيد افتتاحي",
+	noWalletAgent:
+		"هذا الوكيل يعمل بنظام العمولة فقط. الحجوزات تظهر لمراجعة العمولة ولا تنشئ مديونية محفظة.",
+});
+
 Object.assign(labels.en, {
 	attachments: "Attachments",
 	uploadAttachments: "Attach receipts",
@@ -311,6 +332,35 @@ const transactionOptions = (txt) => [
 	{ value: "adjustment", label: txt.adjustment },
 	{ value: "refund", label: txt.refund },
 ];
+
+const agentCommercialModel = (record = {}) =>
+	record.commercialModel || record.agent?.agentCommercialModel || "wallet_inventory";
+
+const commercialModelLabel = (record = {}, txt = labels.en) => {
+	const model = agentCommercialModel(record);
+	if (model === "commission_only") return txt.commissionOnly || "Commission only";
+	if (model === "mixed") return txt.mixedModel || "Wallet + commission";
+	return txt.walletInventory || "Inventory wallet";
+};
+
+const walletBalancePresentation = (record = {}, txt = labels.en) => {
+	const balance = Number(record.balance || 0);
+	if (agentCommercialModel(record) === "commission_only" || record.walletRequired === false) {
+		return {
+			label: txt.commissionOnly || "Commission only",
+			value: txt.commissionOnly || "Commission only",
+			tone: "purple",
+		};
+	}
+	return {
+		label:
+			balance < 0
+				? txt.outstandingReservations || "Outstanding reservations"
+				: txt.availableWallet || txt.balance || "Current balance",
+		value: `${money(Math.abs(balance))} SAR`,
+		tone: balance < 0 ? "orange" : "green",
+	};
+};
 
 const FinancialMain = ({ match }) => {
 	const { userId, hotelId } = match.params;
@@ -352,6 +402,20 @@ const FinancialMain = ({ match }) => {
 	const activeReservations = Array.isArray(activeAgent?.reservations)
 		? activeAgent.reservations
 		: [];
+	const activeBalancePresentation = walletBalancePresentation(activeAgent, txt);
+	const activeIsCommissionOnly =
+		agentCommercialModel(activeAgent) === "commission_only" ||
+		activeAgent?.walletRequired === false;
+	const totalsBalancePresentation = agentOnly
+		? walletBalancePresentation(
+				{
+					...(summary?.totals || {}),
+					commercialModel: activeAgent?.commercialModel,
+					walletRequired: activeAgent?.walletRequired,
+				},
+				txt
+		  )
+		: null;
 
 	const filters = useMemo(
 		() => ({
@@ -552,6 +616,8 @@ const FinancialMain = ({ match }) => {
 				Agent: item.agent?.name || "",
 				Company: item.agent?.companyName || "",
 				Email: item.agent?.email || "",
+				Model: commercialModelLabel(item, labels.en),
+				"Opening Credit": item.openingWalletCredit,
 				"Wallet Added": item.walletAdded,
 				"Wallet Used": item.walletUsed,
 				Balance: item.balance,
@@ -652,16 +718,30 @@ const FinancialMain = ({ match }) => {
 				</AgentNameButton>
 			),
 		},
+		{
+			title: txt.commercialModel,
+			render: (_, row) => (
+				<Tag color={agentCommercialModel(row) === "commission_only" ? "purple" : "blue"}>
+					{commercialModelLabel(row, txt)}
+				</Tag>
+			),
+		},
 		{ title: txt.walletAdded, dataIndex: "walletAdded", render: money },
 		{ title: txt.walletUsed, dataIndex: "walletUsed", render: money },
 		{
 			title: txt.balance,
 			dataIndex: "balance",
-			render: (value) => (
-				<Tag color={Number(value) >= 0 ? "green" : "red"}>{money(value)} SAR</Tag>
-			),
+			render: (_, row) => {
+				const presentation = walletBalancePresentation(row, txt);
+				return <Tag color={presentation.tone}>{presentation.value}</Tag>;
+			},
 		},
 		{ title: txt.reservations, dataIndex: "totalReservations" },
+		{
+			title: txt.reservationValue,
+			dataIndex: "totalReservationValue",
+			render: (value) => `${money(value)} SAR`,
+		},
 		{ title: txt.commissionDue, dataIndex: "commissionDue", render: money },
 		{ title: txt.pending, dataIndex: "pendingConfirmation" },
 		...(summary?.canManage
@@ -871,8 +951,8 @@ const FinancialMain = ({ match }) => {
 								<strong>{getAgentLabel(activeAgent.agent)}</strong>
 							</div>
 							<div>
-								<span>{txt.balance}</span>
-								<strong>{money(activeAgent.balance)} SAR</strong>
+								<span>{activeBalancePresentation.label}</span>
+								<strong>{activeBalancePresentation.value}</strong>
 							</div>
 							<div>
 								<span>{txt.reservationValue}</span>
@@ -883,6 +963,10 @@ const FinancialMain = ({ match }) => {
 								<strong>{money(activeAgent.commissionDue)} SAR</strong>
 							</div>
 						</ActiveAgentBar>
+					)}
+
+					{activeIsCommissionOnly && (
+						<FinanceNotice>{txt.noWalletAgent}</FinanceNotice>
 					)}
 
 					<SummaryGrid>
@@ -898,8 +982,11 @@ const FinancialMain = ({ match }) => {
 						</SummaryCard>
 						<SummaryCard $tone='green'>
 							<WalletOutlined />
-							<span>{txt.balance}</span>
-							<strong>{money(summary?.totals?.balance)} SAR</strong>
+							<span>{totalsBalancePresentation?.label || txt.balance}</span>
+							<strong>
+								{totalsBalancePresentation?.value ||
+									`${money(summary?.totals?.balance)} SAR`}
+							</strong>
 						</SummaryCard>
 						<SummaryCard $tone='purple'>
 							<BankOutlined />
@@ -916,7 +1003,7 @@ const FinancialMain = ({ match }) => {
 							columns={agentColumns}
 							loading={loading}
 							size='small'
-							scroll={{ x: 980 }}
+							scroll={{ x: 1180 }}
 							pagination={{ pageSize: 8 }}
 							locale={{ emptyText: txt.noRows }}
 							rowClassName={(row) =>
@@ -944,7 +1031,11 @@ const FinancialMain = ({ match }) => {
 							/>
 						</Panel>
 						<Panel>
-							<PanelTitle>{txt.reservationDeductions}</PanelTitle>
+							<PanelTitle>
+								{activeIsCommissionOnly
+									? txt.reservations
+									: txt.reservationDeductions}
+							</PanelTitle>
 							<Table
 								rowKey={(row) => row._id}
 								dataSource={activeReservations}
@@ -1434,6 +1525,17 @@ const ActiveAgentBar = styled.section`
 			font-size: 0.86rem;
 		}
 	}
+`;
+
+const FinanceNotice = styled.div`
+	margin: -2px 0 12px;
+	padding: 9px 12px;
+	border: 1px solid #d8c7ff;
+	border-radius: 10px;
+	background: #f7f2ff;
+	color: #5b21b6;
+	font-weight: 850;
+	line-height: 1.35;
 `;
 
 const SummaryGrid = styled.section`

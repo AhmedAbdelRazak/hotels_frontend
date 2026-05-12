@@ -475,6 +475,19 @@ export const updateSingleRoom = (roomId, userId, token, room) => {
 		.catch((err) => console.log(err));
 };
 
+export const deleteSingleRoom = (roomId, userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/room/${roomId}/${userId}`, {
+		method: "DELETE",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const gettingHotelDetailsForAdmin = (userId, token) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/hotel-details-admin/${userId}`,

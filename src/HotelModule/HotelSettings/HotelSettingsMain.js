@@ -100,6 +100,40 @@ const HotelSettingsMain = () => {
 	const buildSettingsPath = (search = "") =>
 		`/hotel-management/settings/${getSettingsOwnerId()}/${getSettingsHotelId()}${search}`;
 
+	const clearUnsavedNewRoomDraft = () => {
+		setHotelDetails((previousDetails) => {
+			if (!previousDetails || !Array.isArray(previousDetails.roomCountDetails)) {
+				return previousDetails;
+			}
+
+			const nextRoomCountDetails = previousDetails.roomCountDetails.filter(
+				(room) => !(room?.myKey === "ThisIsNewKey" && !room?._id)
+			);
+
+			if (nextRoomCountDetails.length === previousDetails.roomCountDetails.length) {
+				return previousDetails;
+			}
+
+			return {
+				...previousDetails,
+				roomCountDetails: nextRoomCountDetails,
+			};
+		});
+		setSelectedRoomType("");
+		setRoomTypeSelected(false);
+	};
+
+	const goToSettingsTab = (tabName, search, nextStep) => {
+		if (activeTab === "HotelDetails" && tabName !== "HotelDetails") {
+			clearUnsavedNewRoomDraft();
+		}
+		setActiveTab(tabName);
+		if (typeof nextStep === "number") {
+			setCurrentStep(nextStep);
+		}
+		history.push(buildSettingsPath(search));
+	};
+
 	//For Rooms
 	const [floorDetails, setFloorDetails] = useState({
 		roomCountDetails: {}, // Initialize as an object to hold counts by _id
@@ -521,16 +555,17 @@ const HotelSettingsMain = () => {
 						{chosenLanguage === "English" ? "ARABIC" : "English"}
 					</div>
 
-					<div style={{ background: "#ededed", padding: "1px" }}>
-						<div className='my-2 tab-grid col-md-9  mr-3'>
+					<TabsShell>
+						<div className='tab-grid'>
 							<Tab
-								isActive={activeTab === "HotelDetails"}
+								$isActive={activeTab === "HotelDetails"}
 								onClick={() => {
-									setActiveTab("HotelDetails");
-									setCurrentStep(0);
-									history.push(
-										buildSettingsPath("?activeTab=HotelDetails&currentStep=0")
-									); // Programmatic navigation
+									clearUnsavedNewRoomDraft();
+									goToSettingsTab(
+										"HotelDetails",
+										"?activeTab=HotelDetails&currentStep=0",
+										0
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -539,13 +574,13 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "UpdateRoomCount"}
+								$isActive={activeTab === "UpdateRoomCount"}
 								onClick={() => {
-									setActiveTab("UpdateRoomCount");
-									setCurrentStep(1);
-									history.push(
-										buildSettingsPath("?activeTab=roomcount&currentStep=1")
-									); // Programmatic navigation
+									goToSettingsTab(
+										"UpdateRoomCount",
+										"?activeTab=roomcount&currentStep=1",
+										1
+									);
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -554,10 +589,9 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "RoomDetails"}
+								$isActive={activeTab === "RoomDetails"}
 								onClick={() => {
-									setActiveTab("RoomDetails");
-									history.push(buildSettingsPath("?roomdetails")); // Programmatic navigation
+									goToSettingsTab("RoomDetails", "?roomdetails");
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -566,12 +600,9 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
-								isActive={activeTab === "PaymentSettings"}
+								$isActive={activeTab === "PaymentSettings"}
 								onClick={() => {
-									setActiveTab("PaymentSettings");
-									history.push(
-										buildSettingsPath("?paymentsettings")
-									); // Programmatic navigation
+									goToSettingsTab("PaymentSettings", "?paymentsettings");
 								}}
 							>
 								{chosenLanguage === "Arabic"
@@ -579,7 +610,7 @@ const HotelSettingsMain = () => {
 									: "Payment Settings"}
 							</Tab>
 						</div>
-					</div>
+					</TabsShell>
 
 					<div className='container-wrapper'>
 						{activeTab === "HotelDetails" &&
@@ -638,6 +669,7 @@ const HotelSettingsMain = () => {
 								setSelectedRoomType={setSelectedRoomType}
 								roomTypeSelected={roomTypeSelected}
 								setRoomTypeSelected={setRoomTypeSelected}
+								chosenLanguage={chosenLanguage}
 							/>
 						) : activeTab === "PricingCalendar" &&
 						  hotelDetails &&
@@ -713,11 +745,12 @@ const HotelSettingsMainWrapper = styled.div`
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
+		border: 1px solid #d7e7f8;
+		padding: 18px;
+		border-radius: 18px;
+		background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
 		margin: 0px 10px;
+		box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
 	}
 
 	tr {
@@ -726,7 +759,12 @@ const HotelSettingsMainWrapper = styled.div`
 
 	.tab-grid {
 		display: flex;
-		/* Additional styling for grid layout */
+		gap: 8px;
+		min-width: 0;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 2px 0 4px;
+		scrollbar-width: thin;
 	}
 
 	@media (max-width: 1600px) {
@@ -737,28 +775,60 @@ const HotelSettingsMainWrapper = styled.div`
 	}
 `;
 
+const TabsShell = styled.div`
+	background: #e3f2fd;
+	border: 1px solid #cfe5fb;
+	border-radius: 8px;
+	margin: 8px auto 0;
+	max-width: 1360px;
+	padding: 8px;
+	min-width: 0;
+	width: calc(100% - clamp(16px, 2.8vw, 36px));
+
+	@media (max-width: 560px) {
+		margin: 8px 8px 0;
+		width: auto;
+		padding: 7px;
+	}
+`;
+
 const Tab = styled.div`
+	display: flex;
 	cursor: pointer;
-	margin: 0 3px; /* 3px margin between tabs */
-	padding: 15px 5px; /* Adjust padding as needed */
-	font-weight: ${(props) => (props.isActive ? "bold" : "bold")};
-	background-color: ${(props) =>
-		props.isActive
-			? "transparent"
-			: "#e0e0e0"}; /* Light grey for unselected tabs */
+	flex: 1 0 138px;
+	margin: 0;
+	padding: 11px 10px;
+	font-weight: bold;
+	background-color: ${(props) => (props.$isActive ? "#fff" : "#f3f7fb")};
+	border: 1px solid
+		${(props) => (props.$isActive ? "#9ecdf8" : "rgba(16, 24, 40, 0.08)")};
+	border-radius: 8px;
 	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
-	transition: all 0.3s ease; /* Smooth transition for changes */
-	min-width: 25px; /* Minimum width of the tab */
-	width: 100%; /* Full width within the container */
-	text-align: center; /* Center the text inside the tab */
-	/* Additional styling for tabs */
+		props.$isActive ? "0 6px 16px rgba(30, 136, 229, 0.16)" : "none"};
+	transition: all 0.3s ease;
+	min-width: 0;
+	text-align: center;
 	z-index: 100;
-	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "black" : "black")};
+	font-size: 0.95rem;
+	color: #18212f;
+	line-height: 1.25;
+	align-items: center;
+	justify-content: center;
+	min-height: 52px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 
 	@media (max-width: 1600px) {
-		font-size: 1rem;
-		padding: 10px 1px; /* Adjust padding as needed */
+		font-size: 0.88rem;
+		padding: 10px 8px;
+	}
+
+	@media (max-width: 760px) {
+		flex: 0 0 auto;
+		font-size: 0.74rem;
+		min-width: 92px;
+		min-height: 48px;
+		padding: 8px 10px;
 	}
 `;

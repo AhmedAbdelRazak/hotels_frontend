@@ -36,8 +36,17 @@ const labels = {
 		walletAdded: "Wallet added",
 		walletUsed: "Reservation deductions",
 		balance: "Current balance",
+		outstandingReservations: "Outstanding reservations",
+		availableWallet: "Available wallet",
+		commercialModel: "Model",
+		commissionOnly: "Commission only",
+		walletInventory: "Inventory wallet",
+		mixedModel: "Wallet + commission",
+		noWalletAgent:
+			"This agent is commission-only. Reservations are visible for commission review and do not create wallet debt.",
 		commissionDue: "Commission due",
 		reservations: "Reservations",
+		reservationValue: "Reservation value",
 		pending: "Pending confirmation",
 		transactions: "Wallet movements",
 		reservationDeductions: "Reservations deducted from wallet",
@@ -98,6 +107,18 @@ Object.assign(labels.ar, {
 		"اختر الوكيل أولاً لعرض حركات المحفظة والحجوزات المخصومة.",
 });
 
+Object.assign(labels.ar, {
+	outstandingReservations: "قيمة حجوزات معلقة",
+	availableWallet: "رصيد متاح",
+	commercialModel: "النموذج",
+	commissionOnly: "عمولة فقط",
+	walletInventory: "محفظة مخزون",
+	mixedModel: "محفظة وعمولة",
+	reservationValue: "قيمة الحجوزات",
+	noWalletAgent:
+		"هذا الوكيل يعمل بنظام العمولة فقط. الحجوزات تظهر لمراجعة العمولة ولا تنشئ مديونية محفظة.",
+});
+
 const normalizeId = (value) => {
 	if (!value) return "";
 	if (typeof value === "object") return String(value._id || value.id || "");
@@ -109,6 +130,35 @@ const money = (value) =>
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});
+
+const agentCommercialModel = (record = {}) =>
+	record.commercialModel || record.agent?.agentCommercialModel || "wallet_inventory";
+
+const commercialModelLabel = (record = {}, txt = labels.en) => {
+	const model = agentCommercialModel(record);
+	if (model === "commission_only") return txt.commissionOnly || "Commission only";
+	if (model === "mixed") return txt.mixedModel || "Wallet + commission";
+	return txt.walletInventory || "Inventory wallet";
+};
+
+const walletBalancePresentation = (record = {}, txt = labels.en) => {
+	const balance = Number(record.balance || 0);
+	if (agentCommercialModel(record) === "commission_only" || record.walletRequired === false) {
+		return {
+			label: txt.commissionOnly || "Commission only",
+			value: txt.commissionOnly || "Commission only",
+			tone: "purple",
+		};
+	}
+	return {
+		label:
+			balance < 0
+				? txt.outstandingReservations || "Outstanding reservations"
+				: txt.availableWallet || txt.balance || "Current balance",
+		value: `${money(Math.abs(balance))} SAR`,
+		tone: balance < 0 ? "orange" : "green",
+	};
+};
 
 const toTitleCase = (value = "") =>
 	String(value || "")
@@ -234,12 +284,17 @@ const ManagerFinancialsModal = ({
 	const activeReservations = Array.isArray(activeAgent?.reservations)
 		? activeAgent.reservations
 		: [];
+	const activeIsCommissionOnly =
+		agentCommercialModel(activeAgent || {}) === "commission_only" ||
+		activeAgent?.walletRequired === false;
 
 	const exportExcel = useCallback(() => {
 		const summaryRows = agents.map((item) => ({
 			Agent: item.agent?.name || "",
 			Company: item.agent?.companyName || "",
 			Email: item.agent?.email || "",
+			Model: commercialModelLabel(item, labels.en),
+			"Opening Credit": item.openingWalletCredit,
 			"Wallet Added": item.walletAdded,
 			"Reservation Deductions": item.walletUsed,
 			Balance: item.balance,
@@ -329,6 +384,14 @@ const ManagerFinancialsModal = ({
 				),
 			},
 			{
+				title: txt.commercialModel,
+				render: (_, row) => (
+					<Tag color={agentCommercialModel(row) === "commission_only" ? "purple" : "blue"}>
+						{commercialModelLabel(row, txt)}
+					</Tag>
+				),
+			},
+			{
 				title: txt.walletAdded,
 				dataIndex: "walletAdded",
 				render: (value) => `${money(value)} SAR`,
@@ -341,13 +404,17 @@ const ManagerFinancialsModal = ({
 			{
 				title: txt.balance,
 				dataIndex: "balance",
-				render: (value) => (
-					<Tag color={Number(value || 0) >= 0 ? "green" : "red"}>
-						{money(value)} SAR
-					</Tag>
-				),
+				render: (_, row) => {
+					const presentation = walletBalancePresentation(row, txt);
+					return <Tag color={presentation.tone}>{presentation.value}</Tag>;
+				},
 			},
 			{ title: txt.reservations, dataIndex: "totalReservations" },
+			{
+				title: txt.reservationValue,
+				dataIndex: "totalReservationValue",
+				render: (value) => `${money(value)} SAR`,
+			},
 			{
 				title: txt.commissionDue,
 				dataIndex: "commissionDue",
@@ -542,7 +609,7 @@ const ManagerFinancialsModal = ({
 								rowKey={(row) => normalizeId(row.agent)}
 								size='small'
 								pagination={{ pageSize: 6 }}
-								scroll={{ x: 980 }}
+								scroll={{ x: 1120 }}
 								onRow={(row) => ({
 									onClick: () => setSelectedAgentId(normalizeId(row.agent)),
 								})}
@@ -555,6 +622,10 @@ const ManagerFinancialsModal = ({
 						{agents.length && !activeAgent ? (
 							<RequiredNotice>{txt.chooseAgentFirst}</RequiredNotice>
 						) : (
+							<>
+							{activeIsCommissionOnly && (
+								<FinanceNotice>{txt.noWalletAgent}</FinanceNotice>
+							)}
 							<DetailGrid>
 							<Panel>
 								<PanelTitle>
@@ -574,7 +645,9 @@ const ManagerFinancialsModal = ({
 							<Panel>
 								<PanelTitle>
 									<BankOutlined />
-									{txt.reservationDeductions}
+									{activeIsCommissionOnly
+										? txt.reservations
+										: txt.reservationDeductions}
 								</PanelTitle>
 								<Table
 									dataSource={activeReservations}
@@ -587,6 +660,7 @@ const ManagerFinancialsModal = ({
 								/>
 							</Panel>
 							</DetailGrid>
+							</>
 						)}
 					</>
 				) : (
@@ -853,6 +927,17 @@ const RequiredNotice = styled.div`
 	color: #8a4b00;
 	font-weight: 950;
 	text-align: center;
+`;
+
+const FinanceNotice = styled.div`
+	margin-bottom: 0.85rem;
+	padding: 0.85rem 1rem;
+	border: 1px solid #d8c7ff;
+	border-radius: 14px;
+	background: #f7f2ff;
+	color: #5b21b6;
+	font-weight: 900;
+	line-height: 1.35;
 `;
 
 const PanelTitle = styled.h3`

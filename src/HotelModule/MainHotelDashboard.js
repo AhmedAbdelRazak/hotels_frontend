@@ -1374,6 +1374,8 @@ const SCOPED_DASHBOARD_WORDS = {
 		payments: "Payments",
 		financials: "Financials",
 		walletBalance: "Wallet balance",
+		outstandingReservations: "Outstanding reservations",
+		commissionOnly: "Commission only",
 		openHotel: "Open hotel",
 		loading: "Loading assigned hotels...",
 		noHotels: "No hotels are assigned to this account yet.",
@@ -1435,6 +1437,28 @@ SCOPED_DASHBOARD_WORDS.ar.financials = "المالية";
 SCOPED_DASHBOARD_WORDS.ar.walletBalance = "رصيد المحفظة";
 SCOPED_DASHBOARD_WORDS.ar.roleLabels.reservationemployee =
 	"مساحة مسؤول الحجوزات";
+
+SCOPED_DASHBOARD_WORDS.ar.outstandingReservations = "قيمة حجوزات معلقة";
+SCOPED_DASHBOARD_WORDS.ar.commissionOnly = "عمولة فقط";
+
+const agentWalletDisplay = (wallet = {}, text = SCOPED_DASHBOARD_WORDS.en) => {
+	const commercialModel =
+		wallet.commercialModel || wallet.agent?.agentCommercialModel || "";
+	if (commercialModel === "commission_only" || wallet.walletRequired === false) {
+		return {
+			value: text.commissionOnly || "Commission only",
+			label: text.walletBalance || "Wallet balance",
+		};
+	}
+	const balance = Number(wallet.balance || 0);
+	return {
+		value: Math.abs(balance).toLocaleString("en-US"),
+		label:
+			balance < 0
+				? text.outstandingReservations || "Outstanding reservations"
+				: text.walletBalance || "Wallet balance",
+	};
+};
 
 const ScopedUserMainDashboard = ({ user, token }) => {
 	const history = useHistory();
@@ -1746,6 +1770,10 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					<AgentHotelGrid>
 						{orderedHotels.map((hotel) => {
 							const summary = summaries[hotel._id] || {};
+							const walletDisplay = agentWalletDisplay(
+								walletSummaries[hotel._id] || {},
+								TXT
+							);
 							const active = hotel._id === selectedHotelId;
 							return (
 								<AgentHotelCard key={hotel._id} $active={active}>
@@ -1794,12 +1822,8 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 										</AgentMiniStat>
 										{roleKey === "ordertaker" && (
 											<AgentMiniStat>
-												<strong>
-													{Number(
-														walletSummaries[hotel._id]?.balance || 0
-													).toLocaleString("en-US")}
-												</strong>
-												<span>{TXT.walletBalance || "Wallet balance"}</span>
+												<strong>{walletDisplay.value}</strong>
+												<span>{walletDisplay.label}</span>
 											</AgentMiniStat>
 										)}
 									</AgentCardStats>
@@ -1903,6 +1927,63 @@ const getDefaultAccessForRoles = (roleDescriptions = []) => [
 	...new Set(roleDescriptions.flatMap((role) => getDefaultAccess(role))),
 ];
 
+const agentCommercialModelOptions = [
+	{
+		value: "wallet_inventory",
+		en: "Inventory wallet",
+		ar: "محفظة مخزون",
+		enHint: "Reservations reduce the agent wallet balance.",
+		arHint: "الحجوزات تخصم من رصيد محفظة الوكيل.",
+	},
+	{
+		value: "commission_only",
+		en: "Commission only",
+		ar: "عمولة فقط",
+		enHint: "Reservations are tracked for commission without wallet debt.",
+		arHint: "تظهر الحجوزات للعمولة بدون مديونية محفظة.",
+	},
+	{
+		value: "mixed",
+		en: "Wallet + commission",
+		ar: "محفظة وعمولة",
+		enHint: "Use wallet tracking and commission reporting together.",
+		arHint: "استخدم المحفظة مع تتبع العمولة معاً.",
+	},
+];
+
+const normalizeAgentCommercialModel = (value) =>
+	agentCommercialModelOptions.some((option) => option.value === value)
+		? value
+		: "wallet_inventory";
+
+const parseAccountMoney = (value) => {
+	const parsed = Number(String(value ?? 0).replace(/,/g, "").trim());
+	return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : 0;
+};
+
+const isAgentRoleSelected = (roleDescriptions = []) =>
+	(Array.isArray(roleDescriptions) ? roleDescriptions : []).includes("ordertaker");
+
+const buildAgentOpeningBalances = (hotelIds = [], amount = 0) =>
+	(Array.isArray(hotelIds) ? hotelIds : [])
+		.filter(Boolean)
+		.map((hotelId) => ({ hotelId, amount: parseAccountMoney(amount) }));
+
+const getAgentOpeningCreditForHotels = (account = {}, hotelIds = []) => {
+	const balances = Array.isArray(account.agentWalletOpeningBalances)
+		? account.agentWalletOpeningBalances
+		: [];
+	const normalizedHotelIds = (Array.isArray(hotelIds) ? hotelIds : [])
+		.map((hotelId) => String(hotelId || ""))
+		.filter(Boolean);
+	const matched = balances.find((entry) =>
+		normalizedHotelIds.includes(String(entry?.hotelId || entry?.hotel || ""))
+	);
+	return parseAccountMoney(
+		matched?.amount ?? account.agentOpeningWalletCredit ?? 0
+	);
+};
+
 const ACCOUNT_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 const fileToCompanyDocument = (file) =>
@@ -1982,6 +2063,8 @@ const OwnerAccountsModal = ({
 		companyOfficialName: "",
 		companyEin: "",
 		companyDocuments: [],
+		agentCommercialModel: "wallet_inventory",
+		agentOpeningWalletCredit: "",
 		password: "",
 		password2: "",
 		roleDescriptions: ["reception"],
@@ -1998,6 +2081,8 @@ const OwnerAccountsModal = ({
 		companyOfficialName: "",
 		companyEin: "",
 		companyDocuments: [],
+		agentCommercialModel: "wallet_inventory",
+		agentOpeningWalletCredit: "",
 		password: "",
 		roleDescriptions: ["reception"],
 		accessTo: getDefaultAccessForRoles(["reception"]),
@@ -2046,6 +2131,27 @@ const OwnerAccountsModal = ({
 							"This attachment has no saved preview file. Remove it and upload it again if it is an older record.",
 						confirmDeactivate: "Deactivate this account?",
 						confirmActivate: "Activate this account?",
+				  },
+		[isRTL]
+	);
+	const agentAccountText = useMemo(
+		() =>
+			isRTL
+				? {
+						commercialModel: "طريقة عمل الوكيل",
+						openingWalletCredit: "رصيد افتتاحي للمحفظة",
+						openingWalletHint:
+							"اتركه صفر إذا لم يكن لدى الوكيل رصيد مسبق. يطبق على الفنادق المختارة.",
+						commercialHint:
+							"حدد هل الوكيل يشتري مخزوناً من المحفظة أو يعمل بعمولة فقط.",
+				  }
+				: {
+						commercialModel: "Agent business model",
+						openingWalletCredit: "Opening wallet credit",
+						openingWalletHint:
+							"Leave as zero when this agent has no starting wallet credit. Applies to the selected hotels.",
+						commercialHint:
+							"Choose whether this agent buys inventory by wallet, works by commission, or uses both.",
 				  },
 		[isRTL]
 	);
@@ -2358,6 +2464,8 @@ const OwnerAccountsModal = ({
 			companyOfficialName: "",
 			companyEin: "",
 			companyDocuments: [],
+			agentCommercialModel: "wallet_inventory",
+			agentOpeningWalletCredit: "",
 			password: "",
 			password2: "",
 			roleDescriptions: ["reception"],
@@ -2393,6 +2501,15 @@ const OwnerAccountsModal = ({
 		const primaryRole =
 			selectedRoles.find((item) => item.value === "hotelmanager") ||
 			selectedRoles[0];
+		const isAgentAccount = selectedRoleDescriptions.includes("ordertaker");
+		const commercialModel = normalizeAgentCommercialModel(
+			form.agentCommercialModel
+		);
+		const openingWalletCredit = isAgentAccount
+			? commercialModel === "commission_only"
+				? 0
+				: parseAccountMoney(form.agentOpeningWalletCredit)
+			: 0;
 		setCreating(true);
 		signupHotelStaff(userId, token, {
 			name: form.name,
@@ -2402,6 +2519,12 @@ const OwnerAccountsModal = ({
 			companyOfficialName: form.companyOfficialName,
 			companyEin: form.companyEin,
 			companyDocuments: normalizeCompanyDocuments(form.companyDocuments),
+			agentCommercialModel: isAgentAccount ? commercialModel : "wallet_inventory",
+			agentOpeningWalletCredit: openingWalletCredit,
+			agentWalletOpeningBalances: buildAgentOpeningBalances(
+				selectedHotelIds,
+				openingWalletCredit
+			),
 			password: form.password,
 			password2: form.password2,
 			role: primaryRole.role,
@@ -2453,6 +2576,13 @@ const OwnerAccountsModal = ({
 			companyOfficialName: account.companyOfficialName || "",
 			companyEin: account.companyEin || "",
 			companyDocuments: normalizeCompanyDocuments(account.companyDocuments),
+			agentCommercialModel: normalizeAgentCommercialModel(
+				account.agentCommercialModel
+			),
+			agentOpeningWalletCredit: getAgentOpeningCreditForHotels(
+				account,
+				selectedHotelIds
+			),
 			password: "",
 			roleDescriptions: normalizedRoles.length ? normalizedRoles : ["reception"],
 			accessTo: Array.isArray(account.accessTo)
@@ -2525,6 +2655,17 @@ const OwnerAccountsModal = ({
 		const primaryRole =
 			selectedRoles.find((item) => item.value === "hotelmanager") ||
 			selectedRoles[0];
+		const isAgentAccount = selectedRoles.some(
+			(item) => item.value === "ordertaker"
+		);
+		const commercialModel = normalizeAgentCommercialModel(
+			editForm.agentCommercialModel
+		);
+		const openingWalletCredit = isAgentAccount
+			? commercialModel === "commission_only"
+				? 0
+				: parseAccountMoney(editForm.agentOpeningWalletCredit)
+			: 0;
 		const payload = {
 			name: editForm.name,
 			email: editForm.email,
@@ -2533,6 +2674,12 @@ const OwnerAccountsModal = ({
 			companyOfficialName: editForm.companyOfficialName,
 			companyEin: editForm.companyEin,
 			companyDocuments: normalizeCompanyDocuments(editForm.companyDocuments),
+			agentCommercialModel: isAgentAccount ? commercialModel : "wallet_inventory",
+			agentOpeningWalletCredit: openingWalletCredit,
+			agentWalletOpeningBalances: buildAgentOpeningBalances(
+				selectedHotelIds,
+				openingWalletCredit
+			),
 			role: primaryRole.role,
 			roleDescription: primaryRole.value,
 			roles: selectedRoles.map((item) => item.role),
@@ -2812,16 +2959,13 @@ const OwnerAccountsModal = ({
 			onCancel={onClose}
 			footer={null}
 			width='min(97vw, 1540px)'
+			style={{ top: 58 }}
 			bodyStyle={{ padding: "14px 18px 16px" }}
 			destroyOnClose={false}
 			className='manager-accounts-modal'
 		>
 			<AccountsModalShell $isRTL={isRTL}>
 				<AccountsHero>
-					<div>
-						<span>{WORDS.accountsTitle}</span>
-						<p>{WORDS.accountsSubtitle}</p>
-					</div>
 					<Button onClick={refreshAccounts} loading={loading}>
 						{WORDS.refresh}
 					</Button>
@@ -2843,18 +2987,11 @@ const OwnerAccountsModal = ({
 							),
 							children: (
 								<AccountForm onSubmit={createAccount}>
-									<FormIntro>
-										<div>
-											<strong>{WORDS.addAccount}</strong>
-											<span>{WORDS.formRequiredNote}</span>
-										</div>
-									</FormIntro>
 									<SelectionBlock>
 										<SelectionHeader>
 											<span>{WORDS.chooseHotels || WORDS.chooseHotel}</span>
 											<Requirement $required>{WORDS.required}</Requirement>
 										</SelectionHeader>
-										<FieldHint>{WORDS.hotelsHint}</FieldHint>
 										<SelectionGrid>
 											{hotelOptions.map((hotel) => (
 												<SelectionPill
@@ -2878,7 +3015,6 @@ const OwnerAccountsModal = ({
 											<span>{WORDS.accountRoles || WORDS.accountRole}</span>
 											<Requirement $required>{WORDS.required}</Requirement>
 										</SelectionHeader>
-										<FieldHint>{WORDS.rolesHint}</FieldHint>
 										<SelectionGrid>
 											{accountRoleOptions.map((option) => (
 												<SelectionPill
@@ -2897,6 +3033,55 @@ const OwnerAccountsModal = ({
 											))}
 										</SelectionGrid>
 									</SelectionBlock>
+									{isAgentRoleSelected(form.roleDescriptions) && (
+										<AgentCommercialBlock>
+											<SelectionHeader>
+												<span>{agentAccountText.commercialModel}</span>
+												<Requirement>{WORDS.optional}</Requirement>
+											</SelectionHeader>
+											<FieldHint>{agentAccountText.commercialHint}</FieldHint>
+											<AgentCommercialOptions>
+												{agentCommercialModelOptions.map((option) => (
+													<AgentCommercialOption
+														type='button'
+														key={option.value}
+														$active={form.agentCommercialModel === option.value}
+														onClick={() =>
+															updateForm("agentCommercialModel", option.value)
+														}
+													>
+														<strong>{isRTL ? option.ar : option.en}</strong>
+														<span>
+															{isRTL ? option.arHint : option.enHint}
+														</span>
+													</AgentCommercialOption>
+												))}
+											</AgentCommercialOptions>
+											<label>
+												<FieldLabel>
+													<span>{agentAccountText.openingWalletCredit}</span>
+													<Requirement>{WORDS.optional}</Requirement>
+												</FieldLabel>
+												<input
+													type='number'
+													min='0'
+													step='0.01'
+													dir='ltr'
+													value={form.agentOpeningWalletCredit}
+													disabled={
+														form.agentCommercialModel === "commission_only"
+													}
+													onChange={(event) =>
+														updateForm(
+															"agentOpeningWalletCredit",
+															event.target.value
+														)
+													}
+												/>
+												<FieldHint>{agentAccountText.openingWalletHint}</FieldHint>
+											</label>
+										</AgentCommercialBlock>
+									)}
 									<label>
 										<FieldLabel>
 											<span>{WORDS.accountName}</span>
@@ -3091,7 +3276,6 @@ const OwnerAccountsModal = ({
 								<span>{WORDS.chooseHotels || WORDS.chooseHotel}</span>
 								<Requirement $required>{WORDS.required}</Requirement>
 							</SelectionHeader>
-							<FieldHint>{WORDS.hotelsHint}</FieldHint>
 							<SelectionGrid>
 								{hotelOptions.map((hotel) => {
 									const hotelId = normalizeHotelId(hotel._id);
@@ -3248,6 +3432,51 @@ const OwnerAccountsModal = ({
 								))}
 							</SelectionGrid>
 						</SelectionBlock>
+						{isAgentRoleSelected(editForm.roleDescriptions) && (
+							<AgentCommercialBlock>
+								<SelectionHeader>
+									<span>{agentAccountText.commercialModel}</span>
+									<Requirement>{WORDS.optional}</Requirement>
+								</SelectionHeader>
+								<FieldHint>{agentAccountText.commercialHint}</FieldHint>
+								<AgentCommercialOptions>
+									{agentCommercialModelOptions.map((option) => (
+										<AgentCommercialOption
+											type='button'
+											key={option.value}
+											$active={editForm.agentCommercialModel === option.value}
+											onClick={() =>
+												updateEditForm("agentCommercialModel", option.value)
+											}
+										>
+											<strong>{isRTL ? option.ar : option.en}</strong>
+											<span>{isRTL ? option.arHint : option.enHint}</span>
+										</AgentCommercialOption>
+									))}
+								</AgentCommercialOptions>
+								<label>
+									<FieldLabel>
+										<span>{agentAccountText.openingWalletCredit}</span>
+										<Requirement>{WORDS.optional}</Requirement>
+									</FieldLabel>
+									<input
+										type='number'
+										min='0'
+										step='0.01'
+										dir='ltr'
+										value={editForm.agentOpeningWalletCredit}
+										disabled={editForm.agentCommercialModel === "commission_only"}
+										onChange={(event) =>
+											updateEditForm(
+												"agentOpeningWalletCredit",
+												event.target.value
+											)
+										}
+									/>
+									<FieldHint>{agentAccountText.openingWalletHint}</FieldHint>
+								</label>
+							</AgentCommercialBlock>
+						)}
 						<AccessPicker>
 							<SelectionHeader>
 								<span>{WORDS.accountAccess}</span>
@@ -4659,32 +4888,22 @@ const AccountsModalShell = styled.div`
 const AccountsHero = styled.div`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-end;
 	gap: 1rem;
-	padding: 0.55rem 0.75rem;
-	margin-bottom: 0.42rem;
-	border-radius: 12px;
-	border: 1px solid #cfe8ff;
-	background: linear-gradient(135deg, #eef8ff 0%, #ffffff 100%);
+	padding: 0 0 0.35rem;
+	margin-bottom: 0.2rem;
 
-	span {
-		display: block;
-		font-size: 1rem;
+	.ant-btn {
 		font-weight: 900;
-		color: #102033;
-	}
-
-	p {
-		margin: 0.06rem 0 0;
-		color: #54708f;
-		font-weight: 700;
-		line-height: 1.3;
-		font-size: 0.8rem;
+		border-radius: 9px;
 	}
 
 	@media (max-width: 620px) {
-		align-items: stretch;
-		flex-direction: column;
+		justify-content: stretch;
+
+		.ant-btn {
+			width: 100%;
+		}
 	}
 `;
 
@@ -4938,34 +5157,6 @@ const ActiveAccountToggle = styled.label`
 	}
 `;
 
-const FormIntro = styled.div`
-	grid-column: 1 / -1;
-	display: grid;
-	gap: 0.16rem;
-	padding: 0.72rem 0.85rem;
-	border: 1px solid #b8dcff;
-	border-radius: 12px;
-	background: linear-gradient(135deg, #e8f4ff 0%, #ffffff 100%);
-
-	> div {
-		display: grid;
-		gap: 0.12rem;
-		min-width: 0;
-	}
-
-	strong {
-		color: #0b5fa8;
-		font-size: 0.98rem;
-	}
-
-	span {
-		color: #4b6584;
-		font-size: 0.82rem;
-		font-weight: 800;
-		line-height: 1.25;
-	}
-`;
-
 const FieldLabel = styled.span`
 	display: flex;
 	align-items: center;
@@ -5161,6 +5352,53 @@ const SelectionGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
 	gap: 0.5rem;
+`;
+
+const AgentCommercialBlock = styled.div`
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.5rem;
+	padding: 0.75rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 12px;
+	background: #ffffff;
+
+	label {
+		max-width: 360px;
+	}
+`;
+
+const AgentCommercialOptions = styled.div`
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 0.5rem;
+`;
+
+const AgentCommercialOption = styled.button`
+	display: grid;
+	gap: 0.18rem;
+	min-height: 72px;
+	padding: 0.62rem 0.72rem;
+	border: 1px solid ${(p) => (p.$active ? "#1677ff" : "#d8e6f5")};
+	border-radius: 10px;
+	background: ${(p) => (p.$active ? "#eef7ff" : "#ffffff")};
+	color: #102033;
+	text-align: inherit;
+	cursor: pointer;
+	box-shadow: ${(p) =>
+		p.$active ? "0 8px 18px rgba(22, 119, 255, 0.12)" : "none"};
+
+	strong {
+		font-size: 0.86rem;
+		font-weight: 950;
+	}
+
+	span {
+		color: #61738a;
+		font-size: 0.72rem;
+		font-weight: 800;
+		line-height: 1.25;
+	}
 `;
 
 const SelectionPill = styled.button`

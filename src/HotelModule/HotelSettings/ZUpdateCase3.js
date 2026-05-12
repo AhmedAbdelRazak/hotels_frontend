@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Form, Input, Button, message, Checkbox, Modal } from "antd";
 import styled from "styled-components";
 import FullCalendar from "@fullcalendar/react";
@@ -9,6 +9,12 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import ZCustomInput from "./ZCustomInput";
 import { isAuthenticated } from "../../auth";
+import {
+	buildCalendarRateTitle,
+	getCalendarRateClassNames,
+	getCalendarRateColor,
+	isCalendarRateRestricted,
+} from "./calendarPricingUtils";
 
 const ZUpdateCase3 = ({
 	hotelDetails,
@@ -31,15 +37,57 @@ const ZUpdateCase3 = ({
 	setRootPrice,
 }) => {
 	const calendarRef = useRef(null);
+	const pricingRatesRef = useRef(existingRoomDetails?.pricingRate || []);
 	const priceInputRef = useRef(null);
 	const [isBlocked, setIsBlocked] = useState(false);
 	const { user } = isAuthenticated();
-	// Helper function to truncate displayName to 10 characters followed by "..."
-	// eslint-disable-next-line
-	const truncateDisplayName = (name) => {
-		return name.length > 10 ? `${name.slice(0, 10)}...` : name;
+	const isArabic = chosenLanguage === "Arabic";
+	const calendarText = {
+		dateRangeRequired: isArabic
+			? "يرجى اختيار نطاق التاريخ"
+			: "Please select a date range",
+	};
+	const selectedRangeEventId = "selected-date-range-highlight";
+	const selectedRangeColor = "#dbeeff";
+
+	useEffect(() => {
+		pricingRatesRef.current = existingRoomDetails?.pricingRate || [];
+		if (calendarRef.current) {
+			calendarRef.current.getApi().refetchEvents();
+		}
+	}, [existingRoomDetails?.pricingRate]);
+
+	const removeSelectedRangeEvents = (calendarApi) => {
+		if (!calendarApi) return;
+		calendarApi
+			.getEvents()
+			.filter(
+				(event) =>
+					event.id === selectedRangeEventId || event.title === "Selected"
+			)
+			.forEach((event) => event.remove());
 	};
 
+	const addSelectedRangeEvent = (start, end) => {
+		if (!start || !end || !calendarRef.current) return;
+		const calendarApi = calendarRef.current.getApi();
+		if (!calendarApi) return;
+
+		const adjustedEnd = new Date(end);
+		adjustedEnd.setDate(adjustedEnd.getDate() + 1);
+
+		removeSelectedRangeEvents(calendarApi);
+		calendarApi.addEvent({
+			id: selectedRangeEventId,
+			title: "Selected",
+			start: start.toISOString().split("T")[0],
+			end: adjustedEnd.toISOString().split("T")[0],
+			allDay: true,
+			display: "background",
+			backgroundColor: selectedRangeColor,
+			classNames: ["selected-range-highlight"],
+		});
+	};
 	// Prepopulate selected date range and pricing events for the selected room
 	useEffect(() => {
 		if (
@@ -56,36 +104,47 @@ const ZUpdateCase3 = ({
 		// eslint-disable-next-line
 	}, [existingRoomDetails]);
 
-	const handleVisibleRangeChange = (info) => {
-		if (!calendarRef.current) return; // Ensure the calendar is initialized
-		const calendarApi = calendarRef.current.getApi();
-		if (!calendarApi) return; // Ensure the API is available
-
-		const visibleStart = info ? info.start : moment().startOf("month").toDate();
-		const visibleEnd = info ? info.end : moment().endOf("month").toDate();
-
-		// Filter events for the visible range
-		const filteredEvents = (existingRoomDetails.pricingRate || [])
-			.filter((rate) => {
-				const eventDate = new Date(rate.calendarDate);
-				return eventDate >= visibleStart && eventDate <= visibleEnd;
-			})
-			.map((rate) => ({
-				title: `Price: ${rate.price} SAR${
-					rate.rootPrice && user?.role === 1000
-						? ` | Root: ${rate.rootPrice} SAR`
-						: ""
-				}`,
-				start: rate.calendarDate,
-				end: rate.calendarDate,
-				allDay: true,
-				backgroundColor: rate.color || getColorForPrice(rate.price),
-			}));
-
-		// Clear previous events and add new ones
-		calendarApi.getEvents().forEach((event) => event.remove());
-		filteredEvents.forEach((event) => calendarApi.addEvent(event));
+	const handleVisibleRangeChange = () => {
+		if (selectedDateRange?.[0] && selectedDateRange?.[1]) {
+			addSelectedRangeEvent(selectedDateRange[0], selectedDateRange[1]);
+		}
 	};
+
+	const getCalendarEvents = useCallback(
+		(fetchInfo, successCallback) => {
+			const visibleStart = fetchInfo.start;
+			const visibleEnd = fetchInfo.end;
+			const events = [];
+
+			(pricingRatesRef.current || []).forEach((rate) => {
+				if (!rate?.calendarDate) return;
+				const eventDate = new Date(`${rate.calendarDate}T00:00:00`);
+				if (eventDate < visibleStart || eventDate >= visibleEnd) return;
+
+				const isRestricted = isCalendarRateRestricted(rate);
+				events.push({
+					title: buildCalendarRateTitle({
+						rate,
+						isArabic,
+						includeRoot: user?.role === 1000,
+					}),
+					start: rate.calendarDate,
+					end: rate.calendarDate,
+					allDay: true,
+					backgroundColor: getCalendarRateColor(rate, getColorForPrice),
+					borderColor: getCalendarRateColor(rate, getColorForPrice),
+					textColor: "#ffffff",
+					classNames: getCalendarRateClassNames(rate),
+					extendedProps: {
+						isRestricted,
+					},
+				});
+			});
+
+			successCallback(events);
+		},
+		[getColorForPrice, isArabic, user?.role]
+	);
 
 	// Helper function to generate an array of dates between two dates
 	const generateDateRangeArray = (startDate, endDate) => {
@@ -106,24 +165,11 @@ const ZUpdateCase3 = ({
 		setSelectedDateRange([start, end]);
 
 		if (start && end) {
-			const adjustedEnd = new Date(end);
-			adjustedEnd.setDate(adjustedEnd.getDate() + 1);
-
 			const calendarApi = calendarRef.current.getApi();
-			const tempEvent = {
-				title: "Selected",
-				start: start.toISOString().split("T")[0],
-				end: adjustedEnd.toISOString().split("T")[0],
-				allDay: true,
-				backgroundColor: "lightgrey",
-			};
-
-			const existingSelectedEvents = calendarApi
-				.getEvents()
-				.filter((event) => event.title === "Selected");
-			existingSelectedEvents.forEach((event) => event.remove());
-
-			calendarApi.addEvent(tempEvent);
+			removeSelectedRangeEvents(calendarApi);
+			addSelectedRangeEvent(start, end);
+		} else if (calendarRef.current) {
+			removeSelectedRangeEvents(calendarRef.current.getApi());
 		}
 	};
 
@@ -140,14 +186,29 @@ const ZUpdateCase3 = ({
 			dateRange: dates,
 		});
 
-		// Ensure the selected range is highlighted in grey
+		// Keep the selected range visibly highlighted on the calendar.
 		handleDatePickerChange([selectedStart, selectedEnd]);
 	};
 
 	// Submit the pricing data for the selected date range
 	const handleDateRangeSubmit = (isBlocking = false) => {
+		if (!selectedDateRange?.[0] || !selectedDateRange?.[1]) {
+			setPriceError(true);
+			message.error(
+				isArabic
+					? "يرجى تحديد نطاق التاريخ أولاً."
+					: "Please select a date range first."
+			);
+			return;
+		}
+
 		if ((!pricingRate && !isBlocking) || (!rootPrice && !isBlocking)) {
 			setPriceError(true);
+			message.error(
+				isArabic
+					? "يرجى إدخال السعر قبل إضافة النطاق."
+					: "Please enter the price before adding this range."
+			);
 			return;
 		}
 
@@ -166,6 +227,19 @@ const ZUpdateCase3 = ({
 				? "black"
 				: getColorForPrice(pricingRate, selectedDateRange.join("-")),
 		}));
+		const newPricingDateSet = new Set(
+			newPricingRates.map((rate) => rate.calendarDate)
+		);
+		const previousPricingRates = Array.isArray(pricingRatesRef.current)
+			? pricingRatesRef.current
+			: [];
+		const mergedPricingRates = [
+			...previousPricingRates.filter(
+				(rate) => !newPricingDateSet.has(rate.calendarDate)
+			),
+			...newPricingRates,
+		];
+		pricingRatesRef.current = mergedPricingRates;
 
 		// Update the roomCountDetails state
 		setHotelDetails((prevDetails) => {
@@ -176,21 +250,7 @@ const ZUpdateCase3 = ({
 			);
 
 			if (roomIndex > -1) {
-				let existingRates =
-					updatedRoomCountDetails[roomIndex].pricingRate || [];
-
-				// Remove overlapping dates
-				existingRates = existingRates.filter(
-					(rate) =>
-						!newPricingRates.some(
-							(newRate) => newRate.calendarDate === rate.calendarDate
-						)
-				);
-
-				updatedRoomCountDetails[roomIndex].pricingRate = [
-					...existingRates,
-					...newPricingRates,
-				];
+				updatedRoomCountDetails[roomIndex].pricingRate = mergedPricingRates;
 			} else {
 				updatedRoomCountDetails.push({
 					_id: existingRoomDetails._id,
@@ -205,35 +265,10 @@ const ZUpdateCase3 = ({
 			};
 		});
 
-		// Immediately update calendar after state update
-		const calendarApi = calendarRef.current.getApi();
-		calendarApi.getEvents().forEach((event) => event.remove()); // Clear all events
-
-		const updatedEvents = newPricingRates.flatMap((rate) => {
-			const events = [
-				{
-					title: `Price: ${rate.price} SAR`,
-					start: rate.calendarDate,
-					end: rate.calendarDate,
-					allDay: true,
-					backgroundColor: rate.color,
-				},
-			];
-
-			if (rate.rootPrice && !isBlocking) {
-				events.push({
-					title: `Root: ${rate.rootPrice} SAR`,
-					start: rate.calendarDate,
-					end: rate.calendarDate,
-					allDay: true,
-					backgroundColor: rate.color,
-				});
-			}
-
-			return events;
-		});
-
-		updatedEvents.forEach((event) => calendarApi.addEvent(event));
+		if (calendarRef.current) {
+			const calendarApi = calendarRef.current.getApi();
+			calendarApi.refetchEvents();
+		}
 
 		handleCancelSelection();
 
@@ -278,18 +313,17 @@ const ZUpdateCase3 = ({
 		setIsBlocked(false);
 
 		const calendarApi = calendarRef.current.getApi();
-		const existingSelectedEvents = calendarApi
-			.getEvents()
-			.filter((event) => event.title === "Selected");
-		existingSelectedEvents.forEach((event) => event.remove());
+		removeSelectedRangeEvents(calendarApi);
 	};
 
 	const renderEventContent = (eventInfo) => {
 		const { title } = eventInfo.event;
+		const isRestricted = eventInfo.event.extendedProps?.isRestricted;
 		const [priceLabel, rootLabel] = title.split(" | ");
 
 		return (
 			<div
+				className={isRestricted ? "calendar-blocked-event-label" : undefined}
 				style={{
 					display: "flex",
 					flexDirection: "column",
@@ -304,35 +338,10 @@ const ZUpdateCase3 = ({
 		);
 	};
 
-	const pricingEvents =
-		existingRoomDetails?.pricingRate?.flatMap((rate) => {
-			const events = [
-				{
-					title: `Price: ${rate.price} SAR`,
-					start: rate.calendarDate,
-					end: rate.calendarDate,
-					allDay: true,
-					backgroundColor: rate.color || getColorForPrice(rate.price),
-				},
-			];
-
-			if (rate.rootPrice && user.role === 1000) {
-				events.push({
-					title: `Root: ${rate.rootPrice} SAR`,
-					start: rate.calendarDate,
-					end: rate.calendarDate,
-					allDay: true,
-					backgroundColor: rate.color || getColorForPrice(rate.price),
-				});
-			}
-
-			return events;
-		}) || [];
-
 	return (
 		<ZUpdateCase3Wrapper
-			isArabic={chosenLanguage === "Arabic"}
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+			isArabic={isArabic}
+			dir={isArabic ? "rtl" : "ltr"}
 		>
 			<div className='row'>
 				<div className='col-md-9'>
@@ -340,8 +349,9 @@ const ZUpdateCase3 = ({
 						ref={calendarRef}
 						plugins={[dayGridPlugin, interactionPlugin]}
 						initialView='dayGridMonth'
-						events={pricingEvents}
+						events={getCalendarEvents}
 						selectable={true}
+						selectMirror={true}
 						headerToolbar={{
 							left: "prev,next today",
 							center: "title",
@@ -350,11 +360,12 @@ const ZUpdateCase3 = ({
 						select={handleCalendarSelect}
 						eventContent={renderEventContent}
 						datesSet={handleVisibleRangeChange}
+						height='auto'
 					/>
 				</div>
 				<div
 					className='col-md-3'
-					style={{ textAlign: chosenLanguage === "Arabic" ? "right" : "" }}
+					style={{ textAlign: isArabic ? "right" : "" }}
 				>
 					<h4 style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
 						{chosenLanguage === "Arabic"
@@ -368,7 +379,7 @@ const ZUpdateCase3 = ({
 						dir='ltr'
 						className='w-100'
 						name='dateRange'
-						rules={[{ required: true, message: "Please select a date range" }]}
+						rules={[{ required: true, message: calendarText.dateRangeRequired }]}
 					>
 						<DatePicker
 							selected={selectedDateRange[0]}
@@ -531,4 +542,77 @@ const ZUpdateCase3 = ({
 
 export default ZUpdateCase3;
 
-const ZUpdateCase3Wrapper = styled.div``;
+const ZUpdateCase3Wrapper = styled.div`
+	.row {
+		align-items: stretch;
+		gap: 1rem;
+	}
+
+	.col-md-9,
+	.col-md-3 {
+		border: 1px solid #d7e7f8;
+		border-radius: 16px;
+		background: #ffffff;
+		padding: 1rem;
+		box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
+	}
+
+	.col-md-9 {
+		flex: 1 1 68%;
+		max-width: none;
+	}
+
+	.col-md-3 {
+		flex: 1 1 280px;
+		max-width: 360px;
+	}
+
+	.fc .fc-toolbar-title {
+		font-size: 1.2rem;
+		font-weight: 900;
+		color: #172033;
+	}
+
+	.fc .fc-button {
+		border-radius: 10px !important;
+		font-weight: 800 !important;
+	}
+
+	.fc-daygrid-day {
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.fc-daygrid-day:hover {
+		background: #f0f7ff;
+	}
+
+	.fc .fc-highlight,
+	.fc .selected-range-highlight,
+	.fc .selected-range-highlight.fc-bg-event {
+		background: #dbeeff !important;
+		opacity: 1 !important;
+	}
+
+	.fc .selected-range-highlight.fc-bg-event {
+		border-radius: 8px;
+		box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.2);
+	}
+
+	.fc .calendar-rate-blocked {
+		background: #111827 !important;
+		border-color: #111827 !important;
+	}
+
+	.fc .calendar-rate-blocked .fc-event-main,
+	.fc .calendar-rate-blocked .fc-event-title,
+	.calendar-blocked-event-label {
+		color: #ffffff !important;
+	}
+
+	@media (max-width: 990px) {
+		.col-md-3 {
+			max-width: none;
+		}
+	}
+`;

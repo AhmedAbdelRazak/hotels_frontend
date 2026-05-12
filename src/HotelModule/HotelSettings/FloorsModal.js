@@ -28,8 +28,32 @@ const FloorsModal = ({
 	rooms,
 	setRooms,
 	values,
+	chosenLanguage,
 }) => {
 	const { user } = isAuthenticated();
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = {
+		title: isArabic ? `بناء غرف الطابق ${clickedFloor}` : `Floor ${clickedFloor} Rooms Builder`,
+		subtitle: isArabic
+			? "حدد عدد الغرف لكل نوع، ثم أنشئ الخريطة لهذا الطابق."
+			: "Set the number of rooms per type, then generate this floor map.",
+		countTitle: isArabic
+			? `أنواع وعدد الغرف في الطابق ${clickedFloor}`
+			: `Room Types & Count In Floor #${clickedFloor}`,
+		total: isArabic ? "الإجمالي" : "Total",
+		roomsInFloor: isArabic ? `غرفة في الطابق ${clickedFloor}` : `Rooms In Floor #${clickedFloor}`,
+		generate: isArabic
+			? `إنشاء غرف الطابق ${clickedFloor}`
+			: `Generate Floor #${clickedFloor} Rooms`,
+		close: isArabic ? "إغلاق" : "Close",
+		maxError: (count, name) =>
+			isArabic
+				? `لا يمكن إضافة أكثر من ${count} غرفة من ${name}.`
+				: `Cannot add more than ${count} rooms for ${name}.`,
+		generated: isArabic
+			? "تم تحديث خريطة الطابق. راجع الغرف ثم احفظ إعدادات الفندق."
+			: "Floor map updated. Review the rooms, then save hotel settings.",
+	};
 
 	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
 
@@ -84,7 +108,11 @@ const FloorsModal = ({
 		}, 0);
 	};
 
-	const totalRooms = getRoomCountTotal(floorDetails.roomCountDetails);
+	const totalRooms = getRoomCountTotal(floorDetails?.roomCountDetails || {});
+	const activeRoomDetails = Array.isArray(hotelDetails?.roomCountDetails)
+		? hotelDetails.roomCountDetails.filter((details) => details.count > 0)
+		: [];
+	const existingRooms = Array.isArray(rooms) ? rooms : [];
 
 	const handleRoomCountChange = (key, value) => {
 		const newRoomCount = Number(value);
@@ -94,9 +122,7 @@ const FloorsModal = ({
 
 		if (newRoomCount > maxRoomCount) {
 			toast.error(
-				`Cannot add more than ${maxRoomCount} rooms for ${
-					roomDetails?.displayName || key
-				}.`
+				labels.maxError(maxRoomCount, roomDetails?.displayName || key)
 			);
 			return;
 		}
@@ -104,7 +130,7 @@ const FloorsModal = ({
 		setFloorDetails((prevDetails) => ({
 			...prevDetails,
 			roomCountDetails: {
-				...prevDetails.roomCountDetails,
+				...(prevDetails.roomCountDetails || {}),
 				[key]: newRoomCount,
 			},
 		}));
@@ -112,7 +138,7 @@ const FloorsModal = ({
 
 	const populateAllRooms = () => {
 		const newRoomsForCurrentFloor = [];
-		const roomTypes = Object.keys(floorDetails.roomCountDetails);
+		const roomTypes = Object.keys(floorDetails.roomCountDetails || {});
 
 		let currentRoomNumber = 1;
 
@@ -158,24 +184,24 @@ const FloorsModal = ({
 			}
 		});
 
-		const updatedRooms = rooms.filter((room) => room.floor !== clickedFloor);
+		const updatedRooms = existingRooms.filter(
+			(room) => room.floor !== clickedFloor
+		);
 		setRooms([...updatedRooms, ...newRoomsForCurrentFloor]);
+		toast.success(labels.generated);
 	};
 
 	const mainForm = () => {
-		const roomTypesCount = hotelDetails.roomCountDetails.filter(
-			(details) => details.count > 0
-		).length;
+		const roomTypesCount = activeRoomDetails.length;
 
 		return (
-			<div className='mx-auto text-center'>
-				<h3 className='form-title'>
-					Room Types & Count In Floor #{clickedFloor}
-				</h3>
-				<div className={`row ${roomTypesCount <= 6 ? "centered-grid" : ""}`}>
-					{hotelDetails.roomCountDetails
-						.filter((details) => details.count > 0)
-						.map((details, i) => {
+			<BuilderContent>
+				<div className='builder-copy'>
+					<h3>{labels.countTitle}</h3>
+					<p>{labels.subtitle}</p>
+				</div>
+				<div className={`rooms-grid ${roomTypesCount <= 6 ? "centered-grid" : ""}`}>
+					{activeRoomDetails.map((details, i) => {
 							const key = getRoomDisplayKey(
 								details.displayName,
 								details.roomType
@@ -187,26 +213,26 @@ const FloorsModal = ({
 										details.displayName ||
 										details.roomType.replace(/([A-Z])/g, " $1").trim()
 									}
-									value={floorDetails.roomCountDetails[key] || 0}
+									value={(floorDetails.roomCountDetails || {})[key] || 0}
 									handleFloorRoomsCount={handleRoomCountChange}
 									keyValue={key}
 									numRoomTypes={roomTypesCount}
+									chosenLanguage={chosenLanguage}
 								/>
 							);
 						})}
-					<div className='col-md-2 my-auto total-rooms'>
-						<h5>
-							Total: {totalRooms ? totalRooms : 0} Rooms In Floor #
-							{clickedFloor}
-						</h5>
-					</div>
+					<TotalRooms>
+						<span>{labels.total}</span>
+						<strong>{totalRooms ? totalRooms : 0}</strong>
+						<small>{labels.roomsInFloor}</small>
+					</TotalRooms>
 				</div>
 				<div className='generate-button'>
-					<button className='btn btn-primary' onClick={populateAllRooms}>
-						Generate Floor #{clickedFloor} Rooms
+					<button type='button' onClick={populateAllRooms}>
+						{labels.generate}
 					</button>
 				</div>
-			</div>
+			</BuilderContent>
 		);
 	};
 
@@ -214,13 +240,12 @@ const FloorsModal = ({
 		<FloorsModalWrapper>
 			<Modal
 				width='70%'
-				title={
-					<div className='modal-title'>{`Floor ${clickedFloor} Rooms Builder`}</div>
-				}
+				title={<div className='modal-title'>{labels.title}</div>}
 				open={modalVisible}
 				onOk={() => {
 					setModalVisible(false);
 				}}
+				okText={labels.close}
 				cancelButtonProps={{ style: { display: "none" } }}
 				onCancel={() => {
 					setModalVisible(false);
@@ -237,34 +262,87 @@ export default FloorsModal;
 // Styled components for FloorsModal
 const FloorsModalWrapper = styled.div`
 	z-index: 18000 !important;
-	.form-container {
-		margin: 0 auto;
-		text-align: center;
-	}
-	.form-title {
-		font-size: 1.3rem;
-		text-decoration: underline;
-		font-weight: bold;
-		margin-bottom: 20px;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 20px;
-	}
-	/* Center the input fields if there are fewer than or equal to 6 room types */
-	.centered-grid {
+`;
+
+const BuilderContent = styled.div`
+	display: grid;
+	gap: 1rem;
+	text-align: center;
+
+	.builder-copy {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-		gap: 20px;
+		gap: 0.25rem;
 	}
-	.total-rooms {
-		font-weight: bold;
+
+	h3 {
+		margin: 0;
 		font-size: 1.2rem;
-		margin-top: 10px;
+		font-weight: 900;
+		color: #102033;
 	}
+
+	p {
+		margin: 0;
+		color: #62748a;
+		font-size: 0.84rem;
+		font-weight: 700;
+	}
+
+	.rooms-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+		gap: 0.75rem;
+		align-items: stretch;
+	}
+
+	.centered-grid {
+		justify-content: center;
+	}
+
 	.generate-button {
-		margin-top: 20px;
+		display: flex;
+		justify-content: center;
+	}
+
+	.generate-button button {
+		min-width: 240px;
+		min-height: 42px;
+		border: 0;
+		border-radius: 999px;
+		background: #1677ff;
+		color: #fff;
+		font-weight: 900;
+		box-shadow: 0 14px 28px rgba(22, 119, 255, 0.2);
+		cursor: pointer;
+		transition: all 0.18s ease;
+	}
+
+	.generate-button button:hover {
+		transform: translateY(-1px);
+		background: #0b5fa8;
+	}
+`;
+
+const TotalRooms = styled.div`
+	display: grid;
+	align-content: center;
+	gap: 0.15rem;
+	min-height: 88px;
+	padding: 0.8rem;
+	border: 1px solid #cfe1f5;
+	border-radius: 14px;
+	background: #f8fbff;
+
+	span,
+	small {
+		color: #62748a;
+		font-size: 0.76rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #0b5fa8;
+		font-size: 1.45rem;
+		font-weight: 900;
 	}
 `;

@@ -353,7 +353,7 @@ const HelperSideDrawer = ({
 						parseFloat(matchedRoom.price?.basePrice) || 0,
 						parseFloat(matchedRoom.defaultCost) || 0,
 						parseFloat(
-							matchedRoom.roomCommission || chat.hotelId.commission || 0.1
+							matchedRoom.roomCommission ?? chat.hotelId.commission ?? 0.1
 						)
 					);
 
@@ -425,7 +425,7 @@ const HelperSideDrawer = ({
 			checkOutDate,
 			parseFloat(matchedRoom.price?.basePrice),
 			parseFloat(matchedRoom.defaultCost),
-			parseFloat(matchedRoom.roomCommission || chat.hotelId.commission || 0.1)
+			parseFloat(matchedRoom.roomCommission ?? chat.hotelId.commission ?? 0.1)
 		);
 
 		console.log("Pricing by Day for Selected Room:", pricingByDay); // Debugging line

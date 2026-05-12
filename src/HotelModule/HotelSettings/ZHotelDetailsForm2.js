@@ -11,7 +11,14 @@ import ZCustomInput from "./ZCustomInput";
 import ZCase0 from "./ZCase0";
 import ZCase1 from "./ZCase1";
 import ZCase2 from "./ZCase2";
+import ZCase3 from "./ZCase3";
 import ZOffersMonthly from "./ZOffersMonthly";
+import {
+	buildCalendarRateTitle,
+	getCalendarRateClassNames,
+	getCalendarRateColor,
+	isCalendarRateRestricted,
+} from "./calendarPricingUtils";
 
 const predefinedColors = [
 	"#1e90ff",
@@ -34,6 +41,11 @@ const predefinedColors = [
 let colorIndex = 0;
 const priceColorMapping = new Map();
 
+const normalizeRoomIdentity = (value) =>
+	String(value || "")
+		.trim()
+		.toLowerCase();
+
 const ZHotelDetailsForm2 = ({
 	hotelDetails,
 	setHotelDetails,
@@ -54,6 +66,7 @@ const ZHotelDetailsForm2 = ({
 }) => {
 	const [selectedDateRange, setSelectedDateRange] = useState([null, null]);
 	const [pricingRate, setPricingRate] = useState("");
+	const [rootPrice, setRootPrice] = useState("");
 	const [customRoomType, setCustomRoomType] = useState("");
 	const [priceError, setPriceError] = useState(false);
 	const [locationModalVisible, setLocationModalVisible] = useState(false);
@@ -77,6 +90,25 @@ const ZHotelDetailsForm2 = ({
 	const [activePricingTab, setActivePricingTab] = useState("custom"); // "custom" | "offers" | "monthly"
 	const isArabic = chosenLanguage === "Arabic";
 
+	useEffect(() => {
+		const hasRootPriceValue =
+			rootPrice !== "" && rootPrice !== null && rootPrice !== undefined;
+		if (currentStep !== 3 || hasRootPriceValue) return;
+
+		const draftRoom = (hotelDetails.roomCountDetails || []).find(
+			(room) => room.myKey === "ThisIsNewKey"
+		);
+		const fallbackRoot =
+			draftRoom?.defaultCost ??
+			draftRoom?.rootPrice ??
+			draftRoom?.price?.basePrice ??
+			"";
+
+		if (fallbackRoot !== "" && fallbackRoot !== null && fallbackRoot !== undefined) {
+			setRootPrice(String(fallbackRoot));
+		}
+	}, [currentStep, hotelDetails.roomCountDetails, rootPrice]);
+
 	const getColorForPrice = useCallback((price, dateRange) => {
 		const key = `${price}-${dateRange}`;
 		if (!priceColorMapping.has(key)) {
@@ -95,42 +127,91 @@ const ZHotelDetailsForm2 = ({
 		});
 	}, [form, hotelDetails]);
 
-	// Safer: guard for calendarRef presence so we don't call getApi() when calendar is unmounted
-	useEffect(() => {
-		if (selectedDateRange[0] && selectedDateRange[1] && calendarRef.current) {
-			const calendarApi = calendarRef.current.getApi();
-			const tempEvent = {
-				title: "Selected",
-				start: selectedDateRange[0].toISOString().split("T")[0],
-				end: selectedDateRange[1].toISOString().split("T")[0],
-				allDay: true,
-				backgroundColor: "lightgrey",
-			};
-			calendarApi.addEvent(tempEvent);
-		}
-	}, [selectedDateRange]);
-
 	const handleNext = () => {
 		form
 			.validateFields()
 			.then((values) => {
+				if (currentStep === 0) {
+					setCurrentStep(1);
+					return;
+				}
+
+				const draftRoom = (hotelDetails.roomCountDetails || []).find(
+					(room) => room.myKey === "ThisIsNewKey"
+				);
+				const selectedTypeValue = values.roomType ?? draftRoom?.roomType;
 				const roomType =
-					values.roomType === "other" ? customRoomType : values.roomType;
+					selectedTypeValue === "other" ? customRoomType : selectedTypeValue;
+				const normalizedRoomType = String(roomType || "").trim();
+				const displayName = String(
+					values.displayName ?? draftRoom?.displayName ?? ""
+				).trim();
+
+				if (currentStep >= 1 && (!normalizedRoomType || !displayName)) {
+					message.error(
+						isArabic
+							? "يرجى اختيار نوع الغرفة وإدخال اسم العرض قبل المتابعة."
+							: "Please select a room type and enter the display name before continuing."
+					);
+					return;
+				}
+
+				if (currentStep === 1) {
+					const duplicateRoom = (hotelDetails.roomCountDetails || []).some(
+						(room) =>
+							room.myKey !== "ThisIsNewKey" &&
+							normalizeRoomIdentity(room.roomType) ===
+								normalizeRoomIdentity(normalizedRoomType) &&
+							normalizeRoomIdentity(room.displayName) ===
+								normalizeRoomIdentity(displayName)
+					);
+
+					if (duplicateRoom) {
+						message.error(
+							isArabic
+								? "يوجد نوع غرفة بنفس اسم العرض بالفعل. غيّر نوع الغرفة أو اسم العرض."
+								: "A room with this room type and display name already exists. Change one of them first."
+						);
+						return;
+					}
+				}
 
 				const updatedRoomDetails = {
-					roomType,
-					displayName: values.displayName || "",
-					displayName_OtherLanguage: values.displayName_OtherLanguage || "",
-					description: values.description || "",
-					description_OtherLanguage: values.description_OtherLanguage || "",
-					count: values.roomCount || 0,
-					price: { basePrice: values.basePrice || 0 },
-					amenities: values.amenities || [],
-					extraAmenities: values.extraAmenities || [],
-					views: values.views || [],
-					activeRoom: values.activeRoom || false,
-					commisionIncluded: values.commisionIncluded || false,
-					roomCommission: values.roomCommission || 0,
+					...(draftRoom || {}),
+					roomType: normalizedRoomType,
+					displayName,
+					displayName_OtherLanguage:
+						values.displayName_OtherLanguage ||
+						draftRoom?.displayName_OtherLanguage ||
+						"",
+					description: values.description ?? draftRoom?.description ?? "",
+					description_OtherLanguage:
+						values.description_OtherLanguage ||
+						draftRoom?.description_OtherLanguage ||
+						"",
+					count: Number(values.roomCount ?? draftRoom?.count ?? 0),
+					price: {
+						basePrice: Number(
+							values.basePrice ?? draftRoom?.price?.basePrice ?? 0
+						),
+					},
+					defaultCost: Number(values.defaultCost ?? draftRoom?.defaultCost ?? 0),
+					bedsCount: Number(values.bedsCount ?? draftRoom?.bedsCount ?? 1),
+					roomForGender:
+						values.roomForGender || draftRoom?.roomForGender || "Unisex",
+					amenities: values.amenities ?? draftRoom?.amenities ?? [],
+					extraAmenities:
+						values.extraAmenities ?? draftRoom?.extraAmenities ?? [],
+					views: values.views ?? draftRoom?.views ?? [],
+					activeRoom: values.activeRoom ?? draftRoom?.activeRoom ?? false,
+					commisionIncluded:
+						values.commisionIncluded ?? draftRoom?.commisionIncluded ?? false,
+					roomCommission: Number(
+						values.roomCommission ?? draftRoom?.roomCommission ?? 0
+					),
+					pricedExtras: draftRoom?.pricedExtras || [],
+					pricingRate: draftRoom?.pricingRate || [],
+					roomColor: draftRoom?.roomColor || getRoomColor(normalizedRoomType),
 					myKey: "ThisIsNewKey", // Ensure the key is consistent
 				};
 
@@ -155,10 +236,24 @@ const ZHotelDetailsForm2 = ({
 					};
 				});
 
+				if (currentStep === 1) {
+					setRootPrice(
+						String(
+							updatedRoomDetails.defaultCost ||
+								updatedRoomDetails.price?.basePrice ||
+								""
+						)
+					);
+				}
+
 				setCurrentStep(currentStep + 1);
 			})
 			.catch(() => {
-				message.error("Please fill in all required fields.");
+				message.error(
+					isArabic
+						? "يرجى إكمال الحقول المطلوبة قبل المتابعة."
+						: "Please complete the required fields before continuing."
+				);
 			});
 	};
 
@@ -189,7 +284,7 @@ const ZHotelDetailsForm2 = ({
 
 		while (currentDate <= end) {
 			const date = new Date(currentDate);
-			date.setHours(0, 0, 0, 0); // Set time to 00:00:00
+			date.setHours(0, 0, 0, 0);
 			dateArray.push(date);
 			currentDate.setDate(currentDate.getDate() + 1);
 		}
@@ -235,57 +330,15 @@ const ZHotelDetailsForm2 = ({
 				.filter((event) => event.title === "Selected");
 			existingSelectedEvents.forEach((event) => event.remove());
 
-			const tempEvent = {
+			calendarApi.addEvent({
 				title: "Selected",
 				start: start.toISOString().split("T")[0],
 				end: adjustedEnd.toISOString().split("T")[0],
 				allDay: true,
 				backgroundColor: "lightgrey",
-			};
-
-			calendarApi.addEvent(tempEvent);
+			});
 		}
 	};
-
-	// When entering Step 3 or when room/prices change, refresh calendar events.
-	useEffect(() => {
-		if (currentStep === 3 && calendarRef.current) {
-			const calendarApi = calendarRef.current.getApi();
-			calendarApi.getEvents().forEach((event) => event.remove()); // Clear existing events
-
-			if (selectedRoomType) {
-				const room = hotelDetails.roomCountDetails.find(
-					(r) =>
-						r.roomType ===
-						(selectedRoomType === "other" ? customRoomType : selectedRoomType)
-				);
-
-				if (room && room.pricingRate && room.pricingRate.length > 0) {
-					const displayName =
-						form.getFieldValue("displayName") ||
-						room.displayName ||
-						selectedRoomType ||
-						"";
-					const truncatedDisplayName =
-						displayName && displayName.length > 8
-							? displayName.slice(0, 8) + "..."
-							: displayName;
-
-					const pricingEvents = room.pricingRate.map((rate) => ({
-						title: `${truncatedDisplayName}: ${rate.price} SAR`,
-						start: rate.calendarDate,
-						end: rate.calendarDate,
-						allDay: true,
-						backgroundColor:
-							rate.color || getColorForPrice(rate.price, rate.calendarDate),
-					}));
-
-					pricingEvents.forEach((event) => calendarApi.addEvent(event));
-				}
-			}
-		}
-		// eslint-disable-next-line
-	}, [currentStep, hotelDetails, selectedRoomType, customRoomType]);
 
 	const renderStepContent = () => {
 		switch (currentStep) {
@@ -352,6 +405,94 @@ const ZHotelDetailsForm2 = ({
 				);
 
 			case 3: {
+				const draftRoom = (hotelDetails.roomCountDetails || []).find(
+					(roomItem) => roomItem.myKey === "ThisIsNewKey"
+				);
+				const roomTypeValue =
+					draftRoom?.roomType ||
+					(selectedRoomType === "other" ? customRoomType : selectedRoomType);
+				const displayNameForPricing =
+					form.getFieldValue("displayName") || draftRoom?.displayName || "";
+
+				if (!roomTypeValue || !displayNameForPricing) {
+					return (
+						<EmptyStep>
+							{isArabic
+								? "يرجى إكمال نوع الغرفة واسم العرض قبل إضافة التقويم."
+								: "Complete the room type and display name before adding calendar pricing."}
+						</EmptyStep>
+					);
+				}
+
+				if (roomTypeValue && displayNameForPricing) {
+					return (
+						<>
+						<TabsRow>
+							<TopTab
+								isActive={activePricingTab === "custom"}
+								onClick={() => setActivePricingTab("custom")}
+							>
+								{isArabic ? "تقويم مخصص" : "Custom Calendar"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "offers"}
+								onClick={() => setActivePricingTab("offers")}
+							>
+								{isArabic ? "العروض" : "Offers"}
+							</TopTab>
+							<TopTab
+								isActive={activePricingTab === "monthly"}
+								onClick={() => setActivePricingTab("monthly")}
+							>
+								{isArabic ? "شهري" : "Monthly"}
+							</TopTab>
+						</TabsRow>
+
+						{activePricingTab === "custom" ? (
+							<ZCase3
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								chosenLanguage={chosenLanguage}
+								selectedRoomType={roomTypeValue}
+								customRoomType=''
+								selectedDateRange={selectedDateRange}
+								setSelectedDateRange={setSelectedDateRange}
+								pricingRate={pricingRate}
+								setPricingRate={setPricingRate}
+								priceError={priceError}
+								setPriceError={setPriceError}
+								getColorForPrice={getColorForPrice}
+								form={form}
+								getRoomColor={getRoomColor}
+								fromPage={fromPage}
+								rootPrice={rootPrice}
+								setRootPrice={setRootPrice}
+							/>
+						) : activePricingTab === "offers" ? (
+							<ZOffersMonthly
+								mode='Offers'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								selectedRoomType={roomTypeValue}
+								customRoomType=''
+								form={form}
+							/>
+						) : (
+							<ZOffersMonthly
+								mode='Monthly'
+								chosenLanguage={chosenLanguage}
+								hotelDetails={hotelDetails}
+								setHotelDetails={setHotelDetails}
+								selectedRoomType={roomTypeValue}
+								customRoomType=''
+								form={form}
+							/>
+						)}
+						</>
+					);
+				}
+
 				// ----- Subtabs for Step 3 -----
 				const room =
 					selectedRoomType && hotelDetails.roomCountDetails
@@ -372,17 +513,28 @@ const ZHotelDetailsForm2 = ({
 
 				// pricingEvents for the calendar view (custom tab)
 				const pricingEvents =
-					room?.pricingRate?.map((rate) => ({
-						title: `${
-							displayNameValue && displayNameValue.length > 8
-								? displayNameValue.slice(0, 8) + "..."
-								: displayNameValue
-						}: ${rate.price} SAR`,
-						start: rate.calendarDate,
-						end: rate.calendarDate,
-						allDay: true,
-						backgroundColor: rate.color || getColorForPrice(rate.price),
-					})) || [];
+					room?.pricingRate?.map((rate) => {
+						const isRestricted = isCalendarRateRestricted(rate);
+						const eventColor = getCalendarRateColor(rate, getColorForPrice);
+
+						return {
+							title: buildCalendarRateTitle({
+								rate,
+								isArabic,
+							}),
+							start: rate.calendarDate,
+							end: rate.calendarDate,
+							allDay: true,
+							backgroundColor: eventColor,
+							borderColor: eventColor,
+							textColor: "#ffffff",
+							classNames: getCalendarRateClassNames(rate),
+							extendedProps: {
+								displayName: displayNameValue,
+								isRestricted,
+							},
+						};
+					}) || [];
 
 				const handleCalendarSelect = (info) => {
 					const selectedStart = new Date(
@@ -470,10 +622,6 @@ const ZHotelDetailsForm2 = ({
 
 					if (calendarRef.current) {
 						const calendarApi = calendarRef.current.getApi();
-						const truncatedDisplayName =
-							fullDisplayName && fullDisplayName.length > 8
-								? fullDisplayName.slice(0, 8) + "..."
-								: fullDisplayName;
 
 						newPricingRates.forEach((rate) => {
 							const existingEvents = calendarApi
@@ -481,16 +629,31 @@ const ZHotelDetailsForm2 = ({
 								.filter(
 									(event) =>
 										event.startStr === rate.calendarDate &&
-										event.title.includes(truncatedDisplayName)
+										(event.title.includes(fullDisplayName) ||
+											event.extendedProps?.displayName === fullDisplayName)
 								);
 							existingEvents.forEach((event) => event.remove());
 
+							const eventColor = getCalendarRateColor(
+								rate,
+								getColorForPrice
+							);
 							calendarApi.addEvent({
-								title: `${truncatedDisplayName}: ${rate.price} SAR`,
+								title: buildCalendarRateTitle({
+									rate,
+									isArabic,
+								}),
 								start: rate.calendarDate,
 								end: rate.calendarDate,
 								allDay: true,
-								backgroundColor: rate.color,
+								backgroundColor: eventColor,
+								borderColor: eventColor,
+								textColor: "#ffffff",
+								classNames: getCalendarRateClassNames(rate),
+								extendedProps: {
+									displayName: fullDisplayName,
+									isRestricted: isCalendarRateRestricted(rate),
+								},
 							});
 						});
 					}
@@ -698,27 +861,23 @@ const ZHotelDetailsForm2 = ({
 				{renderStepContent()}
 				<div className='steps-action'>
 					{currentStep > 0 && (
-						<Button style={{ margin: "0 8px" }} onClick={handlePrev}>
+						<Button className='step-button secondary' onClick={handlePrev}>
 							{chosenLanguage === "Arabic" ? "السابق" : "Previous"}
 						</Button>
 					)}
 
 					{currentStep < 3 && currentStep !== 0 && (
-						<Button type='primary' onClick={handleNext}>
+						<Button className='step-button primary' type='primary' onClick={handleNext}>
 							{chosenLanguage === "Arabic" ? "التالي" : "Next"}
 						</Button>
 					)}
 
 					{currentStep < 3 && currentStep === 0 && (
-						<button
-							className='btn btn-primary'
-							onClick={handleNext}
-							style={{ fontSize: "20px", fontWeight: "bold" }}
-						>
+						<Button className='step-button primary' type='primary' onClick={handleNext}>
 							{chosenLanguage === "Arabic"
 								? "إضافة غرفة جديدة"
 								: "Add A New Room"}
-						</button>
+						</Button>
 					)}
 				</div>
 			</Form>
@@ -801,11 +960,44 @@ const ZHotelDetailsForm2Wrapper = styled.div`
 		height: 100%;
 	}
 
+	.fc .calendar-rate-blocked {
+		background: #111827 !important;
+		border-color: #111827 !important;
+	}
+
+	.fc .calendar-rate-blocked .fc-event-main,
+	.fc .calendar-rate-blocked .fc-event-title {
+		color: #ffffff !important;
+	}
+
 	text-align: ${(props) => (props.isArabic ? "right" : "left")};
 	.steps-action {
+		position: sticky;
+		bottom: 12px;
+		z-index: 30;
 		display: flex;
 		justify-content: center;
-		margin-top: 20px;
+		gap: 10px;
+		width: fit-content;
+		margin: 22px auto 0;
+		padding: 8px;
+		border: 1px solid #d7e7f8;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.96);
+		box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+	}
+
+	.step-button {
+		min-width: 145px;
+		height: 40px;
+		border-radius: 999px;
+		font-weight: 900;
+	}
+
+	.step-button.secondary {
+		border-color: #cfe1f5;
+		color: #24415f;
+		background: #f8fbff;
 	}
 
 	button {
@@ -833,4 +1025,17 @@ const TopTab = styled.div`
 		p.isActive ? "inset 5px 5px 5px rgba(0,0,0,0.08)" : "none"};
 	transition: all 0.2s ease;
 	border-radius: 6px;
+`;
+
+const EmptyStep = styled.div`
+	display: grid;
+	place-items: center;
+	min-height: 220px;
+	padding: 1.5rem;
+	border: 1px dashed #bdd7f4;
+	border-radius: 14px;
+	background: #f8fbff;
+	color: #38506d;
+	font-weight: 900;
+	text-align: center;
 `;

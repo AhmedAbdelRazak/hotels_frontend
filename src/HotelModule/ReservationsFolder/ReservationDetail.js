@@ -107,6 +107,63 @@ const isOrderTakerEditableReservation = (reservation = {}) => {
 	return /pending[\s_-]?confirmation/i.test(status) || pendingStatus === "pending";
 };
 
+const normalizeReservationStatusValue = (value) => {
+	const normalized = String(value || "")
+		.trim()
+		.toLowerCase()
+		.replace(/[-\s]+/g, "_");
+
+	if (/^early_?check(ed)?_?out$/.test(normalized)) return "early_checked_out";
+	if (/^check(ed)?_?out$/.test(normalized)) return "checked_out";
+	if (/^in_?house$/.test(normalized)) return "inhouse";
+	return normalized;
+};
+
+const isReservationCheckoutTodayOrPast = (reservation = {}) => {
+	const checkout = moment(reservation?.checkout_date || reservation?.checkoutDate);
+	return (
+		checkout.isValid() &&
+		checkout.startOf("day").isSameOrBefore(moment().startOf("day"))
+	);
+};
+
+const hasReservationRoomAssignment = (reservation = {}) =>
+	(Array.isArray(reservation?.roomId) && reservation.roomId.length > 0) ||
+	(Array.isArray(reservation?.roomDetails) && reservation.roomDetails.length > 0);
+
+const buildReservationStatusOptions = (reservation = {}) => {
+	const currentStatus = normalizeReservationStatusValue(
+		reservation?.reservation_status || reservation?.state,
+	);
+	const showCheckoutStatuses =
+		hasReservationRoomAssignment(reservation) ||
+		currentStatus === "inhouse" ||
+		currentStatus === "checked_out" ||
+		currentStatus === "early_checked_out" ||
+		isReservationCheckoutTodayOrPast(reservation);
+	const options = [
+		{ value: "", label: "Please Select" },
+		{ value: "cancelled", label: "Cancelled" },
+		{ value: "no_show", label: "No Show" },
+		{ value: "confirmed", label: "Confirmed" },
+	];
+	const addOption = (option) => {
+		if (!options.some((item) => item.value === option.value)) {
+			options.push(option);
+		}
+	};
+
+	if (currentStatus === "inhouse") {
+		addOption({ value: "inhouse", label: "InHouse" });
+	}
+	if (showCheckoutStatuses) {
+		addOption({ value: "checked_out", label: "Checked Out" });
+		addOption({ value: "early_checked_out", label: "Early Check Out" });
+	}
+
+	return options;
+};
+
 const AUDIT_FIELD_LABELS = {
 	agentDecisionSnapshot: "Agent decision",
 	agentWalletSnapshot: "Agent wallet",
@@ -4110,10 +4167,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				agentWalletSnapshot?.balanceBeforeReservation,
 				0,
 			);
+			const walletRequired = agentWalletSnapshot?.walletRequired !== false;
 			// The wallet before-balance is a fixed snapshot, but the reservation value
 			// must always reflect the latest edited stay/room pricing.
 			const reservationAmount = totalAmountValue;
-			const after = normalizeNumber(before - reservationAmount, 0);
+			const after = normalizeNumber(
+				before - (walletRequired ? reservationAmount : 0),
+				0,
+			);
 			return [
 				{
 					label:
@@ -4126,16 +4187,24 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				{
 					label:
 						chosenLanguage === "Arabic"
-							? AR_LABELS.reservationValue
-							: "This reservation",
+							? walletRequired
+								? AR_LABELS.reservationValue
+								: "قيمة الحجز للعمولة"
+							: walletRequired
+							? "This reservation"
+							: "Commission-only reservation value",
 					value: reservationAmount,
 					tone: "neutral",
 				},
 				{
 					label:
 						chosenLanguage === "Arabic"
-							? AR_LABELS.walletAfter
-							: "Wallet after reservation",
+							? walletRequired
+								? AR_LABELS.walletAfter
+								: "المحفظة بعد الحجز"
+							: walletRequired
+							? "Wallet after reservation"
+							: "Wallet unchanged",
 					value: after,
 					tone: after < 0 ? "negative" : "positive",
 				},
@@ -5278,6 +5347,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		}, 0);
 	};
 
+	const reservationStatusOptions = buildReservationStatusOptions(reservation);
+	const currentReservationStatusValue = normalizeReservationStatusValue(
+		reservation?.reservation_status || reservation?.state,
+	);
+
 	return (
 		<Wrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
@@ -5339,27 +5413,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						}}
 					>
 						<Select
-							defaultValue={reservation && reservation.reservation_status}
+							defaultValue={currentReservationStatusValue}
 							style={{ width: "100%" }}
 							onChange={(value) => setSelectedStatus(value)}
 						>
-							<Select.Option value=''>Please Select</Select.Option>
-							<Select.Option value='cancelled'>Cancelled</Select.Option>
-							<Select.Option value='no_show'>No Show</Select.Option>
-							<Select.Option value='confirmed'>Confirmed</Select.Option>
-							{/* <Select.Option value='inhouse'>InHouse</Select.Option> */}
-							{reservation &&
-							reservation.roomId &&
-							reservation.roomId.length > 0 ? (
-								<Select.Option value='checked_out'>Checked Out</Select.Option>
-							) : null}
-							{reservation &&
-							reservation.roomId &&
-							reservation.roomId.length > 0 ? (
-								<Select.Option value='early_checked_out'>
-									Early Check Out
+							{reservationStatusOptions.map((option) => (
+								<Select.Option key={option.value || "empty"} value={option.value}>
+									{option.label}
 								</Select.Option>
-							) : null}
+							))}
 						</Select>
 
 						{/* Send email checkbox (new, mirrors MoreDetails) */}

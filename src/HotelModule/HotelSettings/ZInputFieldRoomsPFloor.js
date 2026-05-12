@@ -6,38 +6,53 @@ const ZInputFieldRoomsPFloor = ({
 	handleFloorRoomsCount,
 	keyValue, // Use concatenated key here
 	numRoomTypes,
+	chosenLanguage,
 }) => {
-	const columnClass = numRoomTypes <= 6 ? "col-custom mx-1" : "col-md-1";
+	const isArabic = chosenLanguage === "Arabic";
 
 	return (
-		<div className={columnClass}>
-			<InputFieldStyling className='form-group' style={{ marginTop: "10px" }}>
-				<label
-					htmlFor='name'
-					style={{
-						fontWeight: "bold",
-						fontSize: "11px",
-						textAlign: "center",
-						marginLeft: "5px",
-						textTransform: "capitalize",
-					}}
-				>
-					{Title}
-				</label>
-				<input
-					type='number'
-					value={value}
-					onChange={(e) => handleFloorRoomsCount(keyValue, e.target.value)}
-					required
-				/>
-			</InputFieldStyling>
-		</div>
+		<InputFieldStyling
+			className='form-group'
+			$isArabic={isArabic}
+			$isCompact={numRoomTypes > 8}
+		>
+			<label htmlFor={`floor-room-${keyValue}`}>{Title}</label>
+			<input
+				id={`floor-room-${keyValue}`}
+				type='number'
+				min='0'
+				value={value}
+				onChange={(e) => handleFloorRoomsCount(keyValue, e.target.value)}
+				required
+			/>
+		</InputFieldStyling>
 	);
 };
 
 export default ZInputFieldRoomsPFloor;
 
 const InputFieldStyling = styled.div`
+	display: grid;
+	gap: 0.45rem;
+	align-content: start;
+	min-height: ${({ $isCompact }) => ($isCompact ? "92px" : "104px")};
+	padding: 0.75rem;
+	border: 1px solid #d7e7f8;
+	border-radius: 14px;
+	background: #ffffff;
+	text-align: ${({ $isArabic }) => ($isArabic ? "right" : "left")};
+	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+
+	label {
+		margin: 0;
+		min-height: 30px;
+		color: #26384d;
+		font-weight: 900;
+		font-size: 0.78rem;
+		text-transform: capitalize;
+		line-height: 1.25;
+	}
+
 	input[type="text"],
 	input[type="email"],
 	input[type="password"],
@@ -49,7 +64,11 @@ const InputFieldStyling = styled.div`
 		width: 100%;
 		padding: 0.5rem;
 		font-size: 1rem;
-		border: 1px solid #ccc;
+		border: 1px solid #bdd7f4;
+		border-radius: 10px;
+		background: #f8fbff;
+		font-weight: 900;
+		text-align: center;
 	}
 	input[type="text"]:focus,
 	input[type="email"]:focus,
@@ -61,7 +80,7 @@ const InputFieldStyling = styled.div`
 	label:focus {
 		outline: none;
 		border: 1px solid var(--primaryColor);
-		box-shadow: 2px 5px 3px 0px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
 		transition: var(--mainTransition);
 		font-weight: bold;
 	}

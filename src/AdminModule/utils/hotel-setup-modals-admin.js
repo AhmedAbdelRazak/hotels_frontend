@@ -187,7 +187,7 @@ export const RoomTypesModalAdmin = ({
 					defaultCost: vals.defaultCost || 0,
 					activeRoom: vals.activeRoom ?? true,
 					commisionIncluded: vals.commisionIncluded || false,
-					roomCommission: vals.roomCommission || 0,
+					roomCommission: vals.roomCommission ?? 0,
 					roomColor: getRoomColor(roomType),
 					myKey: "ThisIsNewKey",
 				};

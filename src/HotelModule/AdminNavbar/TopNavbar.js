@@ -147,6 +147,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		total: 0,
 		data: [],
 	});
+	const [isMobileNav, setIsMobileNav] = useState(false);
 
 	const { languageToggle, chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -199,6 +200,24 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			new URLSearchParams(location.search || "").has("pendingConfirmation"));
 	const isAgentNotificationAudience = isAgentNotificationUser(user);
 	const isFinanceNotificationAudience = isFinanceOnlyNotificationUser(user);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const mediaQuery = window.matchMedia("(max-width: 760px)");
+		const syncViewport = () => {
+			setIsMobileNav(mediaQuery.matches);
+			setNotificationsOpen(false);
+		};
+
+		syncViewport();
+		if (mediaQuery.addEventListener) {
+			mediaQuery.addEventListener("change", syncViewport);
+			return () => mediaQuery.removeEventListener("change", syncViewport);
+		}
+
+		mediaQuery.addListener(syncViewport);
+		return () => mediaQuery.removeListener(syncViewport);
+	}, []);
 
 	// eslint-disable-next-line
 	const userDetails = isOwnerManager ? user : selectedHotel.belongsTo;
@@ -473,7 +492,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 	const handleNotificationOpenChange = (flag) => {
 		setNotificationsOpen(flag);
-		if (flag) refreshNotifications({ silent: true });
+		if (flag) {
+			setProfileMenuOpen(false);
+			setRoomTypesDropdown(false);
+			refreshNotifications({ silent: true });
+		}
 	};
 
 	const goToPendingNotification = (item = {}) => {
@@ -632,6 +655,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			onOpenChange={handleNotificationOpenChange}
 			dropdownRender={() => notificationPanel}
 			placement={isArabic ? "bottomLeft" : "bottomRight"}
+			getPopupContainer={() => document.body}
+			autoAdjustOverflow
+			destroyPopupOnHide={false}
+			overlayClassName='top-navbar-notification-dropdown'
 		>
 			{trigger}
 		</Dropdown>
@@ -712,21 +739,22 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						<NotificationDot2 />
 					</IconWrapper>
 
-					{renderNotificationsDropdown(
-						<IconWrapper
-							role='button'
-							aria-label={isArabic ? "الإشعارات" : "Notifications"}
-						>
-							<Badge
-								count={canUsePendingNotifications ? notificationCount : 0}
-								size='small'
-								overflowCount={99}
-								offset={[1, -2]}
+					{!isMobileNav &&
+						renderNotificationsDropdown(
+							<IconWrapper
+								role='button'
+								aria-label={isArabic ? "الإشعارات" : "Notifications"}
 							>
-								<BellOutlined />
-							</Badge>
-						</IconWrapper>
-					)}
+								<Badge
+									count={canUsePendingNotifications ? notificationCount : 0}
+									size='small'
+									overflowCount={99}
+									offset={[1, -2]}
+								>
+									<BellOutlined />
+								</Badge>
+							</IconWrapper>
+						)}
 
 					<IconWrapper onClick={handleChatClick}>
 						<MessageOutlined />
@@ -770,21 +798,22 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					<GlobalOutlined />
 					<span>{chosenLanguage === "English" ? "AR" : "En"}</span>
 				</MobileTopButton>
-				{renderNotificationsDropdown(
-					<MobileTopButton
-						type='button'
-						aria-label={isArabic ? "الإشعارات" : "Notifications"}
-					>
-						<Badge
-							count={canUsePendingNotifications ? notificationCount : 0}
-							size='small'
-							overflowCount={99}
-							offset={[4, -4]}
+				{isMobileNav &&
+					renderNotificationsDropdown(
+						<MobileTopButton
+							type='button'
+							aria-label={isArabic ? "الإشعارات" : "Notifications"}
 						>
-							<BellOutlined />
-						</Badge>
-					</MobileTopButton>
-				)}
+							<Badge
+								count={canUsePendingNotifications ? notificationCount : 0}
+								size='small'
+								overflowCount={99}
+								offset={[4, -4]}
+							>
+								<BellOutlined />
+							</Badge>
+						</MobileTopButton>
+					)}
 			</MobileActions>
 
 			{/* ===== Account Update Modal (self) for non-admins ===== */}
