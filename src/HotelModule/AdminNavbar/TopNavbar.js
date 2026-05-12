@@ -1,7 +1,7 @@
 /** @format */
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import { Badge, Dropdown, Empty, Spin } from "antd";
 import {
 	UserOutlined,
@@ -207,6 +207,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		const syncViewport = () => {
 			setIsMobileNav(mediaQuery.matches);
 			setNotificationsOpen(false);
+			setProfileMenuOpen(false);
 		};
 
 		syncViewport();
@@ -407,7 +408,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					{
 						key: "update",
 						icon: <UserOutlined />,
-						label: "Update Account",
+						label: "Update Account / Password",
 					},
 			  ]
 			: []),
@@ -496,6 +497,14 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			setProfileMenuOpen(false);
 			setRoomTypesDropdown(false);
 			refreshNotifications({ silent: true });
+		}
+	};
+
+	const handleProfileOpenChange = (flag) => {
+		setProfileMenuOpen(flag);
+		if (flag) {
+			setNotificationsOpen(false);
+			setRoomTypesDropdown(false);
 		}
 	};
 
@@ -666,6 +675,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 	return (
 		<NavbarWrapper $isArabic={chosenLanguage === "Arabic"}>
+			<TopNavbarGlobalStyles />
 			<LeftSection>
 				<Logo $show={collapsed} $isArabic={chosenLanguage === "Arabic"}>
 					<img
@@ -770,7 +780,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						}}
 						trigger={["click"]}
 						open={profileMenuOpen}
-						onOpenChange={(flag) => setProfileMenuOpen(flag)}
+						onOpenChange={handleProfileOpenChange}
+						placement={isArabic ? "bottomLeft" : "bottomRight"}
+						getPopupContainer={() => document.body}
+						overlayClassName='top-navbar-profile-dropdown'
 					>
 						<Profile>
 							<UserOutlined
@@ -799,6 +812,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					<span>{chosenLanguage === "English" ? "AR" : "En"}</span>
 				</MobileTopButton>
 				{isMobileNav &&
+					canUsePendingNotifications &&
 					renderNotificationsDropdown(
 						<MobileTopButton
 							type='button'
@@ -814,6 +828,26 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							</Badge>
 						</MobileTopButton>
 					)}
+				<Dropdown
+					menu={{
+						items: profileMenuItems,
+						onClick: handleMenuClick,
+					}}
+					trigger={["click"]}
+					open={profileMenuOpen}
+					onOpenChange={handleProfileOpenChange}
+					placement={isArabic ? "bottomLeft" : "bottomRight"}
+					getPopupContainer={() => document.body}
+					overlayClassName='top-navbar-profile-dropdown'
+				>
+					<MobileTopButton
+						type='button'
+						data-variant='profile'
+						aria-label={isArabic ? "Account" : "Account menu"}
+					>
+						<UserOutlined />
+					</MobileTopButton>
+				</Dropdown>
 			</MobileActions>
 
 			{/* ===== Account Update Modal (self) for non-admins ===== */}
@@ -838,6 +872,44 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 export default TopNavbar;
 
 /* ======================== Styled Components ======================== */
+
+const TopNavbarGlobalStyles = createGlobalStyle`
+	@media (max-width: 760px) {
+		.top-navbar-notification-dropdown {
+			position: fixed !important;
+			top: 78px !important;
+			left: 9px !important;
+			right: 9px !important;
+			width: auto !important;
+			max-width: none !important;
+			transform: none !important;
+			z-index: 2100 !important;
+		}
+
+		.top-navbar-profile-dropdown {
+			position: fixed !important;
+			top: 78px !important;
+			right: 10px !important;
+			left: auto !important;
+			min-width: 230px !important;
+			transform: none !important;
+			z-index: 2101 !important;
+		}
+
+		.top-navbar-profile-dropdown .ant-dropdown-menu {
+			padding: 8px;
+			border: 1px solid #c7e5ff;
+			border-radius: 14px;
+			box-shadow: 0 16px 38px rgba(15, 23, 42, 0.22);
+		}
+
+		.top-navbar-profile-dropdown .ant-dropdown-menu-item {
+			min-height: 40px;
+			border-radius: 10px;
+			font-weight: 800;
+		}
+	}
+`;
 
 const NavbarWrapper = styled.div`
 	position: fixed;
@@ -899,7 +971,7 @@ const DigitalClockWrapper = styled.div`
 	margin-left: 20px;
 
 	@media (max-width: 760px) {
-		margin-left: 0;
+		display: none;
 	}
 `;
 
@@ -984,34 +1056,70 @@ const MobileActions = styled.div`
 	@media (max-width: 760px) {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 8px;
 		flex: 0 0 auto;
+		margin-left: auto;
 	}
 `;
 
 const MobileTopButton = styled.button`
 	position: relative;
-	min-width: 36px;
-	height: 34px;
-	padding: 0 9px;
-	border: 1px solid rgba(255, 255, 255, 0.12);
-	border-radius: 8px;
-	background: #0d6efd;
+	min-width: 44px;
+	height: 44px;
+	padding: 0 12px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 13px;
+	background: linear-gradient(180deg, #1d8bff 0%, #0d6efd 100%);
 	color: #fff;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 5px;
-	font-weight: 800;
+	gap: 7px;
+	font-weight: 900;
 	line-height: 1;
+	cursor: pointer;
+	box-shadow: 0 8px 18px rgba(13, 110, 253, 0.28);
+	transition: transform 0.15s ease, box-shadow 0.15s ease,
+		border-color 0.15s ease;
+
+	&:active {
+		transform: translateY(1px);
+		box-shadow: 0 5px 12px rgba(13, 110, 253, 0.22);
+	}
+
+	&:focus-visible {
+		outline: 3px solid rgba(255, 255, 255, 0.85);
+		outline-offset: 2px;
+	}
 
 	svg {
-		font-size: 16px;
+		font-size: 21px;
 		color: #fff;
 	}
 
 	span {
-		font-size: 0.76rem;
+		font-size: 0.86rem;
+	}
+
+	.ant-badge {
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.ant-badge-count {
+		font-weight: 900;
+		box-shadow: 0 0 0 2px #1e1e2d;
+	}
+
+	@media (max-width: 420px) {
+		min-width: 40px;
+		height: 40px;
+		padding: 0 10px;
+		border-radius: 12px;
+
+		svg {
+			font-size: 19px;
+		}
 	}
 `;
 
