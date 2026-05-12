@@ -13,7 +13,6 @@ import { Spin, Modal, Select, Checkbox, Input } from "antd";
 import moment from "moment";
 import {
 	BankOutlined,
-	AuditOutlined,
 	CalendarOutlined,
 	CarOutlined,
 	CheckCircleOutlined,
@@ -3852,21 +3851,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		() => summarizePayment(reservation),
 		[reservation, summarizePayment],
 	);
-	const supplierData = reservation?.supplierData || {};
-	const createdByOtaEmail =
-		supplierData.otaCreatedFromEmail === true ||
-		String(supplierData.otaCreatedFromEmail || "").toLowerCase() === "true";
-	const otaAutomationLabel =
-		supplierData.otaProvider ||
-		supplierData.supplierName ||
-		reservation?.booking_source ||
-		"OTA email";
-	const otaPlatformConfirmation =
-		supplierData.platformConfirmationNumber ||
-		supplierData.otaConfirmationNumber ||
-		supplierData.suppliedBookingNo ||
-		reservation?.customer_details?.confirmation_number2 ||
-		"";
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
 	const breakdownTotalsFromReservation = useMemo(
 		() =>
@@ -7405,31 +7389,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												</strong>
 											</div>
 										</div>
-										{createdByOtaEmail ? (
-											<div className='workflow-source-card'>
-												<span className='detail-icon'>
-													<AuditOutlined />
-												</span>
-												<div>
-													<span>
-														{chosenLanguage === "Arabic"
-															? "Ù…ØµØ¯Ø± Ø§Ù„Ø£ØªÙ…ØªØ©"
-															: "Automation Source"}
-													</span>
-													<strong>
-														{formatLeadingCapital(otaAutomationLabel)}
-													</strong>
-													{otaPlatformConfirmation ? (
-														<small className='detail-value-ltr'>
-															{chosenLanguage === "Arabic"
-																? "Ø±Ù‚Ù… Ø§Ù„Ù…Ù†ØµØ©"
-																: "Platform #"}{" "}
-															{otaPlatformConfirmation}
-														</small>
-													) : null}
-												</div>
-											</div>
-										) : null}
 									</div>
 									<div className={`workflow-status-card ${pendingDecisionTone}`}>
 										<div className='workflow-status-main'>
