@@ -29,6 +29,7 @@ import ReceiptPDFB2B from "./ReceiptPDFB2B";
 import AlDawleya from "./AlDawleya";
 import VCCPayment from "./VCCPayment";
 import {
+  getSingleInboundEmailAudit,
   sendReservationConfirmationSMSManualAdmin,
   sendReservationPaymentLinkSMSManualAdmin,
 } from "../apiAdmin";
@@ -218,6 +219,57 @@ const AssignRoomHint = styled.span`
   border-radius: 999px;
 `;
 
+const OtaAuditCallout = styled.div`
+  width: 90%;
+  margin: 8px auto 6px;
+  padding: 10px 12px;
+  border: 1px solid #b8d4f8;
+  background: #f4f9ff;
+  color: #183b65;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 0.92rem;
+  line-height: 1.35;
+
+  button {
+    margin-top: 8px;
+    border: 1px solid #2f6db3;
+    background: #ffffff;
+    color: #1f5d9f;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-weight: 700;
+  }
+`;
+
+const EmailAuditMeta = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+
+  div {
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    padding: 8px;
+    background: #fafafa;
+  }
+`;
+
+const EmailAuditBody = styled.pre`
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #111827;
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+`;
+
 const PaymentBreakdownTotals = styled.div`
   border: 1px solid #e5e5e5;
   background: #f7f7f7;
@@ -401,8 +453,6 @@ const summarizeReservationPaymentStatus = (reservation = {}) => {
     anyCapturesCompleted ||
     paymentStr === "paid online" ||
     paymentStr === "captured" ||
-    paymentStr === "credit/ debit" ||
-    paymentStr === "credit/debit" ||
     breakdownCaptured;
 
   const isNotPaid = paymentStr === "not paid" && !isCaptured && !paidOffline;
@@ -458,6 +508,9 @@ const MoreDetails = ({
   );
   const [isSavingPaymentBreakdown, setIsSavingPaymentBreakdown] =
     useState(false);
+  const [otaEmailModalOpen, setOtaEmailModalOpen] = useState(false);
+  const [otaEmailAudit, setOtaEmailAudit] = useState(null);
+  const [isLoadingOtaEmailAudit, setIsLoadingOtaEmailAudit] = useState(false);
 
   // eslint-disable-next-line
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -483,6 +536,24 @@ const MoreDetails = ({
   const customerNickName = reservation?.customer_details?.nickName || "";
   const secondaryConfirmation =
     reservation?.customer_details?.confirmation_number2 || "";
+  const supplierData = reservation?.supplierData || {};
+  const configuredSuperAdminId = String(
+    process.env.REACT_APP_SUPER_ADMIN_ID || "",
+  ).trim();
+  const canViewOtaEmailAudit =
+    Number(user?.role) === 1000 ||
+    (!!configuredSuperAdminId &&
+      String(user?._id || "").trim() === configuredSuperAdminId);
+  const otaInboundEmailId =
+    supplierData.otaInboundEmailId || supplierData.otaLastInboundEmailId || "";
+  const createdByOtaEmail =
+    supplierData.otaCreatedFromEmail === true ||
+    String(supplierData.otaCreatedFromEmail || "").toLowerCase() === "true";
+  const otaAutomationLabel =
+    supplierData.otaProvider ||
+    supplierData.supplierName ||
+    reservation?.booking_source ||
+    "OTA email";
 
   useEffect(() => {
     if (isModalVisible) {
@@ -619,6 +690,28 @@ const MoreDetails = ({
       setReservation(merged);
       onReservationUpdated(merged);
     });
+  };
+
+  const handleOpenOtaEmailAudit = async () => {
+    if (!otaInboundEmailId) {
+      return toast.error("No inbound email audit is linked to this reservation.");
+    }
+    setOtaEmailModalOpen(true);
+    setIsLoadingOtaEmailAudit(true);
+    try {
+      const data = await getSingleInboundEmailAudit(otaInboundEmailId);
+      if (!data || data.error) {
+        toast.error(data?.error || "Could not load inbound email audit.");
+        setOtaEmailAudit(null);
+      } else {
+        setOtaEmailAudit(data);
+      }
+    } catch (error) {
+      toast.error("Could not load inbound email audit.");
+      setOtaEmailAudit(null);
+    } finally {
+      setIsLoadingOtaEmailAudit(false);
+    }
   };
 
   const handleAssignRoomClick = useCallback(() => {
@@ -1546,6 +1639,99 @@ const MoreDetails = ({
           </Modal>
 
           <Modal
+            title="Inbound OTA Email Audit"
+            open={otaEmailModalOpen}
+            onCancel={() => setOtaEmailModalOpen(false)}
+            footer={null}
+            width={900}
+            centered
+            destroyOnClose
+          >
+            {isLoadingOtaEmailAudit ? (
+              <div className="text-center my-4">
+                <Spin />
+                <div className="mt-2">Loading inbound email...</div>
+              </div>
+            ) : otaEmailAudit ? (
+              <div>
+                <EmailAuditMeta>
+                  <div>
+                    <strong>Status</strong>
+                    <br />
+                    {otaEmailAudit.processingStatus || "N/A"}
+                  </div>
+                  <div>
+                    <strong>Provider</strong>
+                    <br />
+                    {otaEmailAudit.providerLabel ||
+                      otaEmailAudit.provider ||
+                      "N/A"}
+                  </div>
+                  <div>
+                    <strong>Platform Confirmation</strong>
+                    <br />
+                    {otaEmailAudit.confirmationNumber || "N/A"}
+                  </div>
+                  <div>
+                    <strong>PMS Confirmation</strong>
+                    <br />
+                    {otaEmailAudit.pmsConfirmationNumber ||
+                      reservation?.confirmation_number ||
+                      "N/A"}
+                  </div>
+                  <div>
+                    <strong>From</strong>
+                    <br />
+                    {otaEmailAudit.from || "N/A"}
+                  </div>
+                  <div>
+                    <strong>Subject</strong>
+                    <br />
+                    {otaEmailAudit.subject || "N/A"}
+                  </div>
+                  <div>
+                    <strong>Received</strong>
+                    <br />
+                    {otaEmailAudit.receivedAt
+                      ? moment(otaEmailAudit.receivedAt).format(
+                          "YYYY-MM-DD HH:mm",
+                        )
+                      : "N/A"}
+                  </div>
+                  <div>
+                    <strong>Total</strong>
+                    <br />
+                    {safeNumber(otaEmailAudit.totalAmountSar).toFixed(2)} SAR
+                    {otaEmailAudit.sourceCurrency
+                      ? ` (${otaEmailAudit.sourceAmount || 0} ${
+                          otaEmailAudit.sourceCurrency
+                        })`
+                      : ""}
+                  </div>
+                </EmailAuditMeta>
+                <div style={{ marginBottom: 10 }}>
+                  <strong>Orchestrator decision:</strong>{" "}
+                  {otaEmailAudit.intent || "N/A"} /{" "}
+                  {otaEmailAudit.eventType || "N/A"}
+                </div>
+                {Array.isArray(otaEmailAudit.reconcileErrors) &&
+                otaEmailAudit.reconcileErrors.length > 0 ? (
+                  <div className="alert alert-warning">
+                    {otaEmailAudit.reconcileErrors.join(" | ")}
+                  </div>
+                ) : null}
+                <EmailAuditBody>
+                  {otaEmailAudit.bodyText ||
+                    otaEmailAudit.safeSnippet ||
+                    "No email body was stored."}
+                </EmailAuditBody>
+              </div>
+            ) : (
+              <div>No inbound email audit loaded.</div>
+            )}
+          </Modal>
+
+          <Modal
             title={
               chosenLanguage === "Arabic"
                 ? "إرسال رابط الدفع"
@@ -2376,6 +2562,34 @@ const MoreDetails = ({
                         reservation.customer_details &&
                         reservation.customer_details.reservedBy}
                     </div>
+                    {canViewOtaEmailAudit && createdByOtaEmail ? (
+                      <OtaAuditCallout>
+                        <strong>Created by OTA email automation</strong>
+                        <div>
+                          Source: {String(otaAutomationLabel || "OTA email")}
+                        </div>
+                        {supplierData.platformConfirmationNumber ||
+                        supplierData.otaConfirmationNumber ||
+                        supplierData.suppliedBookingNo ? (
+                          <div>
+                            Platform #:{" "}
+                            {supplierData.platformConfirmationNumber ||
+                              supplierData.otaConfirmationNumber ||
+                              supplierData.suppliedBookingNo}
+                          </div>
+                        ) : null}
+                        {otaInboundEmailId ? (
+                          <button
+                            type="button"
+                            onClick={handleOpenOtaEmailAudit}
+                          >
+                            View inbound email
+                          </button>
+                        ) : (
+                          <div>Inbound email audit is not linked.</div>
+                        )}
+                      </OtaAuditCallout>
+                    ) : null}
                   </div>
 
                   <div className="col-md-4">

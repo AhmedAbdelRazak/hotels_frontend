@@ -214,6 +214,25 @@ export const sendReservationPaymentLinkSMSManualAdmin = (
 		});
 };
 
+export const getSingleInboundEmailAudit = (inboundEmailId) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/inbound-emails/single/${inboundEmailId}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			return { error: "Could not load inbound email." };
+		});
+};
+
 export const cloudinaryUpload1 = (userId, token, image) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/admin/uploadimages/${userId}`,

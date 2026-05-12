@@ -62,8 +62,6 @@ const summarizePayment = (reservation, paymentOverride = "") => {
 		anyMitCompleted ||
 		paymentMode === "paid online" ||
 		paymentMode === "captured" ||
-		paymentMode === "credit/ debit" ||
-		paymentMode === "credit/debit" ||
 		breakdownCaptured;
 
 	const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
@@ -455,11 +453,7 @@ const ZReservationForm = ({
 		0,
 	);
 	const totalPaid = paidOnline + paidOffline;
-	const isCreditDebit =
-		paymentSummary.paymentMode === "credit/ debit" ||
-		paymentSummary.paymentMode === "credit/debit";
-	const assumePaidInFull =
-		isCreditDebit || (paymentSummary.isCaptured && totalPaid === 0);
+	const assumePaidInFull = paymentSummary.isCaptured && totalPaid === 0;
 	const amountDue = assumePaidInFull
 		? 0
 		: Math.max(totalAmountValue - totalPaid, 0);

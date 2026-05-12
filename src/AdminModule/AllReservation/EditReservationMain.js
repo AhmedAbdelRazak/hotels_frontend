@@ -1111,12 +1111,14 @@ const EditReservationMain = ({
 			.trim();
 
 		if (status === "paid offline") return onsite;
+		if (status === "paid online") return paid;
 		if (
-			status === "paid online" ||
 			status === "credit/ debit" ||
+			status === "credit/debit" ||
+			status === "credit / debit" ||
 			status === "not captured"
 		)
-			return paid;
+			return onsite;
 		return onsite || paid || 0;
 	}, [reservation]);
 

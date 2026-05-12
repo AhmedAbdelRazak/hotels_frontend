@@ -27,7 +27,7 @@ const resolvePopupContainer = (triggerNode) => {
 /**
  * UpdatePDF (modal)
  * - Adds robust "Not Captured" (credit/ debit) handling.
- * - For "credit/ debit", the amount is REQUIRED and treated as a paid (authorized) amount.
+ * - For "credit/ debit", the amount is not counted as paid until capture.
  * - Validates amount <= totalAmount.
  * - Returns normalized values to parent for persistence.
  *
@@ -36,7 +36,7 @@ const resolvePopupContainer = (triggerNode) => {
  *  - initialValues: {
  *      supplierName, supplierBookingNo, bookingNo, bookingSource, paymentStatus,
  *      guestName, guestEmail, guestPhone, nationality, passport, reservedBy,
- *      paidAmount? // optional, used to prefill when status is "credit/ debit"
+ *      paidAmount? // optional, used for paid online/offline statuses
  *    }
  *  - totalAmount: number
  *  - currentPaidOnline: number
@@ -46,7 +46,7 @@ const paymentOptions = [
 	{ label: "Not Paid", value: "not paid" },
 	{ label: "Paid Online", value: "paid online" },
 	{ label: "Paid Offline", value: "paid offline" },
-	// Business meaning: card on file, authorized (paid) but NOT captured yet
+	// Business meaning: card/VCC details exist, but money has not been captured.
 	{ label: "Not Captured", value: "credit/ debit" },
 ];
 
@@ -75,19 +75,13 @@ const normalizePaymentStatus = (raw) => {
 };
 
 const shouldShowAmount = (status) =>
-	status === "paid online" ||
-	status === "paid offline" ||
-	status === "credit/ debit";
+	status === "paid online" || status === "paid offline";
 
-// Per your requirement: treat "credit/ debit" as paid (authorized) -> required
 const isAmountRequired = (status) =>
-	status === "paid online" ||
-	status === "paid offline" ||
-	status === "credit/ debit";
+	status === "paid online" || status === "paid offline";
 
 const amountLabelFor = (status) => {
 	if (status === "paid offline") return "Onsite Paid Amount (SAR)";
-	if (status === "credit/ debit") return "Paid Amount (SAR) — Not Captured";
 	return "Paid Amount (SAR)";
 };
 
@@ -107,7 +101,6 @@ const UpdatePDF = ({
 		const normalizedStatus = normalizePaymentStatus(
 			initialValues?.paymentStatus
 		);
-		// Preserve any previously stored amount for "credit/ debit"
 		const initialPaid =
 			typeof initialValues?.paidAmount === "number" &&
 			Number.isFinite(initialValues.paidAmount)
@@ -128,9 +121,8 @@ const UpdatePDF = ({
 			passport: initialValues?.passport || "",
 			reservedBy: initialValues?.reservedBy || "",
 
-			// For Not Captured we want to show whatever is already stored (if any)
 			paidAmount:
-				normalizedStatus === "credit/ debit" ? initialPaid : undefined,
+				normalizedStatus === "credit/ debit" ? undefined : initialPaid,
 		};
 	}, [initialValues]);
 
@@ -147,11 +139,7 @@ const UpdatePDF = ({
 		} else if (s === "paid offline") {
 			preset = currentPaidOffline;
 		} else if (s === "credit/ debit") {
-			// If we already have a stored authorized amount, preserve it
-			preset =
-				typeof init.paidAmount === "number" && Number.isFinite(init.paidAmount)
-					? init.paidAmount
-					: undefined;
+			preset = undefined;
 		} else {
 			preset = undefined;
 		}
@@ -166,7 +154,6 @@ const UpdatePDF = ({
 		} else if (s === "paid offline") {
 			form.setFieldsValue({ paidAmount: currentPaidOffline });
 		} else if (s === "credit/ debit") {
-			// Require user entry for Not Captured (paid, not captured) flow
 			form.setFieldsValue({ paidAmount: undefined });
 		} else {
 			// Not Paid or cleared
@@ -327,11 +314,6 @@ const UpdatePDF = ({
 													},
 												},
 											]}
-											extra={
-												status === "credit/ debit"
-													? "Card authorized (paid) but not captured yet. This amount will be considered paid until captured/refunded."
-													: undefined
-											}
 										>
 											<InputNumber
 												min={0}

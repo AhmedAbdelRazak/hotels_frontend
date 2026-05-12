@@ -6,7 +6,7 @@ import { updateSingleReservation } from "../apiAdmin";
 /**
  * ReceiptPDF (drop-in)
  * - Click any editable field to open one Update modal.
- * - Supports Not Captured (credit/ debit) as authorized amount (treated as paid until captured).
+ * - Supports Not Captured (credit/ debit) without counting it as paid until capture.
  * - Validates amounts and updates DB via updateSingleReservation.
  */
 const ReceiptPDF = forwardRef(function ReceiptPDF(
@@ -33,22 +33,19 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	const totalAmount = safeNumber(localResv?.total_amount);
 
-	// Treat paid_amount as the online/authorized bucket:
-	// - Paid Online -> captured
-	// - Not Captured (credit/ debit) -> authorized amount
-	const paidAmountAuthorized = safeNumber(localResv?.paid_amount);
-
-	// Onsite paid amount (POS/cash)
-	const paidAmountOffline = safeNumber(
-		localResv?.payment_details?.onsite_paid_amount,
-	);
-
 	const paymentStatus = (localResv?.payment || "").toLowerCase();
 	const isNotCapturedStatus =
 		paymentStatus === "credit/ debit" ||
 		paymentStatus === "credit/debit" ||
 		paymentStatus === "credit / debit" ||
 		paymentStatus === "not captured";
+	const rawPaidAmount = safeNumber(localResv?.paid_amount);
+	const paidAmountAuthorized = isNotCapturedStatus ? 0 : rawPaidAmount;
+
+	// Onsite paid amount (POS/cash)
+	const paidAmountOffline = safeNumber(
+		localResv?.payment_details?.onsite_paid_amount,
+	);
 
 	const totalPaid = paidAmountAuthorized + paidAmountOffline;
 
@@ -97,8 +94,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 		passport: localResv?.customer_details?.passport || "",
 		reservedBy: localResv?.customer_details?.reservedBy || "",
 
-		// Prefill for Not Captured
-		paidAmount: safeNumber(localResv?.paid_amount),
+		paidAmount: isNotCapturedStatus ? undefined : rawPaidAmount,
 	};
 
 	// Persist changes
@@ -125,26 +121,37 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 			sendEmail: false,
 		};
 
-		// Apply paid/authorized amounts if provided and valid
+		// Apply paid amounts only when money was actually collected.
 		const amount = Number(vals.paidAmount || 0);
 		if (
-			(paymentStatus === "paid online" ||
-				paymentStatus === "paid offline" ||
-				paymentStatus === "credit/ debit") &&
+			(paymentStatus === "paid online" || paymentStatus === "paid offline") &&
 			Number.isFinite(amount) &&
 			amount >= 0
 		) {
 			if (paymentStatus === "paid online") {
 				updateData.paid_amount = amount;
+				updateData.payment_details = {
+					...(localResv?.payment_details || {}),
+					onsite_paid_amount: 0,
+				};
 			} else if (paymentStatus === "paid offline") {
+				updateData.paid_amount = 0;
 				updateData.payment_details = {
 					...(localResv?.payment_details || {}),
 					onsite_paid_amount: amount,
 				};
-			} else if (paymentStatus === "credit/ debit") {
-				// Treat as authorized (paid) amount
-				updateData.paid_amount = amount;
 			}
+		} else if (
+			paymentStatus === "credit/ debit" ||
+			paymentStatus === "credit/debit" ||
+			paymentStatus === "credit / debit" ||
+			paymentStatus === "not captured"
+		) {
+			updateData.paid_amount = 0;
+			updateData.payment_details = {
+				...(localResv?.payment_details || {}),
+				onsite_paid_amount: 0,
+			};
 		} else if (paymentStatus === "not paid") {
 			updateData.paid_amount = 0;
 			updateData.payment_details = {
@@ -263,7 +270,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 							  : isNotPaid
 							    ? "Not Paid"
 							    : isNotCapturedStatus
-							      ? "Authorized (Not Captured)"
+							      ? "Not Captured"
 							      : `${depositPercentage}% Deposit`}
 					</strong>
 
@@ -276,7 +283,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 							) : isNotPaid ? (
 								"Not Paid"
 							) : isNotCapturedStatus ? (
-								`${paidAmountAuthorized.toFixed(2)} SAR`
+								"Not Captured"
 							) : (
 								`${depositPercentage}% Deposit`
 							)}
@@ -338,7 +345,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 									  : isNotPaid
 									    ? "Not Paid"
 									    : isNotCapturedStatus
-									      ? "Authorized (Not Captured)"
+									      ? "Not Captured"
 									      : `${depositPercentage}% Deposit`}
 							</Clickable>
 						</td>
@@ -404,10 +411,9 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 					<div>
 						<strong>Payment Status:</strong> Not Paid
 					</div>
-				) : isNotCapturedStatus && paidAmountAuthorized > 0 ? (
+				) : isNotCapturedStatus ? (
 					<div>
-						<strong>Authorized (Not Captured):</strong>{" "}
-						{paidAmountAuthorized.toFixed(2)} SAR
+						<strong>Payment Status:</strong> Not Captured
 					</div>
 				) : paidAmountAuthorized > 0 ? (
 					<div>

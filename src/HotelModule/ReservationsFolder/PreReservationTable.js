@@ -75,8 +75,6 @@ const summarizePaymentStatus = (reservation = {}) => {
 		anyMitCompleted ||
 		paymentMode === "paid online" ||
 		paymentMode === "captured" ||
-		paymentMode === "credit/ debit" ||
-		paymentMode === "credit/debit" ||
 		breakdownCaptured;
 
 	const isNotPaid = paymentMode === "not paid" && !isCaptured && !payOffline;
