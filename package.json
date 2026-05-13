@@ -64,7 +64,8 @@
 		"socket.io-client": "^4.7.5",
 		"styled-components": "^6.1.1",
 		"web-vitals": "^2.1.4",
-		"xlsx": "^0.18.5"
+		"xlsx": "^0.18.5",
+		"xlsx-js-style": "^1.2.0"
 	},
 	"scripts": {
 		"prestart": "node scripts/strip-bom.js",

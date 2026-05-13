@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
-import * as XLSX from "xlsx";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import {
@@ -69,6 +68,118 @@ const toDatePickerValue = (value) => {
 	if (moment.isMoment(value)) return value.toDate();
 	const parsed = moment(value);
 	return parsed.isValid() ? parsed.toDate() : new Date();
+};
+
+const safeFileSegment = (value = "financials") =>
+	String(value || "financials")
+		.replace(/[\\/:*?"<>|]+/g, "-")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.slice(0, 80) || "financials";
+
+const safeSheetName = (value = "Sheet") =>
+	String(value || "Sheet")
+		.replace(/[\\/?*[\]:]/g, " ")
+		.slice(0, 31) || "Sheet";
+
+const REPORT_COLUMN_WIDTHS = {
+	Hotel: 14,
+	Agent: 24,
+	Company: 24,
+	Email: 24,
+	Model: 18,
+	"Opening Credit": 14,
+	"Wallet Added": 14,
+	"Wallet Used": 15,
+	"Reservation Deductions": 18,
+	Balance: 14,
+	Reservations: 13,
+	"Reservation Value": 17,
+	Commission: 14,
+	"Commission Due": 16,
+	"Pending Confirmation": 18,
+	Type: 16,
+	Amount: 14,
+	Date: 13,
+	Reference: 18,
+	Note: 28,
+	Confirmation: 18,
+	Guest: 22,
+	Status: 16,
+	Attachments: 30,
+};
+
+const getReportColumnWidth = (key, rows = []) => {
+	const maxWidth = REPORT_COLUMN_WIDTHS[key] || 18;
+	const minWidth = Math.min(maxWidth, Math.max(10, Math.ceil(String(key).length * 0.75)));
+	const contentWidth = rows.reduce((max, row) => {
+		const value = row?.[key];
+		const length =
+			value === null || value === undefined ? 0 : String(value).length;
+		return Math.max(max, Math.ceil(length * 0.85) + 2);
+	}, minWidth);
+	return Math.min(maxWidth, Math.max(minWidth, contentWidth));
+};
+
+const loadStyledXlsx = async () => {
+	const xlsxModule = await import("xlsx-js-style");
+	return xlsxModule.default || xlsxModule["module.exports"] || xlsxModule;
+};
+
+const appendReportSheet = (
+	XLSX,
+	workbook,
+	rows,
+	sheetName,
+	emptyText = "No data"
+) => {
+	const safeRows =
+		Array.isArray(rows) && rows.length ? rows : [{ Message: emptyText }];
+	const worksheet = XLSX.utils.json_to_sheet(safeRows);
+	const headers = Object.keys(safeRows[0] || {});
+	worksheet["!cols"] = headers.map((key) => ({
+		wch: getReportColumnWidth(key, safeRows),
+	}));
+	if (worksheet["!ref"]) {
+		const range = XLSX.utils.decode_range(worksheet["!ref"]);
+		worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+		worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+		worksheet["!rows"] = Array.from(
+			{ length: range.e.r + 1 },
+			(_, index) => ({ hpt: index === 0 ? 28 : 30 })
+		);
+		for (let column = range.s.c; column <= range.e.c; column += 1) {
+			const headerAddress = XLSX.utils.encode_cell({ r: 0, c: column });
+			if (!worksheet[headerAddress]) continue;
+			worksheet[headerAddress].s = {
+				fill: { patternType: "solid", fgColor: { rgb: "D9EAF7" } },
+				font: { bold: true, color: { rgb: "0F2842" } },
+				alignment: { horizontal: "center", vertical: "center", wrapText: true },
+				border: {
+					top: { style: "thin", color: { rgb: "B7D7F0" } },
+					bottom: { style: "thin", color: { rgb: "B7D7F0" } },
+					left: { style: "thin", color: { rgb: "B7D7F0" } },
+					right: { style: "thin", color: { rgb: "B7D7F0" } },
+				},
+			};
+		}
+		for (let row = 1; row <= range.e.r; row += 1) {
+			for (let column = range.s.c; column <= range.e.c; column += 1) {
+				const address = XLSX.utils.encode_cell({ r: row, c: column });
+				if (!worksheet[address]) continue;
+				worksheet[address].s = {
+					alignment: { vertical: "top", wrapText: true },
+					border: {
+						bottom: { style: "thin", color: { rgb: "E5E7EB" } },
+					},
+				};
+				if (worksheet[address].t === "n") {
+					worksheet[address].z = "#,##0.00";
+				}
+			}
+		}
+	}
+	XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(sheetName));
 };
 
 const walletAttachmentLimit = 8;
@@ -609,7 +720,7 @@ const FinancialMain = ({ match }) => {
 		loadFinancials();
 	};
 
-	const exportExcel = () => {
+	const exportExcel = async () => {
 		const rows = [];
 		agents.forEach((item) => {
 			rows.push({
@@ -645,20 +756,16 @@ const FinancialMain = ({ match }) => {
 					.join(", "),
 			}))
 		);
+		const XLSX = await loadStyledXlsx();
 		const workbook = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(
-			workbook,
-			XLSX.utils.json_to_sheet(rows),
-			"Wallet Summary"
-		);
-		XLSX.utils.book_append_sheet(
-			workbook,
-			XLSX.utils.json_to_sheet(txRows),
-			"Wallet Ledger"
-		);
+		appendReportSheet(XLSX, workbook, rows, "Wallet Summary", txt.noRows);
+		appendReportSheet(XLSX, workbook, txRows, "Wallet Ledger", txt.noRows);
 		XLSX.writeFile(
 			workbook,
-			`agent-wallet-${hotel?.hotelName || hotelId}-${moment().format("YYYY-MM-DD")}.xlsx`
+			`agent-wallet-${safeFileSegment(
+				hotel?.hotelName || hotelId
+			)}-${moment().format("YYYY-MM-DD")}.xlsx`,
+			{ cellStyles: true }
 		);
 	};
 

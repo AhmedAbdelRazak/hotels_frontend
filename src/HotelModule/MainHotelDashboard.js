@@ -1480,10 +1480,12 @@ const agentWalletDisplay = (wallet = {}, text = SCOPED_DASHBOARD_WORDS.en) => {
 
 const ScopedUserMainDashboard = ({ user, token }) => {
 	const history = useHistory();
+	const location = useLocation();
 	const { chosenLanguage } = useCartContext();
 	const isRTL = chosenLanguage === "Arabic";
 	const TXT = SCOPED_DASHBOARD_WORDS[isRTL ? "ar" : "en"];
 	const roleKey = getPrimaryScopedRole(user);
+	const canUseFinancialsModal = roleKey === "finance" || roleKey === "hotelmanager";
 	const [adminMenuStatus, setAdminMenuStatus] = useState(false);
 	const { value: initialCollapsed } = getStoredMenuCollapsed();
 	const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -1493,6 +1495,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const [loading, setLoading] = useState(false);
 	const [summaryLoading, setSummaryLoading] = useState(false);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
+	const [financialsVisible, setFinancialsVisible] = useState(false);
 
 	const assignedHotelIds = useMemo(
 		() => getAssignedHotelIdsFromUser(user),
@@ -1501,6 +1504,34 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const assignedHotelKey = assignedHotelIds.join("|");
 	const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 	const isOrderTakerOnly = isLimitedOrderTakerDashboardUser(user);
+
+	const updateScopedDashboardQuery = useCallback(
+		(updates = {}) => {
+			const params = new URLSearchParams(location.search);
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value === undefined || value === null || value === "") {
+					params.delete(key);
+				} else {
+					params.set(key, String(value));
+				}
+			});
+			const nextSearch = params.toString();
+			const nextSearchString = nextSearch ? `?${nextSearch}` : "";
+			if (nextSearchString === location.search) return;
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearchString,
+			});
+		},
+		[history, location.pathname, location.search]
+	);
+
+	const clearScopedDashboardModalQuery = useCallback(() => {
+		updateScopedDashboardQuery({
+			modal: "",
+			hotelId: "",
+		});
+	}, [updateScopedDashboardQuery]);
 
 	useEffect(() => {
 		if (!assignedHotelIds.length) {
@@ -1611,14 +1642,49 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	}, [hotels, selectedHotelId]);
 
 	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const shouldOpenFinancials =
+			params.get("modal") === "financials" && canUseFinancialsModal;
+		if (!shouldOpenFinancials) {
+			if (financialsVisible) setFinancialsVisible(false);
+			return;
+		}
+		const queryHotelId = normalizeDashboardId(params.get("hotelId"));
+		const nextHotelId =
+			queryHotelId && hotels.some((hotel) => hotel._id === queryHotelId)
+				? queryHotelId
+				: selectedHotelId || hotels[0]?._id || "";
+		if (nextHotelId) {
+			setSelectedHotelId(nextHotelId);
+		}
+		setFinancialsVisible(true);
+	}, [
+		canUseFinancialsModal,
+		financialsVisible,
+		hotels,
+		location.search,
+		selectedHotelId,
+	]);
+
+	useEffect(() => {
 		if (loading || hotels.length !== 1) return;
+		const params = new URLSearchParams(location.search);
+		if (params.get("modal") === "financials" && canUseFinancialsModal) return;
 		const hotel = hotels[0];
 		const ownerId = getScopedOwnerId(hotel, user);
 		const hotelId = normalizeDashboardId(hotel?._id);
 		if (!ownerId || !hotelId) return;
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
 		history.replace(getScopedRouteForRole(roleKey, ownerId, hotelId));
-	}, [history, hotels, loading, roleKey, user]);
+	}, [
+		canUseFinancialsModal,
+		history,
+		hotels,
+		loading,
+		location.search,
+		roleKey,
+		user,
+	]);
 
 	const totals = useMemo(
 		() =>
@@ -1647,6 +1713,18 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		const ownerId = getScopedOwnerId(hotel, user);
 		if (!hotelId || !ownerId) return;
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
+		if (
+			canUseFinancialsModal &&
+			(action === "finance" || (roleKey === "finance" && action === "primary"))
+		) {
+			setSelectedHotelId(hotelId);
+			setFinancialsVisible(true);
+			updateScopedDashboardQuery({
+				modal: "financials",
+				hotelId: "",
+			});
+			return;
+		}
 		history.push(getScopedRouteForRole(roleKey, ownerId, hotelId, action));
 	};
 
@@ -1701,6 +1779,15 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 				label: TXT.openDashboard || "Open dashboard",
 				icon: <HomeOutlined />,
 			},
+			...(canUseFinancialsModal
+				? [
+						{
+							action: "finance",
+							label: TXT.financials || "Financials",
+							icon: <WalletOutlined />,
+						},
+				  ]
+				: []),
 			{ action: "reservations", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 			{ action: "reports", label: TXT.reports || "Reports", icon: <CalendarOutlined /> },
 			{ action: "housekeeping", label: TXT.housekeeping || "Housekeeping", icon: <HomeOutlined /> },
@@ -1865,6 +1952,18 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					<AgentEmpty>{TXT.noHotels}</AgentEmpty>
 				)}
 			</AgentDashboardShell>
+
+			<ManagerFinancialsModal
+				open={financialsVisible}
+				onCancel={() => {
+					setFinancialsVisible(false);
+					clearScopedDashboardModalQuery();
+				}}
+				hotels={hotels}
+				userId={user?._id}
+				token={token}
+				isArabic={isRTL}
+			/>
 		</Wrapper>
 	);
 };

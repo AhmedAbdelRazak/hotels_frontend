@@ -7,12 +7,10 @@ import {
 	BankOutlined,
 	CalendarOutlined,
 	DownloadOutlined,
-	HomeOutlined,
 	ReloadOutlined,
 	WalletOutlined,
 } from "@ant-design/icons";
 import moment from "moment";
-import * as XLSX from "xlsx";
 
 import { getAgentWalletSummary } from "../apiAdmin";
 
@@ -20,7 +18,8 @@ const labels = {
 	en: {
 		title: "Financials",
 		subtitle:
-			"Agent wallets, reservation deductions, commissions, and pending confirmations by hotel.",
+			"Overall agent wallets, reservation deductions, commissions, and pending confirmations across assigned hotels.",
+		overview: "Overall overview",
 		chooseHotel: "Choose hotel",
 		chooseAgent: "Choose agent",
 		chooseAgentPlaceholder: "Choose agent name | company",
@@ -29,8 +28,11 @@ const labels = {
 			"Choose an agent first to review wallet movements and reservation deductions.",
 		refresh: "Refresh",
 		exportExcel: "Export Excel",
+		exportOverview: "Export overview",
+		exportVisibleTables: "Export visible tables",
 		openWorkspace: "Open full financials",
 		hotelList: "Hotels",
+		hotelName: "Hotel",
 		agent: "Agent",
 		company: "Company",
 		walletAdded: "Wallet added",
@@ -67,12 +69,14 @@ const labels = {
 	ar: {
 		title: "المالية",
 		subtitle:
-			"محافظ الوكلاء، خصومات الحجوزات، العمولات، والحجوزات بانتظار التأكيد حسب الفندق.",
+			"نظرة عامة على محافظ الوكلاء، خصومات الحجوزات، العمولات، والحجوزات بانتظار التأكيد لكل الفنادق المخصصة.",
+		overview: "نظرة عامة",
 		chooseHotel: "اختر الفندق",
 		refresh: "تحديث",
 		exportExcel: "تصدير إكسل",
 		openWorkspace: "فتح المالية بالكامل",
 		hotelList: "الفنادق",
+		hotelName: "الفندق",
 		agent: "الوكيل",
 		company: "الشركة",
 		walletAdded: "المضافة للمحفظة",
@@ -103,6 +107,8 @@ Object.assign(labels.ar, {
 	chooseAgent: "اختر الوكيل",
 	chooseAgentPlaceholder: "اختر اسم الوكيل | الشركة",
 	required: "مطلوب",
+	exportOverview: "تصدير الملخص",
+	exportVisibleTables: "تصدير الجداول الظاهرة",
 	chooseAgentFirst:
 		"اختر الوكيل أولاً لعرض حركات المحفظة والحجوزات المخصومة.",
 });
@@ -130,6 +136,8 @@ const money = (value) =>
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});
+
+const n2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 const agentCommercialModel = (record = {}) =>
 	record.commercialModel || record.agent?.agentCommercialModel || "wallet_inventory";
@@ -168,6 +176,275 @@ const toTitleCase = (value = "") =>
 const formatDate = (value) =>
 	value ? moment(value).format("YYYY-MM-DD") : "-";
 
+const safeFileSegment = (value = "financials") =>
+	String(value || "financials")
+		.replace(/[\\/:*?"<>|]+/g, "-")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.slice(0, 80) || "financials";
+
+const safeSheetName = (value = "Sheet") =>
+	String(value || "Sheet")
+		.replace(/[\\/?*[\]:]/g, " ")
+		.slice(0, 31) || "Sheet";
+
+const REPORT_COLUMN_WIDTHS = {
+	Hotel: 14,
+	Agent: 24,
+	Company: 24,
+	Email: 24,
+	Model: 18,
+	"Opening Credit": 14,
+	"Wallet Added": 14,
+	"Wallet Used": 15,
+	"Reservation Deductions": 18,
+	Balance: 14,
+	Reservations: 13,
+	"Reservation Value": 17,
+	Commission: 14,
+	"Commission Due": 16,
+	"Pending Confirmation": 18,
+	Type: 16,
+	Amount: 14,
+	Date: 13,
+	Reference: 18,
+	Note: 28,
+	Confirmation: 18,
+	Guest: 22,
+	Status: 16,
+	Attachments: 30,
+};
+
+const getReportColumnWidth = (key, rows = []) => {
+	const maxWidth = REPORT_COLUMN_WIDTHS[key] || 18;
+	const minWidth = Math.min(maxWidth, Math.max(10, Math.ceil(String(key).length * 0.75)));
+	const contentWidth = rows.reduce((max, row) => {
+		const value = row?.[key];
+		const length =
+			value === null || value === undefined ? 0 : String(value).length;
+		return Math.max(max, Math.ceil(length * 0.85) + 2);
+	}, minWidth);
+	return Math.min(maxWidth, Math.max(minWidth, contentWidth));
+};
+
+const loadStyledXlsx = async () => {
+	const xlsxModule = await import("xlsx-js-style");
+	return xlsxModule.default || xlsxModule["module.exports"] || xlsxModule;
+};
+
+const appendJsonSheet = (
+	XLSX,
+	workbook,
+	rows,
+	sheetName,
+	emptyText = "No data"
+) => {
+	const safeRows =
+		Array.isArray(rows) && rows.length ? rows : [{ Message: emptyText }];
+	const worksheet = XLSX.utils.json_to_sheet(safeRows);
+	const headers = Object.keys(safeRows[0] || {});
+	worksheet["!cols"] = headers.map((key) => ({
+		wch: getReportColumnWidth(key, safeRows),
+	}));
+	if (worksheet["!ref"]) {
+		const range = XLSX.utils.decode_range(worksheet["!ref"]);
+		worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+		worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+		worksheet["!rows"] = Array.from(
+			{ length: range.e.r + 1 },
+			(_, index) => ({ hpt: index === 0 ? 28 : 30 })
+		);
+		for (let column = range.s.c; column <= range.e.c; column += 1) {
+			const headerAddress = XLSX.utils.encode_cell({ r: 0, c: column });
+			if (!worksheet[headerAddress]) continue;
+			worksheet[headerAddress].s = {
+				fill: { patternType: "solid", fgColor: { rgb: "D9EAF7" } },
+				font: { bold: true, color: { rgb: "0F2842" } },
+				alignment: { horizontal: "center", vertical: "center", wrapText: true },
+				border: {
+					top: { style: "thin", color: { rgb: "B7D7F0" } },
+					bottom: { style: "thin", color: { rgb: "B7D7F0" } },
+					left: { style: "thin", color: { rgb: "B7D7F0" } },
+					right: { style: "thin", color: { rgb: "B7D7F0" } },
+				},
+			};
+		}
+		for (let row = 1; row <= range.e.r; row += 1) {
+			for (let column = range.s.c; column <= range.e.c; column += 1) {
+				const address = XLSX.utils.encode_cell({ r: row, c: column });
+				if (!worksheet[address]) continue;
+				worksheet[address].s = {
+					alignment: { vertical: "top", wrapText: true },
+					border: {
+						bottom: { style: "thin", color: { rgb: "E5E7EB" } },
+					},
+				};
+				if (worksheet[address].t === "n") {
+					worksheet[address].z = "#,##0.00";
+				}
+			}
+		}
+	}
+	XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(sheetName));
+};
+
+const buildAgentSummaryRows = (items = []) =>
+	items.map((item) => ({
+		Hotel: item.hotelName || "",
+		Agent: item.agent?.name || "",
+		Company: item.agent?.companyName || "",
+		Email: item.agent?.email || "",
+		Model: commercialModelLabel(item, labels.en),
+		"Opening Credit": item.openingWalletCredit || 0,
+		"Wallet Added": item.walletAdded || 0,
+		"Reservation Deductions": item.walletUsed || 0,
+		Balance: item.balance || 0,
+		Reservations: item.totalReservations || 0,
+		"Reservation Value": item.totalReservationValue || 0,
+		"Commission Due": item.commissionDue || 0,
+		"Pending Confirmation": item.pendingConfirmation || 0,
+	}));
+
+const buildTransactionRows = (items = []) =>
+	items.flatMap((item) =>
+		(Array.isArray(item.transactions) ? item.transactions : []).map((tx) => ({
+			Hotel: tx.hotelName || item.hotelName || "",
+			Agent: item.agent?.name || "",
+			Company: item.agent?.companyName || "",
+			Type: tx.transactionType || "",
+			Amount: tx.amount || 0,
+			Date: formatDate(tx.transactionDate),
+			Reference: tx.reference || "",
+			Note: tx.note || "",
+		}))
+	);
+
+const buildReservationRows = (items = []) =>
+	items.flatMap((item) =>
+		(Array.isArray(item.reservations) ? item.reservations : []).map(
+			(reservation) => ({
+				Hotel: reservation.hotelName || item.hotelName || "",
+				Agent: item.agent?.name || "",
+				Company: item.agent?.companyName || "",
+				Confirmation: reservation.confirmation_number || "",
+				Guest: reservation.customer_details?.name || "",
+				Date: formatDate(reservation.booked_at || reservation.createdAt),
+				Amount: reservation.total_amount || 0,
+				Commission:
+					reservation.commission ||
+					reservation.financial_cycle?.commissionAmount ||
+					0,
+				Status: reservation.reservation_status || reservation.state || "",
+			})
+		)
+	);
+
+const decorateAgentRow = (item = {}, hotel = {}, responseHotel = {}) => {
+	const hotelId = hotel.id || normalizeId(responseHotel);
+	const hotelName = toTitleCase(
+		hotel.name || responseHotel?.hotelName || responseHotel?.name || "Hotel"
+	);
+	return {
+		...item,
+		hotelId,
+		hotelName,
+		transactions: (Array.isArray(item.transactions) ? item.transactions : []).map(
+			(tx) => ({
+				...tx,
+				hotelId,
+				hotelName,
+			})
+		),
+		reservations: (Array.isArray(item.reservations)
+			? item.reservations
+			: []
+		).map((reservation) => ({
+			...reservation,
+			hotelId,
+			hotelName,
+		})),
+	};
+};
+
+const buildTotals = (items = []) =>
+	items.reduce(
+		(acc, item) => ({
+			walletAdded: n2(acc.walletAdded + Number(item.walletAdded || 0)),
+			walletUsed: n2(acc.walletUsed + Number(item.walletUsed || 0)),
+			balance: n2(acc.balance + Number(item.balance || 0)),
+			totalReservations:
+				acc.totalReservations + Number(item.totalReservations || 0),
+			totalReservationValue: n2(
+				acc.totalReservationValue + Number(item.totalReservationValue || 0)
+			),
+			totalCommission: n2(
+				acc.totalCommission + Number(item.totalCommission || 0)
+			),
+			commissionDue: n2(acc.commissionDue + Number(item.commissionDue || 0)),
+			pendingConfirmation:
+				acc.pendingConfirmation + Number(item.pendingConfirmation || 0),
+		}),
+		{
+			walletAdded: 0,
+			walletUsed: 0,
+			balance: 0,
+			totalReservations: 0,
+			totalReservationValue: 0,
+			totalCommission: 0,
+			commissionDue: 0,
+			pendingConfirmation: 0,
+		}
+	);
+
+const aggregateAgentRows = (items = []) => {
+	if (!items.length) return null;
+	const first = items[0];
+	const models = [...new Set(items.map(agentCommercialModel).filter(Boolean))];
+	const walletRequired = items.some((item) => item.walletRequired !== false);
+	return {
+		...first,
+		hotelName: [...new Set(items.map((item) => item.hotelName).filter(Boolean))].join(
+			", "
+		),
+		commercialModel:
+			models.length === 1 ? models[0] : models.length ? "mixed" : undefined,
+		walletRequired,
+		openingWalletCredit: n2(
+			items.reduce((sum, item) => sum + Number(item.openingWalletCredit || 0), 0)
+		),
+		walletAdded: n2(
+			items.reduce((sum, item) => sum + Number(item.walletAdded || 0), 0)
+		),
+		walletUsed: n2(
+			items.reduce((sum, item) => sum + Number(item.walletUsed || 0), 0)
+		),
+		balance: n2(items.reduce((sum, item) => sum + Number(item.balance || 0), 0)),
+		totalReservations: items.reduce(
+			(sum, item) => sum + Number(item.totalReservations || 0),
+			0
+		),
+		totalReservationValue: n2(
+			items.reduce((sum, item) => sum + Number(item.totalReservationValue || 0), 0)
+		),
+		totalCommission: n2(
+			items.reduce((sum, item) => sum + Number(item.totalCommission || 0), 0)
+		),
+		commissionDue: n2(
+			items.reduce((sum, item) => sum + Number(item.commissionDue || 0), 0)
+		),
+		pendingConfirmation: items.reduce(
+			(sum, item) => sum + Number(item.pendingConfirmation || 0),
+			0
+		),
+		transactions: items.flatMap((item) =>
+			Array.isArray(item.transactions) ? item.transactions : []
+		),
+		reservations: items.flatMap((item) =>
+			Array.isArray(item.reservations) ? item.reservations : []
+		),
+	};
+};
+
 const ManagerFinancialsModal = ({
 	open,
 	onCancel,
@@ -188,52 +465,46 @@ const ManagerFinancialsModal = ({
 		[hotels]
 	);
 
-	const [selectedHotelId, setSelectedHotelId] = useState("");
 	const [summary, setSummary] = useState(null);
 	const [selectedAgentId, setSelectedAgentId] = useState("");
 	const [loading, setLoading] = useState(false);
 
-	useEffect(() => {
-		if (!open) return;
-		if (!normalizedHotels.length) {
-			setSelectedHotelId("");
-			setSummary(null);
-			return;
-		}
-		if (!normalizedHotels.some((hotel) => hotel.id === selectedHotelId)) {
-			setSelectedHotelId(normalizedHotels[0].id);
-		}
-	}, [normalizedHotels, open, selectedHotelId]);
-
-	const selectedHotel = useMemo(
-		() =>
-			normalizedHotels.find((hotel) => hotel.id === selectedHotelId) ||
-			normalizedHotels[0] ||
-			null,
-		[normalizedHotels, selectedHotelId]
-	);
-
 	const loadFinancials = useCallback(async () => {
-		if (!open || !selectedHotelId || !userId || !token) return;
+		if (!open || !normalizedHotels.length || !userId || !token) return;
 		setLoading(true);
 		try {
-			const data = await getAgentWalletSummary(
-				selectedHotelId,
-				userId,
-				token,
-				{}
+			const results = await Promise.all(
+				normalizedHotels.map(async (hotel) => {
+					const data = await getAgentWalletSummary(hotel.id, userId, token, {});
+					return { data, hotel };
+				})
 			);
-			if (data?.error) {
-				message.error(data.error || txt.error);
+			const successful = results.filter((item) => item.data && !item.data.error);
+			const failed = results.filter((item) => item.data?.error || !item.data);
+			if (!successful.length) {
+				message.error(failed[0]?.data?.error || txt.error);
 				setSummary(null);
 				return;
 			}
-			setSummary(data);
-			const nextAgents = Array.isArray(data?.agents) ? data.agents : [];
+			if (failed.length) {
+				message.warning(txt.error);
+			}
+			const nextAgents = successful.flatMap(({ data, hotel }) =>
+				(Array.isArray(data?.agents) ? data.agents : []).map((item) =>
+					decorateAgentRow(item, hotel, data?.hotel)
+				)
+			);
+			setSummary({
+				agents: nextAgents,
+				totals: buildTotals(nextAgents),
+			});
+			const nextAgentIds = [
+				...new Set(nextAgents.map((item) => normalizeId(item.agent)).filter(Boolean)),
+			];
 			setSelectedAgentId((current) =>
-				nextAgents.length === 1
-					? normalizeId(nextAgents[0]?.agent)
-					: nextAgents.some((item) => normalizeId(item.agent) === current)
+				nextAgentIds.length === 1
+					? nextAgentIds[0]
+					: nextAgentIds.includes(current)
 					? current
 					: ""
 			);
@@ -244,7 +515,7 @@ const ManagerFinancialsModal = ({
 		} finally {
 			setLoading(false);
 		}
-	}, [open, selectedHotelId, token, txt.error, userId]);
+	}, [normalizedHotels, open, token, txt.error, userId]);
 
 	useEffect(() => {
 		loadFinancials();
@@ -257,24 +528,33 @@ const ManagerFinancialsModal = ({
 
 	const activeAgent = useMemo(
 		() =>
-			agents.find((item) => normalizeId(item.agent) === selectedAgentId) || null,
+			aggregateAgentRows(
+				agents.filter((item) => normalizeId(item.agent) === selectedAgentId)
+			),
 		[agents, selectedAgentId]
 	);
 
 	const agentOptions = useMemo(
-		() =>
-			agents.map((item) => {
+		() => {
+			const uniqueAgents = new Map();
+			agents.forEach((item) => {
+				const agentId = normalizeId(item.agent);
+				if (!agentId || uniqueAgents.has(agentId)) return;
 				const name = toTitleCase(item.agent?.name || item.agent?.email || "");
 				const company = item.agent?.companyName
 					? toTitleCase(item.agent.companyName)
 					: item.agent?.email || "";
 				const label =
 					company && company !== name ? `${name} | ${company}` : name || company;
-				return {
+				uniqueAgents.set(agentId, {
 					value: normalizeId(item.agent),
 					label,
-				};
-			}),
+				});
+			});
+			return [...uniqueAgents.values()].sort((a, b) =>
+				String(a.label).localeCompare(String(b.label))
+			);
+		},
 		[agents]
 	);
 
@@ -288,80 +568,95 @@ const ManagerFinancialsModal = ({
 		agentCommercialModel(activeAgent || {}) === "commission_only" ||
 		activeAgent?.walletRequired === false;
 
-	const exportExcel = useCallback(() => {
-		const summaryRows = agents.map((item) => ({
-			Agent: item.agent?.name || "",
-			Company: item.agent?.companyName || "",
-			Email: item.agent?.email || "",
-			Model: commercialModelLabel(item, labels.en),
-			"Opening Credit": item.openingWalletCredit,
-			"Wallet Added": item.walletAdded,
-			"Reservation Deductions": item.walletUsed,
-			Balance: item.balance,
-			Reservations: item.totalReservations,
-			"Reservation Value": item.totalReservationValue,
-			"Commission Due": item.commissionDue,
-			"Pending Confirmation": item.pendingConfirmation,
-		}));
-		const transactionRows = agents.flatMap((item) =>
-			(Array.isArray(item.transactions) ? item.transactions : []).map((tx) => ({
-				Agent: item.agent?.name || "",
-				Company: item.agent?.companyName || "",
-				Type: tx.transactionType || "",
-				Amount: tx.amount || 0,
-				Date: formatDate(tx.transactionDate),
-				Reference: tx.reference || "",
-				Note: tx.note || "",
-			}))
-		);
-		const reservationRows = agents.flatMap((item) =>
-			(Array.isArray(item.reservations) ? item.reservations : []).map(
-				(reservation) => ({
-					Agent: item.agent?.name || "",
-					Company: item.agent?.companyName || "",
-					Confirmation: reservation.confirmation_number || "",
-					Guest: reservation.customer_details?.name || "",
-					Date: formatDate(reservation.booked_at || reservation.createdAt),
-					Amount: reservation.total_amount || 0,
-					Commission:
-						reservation.commission ||
-						reservation.financial_cycle?.commissionAmount ||
-						0,
-					Status: reservation.reservation_status || reservation.state || "",
-				})
-			)
-		);
+	const exportExcel = useCallback(async () => {
+		const XLSX = await loadStyledXlsx();
 		const workbook = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(
+		appendJsonSheet(
+			XLSX,
 			workbook,
-			XLSX.utils.json_to_sheet(summaryRows),
-			"Agents"
+			buildAgentSummaryRows(agents),
+			"Agents",
+			txt.noData
 		);
-		XLSX.utils.book_append_sheet(
+		appendJsonSheet(
+			XLSX,
 			workbook,
-			XLSX.utils.json_to_sheet(transactionRows),
-			"Wallet Movements"
+			buildTransactionRows(agents),
+			"Wallet Movements",
+			txt.noData
 		);
-		XLSX.utils.book_append_sheet(
+		appendJsonSheet(
+			XLSX,
 			workbook,
-			XLSX.utils.json_to_sheet(reservationRows),
-			"Reservations"
+			buildReservationRows(agents),
+			"Reservations",
+			txt.noData
 		);
 		XLSX.writeFile(
 			workbook,
-			`${txt.filePrefix}-${selectedHotel?.name || selectedHotelId}-${moment().format(
+			`${safeFileSegment(txt.filePrefix)}-overview-${moment().format(
 				"YYYY-MM-DD"
-			)}.xlsx`
+			)}.xlsx`,
+			{ cellStyles: true }
 		);
-	}, [agents, selectedHotel?.name, selectedHotelId, txt.filePrefix]);
+	}, [agents, txt.filePrefix, txt.noData]);
 
-	const openFullWorkspace = () => {
-		if (!selectedHotelId || !userId) return;
-		window.location.href = `/hotel-management/financials/${userId}/${selectedHotelId}`;
-	};
+	const exportVisibleTables = useCallback(async () => {
+		if (!activeAgent) {
+			message.info(txt.chooseAgentFirst);
+			return;
+		}
+		const agentName =
+			activeAgent.agent?.name ||
+			activeAgent.agent?.companyName ||
+			activeAgent.agent?.email ||
+			"agent";
+		const XLSX = await loadStyledXlsx();
+		const workbook = XLSX.utils.book_new();
+		appendJsonSheet(
+			XLSX,
+			workbook,
+			buildAgentSummaryRows([activeAgent]),
+			"Selected Agent",
+			txt.noData
+		);
+		appendJsonSheet(
+			XLSX,
+			workbook,
+			buildTransactionRows([activeAgent]),
+			"Wallet Movements",
+			txt.noData
+		);
+		appendJsonSheet(
+			XLSX,
+			workbook,
+			buildReservationRows([activeAgent]),
+			"Reservations",
+			txt.noData
+		);
+		XLSX.writeFile(
+			workbook,
+			`${safeFileSegment(txt.filePrefix)}-${safeFileSegment(
+				agentName
+			)}-visible-${moment().format(
+				"YYYY-MM-DD"
+			)}.xlsx`,
+			{ cellStyles: true }
+		);
+	}, [
+		activeAgent,
+		txt.chooseAgentFirst,
+		txt.filePrefix,
+		txt.noData,
+	]);
 
 	const agentColumns = useMemo(
 		() => [
+			{
+				title: txt.hotelName,
+				dataIndex: "hotelName",
+				render: (value) => toTitleCase(value || "-"),
+			},
 			{
 				title: txt.agent,
 				dataIndex: ["agent", "name"],
@@ -427,6 +722,11 @@ const ManagerFinancialsModal = ({
 
 	const transactionColumns = useMemo(
 		() => [
+			{
+				title: txt.hotelName,
+				dataIndex: "hotelName",
+				render: (value) => toTitleCase(value || "-"),
+			},
 			{ title: txt.type, dataIndex: "transactionType" },
 			{
 				title: txt.amount,
@@ -446,6 +746,11 @@ const ManagerFinancialsModal = ({
 
 	const reservationColumns = useMemo(
 		() => [
+			{
+				title: txt.hotelName,
+				dataIndex: "hotelName",
+				render: (value) => toTitleCase(value || "-"),
+			},
 			{ title: txt.confirmation, dataIndex: "confirmation_number" },
 			{
 				title: txt.guest,
@@ -492,10 +797,8 @@ const ManagerFinancialsModal = ({
 					<div>
 						<Pill>
 							<WalletOutlined />
-							{selectedHotel?.name || txt.title}
+							{txt.overview}
 						</Pill>
-						<h2>{txt.title}</h2>
-						<p>{txt.subtitle}</p>
 					</div>
 					<ActionRow>
 						<Button icon={<ReloadOutlined />} onClick={loadFinancials}>
@@ -506,15 +809,7 @@ const ManagerFinancialsModal = ({
 							onClick={exportExcel}
 							disabled={!agents.length}
 						>
-							{txt.exportExcel}
-						</Button>
-						<Button
-							type='primary'
-							icon={<WalletOutlined />}
-							onClick={openFullWorkspace}
-							disabled={!selectedHotelId}
-						>
-							{txt.openWorkspace}
+							{txt.exportOverview || txt.exportExcel}
 						</Button>
 					</ActionRow>
 				</Hero>
@@ -522,26 +817,6 @@ const ManagerFinancialsModal = ({
 				{normalizedHotels.length ? (
 					<>
 						<SelectorGrid>
-							<SelectorField>
-								<LabelLine>
-									<span>{txt.chooseHotel}</span>
-									<Requirement>{txt.required}</Requirement>
-								</LabelLine>
-							<Select
-								value={selectedHotelId || undefined}
-								onChange={(value) => {
-									setSelectedHotelId(value);
-									setSelectedAgentId("");
-									setSummary(null);
-								}}
-								options={normalizedHotels.map((hotel) => ({
-									value: hotel.id,
-									label: hotel.name || hotel.id,
-								}))}
-								showSearch
-								optionFilterProp='label'
-							/>
-							</SelectorField>
 							<SelectorField>
 								<LabelLine>
 									<span>{txt.chooseAgent}</span>
@@ -558,24 +833,6 @@ const ManagerFinancialsModal = ({
 								/>
 							</SelectorField>
 						</SelectorGrid>
-
-						<HotelGrid>
-							{normalizedHotels.map((hotel) => (
-								<HotelChip
-									key={hotel.id}
-									type='button'
-									$active={hotel.id === selectedHotelId}
-									onClick={() => {
-										setSelectedHotelId(hotel.id);
-										setSelectedAgentId("");
-										setSummary(null);
-									}}
-								>
-									<HomeOutlined />
-									{hotel.name || hotel.id}
-								</HotelChip>
-							))}
-						</HotelGrid>
 
 						<SummaryGrid>
 							<SummaryCard $tone='blue'>
@@ -606,10 +863,12 @@ const ManagerFinancialsModal = ({
 								loading={loading}
 								dataSource={agents}
 								columns={agentColumns}
-								rowKey={(row) => normalizeId(row.agent)}
+								rowKey={(row) =>
+									`${row.hotelId || "hotel"}-${normalizeId(row.agent)}`
+								}
 								size='small'
 								pagination={{ pageSize: 6 }}
-								scroll={{ x: 1120 }}
+								scroll={{ x: 1280 }}
 								onRow={(row) => ({
 									onClick: () => setSelectedAgentId(normalizeId(row.agent)),
 								})}
@@ -619,47 +878,69 @@ const ManagerFinancialsModal = ({
 							/>
 						</Panel>
 
-						{agents.length && !activeAgent ? (
-							<RequiredNotice>{txt.chooseAgentFirst}</RequiredNotice>
+						{!activeAgent ? (
+							<RequiredNotice>
+								{agents.length ? txt.chooseAgentFirst : txt.noData}
+							</RequiredNotice>
 						) : (
 							<>
-							{activeIsCommissionOnly && (
-								<FinanceNotice>{txt.noWalletAgent}</FinanceNotice>
-							)}
-							<DetailGrid>
-							<Panel>
-								<PanelTitle>
-									<CalendarOutlined />
-									{txt.transactions}
-								</PanelTitle>
-								<Table
-									dataSource={activeTransactions}
-									columns={transactionColumns}
-									rowKey={(row) => row._id || row.reference || row.createdAt}
-									size='small'
-									pagination={{ pageSize: 5 }}
-									scroll={{ x: 720 }}
-									locale={{ emptyText: txt.noData }}
-								/>
-							</Panel>
-							<Panel>
-								<PanelTitle>
-									<BankOutlined />
-									{activeIsCommissionOnly
-										? txt.reservations
-										: txt.reservationDeductions}
-								</PanelTitle>
-								<Table
-									dataSource={activeReservations}
-									columns={reservationColumns}
-									rowKey={(row) => row._id || row.confirmation_number}
-									size='small'
-									pagination={{ pageSize: 5 }}
-									scroll={{ x: 780 }}
-									locale={{ emptyText: txt.noData }}
-								/>
-							</Panel>
-							</DetailGrid>
+								{activeIsCommissionOnly && (
+									<FinanceNotice>{txt.noWalletAgent}</FinanceNotice>
+								)}
+								<DetailToolbar>
+									<strong>
+										{txt.agent}:{" "}
+										{activeAgent?.agent?.name ||
+											activeAgent?.agent?.companyName ||
+											activeAgent?.agent?.email ||
+											"-"}
+									</strong>
+									<Button icon={<DownloadOutlined />} onClick={exportVisibleTables}>
+										{txt.exportVisibleTables || txt.exportExcel}
+									</Button>
+								</DetailToolbar>
+								<DetailGrid>
+									<Panel>
+										<PanelTitle>
+											<CalendarOutlined />
+											{txt.transactions}
+										</PanelTitle>
+										<Table
+											dataSource={activeTransactions}
+											columns={transactionColumns}
+											rowKey={(row) =>
+												`${row.hotelId || "hotel"}-${
+													row._id || row.reference || row.createdAt
+												}`
+											}
+											size='small'
+											pagination={{ pageSize: 5 }}
+											scroll={{ x: 860 }}
+											locale={{ emptyText: txt.noData }}
+										/>
+									</Panel>
+									<Panel>
+										<PanelTitle>
+											<BankOutlined />
+											{activeIsCommissionOnly
+												? txt.reservations
+												: txt.reservationDeductions}
+										</PanelTitle>
+										<Table
+											dataSource={activeReservations}
+											columns={reservationColumns}
+											rowKey={(row) =>
+												`${row.hotelId || "hotel"}-${
+													row._id || row.confirmation_number
+												}`
+											}
+											size='small'
+											pagination={{ pageSize: 5 }}
+											scroll={{ x: 920 }}
+											locale={{ emptyText: txt.noData }}
+										/>
+									</Panel>
+								</DetailGrid>
 							</>
 						)}
 					</>
@@ -703,24 +984,11 @@ const Hero = styled.section`
 	align-items: center;
 	justify-content: space-between;
 	gap: 1rem;
-	padding: 1rem;
+	padding: 0.65rem 0.85rem;
 	border: 1px solid #cfe8ff;
 	border-radius: 16px;
 	background: linear-gradient(135deg, #eff8ff 0%, #ffffff 100%);
 	margin-bottom: 0.8rem;
-
-	h2 {
-		margin: 0.45rem 0 0.25rem;
-		font-size: clamp(1.45rem, 2vw, 2.1rem);
-		font-weight: 950;
-		color: #0f172a;
-	}
-
-	p {
-		margin: 0;
-		color: #425b78;
-		font-weight: 800;
-	}
 
 	@media (max-width: 760px) {
 		align-items: stretch;
@@ -765,7 +1033,7 @@ const ActionRow = styled.div`
 
 const SelectorGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: 1fr;
 	align-items: center;
 	gap: 0.75rem;
 	padding: 0.85rem 1rem;
@@ -808,33 +1076,6 @@ const Requirement = styled.span`
 	color: #b42318;
 	font-size: 0.72rem;
 	font-weight: 900;
-`;
-
-const HotelGrid = styled.div`
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-	gap: 0.65rem;
-	margin: 0.75rem 0;
-`;
-
-const HotelChip = styled.button`
-	border: 1px solid ${(p) => (p.$active ? "#0d6efd" : "#cfe8ff")};
-	background: ${(p) =>
-		p.$active ? "linear-gradient(135deg, #e8f4ff, #ffffff)" : "#ffffff"};
-	color: #0f2842;
-	border-radius: 12px;
-	padding: 0.75rem 0.85rem;
-	font-weight: 950;
-	text-align: inherit;
-	text-transform: capitalize;
-	box-shadow: ${(p) =>
-		p.$active ? "0 12px 24px rgba(13, 110, 253, 0.14)" : "none"};
-	cursor: pointer;
-
-	svg {
-		margin-inline-end: 0.4rem;
-		color: #0d6efd;
-	}
 `;
 
 const SummaryGrid = styled.div`
@@ -906,6 +1147,40 @@ const DetailGrid = styled.div`
 
 	@media (max-width: 980px) {
 		grid-template-columns: 1fr;
+	}
+`;
+
+const DetailToolbar = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+	margin-bottom: 0.85rem;
+	padding: 0.75rem 0.85rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 14px;
+	background: #f8fcff;
+
+	strong {
+		min-width: 0;
+		color: #0f2842;
+		font-weight: 950;
+		overflow-wrap: anywhere;
+	}
+
+	.ant-btn {
+		min-height: 38px;
+		font-weight: 900;
+	}
+
+	@media (max-width: 620px) {
+		align-items: stretch;
+		flex-direction: column;
+
+		.ant-btn {
+			width: 100%;
+		}
 	}
 `;
 
