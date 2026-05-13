@@ -4,6 +4,7 @@ import { InputNumber, Modal, Table, Tooltip } from "antd";
 import moment from "moment";
 import { toast } from "react-toastify";
 import HotelMapFilters from "./HotelMapFilters"; // Ensure this path is correct
+import { isPendingConfirmationReservation } from "../../utils/reservationStatus";
 
 const CHECKED_OUT_STATUS_REGEX =
 	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
@@ -238,6 +239,7 @@ const HotelOverviewReservation = ({
 	};
 
 	const isReservationActive = useCallback((reservation) => {
+		if (isPendingConfirmationReservation(reservation)) return false;
 		const status = String(reservation?.reservation_status || "").toLowerCase();
 		if (!status) return true;
 		return !CHECKED_OUT_STATUS_REGEX.test(status);

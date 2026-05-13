@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Tooltip } from "antd";
 import moment from "moment";
+import { isPendingConfirmationReservation } from "../utils/reservationStatus";
 
 const CHECKED_OUT_STATUS_REGEX =
 	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
@@ -65,6 +66,7 @@ const HotelHeatMap = ({
 
 		if (useCurrentOccupancy) {
 			return reservations.some((reservation) => {
+				if (isPendingConfirmationReservation(reservation)) return false;
 				const status = String(reservation?.reservation_status || "");
 				if (CHECKED_OUT_STATUS_REGEX.test(status)) return false;
 				const roomIds = Array.isArray(reservation.roomId)
@@ -82,6 +84,7 @@ const HotelHeatMap = ({
 		const endDate = moment(end_date);
 
 		return reservations.some((reservation) => {
+			if (isPendingConfirmationReservation(reservation)) return false;
 			const status = String(reservation?.reservation_status || "");
 			if (CHECKED_OUT_STATUS_REGEX.test(status)) return false;
 

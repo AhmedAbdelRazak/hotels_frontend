@@ -6,6 +6,7 @@ import HotelMapCards from "./HotelMapCards";
 import HotelMapFilters from "./HotelMapFilters";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
 import { useHistory, useLocation } from "react-router-dom";
+import { isPendingConfirmationReservation } from "../../utils/reservationStatus";
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -199,6 +200,7 @@ const HotelHeatMap = ({
 	);
 
 	const isReservationActive = useCallback((reservation) => {
+		if (isPendingConfirmationReservation(reservation)) return false;
 		const status = String(reservation?.reservation_status || "").toLowerCase();
 		if (!status) return true;
 		return !CHECKED_OUT_STATUS_REGEX.test(status);

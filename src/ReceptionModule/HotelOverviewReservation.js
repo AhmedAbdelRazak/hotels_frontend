@@ -3,6 +3,7 @@ import styled, { keyframes } from "styled-components";
 import { InputNumber, Modal, Select, Tooltip, Checkbox } from "antd";
 import moment from "moment";
 import { toast } from "react-toastify";
+import { isPendingConfirmationReservation } from "../utils/reservationStatus";
 // eslint-disable-next-line
 const { Option } = Select;
 
@@ -196,6 +197,7 @@ const HotelOverviewReservation = ({
 		const endDate = moment(end_date_Map);
 
 		return allReservations.some((reservation) => {
+			if (isPendingConfirmationReservation(reservation)) return false;
 			const reservationStart = moment(reservation.checkin_date);
 			const reservationEnd = moment(reservation.checkout_date);
 
