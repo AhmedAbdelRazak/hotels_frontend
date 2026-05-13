@@ -52,10 +52,17 @@ const normalizeId = (value) => {
 	return String(value);
 };
 
-const getSupportedHotelIds = (user) =>
-	Array.isArray(user?.hotelsToSupport)
-		? user.hotelsToSupport.map(normalizeId).filter(Boolean)
-		: [];
+const getSupportedHotelIds = (user) => [
+	...new Set(
+		[
+			user?.hotelIdWork,
+			...(Array.isArray(user?.hotelIdsWork) ? user.hotelIdsWork : []),
+			...(Array.isArray(user?.hotelsToSupport) ? user.hotelsToSupport : []),
+		]
+			.map(normalizeId)
+			.filter(Boolean)
+	),
+];
 
 const getUserRoles = (user) => {
 	const roles = Array.isArray(user?.roles) ? user.roles : [];
@@ -103,12 +110,23 @@ const isOrderTakerReservationSearchAllowed = (search = "") => {
 	return params.has("newReservation") || params.has("list");
 };
 
-const isScopedHotelUser = (user) =>
-	Boolean(user?.hotelIdWork) &&
-	Boolean(user?.belongsToId) &&
+const hasScopedHotelRole = (user) =>
 	getUserRoles(user).some((role) =>
 		[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role)
-	);
+	) ||
+	hasAnyRoleDescription(user, [
+		"hotelmanager",
+		"reception",
+		"housekeepingmanager",
+		"housekeeping",
+		"finance",
+		"ordertaker",
+		"reservationemployee",
+	]);
+
+const isScopedHotelUser = (user) =>
+	hasScopedHotelRole(user) &&
+	getSupportedHotelIds(user).length > 0;
 
 const pathAllowsRole = (pathname = "", user, search = "") => {
 	const isScopedManager = hasRole(user, 2000) && hasRoleDescription(user, "hotelmanager");
@@ -245,9 +263,11 @@ const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
 		const assignedHotelId = normalizeId(user.hotelIdWork);
 		const assignedOwnerId = normalizeId(user.belongsToId);
 		const supportIds = getSupportedHotelIds(user);
+		const ownerMatches =
+			!urlOwnerId || !assignedOwnerId || assignedOwnerId === urlOwnerId;
 		return (
 			(assignedHotelId === urlHotelId || supportIds.includes(urlHotelId)) &&
-			(!urlOwnerId || assignedOwnerId === urlOwnerId)
+			ownerMatches
 		);
 	}
 

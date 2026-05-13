@@ -40,42 +40,13 @@ const getRoleDescriptions = (user = {}) => [
 const hasRoleDescription = (user, description) =>
 	getRoleDescriptions(user).includes(String(description || "").toLowerCase());
 
-const normalizeAssignedHotelId = (value) => {
-	if (!value) return "";
-	if (typeof value === "object") return String(value._id || value.id || "");
-	return String(value);
-};
-
-const getAssignedHotelIds = (user = {}) => [
-	...new Set(
-		[
-			user.hotelIdWork,
-			...(Array.isArray(user.hotelIdsWork) ? user.hotelIdsWork : []),
-			...(Array.isArray(user.hotelsToSupport) ? user.hotelsToSupport : []),
-		]
-			.map(normalizeAssignedHotelId)
-			.filter(Boolean)
-	),
-];
-
-const getScopedHotelPath = (user, route, query = "") => {
-	const ownerId = user?.belongsToId || user?._id;
-	const hotelId =
-		normalizeAssignedHotelId(user?.hotelIdWork) ||
-		(Array.isArray(user?.hotelsToSupport)
-			? normalizeAssignedHotelId(user.hotelsToSupport[0])
-			: "");
-
-	if (!ownerId || !hotelId) return "/hotel-management/main-dashboard";
-	return `/hotel-management/${route}/${ownerId}/${hotelId}${query}`;
-};
+const HOTEL_MAIN_DASHBOARD_PATH = "/hotel-management/main-dashboard";
 
 const getSigninRedirectPath = (user = {}) => {
 	const role = Number(user.role);
 	if (role === 1000) return "/admin/dashboard";
-	if (role === 10000) return "/hotel-management/main-dashboard";
+	if (role === 10000) return HOTEL_MAIN_DASHBOARD_PATH;
 
-	const assignedHotelIds = getAssignedHotelIds(user);
 	const isScopedHotelRole =
 		[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role) ||
 		[
@@ -88,33 +59,8 @@ const getSigninRedirectPath = (user = {}) => {
 			"reservationemployee",
 		].some((description) => hasRoleDescription(user, description));
 
-	if (isScopedHotelRole && assignedHotelIds.length > 1) {
-		return "/hotel-management/main-dashboard";
-	}
-
-	if (role === 7000 || hasRoleDescription(user, "ordertaker")) {
-		return getScopedHotelPath(user, "new-reservation", "?newReservation");
-	}
-	if (role === 8000 || hasRoleDescription(user, "reservationemployee")) {
-		return getScopedHotelPath(user, "new-reservation", "?pendingConfirmation");
-	}
-	if (role === 3000 || hasRoleDescription(user, "reception")) {
-		return getScopedHotelPath(user, "new-reservation", "?reserveARoom");
-	}
-	if (
-		role === 4000 ||
-		role === 5000 ||
-		hasRoleDescription(user, "housekeepingmanager") ||
-		hasRoleDescription(user, "housekeeping")
-	) {
-		return getScopedHotelPath(user, "house-keeping");
-	}
-	if (role === 6000 || hasRoleDescription(user, "finance")) {
-		return getScopedHotelPath(user, "dashboard");
-	}
-
-	if (role === 2000) return "/hotel-management/main-dashboard";
-	return "/hotel-management/main-dashboard";
+	if (isScopedHotelRole) return HOTEL_MAIN_DASHBOARD_PATH;
+	return HOTEL_MAIN_DASHBOARD_PATH;
 };
 
 /* ───────────── localised strings ───────────── */
@@ -293,7 +239,7 @@ const Signin = ({ history }) => {
 				</SmallNote>
 				<SmallNote isRTL={isRTL} style={{ marginTop: "0.75rem" }}>
 					<Link
-						to='/auth/forgot-password'
+						to='/auth/password/forgot'
 						className='cta'
 						dir={isRTL ? "rtl" : "ltr"}
 					>

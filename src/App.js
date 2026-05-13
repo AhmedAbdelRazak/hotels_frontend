@@ -159,6 +159,7 @@ function App() {
 					component={ClientPayMain}
 				/>
 				<Route path='/auth/forgot-password' exact component={ForgotPassword} />
+				<Route path='/auth/password/forgot' exact component={ForgotPassword} />
 				<Route
 					path='/auth/password/reset/:token'
 					exact

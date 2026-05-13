@@ -37,6 +37,7 @@ import {
 	getHotelDashboardOpenReservations,
 	getHotelMainDashboardStats,
 	getAgentWalletSummary,
+	getAgentTodoList,
 	getManagerExecutiveIncompleteReservations,
 	getManagerExecutiveSummary,
 	getReservationSummary,
@@ -1283,6 +1284,9 @@ const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") =>
 	if (!ownerId || !hotelId) return "/hotel-management/main-dashboard";
 
 	if (roleKey === "ordertaker") {
+		if (action === "todos") {
+			return `/hotel-management/financials/${ownerId}/${hotelId}?focus=todos`;
+		}
 		if (action === "finance") {
 			return `/hotel-management/financials/${ownerId}/${hotelId}`;
 		}
@@ -1383,6 +1387,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		newToday: "New today",
 		cancelled: "Cancelled",
 		incomplete: "Needs follow-up",
+		todos: "To Do's",
 		newReservation: "New reservation",
 		myReservations: "Reservation list",
 		openDashboard: "Open dashboard",
@@ -1421,6 +1426,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		newToday: "جديد اليوم",
 		cancelled: "ملغاة",
 		incomplete: "تحتاج متابعة",
+		todos: "المهام",
 		newReservation: "حجز جديد",
 		myReservations: "قائمة حجوزاتي",
 		openHotel: "فتح الفندق",
@@ -1492,6 +1498,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const [hotels, setHotels] = useState([]);
 	const [summaries, setSummaries] = useState({});
 	const [walletSummaries, setWalletSummaries] = useState({});
+	const [todoSummaries, setTodoSummaries] = useState({});
 	const [loading, setLoading] = useState(false);
 	const [summaryLoading, setSummaryLoading] = useState(false);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
@@ -1611,21 +1618,36 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	useEffect(() => {
 		if (!hotels.length || !user?._id || !token || roleKey !== "ordertaker") {
 			setWalletSummaries({});
+			setTodoSummaries({});
 			return;
 		}
 		let isMounted = true;
-		Promise.all(
-			hotels.map((hotel) =>
-				getAgentWalletSummary(hotel._id, user._id, token, {
-					agentId: user._id,
-				}).then((wallet) => [hotel._id, wallet?.agents?.[0] || {}])
-			)
-		)
-			.then((entries) => {
-				if (isMounted) setWalletSummaries(Object.fromEntries(entries));
+		Promise.all([
+			Promise.all(
+				hotels.map((hotel) =>
+					getAgentWalletSummary(hotel._id, user._id, token, {
+						agentId: user._id,
+					}).then((wallet) => [hotel._id, wallet?.agents?.[0] || {}])
+				)
+			),
+			Promise.all(
+				hotels.map((hotel) =>
+					getAgentTodoList(hotel._id, user._id, token, {
+						agentId: user._id,
+					}).then((todos) => [hotel._id, todos || { total: 0, data: [] }])
+				)
+			),
+		])
+			.then(([walletEntries, todoEntries]) => {
+				if (!isMounted) return;
+				setWalletSummaries(Object.fromEntries(walletEntries));
+				setTodoSummaries(Object.fromEntries(todoEntries));
 			})
 			.catch(() => {
-				if (isMounted) setWalletSummaries({});
+				if (isMounted) {
+					setWalletSummaries({});
+					setTodoSummaries({});
+				}
 			});
 
 		return () => {
@@ -1664,26 +1686,6 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		hotels,
 		location.search,
 		selectedHotelId,
-	]);
-
-	useEffect(() => {
-		if (loading || hotels.length !== 1) return;
-		const params = new URLSearchParams(location.search);
-		if (params.get("modal") === "financials" && canUseFinancialsModal) return;
-		const hotel = hotels[0];
-		const ownerId = getScopedOwnerId(hotel, user);
-		const hotelId = normalizeDashboardId(hotel?._id);
-		if (!ownerId || !hotelId) return;
-		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
-		history.replace(getScopedRouteForRole(roleKey, ownerId, hotelId));
-	}, [
-		canUseFinancialsModal,
-		history,
-		hotels,
-		loading,
-		location.search,
-		roleKey,
-		user,
 	]);
 
 	const totals = useMemo(
@@ -1732,6 +1734,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		if (roleKey === "ordertaker") {
 			return [
 				{ action: "primary", label: TXT.newReservation, icon: <PlusOutlined /> },
+				{ action: "todos", label: TXT.todos || "To Do's", icon: <WarningOutlined /> },
 				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 				{ action: "finance", label: TXT.financials, icon: <WalletOutlined /> },
 			];
@@ -1879,6 +1882,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 								walletSummaries[hotel._id] || {},
 								TXT
 							);
+							const todoCount = Number(todoSummaries[hotel._id]?.total || 0);
 							const active = hotel._id === selectedHotelId;
 							return (
 								<AgentHotelCard key={hotel._id} $active={active}>
@@ -1926,10 +1930,16 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 											<span>{TXT.incomplete}</span>
 										</AgentMiniStat>
 										{roleKey === "ordertaker" && (
-											<AgentMiniStat>
-												<strong>{walletDisplay.value}</strong>
-												<span>{walletDisplay.label}</span>
-											</AgentMiniStat>
+											<>
+												<AgentMiniStat>
+													<strong>{todoCount}</strong>
+													<span>{TXT.todos || "To Do's"}</span>
+												</AgentMiniStat>
+												<AgentMiniStat>
+													<strong>{walletDisplay.value}</strong>
+													<span>{walletDisplay.label}</span>
+												</AgentMiniStat>
+											</>
 										)}
 									</AgentCardStats>
 									<AgentCardActions>

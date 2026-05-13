@@ -23,7 +23,7 @@ const normaliseCredential = (v = "") => {
 const t = {
 	en: {
 		title: "Forgot Password",
-		sub: "We will send you a reset link by email and WhatsApp (if a phone exists).",
+		sub: "Enter an email to receive the reset link by email, or enter a phone number to receive it by WhatsApp.",
 		label: "Email or Phone",
 		placeholder: "you@example.com or +123456789",
 		send: "Send Reset Link",
@@ -73,6 +73,7 @@ export default function ForgotPassword() {
 				`${process.env.REACT_APP_API_URL}/forgot-password`,
 				{
 					emailOrPhone: normaliseCredential(credential),
+					client: "hotels",
 				}
 			);
 			setLoading(false);

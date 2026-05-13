@@ -225,6 +225,100 @@ export const getAgentWalletSummary = (hotelId, userId, token, params = {}) => {
 		.catch((err) => console.log(err));
 };
 
+export const getAgentTodoList = (hotelId, userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/todos/${hotelId}/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const createAgentWalletClaim = (
+	hotelId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${hotelId}/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const reviewAgentWalletClaim = (
+	hotelId,
+	userId,
+	token,
+	transactionId,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${hotelId}/${userId}/${transactionId}/review`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateAgentCommissionApproval = (
+	reservationId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/agent-commission-approval/${reservationId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const createAgentWalletTransaction = (
 	hotelId,
 	userId,

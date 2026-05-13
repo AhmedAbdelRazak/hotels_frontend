@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
 	Button,
-	Checkbox,
 	Input,
 	InputNumber,
 	Modal,
@@ -514,7 +513,7 @@ const PendingConfirmationReport = ({
 			payload: {
 				action: "finance",
 				commission: nextCommission,
-				commissionPaid: !!financeModal.commissionPaid,
+				commissionPaid: nextCommissionStatus === "commission paid",
 				commissionStatus: nextCommissionStatus,
 			},
 		})
@@ -883,20 +882,6 @@ const PendingConfirmationReport = ({
 							]}
 						/>
 					</label>
-					<Checkbox
-						checked={financeModal.commissionPaid}
-						onChange={(event) =>
-							setFinanceModal((prev) => ({
-								...prev,
-								commissionPaid: event.target.checked,
-								commissionStatus: event.target.checked
-									? "commission paid"
-									: "commission due",
-							}))
-						}
-					>
-						{txt.commissionPaid}
-					</Checkbox>
 					<ModalActions>
 						<Button onClick={closeFinanceModal}>{txt.cancel}</Button>
 						<Button

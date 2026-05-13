@@ -3,6 +3,7 @@ import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import { useHistory, useLocation, useParams } from "react-router-dom";
+import { Modal, Switch, Tooltip } from "antd";
 import { useCartContext } from "../../cart_context";
 import {
 	createRooms,
@@ -76,6 +77,7 @@ const HotelSettingsMain = () => {
 	const [currentStep, setCurrentStep] = useState(0);
 	const [selectedRoomType, setSelectedRoomType] = useState("");
 	const [roomTypeSelected, setRoomTypeSelected] = useState(false);
+	const [activationSaving, setActivationSaving] = useState(false);
 
 	const getSettingsOwnerId = () => {
 		const selectedHotel = readSelectedHotel();
@@ -99,6 +101,20 @@ const HotelSettingsMain = () => {
 
 	const buildSettingsPath = (search = "") =>
 		`/hotel-management/settings/${getSettingsOwnerId()}/${getSettingsHotelId()}${search}`;
+
+	const updateSelectedHotelCache = (updatedHotel) => {
+		if (!updatedHotel || !updatedHotel._id) return;
+		try {
+			const selectedHotel = readSelectedHotel();
+			const selectedHotelId = normalizeId(selectedHotel?._id);
+			const updatedHotelId = normalizeId(updatedHotel?._id);
+			if (!selectedHotelId || selectedHotelId === updatedHotelId) {
+				localStorage.setItem("selectedHotel", JSON.stringify(updatedHotel));
+			}
+		} catch (error) {
+			console.log("Could not update selected hotel cache:", error);
+		}
+	};
 
 	const clearUnsavedNewRoomDraft = () => {
 		setHotelDetails((previousDetails) => {
@@ -398,6 +414,34 @@ const HotelSettingsMain = () => {
 		}, {});
 	};
 
+	const getActivationReadiness = () => {
+		const roomsDone =
+			Array.isArray(hotelDetails?.roomCountDetails) &&
+			hotelDetails.roomCountDetails.length > 0;
+		const photosDone =
+			Array.isArray(hotelDetails?.hotelPhotos) &&
+			hotelDetails.hotelPhotos.length > 0;
+		const coords = hotelDetails?.location?.coordinates || [];
+		const locationDone =
+			Array.isArray(coords) &&
+			coords.length >= 2 &&
+			Number(coords[0]) !== 0 &&
+			Number(coords[1]) !== 0;
+		const dataDone = Boolean(
+			String(hotelDetails?.aboutHotel || "").trim() ||
+				String(hotelDetails?.aboutHotelArabic || "").trim() ||
+				Number(hotelDetails?.overallRoomsCount || 0) > 0
+		);
+
+		return {
+			roomsDone,
+			photosDone,
+			locationDone,
+			dataDone,
+			ready: roomsDone && photosDone && locationDone && dataDone,
+		};
+	};
+
 	useEffect(() => {
 		gettingHotelData();
 		// eslint-disable-next-line
@@ -444,6 +488,52 @@ const HotelSettingsMain = () => {
 				}
 			})
 			.catch((err) => console.log("Error:", err));
+	};
+
+	const handleActivationChange = (activateHotel) => {
+		const readiness = getActivationReadiness();
+		const hotelName = hotelDetails?.hotelName || "this hotel";
+
+		if (activateHotel && !readiness.ready) {
+			toast.error(
+				"Please complete rooms, photos, location, and hotel data before activating this hotel."
+			);
+			return;
+		}
+
+		Modal.confirm({
+			title: `${activateHotel ? "Activate" : "Deactivate"} ${hotelName}?`,
+			content: activateHotel
+				? "This hotel will become visible on Jannat Booking wherever active hotels are shown."
+				: "This hotel will be hidden from Jannat Booking public hotel pages.",
+			okText: activateHotel ? "Activate" : "Deactivate",
+			cancelText: "Cancel",
+			onOk: () => {
+				setActivationSaving(true);
+				return updateHotelDetails(getSettingsHotelId(), user._id, token, {
+					activateHotel,
+					fromPage: "HotelActivation",
+				})
+					.then((response) => {
+						if (response?.error) {
+							throw new Error(response.error);
+						}
+						setHotelDetails(response);
+						updateSelectedHotelCache(response);
+						toast.success(
+							activateHotel
+								? "Hotel activated successfully"
+								: "Hotel deactivated successfully"
+						);
+					})
+					.catch((error) => {
+						toast.error(error.message || "Hotel activation update failed");
+					})
+					.finally(() => {
+						setActivationSaving(false);
+					});
+			},
+		});
 	};
 
 	const addRooms = () => {
@@ -497,6 +587,11 @@ const HotelSettingsMain = () => {
 				console.error("Error adding rooms:", err);
 			});
 	};
+
+	const activationReadiness = getActivationReadiness();
+	const hotelIsActive = !!hotelDetails?.activateHotel;
+	const activationToggleDisabled =
+		activationSaving || (!hotelIsActive && !activationReadiness.ready);
 
 	return (
 		<HotelSettingsMainWrapper
@@ -554,6 +649,59 @@ const HotelSettingsMain = () => {
 					>
 						{chosenLanguage === "English" ? "ARABIC" : "English"}
 					</div>
+
+					{hotelDetails && hotelDetails.hotelName ? (
+						<ActivationPanel $isActive={hotelIsActive}>
+							<div className='activation-copy'>
+								<span className='activation-kicker'>Hotel visibility</span>
+								<h3>
+									{hotelIsActive
+										? "Active on Jannat Booking"
+										: "Hidden from Jannat Booking"}
+								</h3>
+								<p>
+									{activationReadiness.ready
+										? "This hotel is ready to be shown to guests when active."
+										: "Complete rooms, photos, location, and hotel data before activation."}
+								</p>
+								<div className='activation-checklist'>
+									<span className={activationReadiness.roomsDone ? "done" : ""}>
+										Rooms
+									</span>
+									<span
+										className={activationReadiness.photosDone ? "done" : ""}
+									>
+										Photos
+									</span>
+									<span
+										className={activationReadiness.locationDone ? "done" : ""}
+									>
+										Location
+									</span>
+									<span className={activationReadiness.dataDone ? "done" : ""}>
+										Hotel Data
+									</span>
+								</div>
+							</div>
+							<Tooltip
+								title={
+									activationToggleDisabled && !activationSaving
+										? "Finish the required setup steps first"
+										: ""
+								}
+							>
+								<div className='activation-switch'>
+									<Switch
+										checked={hotelIsActive}
+										loading={activationSaving}
+										disabled={activationToggleDisabled}
+										onChange={handleActivationChange}
+									/>
+									<span>{hotelIsActive ? "Active" : "Inactive"}</span>
+								</div>
+							</Tooltip>
+						</ActivationPanel>
+					) : null}
 
 					<TabsShell>
 						<div className='tab-grid'>
@@ -771,6 +919,102 @@ const HotelSettingsMainWrapper = styled.div`
 		.grid-container-main {
 			grid-template-columns: ${(props) =>
 				props.show ? "5% 90%" : props.showList ? "13% 87%" : "19% 81%"};
+		}
+	}
+`;
+
+const ActivationPanel = styled.div`
+	align-items: center;
+	background: #ffffff;
+	border: 1px solid
+		${(props) => (props.$isActive ? "#8fd3a4" : "#d7e7f8")};
+	border-left: 5px solid ${(props) => (props.$isActive ? "#229954" : "#7f8c8d")};
+	border-radius: 8px;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+	display: flex;
+	gap: 18px;
+	justify-content: space-between;
+	margin: 8px auto 10px;
+	max-width: 1360px;
+	padding: 16px 18px;
+	width: calc(100% - clamp(16px, 2.8vw, 36px));
+
+	.activation-copy {
+		min-width: 0;
+	}
+
+	.activation-kicker {
+		color: #566573;
+		display: block;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0;
+		margin-bottom: 4px;
+		text-transform: uppercase;
+	}
+
+	h3 {
+		color: #17202a;
+		font-size: 1.05rem;
+		font-weight: 800;
+		line-height: 1.25;
+		margin: 0;
+	}
+
+	p {
+		color: #566573;
+		font-size: 0.92rem;
+		line-height: 1.45;
+		margin: 6px 0 0;
+	}
+
+	.activation-checklist {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 7px;
+		margin-top: 10px;
+	}
+
+	.activation-checklist span {
+		background: #f3f6f8;
+		border: 1px solid #d9e2ec;
+		border-radius: 6px;
+		color: #596b7a;
+		font-size: 0.78rem;
+		font-weight: 700;
+		line-height: 1;
+		padding: 6px 9px;
+	}
+
+	.activation-checklist span.done {
+		background: #eaf8ee;
+		border-color: #a9dfbf;
+		color: #1e8449;
+	}
+
+	.activation-switch {
+		align-items: center;
+		display: flex;
+		flex: 0 0 auto;
+		gap: 9px;
+		justify-content: flex-end;
+		min-width: 116px;
+	}
+
+	.activation-switch span {
+		color: #17202a;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 720px) {
+		align-items: flex-start;
+		flex-direction: column;
+		margin: 8px 8px 10px;
+		width: auto;
+
+		.activation-switch {
+			justify-content: flex-start;
 		}
 	}
 `;

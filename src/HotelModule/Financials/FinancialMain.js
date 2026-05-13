@@ -24,6 +24,7 @@ import {
 	PaperClipOutlined,
 	PlusOutlined,
 	ReloadOutlined,
+	WarningOutlined,
 	WalletOutlined,
 } from "@ant-design/icons";
 import moment from "moment";
@@ -32,10 +33,14 @@ import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
 import {
+	createAgentWalletClaim,
 	createAgentWalletTransaction,
 	deleteAgentWalletTransaction,
+	getAgentTodoList,
 	getAgentWalletSummary,
 	getHotelById,
+	reviewAgentWalletClaim,
+	updateAgentCommissionApproval,
 	updateAgentWalletTransaction,
 } from "../apiAdmin";
 import { getStoredMenuCollapsed } from "../utils/menuState";
@@ -422,6 +427,29 @@ Object.assign(labels.en, {
 	attachmentInvalid: "Only PDF and image attachments are allowed.",
 	attachmentLimit: "You can attach up to 8 files.",
 	attachmentTotalTooLarge: "Attachments must be 32MB total or smaller.",
+	claimWalletCredit: "Claim wallet credit",
+	claimSubmitted: "Wallet credit claim submitted for approval.",
+	todos: "To Do's",
+	todoHint: "Action items for your reservations and wallet claims.",
+	noTodos: "No action items right now.",
+	approve: "Approve",
+	reject: "Reject",
+	rejectionReason: "Write the rejection reason",
+	commissionApproved: "Commission payment approved.",
+	commissionRejected: "Commission payment rejected.",
+	rejectCommissionTitle: "Reject commission payment?",
+	pendingApproval: "Pending approval",
+	claimApproved: "Wallet claim approved.",
+	claimRejected: "Wallet claim rejected.",
+	rejectClaimTitle: "Reject wallet claim?",
+	walletClaimPending: "Wallet claim pending",
+	walletClaimRejected: "Wallet claim rejected",
+	claimStatus: "Claim status",
+	pendingClaimAmount: "Pending wallet claims",
+	rejectedClaimAmount: "Rejected wallet claims",
+	walletApprovalNotice:
+		"Wallet credit claims update your balance only after hotel finance approves them. Pending or rejected claims are shown below and are not included in Wallet added or Current balance.",
+	notInWalletBalance: "Not included in wallet balance",
 });
 
 Object.assign(labels.ar, {
@@ -435,6 +463,32 @@ Object.assign(labels.ar, {
 	attachmentInvalid: "المسموح فقط PDF أو صور.",
 	attachmentLimit: "يمكن إرفاق 8 ملفات كحد أقصى.",
 	attachmentTotalTooLarge: "إجمالي المرفقات يجب أن يكون 32MB أو أقل.",
+});
+
+Object.assign(labels.ar, {
+	claimWalletCredit: "\u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629 \u0628\u0631\u0635\u064a\u062f \u0644\u0644\u0645\u062d\u0641\u0638\u0629",
+	claimSubmitted: "\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0631\u0635\u064a\u062f \u0644\u0644\u0645\u0631\u0627\u062c\u0639\u0629.",
+	todos: "\u0627\u0644\u0645\u0647\u0627\u0645",
+	todoHint: "\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0645\u0637\u0644\u0648\u0628\u0629 \u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0643 \u0648\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
+	noTodos: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0647\u0627\u0645 \u062d\u0627\u0644\u064a\u0627.",
+	approve: "\u0645\u0648\u0627\u0641\u0642\u0629",
+	reject: "\u0631\u0641\u0636",
+	rejectionReason: "\u0627\u0643\u062a\u0628 \u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636",
+	commissionApproved: "\u062a\u0645\u062a \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629.",
+	commissionRejected: "\u062a\u0645 \u0631\u0641\u0636 \u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629.",
+	rejectCommissionTitle: "\u0631\u0641\u0636 \u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629\u061f",
+	pendingApproval: "\u0642\u064a\u062f \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629",
+	claimApproved: "\u062a\u0645\u062a \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
+	claimRejected: "\u062a\u0645 \u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
+	rejectClaimTitle: "\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629\u061f",
+	walletClaimPending: "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u062d\u0641\u0638\u0629 \u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629",
+	walletClaimRejected: "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u062d\u0641\u0638\u0629 \u0645\u0631\u0641\u0648\u0636\u0629",
+	claimStatus: "\u062d\u0627\u0644\u0629 \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629",
+	pendingClaimAmount: "\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629",
+	rejectedClaimAmount: "\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0645\u0631\u0641\u0648\u0636\u0629",
+	walletApprovalNotice:
+		"\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0627 \u062a\u0636\u0627\u0641 \u0625\u0644\u0649 \u0627\u0644\u0631\u0635\u064a\u062f \u0625\u0644\u0627 \u0628\u0639\u062f \u0645\u0648\u0627\u0641\u0642\u0629 \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0641\u0646\u062f\u0642. \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0623\u0648 \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629 \u062a\u0638\u0647\u0631 \u0647\u0646\u0627 \u0648\u0644\u0627 \u062a\u062f\u062e\u0644 \u0641\u064a \u0627\u0644\u0645\u0636\u0627\u0641 \u0644\u0644\u0645\u062d\u0641\u0638\u0629 \u0623\u0648 \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u062d\u0627\u0644\u064a.",
+	notInWalletBalance: "\u063a\u064a\u0631 \u0645\u062d\u062a\u0633\u0628 \u0641\u064a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
 });
 
 const transactionOptions = (txt) => [
@@ -487,6 +541,8 @@ const FinancialMain = ({ match }) => {
 	);
 	const [loading, setLoading] = useState(false);
 	const [summary, setSummary] = useState(null);
+	const [todos, setTodos] = useState([]);
+	const [todosLoading, setTodosLoading] = useState(false);
 	const [selectedAgentId, setSelectedAgentId] = useState("");
 	const [dateRange, setDateRange] = useState([]);
 	const [modalOpen, setModalOpen] = useState(false);
@@ -559,6 +615,27 @@ const FinancialMain = ({ match }) => {
 		}
 	}, [filters, hotelId, token, txt.error, userId]);
 
+	const loadTodos = useCallback(async () => {
+		if (!hotelId || !userId || !token || !agentOnly) {
+			setTodos([]);
+			return;
+		}
+		setTodosLoading(true);
+		try {
+			const data = await getAgentTodoList(hotelId, userId, token, {
+				agentId: user?._id,
+			});
+			if (data?.error) {
+				message.error(data.error);
+				setTodos([]);
+			} else {
+				setTodos(Array.isArray(data?.data) ? data.data : []);
+			}
+		} finally {
+			setTodosLoading(false);
+		}
+	}, [agentOnly, hotelId, token, user?._id, userId]);
+
 	useEffect(() => {
 		getHotelById(hotelId).then((data) => {
 			if (data && !data.error) {
@@ -571,6 +648,10 @@ const FinancialMain = ({ match }) => {
 	useEffect(() => {
 		loadFinancials();
 	}, [loadFinancials]);
+
+	useEffect(() => {
+		loadTodos();
+	}, [loadTodos]);
 
 	const openEntryModal = (agentId = activeAgentId) => {
 		setEditingTransactionId("");
@@ -682,7 +763,9 @@ const FinancialMain = ({ match }) => {
 			endDate: filters.endDate,
 		};
 		try {
-			const response = editingTransactionId
+			const response = agentOnly && !editingTransactionId
+				? await createAgentWalletClaim(hotelId, userId, token, payload)
+				: editingTransactionId
 				? await updateAgentWalletTransaction(
 						hotelId,
 						userId,
@@ -695,10 +778,17 @@ const FinancialMain = ({ match }) => {
 				message.error(response.error);
 				return;
 			}
-			message.success(editingTransactionId ? txt.updated : txt.saved);
+			message.success(
+				agentOnly && !editingTransactionId
+					? txt.claimSubmitted
+					: editingTransactionId
+					? txt.updated
+					: txt.saved
+			);
 			setEditingTransactionId("");
 			setModalOpen(false);
 			loadFinancials();
+			loadTodos();
 		} finally {
 			setEntrySaving(false);
 		}
@@ -718,6 +808,82 @@ const FinancialMain = ({ match }) => {
 		}
 		message.success(txt.deleted);
 		loadFinancials();
+	};
+
+	const submitCommissionApproval = async (todo, action, reason = "") => {
+		const response = await updateAgentCommissionApproval(
+			todo.reservationId,
+			userId,
+			token,
+			{ action, reason }
+		);
+		if (response?.error) {
+			message.error(response.error);
+			return;
+		}
+		message.success(
+			action === "approve" ? txt.commissionApproved : txt.commissionRejected
+		);
+		loadFinancials();
+		loadTodos();
+	};
+
+	const rejectCommissionApproval = (todo) => {
+		let reason = "";
+		Modal.confirm({
+			title: txt.rejectCommissionTitle,
+			content: (
+				<Input.TextArea
+					rows={3}
+					placeholder={txt.rejectionReason}
+					onChange={(event) => {
+						reason = event.target.value;
+					}}
+				/>
+			),
+			okText: txt.reject,
+			cancelText: txt.cancel,
+			okButtonProps: { danger: true },
+			onOk: () => submitCommissionApproval(todo, "reject", reason),
+		});
+	};
+
+	const reviewWalletClaim = async (transactionId, action, reason = "") => {
+		const response = await reviewAgentWalletClaim(
+			hotelId,
+			userId,
+			token,
+			transactionId,
+			{ action, rejectionReason: reason }
+		);
+		if (response?.error) {
+			message.error(response.error);
+			return;
+		}
+		message.success(
+			action === "approve" ? txt.claimApproved : txt.claimRejected
+		);
+		loadFinancials();
+	};
+
+	const rejectWalletClaim = (transactionId) => {
+		let reason = "";
+		Modal.confirm({
+			title: txt.rejectClaimTitle,
+			content: (
+				<Input.TextArea
+					rows={3}
+					placeholder={txt.rejectionReason}
+					onChange={(event) => {
+						reason = event.target.value;
+					}}
+				/>
+			),
+			okText: txt.reject,
+			cancelText: txt.cancel,
+			okButtonProps: { danger: true },
+			onOk: () => reviewWalletClaim(transactionId, "reject", reason),
+		});
 	};
 
 	const exportExcel = async () => {
@@ -851,6 +1017,11 @@ const FinancialMain = ({ match }) => {
 		},
 		{ title: txt.commissionDue, dataIndex: "commissionDue", render: money },
 		{ title: txt.pending, dataIndex: "pendingConfirmation" },
+		{
+			title: txt.walletClaimPending,
+			dataIndex: "pendingWalletClaims",
+			render: (value) => Number(value || 0),
+		},
 		...(summary?.canManage
 			? [
 					{
@@ -873,6 +1044,29 @@ const FinancialMain = ({ match }) => {
 		{ title: txt.transactionType, dataIndex: "transactionType" },
 		{ title: txt.amount, dataIndex: "amount", render: money },
 		{
+			title: txt.claimStatus,
+			dataIndex: "status",
+			render: (value, row) => (
+				<Tag
+					color={
+						value === "posted"
+							? "green"
+							: value === "pending"
+							? "orange"
+							: value === "rejected"
+							? "red"
+							: "default"
+					}
+				>
+					{row.source === "agent_claim" && value === "pending"
+						? txt.walletClaimPending
+						: row.source === "agent_claim" && value === "rejected"
+						? txt.walletClaimRejected
+						: value || "-"}
+				</Tag>
+			),
+		},
+		{
 			title: txt.date,
 			dataIndex: "transactionDate",
 			render: (value) => (value ? moment(value).format("YYYY-MM-DD") : "-"),
@@ -894,7 +1088,7 @@ const FinancialMain = ({ match }) => {
 								<Button
 									size='small'
 									icon={<EditOutlined />}
-									disabled={Boolean(row.reservationId)}
+									disabled={Boolean(row.reservationId) || row.status === "pending"}
 									onClick={() => openEditTransactionModal(row)}
 								>
 									{txt.edit}
@@ -909,16 +1103,101 @@ const FinancialMain = ({ match }) => {
 										size='small'
 										danger
 										icon={<DeleteOutlined />}
-										disabled={Boolean(row.reservationId)}
+										disabled={Boolean(row.reservationId) || row.status === "pending"}
 									>
 										{txt.delete}
 									</Button>
 								</Popconfirm>
+								{row.source === "agent_claim" && row.status === "pending" && (
+									<>
+										<Button
+											size='small'
+											type='primary'
+											onClick={() => reviewWalletClaim(row._id, "approve")}
+										>
+											{txt.approve}
+										</Button>
+										<Button
+											size='small'
+											danger
+											onClick={() => rejectWalletClaim(row._id)}
+										>
+											{txt.reject}
+										</Button>
+									</>
+								)}
 							</WalletActionButtons>
 						),
 					},
 			  ]
 			: []),
+	];
+
+	const todoColumns = [
+		{
+			title: txt.todos,
+			dataIndex: "title",
+			render: (value, row) => (
+				<div>
+					<strong>{value || row.type}</strong>
+					<div style={{ color: "#667085", fontSize: 12 }}>
+						{row.confirmation_number || row.reference || ""}
+					</div>
+				</div>
+			),
+		},
+		{
+			title: txt.guest,
+			dataIndex: "guestName",
+			render: (value) => value || "-",
+		},
+		{
+			title: txt.amount,
+			dataIndex: "amount",
+			render: (value) => (value ? `${money(value)} SAR` : "-"),
+		},
+		{
+			title: txt.status,
+			dataIndex: "status",
+			render: (value, row) => (
+				<Tag color={row.severity === "high" ? "red" : row.severity === "medium" ? "orange" : "blue"}>
+					{value || row.type || "-"}
+				</Tag>
+			),
+		},
+		{
+			title: txt.note,
+			render: (_, row) => row.rejectionReason || "-",
+		},
+		{
+			title: txt.attachments,
+			dataIndex: "attachments",
+			render: renderAttachments,
+		},
+		{
+			title: txt.actions,
+			render: (_, row) =>
+				row.type === "commission_agent_approval" ? (
+					<WalletActionButtons>
+						<Button
+							size='small'
+							type='primary'
+							onClick={() => submitCommissionApproval(row, "approve")}
+						>
+							{txt.approve}
+						</Button>
+						<Button
+							size='small'
+							danger
+							onClick={() => rejectCommissionApproval(row)}
+						>
+							{txt.reject}
+						</Button>
+					</WalletActionButtons>
+				) : (
+					"-"
+				),
+		},
 	];
 
 	const reservationColumns = [
@@ -998,6 +1277,15 @@ const FinancialMain = ({ match }) => {
 									{txt.addFunds}
 								</Button>
 							)}
+							{agentOnly && !activeIsCommissionOnly && (
+								<Button
+									type='primary'
+									icon={<PlusOutlined />}
+									onClick={() => openEntryModal(user?._id)}
+								>
+									{txt.claimWalletCredit}
+								</Button>
+							)}
 						</HeaderActions>
 					</HeaderCard>
 
@@ -1075,6 +1363,9 @@ const FinancialMain = ({ match }) => {
 					{activeIsCommissionOnly && (
 						<FinanceNotice>{txt.noWalletAgent}</FinanceNotice>
 					)}
+					{agentOnly && !activeIsCommissionOnly && (
+						<FinanceNotice>{txt.walletApprovalNotice}</FinanceNotice>
+					)}
 
 					<SummaryGrid>
 						<SummaryCard $tone='blue'>
@@ -1100,7 +1391,49 @@ const FinancialMain = ({ match }) => {
 							<span>{txt.commissionDue}</span>
 							<strong>{money(summary?.totals?.commissionDue)} SAR</strong>
 						</SummaryCard>
+						{agentOnly && !activeIsCommissionOnly && (
+							<>
+								<SummaryCard $tone='orange'>
+									<WarningOutlined />
+									<span>{txt.pendingClaimAmount}</span>
+									<strong>
+										{money(activeAgent?.pendingWalletClaimAmount)} SAR
+									</strong>
+									<small>
+										{Number(activeAgent?.pendingWalletClaims || 0)}{" "}
+										{txt.pendingApproval}
+									</small>
+								</SummaryCard>
+								<SummaryCard $tone='red'>
+									<WarningOutlined />
+									<span>{txt.rejectedClaimAmount}</span>
+									<strong>
+										{money(activeAgent?.rejectedWalletClaimAmount)} SAR
+									</strong>
+									<small>{txt.notInWalletBalance}</small>
+								</SummaryCard>
+							</>
+						)}
 					</SummaryGrid>
+
+					{agentOnly && (
+						<Panel id='agent-finance-todos'>
+							<PanelTitle>{txt.todos}</PanelTitle>
+							<p style={{ marginTop: 0, color: "#667085" }}>{txt.todoHint}</p>
+							<Table
+								rowKey={(row) =>
+									row.reservationId || row.walletTransactionId || row.type
+								}
+								dataSource={todos}
+								columns={todoColumns}
+								loading={todosLoading}
+								size='small'
+								scroll={{ x: 980 }}
+								pagination={{ pageSize: 6 }}
+								locale={{ emptyText: txt.noTodos }}
+							/>
+						</Panel>
+					)}
 
 					<Panel>
 						<PanelTitle>{txt.agent}</PanelTitle>
@@ -1163,9 +1496,21 @@ const FinancialMain = ({ match }) => {
 							}}
 							onOk={saveEntry}
 							confirmLoading={entrySaving}
-							okText={editingTransactionId ? txt.updateEntry : txt.save}
+							okText={
+								agentOnly && !editingTransactionId
+									? txt.claimWalletCredit
+									: editingTransactionId
+									? txt.updateEntry
+									: txt.save
+							}
 							cancelText={txt.cancel}
-							title={editingTransactionId ? txt.updateEntry : txt.addFunds}
+							title={
+								agentOnly && !editingTransactionId
+									? txt.claimWalletCredit
+									: editingTransactionId
+									? txt.updateEntry
+									: txt.addFunds
+							}
 							width={760}
 						>
 						<EntryGrid>
@@ -1173,7 +1518,7 @@ const FinancialMain = ({ match }) => {
 								<span>{txt.agent}</span>
 									<Select
 										value={entry.agentId || undefined}
-										disabled={Boolean(editingTransactionId)}
+										disabled={Boolean(editingTransactionId) || agentOnly}
 										onChange={(value) =>
 										setEntry((current) => ({ ...current, agentId: value }))
 									}
@@ -1187,6 +1532,7 @@ const FinancialMain = ({ match }) => {
 								<span>{txt.transactionType}</span>
 								<Select
 									value={entry.transactionType}
+									disabled={agentOnly}
 									onChange={(value) =>
 										setEntry((current) => ({
 											...current,
@@ -1666,6 +2012,7 @@ const cardTones = {
 	orange: ["#fff7ed", "#ea580c"],
 	green: ["#ecfdf5", "#059669"],
 	purple: ["#f5f3ff", "#7c3aed"],
+	red: ["#fff1f2", "#e11d48"],
 };
 
 const SummaryCard = styled.article`
@@ -1696,6 +2043,12 @@ const SummaryCard = styled.article`
 		direction: ltr;
 		unicode-bidi: plaintext;
 	}
+	small {
+		color: #475569;
+		font-weight: 800;
+		font-size: 0.72rem;
+		line-height: 1.25;
+	}
 
 	@media (max-width: 520px) {
 		min-height: 84px;
@@ -1707,6 +2060,10 @@ const SummaryCard = styled.article`
 
 		strong {
 			font-size: 0.9rem;
+		}
+
+		small {
+			font-size: 0.68rem;
 		}
 	}
 `;
