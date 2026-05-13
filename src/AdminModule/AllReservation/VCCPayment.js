@@ -24,10 +24,32 @@ import {
 	chargeReservationViaBraintreeVcc,
 	chargeReservationViaBofaVcc,
 } from "../apiAdmin";
+import { isAuthenticated } from "../../auth";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const safeNumber = (val) => {
 	const parsed = Number(val);
 	return isNaN(parsed) ? 0 : parsed;
+};
+const formatMoneyInput = (value) => {
+	const amount = safeNumber(value);
+	return amount > 0 ? amount.toFixed(2) : "";
+};
+const resolveStoredVccAmounts = (reservation) => {
+	const metadata =
+		reservation?.vcc_payment?.metadata &&
+		typeof reservation.vcc_payment.metadata === "object"
+			? reservation.vcc_payment.metadata
+			: {};
+	const currency = String(metadata.amount_to_charge_currency || "").toUpperCase();
+	const sourceAmount = safeNumber(metadata.amount_to_charge);
+	const amountUsd =
+		safeNumber(metadata.amount_to_charge_usd) ||
+		(currency === "USD" ? sourceAmount : 0);
+	const amountSar =
+		safeNumber(metadata.amount_to_charge_sar) ||
+		(currency === "SAR" ? sourceAmount : 0);
+	return { amountUsd, amountSar };
 };
 const formatDisplayDate = (date, locale) => {
 	if (!date) return "N/A";
@@ -393,6 +415,9 @@ const VCCPayment = ({
 	const isBraintreeVccMode = VCC_GATEWAY_MODE === "braintree";
 	const isBofaVccMode = VCC_GATEWAY_MODE === "bofa";
 	const isPayPalVccMode = !isBraintreeVccMode && !isBofaVccMode;
+	const authState = isAuthenticated() || {};
+	const canManageBofaVcc =
+		!isBofaVccMode || isSuperAdminUser(authState?.user);
 	const vccCardholderName = String(
 		vccManualCardholderName || defaultVccCardholderName,
 	)
@@ -419,6 +444,11 @@ const VCCPayment = ({
 			),
 		[vccProviderUiPreset, vccZipCode, vccDefaultZipCode],
 	);
+	const storedVccAmounts = useMemo(
+		() => resolveStoredVccAmounts(reservation),
+		[reservation],
+	);
+	const storedVccAmountUsdInput = formatMoneyInput(storedVccAmounts.amountUsd);
 	const vccAddressLine1 =
 		vccBillingProfile.addressLine1 || "1111 Expedia Group Way W";
 	const vccAdminArea2 = vccBillingProfile.adminArea2 || "Seattle";
@@ -479,7 +509,8 @@ const VCCPayment = ({
 		if (
 			!isPaymentBreakdownVisible ||
 			!reservation?._id ||
-			!isExpediaReservation
+			!isExpediaReservation ||
+			!canManageBofaVcc
 		) {
 			return;
 		}
@@ -530,6 +561,7 @@ const VCCPayment = ({
 	}, [
 		isPaymentBreakdownVisible,
 		isExpediaReservation,
+		canManageBofaVcc,
 		isBraintreeVccMode,
 		isBofaVccMode,
 		reservation?._id,
@@ -544,7 +576,8 @@ const VCCPayment = ({
 			!isPaymentBreakdownVisible ||
 			!isVccPanelVisible ||
 			vccStep !== "card" ||
-			!isExpediaReservation
+			!isExpediaReservation ||
+			!canManageBofaVcc
 		) {
 			return;
 		}
@@ -648,6 +681,7 @@ const VCCPayment = ({
 		isVccPanelVisible,
 		vccStep,
 		isExpediaReservation,
+		canManageBofaVcc,
 		isBraintreeVccMode,
 		isBofaVccMode,
 		isPayPalVccMode,
@@ -718,6 +752,10 @@ const VCCPayment = ({
 		"";
 
 	const openVccPanel = () => {
+		if (!canManageBofaVcc) {
+			toast.error("Only the configured super admin can process BoA VCC cards.");
+			return;
+		}
 		if (!isExpediaReservation) {
 			toast.error("Pay Via VCC is currently available only for Expedia.");
 			return;
@@ -734,6 +772,7 @@ const VCCPayment = ({
 			toast.warn(vccWarningMessage || VCC_RETRY_AVAILABLE_MESSAGE);
 		}
 		vccProceedWithoutRoomRef.current = false;
+		setVccAmountUsd(storedVccAmountUsdInput);
 		setIsVccPanelVisible(true);
 		setVccStep("amount");
 	};
@@ -747,6 +786,9 @@ const VCCPayment = ({
 
 			if (!reservation?._id) {
 				return fail("Missing reservation reference.");
+			}
+			if (!canManageBofaVcc) {
+				return fail("Only the configured super admin can process BoA VCC cards.");
 			}
 			if (vccAlreadyCharged) {
 				return fail("This reservation was already charged via VCC.");
@@ -794,6 +836,7 @@ const VCCPayment = ({
 		},
 		[
 			reservation?._id,
+			canManageBofaVcc,
 			vccAlreadyCharged,
 			vccAttemptedBefore,
 			vccWarningMessage,
@@ -854,6 +897,14 @@ const VCCPayment = ({
 	const handleRunBofaHealthCheck = useCallback(
 		async ({ silent = false } = {}) => {
 			if (!isBofaVccMode) return null;
+			if (!canManageBofaVcc) {
+				if (!silent) {
+					toast.error(
+						"Only the configured super admin can run BoA VCC checks.",
+					);
+				}
+				return null;
+			}
 			setIsBofaHealthLoading(true);
 			try {
 				const data = await getBofaVccHealth({ token, probe: true });
@@ -889,7 +940,7 @@ const VCCPayment = ({
 				setIsBofaHealthLoading(false);
 			}
 		},
-		[isBofaVccMode, token],
+		[isBofaVccMode, canManageBofaVcc, token],
 	);
 
 	useEffect(() => {
@@ -897,7 +948,8 @@ const VCCPayment = ({
 			!isPaymentBreakdownVisible ||
 			!isVccPanelVisible ||
 			vccStep !== "card" ||
-			!isBofaVccMode
+			!isBofaVccMode ||
+			!canManageBofaVcc
 		) {
 			return;
 		}
@@ -908,6 +960,7 @@ const VCCPayment = ({
 		isVccPanelVisible,
 		vccStep,
 		isBofaVccMode,
+		canManageBofaVcc,
 		isBofaHealthLoading,
 		bofaHealthState,
 		handleRunBofaHealthCheck,
@@ -1100,6 +1153,10 @@ const VCCPayment = ({
 	]);
 
 	const handleBofaVccSubmit = useCallback(async () => {
+		if (!canManageBofaVcc) {
+			toast.error("Only the configured super admin can process BoA VCC cards.");
+			return;
+		}
 		const healthSnapshot = bofaHealthState;
 		if (!healthSnapshot || healthSnapshot?.readyForCharge !== true) {
 			const refreshedHealth = await handleRunBofaHealthCheck({ silent: false });
@@ -1191,6 +1248,7 @@ const VCCPayment = ({
 			setIsVccSubmitting(false);
 		}
 	}, [
+		canManageBofaVcc,
 		bofaHealthState,
 		handleRunBofaHealthCheck,
 		validateVccChargeContext,
@@ -1212,6 +1270,10 @@ const VCCPayment = ({
 		resetVccFlowState,
 		applyVccApiError,
 	]);
+
+	if (isBofaVccMode && !canManageBofaVcc) {
+		return null;
+	}
 
 	return (
 		<div
@@ -1314,6 +1376,18 @@ const VCCPayment = ({
 													value={vccAmountUsd}
 													onChange={(e) => setVccAmountUsd(e.target.value)}
 												/>
+												{storedVccAmounts.amountUsd > 0 ||
+												storedVccAmounts.amountSar > 0 ? (
+													<div style={{ fontSize: "0.82rem", marginTop: "6px" }}>
+														OTA VCC amount saved:{" "}
+														{storedVccAmounts.amountUsd > 0
+															? `$${storedVccAmounts.amountUsd.toFixed(2)} USD`
+															: "USD not available"}
+														{storedVccAmounts.amountSar > 0
+															? ` / ${storedVccAmounts.amountSar.toFixed(2)} SAR`
+															: ""}
+													</div>
+												) : null}
 												<div className='mt-2'>
 													<label style={{ fontWeight: "bold" }}>
 														Billing ZIP / Postal Code

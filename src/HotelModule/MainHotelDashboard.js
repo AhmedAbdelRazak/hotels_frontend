@@ -211,6 +211,8 @@ Object.assign(WORDS.ar, {
 Object.assign(WORDS.en, {
 	accountsButton: "Manager Hotel Accounts",
 	financialsButton: "Financials",
+	addPropertyButton: "Add New Property",
+	addPropertyTitle: "Add New Property",
 	accountsTitle: "Manager Hotel Accounts",
 	accountsSubtitle:
 		"Create and review hotel-level accounts across all properties owned by this manager.",
@@ -268,6 +270,8 @@ Object.assign(WORDS.en, {
 
 Object.assign(WORDS.ar, {
 	accountsButton: "حسابات إدارة الفنادق",
+	addPropertyButton: "إضافة منشأة جديدة",
+	addPropertyTitle: "إضافة منشأة جديدة",
 	accountsTitle: "حسابات إدارة الفنادق",
 	accountsSubtitle:
 		"إنشاء ومراجعة حسابات محددة على مستوى كل فندق من فنادق المدير.",
@@ -316,6 +320,8 @@ Object.assign(WORDS.ar, {
 
 Object.assign(WORDS.ar, {
 	accountsButton: "حسابات إدارة الفنادق",
+	addPropertyButton: "إضافة منشأة جديدة",
+	addPropertyTitle: "إضافة منشأة جديدة",
 	accountsTitle: "حسابات إدارة الفنادق",
 	accountsSubtitle:
 		"أنشئ حسابات محددة لكل فندق، وحدد الأدوار والصلاحيات بوضوح.",
@@ -375,6 +381,8 @@ Object.assign(WORDS.ar, {
 });
 
 WORDS.ar.financialsButton = WORDS.ar.financialsButton || "المالية";
+WORDS.ar.addPropertyButton = WORDS.ar.addPropertyButton || "إضافة منشأة جديدة";
+WORDS.ar.addPropertyTitle = WORDS.ar.addPropertyTitle || "إضافة منشأة جديدة";
 
 const ManagerMainHotelDashboard = () => {
 	const history = useHistory();
@@ -772,6 +780,15 @@ const ManagerMainHotelDashboard = () => {
 					<WalletOutlined />
 					{TXT.financialsButton}
 				</ManageAccountsButton>
+				<ManageAccountsButton
+					onClick={() => {
+						setAddVisible(true);
+						updateDashboardQuery({ modal: "add-property" });
+					}}
+				>
+					<PlusOutlined />
+					{TXT.addPropertyButton}
+				</ManageAccountsButton>
 			</PageActions>
 
 			<ExecutiveSummaryPanel className='container' $isRTL={isRTL}>
@@ -888,32 +905,33 @@ const ManagerMainHotelDashboard = () => {
 				) : (
 					<p>No hotels found.</p>
 				)}
-
-				<Button
-					type='primary'
-					icon={<PlusOutlined />}
-					onClick={() => {
-						setAddVisible(true);
-						updateDashboardQuery({ modal: "add-property" });
-					}}
-					style={addBtnStyle}
-				>
-					Add Another Property
-				</Button>
 			</CardsGrid>
 
 			{/* add / edit */}
 			<Modal
-				title='Add New Property'
+				title={TXT.addPropertyTitle}
 				open={addVisible}
 				onCancel={() => {
 					setAddVisible(false);
 					clearDashboardModalQuery();
 				}}
 				footer={null}
+				width='min(94vw, 680px)'
+				style={{ top: 10 }}
+				modalRender={(modal) => (
+					<div dir={isRTL ? "rtl" : "ltr"}>{modal}</div>
+				)}
+				styles={{
+					body: {
+						maxHeight: "calc(100vh - 104px)",
+						overflowY: "auto",
+						paddingTop: 12,
+					},
+				}}
 				destroyOnClose
 			>
 				<AddHotelForm
+					chosenLanguage={chosenLanguage}
 					closeAddHotelModal={() => {
 						setAddVisible(false);
 						clearDashboardModalQuery();
@@ -5941,13 +5959,3 @@ const ProceedBtn = styled.button`
 		opacity: ${(p) => (p.disabled ? 1 : 0.88)};
 	}
 `;
-
-const addBtnStyle = {
-	backgroundColor: "var(--button-bg-primary)",
-	borderColor: "var(--button-bg-primary)",
-	color: "var(--button-font-color)",
-	width: "50%",
-	textAlign: "center",
-	margin: "3rem auto 0",
-	display: "block",
-};
