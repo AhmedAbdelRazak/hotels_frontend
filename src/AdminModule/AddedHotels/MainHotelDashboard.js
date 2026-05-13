@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import {
 	Button,
 	Card,
@@ -71,6 +71,8 @@ const WORDS = {
 			"Bank details",
 		],
 		btnAdd: "Add another property",
+		diagramButton: "Open xHotelPro PMS map",
+		diagramTitle: "xHotelPro PMS operating map",
 		searchPh:
 			"Search by Hotel, Country, Phone, Address, or Owner name / e‑mail…",
 		activate: "Activate",
@@ -123,6 +125,9 @@ const WORDS = {
 			"البيانات البنكية",
 		],
 		btnAdd: "إضافة فندق آخر",
+		diagramButton: "\u0639\u0631\u0636 \u062e\u0631\u064a\u0637\u0629 xHotelPro PMS",
+		diagramTitle:
+			"\u0627\u0644\u062e\u0631\u064a\u0637\u0629 \u0627\u0644\u062a\u0634\u063a\u064a\u0644\u064a\u0629 \u0644\u0640 xHotelPro PMS",
 		searchPh: "ابحث بالإسم، الدولة، الهاتف، العنوان أو مالك الفندق…",
 		activate: "تفعيل",
 		deactivate: "إيقاف",
@@ -216,6 +221,181 @@ const STATUS_FILTERS = [
 	},
 ];
 
+const API_ROOT = (process.env.REACT_APP_API_URL || "http://localhost:8080/api")
+	.replace(/\/api\/?$/, "")
+	.replace(/\/$/, "");
+const PMS_DIAGRAM_IMAGE_URL = `${API_ROOT}/uploads/image.png`;
+
+const PMS_DIAGRAM_HOTSPOTS = [
+	{
+		key: "booking",
+		label: "Create booking",
+		x: 1.9,
+		y: 8.8,
+		w: 9.1,
+		h: 20.3,
+	},
+	{
+		key: "availability",
+		label: "Check availability",
+		x: 13.0,
+		y: 8.8,
+		w: 8.8,
+		h: 20.3,
+	},
+	{
+		key: "confirmation-wait",
+		label: "Waiting confirmation",
+		x: 23.6,
+		y: 8.8,
+		w: 8.8,
+		h: 20.3,
+	},
+	{
+		key: "reservation-review",
+		label: "Reservation review",
+		x: 33.5,
+		y: 8.8,
+		w: 8.8,
+		h: 20.3,
+	},
+	{
+		key: "financial-review",
+		label: "Financial review",
+		x: 44.2,
+		y: 8.8,
+		w: 8.8,
+		h: 20.3,
+	},
+	{
+		key: "commission",
+		label: "Commission decision",
+		x: 54.7,
+		y: 8.8,
+		w: 8.7,
+		h: 20.3,
+	},
+	{
+		key: "agent-approval",
+		label: "Agent approval",
+		x: 64.9,
+		y: 8.8,
+		w: 8.7,
+		h: 20.3,
+	},
+	{
+		key: "confirmed",
+		label: "Confirmed reservation",
+		x: 74.8,
+		y: 8.5,
+		w: 9.2,
+		h: 22.1,
+	},
+	{ key: "dashboards-header", label: "Daily operations dashboards", x: 85.4, y: 3.7, w: 13.0, h: 4.8 },
+	{ key: "dashboard-general-manager", label: "General manager dashboard", x: 85.6, y: 9.4, w: 12.8, h: 6.0 },
+	{ key: "dashboard-reservations", label: "Reservations dashboard", x: 85.6, y: 16.7, w: 12.8, h: 6.0 },
+	{ key: "dashboard-finance", label: "Finance dashboard", x: 85.6, y: 24.0, w: 12.8, h: 6.0 },
+	{ key: "dashboard-reception", label: "Reception dashboard", x: 85.6, y: 31.2, w: 12.8, h: 6.0 },
+	{ key: "dashboard-housekeeping", label: "Housekeeping dashboard", x: 85.6, y: 38.5, w: 12.8, h: 6.0 },
+	{ key: "dashboard-agents", label: "Agents dashboard", x: 85.6, y: 45.8, w: 12.8, h: 6.0 },
+	{ key: "dashboard-reports", label: "Reports dashboard", x: 85.6, y: 53.1, w: 12.8, h: 6.0 },
+	{
+		key: "platform",
+		label: "xHotelPro operations platform",
+		x: 44.1,
+		y: 29.0,
+		w: 8.7,
+		h: 15.3,
+	},
+	{
+		key: "revision-loop",
+		label: "Reject or resend loop",
+		x: 25.7,
+		y: 30.2,
+		w: 11.0,
+		h: 4.3,
+	},
+	{
+		key: "arrival-prep",
+		label: "Arrival preparation",
+		x: 77.5,
+		y: 40.1,
+		w: 5.8,
+		h: 20.3,
+	},
+	{
+		key: "checkin",
+		label: "Check in",
+		x: 69.9,
+		y: 40.1,
+		w: 6.5,
+		h: 20.3,
+	},
+	{
+		key: "stay-management",
+		label: "Stay management",
+		x: 52.9,
+		y: 40.1,
+		w: 15.4,
+		h: 20.3,
+	},
+	{
+		key: "payments",
+		label: "Payment tracking",
+		x: 30.8,
+		y: 40.1,
+		w: 13.4,
+		h: 20.3,
+	},
+	{
+		key: "room-status",
+		label: "Room status",
+		x: 18.2,
+		y: 40.1,
+		w: 11.4,
+		h: 20.3,
+	},
+	{
+		key: "settlement",
+		label: "Financial settlement",
+		x: 10.6,
+		y: 40.1,
+		w: 6.8,
+		h: 20.3,
+	},
+	{ key: "closure", label: "Case closure", x: 1.7, y: 40.1, w: 8.0, h: 20.3 },
+	{
+		key: "alerts",
+		label: "Alerts and tasks",
+		x: 1.8,
+		y: 61.8,
+		w: 31.1,
+		h: 17.3,
+	},
+	{ key: "rules", label: "Strict controls", x: 34.0, y: 61.8, w: 28.5, h: 17.3 },
+	{
+		key: "visibility",
+		label: "Business visibility",
+		x: 63.5,
+		y: 61.8,
+		w: 29.8,
+		h: 17.3,
+	},
+	{ key: "roles", label: "Main roles", x: 11.2, y: 82.3, w: 76.7, h: 14.2 },
+];
+
+const getHotspotStyle = ({ x, y, w, h }) => ({
+	left: `${x}%`,
+	top: `${y}%`,
+	width: `${w}%`,
+	height: `${h}%`,
+	"--hotspot-bg": `url(${PMS_DIAGRAM_IMAGE_URL})`,
+	"--hotspot-bg-size": `${10000 / w}% ${10000 / h}%`,
+	"--hotspot-bg-position": `${(x / (100 - w)) * 100}% ${
+		(y / (100 - h)) * 100
+	}%`,
+});
+
 const MainHotelDashboardAdmin = () => {
 	/* context & i18n */
 	const { chosenLanguage, languageToggle } = useCartContext();
@@ -245,6 +425,7 @@ const MainHotelDashboardAdmin = () => {
 	const [currentHotel, setCurrentHotel] = useState(null);
 	const [stepModalIdx, setStepModalIdx] = useState(null);
 	const [stepModalHotel, setStepModalHotel] = useState(null);
+	const [diagramVisible, setDiagramVisible] = useState(false);
 
 	const switchLanguage = () =>
 		languageToggle(chosenLanguage === "English" ? "Arabic" : "English");
@@ -353,7 +534,7 @@ const MainHotelDashboardAdmin = () => {
 		{
 			title: L.index,
 			dataIndex: "__index",
-			width: 40,
+			width: 34,
 			align: "center",
 			render: (_t, _r, i) => indexStart + i + 1,
 			fixed: "left",
@@ -362,7 +543,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.hotel,
 			dataIndex: "hotelName",
 			key: "hotelName",
-			width: 250,
+			width: 190,
 			render: (_t, record) => {
 				const fullName = record.hotelName || "-";
 				const fullAddress = [
@@ -411,7 +592,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.owner,
 			dataIndex: "belongsTo",
 			key: "owner",
-			width: 200,
+			width: 165,
 			render: (owner) => {
 				const name = owner?.name || "-";
 				const email = owner?.email || "-";
@@ -435,7 +616,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.phone,
 			dataIndex: "phone",
 			key: "phone",
-			width: 160,
+			width: 120,
 			render: (v) => (
 				<Tooltip title={v ? `+${v}` : "-"}>
 					<div className='ellip-1'>
@@ -448,7 +629,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.status,
 			dataIndex: "activateHotel",
 			key: "activateHotel",
-			width: 120,
+			width: 105,
 			render: (val) =>
 				val ? (
 					<Tag color='success'>{L.active}</Tag>
@@ -460,7 +641,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Rooms",
 			dataIndex: "roomsDone",
 			align: "center",
-			width: 90,
+			width: 64,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(1, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[1]}>
@@ -475,7 +656,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Photos",
 			dataIndex: "photosDone",
 			align: "center",
-			width: 90,
+			width: 64,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(2, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[2]}>
@@ -490,7 +671,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Location",
 			dataIndex: "locationDone",
 			align: "center",
-			width: 100,
+			width: 72,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(3, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[3]}>
@@ -505,7 +686,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Data",
 			dataIndex: "dataDone",
 			align: "center",
-			width: 90,
+			width: 64,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(4, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[4]}>
@@ -520,7 +701,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Bank",
 			dataIndex: "bankDone",
 			align: "center",
-			width: 90,
+			width: 64,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(5, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[5]}>
@@ -535,21 +716,21 @@ const MainHotelDashboardAdmin = () => {
 			title: <span title={L.activationReady}>{L.activationReady}</span>,
 			dataIndex: "activationReady",
 			align: "center",
-			width: 140,
+			width: 100,
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
 			title: <span title={L.fullyComplete}>{L.fullyComplete}</span>,
 			dataIndex: "fullyComplete",
 			align: "center",
-			width: 140,
+			width: 100,
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
 			title: L.activateCol,
 			dataIndex: "activateHotel",
 			key: "activationAction",
-			width: 170,
+			width: 110,
 			fixed: "right",
 			render: (_v, r) => {
 				const canActivate = !!(
@@ -582,6 +763,8 @@ const MainHotelDashboardAdmin = () => {
 
 	return (
 		<>
+			<DiagramModalGlobalStyles />
+			{false && (
 			<ul
 				dir={isRTL ? "rtl" : "ltr"}
 				style={{
@@ -597,8 +780,27 @@ const MainHotelDashboardAdmin = () => {
 					<span>{chosenLanguage === "English" ? "عربي" : "En"}</span>
 				</li>
 			</ul>
+			)}
 
-			<Wrapper>
+			<Wrapper dir={isRTL ? "rtl" : "ltr"}>
+				<DashboardToolbar>
+					<DiagramLaunch>
+					<Button
+						type='primary'
+						icon={<PictureOutlined />}
+						onClick={() => setDiagramVisible(true)}
+					>
+						{L.diagramButton}
+					</Button>
+				</DiagramLaunch>
+					<LanguageToggleButton type='button' onClick={switchLanguage}>
+						<GlobalOutlined />
+						<span className='language-toggle-clean'>
+							{chosenLanguage === "English" ? "\u0639\u0631\u0628\u064a" : "En"}
+						</span>
+						<span>{chosenLanguage === "English" ? "Ø¹Ø±Ø¨ÙŠ" : "En"}</span>
+					</LanguageToggleButton>
+
 				<TopRow>
 					<Search
 						placeholder={L.searchPh}
@@ -615,6 +817,7 @@ const MainHotelDashboardAdmin = () => {
 						{L.btnAdd}
 					</Button>
 				</TopRow>
+				</DashboardToolbar>
 
 				{/* Filters row */}
 				<FiltersBar dir={isRTL ? "rtl" : "ltr"}>
@@ -690,7 +893,7 @@ const MainHotelDashboardAdmin = () => {
 							columns={columns}
 							rowKey={(r) => r._id}
 							pagination={false}
-							scroll={{ x: 1320 }}
+							scroll={{ x: 1260 }}
 							tableLayout='fixed'
 							size='small'
 							rowClassName='compact-row'
@@ -714,6 +917,34 @@ const MainHotelDashboardAdmin = () => {
 						/>
 					</PaginationRow>
 				</ContentArea>
+
+				<Modal
+					title={L.diagramTitle}
+					open={diagramVisible}
+					onCancel={() => setDiagramVisible(false)}
+					footer={null}
+					width='100vw'
+					style={{ top: 0, maxWidth: "100vw", paddingBottom: 0 }}
+					className='xhotelpro-map-modal'
+					wrapClassName='xhotelpro-map-modal-wrap'
+					zIndex={5000}
+					styles={{ body: { padding: 0 } }}
+					destroyOnClose
+				>
+					<DiagramModalBody>
+						<DiagramStage aria-label={L.diagramTitle}>
+							<img src={PMS_DIAGRAM_IMAGE_URL} alt={L.diagramTitle} />
+							{PMS_DIAGRAM_HOTSPOTS.map((spot) => (
+								<DiagramHotspot
+									key={spot.key}
+									type='button'
+									style={getHotspotStyle(spot)}
+									aria-label={spot.label}
+								/>
+							))}
+						</DiagramStage>
+					</DiagramModalBody>
+				</Modal>
 
 				{/* ADD / EDIT modals */}
 				<Modal
@@ -784,13 +1015,13 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 	height: 100%;
 	.ant-card-body {
-		padding: 14px 16px;
+		padding: 10px 12px;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 9px;
 	}
 	.stat-icon {
-		font-size: 20px;
+		font-size: 18px;
 		opacity: 0.9;
 	}
 	.stat-texts {
@@ -799,7 +1030,7 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 		min-width: 0;
 	}
 	.stat-title {
-		font-size: 0.85rem;
+		font-size: 0.78rem;
 		font-weight: 700;
 		color: #55657a;
 		white-space: nowrap;
@@ -808,7 +1039,7 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 		line-height: 1.1;
 	}
 	.stat-value {
-		font-size: 1.28rem;
+		font-size: 1.15rem;
 		font-weight: 800;
 		color: #0f172a;
 		white-space: nowrap;
@@ -817,24 +1048,27 @@ const StatCard = styled(Card).attrs({ bordered: false })`
 
 const SummaryGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-	gap: 12px;
-	margin-top: 8px;
+	grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+	gap: 8px;
+	margin-top: 6px;
 `;
 
 const SummaryHeader = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin: 10px 0 8px;
+	gap: 8px;
+	margin: 6px 0;
+	flex-wrap: wrap;
 `;
 
 const SummaryRight = styled.div`
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 8px;
 	color: #6b7280;
 	font-weight: 600;
+	flex-wrap: wrap;
 `;
 
 const HotelsSummary = ({ L, isRTL, summary, pageMeta }) => {
@@ -896,8 +1130,10 @@ const HotelsSummary = ({ L, isRTL, summary, pageMeta }) => {
 
 	return (
 		<div dir={isRTL ? "rtl" : "ltr"}>
-			<SummaryHeader>
-				<h3 style={{ margin: 0, fontWeight: 800 }}>{L.summaryTitle}</h3>
+	<SummaryHeader>
+				<h3 style={{ margin: 0, fontWeight: 800, fontSize: 18 }}>
+					{L.summaryTitle}
+				</h3>
 				<SummaryRight>
 					<span className='page-meta ellip-1'>{pageMeta}</span>
 					<Segmented
@@ -930,40 +1166,164 @@ const HotelsSummary = ({ L, isRTL, summary, pageMeta }) => {
 
 /* ══════════════  styled bits + table compaction & clamping  ══════════════ */
 
+const DiagramModalGlobalStyles = createGlobalStyle`
+	.xhotelpro-map-modal-wrap {
+		z-index: 5000 !important;
+	}
+
+	.xhotelpro-map-modal-wrap .ant-modal {
+		max-width: 100vw;
+		margin: 0;
+		padding-bottom: 0;
+		top: 0;
+	}
+
+	.xhotelpro-map-modal .ant-modal-content {
+		min-height: 100vh;
+		border-radius: 0;
+		background: #f6f9ff;
+		overflow: hidden;
+	}
+
+	.xhotelpro-map-modal .ant-modal-header {
+		margin: 0;
+		padding: 14px 56px 12px 20px;
+		border-bottom: 1px solid #dce9ff;
+		background: #ffffff;
+	}
+
+	.xhotelpro-map-modal .ant-modal-title {
+		color: #0b2a66;
+		font-weight: 800;
+	}
+
+	.xhotelpro-map-modal .ant-modal-close {
+		top: 10px;
+	}
+`;
+
 const Wrapper = styled.div`
-	margin-top: 46px;
-	min-height: 100vh;
+	margin-top: 0;
+	min-height: auto;
+	max-width: 100%;
+	overflow: hidden;
+`;
+
+const DashboardToolbar = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 10px;
+	max-width: 100%;
+`;
+
+const DiagramLaunch = styled.div`
+	display: flex;
+	flex: 0 1 auto;
+
+	.ant-btn {
+		height: 36px;
+		border-radius: 999px;
+		font-weight: 800;
+		max-width: 100%;
+		white-space: nowrap;
+		box-shadow: 0 10px 24px rgba(24, 144, 255, 0.18);
+	}
+
+	@media (max-width: 575px) {
+		.ant-btn {
+			width: 100%;
+			justify-content: center;
+		}
+	}
+`;
+
+const LanguageToggleButton = styled.button`
+	height: 36px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	border: 1px solid #d8e6ff;
+	background: #fff;
+	color: #0f3a7a;
+	border-radius: 999px;
+	padding: 0 12px;
+	font-weight: 800;
+	cursor: pointer;
+	white-space: nowrap;
+
+	&:hover {
+		border-color: #1677ff;
+		color: #0958d9;
+	}
+
+	> .anticon {
+		display: inline-flex !important;
+	}
+
+	.language-toggle-clean {
+		display: inline-flex !important;
+		direction: rtl;
+		unicode-bidi: isolate;
+		font-family: "Tahoma", "Arial", sans-serif;
+	}
+
+	> span:not(.language-toggle-clean):not(.anticon) {
+		display: none !important;
+	}
 `;
 
 const TopRow = styled.div`
 	display: flex;
-	gap: 1rem;
-	margin-bottom: 1rem;
+	gap: 0.6rem;
+	margin-bottom: 0;
 	flex-wrap: wrap;
+	flex: 1 1 520px;
+	min-width: min(100%, 320px);
 `;
 
 const FiltersBar = styled.div`
-	display: grid;
-	gap: 12px;
-	margin-bottom: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+	max-width: 100%;
 `;
 
 const FilterGroup = styled.div`
 	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding: 10px 12px;
-	background: #fafafa;
-	border: 1px solid #eee;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	background: #fbfdff;
+	border: 1px solid #e7edf7;
 	border-radius: 6px;
+	min-width: 0;
+
+	.ant-space {
+		row-gap: 6px;
+	}
+
+	.ant-btn {
+		height: 30px;
+		padding-inline: 10px;
+		font-size: 12px;
+	}
 `;
 
 const GroupTitle = styled.div`
 	font-weight: 700;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 5px;
 	color: #555;
+	font-size: 12px;
+	white-space: nowrap;
 `;
 
 const ContentArea = styled.div`
@@ -982,6 +1342,7 @@ const ContentArea = styled.div`
 const Search = styled(Input)`
 	max-width: 420px;
 	flex: 1 1 320px;
+	min-width: min(100%, 260px);
 `;
 
 const PaginationRow = styled.div`
@@ -993,15 +1354,98 @@ const StatusSelect = styled(Select)`
 	width: 160px;
 `;
 
+const DiagramModalBody = styled.div`
+	height: calc(100vh - 53px);
+	overflow: auto;
+	padding: 14px;
+	background: linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+`;
+
+const DiagramStage = styled.div`
+	position: relative;
+	width: min(100%, 1672px);
+	margin: 0 auto;
+	line-height: 0;
+
+	img {
+		display: block;
+		width: 100%;
+		height: auto;
+		border-radius: 8px;
+		box-shadow: 0 18px 42px rgba(11, 42, 102, 0.16);
+	}
+`;
+
+const DiagramHotspot = styled.button`
+	position: absolute;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	border-radius: 12px;
+	background-color: transparent;
+	background-image: var(--hotspot-bg);
+	background-size: var(--hotspot-bg-size);
+	background-position: var(--hotspot-bg-position);
+	background-repeat: no-repeat;
+	cursor: pointer;
+	opacity: 0;
+	transform-origin: center;
+	transition: opacity 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		border: 2px solid transparent;
+		box-shadow: none;
+		pointer-events: none;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease,
+			background-color 0.15s ease;
+	}
+
+	&:hover,
+	&:focus-visible {
+		opacity: 1;
+		animation: xhotelproDiagramBeat 0.72s ease-in-out infinite;
+		box-shadow: 0 0 0 2px rgba(0, 84, 188, 0.42),
+			0 0 0 8px rgba(0, 132, 255, 0.12),
+			0 18px 28px rgba(0, 61, 132, 0.18);
+		filter: saturate(1.08);
+		outline: none;
+		z-index: 2;
+	}
+
+	&:hover::after,
+	&:focus-visible::after {
+		border-color: rgba(0, 105, 220, 0.55);
+		background-color: rgba(255, 255, 255, 0.05);
+		box-shadow: 0 0 0 7px rgba(0, 132, 255, 0.11),
+			0 14px 28px rgba(0, 61, 132, 0.14);
+	}
+
+	@keyframes xhotelproDiagramBeat {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.055);
+		}
+	}
+`;
+
 /* Compact, consistent row height & 2-line total per text cell (name+address / name+email) */
 const StyledTable = styled(Table)`
 	.ant-table-thead > tr > th {
-		padding: 10px 12px;
+		padding: 8px 8px;
 		white-space: nowrap;
+		font-size: 12px;
 	}
 	.ant-table-tbody > tr > td {
-		padding: 10px 12px;
+		padding: 7px 8px;
 		vertical-align: middle;
+		font-size: 12px;
 	}
 
 	th {
@@ -1024,7 +1468,7 @@ const StyledTable = styled(Table)`
 
 	.sub-line {
 		opacity: 0.85;
-		font-size: 12px;
+		font-size: 11px;
 	}
 
 	.hotel-line {

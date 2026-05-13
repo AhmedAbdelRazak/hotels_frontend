@@ -19,7 +19,11 @@ import { isAuthenticated, signout, stopDashboardPreview } from "../../auth";
 import { useLocation, useHistory } from "react-router-dom";
 import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
-import { pendingConfirmationNotificationFeed } from "../apiAdmin";
+import {
+	getHotelDetails,
+	hotelAccount,
+	pendingConfirmationNotificationFeed,
+} from "../apiAdmin";
 import socket from "../../socket";
 
 const normalizeTopNavId = (value) => {
@@ -27,6 +31,11 @@ const normalizeTopNavId = (value) => {
 	if (typeof value === "object") return String(value._id || value.id || "");
 	return String(value);
 };
+
+const titleCaseHotelName = (value = "") =>
+	String(value || "")
+		.toLowerCase()
+		.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 
 const getUserRoles = (user = {}) => [
 	Number(user.role),
@@ -90,17 +99,104 @@ const isReservationEmployeeNotificationUser = (user = {}) => {
 	return roles.includes(8000) || descriptions.includes("reservationemployee");
 };
 
+const canOpenSettingsCalendar = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo)
+		? user.accessTo.map((item) => String(item || "").toLowerCase())
+		: [];
+	return (
+		isSuperAdminUser(user) ||
+		roles.includes(1000) ||
+		roles.includes(2000) ||
+		descriptions.includes("hotelmanager") ||
+		accessTo.includes("settings") ||
+		accessTo.includes("all")
+	);
+};
+
+const getAssignedHotelIds = (user = {}) => {
+	const values = [
+		user.hotelIdWork,
+		...(Array.isArray(user.hotelIdsWork) ? user.hotelIdsWork : []),
+		...(Array.isArray(user.hotelsToSupport) ? user.hotelsToSupport : []),
+		...(Array.isArray(user.hotelIdsOwner) ? user.hotelIdsOwner : []),
+	];
+	return [...new Set(values.map(normalizeTopNavId).filter(Boolean))];
+};
+
+const canSeeOwnerWideCalendarHotels = (user = {}) => {
+	const roles = getUserRoles(user);
+	return (
+		isSuperAdminUser(user) ||
+		roles.includes(1000) ||
+		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
+	);
+};
+
+const normalizeCalendarHotel = (hotel, fallback = {}, user = {}) => {
+	const hotelId = normalizeTopNavId(hotel?._id || fallback?._id || fallback);
+	if (!hotelId) return null;
+	const fallbackObject = fallback && typeof fallback === "object" ? fallback : {};
+	return {
+		...fallbackObject,
+		...(hotel && typeof hotel === "object" ? hotel : {}),
+		_id: hotelId,
+		hotelName:
+			hotel?.hotelName ||
+			fallbackObject?.hotelName ||
+			fallbackObject?.name ||
+			(hotelId ? `Hotel ${hotelId.slice(-4)}` : "Hotel"),
+		belongsTo:
+			hotel?.belongsTo ||
+			fallbackObject?.belongsTo ||
+			fallbackObject?.ownerId ||
+			user.belongsToId,
+	};
+};
+
+const getCalendarHotelOwnerId = (hotel = {}, user = {}, fallbackOwnerId = "") =>
+	normalizeTopNavId(
+		hotel.belongsTo?._id ||
+			hotel.belongsTo ||
+			hotel.ownerId ||
+			fallbackOwnerId ||
+			user.belongsToId ||
+			user._id
+	);
+
+const getCalendarRoomLabel = (room = {}) =>
+	room.displayName ||
+	room.displayName_OtherLanguage ||
+	room.roomType ||
+	room.name ||
+	"Room";
+
+const getCalendarHotelRooms = (hotel = {}) =>
+	(Array.isArray(hotel.roomCountDetails) ? hotel.roomCountDetails : [])
+		.filter((room) => normalizeTopNavId(room?._id || room?.roomType))
+		.filter((room) => room.activeRoom !== false);
+
 const isFinanceOnlyNotificationUser = (user = {}) =>
 	isFinanceNotificationUser(user) &&
 	!isManagerOrAdminNotificationUser(user) &&
 	!isReservationEmployeeNotificationUser(user);
 
-const isReservationEmployeeOnlyNotificationUser = (user = {}) =>
-	isReservationEmployeeNotificationUser(user) &&
-	!isManagerOrAdminNotificationUser(user) &&
-	!isFinanceNotificationUser(user);
+const isAgentAccountNotification = (item = {}) =>
+	String(item.notificationType || "").startsWith("agent_account");
 
 const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
+	if (reason === "agent_account_pending_approval") {
+		return isArabic
+			? "Agent account waiting for director approval"
+			: "Agent account waiting for director approval";
+	}
+	if (reason === "agent_account_approved") {
+		return isArabic ? "Agent account approved" : "Agent account approved";
+	}
+	if (reason === "agent_account_rejected") {
+		return isArabic ? "Agent account rejected" : "Agent account rejected";
+	}
 	if (reason === "agent_pending_review") {
 		return isArabic
 			? "الحجز بانتظار مراجعة الفندق"
@@ -148,6 +244,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		data: [],
 	});
 	const [isMobileNav, setIsMobileNav] = useState(false);
+	const [calendarHotels, setCalendarHotels] = useState([]);
+	const [calendarRooms, setCalendarRooms] = useState([]);
+	const [calendarHotel, setCalendarHotel] = useState(null);
+	const [calendarMode, setCalendarMode] = useState("hotels");
+	const [calendarLoading, setCalendarLoading] = useState(false);
+	const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
 
 	const { languageToggle, chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -194,12 +296,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		routeHotelContext.routeOwnerId ||
 		selectedHotelOwnerId ||
 		(isOwnerManager ? user._id : user.belongsToId);
-	const canUsePendingNotifications =
-		canSeePendingConfirmationNotifications(user) &&
-		(!isReservationEmployeeOnlyNotificationUser(user) ||
-			new URLSearchParams(location.search || "").has("pendingConfirmation"));
+	const canUsePendingNotifications = canSeePendingConfirmationNotifications(user);
 	const isAgentNotificationAudience = isAgentNotificationUser(user);
 	const isFinanceNotificationAudience = isFinanceOnlyNotificationUser(user);
+	const assignedCalendarHotelIds = useMemo(
+		() => getAssignedHotelIds(user),
+		[user]
+	);
+	const canUseOwnerWideCalendarHotels = canSeeOwnerWideCalendarHotels(user);
+	const canUseMainDashboardSettingsCalendar =
+		isMainHotelDashboard && canOpenSettingsCalendar(user);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
@@ -208,6 +314,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			setIsMobileNav(mediaQuery.matches);
 			setNotificationsOpen(false);
 			setProfileMenuOpen(false);
+			setSettingsDropdownOpen(false);
 		};
 
 		syncViewport();
@@ -230,7 +337,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			hotelId &&
 			location.pathname.includes(userId) &&
 			location.pathname.includes(hotelId);
-		setHotelName(show ? selectedHotel.hotelName : "");
+		setHotelName(show ? titleCaseHotelName(selectedHotel.hotelName) : "");
 	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
 	const refreshNotifications = useCallback(
@@ -324,6 +431,71 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		refreshNotifications,
 	]);
 
+	const loadCalendarHotels = useCallback(async () => {
+		if (!canUseMainDashboardSettingsCalendar || !user?._id) return;
+
+		setCalendarLoading(true);
+		try {
+			let loadedHotels = [];
+			const ownerIdForAccount =
+				queryOwnerId ||
+				selectedHotelOwnerId ||
+				(isOwnerManager ? user._id : user.belongsToId || user._id);
+
+			if (ownerIdForAccount && token) {
+				const accountData = await hotelAccount(user._id, token, ownerIdForAccount);
+				if (!accountData?.error && Array.isArray(accountData?.hotelIdsOwner)) {
+					loadedHotels = accountData.hotelIdsOwner;
+				}
+			}
+
+			if (!loadedHotels.length && assignedCalendarHotelIds.length) {
+				const rawAssignedHotels = [
+					user.hotelIdWork,
+					...(Array.isArray(user.hotelIdsWork) ? user.hotelIdsWork : []),
+					...(Array.isArray(user.hotelsToSupport) ? user.hotelsToSupport : []),
+					...(Array.isArray(user.hotelIdsOwner) ? user.hotelIdsOwner : []),
+				];
+				loadedHotels = await Promise.all(
+					assignedCalendarHotelIds.map((assignedHotelId) => {
+						const fallback =
+							rawAssignedHotels.find(
+								(item) => normalizeTopNavId(item) === assignedHotelId
+							) || { _id: assignedHotelId };
+						return getHotelDetails(assignedHotelId)
+							.then((hotel) => hotel || fallback)
+							.catch(() => fallback);
+					})
+				);
+			}
+
+			const normalizedHotels = loadedHotels
+				.map((hotel) => normalizeCalendarHotel(hotel, hotel, user))
+				.filter((hotel) => {
+					if (canUseOwnerWideCalendarHotels || !assignedCalendarHotelIds.length) {
+						return true;
+					}
+					return assignedCalendarHotelIds.includes(hotel?._id);
+				})
+				.filter(Boolean);
+			setCalendarHotels(normalizedHotels);
+		} catch (error) {
+			console.error("Failed to load calendar hotels", error);
+			setCalendarHotels([]);
+		} finally {
+			setCalendarLoading(false);
+		}
+	}, [
+		assignedCalendarHotelIds,
+		canUseMainDashboardSettingsCalendar,
+		canUseOwnerWideCalendarHotels,
+		isOwnerManager,
+		queryOwnerId,
+		selectedHotelOwnerId,
+		token,
+		user,
+	]);
+
 	/* ===== actions ===== */
 
 	const handleSignout = () => {
@@ -389,6 +561,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				break;
 		}
 		setProfileMenuOpen(false);
+		setSettingsDropdownOpen(false);
 	};
 
 	// Build profile dropdown menu (hide "Update Account" for admin)
@@ -430,15 +603,22 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 	// Room types dropdown
 	const handleRoomClick = ({ key }) => {
+		if (!key || key === "no-rooms") return;
+		const destinationOwnerId = routeHotelContext.routeOwnerId || userId;
+		const destinationHotelId = routeHotelContext.routeHotelId || hotelId;
+		if (!destinationOwnerId || !destinationHotelId) return;
 		setRoomTypesDropdown(false);
-		window.location.href = `/hotel-management/settings/${userId}/${hotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`;
+		setSettingsDropdownOpen(false);
+		history.push(
+			`/hotel-management/settings/${destinationOwnerId}/${destinationHotelId}?activeTab=roomcount&currentStep=3&selectedRoomType=${key}`
+		);
 	};
 
 	const roomTypeMenuItems =
 		roomCountDetails && roomCountDetails.length > 0
 			? roomCountDetails.map((room, index) => ({
 					key: room?._id || room?.roomType || room?.displayName || String(index),
-					label: room.displayName,
+					label: getCalendarRoomLabel(room),
 			  }))
 			: [
 					{
@@ -448,23 +628,246 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					},
 			  ];
 
+	const loadCalendarRoomsForHotel = async (hotel) => {
+		if (!hotel?._id) return;
+		setCalendarLoading(true);
+		setRoomTypesDropdown(true);
+		try {
+			let fullHotel = hotel;
+			if (!Array.isArray(fullHotel.roomCountDetails)) {
+				const hotelDetails = await getHotelDetails(hotel._id);
+				if (hotelDetails && !hotelDetails.error) {
+					const normalizedHotel = normalizeCalendarHotel(
+						hotelDetails,
+						hotel,
+						user
+					);
+					if (normalizedHotel) {
+						fullHotel = normalizedHotel;
+						setCalendarHotels((currentHotels) =>
+							currentHotels.map((item) =>
+								item._id === fullHotel._id ? { ...item, ...fullHotel } : item
+							)
+						);
+					}
+				}
+			}
+			setCalendarHotel(fullHotel);
+			setCalendarRooms(getCalendarHotelRooms(fullHotel));
+			setCalendarMode("rooms");
+		} catch (error) {
+			console.error("Failed to load calendar rooms", error);
+			setCalendarHotel(hotel);
+			setCalendarRooms([]);
+			setCalendarMode("rooms");
+		} finally {
+			setCalendarLoading(false);
+			window.setTimeout(() => setRoomTypesDropdown(true), 0);
+		}
+	};
+
+	const handleCalendarMenuClick = ({ key }) => {
+		if (!canUseMainDashboardSettingsCalendar) {
+			handleRoomClick({ key });
+			return;
+		}
+
+		if (key === "calendar-back-to-hotels") {
+			setCalendarMode("hotels");
+			setCalendarHotel(null);
+			setCalendarRooms([]);
+			window.setTimeout(() => setRoomTypesDropdown(true), 0);
+			return;
+		}
+
+		if (String(key || "").startsWith("hotel:")) {
+			const selectedHotelId = String(key).replace("hotel:", "");
+			const hotel = calendarHotels.find((item) => item._id === selectedHotelId);
+			if (hotel) {
+				loadCalendarRoomsForHotel(hotel);
+			}
+			return;
+		}
+
+		if (String(key || "").startsWith("room:")) {
+			const selectedRoomId = String(key).replace("room:", "");
+			const selectedHotelForRoute = calendarHotel;
+			const selectedOwnerId = getCalendarHotelOwnerId(
+				selectedHotelForRoute,
+				user,
+				queryOwnerId || selectedHotelOwnerId
+			);
+
+			if (!selectedOwnerId || !selectedHotelForRoute?._id || !selectedRoomId) {
+				return;
+			}
+
+			localStorage.setItem(
+				"selectedHotel",
+				JSON.stringify(selectedHotelForRoute)
+			);
+			setRoomTypesDropdown(false);
+			setSettingsDropdownOpen(false);
+			history.push(
+				`/hotel-management/settings/${selectedOwnerId}/${selectedHotelForRoute._id}?activeTab=roomcount&currentStep=3&selectedRoomType=${selectedRoomId}`
+			);
+		}
+	};
+
+	const handleCalendarOpenChange = (flag) => {
+		setRoomTypesDropdown(flag);
+		if (!flag) return;
+		setNotificationsOpen(false);
+		setProfileMenuOpen(false);
+		setSettingsDropdownOpen(false);
+		if (canUseMainDashboardSettingsCalendar) {
+			setCalendarMode("hotels");
+			setCalendarHotel(null);
+			setCalendarRooms([]);
+			loadCalendarHotels();
+		}
+	};
+
+	const calendarMenuItems = canUseMainDashboardSettingsCalendar
+		? calendarMode === "rooms"
+			? [
+					{
+						key: "calendar-back-to-hotels",
+						label: isArabic ? "Back to hotels" : "Back to hotels",
+					},
+					...(calendarLoading
+						? [
+								{
+									key: "calendar-loading-rooms",
+									label: "Loading rooms...",
+									disabled: true,
+								},
+						  ]
+						: calendarRooms.length
+						? calendarRooms.map((room, index) => {
+								const roomId = normalizeTopNavId(
+									room?._id || room?.roomType || room?.displayName || index
+								);
+								return {
+									key: `room:${roomId}`,
+									label: getCalendarRoomLabel(room),
+								};
+						  })
+						: [
+								{
+									key: "calendar-no-rooms",
+									label: "No rooms available",
+									disabled: true,
+								},
+						  ]),
+			  ]
+			: calendarLoading
+			? [
+					{
+						key: "calendar-loading-hotels",
+						label: "Loading hotels...",
+						disabled: true,
+					},
+			  ]
+			: calendarHotels.length
+			? calendarHotels.map((hotel) => ({
+					key: `hotel:${hotel._id}`,
+					label: titleCaseHotelName(hotel.hotelName || "Hotel"),
+			  }))
+			: [
+					{
+						key: "calendar-no-hotels",
+						label: "No hotels available",
+						disabled: true,
+					},
+			  ]
+			: roomTypeMenuItems;
+
 	// Settings & chat
+	const goToHotelSettingsDetails = (hotel = {}) => {
+		const selectedHotelId = normalizeTopNavId(hotel?._id);
+		const selectedOwnerId = getCalendarHotelOwnerId(
+			hotel,
+			user,
+			queryOwnerId || selectedHotelOwnerId || userId
+		);
+
+		if (!selectedOwnerId || !selectedHotelId) return;
+
+		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
+		setSettingsDropdownOpen(false);
+		setRoomTypesDropdown(false);
+		history.push(
+			`/hotel-management/settings/${selectedOwnerId}/${selectedHotelId}/?activeTab=HotelDetails&currentStep=0`
+		);
+	};
+
+	const handleSettingsMenuClick = ({ key }) => {
+		if (!String(key || "").startsWith("settings-hotel:")) return;
+		const selectedHotelId = String(key).replace("settings-hotel:", "");
+		const hotel = calendarHotels.find((item) => item._id === selectedHotelId);
+		if (hotel) {
+			goToHotelSettingsDetails(hotel);
+		}
+	};
+
+	const handleSettingsOpenChange = (flag) => {
+		if (!canUseMainDashboardSettingsCalendar) return;
+
+		setSettingsDropdownOpen(flag);
+		if (!flag) return;
+
+		setRoomTypesDropdown(false);
+		setNotificationsOpen(false);
+		setProfileMenuOpen(false);
+		setCalendarMode("hotels");
+		setCalendarHotel(null);
+		setCalendarRooms([]);
+		loadCalendarHotels();
+	};
+
+	const settingsMenuItems = canUseMainDashboardSettingsCalendar
+		? calendarLoading
+			? [
+					{
+						key: "settings-loading-hotels",
+						label: "Loading hotels...",
+						disabled: true,
+					},
+			  ]
+			: calendarHotels.length
+			? calendarHotels.map((hotel) => ({
+					key: `settings-hotel:${hotel._id}`,
+					label: titleCaseHotelName(hotel.hotelName || "Hotel"),
+			  }))
+			: [
+					{
+						key: "settings-no-hotels",
+						label: "No hotels available",
+						disabled: true,
+					},
+			  ]
+		: [];
+
 	const handleSettingsClick = () => {
 		const selectedHotelLocal =
 			JSON.parse(localStorage.getItem("selectedHotel")) || {};
 		const userIdLocal =
+			routeHotelContext.routeOwnerId ||
 			selectedHotelLocal.belongsTo?._id ||
 			selectedHotelLocal.belongsTo ||
 			user.belongsToId ||
 			user._id;
-		const hotelIdLocal = selectedHotelLocal._id;
+		const hotelIdLocal = routeHotelContext.routeHotelId || selectedHotelLocal._id;
 
 		const ok =
 			location.pathname.includes(userIdLocal) &&
 			location.pathname.includes(hotelIdLocal);
 
 		if (ok) {
-			window.location.href = `/hotel-management/settings/${userIdLocal}/${hotelIdLocal}`;
+			history.push(
+				`/hotel-management/settings/${userIdLocal}/${hotelIdLocal}/?activeTab=HotelDetails&currentStep=0`
+			);
 		}
 	};
 
@@ -496,6 +899,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		if (flag) {
 			setProfileMenuOpen(false);
 			setRoomTypesDropdown(false);
+			setSettingsDropdownOpen(false);
 			refreshNotifications({ silent: true });
 		}
 	};
@@ -505,6 +909,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		if (flag) {
 			setNotificationsOpen(false);
 			setRoomTypesDropdown(false);
+			setSettingsDropdownOpen(false);
 		}
 	};
 
@@ -512,6 +917,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		const targetHotelId = item.hotelId || notificationHotelId || hotelId;
 		const targetOwnerId = item.hotelOwnerId || notificationOwnerId || userId;
 		if (!targetHotelId || !targetOwnerId) return;
+		if (isAgentAccountNotification(item)) {
+			history.push(
+				`/hotel-management/main-dashboard?modal=accounts&ownerId=${targetOwnerId}`
+			);
+			setNotificationsOpen(false);
+			return;
+		}
 		if (
 			isAgentNotificationAudience ||
 			item.notificationType === "agent_decision" ||
@@ -540,6 +952,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const notificationCount = Number(notificationFeed.total || 0);
 	const notificationPanel = (
 		<NotificationPanel $isArabic={isArabic}>
+			{false && (
 			<NotificationHeader>
 				<div>
 					<NotificationTitle>
@@ -575,6 +988,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				</div>
 				<NotificationPill>{notificationCount}</NotificationPill>
 			</NotificationHeader>
+			)}
 
 			{notificationsLoading ? (
 				<NotificationLoading>
@@ -583,6 +997,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			) : notificationFeed.data.length ? (
 				<NotificationList>
 					{notificationFeed.data.map((item) => {
+						const agentAccountNotice = isAgentAccountNotification(item);
 						const reasons = Array.isArray(item.pendingReasons)
 							? item.pendingReasons
 							: [];
@@ -604,6 +1019,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 									? "تم قبول الحجز"
 									: "Reservation confirmed"
 								: "";
+						const agentAccountTitle =
+							item.notificationType === "agent_account_approved"
+								? "Agent approved"
+								: item.notificationType === "agent_account_rejected"
+								? "Agent rejected"
+								: "Agent approval";
 						return (
 							<NotificationItem
 								key={item._id}
@@ -611,14 +1032,24 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 								onClick={() => goToPendingNotification(item)}
 							>
 								<NotificationItemTop>
-									<strong>{item.confirmation_number || "N/A"}</strong>
-									<span>{formatNotificationMoney(item.total_amount)} SAR</span>
+									<strong>
+										{agentAccountNotice
+											? agentAccountTitle
+											: item.confirmation_number || "N/A"}
+									</strong>
+									{!agentAccountNotice && (
+										<span>{formatNotificationMoney(item.total_amount)} SAR</span>
+									)}
 								</NotificationItemTop>
 								<NotificationGuest>
 									{item.guestName || (isArabic ? "ضيف بدون اسم" : "Unnamed guest")}
 								</NotificationGuest>
 								<NotificationMeta>
-									<span>{item.hotelName || item.booking_source || "Hotel"}</span>
+									<span>
+										{item.hotelName
+											? titleCaseHotelName(item.hotelName)
+											: item.booking_source || "Hotel"}
+									</span>
 									<span>
 										{formatNotificationDate(item.checkin_date)}
 										{item.checkout_date ? " - " : ""}
@@ -717,19 +1148,42 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						</LanguageText>
 					</IconWrapper>
 
-					<IconWrapper onClick={handleSettingsClick}>
-						<SettingOutlined />
-					</IconWrapper>
+					{canUseMainDashboardSettingsCalendar ? (
+						<Dropdown
+							menu={{
+								items: settingsMenuItems,
+								onClick: handleSettingsMenuClick,
+							}}
+							trigger={["click"]}
+							open={settingsDropdownOpen}
+							onOpenChange={handleSettingsOpenChange}
+							placement={isArabic ? "bottomLeft" : "bottomRight"}
+							getPopupContainer={() => document.body}
+							overlayClassName='top-navbar-settings-dropdown'
+						>
+							<IconWrapper role='button' aria-label='Hotel settings'>
+								<SettingOutlined />
+							</IconWrapper>
+						</Dropdown>
+					) : (
+						<IconWrapper
+							onClick={handleSettingsClick}
+							role='button'
+							aria-label='Hotel settings'
+						>
+							<SettingOutlined />
+						</IconWrapper>
+					)}
 
 					<IconWrapper style={{ width: "25%" }}>
 						<Dropdown
 							menu={{
-								items: roomTypeMenuItems,
-								onClick: handleRoomClick,
+								items: calendarMenuItems,
+								onClick: handleCalendarMenuClick,
 							}}
 							trigger={["click"]}
 							open={roomTypesDropdown}
-							onOpenChange={(flag) => setRoomTypesDropdown(flag)}
+							onOpenChange={handleCalendarOpenChange}
 						>
 							<div style={{ display: "flex", alignItems: "center" }}>
 								<CalendarOutlined
@@ -896,6 +1350,16 @@ const TopNavbarGlobalStyles = createGlobalStyle`
 			z-index: 2101 !important;
 		}
 
+		.top-navbar-settings-dropdown {
+			position: fixed !important;
+			top: 78px !important;
+			right: 10px !important;
+			left: auto !important;
+			min-width: 230px !important;
+			transform: none !important;
+			z-index: 2101 !important;
+		}
+
 		.top-navbar-profile-dropdown .ant-dropdown-menu {
 			padding: 8px;
 			border: 1px solid #c7e5ff;
@@ -907,6 +1371,20 @@ const TopNavbarGlobalStyles = createGlobalStyle`
 			min-height: 40px;
 			border-radius: 10px;
 			font-weight: 800;
+		}
+
+		.top-navbar-settings-dropdown .ant-dropdown-menu {
+			padding: 8px;
+			border: 1px solid #c7e5ff;
+			border-radius: 14px;
+			box-shadow: 0 16px 38px rgba(15, 23, 42, 0.22);
+		}
+
+		.top-navbar-settings-dropdown .ant-dropdown-menu-item {
+			min-height: 40px;
+			border-radius: 10px;
+			font-weight: 800;
+			text-transform: capitalize;
 		}
 	}
 `;

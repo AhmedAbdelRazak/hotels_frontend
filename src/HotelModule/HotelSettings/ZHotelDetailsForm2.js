@@ -63,6 +63,10 @@ const ZHotelDetailsForm2 = ({
 	existingRoomDetails,
 	viewsList,
 	extraAmenitiesList,
+	hotelIsActive,
+	activationSaving,
+	activationToggleDisabled,
+	handleActivationChange,
 }) => {
 	const [selectedDateRange, setSelectedDateRange] = useState([null, null]);
 	const [pricingRate, setPricingRate] = useState("");
@@ -359,6 +363,10 @@ const ZHotelDetailsForm2 = ({
 							hotelPhotos={hotelPhotos}
 							setGeocoder={setGeocoder}
 							geocoder={geocoder}
+							hotelIsActive={hotelIsActive}
+							activationSaving={activationSaving}
+							activationToggleDisabled={activationToggleDisabled}
+							handleActivationChange={handleActivationChange}
 						/>
 					</>
 				);

@@ -13,6 +13,7 @@ import {
 	Select,
 	Table,
 	Tag,
+	Tooltip,
 	message,
 } from "antd";
 import {
@@ -21,6 +22,7 @@ import {
 	DeleteOutlined,
 	DownloadOutlined,
 	EditOutlined,
+	InfoCircleOutlined,
 	PaperClipOutlined,
 	PlusOutlined,
 	ReloadOutlined,
@@ -450,6 +452,12 @@ Object.assign(labels.en, {
 	walletApprovalNotice:
 		"Wallet credit claims update your balance only after hotel finance approves them. Pending or rejected claims are shown below and are not included in Wallet added or Current balance.",
 	notInWalletBalance: "Not included in wallet balance",
+	commissionApprovalHelp:
+		"Approve only when the commission amount and payment status match your agreement with the hotel.",
+	approveCommissionHelp:
+		"Accepts the hotel finance update and lets the commission side of the reservation move toward closure.",
+	rejectCommissionHelp:
+		"Reject when the commission amount or status is not correct. Add a reason so finance can adjust it.",
 });
 
 Object.assign(labels.ar, {
@@ -489,6 +497,12 @@ Object.assign(labels.ar, {
 	walletApprovalNotice:
 		"\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0627 \u062a\u0636\u0627\u0641 \u0625\u0644\u0649 \u0627\u0644\u0631\u0635\u064a\u062f \u0625\u0644\u0627 \u0628\u0639\u062f \u0645\u0648\u0627\u0641\u0642\u0629 \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0641\u0646\u062f\u0642. \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0623\u0648 \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629 \u062a\u0638\u0647\u0631 \u0647\u0646\u0627 \u0648\u0644\u0627 \u062a\u062f\u062e\u0644 \u0641\u064a \u0627\u0644\u0645\u0636\u0627\u0641 \u0644\u0644\u0645\u062d\u0641\u0638\u0629 \u0623\u0648 \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u062d\u0627\u0644\u064a.",
 	notInWalletBalance: "\u063a\u064a\u0631 \u0645\u062d\u062a\u0633\u0628 \u0641\u064a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
+	commissionApprovalHelp:
+		"\u0648\u0627\u0641\u0642 \u0641\u0642\u0637 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639 \u0645\u0637\u0627\u0628\u0642\u064a\u0646 \u0644\u0627\u062a\u0641\u0627\u0642\u0643 \u0645\u0639 \u0627\u0644\u0641\u0646\u062f\u0642.",
+	approveCommissionHelp:
+		"\u064a\u0639\u062a\u0645\u062f \u062a\u062d\u062f\u064a\u062b \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0641\u0646\u062f\u0642 \u0648\u064a\u0633\u0645\u062d \u0644\u062c\u0627\u0646\u0628 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0628\u0627\u0644\u062a\u0642\u062f\u0645 \u0646\u062d\u0648 \u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u062d\u062c\u0632.",
+	rejectCommissionHelp:
+		"\u0627\u0631\u0641\u0636 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0623\u0648 \u062d\u0627\u0644\u062a\u0647\u0627 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d. \u0623\u0636\u0641 \u0633\u0628\u0628\u0627 \u0648\u0627\u0636\u062d\u0627 \u0644\u0643\u064a \u062a\u0639\u062f\u0644\u0647 \u0627\u0644\u0645\u0627\u0644\u064a\u0629.",
 });
 
 const transactionOptions = (txt) => [
@@ -526,6 +540,28 @@ const walletBalancePresentation = (record = {}, txt = labels.en) => {
 		tone: balance < 0 ? "orange" : "green",
 	};
 };
+
+const ActionInfo = ({ text, isArabic }) => (
+	<Tooltip
+		title={<ActionInfoText $isRTL={isArabic}>{text}</ActionInfoText>}
+		trigger={["hover", "focus", "click"]}
+		placement={isArabic ? "left" : "right"}
+		getPopupContainer={(triggerNode) =>
+			triggerNode?.closest?.(".ant-modal-content") || document.body
+		}
+		overlayClassName='finance-action-tooltip'
+		zIndex={100000}
+	>
+		<ActionInfoIcon
+			tabIndex={0}
+			role='button'
+			aria-label={isArabic ? "\u062a\u0639\u0631\u064a\u0641" : "Definition"}
+			onClick={(event) => event.stopPropagation()}
+		>
+			<InfoCircleOutlined />
+		</ActionInfoIcon>
+	</Tooltip>
+);
 
 const FinancialMain = ({ match }) => {
 	const { userId, hotelId } = match.params;
@@ -833,13 +869,22 @@ const FinancialMain = ({ match }) => {
 		Modal.confirm({
 			title: txt.rejectCommissionTitle,
 			content: (
-				<Input.TextArea
-					rows={3}
-					placeholder={txt.rejectionReason}
-					onChange={(event) => {
-						reason = event.target.value;
-					}}
-				/>
+				<RejectModalBody $isRTL={isArabic}>
+					<div>
+						<span>{txt.reject}</span>
+						<ActionInfo
+							text={txt.rejectCommissionHelp}
+							isArabic={isArabic}
+						/>
+					</div>
+					<Input.TextArea
+						rows={3}
+						placeholder={txt.rejectionReason}
+						onChange={(event) => {
+							reason = event.target.value;
+						}}
+					/>
+				</RejectModalBody>
 			),
 			okText: txt.reject,
 			cancelText: txt.cancel,
@@ -1179,20 +1224,26 @@ const FinancialMain = ({ match }) => {
 			render: (_, row) =>
 				row.type === "commission_agent_approval" ? (
 					<WalletActionButtons>
-						<Button
-							size='small'
-							type='primary'
-							onClick={() => submitCommissionApproval(row, "approve")}
-						>
-							{txt.approve}
-						</Button>
-						<Button
-							size='small'
-							danger
-							onClick={() => rejectCommissionApproval(row)}
-						>
-							{txt.reject}
-						</Button>
+						<ActionChoice>
+							<Button
+								size='small'
+								type='primary'
+								onClick={() => submitCommissionApproval(row, "approve")}
+							>
+								{txt.approve}
+							</Button>
+							<ActionInfo text={txt.approveCommissionHelp} isArabic={isArabic} />
+						</ActionChoice>
+						<ActionChoice>
+							<Button
+								size='small'
+								danger
+								onClick={() => rejectCommissionApproval(row)}
+							>
+								{txt.reject}
+							</Button>
+							<ActionInfo text={txt.rejectCommissionHelp} isArabic={isArabic} />
+						</ActionChoice>
 					</WalletActionButtons>
 				) : (
 					"-"
@@ -1418,7 +1469,15 @@ const FinancialMain = ({ match }) => {
 
 					{agentOnly && (
 						<Panel id='agent-finance-todos'>
-							<PanelTitle>{txt.todos}</PanelTitle>
+							<PanelTitle>
+								<TitleWithInfo $isRTL={isArabic}>
+									<span>{txt.todos}</span>
+									<ActionInfo
+										text={txt.commissionApprovalHelp}
+										isArabic={isArabic}
+									/>
+								</TitleWithInfo>
+							</PanelTitle>
 							<p style={{ marginTop: 0, color: "#667085" }}>{txt.todoHint}</p>
 							<Table
 								rowKey={(row) =>
@@ -2136,6 +2195,68 @@ const PanelTitle = styled.h2`
 	font-size: 1.05rem;
 	font-weight: 900;
 	color: #0f172a;
+`;
+
+const TitleWithInfo = styled.span`
+	display: inline-flex;
+	align-items: center;
+	flex-direction: row;
+	gap: 7px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+`;
+
+const ActionChoice = styled.span`
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+`;
+
+const ActionInfoIcon = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border: 1px solid #93c5fd;
+	border-radius: 999px;
+	background: #eff6ff;
+	color: #0b6fdc;
+	font-size: 0.72rem;
+	line-height: 1;
+	cursor: help;
+	flex: 0 0 auto;
+
+	svg {
+		font-size: 12px;
+	}
+`;
+
+const ActionInfoText = styled.div`
+	max-width: 280px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	line-height: 1.55;
+	font-weight: 700;
+`;
+
+const RejectModalBody = styled.div`
+	display: grid;
+	gap: 8px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	> div {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		width: fit-content;
+		justify-self: ${(props) => (props.$isRTL ? "end" : "start")};
+		font-weight: 900;
+	}
+
+	textarea {
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
 `;
 
 const AgentNameButton = styled.button`

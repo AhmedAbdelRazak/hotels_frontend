@@ -3,7 +3,7 @@ import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import { useHistory, useLocation, useParams } from "react-router-dom";
-import { Modal, Switch, Tooltip } from "antd";
+import { Modal } from "antd";
 import { useCartContext } from "../../cart_context";
 import {
 	createRooms,
@@ -493,21 +493,55 @@ const HotelSettingsMain = () => {
 	const handleActivationChange = (activateHotel) => {
 		const readiness = getActivationReadiness();
 		const hotelName = hotelDetails?.hotelName || "this hotel";
+		const isArabic = chosenLanguage === "Arabic";
+		const activationText = {
+			incomplete: isArabic
+				? "\u064a\u0631\u062c\u0649 \u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u063a\u0631\u0641 \u0648\u0627\u0644\u0635\u0648\u0631 \u0648\u0627\u0644\u0645\u0648\u0642\u0639 \u0648\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0641\u0646\u062f\u0642 \u0642\u0628\u0644 \u062a\u0641\u0639\u064a\u0644\u0647."
+				: "Please complete rooms, photos, location, and hotel data before activating this hotel.",
+			title: activateHotel
+				? isArabic
+					? `\u062a\u0641\u0639\u064a\u0644 ${hotelName}\u061f`
+					: `Activate ${hotelName}?`
+				: isArabic
+				? `\u062a\u0639\u0637\u064a\u0644 ${hotelName}\u061f`
+				: `Deactivate ${hotelName}?`,
+			content: activateHotel
+				? isArabic
+					? "\u0633\u064a\u0638\u0647\u0631 \u0647\u0630\u0627 \u0627\u0644\u0641\u0646\u062f\u0642 \u0644\u0644\u0636\u064a\u0648\u0641 \u0641\u064a \u062c\u0646\u0629 \u0628\u0648\u0643\u064a\u0646\u062c \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0646\u0634\u0637\u0627."
+					: "This hotel will become visible on Jannat Booking wherever active hotels are shown."
+				: isArabic
+				? "\u0633\u064a\u062a\u0645 \u0625\u062e\u0641\u0627\u0621 \u0647\u0630\u0627 \u0627\u0644\u0641\u0646\u062f\u0642 \u0645\u0646 \u0635\u0641\u062d\u0627\u062a \u062c\u0646\u0629 \u0628\u0648\u0643\u064a\u0646\u062c \u0627\u0644\u0639\u0627\u0645\u0629."
+				: "This hotel will be hidden from Jannat Booking public hotel pages.",
+			okText: activateHotel
+				? isArabic
+					? "\u062a\u0641\u0639\u064a\u0644"
+					: "Activate"
+				: isArabic
+				? "\u062a\u0639\u0637\u064a\u0644"
+				: "Deactivate",
+			cancelText: isArabic ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
+			success: activateHotel
+				? isArabic
+					? "\u062a\u0645 \u062a\u0641\u0639\u064a\u0644 \u0627\u0644\u0641\u0646\u062f\u0642 \u0628\u0646\u062c\u0627\u062d"
+					: "Hotel activated successfully"
+				: isArabic
+				? "\u062a\u0645 \u062a\u0639\u0637\u064a\u0644 \u0627\u0644\u0641\u0646\u062f\u0642 \u0628\u0646\u062c\u0627\u062d"
+				: "Hotel deactivated successfully",
+			failed: isArabic
+				? "\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u062d\u0627\u0644\u0629 \u0627\u0644\u0641\u0646\u062f\u0642"
+				: "Hotel activation update failed",
+		};
 
 		if (activateHotel && !readiness.ready) {
-			toast.error(
-				"Please complete rooms, photos, location, and hotel data before activating this hotel."
-			);
+			toast.error(activationText.incomplete);
 			return;
 		}
 
 		Modal.confirm({
-			title: `${activateHotel ? "Activate" : "Deactivate"} ${hotelName}?`,
-			content: activateHotel
-				? "This hotel will become visible on Jannat Booking wherever active hotels are shown."
-				: "This hotel will be hidden from Jannat Booking public hotel pages.",
-			okText: activateHotel ? "Activate" : "Deactivate",
-			cancelText: "Cancel",
+			title: activationText.title,
+			content: activationText.content,
+			okText: activationText.okText,
+			cancelText: activationText.cancelText,
 			onOk: () => {
 				setActivationSaving(true);
 				return updateHotelDetails(getSettingsHotelId(), user._id, token, {
@@ -520,14 +554,10 @@ const HotelSettingsMain = () => {
 						}
 						setHotelDetails(response);
 						updateSelectedHotelCache(response);
-						toast.success(
-							activateHotel
-								? "Hotel activated successfully"
-								: "Hotel deactivated successfully"
-						);
+						toast.success(activationText.success);
 					})
 					.catch((error) => {
-						toast.error(error.message || "Hotel activation update failed");
+						toast.error(error.message || activationText.failed);
 					})
 					.finally(() => {
 						setActivationSaving(false);
@@ -650,59 +680,6 @@ const HotelSettingsMain = () => {
 						{chosenLanguage === "English" ? "ARABIC" : "English"}
 					</div>
 
-					{hotelDetails && hotelDetails.hotelName ? (
-						<ActivationPanel $isActive={hotelIsActive}>
-							<div className='activation-copy'>
-								<span className='activation-kicker'>Hotel visibility</span>
-								<h3>
-									{hotelIsActive
-										? "Active on Jannat Booking"
-										: "Hidden from Jannat Booking"}
-								</h3>
-								<p>
-									{activationReadiness.ready
-										? "This hotel is ready to be shown to guests when active."
-										: "Complete rooms, photos, location, and hotel data before activation."}
-								</p>
-								<div className='activation-checklist'>
-									<span className={activationReadiness.roomsDone ? "done" : ""}>
-										Rooms
-									</span>
-									<span
-										className={activationReadiness.photosDone ? "done" : ""}
-									>
-										Photos
-									</span>
-									<span
-										className={activationReadiness.locationDone ? "done" : ""}
-									>
-										Location
-									</span>
-									<span className={activationReadiness.dataDone ? "done" : ""}>
-										Hotel Data
-									</span>
-								</div>
-							</div>
-							<Tooltip
-								title={
-									activationToggleDisabled && !activationSaving
-										? "Finish the required setup steps first"
-										: ""
-								}
-							>
-								<div className='activation-switch'>
-									<Switch
-										checked={hotelIsActive}
-										loading={activationSaving}
-										disabled={activationToggleDisabled}
-										onChange={handleActivationChange}
-									/>
-									<span>{hotelIsActive ? "Active" : "Inactive"}</span>
-								</div>
-							</Tooltip>
-						</ActivationPanel>
-					) : null}
-
 					<TabsShell>
 						<div className='tab-grid'>
 							<Tab
@@ -784,6 +761,10 @@ const HotelSettingsMain = () => {
 									fromPage='AddNew'
 									viewsList={viewsList}
 									extraAmenitiesList={extraAmenitiesList}
+									hotelIsActive={hotelIsActive}
+									activationSaving={activationSaving}
+									activationToggleDisabled={activationToggleDisabled}
+									handleActivationChange={handleActivationChange}
 								/>
 							</div>
 						) : activeTab === "RoomDetails" &&
@@ -919,102 +900,6 @@ const HotelSettingsMainWrapper = styled.div`
 		.grid-container-main {
 			grid-template-columns: ${(props) =>
 				props.show ? "5% 90%" : props.showList ? "13% 87%" : "19% 81%"};
-		}
-	}
-`;
-
-const ActivationPanel = styled.div`
-	align-items: center;
-	background: #ffffff;
-	border: 1px solid
-		${(props) => (props.$isActive ? "#8fd3a4" : "#d7e7f8")};
-	border-left: 5px solid ${(props) => (props.$isActive ? "#229954" : "#7f8c8d")};
-	border-radius: 8px;
-	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
-	display: flex;
-	gap: 18px;
-	justify-content: space-between;
-	margin: 8px auto 10px;
-	max-width: 1360px;
-	padding: 16px 18px;
-	width: calc(100% - clamp(16px, 2.8vw, 36px));
-
-	.activation-copy {
-		min-width: 0;
-	}
-
-	.activation-kicker {
-		color: #566573;
-		display: block;
-		font-size: 0.78rem;
-		font-weight: 700;
-		letter-spacing: 0;
-		margin-bottom: 4px;
-		text-transform: uppercase;
-	}
-
-	h3 {
-		color: #17202a;
-		font-size: 1.05rem;
-		font-weight: 800;
-		line-height: 1.25;
-		margin: 0;
-	}
-
-	p {
-		color: #566573;
-		font-size: 0.92rem;
-		line-height: 1.45;
-		margin: 6px 0 0;
-	}
-
-	.activation-checklist {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 7px;
-		margin-top: 10px;
-	}
-
-	.activation-checklist span {
-		background: #f3f6f8;
-		border: 1px solid #d9e2ec;
-		border-radius: 6px;
-		color: #596b7a;
-		font-size: 0.78rem;
-		font-weight: 700;
-		line-height: 1;
-		padding: 6px 9px;
-	}
-
-	.activation-checklist span.done {
-		background: #eaf8ee;
-		border-color: #a9dfbf;
-		color: #1e8449;
-	}
-
-	.activation-switch {
-		align-items: center;
-		display: flex;
-		flex: 0 0 auto;
-		gap: 9px;
-		justify-content: flex-end;
-		min-width: 116px;
-	}
-
-	.activation-switch span {
-		color: #17202a;
-		font-weight: 800;
-		white-space: nowrap;
-	}
-
-	@media (max-width: 720px) {
-		align-items: flex-start;
-		flex-direction: column;
-		margin: 8px 8px 10px;
-		width: auto;
-
-		.activation-switch {
-			justify-content: flex-start;
 		}
 	}
 `;

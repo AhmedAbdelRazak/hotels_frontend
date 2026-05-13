@@ -142,9 +142,18 @@ export const getHotelDetails = (userId) => {
 		.catch((err) => console.log(err));
 };
 
-export const getHotelMainDashboardStats = (hotelId, userId, token) => {
+export const getHotelMainDashboardStats = (
+	hotelId,
+	userId,
+	token,
+	params = {},
+) => {
+	const query = new URLSearchParams();
+	if (params.range) query.append("range", params.range);
+	if (params.dateBy) query.append("dateBy", params.dateBy);
+	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-details/stats/${hotelId}/${userId}`,
+		`${process.env.REACT_APP_API_URL}/hotel-details/stats/${hotelId}/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
@@ -158,9 +167,13 @@ export const getHotelMainDashboardStats = (hotelId, userId, token) => {
 		.catch((err) => console.log(err));
 };
 
-export const getManagerExecutiveSummary = (userId, token) => {
+export const getManagerExecutiveSummary = (userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	if (params.range) query.append("range", params.range);
+	if (params.dateBy) query.append("dateBy", params.dateBy);
+	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/hotel-details/executive-summary/${userId}`,
+		`${process.env.REACT_APP_API_URL}/hotel-details/executive-summary/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {

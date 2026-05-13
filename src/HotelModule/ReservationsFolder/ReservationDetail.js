@@ -9,7 +9,7 @@ import styled, { createGlobalStyle } from "styled-components";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
-import { Spin, Modal, Select, Checkbox, Input } from "antd";
+import { Spin, Modal, Select, Checkbox, Input, Tooltip } from "antd";
 import moment from "moment";
 import {
 	BankOutlined,
@@ -22,6 +22,7 @@ import {
 	FileTextOutlined,
 	HomeOutlined,
 	IdcardOutlined,
+	InfoCircleOutlined,
 	MailOutlined,
 	PhoneOutlined,
 	TeamOutlined,
@@ -95,16 +96,23 @@ const isOrderTakerEditableReservation = (reservation = {}) => {
 		.trim()
 		.toLowerCase();
 
-	if (["confirmed", "rejected"].includes(agentDecisionStatus)) return false;
-	if (["confirmed", "rejected"].includes(pendingStatus)) return false;
+	const financeRejected = /finance[\s_-]?rejected/i.test(status);
+	if (!financeRejected && agentDecisionStatus === "confirmed") return false;
+	if (!financeRejected && pendingStatus === "confirmed") return false;
 	if (
-		/(confirmed|inhouse|checked[_\s-]?in|checked[_\s-]?out|cancel|reject|no[_\s-]?show|relocated)/i.test(
+		/(confirmed|pending[\s_-]?finance[\s_-]?review|pending[\s_-]?agent[\s_-]?commission[\s_-]?approval|inhouse|checked[_\s-]?in|checked[_\s-]?out|cancel|no[_\s-]?show|relocated)/i.test(
 			status,
 		)
 	) {
 		return false;
 	}
-	return /pending[\s_-]?confirmation/i.test(status) || pendingStatus === "pending";
+	return (
+		/pending[\s_-]?confirmation/i.test(status) ||
+		pendingStatus === "pending" ||
+		pendingStatus === "rejected" ||
+		agentDecisionStatus === "rejected" ||
+		financeRejected
+	);
 };
 
 const normalizeReservationStatusValue = (value) => {
@@ -646,7 +654,60 @@ const AR_LABELS = {
 		"\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0644\u064a\u0644\u0629",
 };
 
+const FINANCE_CHOICE_HELP = {
+	en: {
+		commissionAmount:
+			"Commission amount agreed for this reservation before the case can be fully reconciled.",
+		commissionPaid:
+			"Use only when the commission has been paid or reconciled. This can close the commission side of the case.",
+		hotelPayoutDone:
+			"Use when the amount owed to the hotel has already been transferred or settled.",
+		reconciliationNotes:
+			"Short internal note explaining what was paid, pending, or agreed.",
+	},
+	ar: {
+		commissionAmount:
+			"\u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u062a\u0641\u0642 \u0639\u0644\u064a\u0647 \u0644\u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0642\u0628\u0644 \u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u062d\u0627\u0644\u0629 \u0645\u0627\u0644\u064a\u0627.",
+		commissionPaid:
+			"\u0627\u0633\u062a\u062e\u062f\u0645\u0647\u0627 \u0641\u0642\u0637 \u0639\u0646\u062f\u0645\u0627 \u062a\u0643\u0648\u0646 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0645\u062f\u0641\u0648\u0639\u0629 \u0623\u0648 \u062a\u0645\u062a \u062a\u0633\u0648\u064a\u062a\u0647\u0627. \u0647\u0630\u0627 \u0642\u062f \u064a\u063a\u0644\u0642 \u062c\u0627\u0646\u0628 \u0627\u0644\u0639\u0645\u0648\u0644\u0629.",
+		hotelPayoutDone:
+			"\u0627\u0633\u062a\u062e\u062f\u0645\u0647\u0627 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u062d\u0642 \u0627\u0644\u0641\u0646\u062f\u0642 \u0642\u062f \u062a\u0645 \u062a\u062d\u0648\u064a\u0644\u0647 \u0623\u0648 \u062a\u0633\u0648\u064a\u062a\u0647.",
+		reconciliationNotes:
+			"\u0645\u0644\u0627\u062d\u0638\u0629 \u0645\u062e\u062a\u0635\u0631\u0629 \u062a\u0648\u0636\u062d \u0645\u0627 \u062a\u0645 \u062f\u0641\u0639\u0647 \u0623\u0648 \u0645\u0627 \u0647\u0648 \u0645\u0639\u0644\u0642 \u0623\u0648 \u0645\u062a\u0641\u0642 \u0639\u0644\u064a\u0647.",
+	},
+};
+
+const FinanceInfo = ({ text, isArabic }) => (
+	<Tooltip
+		title={<FinanceInfoText $isRTL={isArabic}>{text}</FinanceInfoText>}
+		trigger={["hover", "focus", "click"]}
+		placement={isArabic ? "left" : "right"}
+		getPopupContainer={(triggerNode) =>
+			triggerNode?.closest?.(".ant-modal-content") || document.body
+		}
+		overlayClassName='reservation-finance-tooltip'
+		zIndex={100000}
+	>
+		<FinanceInfoIcon
+			tabIndex={0}
+			role='button'
+			aria-label={isArabic ? "\u062a\u0639\u0631\u064a\u0641" : "Definition"}
+			onClick={(event) => event.stopPropagation()}
+		>
+			<InfoCircleOutlined />
+		</FinanceInfoIcon>
+	</Tooltip>
+);
+
 const ReservationDetailGlobalStyles = createGlobalStyle`
+	.reservation-finance-tooltip,
+	.reservation-finance-tooltip.ant-tooltip,
+	.ant-tooltip.reservation-finance-tooltip,
+	.reservation-finance-tooltip .ant-tooltip-content,
+	.reservation-finance-tooltip .ant-tooltip-inner {
+		z-index: 100000 !important;
+	}
+
 	.reservation-update-modal-wrap {
 		overflow: hidden auto;
 	}
@@ -2121,6 +2182,11 @@ const ContentSection = styled.div`
 		grid-column: 1 / -1;
 	}
 
+	.workflow-action.cancel {
+		background: #991b1b;
+		grid-column: 1 / -1;
+	}
+
 	.middle-operation-top,
 	.middle-operation-bottom {
 		display: grid;
@@ -2445,6 +2511,11 @@ const ContentSection = styled.div`
 
 	.payment-preview-action.pending {
 		background: #f59e0b;
+		grid-column: 1 / -1;
+	}
+
+	.payment-preview-action.cancel {
+		background: #991b1b;
 		grid-column: 1 / -1;
 	}
 
@@ -2973,6 +3044,24 @@ const FinanceCycleEditor = styled.div`
 		font-weight: 800;
 	}
 
+	.cycle-label-with-info,
+	.cycle-choice-with-info {
+		display: inline-flex;
+		align-items: center;
+		flex-direction: row;
+		gap: 6px;
+		width: fit-content;
+		direction: inherit;
+	}
+
+	.cycle-label-with-info {
+		justify-self: start;
+	}
+
+	&[dir="rtl"] .cycle-label-with-info {
+		justify-self: end;
+	}
+
 	.cycle-mini-card strong {
 		font-size: 1rem;
 		font-weight: 950;
@@ -2990,6 +3079,11 @@ const FinanceCycleEditor = styled.div`
 		border-radius: 8px;
 		padding: 10px;
 		font-weight: 800;
+		width: 100%;
+	}
+
+	.cycle-choice-with-info {
+		width: 100%;
 	}
 
 	.cycle-notes {
@@ -3007,6 +3101,34 @@ const FinanceCycleEditor = styled.div`
 			display: grid;
 		}
 	}
+`;
+
+const FinanceInfoIcon = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border: 1px solid #93c5fd;
+	border-radius: 999px;
+	background: #eff6ff;
+	color: #0b6fdc;
+	font-size: 0.72rem;
+	line-height: 1;
+	cursor: help;
+	flex: 0 0 auto;
+
+	svg {
+		font-size: 12px;
+	}
+`;
+
+const FinanceInfoText = styled.div`
+	max-width: 280px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	line-height: 1.55;
+	font-weight: 700;
 `;
 
 const CycleTrackerList = styled.div`
@@ -3516,6 +3638,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const [linkGenerate, setLinkGenerated] = useState("");
 
 	const { chosenLanguage } = useCartContext();
+	const isArabic = chosenLanguage === "Arabic";
+	const financeHelp = FINANCE_CHOICE_HELP[isArabic ? "ar" : "en"];
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
@@ -3998,6 +4122,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			collectionModel = "pms_collected";
 		} else if (hotelCollectedAmount > 0 || paymentSummary.paidOffline) {
 			collectionModel = "hotel_collected";
+		} else if (
+			reservation?.agentWalletSnapshot?.captured &&
+			reservation?.agentWalletSnapshot?.walletRequired !== false
+		) {
+			collectionModel = "agent_wallet";
 		}
 		const hotelPayoutDue =
 			collectionModel === "pms_collected" || collectionModel === "mixed"
@@ -4024,6 +4153,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				  : collectionModel === "mixed"
 				    ? !!reservation?.moneyTransferredToHotel &&
 				      commissionSideClosed
+				    : collectionModel === "agent_wallet"
+				      ? commissionSideClosed
 				    : reservation?.financial_cycle?.status === "closed";
 		return {
 			collectionModel,
@@ -4044,6 +4175,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						  ? AR_LABELS.hotelCollected
 						  : collectionModel === "mixed"
 						    ? "\u062a\u062d\u0635\u064a\u0644 \u0645\u0634\u062a\u0631\u0643"
+						    : collectionModel === "agent_wallet"
+						      ? "\u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u0648\u0643\u064a\u0644"
 						    : "\u0642\u064a\u062f \u0627\u0644\u062a\u062d\u062f\u064a\u062f"
 					: collectionModel === "pms_collected"
 					  ? "PMS collected"
@@ -4051,6 +4184,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					    ? "Hotel collected"
 					    : collectionModel === "mixed"
 					      ? "Mixed collection"
+					      : collectionModel === "agent_wallet"
+					        ? "Agent wallet"
 					      : "Pending",
 			actionLabel:
 				chosenLanguage === "Arabic"
@@ -4060,6 +4195,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						  ? AR_LABELS.hotelOwesPms
 						  : collectionModel === "mixed"
 						    ? "\u064a\u062a\u0637\u0644\u0628 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0637\u0631\u0641\u064a\u0646"
+						    : collectionModel === "agent_wallet"
+						      ? "\u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629"
 						    : "\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0633\u0648\u064a\u0629 \u0628\u0639\u062f"
 					: collectionModel === "pms_collected"
 					  ? "PMS owes hotel"
@@ -4067,6 +4204,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					    ? "Hotel owes PMS"
 					    : collectionModel === "mixed"
 					      ? "Both sides need review"
+					      : collectionModel === "agent_wallet"
+					        ? "Wallet and commission review"
 					      : "No cycle yet",
 			hotelPayoutDue,
 			commissionDueToPms,
@@ -4075,6 +4214,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.financial_cycle?.collectionModel,
 		reservation?.financial_cycle?.commissionAssigned,
 		reservation?.financial_cycle?.status,
+		reservation?.agentWalletSnapshot,
 		reservation?.commissionData?.assigned,
 		reservation?.commissionStatus,
 		reservation?.moneyTransferredToHotel,
@@ -4371,6 +4511,107 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			},
 		});
 	}, [chosenLanguage, updatePendingDecision]);
+	const openCancelDecisionModal = useCallback(() => {
+		let cancelReason = "";
+		Modal.confirm({
+			title:
+				chosenLanguage === "Arabic"
+					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+					: "Cancel reservation",
+			content: (
+				<div className='pending-decision-modal'>
+					<p>
+						{chosenLanguage === "Arabic"
+							? "\u0627\u0643\u062a\u0628 \u0633\u0628\u0628 \u0627\u0644\u0625\u0644\u063a\u0627\u0621 \u0644\u064a\u0638\u0647\u0631 \u0641\u064a \u0633\u062c\u0644 \u0627\u0644\u062d\u062c\u0632."
+							: "Add a cancellation reason for the reservation record."}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={
+							chosenLanguage === "Arabic"
+								? AR_LABELS.optionalReason
+								: "Cancellation reason"
+						}
+						onChange={(event) => {
+							cancelReason = event.target.value;
+						}}
+					/>
+				</div>
+			),
+			okText:
+				chosenLanguage === "Arabic"
+					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+					: "Cancel reservation",
+			cancelText: chosenLanguage === "Arabic" ? "\u062a\u0631\u0627\u062c\u0639" : "Back",
+			okButtonProps: { danger: true },
+			centered: true,
+			zIndex: 3000,
+			onOk: () =>
+				updatePendingDecision({
+					action: "cancel",
+					cancelReason,
+				}),
+		});
+	}, [chosenLanguage, updatePendingDecision]);
+	const openAgentCancelReservationModal = useCallback(() => {
+		if (!reservation?._id || !user?._id) return;
+		let cancelReason = "";
+		Modal.confirm({
+			title:
+				chosenLanguage === "Arabic"
+					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+					: "Cancel reservation",
+			content: (
+				<div className='pending-decision-modal'>
+					<p>
+						{chosenLanguage === "Arabic"
+							? "\u0633\u064a\u062a\u0645 \u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u062d\u062c\u0632 \u0645\u0628\u0643\u0631\u0627\u064b \u0648\u0644\u0646 \u064a\u0624\u062b\u0631 \u0639\u0644\u0649 \u0627\u0644\u0645\u062e\u0632\u0648\u0646."
+							: "This closes the reservation early and removes it from effective inventory."}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={
+							chosenLanguage === "Arabic"
+								? AR_LABELS.optionalReason
+								: "Cancellation reason"
+						}
+						onChange={(event) => {
+							cancelReason = event.target.value;
+						}}
+					/>
+				</div>
+			),
+			okText:
+				chosenLanguage === "Arabic"
+					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+					: "Cancel reservation",
+			cancelText: chosenLanguage === "Arabic" ? "\u062a\u0631\u0627\u062c\u0639" : "Back",
+			okButtonProps: { danger: true },
+			centered: true,
+			zIndex: 3000,
+			onOk: async () => {
+				setPendingDecisionLoading(true);
+				try {
+					const response = await updateSingleReservation(reservation._id, {
+						reservation_status: "cancelled",
+						state: "cancelled",
+						cancel_reason: cancelReason,
+						requestingUserId: user._id,
+					});
+					if (!response || response.error) {
+						toast.error(response?.error || "Could not cancel reservation.");
+						return Promise.reject(new Error(response?.error || "cancel failed"));
+					}
+					const updated = response?.reservation || response;
+					if (updated?._id) setReservation(updated);
+					toast.success("Reservation was cancelled.");
+					return updated;
+				} finally {
+					setPendingDecisionLoading(false);
+				}
+			},
+		});
+	}, [chosenLanguage, reservation?._id, setReservation, user?._id]);
 	const openRevertDecisionModal = useCallback(() => {
 		let revertReason = "";
 		Modal.confirm({
@@ -5859,10 +6100,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							</div>
 							<div className='cycle-editor-grid'>
 								<label>
-									<span>
+									<span className='cycle-label-with-info'>
 										{chosenLanguage === "Arabic"
 											? AR_LABELS.commissionAmount
 											: "Commission Amount"}
+										<FinanceInfo
+											text={financeHelp.commissionAmount}
+											isArabic={isArabic}
+										/>
 									</span>
 									<Input
 										inputMode='decimal'
@@ -5898,38 +6143,54 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								</div>
 							</div>
 							<div className='cycle-check-row'>
-								<Checkbox
-									checked={financeCycleDraft.commissionPaid}
-									onChange={(e) =>
-										setFinanceCycleDraft((prev) => ({
-											...prev,
-											commissionPaid: e.target.checked,
-										}))
-									}
-								>
-									{chosenLanguage === "Arabic"
-										? AR_LABELS.commissionReceived
-										: "Commission paid"}
-								</Checkbox>
-								<Checkbox
-									checked={financeCycleDraft.moneyTransferredToHotel}
-									onChange={(e) =>
-										setFinanceCycleDraft((prev) => ({
-											...prev,
-											moneyTransferredToHotel: e.target.checked,
-										}))
-									}
-								>
-									{chosenLanguage === "Arabic"
-										? AR_LABELS.hotelPayoutDone
-										: "Hotel payout completed"}
-								</Checkbox>
+								<span className='cycle-choice-with-info'>
+									<Checkbox
+										checked={financeCycleDraft.commissionPaid}
+										onChange={(e) =>
+											setFinanceCycleDraft((prev) => ({
+												...prev,
+												commissionPaid: e.target.checked,
+											}))
+										}
+									>
+										{chosenLanguage === "Arabic"
+											? AR_LABELS.commissionReceived
+											: "Commission paid"}
+									</Checkbox>
+									<FinanceInfo
+										text={financeHelp.commissionPaid}
+										isArabic={isArabic}
+									/>
+								</span>
+								<span className='cycle-choice-with-info'>
+									<Checkbox
+										checked={financeCycleDraft.moneyTransferredToHotel}
+										onChange={(e) =>
+											setFinanceCycleDraft((prev) => ({
+												...prev,
+												moneyTransferredToHotel: e.target.checked,
+											}))
+										}
+									>
+										{chosenLanguage === "Arabic"
+											? AR_LABELS.hotelPayoutDone
+											: "Hotel payout completed"}
+									</Checkbox>
+									<FinanceInfo
+										text={financeHelp.hotelPayoutDone}
+										isArabic={isArabic}
+									/>
+								</span>
 							</div>
 							<label className='cycle-notes'>
-								<span>
+								<span className='cycle-label-with-info'>
 									{chosenLanguage === "Arabic"
 										? AR_LABELS.reconciliationNotes
 										: "Reconciliation Notes"}
+									<FinanceInfo
+										text={financeHelp.reconciliationNotes}
+										isArabic={isArabic}
+									/>
 								</span>
 								<Input.TextArea
 									rows={3}
@@ -7516,6 +7777,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														: "Revert to pending"}
 												</button>
 											)}
+											<button
+												className='workflow-action cancel'
+												type='button'
+												disabled={pendingDecisionLoading}
+												onClick={openCancelDecisionModal}
+											>
+												{chosenLanguage === "Arabic"
+													? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+													: "Cancel reservation"}
+											</button>
 										</div>
 									) : null}
 									<div className='middle-operation-top'>
@@ -7687,6 +7958,31 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 																	: "Revert to pending"}
 															</button>
 														)}
+														<button
+															className='payment-preview-action cancel'
+															type='button'
+															disabled={pendingDecisionLoading}
+															onClick={openCancelDecisionModal}
+														>
+															{chosenLanguage === "Arabic"
+																? "\u0625\u0644\u063a\u0627\u0621"
+																: "Cancel"}
+														</button>
+													</div>
+												) : limitedOrderTakerAccount &&
+												  canLimitedOrderTakerEditReservation &&
+												  newProcessReservation ? (
+													<div className='payment-preview-actions'>
+														<button
+															className='payment-preview-action cancel'
+															type='button'
+															disabled={pendingDecisionLoading}
+															onClick={openAgentCancelReservationModal}
+														>
+															{chosenLanguage === "Arabic"
+																? "\u0625\u0644\u063a\u0627\u0621"
+																: "Cancel"}
+														</button>
 													</div>
 												) : null}
 											</div>

@@ -30,10 +30,31 @@ const ZCase0 = ({
 	hotelPhotos,
 	setGeocoder,
 	geocoder,
+	hotelIsActive,
+	activationSaving,
+	handleActivationChange,
 }) => {
 	const [manualLat, setManualLat] = useState("");
 	const [manualLng, setManualLng] = useState("");
 	const [manualInputEnabled, setManualInputEnabled] = useState(false);
+	const isArabic = chosenLanguage === "Arabic";
+	const switchText = {
+		paymentTitle: isArabic
+			? "\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u062f\u0641\u0639 \u0644\u0644\u0636\u064a\u0648\u0641"
+			: "Payment Settings For Guests",
+		hotelActivation: isArabic
+			? "\u062a\u0641\u0639\u064a\u0644 \u0627\u0644\u0641\u0646\u062f\u0642"
+			: "Activate Hotel",
+		acceptDeposit: isArabic
+			? "\u0642\u0628\u0648\u0644 \u0627\u0644\u0639\u0631\u0628\u0648\u0646 \u0623\u0648\u0646\u0644\u0627\u064a\u0646"
+			: "Accept Deposit Online",
+		payWholeAmount: isArabic
+			? "\u0627\u062f\u0641\u0639 \u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0623\u0648\u0646\u0644\u0627\u064a\u0646"
+			: "Pay Whole Amount Online",
+		reserveNowPayHotel: isArabic
+			? "\u0627\u062d\u062c\u0632 \u0627\u0644\u0622\u0646 \u0648\u0627\u062f\u0641\u0639 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642"
+			: "Reserve Now, Pay Later",
+	};
 
 	const handleLoad = () => {
 		if (window.google && window.google.maps && window.google.maps.Geocoder) {
@@ -461,47 +482,31 @@ const ZCase0 = ({
 					</LoadScript>
 				</Modal>
 
-				<div
-					className='row'
-					style={{
-						display: "flex",
-						marginBottom: "30px",
-						marginTop: "10px",
-						gap: "20px",
-					}}
+				<GuestPaymentSwitchRow
+					$isArabic={isArabic}
 				>
-					<h5
-						className='mx-4'
-						style={{
-							fontWeight: "bold",
-							color: "darkred",
-							fontSize: "1.1rem",
-							textDecoration: "underline",
-						}}
-					>
-						{chosenLanguage === "Arabic"
-							? "إعدادات الدفع للضيوف"
-							: "Payment Settings For Guests"}
-					</h5>
+					<h5>{switchText.paymentTitle}</h5>
 
-					<div>
-						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
-							{chosenLanguage === "Arabic"
-								? "قبول العربون أونلاين"
-								: "Accept Deposit Online"}
-						</span>
+					<SwitchControl $isArabic={isArabic}>
+						<Switch
+							className='mx-1'
+							checked={!!hotelIsActive}
+							loading={activationSaving}
+							disabled={activationSaving}
+							onChange={handleActivationChange}
+						/>
+						<span>{switchText.hotelActivation}</span>
+					</SwitchControl>
+
+					<SwitchControl $isArabic={isArabic}>
 						<Switch
 							className='mx-1'
 							checked={hotelDetails.guestPaymentAcceptance.acceptDeposit}
 							onChange={(value) => handleSwitchChange("acceptDeposit", value)}
 						/>
-					</div>
-					<div>
-						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
-							{chosenLanguage === "Arabic"
-								? "ادفع المبلغ الإجمالي أونلاين"
-								: "Pay Whole Amount Online"}
-						</span>
+						<span>{switchText.acceptDeposit}</span>
+					</SwitchControl>
+					<SwitchControl $isArabic={isArabic}>
 						<Switch
 							className='mx-1'
 							checked={hotelDetails.guestPaymentAcceptance.acceptPayWholeAmount}
@@ -509,13 +514,9 @@ const ZCase0 = ({
 								handleSwitchChange("acceptPayWholeAmount", value)
 							}
 						/>
-					</div>
-					<div>
-						<span style={{ marginRight: "10px", fontWeight: "bold" }}>
-							{chosenLanguage === "Arabic"
-								? "احجز الآن وادفع في الفندق"
-								: "Reserve Now, Pay Later..."}
-						</span>
+						<span>{switchText.payWholeAmount}</span>
+					</SwitchControl>
+					<SwitchControl $isArabic={isArabic}>
 						<Switch
 							className='mx-1'
 							checked={
@@ -525,8 +526,9 @@ const ZCase0 = ({
 								handleSwitchChange("acceptReserveNowPayInHotel", value)
 							}
 						/>
-					</div>
-				</div>
+						<span>{switchText.reserveNowPayHotel}</span>
+					</SwitchControl>
+				</GuestPaymentSwitchRow>
 
 				<h4 style={{ fontSize: "1.3rem", fontWeight: "bold" }} className='mt-3'>
 					{chosenLanguage === "Arabic"
@@ -549,3 +551,69 @@ const ZCase0 = ({
 export default ZCase0;
 
 const ZCase0Wrapper = styled.div``;
+
+const GuestPaymentSwitchRow = styled.div`
+	align-items: center;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+	justify-content: flex-start;
+	margin: 10px 0 30px;
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+	width: 100%;
+
+	h5 {
+		color: darkred;
+		font-size: 1.1rem;
+		font-weight: bold;
+		margin: 0;
+		text-decoration: underline;
+		white-space: nowrap;
+	}
+
+	> div + div {
+		border-inline-start: 1px solid #d6dde8;
+		margin-inline-start: 18px;
+		padding-inline-start: 18px;
+	}
+
+	@media (max-width: 900px) {
+		align-items: ${(props) => (props.$isArabic ? "flex-end" : "flex-start")};
+		flex-direction: column;
+		gap: 12px;
+
+		h5 {
+			margin: 0;
+			white-space: normal;
+		}
+
+		> div + div {
+			border-inline-start: 0;
+			border-block-start: 1px solid #e2e7ef;
+			margin-inline-start: 0;
+			padding-block-start: 12px;
+			padding-inline-start: 0;
+		}
+	}
+`;
+
+const SwitchControl = styled.div`
+	align-items: center;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	display: inline-flex;
+	flex-direction: row;
+	gap: 8px;
+	white-space: nowrap;
+
+	.ant-switch {
+		direction: ltr !important;
+		flex: 0 0 auto;
+		margin: 0 !important;
+	}
+
+	> span {
+		font-weight: bold;
+		margin: 0 !important;
+	}
+`;

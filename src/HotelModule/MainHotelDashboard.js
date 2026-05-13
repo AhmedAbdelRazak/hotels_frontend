@@ -20,6 +20,7 @@ import {
 	DeleteOutlined,
 	EyeOutlined,
 	WalletOutlined,
+	UserAddOutlined,
 } from "@ant-design/icons";
 
 import { useCartContext } from "../cart_context";
@@ -116,7 +117,7 @@ Object.assign(WORDS.en, {
 	totalRooms: "Total rooms",
 	reservations: "Reservations",
 	nonDone: "Open reservations",
-	uncompleted: "Incomplete",
+	uncompleted: "Reconciliation",
 	setupReady: "Settings ready",
 	statsUnavailable: "Stats loading...",
 });
@@ -137,7 +138,7 @@ WORDS.ar.setupPending = "الإعدادات غير مكتملة";
 Object.assign(WORDS.en, {
 	sourceTitle: "Booking sources",
 	openModalTitle: "Open confirmed reservations",
-	incompleteModalTitle: "Incomplete reservations",
+	incompleteModalTitle: "Reconciliation queue",
 	searchPlaceholder: "Search confirmation, guest name, or hotel name",
 	search: "Search",
 	reset: "Reset",
@@ -157,15 +158,20 @@ Object.assign(WORDS.en, {
 	exportExcel: "Export Excel",
 	exporting: "Exporting...",
 	noRows: "No open reservations found.",
-	noIncompleteRows: "No incomplete reservations found.",
-	executiveSummary: "Executive summary",
+	noIncompleteRows: "No reconciliation items found.",
 	executiveSummarySubtitle:
 		"All assigned properties in one operational snapshot.",
 	allRooms: "All rooms",
 	allAvailableRooms: "Available rooms",
 	reservationsPastThreeMonths: "Reservations",
 	pastThreeMonths: "Past 3 months",
-	allIncompleteReservations: "Incomplete reservations",
+	summaryToday: "Today",
+	summaryYesterday: "Yesterday",
+	summaryLast7Days: "Last 7 Days",
+	summaryAll: "All",
+	summaryDateBy: "Date",
+	createdAt: "Created At",
+	allIncompleteReservations: "Reconciliation queue",
 	historicalData: "Historical",
 	hotelName: "Hotel",
 });
@@ -197,9 +203,8 @@ WORDS.ar.exporting = "جاري التصدير...";
 WORDS.ar.noIncompleteRows = "لا توجد حجوزات غير مكتملة.";
 
 Object.assign(WORDS.ar, {
-	executiveSummary: "الملخص التنفيذي",
 	executiveSummarySubtitle:
-		"نظرة تشغيلية عامة على كل الفنادق المخصصة.",
+		"\u0646\u0638\u0631\u0629 \u062a\u0634\u063a\u064a\u0644\u064a\u0629 \u0639\u0627\u0645\u0629 \u0639\u0644\u0649 \u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	allRooms: "كل الغرف",
 	allAvailableRooms: "الغرف المتاحة",
 	reservationsPastThreeMonths: "الحجوزات",
@@ -208,6 +213,13 @@ Object.assign(WORDS.ar, {
 	historicalData: "كل البيانات",
 	hotelName: "الفندق",
 });
+
+WORDS.ar.summaryToday = "اليوم";
+WORDS.ar.summaryYesterday = "أمس";
+WORDS.ar.summaryLast7Days = "آخر 7 أيام";
+WORDS.ar.summaryAll = "الكل";
+WORDS.ar.summaryDateBy = "التاريخ";
+WORDS.ar.createdAt = "تاريخ الإنشاء";
 
 Object.assign(WORDS.en, {
 	accountsButton: "Manager Hotel Accounts",
@@ -406,6 +418,9 @@ const ManagerMainHotelDashboard = () => {
 	const [financialsVisible, setFinancialsVisible] = useState(false);
 	const [executiveSummary, setExecutiveSummary] = useState(null);
 	const [executiveLoading, setExecutiveLoading] = useState(false);
+	const [executiveSummaryRange, setExecutiveSummaryRange] = useState("all");
+	const [executiveSummaryDateBy, setExecutiveSummaryDateBy] =
+		useState("createdAt");
 	const [executiveIncompleteVisible, setExecutiveIncompleteVisible] =
 		useState(false);
 	const [executiveIncompleteRows, setExecutiveIncompleteRows] = useState([]);
@@ -420,6 +435,31 @@ const ManagerMainHotelDashboard = () => {
 	const [executiveDateTo, setExecutiveDateTo] = useState("");
 	const [executiveSortBy, setExecutiveSortBy] = useState("booked_at");
 	const executiveListLimit = 10;
+	const executiveRangeOptions = useMemo(
+		() => [
+			{ value: "today", label: TXT.summaryToday },
+			{ value: "yesterday", label: TXT.summaryYesterday },
+			{ value: "last7", label: TXT.summaryLast7Days },
+			{ value: "all", label: TXT.summaryAll },
+		],
+		[TXT]
+	);
+	const executiveDateByOptions = useMemo(
+		() => [
+			{ value: "createdAt", label: TXT.createdAt },
+			{ value: "checkin_date", label: TXT.checkin },
+			{ value: "checkout_date", label: TXT.checkout },
+		],
+		[TXT]
+	);
+	const executiveSummaryRangeLabel =
+		executiveRangeOptions.find(
+			(option) => option.value === executiveSummaryRange
+		)?.label || TXT.summaryAll;
+	const executiveSummaryDateByLabel =
+		executiveDateByOptions.find(
+			(option) => option.value === executiveSummaryDateBy
+		)?.label || TXT.createdAt;
 
 	/* onboarding modals */
 	const [stepModalIdx, setStepModalIdx] = useState(null);
@@ -521,7 +561,10 @@ const ManagerMainHotelDashboard = () => {
 	const fetchExecutiveSummary = useCallback(() => {
 		if (isSingleHotelUser || !dashboardOwnerId || !token) return;
 		setExecutiveLoading(true);
-		getManagerExecutiveSummary(dashboardOwnerId, token)
+		getManagerExecutiveSummary(dashboardOwnerId, token, {
+			range: executiveSummaryRange,
+			dateBy: executiveSummaryDateBy,
+		})
 			.then((data) => {
 				if (!data || data.error) {
 					setExecutiveSummary(null);
@@ -530,7 +573,13 @@ const ManagerMainHotelDashboard = () => {
 				setExecutiveSummary(data);
 			})
 			.finally(() => setExecutiveLoading(false));
-	}, [dashboardOwnerId, isSingleHotelUser, token]);
+	}, [
+		dashboardOwnerId,
+		executiveSummaryDateBy,
+		executiveSummaryRange,
+		isSingleHotelUser,
+		token,
+	]);
 
 	useEffect(fetchExecutiveSummary, [fetchExecutiveSummary]);
 
@@ -613,7 +662,7 @@ const ManagerMainHotelDashboard = () => {
 				}
 				const exportRows = rows.map((reservation, index) => ({
 					[TXT.index]: index + 1,
-					[TXT.hotelName]: reservation.hotelName || "",
+					[TXT.hotelName]: titleCaseWords(reservation.hotelName || ""),
 					[TXT.confirmation]: reservation.confirmation_number || "",
 					[TXT.guest]: reservation.customer_details?.name || "",
 					[TXT.source]: reservation.booking_source || "",
@@ -792,10 +841,39 @@ const ManagerMainHotelDashboard = () => {
 				</ManageAccountsButton>
 			</PageActions>
 
+			<ExecutiveSummaryControls className='container' $isRTL={isRTL}>
+				<ExecutiveRangeGroup role='group' aria-label='Executive summary date range'>
+					{executiveRangeOptions.map((option) => (
+						<button
+							type='button'
+							key={option.value}
+							data-active={
+								executiveSummaryRange === option.value ? "true" : "false"
+							}
+							onClick={() => setExecutiveSummaryRange(option.value)}
+						>
+							{option.label}
+						</button>
+					))}
+				</ExecutiveRangeGroup>
+				<ExecutiveDateSelect>
+					<span>{TXT.summaryDateBy}</span>
+					<select
+						value={executiveSummaryDateBy}
+						onChange={(event) => setExecutiveSummaryDateBy(event.target.value)}
+					>
+						{executiveDateByOptions.map((option) => (
+							<option key={option.value} value={option.value}>
+								{option.label}
+							</option>
+						))}
+					</select>
+				</ExecutiveDateSelect>
+			</ExecutiveSummaryControls>
+
 			<ExecutiveSummaryPanel className='container' $isRTL={isRTL}>
 				<ExecutiveSummaryHeader>
 					<div>
-						<strong>{TXT.executiveSummary}</strong>
 						<span>{TXT.executiveSummarySubtitle}</span>
 					</div>
 					<small>
@@ -803,7 +881,7 @@ const ManagerMainHotelDashboard = () => {
 							? `${formatShortDate(
 									executiveSummary.period.reservationsFrom
 							  )} - ${formatShortDate(executiveSummary.period.reservationsTo)}`
-							: ""}
+							: `${executiveSummaryRangeLabel} - ${executiveSummaryDateByLabel}`}
 					</small>
 				</ExecutiveSummaryHeader>
 				<ExecutiveSummaryGrid>
@@ -836,7 +914,9 @@ const ManagerMainHotelDashboard = () => {
 								  )}
 						</strong>
 						<span>{TXT.reservationsPastThreeMonths}</span>
-						<em>{TXT.pastThreeMonths}</em>
+						<em>
+							{executiveSummaryRangeLabel} - {executiveSummaryDateByLabel}
+						</em>
 					</ExecutiveSummaryCard>
 					<ExecutiveSummaryCard
 						$tone='red'
@@ -901,6 +981,8 @@ const ManagerMainHotelDashboard = () => {
 							onStepClick={handleStepClick}
 							updateDashboardQuery={updateDashboardQuery}
 							clearDashboardModalQuery={clearDashboardModalQuery}
+							statsRange={executiveSummaryRange}
+							statsDateBy={executiveSummaryDateBy}
 						/>
 					))
 				) : (
@@ -1107,7 +1189,7 @@ const ManagerMainHotelDashboard = () => {
 													index +
 													1}
 											</td>
-											<td>{reservation.hotelName || "-"}</td>
+											<td>{titleCaseWords(reservation.hotelName || "-")}</td>
 											<td>
 												<ConfirmationButton
 													type='button'
@@ -1387,6 +1469,9 @@ const SCOPED_DASHBOARD_WORDS = {
 		newToday: "New today",
 		cancelled: "Cancelled",
 		incomplete: "Needs follow-up",
+		reconciliationQueue: "Reconciliation",
+		reconciliationTitle: "Reconciliation queue",
+		noReconciliationRows: "No reconciliation items found.",
 		todos: "To Do's",
 		newReservation: "New reservation",
 		myReservations: "Reservation list",
@@ -1396,6 +1481,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		settings: "Settings",
 		payments: "Payments",
 		financials: "Financials",
+		agentAccounts: "Agent accounts",
 		walletBalance: "Wallet balance",
 		outstandingReservations: "Outstanding reservations",
 		commissionOnly: "Commission only",
@@ -1459,11 +1545,16 @@ SCOPED_DASHBOARD_WORDS.ar = {
 
 SCOPED_DASHBOARD_WORDS.ar.financials = "المالية";
 SCOPED_DASHBOARD_WORDS.ar.walletBalance = "رصيد المحفظة";
+SCOPED_DASHBOARD_WORDS.ar.agentAccounts = "Agent accounts";
 SCOPED_DASHBOARD_WORDS.ar.roleLabels.reservationemployee =
 	"مساحة مسؤول الحجوزات";
 
 SCOPED_DASHBOARD_WORDS.ar.outstandingReservations = "قيمة حجوزات معلقة";
 SCOPED_DASHBOARD_WORDS.ar.commissionOnly = "عمولة فقط";
+
+SCOPED_DASHBOARD_WORDS.ar.reconciliationQueue = "المطابقة";
+SCOPED_DASHBOARD_WORDS.ar.reconciliationTitle = "قائمة المطابقة";
+SCOPED_DASHBOARD_WORDS.ar.noReconciliationRows = "لا توجد عناصر مطابقة.";
 
 const agentWalletDisplay = (wallet = {}, text = SCOPED_DASHBOARD_WORDS.en) => {
 	const commercialModel =
@@ -1492,6 +1583,8 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const TXT = SCOPED_DASHBOARD_WORDS[isRTL ? "ar" : "en"];
 	const roleKey = getPrimaryScopedRole(user);
 	const canUseFinancialsModal = roleKey === "finance" || roleKey === "hotelmanager";
+	const canUseAgentAccountsModal = ["finance", "reservationemployee", "hotelmanager"].includes(roleKey);
+	const canApproveScopedAgents = roleKey === "hotelmanager";
 	const [adminMenuStatus, setAdminMenuStatus] = useState(false);
 	const { value: initialCollapsed } = getStoredMenuCollapsed();
 	const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -1503,6 +1596,14 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const [summaryLoading, setSummaryLoading] = useState(false);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
 	const [financialsVisible, setFinancialsVisible] = useState(false);
+	const [agentAccountsVisible, setAgentAccountsVisible] = useState(false);
+	const [reconciliationVisible, setReconciliationVisible] = useState(false);
+	const [reconciliationHotel, setReconciliationHotel] = useState(null);
+	const [reconciliationRows, setReconciliationRows] = useState([]);
+	const [reconciliationTotal, setReconciliationTotal] = useState(0);
+	const [reconciliationPage, setReconciliationPage] = useState(1);
+	const [reconciliationLoading, setReconciliationLoading] = useState(false);
+	const reconciliationLimit = 10;
 
 	const assignedHotelIds = useMemo(
 		() => getAssignedHotelIdsFromUser(user),
@@ -1688,6 +1789,31 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		selectedHotelId,
 	]);
 
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const shouldOpenAccounts =
+			params.get("modal") === "accounts" && canUseAgentAccountsModal;
+		if (!shouldOpenAccounts) {
+			if (agentAccountsVisible) setAgentAccountsVisible(false);
+			return;
+		}
+		const queryHotelId = normalizeDashboardId(params.get("hotelId"));
+		const nextHotelId =
+			queryHotelId && hotels.some((hotel) => hotel._id === queryHotelId)
+				? queryHotelId
+				: selectedHotelId || hotels[0]?._id || "";
+		if (nextHotelId) {
+			setSelectedHotelId(nextHotelId);
+		}
+		setAgentAccountsVisible(true);
+	}, [
+		agentAccountsVisible,
+		canUseAgentAccountsModal,
+		hotels,
+		location.search,
+		selectedHotelId,
+	]);
+
 	const totals = useMemo(
 		() =>
 			Object.values(summaries).reduce(
@@ -1710,11 +1836,83 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		[summaries]
 	);
 
+	const openScopedReconciliation = useCallback(
+		(hotel, page = 1) => {
+			const hotelId = normalizeDashboardId(hotel?._id);
+			if (!hotelId || !user?._id || !token) return;
+			setReconciliationHotel(hotel);
+			setReconciliationVisible(true);
+			setReconciliationLoading(true);
+			getHotelDashboardIncompleteReservations(hotelId, user._id, token, {
+				page,
+				limit: reconciliationLimit,
+				sortBy: "booked_at",
+				sortOrder: "asc",
+			})
+				.then((data) => {
+					if (!data || data.error) {
+						setReconciliationRows([]);
+						setReconciliationTotal(0);
+						return;
+					}
+					setReconciliationRows(
+						Array.isArray(data.reservations) ? data.reservations : []
+					);
+					setReconciliationTotal(Number(data.total || 0));
+					setReconciliationPage(Number(data.page || page));
+				})
+				.finally(() => setReconciliationLoading(false));
+		},
+		[reconciliationLimit, token, user?._id]
+	);
+
+	const openScopedReservationDetails = useCallback(
+		(reservation = {}) => {
+			const hotel = reconciliationHotel;
+			const hotelId = normalizeDashboardId(hotel?._id || reservation.hotelId);
+			const ownerId = getScopedOwnerId(hotel || {}, user);
+			if (!hotelId || !ownerId) return;
+			const params = new URLSearchParams();
+			params.set("list", "");
+			params.set("page", "1");
+			if (reservation.confirmation_number) {
+				params.set("search", String(reservation.confirmation_number));
+			}
+			if (reservation.reservationId || reservation.linkedReservationId || reservation._id) {
+				params.set(
+					"reservationId",
+					String(
+						reservation.reservationId ||
+							reservation.linkedReservationId ||
+							reservation._id
+					)
+				);
+			}
+			history.push(
+				`/hotel-management/new-reservation/${ownerId}/${hotelId}?${params.toString()}`
+			);
+		},
+		[history, reconciliationHotel, user]
+	);
+
 	const goToHotel = (hotel, action = "primary") => {
 		const hotelId = normalizeDashboardId(hotel?._id);
 		const ownerId = getScopedOwnerId(hotel, user);
 		if (!hotelId || !ownerId) return;
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
+		if (action === "reconciliation") {
+			openScopedReconciliation(hotel, 1);
+			return;
+		}
+		if (canUseAgentAccountsModal && action === "accounts") {
+			setSelectedHotelId(hotelId);
+			setAgentAccountsVisible(true);
+			updateScopedDashboardQuery({
+				modal: "accounts",
+				hotelId: "",
+			});
+			return;
+		}
 		if (
 			canUseFinancialsModal &&
 			(action === "finance" || (roleKey === "finance" && action === "primary"))
@@ -1742,6 +1940,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		if (roleKey === "reception") {
 			return [
 				{ action: "primary", label: TXT.newReservation, icon: <PlusOutlined /> },
+				{ action: "reconciliation", label: TXT.reconciliationQueue, icon: <WarningOutlined /> },
 				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 			];
 		}
@@ -1753,6 +1952,8 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					icon: <DatabaseOutlined />,
 				},
 				{ action: "list", label: TXT.myReservations, icon: <DatabaseOutlined /> },
+				{ action: "reconciliation", label: TXT.reconciliationQueue, icon: <WarningOutlined /> },
+				{ action: "accounts", label: TXT.agentAccounts, icon: <UserAddOutlined /> },
 				{
 					action: "newReservation",
 					label: TXT.newReservation,
@@ -1763,6 +1964,8 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		if (roleKey === "finance") {
 			return [
 				{ action: "primary", label: TXT.financials || "Financials", icon: <WalletOutlined /> },
+				{ action: "reconciliation", label: TXT.reconciliationQueue, icon: <WarningOutlined /> },
+				{ action: "accounts", label: TXT.agentAccounts, icon: <UserAddOutlined /> },
 				{ action: "reservations", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 				{ action: "payment", label: TXT.payments || "Payments", icon: <CalendarOutlined /> },
 			];
@@ -1791,6 +1994,16 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 						},
 				  ]
 				: []),
+			...(canUseAgentAccountsModal
+				? [
+						{
+							action: "accounts",
+							label: TXT.agentAccounts || "Agent accounts",
+							icon: <UserAddOutlined />,
+						},
+				  ]
+				: []),
+			{ action: "reconciliation", label: TXT.reconciliationQueue, icon: <WarningOutlined /> },
 			{ action: "reservations", label: TXT.myReservations, icon: <DatabaseOutlined /> },
 			{ action: "reports", label: TXT.reports || "Reports", icon: <CalendarOutlined /> },
 			{ action: "housekeeping", label: TXT.housekeeping || "Housekeeping", icon: <HomeOutlined /> },
@@ -1974,6 +2187,93 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 				token={token}
 				isArabic={isRTL}
 			/>
+
+			<OwnerAccountsModal
+				open={agentAccountsVisible}
+				onClose={() => {
+					setAgentAccountsVisible(false);
+					clearScopedDashboardModalQuery();
+				}}
+				hotels={hotels}
+				userId={user?._id}
+				token={token}
+				WORDS={WORDS[isRTL ? "ar" : "en"]}
+				isRTL={isRTL}
+				agentOnly
+				canApproveAgents={canApproveScopedAgents}
+			/>
+
+			<Modal
+				title={TXT.reconciliationTitle}
+				open={reconciliationVisible}
+				onCancel={() => setReconciliationVisible(false)}
+				footer={null}
+				width='min(96vw, 1080px)'
+				destroyOnClose
+			>
+				<OpenReservationsPanel $isRTL={isRTL}>
+					<OpenTableWrap>
+						<OpenTable>
+							<thead>
+								<tr>
+									<th>#</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].confirmation}</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].guest}</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].source}</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].checkout}</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].reason}</th>
+									<th>{WORDS[isRTL ? "ar" : "en"].cycle}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{reconciliationLoading ? (
+									<tr>
+										<td colSpan='7'>Loading...</td>
+									</tr>
+								) : reconciliationRows.length ? (
+									reconciliationRows.map((reservation, index) => (
+										<tr key={reservation._id || reservation.confirmation_number}>
+											<td>
+												{(reconciliationPage - 1) *
+													reconciliationLimit +
+													index +
+													1}
+											</td>
+											<td>
+												<ConfirmationButton
+													type='button'
+													onClick={() => openScopedReservationDetails(reservation)}
+												>
+													{reservation.confirmation_number || "-"}
+												</ConfirmationButton>
+											</td>
+											<td>{reservation.customer_details?.name || "-"}</td>
+											<SourceCell>{reservation.booking_source || "-"}</SourceCell>
+											<td>{formatShortDate(reservation.checkout_date)}</td>
+											<ReasonCell dir={isRTL ? "rtl" : "ltr"}>
+												{getReservationReasonText(reservation, isRTL)}
+											</ReasonCell>
+											<td>{reservation.financial_cycle?.status || "open"}</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td colSpan='7'>{TXT.noReconciliationRows}</td>
+									</tr>
+								)}
+							</tbody>
+						</OpenTable>
+					</OpenTableWrap>
+					<Pagination
+						current={reconciliationPage}
+						pageSize={reconciliationLimit}
+						total={reconciliationTotal}
+						onChange={(page) => openScopedReconciliation(reconciliationHotel, page)}
+						showSizeChanger={false}
+						size='small'
+					/>
+				</OpenReservationsPanel>
+			</Modal>
 		</Wrapper>
 	);
 };
@@ -2091,6 +2391,24 @@ const parseAccountMoney = (value) => {
 const isAgentRoleSelected = (roleDescriptions = []) =>
 	(Array.isArray(roleDescriptions) ? roleDescriptions : []).includes("ordertaker");
 
+const accountIsAgentAccount = (account = {}) => {
+	const descriptions = [
+		account.roleDescription,
+		...(Array.isArray(account.roleDescriptions) ? account.roleDescriptions : []),
+	]
+		.map((item) => String(item || "").toLowerCase())
+		.filter(Boolean);
+	const roles = [
+		Number(account.role),
+		...(Array.isArray(account.roles) ? account.roles.map(Number) : []),
+	];
+	return (
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		(Array.isArray(account.accessTo) && account.accessTo.includes("ownReservations"))
+	);
+};
+
 const buildAgentOpeningBalances = (hotelIds = [], amount = 0) =>
 	(Array.isArray(hotelIds) ? hotelIds : [])
 		.filter(Boolean)
@@ -2173,8 +2491,12 @@ const OwnerAccountsModal = ({
 	token,
 	WORDS,
 	isRTL,
+	agentOnly = false,
+	canApproveAgents = true,
 }) => {
 	const history = useHistory();
+	const defaultAccountRoles = agentOnly ? ["ordertaker"] : ["reception"];
+	const defaultAccountAccess = getDefaultAccessForRoles(defaultAccountRoles);
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
@@ -2194,8 +2516,8 @@ const OwnerAccountsModal = ({
 		agentOpeningWalletCredit: "",
 		password: "",
 		password2: "",
-		roleDescriptions: ["reception"],
-		accessTo: getDefaultAccessForRoles(["reception"]),
+		roleDescriptions: defaultAccountRoles,
+		accessTo: defaultAccountAccess,
 	});
 	const [editingAccount, setEditingAccount] = useState(null);
 	const [savingAccount, setSavingAccount] = useState(false);
@@ -2211,8 +2533,8 @@ const OwnerAccountsModal = ({
 		agentCommercialModel: "wallet_inventory",
 		agentOpeningWalletCredit: "",
 		password: "",
-		roleDescriptions: ["reception"],
-		accessTo: getDefaultAccessForRoles(["reception"]),
+		roleDescriptions: defaultAccountRoles,
+		accessTo: defaultAccountAccess,
 		activeUser: true,
 	});
 
@@ -2258,9 +2580,30 @@ const OwnerAccountsModal = ({
 							"This attachment has no saved preview file. Remove it and upload it again if it is an older record.",
 						confirmDeactivate: "Deactivate this account?",
 						confirmActivate: "Activate this account?",
+						approveAgent: "Approve agent",
+						pendingApproval: "Pending director approval",
+						approvedApproval: "Approved",
+						rejectedApproval: "Rejected",
+						agentOnlyNotice:
+							"Only external agent accounts can be created here. New agents stay inactive until the hotel director approves them.",
+						agentApprovalLocked:
+							"Activation is handled by the hotel director or platform admin.",
 				  },
 		[isRTL]
 	);
+	const agentApprovalText = {
+		approveAgent: accountText.approveAgent || "Approve agent",
+		pendingApproval:
+			accountText.pendingApproval || "Pending director approval",
+		approvedApproval: accountText.approvedApproval || "Approved",
+		rejectedApproval: accountText.rejectedApproval || "Rejected",
+		agentOnlyNotice:
+			accountText.agentOnlyNotice ||
+			"Only external agent accounts can be created here. New agents stay inactive until the hotel director approves them.",
+		agentApprovalLocked:
+			accountText.agentApprovalLocked ||
+			"Activation is handled by the hotel director or platform admin.",
+	};
 	const agentAccountText = useMemo(
 		() =>
 			isRTL
@@ -2282,6 +2625,13 @@ const OwnerAccountsModal = ({
 				  },
 		[isRTL]
 	);
+	const visibleAccountRoleOptions = useMemo(
+		() =>
+			agentOnly
+				? accountRoleOptions.filter((option) => option.value === "ordertaker")
+				: accountRoleOptions,
+		[agentOnly]
+	);
 
 	const hotelOptions = useMemo(
 		() => (Array.isArray(hotels) ? hotels.filter((hotel) => hotel?._id) : []),
@@ -2302,7 +2652,7 @@ const OwnerAccountsModal = ({
 		const names = new Map();
 		hotelOptions.forEach((hotel) => {
 			const id = normalizeHotelId(hotel._id);
-			if (id) names.set(id, hotel.hotelName || hotel.name || "Hotel");
+			if (id) names.set(id, titleCaseWords(hotel.hotelName || hotel.name || "Hotel"));
 		});
 		return names;
 	}, [hotelOptions, normalizeHotelId]);
@@ -2332,7 +2682,7 @@ const OwnerAccountsModal = ({
 			if (Array.isArray(account?.hotelsToSupport)) {
 				account.hotelsToSupport.forEach((hotel) => {
 					const id = normalizeHotelId(hotel);
-					const name = hotel?.hotelName || hotel?.name;
+					const name = titleCaseWords(hotel?.hotelName || hotel?.name || "");
 					if (id && name) populatedNames.set(id, name);
 				});
 			}
@@ -2401,7 +2751,7 @@ const OwnerAccountsModal = ({
 						const hotelNames = accountHotelNames(
 							account,
 							hotelScopeIds,
-							hotel.hotelName || "Hotel"
+							titleCaseWords(hotel.hotelName || "Hotel")
 						);
 						const existing = byAccount.get(key);
 						if (existing) {
@@ -2424,10 +2774,15 @@ const OwnerAccountsModal = ({
 						});
 					});
 				});
-				setAccounts([...byAccount.values()]);
+				const accountRows = [...byAccount.values()];
+				setAccounts(
+					agentOnly
+						? accountRows.filter((account) => accountIsAgentAccount(account))
+						: accountRows
+				);
 			})
 			.finally(() => setLoading(false));
-	}, [accountHotelIds, accountHotelNames, hotelOptions, open, token, userId]);
+	}, [accountHotelIds, accountHotelNames, agentOnly, hotelOptions, open, token, userId]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -2440,9 +2795,13 @@ const OwnerAccountsModal = ({
 					: hotelOptions[0]?._id
 					? [hotelOptions[0]._id]
 					: [],
+			roleDescriptions: agentOnly ? ["ordertaker"] : prev.roleDescriptions,
+			accessTo: agentOnly
+				? getDefaultAccessForRoles(["ordertaker"])
+				: prev.accessTo,
 		}));
 		refreshAccounts();
-	}, [hotelOptions, open, refreshAccounts]);
+	}, [agentOnly, hotelOptions, open, refreshAccounts]);
 
 	useEffect(() => {
 		if (!open) setDocumentPreview(null);
@@ -2531,6 +2890,14 @@ const OwnerAccountsModal = ({
 	);
 
 	const toggleRole = (value) => {
+		if (agentOnly) {
+			setForm((prev) => ({
+				...prev,
+				roleDescriptions: ["ordertaker"],
+				accessTo: getDefaultAccessForRoles(["ordertaker"]),
+			}));
+			return;
+		}
 		setForm((prev) => ({
 			...prev,
 			roleDescriptions: (() => {
@@ -2595,15 +2962,17 @@ const OwnerAccountsModal = ({
 			agentOpeningWalletCredit: "",
 			password: "",
 			password2: "",
-			roleDescriptions: ["reception"],
-			accessTo: getDefaultAccessForRoles(["reception"]),
+			roleDescriptions: defaultAccountRoles,
+			accessTo: defaultAccountAccess,
 		});
 	};
 
 	const createAccount = (event) => {
 		event.preventDefault();
 		const selectedHotelIds = Array.isArray(form.hotelIds) ? form.hotelIds : [];
-		const selectedRoleDescriptions = Array.isArray(form.roleDescriptions)
+		const selectedRoleDescriptions = agentOnly
+			? ["ordertaker"]
+			: Array.isArray(form.roleDescriptions)
 			? form.roleDescriptions
 			: [];
 		if (
@@ -2661,14 +3030,16 @@ const OwnerAccountsModal = ({
 			hotelIdWork: selectedHotelIds[0],
 			hotelIdsWork: selectedHotelIds,
 			hotelsToSupport: selectedHotelIds,
-			accessTo: form.accessTo,
+			accessTo: agentOnly
+				? getDefaultAccessForRoles(["ordertaker"])
+				: form.accessTo,
 		})
 			.then((data) => {
 				if (data?.error) {
 					message.error(data.error);
 					return;
 				}
-				message.success("Account created successfully.");
+				message.success(data?.message || "Account created successfully.");
 				resetForm();
 				refreshAccounts();
 			})
@@ -2684,6 +3055,7 @@ const OwnerAccountsModal = ({
 			? account.roleDescriptions
 			: [account.roleDescription || getAccountRoleOption("", account.role).value];
 		const normalizedRoles = [...new Set(descriptions.filter(Boolean))];
+		const effectiveRoles = agentOnly ? ["ordertaker"] : normalizedRoles;
 		const selectedHotelIds = accountHotelIds(
 			account,
 			account.hotelId || account.hotelIdWork
@@ -2711,10 +3083,10 @@ const OwnerAccountsModal = ({
 				selectedHotelIds
 			),
 			password: "",
-			roleDescriptions: normalizedRoles.length ? normalizedRoles : ["reception"],
+			roleDescriptions: effectiveRoles.length ? effectiveRoles : defaultAccountRoles,
 			accessTo: Array.isArray(account.accessTo)
 				? account.accessTo
-				: getDefaultAccessForRoles(normalizedRoles),
+				: getDefaultAccessForRoles(effectiveRoles),
 			activeUser: account.activeUser !== false,
 		});
 	};
@@ -2733,6 +3105,14 @@ const OwnerAccountsModal = ({
 	};
 
 	const toggleEditRole = (value) => {
+		if (agentOnly) {
+			setEditForm((prev) => ({
+				...prev,
+				roleDescriptions: ["ordertaker"],
+				accessTo: getDefaultAccessForRoles(["ordertaker"]),
+			}));
+			return;
+		}
 		setEditForm((prev) => {
 			const current = Array.isArray(prev.roleDescriptions)
 				? prev.roleDescriptions
@@ -2775,10 +3155,14 @@ const OwnerAccountsModal = ({
 			return;
 		}
 
-		const selectedRoles = (Array.isArray(editForm.roleDescriptions)
+		const selectedRoleDescriptions = agentOnly
+			? ["ordertaker"]
+			: Array.isArray(editForm.roleDescriptions)
 			? editForm.roleDescriptions
-			: ["reception"]
-		).map((item) => getAccountRoleOption(item));
+			: ["reception"];
+		const selectedRoles = selectedRoleDescriptions.map((item) =>
+			getAccountRoleOption(item)
+		);
 		const primaryRole =
 			selectedRoles.find((item) => item.value === "hotelmanager") ||
 			selectedRoles[0];
@@ -2814,9 +3198,13 @@ const OwnerAccountsModal = ({
 			hotelIdWork: selectedHotelIds[0],
 			hotelIdsWork: selectedHotelIds,
 			hotelsToSupport: selectedHotelIds,
-			accessTo: editForm.accessTo,
-			activeUser: editForm.activeUser,
+			accessTo: agentOnly
+				? getDefaultAccessForRoles(["ordertaker"])
+				: editForm.accessTo,
 		};
+		if (!agentOnly || canApproveAgents) {
+			payload.activeUser = editForm.activeUser;
+		}
 
 		if (editForm.password) {
 			payload.password = editForm.password;
@@ -2852,6 +3240,10 @@ const OwnerAccountsModal = ({
 	};
 
 	const toggleAccountActive = (account) => {
+		if (agentOnly && !canApproveAgents) {
+			message.info(agentApprovalText.agentApprovalLocked);
+			return;
+		}
 		const nextActive = account.activeUser === false;
 		const confirmed = window.confirm(
 			nextActive ? accountText.confirmActivate : accountText.confirmDeactivate
@@ -2986,7 +3378,7 @@ const OwnerAccountsModal = ({
 						: [row.hotelName || "Hotel"]
 					).map((hotelName) => (
 						<Tag color='cyan' key={`${row._id}-${hotelName}`}>
-							{hotelName}
+							{titleCaseWords(hotelName)}
 						</Tag>
 					))}
 				</AccessTags>
@@ -3032,12 +3424,21 @@ const OwnerAccountsModal = ({
 		{
 			title: WORDS.accountStatus,
 			key: "status",
-			width: 95,
-			render: (_, row) => (
-				<Tag color={row.activeUser === false ? "red" : "green"}>
-					{row.activeUser === false ? WORDS.inactive : WORDS.active}
-				</Tag>
-			),
+			width: 130,
+			render: (_, row) => {
+				const approvalStatus = String(row.agentApproval?.status || "").toLowerCase();
+				if (accountIsAgentAccount(row) && approvalStatus === "pending") {
+					return <Tag color='gold'>{agentApprovalText.pendingApproval}</Tag>;
+				}
+				if (accountIsAgentAccount(row) && approvalStatus === "rejected") {
+					return <Tag color='red'>{agentApprovalText.rejectedApproval}</Tag>;
+				}
+				return (
+					<Tag color={row.activeUser === false ? "red" : "green"}>
+						{row.activeUser === false ? WORDS.inactive : WORDS.active}
+					</Tag>
+				);
+			},
 		},
 		{
 			title: WORDS.accountCreated,
@@ -3050,23 +3451,33 @@ const OwnerAccountsModal = ({
 			title: accountText.actions,
 			key: "actions",
 			width: 145,
-			render: (_, row) => (
-				<AccountActions>
-					<Button size='small' onClick={() => openEditAccount(row)}>
-						{accountText.edit}
-					</Button>
-					<Button
-						size='small'
-						danger={row.activeUser !== false}
-						type={row.activeUser === false ? "primary" : "default"}
-						onClick={() => toggleAccountActive(row)}
-					>
-						{row.activeUser === false
-							? accountText.activate
-							: accountText.deactivate}
-					</Button>
-				</AccountActions>
-			),
+			render: (_, row) => {
+				const isAgentAccount = accountIsAgentAccount(row);
+				const approvalStatus = String(row.agentApproval?.status || "").toLowerCase();
+				const canToggleThisAccount =
+					!agentOnly || (canApproveAgents && isAgentAccount);
+				return (
+					<AccountActions>
+						<Button size='small' onClick={() => openEditAccount(row)}>
+							{accountText.edit}
+						</Button>
+						{canToggleThisAccount && (
+							<Button
+								size='small'
+								danger={row.activeUser !== false}
+								type={row.activeUser === false ? "primary" : "default"}
+								onClick={() => toggleAccountActive(row)}
+							>
+								{row.activeUser === false
+									? approvalStatus === "pending"
+										? agentApprovalText.approveAgent
+										: accountText.activate
+									: accountText.deactivate}
+							</Button>
+						)}
+					</AccountActions>
+				);
+			},
 		},
 	];
 
@@ -3097,6 +3508,7 @@ const OwnerAccountsModal = ({
 						{WORDS.refresh}
 					</Button>
 				</AccountsHero>
+				{agentOnly && <FieldHint>{agentApprovalText.agentOnlyNotice}</FieldHint>}
 
 				<Tabs
 					className='manager-account-tabs'
@@ -3132,7 +3544,7 @@ const OwnerAccountsModal = ({
 														readOnly
 														checked={form.hotelIds.includes(hotel._id)}
 													/>
-													<strong>{hotel.hotelName || "Hotel"}</strong>
+													<strong>{titleCaseWords(hotel.hotelName || "Hotel")}</strong>
 												</SelectionPill>
 											))}
 										</SelectionGrid>
@@ -3143,7 +3555,7 @@ const OwnerAccountsModal = ({
 											<Requirement $required>{WORDS.required}</Requirement>
 										</SelectionHeader>
 										<SelectionGrid>
-											{accountRoleOptions.map((option) => (
+											{visibleAccountRoleOptions.map((option) => (
 												<SelectionPill
 													type='button'
 													key={option.value}
@@ -3332,6 +3744,7 @@ const OwnerAccountsModal = ({
 										/>
 										<FieldHint>{WORDS.confirmPasswordHint}</FieldHint>
 									</label>
+									{!agentOnly && (
 									<AccessPicker>
 										<SelectionHeader>
 											<span>{WORDS.accountAccess}</span>
@@ -3351,6 +3764,7 @@ const OwnerAccountsModal = ({
 											))}
 										</div>
 									</AccessPicker>
+									)}
 									<CreateAccountButton
 										type='submit'
 										disabled={creating}
@@ -3418,7 +3832,7 @@ const OwnerAccountsModal = ({
 												readOnly
 												checked={editForm.hotelIds.includes(hotelId)}
 											/>
-											<strong>{hotel.hotelName || "Hotel"}</strong>
+											<strong>{titleCaseWords(hotel.hotelName || "Hotel")}</strong>
 										</SelectionPill>
 									);
 								})}
@@ -3526,23 +3940,27 @@ const OwnerAccountsModal = ({
 							/>
 							<FieldHint>{accountText.passwordHint}</FieldHint>
 						</label>
-						<ActiveAccountToggle>
-							<input
-								type='checkbox'
-								checked={editForm.activeUser}
-								onChange={(event) =>
-									updateEditForm("activeUser", event.target.checked)
-								}
-							/>
-							<span>{accountText.activeUser}</span>
-						</ActiveAccountToggle>
+						{!agentOnly || canApproveAgents ? (
+							<ActiveAccountToggle>
+								<input
+									type='checkbox'
+									checked={editForm.activeUser}
+									onChange={(event) =>
+										updateEditForm("activeUser", event.target.checked)
+									}
+								/>
+								<span>{accountText.activeUser}</span>
+							</ActiveAccountToggle>
+						) : (
+							<FieldHint>{agentApprovalText.agentApprovalLocked}</FieldHint>
+						)}
 						<SelectionBlock>
 							<SelectionHeader>
 								<span>{WORDS.accountRoles || WORDS.accountRole}</span>
 								<Requirement $required>{WORDS.required}</Requirement>
 							</SelectionHeader>
 							<SelectionGrid>
-								{accountRoleOptions.map((option) => (
+								{visibleAccountRoleOptions.map((option) => (
 									<SelectionPill
 										type='button'
 										key={option.value}
@@ -3604,6 +4022,7 @@ const OwnerAccountsModal = ({
 								</label>
 							</AgentCommercialBlock>
 						)}
+						{!agentOnly && (
 						<AccessPicker>
 							<SelectionHeader>
 								<span>{WORDS.accountAccess}</span>
@@ -3622,6 +4041,7 @@ const OwnerAccountsModal = ({
 								))}
 							</div>
 						</AccessPicker>
+						)}
 					</StaffEditForm>
 				</Modal>
 				<Modal
@@ -3718,6 +4138,8 @@ const HotelCard = memo(
 		onStepClick,
 		updateDashboardQuery,
 		clearDashboardModalQuery,
+		statsRange = "all",
+		statsDateBy = "createdAt",
 	}) => {
 		const location = useLocation();
 		const isActive = !!hotel.activateHotel;
@@ -3797,7 +4219,11 @@ const HotelCard = memo(
 			let mounted = true;
 			if (!hotel?._id || !adminId || !token) return undefined;
 
-			getHotelMainDashboardStats(hotel._id, adminId, token).then((data) => {
+			setHotelStats(null);
+			getHotelMainDashboardStats(hotel._id, adminId, token, {
+				range: statsRange,
+				dateBy: statsDateBy,
+			}).then((data) => {
 				if (!mounted || !data || data.error) return;
 				setHotelStats(data);
 			});
@@ -3805,7 +4231,7 @@ const HotelCard = memo(
 			return () => {
 				mounted = false;
 			};
-		}, [adminId, hotel?._id, token]);
+		}, [adminId, hotel?._id, statsDateBy, statsRange, token]);
 
 		const loadOpenReservations = useCallback(
 			(page = openListPage, overrides = {}) => {
@@ -4078,7 +4504,7 @@ const HotelCard = memo(
 							</ReviewRibbon>
 
 							<NameRow onClick={onTitleClick} $isRTL={isRTL}>
-								{hotel?.hotelName || "Unnamed hotel"}
+								{titleCaseWords(hotel?.hotelName || "Unnamed hotel")}
 								<EditOutlined
 									onClick={(e) => {
 										e.stopPropagation();
@@ -4420,6 +4846,101 @@ const PageActions = styled.div`
 	}
 `;
 
+const ExecutiveSummaryControls = styled.div`
+	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.7rem;
+	flex-wrap: wrap;
+	margin: -0.2rem auto 1rem;
+`;
+
+const ExecutiveRangeGroup = styled.div`
+	display: inline-flex;
+	align-items: center;
+	gap: 0.28rem;
+	padding: 0.24rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.9);
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+
+	button {
+		border: 0;
+		border-radius: 999px;
+		background: transparent;
+		color: #47637f;
+		font-size: 0.76rem;
+		font-weight: 900;
+		padding: 0.42rem 0.74rem;
+		min-height: 32px;
+		line-height: 1;
+		white-space: nowrap;
+		transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+	}
+
+	button[data-active="true"] {
+		background: #0d6efd;
+		color: #fff;
+		box-shadow: 0 8px 18px rgba(13, 110, 253, 0.24);
+	}
+
+	button:hover {
+		background: rgba(13, 110, 253, 0.1);
+	}
+
+	button[data-active="true"]:hover {
+		background: #0d6efd;
+	}
+
+	@media (max-width: 520px) {
+		width: 100%;
+		justify-content: center;
+		border-radius: 14px;
+		flex-wrap: wrap;
+	}
+`;
+
+const ExecutiveDateSelect = styled.label`
+	display: inline-flex;
+	align-items: center;
+	gap: 0.42rem;
+	min-height: 38px;
+	padding: 0.25rem 0.36rem 0.25rem 0.7rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.94);
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+	color: #47637f;
+	font-size: 0.76rem;
+	font-weight: 900;
+	white-space: nowrap;
+
+	select {
+		min-width: 132px;
+		border: 0;
+		border-radius: 999px;
+		background: #eef7ff;
+		color: #0b5fa8;
+		font-size: 0.78rem;
+		font-weight: 900;
+		padding: 0.42rem 0.7rem;
+		outline: none;
+	}
+
+	@media (max-width: 520px) {
+		width: 100%;
+		justify-content: space-between;
+		border-radius: 14px;
+
+		select {
+			min-width: 0;
+			flex: 1;
+		}
+	}
+`;
+
 const ManageAccountsButton = styled.button`
 	display: inline-flex;
 	align-items: center;
@@ -4479,14 +5000,16 @@ const ExecutiveSummaryHeader = styled.div`
 		font-weight: 950;
 	}
 
-	span,
+	span {
+		color: #102033;
+		font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+		font-weight: 900;
+	}
+
 	small {
 		color: #58708c;
 		font-size: 0.82rem;
 		font-weight: 800;
-	}
-
-	small {
 		white-space: nowrap;
 	}
 

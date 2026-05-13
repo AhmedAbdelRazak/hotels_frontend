@@ -17,6 +17,21 @@ import ZCase0 from "../HotelSettings/ZCase0";
 import PaymentSettings from "../HotelSettings/PaymentSettings";
 import { updateHotelDetails } from "../apiAdmin";
 
+const AR_MODAL_TEXT = {
+	save: "حفظ",
+	saved: "تم الحفظ",
+	addRoom: "يجب إضافة غرفة واحدة على الأقل",
+	roomTypesPricing: "أنواع الغرف والسعر",
+	infoTitle: "معلومات التسجيل",
+	infoBody: "طلب التسجيل قيد المراجعة.",
+	uploadPhoto: "أضف صورة واحدة على الأقل",
+	hotelPhotos: "صور الفندق",
+	pickLocation: "حدد موقع الفندق",
+	hotelLocation: "موقع الفندق",
+	hotelData: "بيانات الفندق",
+	bankDetails: "البيانات البنكية",
+};
+
 /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ static dictionaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 const roomTypes = [
@@ -207,9 +222,7 @@ export const RoomTypesModal = ({
 			);
 			if (!cleaned.length) {
 				message.error(
-					language === "Arabic"
-						? "ÙŠØ¬Ø¨ Ø¥Ø¶Ø§ÙØ© ØºØ±ÙØ© ÙˆØ§Ø­Ø¯Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„"
-						: "Add at least one room"
+					language === "Arabic" ? AR_MODAL_TEXT.addRoom : "Add at least one room"
 				);
 				return;
 			}
@@ -230,7 +243,7 @@ export const RoomTypesModal = ({
 			);
 			if (resp?.error) throw new Error(resp.error);
 
-			message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
+			message.success(language === "Arabic" ? AR_MODAL_TEXT.saved : "Saved");
 			refreshCard();
 			onClose();
 		} catch (err) {
@@ -248,10 +261,8 @@ export const RoomTypesModal = ({
 			onOk={handleSave}
 			confirmLoading={saving}
 			width={1000}
-			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
-			title={
-				language === "Arabic" ? "Ø£Ù†ÙˆØ§Ø¹ Ø§Ù„ØºØ±Ù ÙˆØ§Ù„Ø³Ø¹Ø±" : "Room types & pricing"
-			}
+			okText={language === "Arabic" ? AR_MODAL_TEXT.save : "Save"}
+			title={language === "Arabic" ? AR_MODAL_TEXT.roomTypesPricing : "Room types & pricing"}
 			styles={{ body: { padding: 0, maxHeight: "80vh", overflowY: "auto" } }}
 			destroyOnClose
 		>
@@ -304,11 +315,9 @@ export const InfoModal = ({ open, onClose, language }) => (
 		open={open}
 		onCancel={onClose}
 		footer={null}
-		title={language === "Arabic" ? "Ù…Ø¹Ù„ÙˆÙ…Ø§Øª" : "Info"}
+		title={language === "Arabic" ? AR_MODAL_TEXT.infoTitle : "Info"}
 	>
-		{language === "Arabic"
-			? "Ø·Ù„Ø¨ Ø§Ù„ØªØ³Ø¬ÙŠÙ„ Ù‚ÙŠØ¯ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©."
-			: "Your registration request is under review."}
+		{language === "Arabic" ? AR_MODAL_TEXT.infoBody : "Your registration request is under review."}
 	</Modal>
 );
 
@@ -327,9 +336,7 @@ export const HotelPhotosModal = ({
 	const persist = () => {
 		if (!draft.hotelPhotos?.length) {
 			message.error(
-				language === "Arabic"
-					? "Ø£Ø¶Ù ØµÙˆØ±Ø© ÙˆØ§Ø­Ø¯Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„"
-					: "Upload at least one photo"
+				language === "Arabic" ? AR_MODAL_TEXT.uploadPhoto : "Upload at least one photo"
 			);
 			return;
 		}
@@ -340,7 +347,7 @@ export const HotelPhotosModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
+				message.success(language === "Arabic" ? AR_MODAL_TEXT.saved : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -354,8 +361,8 @@ export const HotelPhotosModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "ØµÙˆØ± Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel photos"}
-			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
+			title={language === "Arabic" ? AR_MODAL_TEXT.hotelPhotos : "Hotel photos"}
+			okText={language === "Arabic" ? AR_MODAL_TEXT.save : "Save"}
 			width={900}
 			destroyOnClose
 		>
@@ -389,7 +396,7 @@ export const LocationModal = ({
 	const persist = () => {
 		if (!draft.location?.coordinates || draft.location.coordinates[0] === 0) {
 			message.error(
-				language === "Arabic" ? "Ø­Ø¯Ø¯ Ù…ÙˆÙ‚Ø¹ Ø§Ù„ÙÙ†Ø¯Ù‚" : "Pick hotel location"
+				language === "Arabic" ? AR_MODAL_TEXT.pickLocation : "Pick hotel location"
 			);
 			return;
 		}
@@ -400,7 +407,7 @@ export const LocationModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
+				message.success(language === "Arabic" ? AR_MODAL_TEXT.saved : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -414,8 +421,8 @@ export const LocationModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "Ù…ÙˆÙ‚Ø¹ Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel location"}
-			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
+			title={language === "Arabic" ? AR_MODAL_TEXT.hotelLocation : "Hotel location"}
+			okText={language === "Arabic" ? AR_MODAL_TEXT.save : "Save"}
 			width={1000}
 			styles={{ body: { padding: 0, maxHeight: "80vh", overflowY: "auto" } }}
 			destroyOnClose
@@ -459,7 +466,7 @@ export const CompleteDataModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
+				message.success(language === "Arabic" ? AR_MODAL_TEXT.saved : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -473,8 +480,8 @@ export const CompleteDataModal = ({
 			onCancel={onClose}
 			onOk={persist}
 			confirmLoading={saving}
-			title={language === "Arabic" ? "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ÙÙ†Ø¯Ù‚" : "Hotel data"}
-			okText={language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
+			title={language === "Arabic" ? AR_MODAL_TEXT.hotelData : "Hotel data"}
+			okText={language === "Arabic" ? AR_MODAL_TEXT.save : "Save"}
 			width={1000}
 			destroyOnClose
 		>
@@ -517,7 +524,7 @@ export const BankDetailsModal = ({
 		})
 			.then((r) => {
 				if (r.error) throw new Error(r.error);
-				message.success(language === "Arabic" ? "ØªÙ… Ø§Ù„Ø­ÙØ¸" : "Saved");
+				message.success(language === "Arabic" ? AR_MODAL_TEXT.saved : "Saved");
 				refreshCard();
 				onClose();
 			})
@@ -532,7 +539,7 @@ export const BankDetailsModal = ({
 			footer={null}
 			width={800}
 			destroyOnClose
-			title={language === "Arabic" ? "Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¨Ù†ÙƒÙŠØ©" : "Bank details"}
+			title={language === "Arabic" ? AR_MODAL_TEXT.bankDetails : "Bank details"}
 		>
 			<PaymentSettings
 				hotelDetails={draft}
@@ -542,7 +549,7 @@ export const BankDetailsModal = ({
 			/>
 			<div style={{ textAlign: "center", marginTop: 24 }}>
 				<Button type='primary' loading={saving} onClick={persist}>
-					{language === "Arabic" ? "Ø­ÙØ¸" : "Save"}
+					{language === "Arabic" ? AR_MODAL_TEXT.save : "Save"}
 				</Button>
 			</div>
 		</Modal>
@@ -551,8 +558,19 @@ export const BankDetailsModal = ({
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•  export registry  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
+const RegistrationInfoModal = ({ open, onClose, language }) => (
+	<Modal
+		open={open}
+		onCancel={onClose}
+		footer={null}
+		title={language === "Arabic" ? AR_MODAL_TEXT.infoTitle : "Info"}
+	>
+		{language === "Arabic" ? AR_MODAL_TEXT.infoBody : "Your registration request is under review."}
+	</Modal>
+);
+
 export const STEP_MODAL_REGISTRY = {
-	0: InfoModal, // Registration request
+	0: RegistrationInfoModal, // Registration request
 	1: RoomTypesModal, // Room types & pricing
 	2: HotelPhotosModal, // Upload required photos
 	3: LocationModal, // Pin hotel location

@@ -178,11 +178,12 @@ export default AdminDashboard;
 
 const AdminDashboardWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 20px;
+	margin-top: 6px;
 	min-height: 715px;
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -197,14 +198,18 @@ const AdminDashboardWrapper = styled.div`
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
+		border: 1px solid lightgrey;
+		padding: 12px;
+		border-radius: 16px;
 		background: white;
-		margin: 0px 10px;
+		margin: 0 8px;
+		max-width: 100%;
+		overflow: hidden;
 	}
 
 	@media (max-width: 1400px) {
@@ -212,9 +217,17 @@ const AdminDashboardWrapper = styled.div`
 	}
 
 	@media (max-width: 992px) {
+		margin-top: 0;
+
 		.grid-container-main {
 			grid-template-columns: 1fr;
 			grid-template-areas: "nav" "content";
+		}
+
+		.container-wrapper {
+			margin: 0;
+			border-radius: 12px;
+			padding: 10px;
 		}
 	}
 `;

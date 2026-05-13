@@ -8,9 +8,11 @@ import {
 	Select,
 	Table,
 	Tag,
+	Tooltip,
 	message,
 } from "antd";
-import styled, { css, keyframes } from "styled-components";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import styled, { createGlobalStyle, css, keyframes } from "styled-components";
 import moment from "moment";
 import { useHistory, useLocation } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
@@ -155,6 +157,109 @@ Object.assign(labels.ar, {
 	commissionAssigned: "تم تحديد العمولة",
 });
 
+Object.assign(labels.en, {
+	financeReviewPending: "Finance review",
+	agentCommissionPending: "Agent approval",
+	financeRejected: "Finance rejected",
+	totalReview: "Reservation total amount review",
+	totalApproved: "Total approved",
+	totalRejected: "Total rejected",
+	totalRejectionReason: "Total rejection reason",
+	totalRejectionPlaceholder: "Write what the agent must correct in the amount.",
+	cancelReservation: "Cancel reservation",
+});
+
+Object.assign(labels.ar, {
+	financeReviewPending: "مراجعة المالية",
+	agentCommissionPending: "موافقة الوكيل",
+	financeRejected: "رفض المالية",
+	totalReview: "مراجعة المبلغ الإجمالي للحجز",
+	totalApproved: "المبلغ موافق عليه",
+	totalRejected: "المبلغ مرفوض",
+	totalRejectionReason: "سبب رفض المبلغ",
+	totalRejectionPlaceholder: "اكتب ما يجب على الوكيل تصحيحه في المبلغ.",
+	cancelReservation: "إلغاء الحجز",
+});
+
+const choiceDefinitions = {
+	en: {
+		commissionAmount:
+			"Enter the commission amount that applies to this reservation before the finance step is saved.",
+		totalReview:
+			"Review the exact reservation total shown in parentheses. Approve only if that amount is correct.",
+		totalApproved:
+			"The shown reservation total is accepted and finance can continue the confirmation cycle.",
+		totalRejected:
+			"The shown reservation total is not accepted. The agent must correct it and resubmit.",
+		commissionStatus:
+			"Defines what should happen with the commission for this reservation.",
+		commissionDue:
+			"Commission is still owed and remains open until it is paid or reconciled.",
+		commissionPaid:
+			"Commission is marked paid/reconciled by finance. The agent may still need to approve it before the case closes.",
+		commissionNone:
+			"No commission is required for this reservation once the total amount is approved.",
+		rejectionReason:
+			"Use this only when a reservation or total amount is rejected, so the agent knows exactly what to fix.",
+	},
+	ar: {
+		commissionAmount:
+			"اكتب مبلغ العمولة الذي يخص هذا الحجز قبل حفظ خطوة المالية.",
+		totalReview:
+			"راجع إجمالي مبلغ الحجز الظاهر بين القوسين. وافق فقط إذا كان هذا المبلغ صحيحا.",
+		totalApproved:
+			"إجمالي الحجز الظاهر مقبول ويمكن للمالية متابعة دورة التأكيد.",
+		totalRejected:
+			"إجمالي الحجز الظاهر غير مقبول، ويجب على الوكيل تصحيحه وإرساله مرة أخرى.",
+		commissionStatus:
+			"تحدد ما الذي يجب عمله بخصوص عمولة هذا الحجز.",
+		commissionDue:
+			"العمولة ما زالت مستحقة وتبقى مفتوحة حتى يتم دفعها أو تسويتها.",
+		commissionPaid:
+			"تم تعليم العمولة كمدفوعة أو تمت تسويتها من المالية، وقد يحتاج الوكيل لاعتمادها قبل إغلاق الحالة.",
+		commissionNone:
+			"لا توجد عمولة مطلوبة لهذا الحجز بعد اعتماد إجمالي المبلغ.",
+		rejectionReason:
+			"استخدمه عند رفض الحجز أو المبلغ حتى يعرف الوكيل ما الذي يجب تصحيحه بوضوح.",
+	},
+};
+
+const DefinitionHint = ({ text, isArabic }) => (
+	<Tooltip
+		title={<TooltipContent $isRTL={isArabic}>{text}</TooltipContent>}
+		trigger={["hover", "focus", "click"]}
+		placement={isArabic ? "left" : "right"}
+		getPopupContainer={(triggerNode) =>
+			triggerNode?.closest?.(".ant-modal-content") || document.body
+		}
+		overlayClassName='pending-choice-tooltip'
+		zIndex={100000}
+	>
+		<InfoHint
+			tabIndex={0}
+			role='button'
+			aria-label={isArabic ? "تعريف" : "Definition"}
+			onClick={(event) => event.stopPropagation()}
+		>
+			<InfoCircleOutlined />
+		</InfoHint>
+	</Tooltip>
+);
+
+const FieldLabelText = ({ children, help, isArabic }) => (
+	<LabelText $isRTL={isArabic}>
+		<span>{children}</span>
+		<DefinitionHint text={help} isArabic={isArabic} />
+	</LabelText>
+);
+
+const ChoiceOptionLabel = ({ label, help, isArabic }) => (
+	<ChoiceLabel $isRTL={isArabic}>
+		<span>{label}</span>
+		<DefinitionHint text={help} isArabic={isArabic} />
+	</ChoiceLabel>
+);
+
 const formatDate = (value) => {
 	if (!value) return "-";
 	const parsed = moment(value);
@@ -247,6 +352,7 @@ const PendingConfirmationReport = ({
 }) => {
 	const isArabic = chosenLanguage === "Arabic";
 	const txt = labels[isArabic ? "ar" : "en"];
+	const definitions = choiceDefinitions[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated();
 	const workflowPermissions = useMemo(
 		() => getPendingWorkflowPermissions(user),
@@ -274,6 +380,8 @@ const PendingConfirmationReport = ({
 		commission: 0,
 		commissionPaid: false,
 		commissionStatus: "commission due",
+		totalReviewStatus: "approved",
+		totalRejectionReason: "",
 	});
 	const [actionLoading, setActionLoading] = useState(false);
 	const [decisionSupport, setDecisionSupport] = useState({
@@ -281,6 +389,12 @@ const PendingConfirmationReport = ({
 		wallet: null,
 		inventory: [],
 	});
+	const financeReservationTotal = financeModal.reservation
+		? formatMoney(financeModal.reservation.total_amount)
+		: "";
+	const totalReviewLabel = financeReservationTotal
+		? `${txt.totalReview} (${financeReservationTotal} SAR)`
+		: txt.totalReview;
 
 	const loadData = () => {
 		if (!hotelDetails?._id || !user?._id) return;
@@ -419,6 +533,11 @@ const PendingConfirmationReport = ({
 			}
 			payload.rejectionReason = reason;
 		}
+		if (action === "cancel") {
+			payload.cancelReason =
+				String(statusModal.rejectionReason || "").trim() ||
+				"Reservation cancelled.";
+		}
 		setActionLoading(true);
 		updatePendingConfirmationReservation({
 			reservationId: reservation._id,
@@ -474,6 +593,12 @@ const PendingConfirmationReport = ({
 			reservation,
 			commission,
 			commissionPaid,
+			totalReviewStatus:
+				reservation?.financial_cycle?.totalReviewStatus === "rejected"
+					? "rejected"
+					: "approved",
+			totalRejectionReason:
+				reservation?.financial_cycle?.totalRejectionReason || "",
 			commissionStatus:
 				reservation.commissionStatus ||
 				(commissionPaid
@@ -491,6 +616,8 @@ const PendingConfirmationReport = ({
 			commission: 0,
 			commissionPaid: false,
 			commissionStatus: "commission due",
+			totalReviewStatus: "approved",
+			totalRejectionReason: "",
 		});
 	};
 
@@ -506,6 +633,13 @@ const PendingConfirmationReport = ({
 				: financeModal.commissionStatus === "no commission due"
 				? "commission due"
 				: financeModal.commissionStatus;
+		if (
+			financeModal.totalReviewStatus === "rejected" &&
+			!String(financeModal.totalRejectionReason || "").trim()
+		) {
+			message.error(txt.totalRejectionReason);
+			return;
+		}
 		setActionLoading(true);
 		updatePendingConfirmationReservation({
 			reservationId: reservation._id,
@@ -515,6 +649,8 @@ const PendingConfirmationReport = ({
 				commission: nextCommission,
 				commissionPaid: nextCommissionStatus === "commission paid",
 				commissionStatus: nextCommissionStatus,
+				totalReviewStatus: financeModal.totalReviewStatus,
+				totalRejectionReason: financeModal.totalRejectionReason,
 			},
 		})
 			.then((data) => {
@@ -584,10 +720,21 @@ const PendingConfirmationReport = ({
 				width: 110,
 				render: (value, record) => {
 					const statusText = String(value || "").toLowerCase();
-					const isPending = String(value || "")
-						.toLowerCase()
-						.includes("pending");
+					const isPendingConfirmation =
+						statusText.includes("pending confirmation") ||
+						String(record?.pendingConfirmation?.status || "").toLowerCase() ===
+							"pending";
+					const isPending =
+						isPendingConfirmation ||
+						statusText.includes("pending finance review") ||
+						statusText.includes("pending agent commission approval");
+					const isFinanceReview = statusText.includes("pending finance review");
+					const isAgentCommission = statusText.includes(
+						"pending agent commission approval",
+					);
+					const isFinanceRejected = statusText.includes("finance rejected");
 					const isRejected =
+						isFinanceRejected ||
 						statusText.includes("reject") ||
 						String(record?.pendingConfirmation?.status || "").toLowerCase() ===
 							"rejected";
@@ -601,15 +748,27 @@ const PendingConfirmationReport = ({
 							onClick={() =>
 								!workflowPermissions.canReviewStatus
 									? openReservation(record)
-									: isPending
+									: isPendingConfirmation
 									? openStatusModal(record)
 									: isConfirmed
 									? submitRevertToPending(record)
 									: openReservation(record)
 							}
-							title={isPending ? txt.confirmTitle : isConfirmed ? txt.revertTitle : ""}
+							title={
+								isPendingConfirmation
+									? txt.confirmTitle
+									: isConfirmed
+									? txt.revertTitle
+									: ""
+							}
 						>
-							{isPending
+							{isFinanceRejected
+								? txt.financeRejected
+								: isAgentCommission
+								? txt.agentCommissionPending
+								: isFinanceReview
+								? txt.financeReviewPending
+								: isPending
 								? txt.pending
 								: isRejected
 								? txt.rejected
@@ -676,6 +835,18 @@ const PendingConfirmationReport = ({
 							{reasons.includes("commission_missing") ? (
 								<Tag color='volcano'>{txt.commissionMissing}</Tag>
 							) : null}
+							{reasons.includes("finance_review_pending") ? (
+								<Tag color='blue'>{txt.financeReviewPending}</Tag>
+							) : null}
+							{reasons.includes("agent_commission_pending") ? (
+								<Tag color='purple'>{txt.agentCommissionPending}</Tag>
+							) : null}
+							{reasons.includes("finance_total_rejected") ? (
+								<Tag color='red'>{txt.financeRejected}</Tag>
+							) : null}
+							{reasons.includes("agent_commission_rejected") ? (
+								<Tag color='red'>{txt.rejected}</Tag>
+							) : null}
 						</ReasonStack>
 					);
 				},
@@ -694,6 +865,7 @@ const PendingConfirmationReport = ({
 
 	return (
 		<Wrapper dir={isArabic ? "rtl" : "ltr"} $isArabic={isArabic}>
+			<PendingChoiceGlobalStyles />
 			<HeaderPanel>
 				<div>
 					<h2>{txt.title}</h2>
@@ -740,12 +912,12 @@ const PendingConfirmationReport = ({
 			<Modal
 				open={statusModal.open}
 				onCancel={closeStatusModal}
-				title={txt.confirmTitle}
+				title={<ModalTitleText $isRTL={isArabic}>{txt.confirmTitle}</ModalTitleText>}
 				footer={null}
 				destroyOnClose
 			>
 				{statusModal.reservation ? (
-					<DecisionModalBody>
+					<DecisionModalBody $isRTL={isArabic}>
 						<p>
 							{txt.confirmQuestion
 								.replace(
@@ -807,7 +979,12 @@ const PendingConfirmationReport = ({
 							</DecisionSupportCard>
 						</DecisionSupportGrid>
 						<label>
-							<span>{txt.rejectionReason}</span>
+							<FieldLabelText
+								help={definitions.rejectionReason}
+								isArabic={isArabic}
+							>
+								{txt.rejectionReason}
+							</FieldLabelText>
 							<Input.TextArea
 								value={statusModal.rejectionReason}
 								onChange={(event) =>
@@ -830,6 +1007,13 @@ const PendingConfirmationReport = ({
 								{txt.noReject}
 							</Button>
 							<Button
+								danger
+								loading={actionLoading}
+								onClick={() => submitPendingDecision("cancel")}
+							>
+								{txt.cancelReservation}
+							</Button>
+							<Button
 								type='primary'
 								loading={actionLoading}
 								onClick={() => submitPendingDecision("confirm")}
@@ -844,13 +1028,19 @@ const PendingConfirmationReport = ({
 			<Modal
 				open={financeModal.open}
 				onCancel={closeFinanceModal}
-				title={txt.adjustCommission}
+				title={<ModalTitleText $isRTL={isArabic}>{txt.adjustCommission}</ModalTitleText>}
 				footer={null}
 				destroyOnClose
+				className={isArabic ? "pending-choice-modal rtl" : "pending-choice-modal"}
 			>
-				<DecisionModalBody>
+				<DecisionModalBody $isRTL={isArabic}>
 					<label>
-						<span>{txt.commission}</span>
+						<FieldLabelText
+							help={definitions.commissionAmount}
+							isArabic={isArabic}
+						>
+							{txt.commission}
+						</FieldLabelText>
 						<InputNumber
 							min={0}
 							value={financeModal.commission}
@@ -865,8 +1055,82 @@ const PendingConfirmationReport = ({
 						/>
 					</label>
 					<label>
-						<span>{txt.commissionStatus}</span>
+						<FieldLabelText help={definitions.totalReview} isArabic={isArabic}>
+							{totalReviewLabel}
+						</FieldLabelText>
 						<Select
+							popupClassName={
+								isArabic
+									? "pending-choice-select-dropdown rtl"
+									: "pending-choice-select-dropdown"
+							}
+							value={financeModal.totalReviewStatus}
+							onChange={(value) =>
+								setFinanceModal((prev) => ({
+									...prev,
+									totalReviewStatus: value,
+									totalRejectionReason:
+										value === "rejected" ? prev.totalRejectionReason : "",
+								}))
+							}
+							options={[
+								{
+									value: "approved",
+									label: (
+										<ChoiceOptionLabel
+											label={txt.totalApproved}
+											help={definitions.totalApproved}
+											isArabic={isArabic}
+										/>
+									),
+								},
+								{
+									value: "rejected",
+									label: (
+										<ChoiceOptionLabel
+											label={txt.totalRejected}
+											help={definitions.totalRejected}
+											isArabic={isArabic}
+										/>
+									),
+								},
+							]}
+						/>
+					</label>
+					{financeModal.totalReviewStatus === "rejected" ? (
+						<label>
+							<FieldLabelText
+								help={definitions.rejectionReason}
+								isArabic={isArabic}
+							>
+								{txt.totalRejectionReason}
+							</FieldLabelText>
+							<Input.TextArea
+								rows={3}
+								value={financeModal.totalRejectionReason}
+								placeholder={txt.totalRejectionPlaceholder}
+								onChange={(event) =>
+									setFinanceModal((prev) => ({
+										...prev,
+										totalRejectionReason: event.target.value,
+									}))
+								}
+							/>
+						</label>
+					) : null}
+					<label>
+						<FieldLabelText
+							help={definitions.commissionStatus}
+							isArabic={isArabic}
+						>
+							{txt.commissionStatus}
+						</FieldLabelText>
+						<Select
+							popupClassName={
+								isArabic
+									? "pending-choice-select-dropdown rtl"
+									: "pending-choice-select-dropdown"
+							}
 							value={financeModal.commissionStatus}
 							onChange={(value) =>
 								setFinanceModal((prev) => ({
@@ -876,9 +1140,36 @@ const PendingConfirmationReport = ({
 								}))
 							}
 							options={[
-								{ value: "commission due", label: txt.commissionDue },
-								{ value: "commission paid", label: txt.commissionPaid },
-								{ value: "no commission due", label: txt.commissionNone },
+								{
+									value: "commission due",
+									label: (
+										<ChoiceOptionLabel
+											label={txt.commissionDue}
+											help={definitions.commissionDue}
+											isArabic={isArabic}
+										/>
+									),
+								},
+								{
+									value: "commission paid",
+									label: (
+										<ChoiceOptionLabel
+											label={txt.commissionPaid}
+											help={definitions.commissionPaid}
+											isArabic={isArabic}
+										/>
+									),
+								},
+								{
+									value: "no commission due",
+									label: (
+										<ChoiceOptionLabel
+											label={txt.commissionNone}
+											help={definitions.commissionNone}
+											isArabic={isArabic}
+										/>
+									),
+								},
 							]}
 						/>
 					</label>
@@ -927,6 +1218,25 @@ const PendingConfirmationReport = ({
 };
 
 export default PendingConfirmationReport;
+
+const PendingChoiceGlobalStyles = createGlobalStyle`
+	.pending-choice-select-dropdown.rtl {
+		direction: rtl;
+		text-align: right;
+	}
+
+	.pending-choice-select-dropdown.rtl .ant-select-item-option-content {
+		text-align: right;
+	}
+
+	.pending-choice-tooltip,
+	.pending-choice-tooltip.ant-tooltip,
+	.ant-tooltip.pending-choice-tooltip,
+	.pending-choice-tooltip .ant-tooltip-content,
+	.pending-choice-tooltip .ant-tooltip-inner {
+		z-index: 100000 !important;
+	}
+`;
 
 const Wrapper = styled.div`
 	max-width: 1480px;
@@ -1153,6 +1463,8 @@ const ReasonStack = styled.div`
 const DecisionModalBody = styled.div`
 	display: grid;
 	gap: 14px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 
 	p {
 		margin: 0;
@@ -1171,7 +1483,105 @@ const DecisionModalBody = styled.div`
 		gap: 6px;
 		color: #203044;
 		font-weight: 900;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 	}
+
+	.ant-select,
+	.ant-input,
+	.ant-input-number,
+	.ant-input-number-group-wrapper {
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	.ant-select-selection-item,
+	.ant-select-selection-placeholder,
+	.ant-input,
+	.ant-input-number-input,
+	textarea.ant-input {
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	.ant-select-selector {
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")} !important;
+	}
+
+	.ant-select-arrow {
+		inset-inline-start: ${(props) => (props.$isRTL ? "11px" : "auto")};
+		inset-inline-end: ${(props) => (props.$isRTL ? "auto" : "11px")};
+	}
+
+	.ant-input-number-group-addon {
+		direction: ltr;
+	}
+`;
+
+const ModalTitleText = styled.span`
+	display: block;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+`;
+
+const LabelText = styled.span`
+	display: inline-flex;
+	align-items: center;
+	flex-direction: row;
+	justify-content: flex-start;
+	gap: 6px;
+	width: fit-content;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	justify-self: ${(props) => (props.$isRTL ? "right" : "left")};
+	margin-left: ${(props) => (props.$isRTL ? "auto" : "0")};
+	margin-right: ${(props) => (props.$isRTL ? "0" : "auto")};
+
+`;
+
+const ChoiceLabel = styled.span`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-direction: row;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	> span:first-child {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+`;
+
+const InfoHint = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border: 1px solid #93c5fd;
+	border-radius: 999px;
+	background: #eff6ff;
+	color: #0b6fdc;
+	font-size: 0.72rem;
+	line-height: 1;
+	cursor: help;
+	flex: 0 0 auto;
+
+	svg {
+		font-size: 12px;
+	}
+`;
+
+const TooltipContent = styled.div`
+	max-width: 280px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	line-height: 1.55;
+	font-weight: 700;
 `;
 
 const DecisionSupportGrid = styled.div`

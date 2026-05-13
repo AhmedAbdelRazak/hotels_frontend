@@ -21,6 +21,10 @@ const ZHotelDetails = ({
 	fromPage,
 	viewsList,
 	extraAmenitiesList,
+	hotelIsActive,
+	activationSaving,
+	activationToggleDisabled,
+	handleActivationChange,
 }) => {
 	return (
 		<ZAddHotelSettingsWrapper>
@@ -41,6 +45,10 @@ const ZHotelDetails = ({
 					fromPage={fromPage}
 					viewsList={viewsList}
 					extraAmenitiesList={extraAmenitiesList}
+					hotelIsActive={hotelIsActive}
+					activationSaving={activationSaving}
+					activationToggleDisabled={activationToggleDisabled}
+					handleActivationChange={handleActivationChange}
 				/>
 
 				<div className='mx-auto text-center mt-4'>
