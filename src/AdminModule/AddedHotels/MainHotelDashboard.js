@@ -221,10 +221,9 @@ const STATUS_FILTERS = [
 	},
 ];
 
-const API_ROOT = (process.env.REACT_APP_API_URL || "http://localhost:8080/api")
-	.replace(/\/api\/?$/, "")
-	.replace(/\/$/, "");
-const PMS_DIAGRAM_IMAGE_URL = `${API_ROOT}/uploads/image.png`;
+const PMS_DIAGRAM_IMAGE_URL = `${
+	process.env.PUBLIC_URL || ""
+}/xhotelpro-pms-map.png`;
 
 const PMS_DIAGRAM_HOTSPOTS = [
 	{
