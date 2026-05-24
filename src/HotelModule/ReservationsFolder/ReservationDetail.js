@@ -619,6 +619,14 @@ const AR_LABELS = {
 		"\u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u0645\u0633\u062a\u062d\u0642",
 	paymentStatus:
 		"\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639",
+	paymentMethodOnly:
+		"\u0637\u0631\u064a\u0642\u0629 \u0627\u0644\u062f\u0641\u0639",
+	hotelCollectionPending:
+		"\u062a\u062d\u0635\u064a\u0644 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642",
+	onlinePaymentPending:
+		"\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062f\u0641\u0639 \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a",
+	paymentPending:
+		"\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062f\u0641\u0639",
 	financeCycle:
 		"\u062f\u0648\u0631\u0629 \u0627\u0644\u062a\u0633\u0648\u064a\u0629",
 	cycleClosed:
@@ -2680,6 +2688,11 @@ const ContentSection = styled.div`
 		line-height: 1.25;
 	}
 
+	.payment-status-card .payment-method-note {
+		color: #64748b;
+		margin-top: 4px;
+	}
+
 	.payment-status-card.success {
 		background: #ecfdf5;
 		border-color: #86efac;
@@ -3729,6 +3742,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					"reservationemployee",
 				].includes(role),
 			));
+	const canSeePrivilegedTrackerEntries = isSuperAdminUser(user);
 	const canManagePendingDecision =
 		user?.activeUser !== false &&
 		canFullManageReservation &&
@@ -3930,17 +3944,24 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					"") + "";
 			const paymentMode = paymentModeRaw.toLowerCase().trim();
 			const pd = reservationData?.paypal_details || {};
-			const legacyCaptured = !!reservationData?.payment_details?.captured;
-			const payOffline =
-				normalizeNumber(
-					reservationData?.payment_details?.onsite_paid_amount,
-					0,
-				) > 0 || paymentMode === "paid offline";
+			const paymentDetails = reservationData?.payment_details || {};
 			const breakdown = reservationData?.paid_amount_breakdown || {};
-			const breakdownCaptured = Object.keys(breakdown).some((key) => {
-				if (key === "payment_comments") return false;
-				return normalizeNumber(breakdown[key], 0) > 0;
-			});
+			const legacyCaptured = !!paymentDetails?.captured;
+			const offlinePaidAmount = [
+				paymentDetails?.onsite_paid_amount,
+				breakdown?.paid_at_hotel_cash,
+				breakdown?.paid_at_hotel_card,
+			].reduce((sum, value) => sum + normalizeNumber(value, 0), 0);
+			const onlinePaidAmount = [
+				reservationData?.paid_amount,
+				breakdown?.paid_online_via_link,
+				breakdown?.paid_online_via_instapay,
+				breakdown?.paid_no_show,
+				breakdown?.paid_to_hotel,
+				breakdown?.paid_online_jannatbooking,
+				breakdown?.paid_online_other_platforms,
+			].reduce((sum, value) => sum + normalizeNumber(value, 0), 0);
+			const payOffline = offlinePaidAmount > 0;
 			const capturedTotals = [
 				pd?.captured_total_sar,
 				pd?.captured_total_usd,
@@ -3969,30 +3990,44 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							.trim() === "COMPLETED",
 				);
 
-			const isCaptured =
+			const hasGatewayCapture =
 				legacyCaptured ||
 				capturedTotals.length > 0 ||
 				initialCompleted ||
 				anyMitCompleted ||
-				anyCapturesCompleted ||
-				paymentMode === "paid online" ||
-				paymentMode === "captured" ||
-				breakdownCaptured;
+				anyCapturesCompleted;
+			const expectsHotelCollection =
+				/(paid\s*offline|pay\s*at\s*hotel|paid\s*at\s*hotel|hotel|cash)/i.test(
+					paymentMode,
+				);
+			const expectsOnlinePayment =
+				/(paid\s*online|online|payment\s*link|link|paypal|stripe|gateway)/i.test(
+					paymentMode,
+				) && !expectsHotelCollection;
+			const isCaptured =
+				hasGatewayCapture ||
+				onlinePaidAmount > 0 ||
+				paymentMode === "captured";
 
 			const isNotPaid =
 				paymentMode === "not paid" && !isCaptured && !payOffline;
 
 			let status = "Not Captured";
-			if (isCaptured) status = "Captured";
-			else if (payOffline) status = "Paid Offline";
+			if (payOffline) status = "Paid Offline";
+			else if (isCaptured) status = "Captured";
+			else if (expectsHotelCollection) status = "Hotel Collection Pending";
+			else if (expectsOnlinePayment) status = "Online Payment Pending";
 			else if (isNotPaid) status = "Not Paid";
 
 			return {
 				status,
 				isCaptured,
+				assumePaidInFull: hasGatewayCapture || paymentMode === "captured",
 				paidOffline: payOffline,
 				isNotPaid,
 				paymentMode,
+				expectsHotelCollection,
+				expectsOnlinePayment,
 			};
 		},
 		[normalizeNumber],
@@ -4057,7 +4092,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const totalPaid = hasBreakdownValues
 		? breakdownTotalsFromReservation.total
 		: paidOnline + paidOffline;
-	const assumePaidInFull = paymentSummary.isCaptured && totalPaid === 0;
+	const assumePaidInFull = paymentSummary.assumePaidInFull && totalPaid === 0;
 	const amountDue = assumePaidInFull
 		? 0
 		: Math.max(totalAmountValue - totalPaid, 0);
@@ -4075,6 +4110,24 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.payment_status ||
 		reservation?.financeStatus ||
 		"";
+	const paymentMethodDisplayLabel = useMemo(() => {
+		const rawLabel = String(displayPaymentLabel || "").trim();
+		if (!rawLabel) return "";
+		const normalizedLabel = rawLabel.toLowerCase();
+		if (chosenLanguage !== "Arabic") return rawLabel;
+		if (
+			/(paid\s*offline|pay\s*at\s*hotel|paid\s*at\s*hotel|hotel|cash)/i.test(
+				normalizedLabel,
+			)
+		) {
+			return "\u0627\u0644\u062f\u0641\u0639 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642";
+		}
+		if (/(paid\s*online|online|payment\s*link|link|paypal|stripe)/i.test(normalizedLabel)) {
+			return "\u062f\u0641\u0639 \u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a";
+		}
+		if (/not\s*paid/i.test(normalizedLabel)) return AR_LABELS.notPaid;
+		return rawLabel;
+	}, [chosenLanguage, displayPaymentLabel]);
 	const paymentStatusLabel = useMemo(() => {
 		if (chosenLanguage !== "Arabic") return paymentSummary.status;
 		switch (paymentSummary.status) {
@@ -4082,6 +4135,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				return AR_LABELS.captured;
 			case "Paid Offline":
 				return AR_LABELS.paidOfflineStatus;
+			case "Hotel Collection Pending":
+				return AR_LABELS.hotelCollectionPending;
+			case "Online Payment Pending":
+				return AR_LABELS.onlinePaymentPending;
 			case "Not Paid":
 				return AR_LABELS.notPaid;
 			default:
@@ -4105,6 +4162,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					return "\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u062f\u0641\u0639 \u0639\u0644\u0649 \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632";
 				case "Paid Offline":
 					return "\u0627\u0644\u062f\u0641\u0639 \u0645\u0633\u062c\u0644 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642";
+				case "Hotel Collection Pending":
+					return "\u0637\u0631\u064a\u0642\u0629 \u0627\u0644\u062f\u0641\u0639 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642\u060c \u0648\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0628\u0644\u063a \u0645\u062f\u0641\u0648\u0639 \u0645\u0633\u062c\u0644 \u0628\u0639\u062f";
+				case "Online Payment Pending":
+					return "\u062a\u0645 \u062a\u062d\u062f\u064a\u062f \u062f\u0641\u0639 \u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u060c \u0648\u0644\u0645 \u064a\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062a\u062d\u0635\u064a\u0644 \u0628\u0639\u062f";
 				case "Not Paid":
 					return "\u0644\u0627 \u064a\u0648\u062c\u062f \u062f\u0641\u0639 \u0645\u0633\u062c\u0644";
 				default:
@@ -4116,6 +4177,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				return "A payment was recorded against this reservation";
 			case "Paid Offline":
 				return "The hotel recorded an onsite payment";
+			case "Hotel Collection Pending":
+				return "Hotel collection is selected, but no paid amount is recorded yet";
+			case "Online Payment Pending":
+				return "Online payment is selected, but no captured amount is recorded yet";
 			case "Not Paid":
 				return "No payment is recorded yet";
 			default:
@@ -4352,13 +4417,30 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.updatedAt ||
 		reservation?.createdAt ||
 		"";
+	const visibleWorkflowActorName = (actor = {}) => {
+		if (!actor || typeof actor !== "object") return "";
+		if (!canSeePrivilegedTrackerEntries && isPrivilegedAuditActor(actor)) {
+			return "";
+		}
+		return actor.name || actor.email || "";
+	};
+	const explicitWorkflowUpdateExists = !!(
+		reservation?.pendingConfirmation?.lastUpdatedAt ||
+		reservation?.agentDecisionSnapshot?.decidedAt ||
+		reservation?.agentDecisionSnapshot?.lastUpdatedAt ||
+		reservation?.adminLastUpdatedAt
+	);
+	const workflowUpdateActor =
+		visibleWorkflowActorName(reservation?.pendingConfirmation?.lastUpdatedBy) ||
+		visibleWorkflowActorName(reservation?.agentDecisionSnapshot?.decidedBy) ||
+		visibleWorkflowActorName(reservation?.agentDecisionSnapshot?.lastUpdatedBy) ||
+		visibleWorkflowActorName(reservation?.adminLastUpdatedBy);
 	const workflowUpdatedBy =
-		reservation?.pendingConfirmation?.lastUpdatedBy?.name ||
-		reservation?.agentDecisionSnapshot?.decidedBy?.name ||
-		reservation?.adminLastUpdatedBy?.name ||
-		reservation?.orderTaker?.name ||
-		reservation?.createdBy?.name ||
-		"";
+		workflowUpdateActor ||
+		(!explicitWorkflowUpdateExists
+			? visibleWorkflowActorName(reservation?.orderTaker) ||
+			  visibleWorkflowActorName(reservation?.createdBy)
+			: "");
 	const agentAccountLabel = formatLeadingCapital(
 		agentWalletSnapshot?.agent?.companyName ||
 			agentWalletSnapshot?.agent?.name ||
@@ -4711,7 +4793,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [chosenLanguage, updatePendingDecision]);
 	const reservationCycleRows = useMemo(() => {
 		const rows = [];
-		const canSeePrivilegedTrackerEntries = isSuperAdminUser(user);
 		const pushRow = ({ at, title, by, detail }) => {
 			if (!at && !title && !detail) return;
 			if (!canSeePrivilegedTrackerEntries && isPrivilegedAuditActor(by)) return;
@@ -4808,7 +4889,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					: 0;
 			return bTime - aTime;
 		});
-	}, [chosenLanguage, formatMoney, reservation, user]);
+	}, [canSeePrivilegedTrackerEntries, chosenLanguage, formatMoney, reservation]);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		if (key === "paid_at_hotel_cash" && isCashLocked) {
@@ -8250,10 +8331,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</div>
 
 									<div className={`payment-status-card ${paymentStatusTone}`}>
-										{paymentSummary.status === "Not Paid" ? (
-											<CreditCardOutlined />
-										) : (
+										{paymentStatusTone === "success" ? (
 											<CheckCircleOutlined />
+										) : (
+											<CreditCardOutlined />
 										)}
 										<div>
 											<span>
@@ -8263,6 +8344,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</span>
 											<strong>{paymentStatusLabel}</strong>
 											<small>{paymentStatusHint}</small>
+											{paymentMethodDisplayLabel ? (
+												<small className='payment-method-note'>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.paymentMethodOnly
+														: "Payment method"}
+													: {paymentMethodDisplayLabel}
+												</small>
+											) : null}
 										</div>
 									</div>
 

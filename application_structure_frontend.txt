@@ -194,6 +194,8 @@ HotelModule Structure
 - src/HotelModule/ReservationsFolder/
   - Reservation history/list/details workflows.
   - ReservationDetail's cycle tracker depends on backend-sanitized adminChangeLog/reservationAuditLog data. It also hides derived tracker rows whose actor is superadmin/admin/systemadmin unless the current user is a true super admin.
+  - ReservationDetail's workflow summary must not expose or misattribute privileged admin actors. If a privileged last-updated actor is hidden for an agent/staff viewer, show the status/date without falling back to the agent/order-taker name.
+  - Payment Summary separates selected payment method from actual collected money. "Paid offline" or hotel collection is only successful when an onsite/hotel paid amount exists; otherwise it displays a pending hotel-collection state while the amount due remains visible.
   - singlePreReservationById should send the stored Authorization header when available. The backend treats missing auth as a public/non-super-admin viewer and removes privileged tracker rows.
 - src/HotelModule/CustomerService/
   - Hotel-side support cases and conversations.
