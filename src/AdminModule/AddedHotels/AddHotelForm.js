@@ -15,6 +15,19 @@ import { gettingAllHotelAccounts } from "../apiAdmin";
 const { Title } = Typography;
 const { Option } = Select;
 
+const selectPopupContainer = (triggerNode) => {
+	const modalContent = triggerNode?.closest?.(".ant-modal-content");
+	if (modalContent) return modalContent;
+	if (triggerNode?.parentElement) return triggerNode.parentElement;
+	return typeof document !== "undefined" ? document.body : triggerNode;
+};
+
+const selectPopupProps = {
+	getPopupContainer: selectPopupContainer,
+	dropdownStyle: { zIndex: 22000 },
+	popupClassName: "admin-add-hotel-select-dropdown",
+};
+
 const AddHotelForm = ({ closeAddHotelModal }) => {
 	const [step, setStep] = useState(1); // Step 1: Choose Option, Step 2: Choose user or show form
 	const [hotelData, setHotelData] = useState({
@@ -95,7 +108,11 @@ const AddHotelForm = ({ closeAddHotelModal }) => {
 			<Form layout='vertical'>
 				<Title level={5}>Choose Option</Title>
 				<Form.Item label='Please select one'>
-					<Select onChange={handleStepChange} placeholder='Select an option'>
+					<Select
+						{...selectPopupProps}
+						onChange={handleStepChange}
+						placeholder='Select an option'
+					>
 						<Option value='existing'>New Hotel To Existing User</Option>
 						<Option value='new'>New Hotel</Option>
 					</Select>
@@ -107,6 +124,7 @@ const AddHotelForm = ({ closeAddHotelModal }) => {
 					<Title level={5}>Choose Existing User</Title>
 					<Form.Item label='Select a user'>
 						<Select
+							{...selectPopupProps}
 							onChange={handleUserSelection}
 							value={hotelData.existingUser} // Ensure the selected option doesn't disappear
 							placeholder='Select a user'
@@ -218,6 +236,7 @@ const AddHotelForm = ({ closeAddHotelModal }) => {
 					</Form.Item>
 					<Form.Item label='Property Type' required>
 						<Select
+							{...selectPopupProps}
 							value={hotelData.propertyType}
 							onChange={handleChange("propertyType")}
 							placeholder='Select Property Type'

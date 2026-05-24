@@ -1148,47 +1148,51 @@ const ZReservationForm2 = ({
 
 							<Block>
 								<div className='row'>
-									<div className='col booking-source-field'>
-										<Label>
-											{chosenLanguage === "Arabic"
-												? "مصدر الحجز"
-												: "Booking Source"}
-										</Label>
-										<select
-											onChange={(e) => setBookingSource(e.target.value)}
-											className='selectlike'
-											value={booking_source}
-										>
-											<option value=''>
+									{!limitedOrderTakerAccount && (
+										<div className='col booking-source-field'>
+											<Label>
 												{chosenLanguage === "Arabic"
-													? "الرجاء الاختيار"
-													: "Please Select"}
-											</option>
-											{booking_source &&
-											![
-												"janat",
-												"affiliate",
-												"manual",
-												"booking.com",
-												"trivago",
-												"expedia",
-												"hotel.com",
-												"airbnb",
-											].includes(String(booking_source).toLowerCase()) ? (
-												<option value={booking_source}>{booking_source}</option>
-											) : null}
-											<option value='janat'>Janat</option>
-											<option value='affiliate'>Affiliate</option>
-											<option value='manual'>Manual Reservation</option>
-											<option value='booking.com'>Booking.com</option>
-											<option value='trivago'>Trivago</option>
-											<option value='expedia'>Expedia</option>
-											<option value='hotel.com'>Hotel.com</option>
-											<option value='airbnb'>Airbnb</option>
-										</select>
-									</div>
+													? "مصدر الحجز"
+													: "Booking Source"}
+											</Label>
+											<select
+												onChange={(e) => setBookingSource(e.target.value)}
+												className='selectlike'
+												value={booking_source}
+											>
+												<option value=''>
+													{chosenLanguage === "Arabic"
+														? "الرجاء الاختيار"
+														: "Please Select"}
+												</option>
+												{booking_source &&
+												![
+													"janat",
+													"affiliate",
+													"manual",
+													"booking.com",
+													"trivago",
+													"expedia",
+													"hotel.com",
+													"airbnb",
+												].includes(String(booking_source).toLowerCase()) ? (
+													<option value={booking_source}>{booking_source}</option>
+												) : null}
+												<option value='janat'>Janat</option>
+												<option value='affiliate'>Affiliate</option>
+												<option value='manual'>Manual Reservation</option>
+												<option value='booking.com'>Booking.com</option>
+												<option value='trivago'>Trivago</option>
+												<option value='expedia'>Expedia</option>
+												<option value='hotel.com'>Hotel.com</option>
+												<option value='airbnb'>Airbnb</option>
+											</select>
+										</div>
+									)}
 
-									{booking_source && booking_source !== "manual" && (
+									{!limitedOrderTakerAccount &&
+										booking_source &&
+										booking_source !== "manual" && (
 										<div className='col confirmation-field'>
 											<Label>
 												{chosenLanguage === "Arabic"

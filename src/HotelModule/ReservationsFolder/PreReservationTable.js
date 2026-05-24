@@ -587,7 +587,9 @@ const PreReservationTable = ({
 										? "المبلغ الإجمالي"
 										: "Total Amount"}
 								</th>
-								<th>{chosenLanguage === "Arabic" ? "تفاصيل" : "DETAILS..."}</th>
+								<th>
+									{chosenLanguage === "Arabic" ? "تفاصيل أكثر" : "More Details"}
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -770,8 +772,8 @@ const PreReservationTable = ({
 									<td>
 										<Button onClick={() => showDetailsModal(reservation)}>
 											{chosenLanguage === "Arabic"
-												? "التفاصيل..."
-												: "Details..."}
+												? "تفاصيل أكثر"
+												: "More Details"}
 										</Button>
 									</td>
 								</tr>

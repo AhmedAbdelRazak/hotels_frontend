@@ -1,6 +1,6 @@
 /** @format */
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { Badge, Dropdown, Empty, Spin } from "antd";
 import {
@@ -20,8 +20,10 @@ import { useLocation, useHistory } from "react-router-dom";
 import UpdateAccountModal from "./UpdateAccountModal"; // <-- NEW
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
 import {
+	getEmployeeWorkLoad,
 	getHotelDetails,
 	hotelAccount,
+	acknowledgePendingNotification,
 	pendingConfirmationNotificationFeed,
 } from "../apiAdmin";
 import socket from "../../socket";
@@ -49,15 +51,26 @@ const getUserRoleDescriptions = (user = {}) => [
 		: []),
 ];
 
+const isSystemAdminTopNavUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	return (
+		roles.includes(10000) ||
+		descriptions.includes("systemadmin") ||
+		descriptions.includes("system admin")
+	);
+};
+
 const canSeePendingConfirmationNotifications = (user = {}) => {
 	const roles = getUserRoles(user);
 	const descriptions = getUserRoleDescriptions(user);
 	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
 	return (
 		isSuperAdminUser(user) ||
-		[1000, 2000, 6000, 8000].some((role) => roles.includes(role)) ||
+		[1000, 2000, 6000, 8000, 10000].some((role) => roles.includes(role)) ||
 		roles.includes(7000) ||
 		descriptions.includes("hotelmanager") ||
+		descriptions.includes("systemadmin") ||
 		descriptions.includes("finance") ||
 		descriptions.includes("reservationemployee") ||
 		descriptions.includes("ordertaker") ||
@@ -83,6 +96,8 @@ const isManagerOrAdminNotificationUser = (user = {}) => {
 		isSuperAdminUser(user) ||
 		roles.includes(1000) ||
 		roles.includes(2000) ||
+		roles.includes(10000) ||
+		descriptions.includes("systemadmin") ||
 		descriptions.includes("hotelmanager")
 	);
 };
@@ -99,6 +114,12 @@ const isReservationEmployeeNotificationUser = (user = {}) => {
 	return roles.includes(8000) || descriptions.includes("reservationemployee");
 };
 
+const isHousekeepingNotificationUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	return roles.includes(5000) || descriptions.includes("housekeeping");
+};
+
 const canOpenSettingsCalendar = (user = {}) => {
 	const roles = getUserRoles(user);
 	const descriptions = getUserRoleDescriptions(user);
@@ -109,6 +130,8 @@ const canOpenSettingsCalendar = (user = {}) => {
 		isSuperAdminUser(user) ||
 		roles.includes(1000) ||
 		roles.includes(2000) ||
+		roles.includes(10000) ||
+		descriptions.includes("systemadmin") ||
 		descriptions.includes("hotelmanager") ||
 		accessTo.includes("settings") ||
 		accessTo.includes("all")
@@ -125,11 +148,18 @@ const getAssignedHotelIds = (user = {}) => {
 	return [...new Set(values.map(normalizeTopNavId).filter(Boolean))];
 };
 
+const assignedHotelScopeKey = (user = {}) => getAssignedHotelIds(user).join("|");
+
+const isBrowserTabHidden = () =>
+	typeof document !== "undefined" && document.hidden;
+
 const canSeeOwnerWideCalendarHotels = (user = {}) => {
 	const roles = getUserRoles(user);
 	return (
 		isSuperAdminUser(user) ||
 		roles.includes(1000) ||
+		roles.includes(10000) ||
+		isSystemAdminTopNavUser(user) ||
 		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
 	);
 };
@@ -185,11 +215,42 @@ const isFinanceOnlyNotificationUser = (user = {}) =>
 const isAgentAccountNotification = (item = {}) =>
 	String(item.notificationType || "").startsWith("agent_account");
 
+const isAgentWalletClaimNotification = (item = {}) =>
+	String(item.notificationType || "").startsWith("agent_wallet_claim");
+
+const isStaffApplicationNotification = (item = {}) =>
+	String(item.notificationType || "") === "staff_application_pending";
+
 const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
+	if (reason === "wallet_claim_pending") {
+		return isArabic
+			? "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u062d\u0641\u0638\u0629 \u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
+			: "Wallet claim waiting for finance review";
+	}
+	if (reason === "wallet_claim_rejected") {
+		return isArabic
+			? "\u062a\u0645 \u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629"
+			: "Wallet claim rejected";
+	}
+	if (reason === "wallet_claim_approved") {
+		return isArabic
+			? "\u062a\u0645\u062a \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u0639\u0644\u0649 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629"
+			: "Wallet claim approved by finance";
+	}
+	if (reason === "finance_accepted") {
+		return isArabic
+			? "\u062a\u0645\u062a \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
+			: "Finance accepted";
+	}
 	if (reason === "agent_account_pending_approval") {
 		return isArabic
-			? "Agent account waiting for director approval"
+			? "\u062d\u0633\u0627\u0628 \u0648\u0643\u064a\u0644 \u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u062f\u064a\u0631"
 			: "Agent account waiting for director approval";
+	}
+	if (reason === "staff_application_pending_review") {
+		return isArabic
+			? "\u0637\u0644\u0628 \u0648\u0638\u064a\u0641\u0629 \u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629"
+			: "Job application waiting for review";
 	}
 	if (reason === "agent_account_approved") {
 		return isArabic ? "Agent account approved" : "Agent account approved";
@@ -217,8 +278,111 @@ const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 			: "Pending confirmation",
 		commission_missing: isArabic ? "العمولة غير محددة" : "Commission missing",
 		pending_rejected: isArabic ? "مرفوضة وتحتاج متابعة" : "Rejected follow-up",
+		finance_review_pending: isArabic
+			? "بانتظار مراجعة المالية"
+			: "Pending finance review",
+		finance_total_rejected: isArabic
+			? "مرفوض من المالية"
+			: "Finance rejected",
+		agent_commission_pending: isArabic
+			? "بانتظار موافقة الوكيل"
+			: "Agent commission approval",
+		agent_commission_rejected: isArabic
+			? "رفض الوكيل للعمولة"
+			: "Agent commission rejected",
 	};
 	return labels[reason] || reason;
+};
+
+const cleanNotificationReasonLabel = (reason, isArabic, isAgent = false) => {
+	if (!isArabic) return notificationReasonLabel(reason, false, isAgent);
+	const labels = {
+		wallet_claim_pending: "مطالبة محفظة بانتظار مراجعة المالية",
+		wallet_claim_rejected: "تم رفض مطالبة المحفظة",
+		wallet_claim_approved: "تمت موافقة المالية على مطالبة المحفظة",
+		finance_accepted: "تمت الموافقة المالية",
+		agent_account_pending_approval: "حساب وكيل بانتظار موافقة المدير",
+		staff_application_pending_review: "طلب وظيفة بانتظار المراجعة",
+		agent_account_approved: "تمت الموافقة على حساب الوكيل",
+		agent_account_rejected: "تم رفض حساب الوكيل",
+		agent_pending_review: "الحجز بانتظار مراجعة الفندق",
+		pending_confirmation: "بانتظار تأكيد الحجز",
+		commission_missing: isAgent
+			? "مراجعة الفندق المالية قيد التنفيذ"
+			: "العمولة تحتاج مراجعة",
+		pending_rejected: "مرفوض ويحتاج متابعة",
+		finance_review_pending: "بانتظار مراجعة المالية",
+		finance_total_rejected: "مرفوض من المالية",
+		agent_commission_pending: "بانتظار موافقة الوكيل",
+		agent_commission_rejected: "رفض الوكيل للعمولة",
+	};
+	return labels[reason] || reason;
+};
+
+const cleanAgentDecisionText = (item = {}, isArabic = false) => {
+	const status = String(item.decisionStatus || "").toLowerCase();
+	if (status === "rejected") {
+		return isArabic ? "تم رفض الحجز" : "Reservation rejected";
+	}
+	if (status === "confirmed") {
+		return isArabic ? "تم قبول الحجز" : "Reservation confirmed";
+	}
+	return "";
+};
+
+const notificationTone = (item = {}) => {
+	const type = String(item.notificationType || "");
+	const status = String(item.decisionStatus || "").toLowerCase();
+	if (
+		type === "agent_wallet_claim_approved" ||
+		type === "agent_finance_accepted" ||
+		(type === "agent_decision" && status === "confirmed") ||
+		status === "accepted" ||
+		status === "approved"
+	) {
+		return "success";
+	}
+	if (type.includes("rejected") || status === "rejected") return "danger";
+	if (type.includes("pending") || status === "pending") return "warning";
+	return "default";
+};
+
+const notificationReasonList = (item = {}) =>
+	Array.isArray(item.pendingReasons)
+		? item.pendingReasons.map((reason) => String(reason || "").toLowerCase())
+		: [];
+
+const isPendingConfirmationNotificationItem = (item = {}) => {
+	const type = String(item.notificationType || "").toLowerCase();
+	const reasons = notificationReasonList(item);
+	const status = String(
+		item.reservation_status || item.status || item.state || ""
+	).toLowerCase();
+	return (
+		type === "pending_confirmation" ||
+		reasons.includes("pending_confirmation") ||
+		reasons.includes("pending_rejected") ||
+		/pending[\s_-]?confirmation/i.test(status)
+	);
+};
+
+const isFinancialNotificationItem = (item = {}) => {
+	const type = String(item.notificationType || "").toLowerCase();
+	const reasons = notificationReasonList(item);
+	return (
+		type.includes("commission") ||
+		type.includes("finance") ||
+		reasons.some((reason) =>
+			[
+				"commission_missing",
+				"finance_review_pending",
+				"finance_total_rejected",
+				"agent_commission_pending",
+				"agent_commission_rejected",
+				"finance_accepted",
+			].includes(reason)
+		)
+	);
 };
 
 const formatNotificationMoney = (value) =>
@@ -233,6 +397,19 @@ const formatNotificationDate = (value) => {
 	return parsed.toISOString().slice(0, 10);
 };
 
+const housekeepingTaskLabel = (task = {}) => {
+	const rooms = Array.isArray(task.rooms) ? task.rooms : [];
+	const roomText = rooms
+		.map((room) => room.room_number || room.roomNumber || room.displayName)
+		.filter(Boolean)
+		.join(", ");
+	if (roomText) return roomText;
+	if (Array.isArray(task.generalAreas) && task.generalAreas.length) {
+		return task.generalAreas.join(", ");
+	}
+	return task.customTask || task.task_comment || "Housekeeping task";
+};
+
 const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
@@ -243,6 +420,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		total: 0,
 		data: [],
 	});
+	const [notificationBellRinging, setNotificationBellRinging] = useState(false);
 	const [isMobileNav, setIsMobileNav] = useState(false);
 	const [calendarHotels, setCalendarHotels] = useState([]);
 	const [calendarRooms, setCalendarRooms] = useState([]);
@@ -255,6 +433,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const isArabic = chosenLanguage === "Arabic";
 
 	const [hotelName, setHotelName] = useState("");
+	const notificationAudioContextRef = useRef(null);
+	const notificationAudioUnlockedRef = useRef(false);
+	const notificationBellTimerRef = useRef(null);
+	const notificationFeedTotalRef = useRef(0);
+	const notificationFeedReadyRef = useRef(false);
+	const lastNotificationBellAtRef = useRef(0);
 
 	const location = useLocation();
 	const history = useHistory();
@@ -279,7 +463,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		return new URLSearchParams(location.search || "").get("ownerId") || "";
 	}, [location.search]);
 
-	const isOwnerManager = user.role === 2000 && !user.belongsToId;
+	const isOwnerManager =
+		(user.role === 2000 || isSystemAdminTopNavUser(user)) &&
+		!user.belongsToId;
 	const userId = isOwnerManager
 		? user._id
 		: selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId;
@@ -297,11 +483,15 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		selectedHotelOwnerId ||
 		(isOwnerManager ? user._id : user.belongsToId);
 	const canUsePendingNotifications = canSeePendingConfirmationNotifications(user);
+	const canUseHousekeepingNotifications = isHousekeepingNotificationUser(user);
+	const canUseNotifications =
+		canUsePendingNotifications || canUseHousekeepingNotifications;
 	const isAgentNotificationAudience = isAgentNotificationUser(user);
 	const isFinanceNotificationAudience = isFinanceOnlyNotificationUser(user);
+	const assignedHotelKey = assignedHotelScopeKey(user);
 	const assignedCalendarHotelIds = useMemo(
-		() => getAssignedHotelIds(user),
-		[user]
+		() => (assignedHotelKey ? assignedHotelKey.split("|") : []),
+		[assignedHotelKey]
 	);
 	const canUseOwnerWideCalendarHotels = canSeeOwnerWideCalendarHotels(user);
 	const canUseMainDashboardSettingsCalendar =
@@ -330,6 +520,124 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	// eslint-disable-next-line
 	const userDetails = isOwnerManager ? user : selectedHotel.belongsTo;
 
+	const ensureNotificationAudioReady = useCallback(async () => {
+		if (typeof window === "undefined") return null;
+		const AudioContextConstructor =
+			window.AudioContext || window.webkitAudioContext;
+		if (!AudioContextConstructor) return null;
+
+		let audioContext = notificationAudioContextRef.current;
+		if (!audioContext || audioContext.state === "closed") {
+			audioContext = new AudioContextConstructor();
+			notificationAudioContextRef.current = audioContext;
+		}
+
+		if (audioContext.state === "suspended") {
+			try {
+				await audioContext.resume();
+			} catch (error) {
+				return audioContext;
+			}
+		}
+
+		notificationAudioUnlockedRef.current = audioContext.state === "running";
+		return audioContext;
+	}, []);
+
+	const playNotificationBell = useCallback(async () => {
+		if (typeof window === "undefined") return;
+		const nowMs = Date.now();
+		if (nowMs - lastNotificationBellAtRef.current < 2200) return;
+		lastNotificationBellAtRef.current = nowMs;
+
+		setNotificationBellRinging(true);
+		if (notificationBellTimerRef.current) {
+			clearTimeout(notificationBellTimerRef.current);
+		}
+		notificationBellTimerRef.current = setTimeout(() => {
+			setNotificationBellRinging(false);
+		}, 950);
+
+		if (typeof navigator !== "undefined" && navigator.vibrate) {
+			try {
+				navigator.vibrate([85, 35, 95]);
+			} catch (error) {
+				// Vibration support varies by browser and device.
+			}
+		}
+
+		const audioContext = await ensureNotificationAudioReady();
+		if (!audioContext || audioContext.state !== "running") return;
+
+		try {
+			const startTime = audioContext.currentTime;
+			const masterGain = audioContext.createGain();
+			masterGain.gain.setValueAtTime(0.0001, startTime);
+			masterGain.gain.exponentialRampToValueAtTime(0.14, startTime + 0.025);
+			masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.05);
+			masterGain.connect(audioContext.destination);
+
+			const chimes = [
+				{ frequency: 880, offset: 0, duration: 0.22, gain: 0.58 },
+				{ frequency: 1174.66, offset: 0.12, duration: 0.28, gain: 0.45 },
+				{ frequency: 1567.98, offset: 0.3, duration: 0.42, gain: 0.32 },
+			];
+
+			chimes.forEach(({ frequency, offset, duration, gain }) => {
+				const oscillator = audioContext.createOscillator();
+				const noteGain = audioContext.createGain();
+				const noteStart = startTime + offset;
+				const noteEnd = noteStart + duration;
+
+				oscillator.type = "sine";
+				oscillator.frequency.setValueAtTime(frequency, noteStart);
+				oscillator.frequency.exponentialRampToValueAtTime(
+					frequency * 0.992,
+					noteEnd
+				);
+				noteGain.gain.setValueAtTime(0.0001, noteStart);
+				noteGain.gain.exponentialRampToValueAtTime(gain, noteStart + 0.018);
+				noteGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+				oscillator.connect(noteGain);
+				noteGain.connect(masterGain);
+				oscillator.start(noteStart);
+				oscillator.stop(noteEnd + 0.04);
+			});
+		} catch (error) {
+			// Audio is best-effort; the visual bell and vibration still run.
+		}
+	}, [ensureNotificationAudioReady]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const unlockAudio = () => {
+			if (!notificationAudioUnlockedRef.current) {
+				ensureNotificationAudioReady();
+			}
+		};
+		window.addEventListener("pointerdown", unlockAudio, { passive: true });
+		window.addEventListener("touchstart", unlockAudio, { passive: true });
+		window.addEventListener("keydown", unlockAudio);
+		return () => {
+			window.removeEventListener("pointerdown", unlockAudio);
+			window.removeEventListener("touchstart", unlockAudio);
+			window.removeEventListener("keydown", unlockAudio);
+		};
+	}, [ensureNotificationAudioReady]);
+
+	useEffect(() => {
+		return () => {
+			if (notificationBellTimerRef.current) {
+				clearTimeout(notificationBellTimerRef.current);
+			}
+			const audioContext = notificationAudioContextRef.current;
+			if (audioContext && audioContext.state !== "closed") {
+				audioContext.close().catch(() => {});
+			}
+		};
+	}, []);
+
 	// Detect whether path contains both ids to show hotel name
 	useEffect(() => {
 		const show =
@@ -340,28 +648,83 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		setHotelName(show ? titleCaseHotelName(selectedHotel.hotelName) : "");
 	}, [location, selectedHotel.hotelName, hotelId, userId]);
 
+	useEffect(() => {
+		notificationFeedReadyRef.current = false;
+		notificationFeedTotalRef.current = 0;
+	}, [canUseNotifications, notificationHotelId, notificationOwnerId, user?._id]);
+
 	const refreshNotifications = useCallback(
-		async ({ silent = false } = {}) => {
-			if (!canUsePendingNotifications || !user?._id) {
+		async ({ silent = false, force = false } = {}) => {
+			if (!force && isBrowserTabHidden()) {
+				return;
+			}
+			if (!canUseNotifications || !user?._id) {
+				notificationFeedReadyRef.current = false;
+				notificationFeedTotalRef.current = 0;
 				setNotificationFeed({ total: 0, data: [] });
 				return;
 			}
 			if (!silent) setNotificationsLoading(true);
 			try {
-				const data = await pendingConfirmationNotificationFeed({
-					userId: user._id,
-					hotelId: notificationHotelId,
-					ownerId: notificationOwnerId,
-					limit: 8,
+				const [pendingData, housekeepingData] = await Promise.all([
+					canUsePendingNotifications
+						? pendingConfirmationNotificationFeed({
+								userId: user._id,
+								hotelId: notificationHotelId,
+								ownerId: notificationOwnerId,
+								limit: 8,
+						  })
+						: Promise.resolve({ total: 0, data: [] }),
+					canUseHousekeepingNotifications
+						? getEmployeeWorkLoad(user._id, {
+								hotelId: notificationHotelId,
+								includeFinished: "false",
+								status: "active",
+						  })
+						: Promise.resolve([]),
+				]);
+				const reservationItems =
+					pendingData && !pendingData.error && Array.isArray(pendingData.data)
+						? pendingData.data
+						: [];
+				const housekeepingTasks = Array.isArray(housekeepingData)
+					? housekeepingData
+					: [];
+				const housekeepingItems = housekeepingTasks.map((task) => {
+					const taskHotel =
+						task.hotelId && typeof task.hotelId === "object" ? task.hotelId : {};
+					const taskHotelId = normalizeTopNavId(taskHotel._id || task.hotelId);
+					const taskOwnerId = normalizeTopNavId(
+						taskHotel.belongsTo || task.hotelOwnerId || notificationOwnerId
+					);
+					return {
+						_id: `housekeeping-${normalizeTopNavId(task._id)}`,
+						notificationType: "housekeeping_task",
+						taskId: normalizeTopNavId(task._id),
+						hotelId: taskHotelId || notificationHotelId,
+						hotelOwnerId: taskOwnerId,
+						hotelName: taskHotel.hotelName || task.hotelName || "",
+						taskLabel: housekeepingTaskLabel(task),
+						task_status: task.task_status || "",
+						taskDate: task.taskDate || task.createdAt,
+						confirmation_number: task.confirmation_number || "",
+						pendingReasons: ["housekeeping_assigned"],
+					};
 				});
-				if (data?.error) {
-					setNotificationFeed({ total: 0, data: [] });
-				} else {
-					setNotificationFeed({
-						total: Number(data?.total || 0),
-						data: Array.isArray(data?.data) ? data.data : [],
-					});
+				const nextFeed = {
+					total:
+						Number(pendingData?.total || reservationItems.length || 0) +
+						housekeepingTasks.length,
+					data: [...housekeepingItems, ...reservationItems].slice(0, 8),
+				};
+				const nextTotal = Number(nextFeed.total || 0);
+				const previousTotal = Number(notificationFeedTotalRef.current || 0);
+				if (notificationFeedReadyRef.current && nextTotal > previousTotal) {
+					playNotificationBell();
 				}
+				notificationFeedReadyRef.current = true;
+				notificationFeedTotalRef.current = nextTotal;
+				setNotificationFeed(nextFeed);
 			} catch (error) {
 				console.error("Failed to load notification feed", error);
 				setNotificationFeed({ total: 0, data: [] });
@@ -370,15 +733,18 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			}
 		},
 		[
+			canUseHousekeepingNotifications,
+			canUseNotifications,
 			canUsePendingNotifications,
 			notificationHotelId,
 			notificationOwnerId,
+			playNotificationBell,
 			user?._id,
 		]
 	);
 
 	useEffect(() => {
-		refreshNotifications();
+		refreshNotifications({ force: true });
 		const timer = setInterval(
 			() => refreshNotifications({ silent: true }),
 			60000
@@ -387,12 +753,33 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	}, [refreshNotifications]);
 
 	useEffect(() => {
-		if (!canUsePendingNotifications) return undefined;
-		if (notificationHotelId) {
+		if (typeof document === "undefined") return undefined;
+		const handleVisibilityChange = () => {
+			if (!document.hidden) {
+				refreshNotifications({ silent: true, force: true });
+			}
+		};
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [refreshNotifications]);
+
+	useEffect(() => {
+		if (!canUseNotifications) return undefined;
+		const housekeepingHotelIds = canUseHousekeepingNotifications
+			? [notificationHotelId, ...assignedCalendarHotelIds].filter(Boolean)
+			: [];
+		const uniqueHousekeepingHotelIds = [...new Set(housekeepingHotelIds)];
+
+		if (canUsePendingNotifications && notificationHotelId) {
 			socket.emit("joinHotelNotifications", { hotelId: notificationHotelId });
-		} else if (notificationOwnerId) {
+		} else if (canUsePendingNotifications && notificationOwnerId) {
 			socket.emit("joinOwnerNotifications", { ownerId: notificationOwnerId });
 		}
+		uniqueHousekeepingHotelIds.forEach((housekeepingHotelId) => {
+			socket.emit("joinHousekeeping", { hotelId: housekeepingHotelId });
+		});
 
 		const handleRefresh = (payload = {}) => {
 			const payloadHotelId = normalizeTopNavId(payload.hotelId);
@@ -414,17 +801,36 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			}
 			refreshNotifications({ silent: true });
 		};
+		const handleHousekeepingRefresh = (payload = {}) => {
+			const payloadHotelId = normalizeTopNavId(payload.hotelId);
+			if (
+				payloadHotelId &&
+				uniqueHousekeepingHotelIds.length &&
+				!uniqueHousekeepingHotelIds.includes(payloadHotelId)
+			) {
+				return;
+			}
+			refreshNotifications({ silent: true });
+		};
 
 		socket.on("hotelNotificationsUpdated", handleRefresh);
+		socket.on("housekeepingUpdated", handleHousekeepingRefresh);
 		return () => {
 			socket.off("hotelNotificationsUpdated", handleRefresh);
-			if (notificationHotelId) {
+			socket.off("housekeepingUpdated", handleHousekeepingRefresh);
+			if (canUsePendingNotifications && notificationHotelId) {
 				socket.emit("leaveHotelNotifications", { hotelId: notificationHotelId });
-			} else if (notificationOwnerId) {
+			} else if (canUsePendingNotifications && notificationOwnerId) {
 				socket.emit("leaveOwnerNotifications", { ownerId: notificationOwnerId });
 			}
+			uniqueHousekeepingHotelIds.forEach((housekeepingHotelId) => {
+				socket.emit("leaveHousekeeping", { hotelId: housekeepingHotelId });
+			});
 		};
 	}, [
+		assignedCalendarHotelIds,
+		canUseHousekeepingNotifications,
+		canUseNotifications,
 		canUsePendingNotifications,
 		notificationHotelId,
 		notificationOwnerId,
@@ -900,7 +1306,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			setProfileMenuOpen(false);
 			setRoomTypesDropdown(false);
 			setSettingsDropdownOpen(false);
-			refreshNotifications({ silent: true });
+			refreshNotifications({ silent: true, force: true });
 		}
 	};
 
@@ -913,14 +1319,134 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		}
 	};
 
+	const acknowledgeNotificationClick = (item = {}) => {
+		if (!item.ackable || !item.ackKey || !user?._id) return;
+		setNotificationFeed((previous) => {
+			const nextData = (previous.data || []).filter(
+				(row) => row.ackKey !== item.ackKey
+			);
+			const nextTotal = Math.max(0, Number(previous.total || 0) - 1);
+			notificationFeedTotalRef.current = nextTotal;
+			return {
+				...previous,
+				total: nextTotal,
+				data: nextData,
+			};
+		});
+		acknowledgePendingNotification({
+			userId: user._id,
+			ackKey: item.ackKey,
+			notificationType: item.notificationType,
+			entityId:
+				item.walletTransactionId || item.reservationId || normalizeTopNavId(item._id),
+			reservationId: normalizeTopNavId(item._id),
+			walletTransactionId: item.walletTransactionId || "",
+		}).catch(() => refreshNotifications({ silent: true }));
+	};
+
+	const buildOverallNotificationRoute = (item = {}, targetOwnerId, targetHotelId) => {
+		const params = new URLSearchParams();
+		if (targetOwnerId) params.set("ownerId", targetOwnerId);
+		if (targetHotelId) params.set("hotelId", targetHotelId);
+
+		if (item.notificationType === "housekeeping_task") {
+			params.set("overall", "housekeeping");
+			params.set("tab", "reports");
+			if (item.taskId) params.set("taskId", item.taskId);
+			return `/hotel-management/main-dashboard?${params.toString()}`;
+		}
+
+		if (isAgentAccountNotification(item) || isStaffApplicationNotification(item)) {
+			params.set("overall", "account-management");
+			return `/hotel-management/main-dashboard?${params.toString()}`;
+		}
+
+		if (isAgentWalletClaimNotification(item)) {
+			params.set("overall", "wallet-management");
+			if (item.agentId) params.set("agentId", item.agentId);
+			if (item.walletTransactionId) {
+				params.set("transactionId", item.walletTransactionId);
+			}
+			return `/hotel-management/main-dashboard?${params.toString()}`;
+		}
+
+		params.set(
+			"overall",
+			isPendingConfirmationNotificationItem(item)
+				? "pending-reservations"
+				: isFinancialNotificationItem(item)
+					? "financial-actions"
+					: "pending-reservations"
+		);
+		return `/hotel-management/main-dashboard?${params.toString()}`;
+	};
+
+	const buildSingleHotelPendingRoute = (item = {}, targetOwnerId, targetHotelId) => {
+		const params = new URLSearchParams();
+		params.set("pendingConfirmation", "");
+		params.set("page", "1");
+		const reservationId = normalizeTopNavId(item.reservationId || item._id);
+		if (reservationId && !String(reservationId).startsWith("agent-wallet-")) {
+			params.set("reservationId", reservationId);
+		}
+		return `/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}?${params.toString()}`;
+	};
+
 	const goToPendingNotification = (item = {}) => {
+		acknowledgeNotificationClick(item);
 		const targetHotelId = item.hotelId || notificationHotelId || hotelId;
 		const targetOwnerId = item.hotelOwnerId || notificationOwnerId || userId;
 		if (!targetHotelId || !targetOwnerId) return;
-		if (isAgentAccountNotification(item)) {
+		if (isAgentNotificationAudience && isAgentAccountNotification(item)) {
+			const params = new URLSearchParams();
+			if (targetOwnerId) params.set("ownerId", targetOwnerId);
+			if (targetHotelId) params.set("hotelId", targetHotelId);
+			history.push(`/hotel-management/main-dashboard?${params.toString()}`);
+			setNotificationsOpen(false);
+			return;
+		}
+		if (isMainHotelDashboard) {
+			history.push(
+				buildOverallNotificationRoute(item, targetOwnerId, targetHotelId)
+			);
+			setNotificationsOpen(false);
+			return;
+		}
+		if (item.notificationType === "housekeeping_task") {
+			history.push(
+				`/hotel-management/house-keeping/${targetOwnerId}/${targetHotelId}?overAllTasks`
+			);
+			setNotificationsOpen(false);
+			return;
+		}
+		if (isAgentAccountNotification(item) || isStaffApplicationNotification(item)) {
 			history.push(
 				`/hotel-management/main-dashboard?modal=accounts&ownerId=${targetOwnerId}`
 			);
+			setNotificationsOpen(false);
+			return;
+		}
+		if (isAgentWalletClaimNotification(item)) {
+			if (isAgentNotificationAudience) {
+				const agentParams = new URLSearchParams();
+				if (item.agentId) agentParams.set("agentId", item.agentId);
+				if (item.walletTransactionId) {
+					agentParams.set("walletTransactionId", item.walletTransactionId);
+				}
+				history.push(
+					`/hotel-management/financials/${targetOwnerId}/${targetHotelId}?${agentParams.toString()}`
+				);
+			} else {
+				const params = new URLSearchParams();
+				if (targetOwnerId) params.set("ownerId", targetOwnerId);
+				params.set("overall", "wallet-management");
+				params.set("hotelId", targetHotelId);
+				if (item.agentId) params.set("agentId", item.agentId);
+				if (item.walletTransactionId) {
+					params.set("transactionId", item.walletTransactionId);
+				}
+				history.push(`/hotel-management/main-dashboard?${params.toString()}`);
+			}
 			setNotificationsOpen(false);
 			return;
 		}
@@ -929,15 +1455,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			item.notificationType === "agent_decision" ||
 			item.notificationType === "agent_review"
 		) {
-			history.push(
-				`/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}?list=&page=1&reservationId=${item._id}`
-			);
+			history.push(buildSingleHotelPendingRoute(item, targetOwnerId, targetHotelId));
 			setNotificationsOpen(false);
 			return;
 		}
-		history.push(
-			`/hotel-management/new-reservation/${targetOwnerId}/${targetHotelId}?pendingConfirmation`
-		);
+		history.push(buildSingleHotelPendingRoute(item, targetOwnerId, targetHotelId));
 		setNotificationsOpen(false);
 	};
 
@@ -947,8 +1469,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		return { _id: user._id, name: user.name, email: user.email };
 	}, [user]);
 
-	const roleLabel =
-		user.role === 1000 ? "Superadmin" : user.role === 2000 ? "Owner" : "User";
+	const roleLabel = isSystemAdminTopNavUser(user)
+		? "System Admin"
+		: user.role === 1000
+		  ? "Superadmin"
+		  : user.role === 2000
+		    ? "Owner"
+		    : "User";
 	const notificationCount = Number(notificationFeed.total || 0);
 	const notificationPanel = (
 		<NotificationPanel $isArabic={isArabic}>
@@ -998,6 +1525,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				<NotificationList>
 					{notificationFeed.data.map((item) => {
 						const agentAccountNotice = isAgentAccountNotification(item);
+						const staffApplicationNotice = isStaffApplicationNotification(item);
+						const agentWalletNotice = isAgentWalletClaimNotification(item);
+						const housekeepingNotice =
+							item.notificationType === "housekeeping_task";
+						const tone = notificationTone(item);
 						const reasons = Array.isArray(item.pendingReasons)
 							? item.pendingReasons
 							: [];
@@ -1019,30 +1551,69 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 									? "تم قبول الحجز"
 									: "Reservation confirmed"
 								: "";
+						const financeAcceptedTitle = isArabic
+							? "تمت الموافقة المالية"
+							: "Finance accepted";
 						const agentAccountTitle =
 							item.notificationType === "agent_account_approved"
-								? "Agent approved"
+								? isArabic
+									? "\u062a\u0645\u062a \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0648\u0643\u064a\u0644"
+									: "Agent approved"
 								: item.notificationType === "agent_account_rejected"
-								? "Agent rejected"
+								? isArabic
+									? "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0648\u0643\u064a\u0644"
+									: "Agent rejected"
+								: isArabic
+								? "\u0645\u0648\u0627\u0641\u0642\u0629 \u0648\u0643\u064a\u0644"
 								: "Agent approval";
+						const staffApplicationTitle = isArabic
+							? "\u0637\u0644\u0628 \u0648\u0638\u064a\u0641\u0629"
+							: "Job application";
+						const walletClaimTitle =
+							item.notificationType === "agent_wallet_claim_rejected"
+								? isArabic
+									? "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u0631\u0641\u0648\u0636\u0629"
+									: "Wallet claim rejected"
+								: item.notificationType === "agent_wallet_claim_approved"
+								? isArabic
+									? "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u0642\u0628\u0648\u0644\u0629"
+									: "Wallet claim approved"
+								: isArabic
+								? "\u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u062d\u0641\u0638\u0629"
+								: "Wallet claim";
 						return (
 							<NotificationItem
 								key={item._id}
 								type='button'
+								$tone={tone}
 								onClick={() => goToPendingNotification(item)}
 							>
 								<NotificationItemTop>
 									<strong>
-										{agentAccountNotice
+										{housekeepingNotice
+											? isArabic
+												? "Ù…Ù‡Ù…Ø© Ù†Ø¸Ø§ÙØ©"
+												: "Housekeeping task"
+											: agentWalletNotice
+											? walletClaimTitle
+											: staffApplicationNotice
+											? staffApplicationTitle
+											: agentAccountNotice
 											? agentAccountTitle
+											: item.notificationType === "agent_finance_accepted"
+											? isArabic ? "تمت الموافقة المالية" : financeAcceptedTitle
 											: item.confirmation_number || "N/A"}
 									</strong>
-									{!agentAccountNotice && (
+									{!agentAccountNotice && !staffApplicationNotice && !housekeepingNotice && (
 										<span>{formatNotificationMoney(item.total_amount)} SAR</span>
 									)}
 								</NotificationItemTop>
 								<NotificationGuest>
-									{item.guestName || (isArabic ? "ضيف بدون اسم" : "Unnamed guest")}
+									{housekeepingNotice
+										? item.taskLabel || "Housekeeping task"
+										: agentWalletNotice
+										? item.agentName || item.guestName || "Agent"
+										: item.guestName || (isArabic ? "ضيف بدون اسم" : "Unnamed guest")}
 								</NotificationGuest>
 								<NotificationMeta>
 									<span>
@@ -1051,18 +1622,30 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 											: item.booking_source || "Hotel"}
 									</span>
 									<span>
-										{formatNotificationDate(item.checkin_date)}
-										{item.checkout_date ? " - " : ""}
-										{formatNotificationDate(item.checkout_date)}
+										{housekeepingNotice
+											? formatNotificationDate(item.taskDate)
+											: `${formatNotificationDate(item.checkin_date)}${
+													item.checkout_date ? " - " : ""
+											  }${formatNotificationDate(item.checkout_date)}`}
 									</span>
 								</NotificationMeta>
-								<NotificationReasons>
-									{item.notificationType === "agent_decision" ? (
-										<span>{agentDecisionText}</span>
+								<NotificationReasons $tone={tone}>
+									{housekeepingNotice ? (
+										<span>
+											{isArabic
+												? "Ù…ÙƒÙ„ÙØ© Ù„Ùƒ"
+												: item.task_status || "Assigned to you"}
+										</span>
+									) : item.notificationType === "agent_decision" ? (
+										<span>
+											{isArabic
+												? cleanAgentDecisionText(item, isArabic)
+												: agentDecisionText}
+										</span>
 									) : (
 										visibleReasons.slice(0, 2).map((reason) => (
 											<span key={reason}>
-												{notificationReasonLabel(
+												{cleanNotificationReasonLabel(
 													reason,
 													isArabic,
 													isAgentNotificationAudience
@@ -1206,16 +1789,25 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					{!isMobileNav &&
 						renderNotificationsDropdown(
 							<IconWrapper
+								className={
+									notificationBellRinging ? "notification-bell-ringing" : ""
+								}
 								role='button'
 								aria-label={isArabic ? "الإشعارات" : "Notifications"}
 							>
 								<Badge
-									count={canUsePendingNotifications ? notificationCount : 0}
+									count={canUseNotifications ? notificationCount : 0}
 									size='small'
 									overflowCount={99}
 									offset={[1, -2]}
 								>
-									<BellOutlined />
+									<BellOutlined
+										className={
+											notificationBellRinging
+												? "notification-bell-ringing"
+												: ""
+										}
+									/>
 								</Badge>
 							</IconWrapper>
 						)}
@@ -1266,19 +1858,23 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					<span>{chosenLanguage === "English" ? "AR" : "En"}</span>
 				</MobileTopButton>
 				{isMobileNav &&
-					canUsePendingNotifications &&
+					canUseNotifications &&
 					renderNotificationsDropdown(
 						<MobileTopButton
 							type='button'
 							aria-label={isArabic ? "الإشعارات" : "Notifications"}
 						>
 							<Badge
-								count={canUsePendingNotifications ? notificationCount : 0}
+								count={canUseNotifications ? notificationCount : 0}
 								size='small'
 								overflowCount={99}
 								offset={[4, -4]}
 							>
-								<BellOutlined />
+								<BellOutlined
+									className={
+										notificationBellRinging ? "notification-bell-ringing" : ""
+									}
+								/>
 							</Badge>
 						</MobileTopButton>
 					)}
@@ -1328,6 +1924,45 @@ export default TopNavbar;
 /* ======================== Styled Components ======================== */
 
 const TopNavbarGlobalStyles = createGlobalStyle`
+	@keyframes topNavbarBellRing {
+		0% {
+			transform: rotate(0deg) scale(1);
+		}
+		14% {
+			transform: rotate(16deg) scale(1.08);
+		}
+		28% {
+			transform: rotate(-14deg) scale(1.08);
+		}
+		42% {
+			transform: rotate(12deg) scale(1.05);
+		}
+		56% {
+			transform: rotate(-8deg) scale(1.04);
+		}
+		70% {
+			transform: rotate(5deg) scale(1.02);
+		}
+		100% {
+			transform: rotate(0deg) scale(1);
+		}
+	}
+
+	.notification-bell-ringing {
+		animation: topNavbarBellRing 0.88s ease-in-out;
+		color: #fde047 !important;
+		filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.65));
+		transform-origin: 50% 4px;
+	}
+
+	.notification-bell-ringing .anticon-bell,
+	.notification-bell-ringing svg {
+		animation: topNavbarBellRing 0.88s ease-in-out;
+		color: #fde047 !important;
+		filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.65));
+		transform-origin: 50% 4px;
+	}
+
 	@media (max-width: 760px) {
 		.top-navbar-notification-dropdown {
 			position: fixed !important;
@@ -1672,9 +2307,24 @@ const NotificationList = styled.div`
 const NotificationItem = styled.button`
 	width: 100%;
 	padding: 10px;
-	border: 1px solid #cfe4ff;
+	border: 1px solid
+		${(props) =>
+			props.$tone === "success"
+				? "#9ee5b3"
+				: props.$tone === "danger"
+				? "#ffc4cc"
+				: props.$tone === "warning"
+				? "#ffd8a8"
+				: "#cfe4ff"};
 	border-radius: 10px;
-	background: #fbfdff;
+	background: ${(props) =>
+		props.$tone === "success"
+			? "#f0fff5"
+			: props.$tone === "danger"
+			? "#fff5f6"
+			: props.$tone === "warning"
+			? "#fffaf0"
+			: "#fbfdff"};
 	text-align: inherit;
 	cursor: pointer;
 	transition: border-color 0.15s ease, transform 0.15s ease,
@@ -1734,9 +2384,25 @@ const NotificationReasons = styled.div`
 	margin-top: 8px;
 
 	span {
-		border: 1px solid #ffbf8a;
-		background: #fff7ed;
-		color: #c2410c;
+		border: 1px solid
+			${(props) =>
+				props.$tone === "success"
+					? "#8bdca7"
+					: props.$tone === "danger"
+					? "#ffb3bd"
+					: "#ffbf8a"};
+		background: ${(props) =>
+			props.$tone === "success"
+				? "#e9fff0"
+				: props.$tone === "danger"
+				? "#fff0f2"
+				: "#fff7ed"};
+		color: ${(props) =>
+			props.$tone === "success"
+				? "#08763d"
+				: props.$tone === "danger"
+				? "#b42335"
+				: "#c2410c"};
 		border-radius: 999px;
 		padding: 3px 8px;
 		font-size: 0.7rem;

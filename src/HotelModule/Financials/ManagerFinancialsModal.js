@@ -12,7 +12,10 @@ import {
 } from "@ant-design/icons";
 import moment from "moment";
 
-import { getAgentWalletSummary } from "../apiAdmin";
+import {
+	getAgentWalletSummary,
+	trackOverallFinancialReportExport,
+} from "../apiAdmin";
 
 const labels = {
 	en: {
@@ -28,6 +31,8 @@ const labels = {
 			"Choose an agent first to review wallet movements and reservation deductions.",
 		refresh: "Refresh",
 		exportExcel: "Export Excel",
+		exportingExcel: "Exporting...",
+		exportError: "Unable to export financials.",
 		exportOverview: "Export overview",
 		exportVisibleTables: "Export visible tables",
 		openWorkspace: "Open full financials",
@@ -46,6 +51,8 @@ const labels = {
 		mixedModel: "Wallet + commission",
 		noWalletAgent:
 			"This agent is commission-only. Reservations are visible for commission review and do not create wallet debt.",
+		commissionPaid: "Commission paid",
+		commissionUnpaid: "Unpaid commission",
 		commissionDue: "Commission due",
 		reservations: "Reservations",
 		reservationValue: "Reservation value",
@@ -74,6 +81,8 @@ const labels = {
 		chooseHotel: "اختر الفندق",
 		refresh: "تحديث",
 		exportExcel: "تصدير إكسل",
+		exportingExcel: "جاري التصدير...",
+		exportError: "تعذر تصدير المالية.",
 		openWorkspace: "فتح المالية بالكامل",
 		hotelList: "الفنادق",
 		hotelName: "الفندق",
@@ -123,6 +132,11 @@ Object.assign(labels.ar, {
 	reservationValue: "قيمة الحجوزات",
 	noWalletAgent:
 		"هذا الوكيل يعمل بنظام العمولة فقط. الحجوزات تظهر لمراجعة العمولة ولا تنشئ مديونية محفظة.",
+});
+
+Object.assign(labels.ar, {
+	commissionPaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
+	commissionUnpaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
 });
 
 const normalizeId = (value) => {
@@ -202,6 +216,7 @@ const REPORT_COLUMN_WIDTHS = {
 	Reservations: 13,
 	"Reservation Value": 17,
 	Commission: 14,
+	"Commission Paid": 16,
 	"Commission Due": 16,
 	"Pending Confirmation": 18,
 	Type: 16,
@@ -301,6 +316,7 @@ const buildAgentSummaryRows = (items = []) =>
 		Balance: item.balance || 0,
 		Reservations: item.totalReservations || 0,
 		"Reservation Value": item.totalReservationValue || 0,
+		"Commission Paid": item.commissionPaid || 0,
 		"Commission Due": item.commissionDue || 0,
 		"Pending Confirmation": item.pendingConfirmation || 0,
 	}));
@@ -338,6 +354,41 @@ const buildReservationRows = (items = []) =>
 			})
 		)
 	);
+
+const withAgentTrackingFields = (items = [], rows = []) =>
+	rows.map((row, index) => ({
+		...row,
+		hotelId: items[index]?.hotelId || "",
+		agentId: normalizeId(items[index]?.agent),
+	}));
+
+const buildTrackedTransactionRows = (items = [], rows = []) => {
+	let index = 0;
+	return items.flatMap((item) =>
+		(Array.isArray(item.transactions) ? item.transactions : []).map((tx) => ({
+			...(rows[index++] || {}),
+			hotelId: tx.hotelId || item.hotelId || "",
+			agentId: normalizeId(item.agent),
+			transactionId: normalizeId(tx._id),
+		}))
+	);
+};
+
+const buildTrackedReservationRows = (items = [], rows = []) => {
+	let index = 0;
+	return items.flatMap((item) =>
+		(Array.isArray(item.reservations) ? item.reservations : []).map(
+			(reservation) => ({
+				...(rows[index++] || {}),
+				hotelId: reservation.hotelId || item.hotelId || "",
+				agentId: normalizeId(item.agent),
+				reservationId: normalizeId(reservation._id),
+				confirmation_number:
+					reservation.confirmation_number || rows[index - 1]?.Confirmation || "",
+			})
+		)
+	);
+};
 
 const decorateAgentRow = (item = {}, hotel = {}, responseHotel = {}) => {
 	const hotelId = hotel.id || normalizeId(responseHotel);
@@ -380,6 +431,7 @@ const buildTotals = (items = []) =>
 			totalCommission: n2(
 				acc.totalCommission + Number(item.totalCommission || 0)
 			),
+			commissionPaid: n2(acc.commissionPaid + Number(item.commissionPaid || 0)),
 			commissionDue: n2(acc.commissionDue + Number(item.commissionDue || 0)),
 			pendingConfirmation:
 				acc.pendingConfirmation + Number(item.pendingConfirmation || 0),
@@ -391,6 +443,7 @@ const buildTotals = (items = []) =>
 			totalReservations: 0,
 			totalReservationValue: 0,
 			totalCommission: 0,
+			commissionPaid: 0,
 			commissionDue: 0,
 			pendingConfirmation: 0,
 		}
@@ -429,6 +482,9 @@ const aggregateAgentRows = (items = []) => {
 		totalCommission: n2(
 			items.reduce((sum, item) => sum + Number(item.totalCommission || 0), 0)
 		),
+		commissionPaid: n2(
+			items.reduce((sum, item) => sum + Number(item.commissionPaid || 0), 0)
+		),
 		commissionDue: n2(
 			items.reduce((sum, item) => sum + Number(item.commissionDue || 0), 0)
 		),
@@ -451,6 +507,7 @@ const ManagerFinancialsModal = ({
 	hotels = [],
 	userId,
 	token,
+	ownerId = "",
 	isArabic = false,
 }) => {
 	const txt = useMemo(() => labels[isArabic ? "ar" : "en"], [isArabic]);
@@ -468,6 +525,7 @@ const ManagerFinancialsModal = ({
 	const [summary, setSummary] = useState(null);
 	const [selectedAgentId, setSelectedAgentId] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [exportingScope, setExportingScope] = useState("");
 
 	const loadFinancials = useCallback(async () => {
 		if (!open || !normalizedHotels.length || !userId || !token) return;
@@ -568,38 +626,109 @@ const ManagerFinancialsModal = ({
 		agentCommercialModel(activeAgent || {}) === "commission_only" ||
 		activeAgent?.walletRequired === false;
 
+	const trackFinancialExport = useCallback(
+		async (items = [], scope = "modal_overview") => {
+			const agentRows = buildAgentSummaryRows(items);
+			const transactionRows = buildTransactionRows(items);
+			const reservationRows = buildReservationRows(items);
+			const agentColumns = Object.keys(agentRows[0] || {});
+			const transactionColumns = Object.keys(transactionRows[0] || {});
+			const reservationColumns = Object.keys(reservationRows[0] || {});
+			const hotelIds = [
+				...new Set(
+					[
+						...normalizedHotels.map((hotel) => hotel.id),
+						...items.map((item) => item.hotelId),
+					].filter(Boolean)
+				),
+			];
+			const tracking = await trackOverallFinancialReportExport(
+				userId,
+				token,
+				{
+					dataset:
+						scope === "modal_visible"
+							? "manager_financials_visible_tables"
+							: "manager_financials_overview",
+					format: "XLSX",
+					totalRows:
+						agentRows.length + transactionRows.length + reservationRows.length,
+					filters: {
+						ownerId: ownerId || "",
+						hotelIds,
+						agentId:
+							scope === "modal_visible" ? selectedAgentId || "" : "",
+						scope,
+						reportType: "manager-financials-modal",
+					},
+					columns: [
+						...new Set([
+							...agentColumns,
+							...transactionColumns,
+							...reservationColumns,
+						]),
+					],
+					agentColumns,
+					transactionColumns,
+					reservationColumns,
+					totals: buildTotals(items),
+					agents: withAgentTrackingFields(items, agentRows),
+					transactions: buildTrackedTransactionRows(items, transactionRows),
+					reservations: buildTrackedReservationRows(items, reservationRows),
+				},
+				ownerId ? { ownerId } : {}
+			);
+			if (!tracking || tracking.error || !tracking.exportTracked) {
+				throw new Error(tracking?.error || txt.exportError);
+			}
+			return { agentRows, transactionRows, reservationRows };
+		},
+		[
+			normalizedHotels,
+			ownerId,
+			selectedAgentId,
+			token,
+			txt.exportError,
+			userId,
+		]
+	);
+
 	const exportExcel = useCallback(async () => {
-		const XLSX = await loadStyledXlsx();
-		const workbook = XLSX.utils.book_new();
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildAgentSummaryRows(agents),
-			"Agents",
-			txt.noData
-		);
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildTransactionRows(agents),
-			"Wallet Movements",
-			txt.noData
-		);
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildReservationRows(agents),
-			"Reservations",
-			txt.noData
-		);
-		XLSX.writeFile(
-			workbook,
-			`${safeFileSegment(txt.filePrefix)}-overview-${moment().format(
-				"YYYY-MM-DD"
-			)}.xlsx`,
-			{ cellStyles: true }
-		);
-	}, [agents, txt.filePrefix, txt.noData]);
+		setExportingScope("overview");
+		try {
+			const { agentRows, transactionRows, reservationRows } =
+				await trackFinancialExport(agents, "modal_overview");
+			const XLSX = await loadStyledXlsx();
+			const workbook = XLSX.utils.book_new();
+			appendJsonSheet(XLSX, workbook, agentRows, "Agents", txt.noData);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				transactionRows,
+				"Wallet Movements",
+				txt.noData
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				reservationRows,
+				"Reservations",
+				txt.noData
+			);
+			XLSX.writeFile(
+				workbook,
+				`${safeFileSegment(txt.filePrefix)}-overview-${moment().format(
+					"YYYY-MM-DD"
+				)}.xlsx`,
+				{ cellStyles: true }
+			);
+		} catch (error) {
+			console.error(error);
+			message.error(error.message || txt.exportError);
+		} finally {
+			setExportingScope("");
+		}
+	}, [agents, trackFinancialExport, txt.exportError, txt.filePrefix, txt.noData]);
 
 	const exportVisibleTables = useCallback(async () => {
 		if (!activeAgent) {
@@ -611,41 +740,47 @@ const ManagerFinancialsModal = ({
 			activeAgent.agent?.companyName ||
 			activeAgent.agent?.email ||
 			"agent";
-		const XLSX = await loadStyledXlsx();
-		const workbook = XLSX.utils.book_new();
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildAgentSummaryRows([activeAgent]),
-			"Selected Agent",
-			txt.noData
-		);
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildTransactionRows([activeAgent]),
-			"Wallet Movements",
-			txt.noData
-		);
-		appendJsonSheet(
-			XLSX,
-			workbook,
-			buildReservationRows([activeAgent]),
-			"Reservations",
-			txt.noData
-		);
-		XLSX.writeFile(
-			workbook,
-			`${safeFileSegment(txt.filePrefix)}-${safeFileSegment(
-				agentName
-			)}-visible-${moment().format(
-				"YYYY-MM-DD"
-			)}.xlsx`,
-			{ cellStyles: true }
-		);
+		setExportingScope("visible");
+		try {
+			const { agentRows, transactionRows, reservationRows } =
+				await trackFinancialExport([activeAgent], "modal_visible");
+			const XLSX = await loadStyledXlsx();
+			const workbook = XLSX.utils.book_new();
+			appendJsonSheet(XLSX, workbook, agentRows, "Selected Agent", txt.noData);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				transactionRows,
+				"Wallet Movements",
+				txt.noData
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				reservationRows,
+				"Reservations",
+				txt.noData
+			);
+			XLSX.writeFile(
+				workbook,
+				`${safeFileSegment(txt.filePrefix)}-${safeFileSegment(
+					agentName
+				)}-visible-${moment().format(
+					"YYYY-MM-DD"
+				)}.xlsx`,
+				{ cellStyles: true }
+			);
+		} catch (error) {
+			console.error(error);
+			message.error(error.message || txt.exportError);
+		} finally {
+			setExportingScope("");
+		}
 	}, [
 		activeAgent,
+		trackFinancialExport,
 		txt.chooseAgentFirst,
+		txt.exportError,
 		txt.filePrefix,
 		txt.noData,
 	]);
@@ -711,7 +846,12 @@ const ManagerFinancialsModal = ({
 				render: (value) => `${money(value)} SAR`,
 			},
 			{
-				title: txt.commissionDue,
+				title: txt.commissionPaid,
+				dataIndex: "commissionPaid",
+				render: (value) => `${money(value)} SAR`,
+			},
+			{
+				title: txt.commissionUnpaid,
 				dataIndex: "commissionDue",
 				render: (value) => `${money(value)} SAR`,
 			},
@@ -807,9 +947,12 @@ const ManagerFinancialsModal = ({
 						<Button
 							icon={<DownloadOutlined />}
 							onClick={exportExcel}
-							disabled={!agents.length}
+							loading={exportingScope === "overview"}
+							disabled={!agents.length || !!exportingScope}
 						>
-							{txt.exportOverview || txt.exportExcel}
+							{exportingScope === "overview"
+								? txt.exportingExcel
+								: txt.exportOverview || txt.exportExcel}
 						</Button>
 					</ActionRow>
 				</Hero>
@@ -850,9 +993,14 @@ const ManagerFinancialsModal = ({
 								<span>{txt.balance}</span>
 								<strong>{money(summary?.totals?.balance)} SAR</strong>
 							</SummaryCard>
+							<SummaryCard $tone='green'>
+								<BankOutlined />
+								<span>{txt.commissionPaid}</span>
+								<strong>{money(summary?.totals?.commissionPaid)} SAR</strong>
+							</SummaryCard>
 							<SummaryCard $tone='purple'>
 								<BankOutlined />
-								<span>{txt.commissionDue}</span>
+								<span>{txt.commissionUnpaid}</span>
 								<strong>{money(summary?.totals?.commissionDue)} SAR</strong>
 							</SummaryCard>
 						</SummaryGrid>
@@ -895,8 +1043,15 @@ const ManagerFinancialsModal = ({
 											activeAgent?.agent?.email ||
 											"-"}
 									</strong>
-									<Button icon={<DownloadOutlined />} onClick={exportVisibleTables}>
-										{txt.exportVisibleTables || txt.exportExcel}
+									<Button
+										icon={<DownloadOutlined />}
+										onClick={exportVisibleTables}
+										loading={exportingScope === "visible"}
+										disabled={!!exportingScope}
+									>
+										{exportingScope === "visible"
+											? txt.exportingExcel
+											: txt.exportVisibleTables || txt.exportExcel}
 									</Button>
 								</DetailToolbar>
 								<DetailGrid>

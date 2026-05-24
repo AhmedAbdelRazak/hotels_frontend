@@ -54,6 +54,7 @@ const HotelHeatMap = ({
 	allReservations,
 	chosenLanguage,
 	useCurrentOccupancy = false,
+	mapSummary,
 }) => {
 	const history = useHistory();
 	const location = useLocation();
@@ -733,7 +734,7 @@ const HotelHeatMap = ({
 	return (
 		<HotelOverviewWrapper $fixIt={fixIt}>
 			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
-				<HotelMapCards chosenLanguage={chosenLanguage} />
+				<HotelMapCards chosenLanguage={chosenLanguage} summary={mapSummary} />
 			</div>
 			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 				<HotelMapFilters

@@ -3,7 +3,7 @@
  *  © 2025 Serene Code Labs – free to use in your PMS
  */
 
-import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
+import React, { useEffect, useState, useCallback, memo, useMemo, useRef } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled, { css } from "styled-components";
 import { Button, Modal, Card, message, Pagination, Table, Tabs, Tag } from "antd";
@@ -47,6 +47,8 @@ import {
 } from "./apiAdmin";
 
 import TopNavbar from "./AdminNavbar/TopNavbar";
+import AdminOverallSideMenu from "./AdminOverallSideMenu/AdminOverallSideMenu";
+import OverallStructurePage from "./TheOverallStructure/page";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 import ManagerFinancialsModal from "./Financials/ManagerFinancialsModal";
@@ -415,6 +417,8 @@ const ManagerMainHotelDashboard = () => {
 	const [editVisible, setEditVisible] = useState(false);
 	const [currentHotel, setCurrentHotel] = useState(null);
 	const [accountsVisible, setAccountsVisible] = useState(false);
+	const [overallAccountsModalHotels, setOverallAccountsModalHotels] =
+		useState([]);
 	const [financialsVisible, setFinancialsVisible] = useState(false);
 	const [executiveSummary, setExecutiveSummary] = useState(null);
 	const [executiveLoading, setExecutiveLoading] = useState(false);
@@ -489,6 +493,19 @@ const ManagerMainHotelDashboard = () => {
 	const dashboardOwnerId = isConfiguredSuperAdmin
 		? queryDashboardOwnerId || storedDashboardOwnerId || userId
 		: userId;
+	const overallView = useMemo(() => {
+		const params = new URLSearchParams(location.search);
+		return params.get("overall") || "";
+	}, [location.search]);
+	const overallOwnerId = queryDashboardOwnerId || (isConfiguredSuperAdmin ? storedDashboardOwnerId : "");
+	const accountsModalHotels = useMemo(() => {
+		const scopedHotels = Array.isArray(overallAccountsModalHotels)
+			? overallAccountsModalHotels.filter((hotel) => hotel?._id)
+			: [];
+		return overallView && scopedHotels.length
+			? scopedHotels
+			: userData?.hotelIdsOwner || [];
+	}, [overallAccountsModalHotels, overallView, userData?.hotelIdsOwner]);
 	const assignedHotelId = user?.hotelIdWork || "";
 	const assignedOwnerId = user?.belongsToId || "";
 	const isSingleHotelUser = Boolean(assignedHotelId && assignedOwnerId);
@@ -525,6 +542,8 @@ const ManagerMainHotelDashboard = () => {
 			dateFrom: "",
 			dateTo: "",
 			sortBy: "",
+			accountTab: "",
+			accountId: "",
 			executiveListPage: "",
 			executiveListSearch: "",
 			executiveDateFrom: "",
@@ -547,6 +566,10 @@ const ManagerMainHotelDashboard = () => {
 			}
 		});
 	}, [assignedHotelId, assignedOwnerId, isSingleHotelUser]);
+
+	useEffect(() => {
+		setOverallAccountsModalHotels([]);
+	}, [overallOwnerId, overallView]);
 
 	/* fetch hotels owned by this admin */
 	const fetchHotels = useCallback(() => {
@@ -774,7 +797,10 @@ const ManagerMainHotelDashboard = () => {
 			? hotels.find((hotel) => String(hotel?._id) === String(queryHotelId))
 			: null;
 
-		setAccountsVisible(modal === "accounts");
+		setAccountsVisible(
+			modal === "accounts" &&
+				!["create-account", "update-account"].includes(overallView)
+		);
 		setFinancialsVisible(modal === "financials");
 		setAddVisible(modal === "add-property");
 
@@ -797,11 +823,11 @@ const ManagerMainHotelDashboard = () => {
 			setStepModalIdx(null);
 			setStepModalHotel(null);
 		}
-	}, [location.search, userData?.hotelIdsOwner]);
+	}, [location.search, overallView, userData?.hotelIdsOwner]);
 
 	/* ═════ JSX ═════ */
 	return (
-		<Wrapper>
+		<Wrapper $withOverallMenu $collapsed={collapsed} $isRTL={isRTL}>
 			<TopNavbar
 				fromPage='AdminDashboard'
 				AdminMenuStatus={adminMenuStatus}
@@ -810,66 +836,74 @@ const ManagerMainHotelDashboard = () => {
 				setCollapsed={setCollapsed}
 				chosenLanguage={chosenLanguage}
 			/>
+			<AdminOverallSideMenu
+				collapsed={collapsed}
+				setCollapsed={setCollapsed}
+				setAdminMenuStatus={setAdminMenuStatus}
+				chosenLanguage={chosenLanguage}
+			/>
 
-			<PageActions className='container' $isRTL={isRTL}>
-				<ManageAccountsButton
-					onClick={() => {
-						setAccountsVisible(true);
-						updateDashboardQuery({ modal: "accounts" });
-					}}
-				>
-					{TXT.accountsButton}
-				</ManageAccountsButton>
-				<ManageAccountsButton
-					$variant='financials'
-					onClick={() => {
-						setFinancialsVisible(true);
-						updateDashboardQuery({ modal: "financials" });
-					}}
-				>
-					<WalletOutlined />
-					{TXT.financialsButton}
-				</ManageAccountsButton>
-				<ManageAccountsButton
-					onClick={() => {
-						setAddVisible(true);
-						updateDashboardQuery({ modal: "add-property" });
-					}}
-				>
-					<PlusOutlined />
-					{TXT.addPropertyButton}
-				</ManageAccountsButton>
-			</PageActions>
+			{overallView && (
+				<OverallContent>
+					<OverallStructurePage
+						view={overallView}
+						userId={userId}
+						user={user}
+						token={token}
+						ownerId={overallOwnerId}
+						chosenLanguage={chosenLanguage}
+						setAccountsModalHotels={setOverallAccountsModalHotels}
+					/>
+				</OverallContent>
+			)}
 
-			<ExecutiveSummaryControls className='container' $isRTL={isRTL}>
-				<ExecutiveRangeGroup role='group' aria-label='Executive summary date range'>
-					{executiveRangeOptions.map((option) => (
-						<button
-							type='button'
-							key={option.value}
-							data-active={
-								executiveSummaryRange === option.value ? "true" : "false"
-							}
-							onClick={() => setExecutiveSummaryRange(option.value)}
+			<DashboardBody $hidden={Boolean(overallView)}>
+				<ExecutiveSummaryControls className='container' $isRTL={isRTL}>
+					<ExecutiveFilters $isRTL={isRTL}>
+						<ExecutiveRangeGroup
+							role='group'
+							aria-label='Executive summary date range'
 						>
-							{option.label}
-						</button>
-					))}
-				</ExecutiveRangeGroup>
-				<ExecutiveDateSelect>
-					<span>{TXT.summaryDateBy}</span>
-					<select
-						value={executiveSummaryDateBy}
-						onChange={(event) => setExecutiveSummaryDateBy(event.target.value)}
+							{executiveRangeOptions.map((option) => (
+								<button
+									type='button'
+									key={option.value}
+									data-active={
+										executiveSummaryRange === option.value ? "true" : "false"
+									}
+									onClick={() => setExecutiveSummaryRange(option.value)}
+								>
+									{option.label}
+								</button>
+							))}
+						</ExecutiveRangeGroup>
+						<ExecutiveDateSelect>
+							<span>{TXT.summaryDateBy}</span>
+							<select
+								value={executiveSummaryDateBy}
+								onChange={(event) =>
+									setExecutiveSummaryDateBy(event.target.value)
+								}
+							>
+								{executiveDateByOptions.map((option) => (
+									<option key={option.value} value={option.value}>
+										{option.label}
+									</option>
+								))}
+							</select>
+						</ExecutiveDateSelect>
+					</ExecutiveFilters>
+					<ManageAccountsButton
+						dir={isRTL ? "rtl" : "ltr"}
+						onClick={() => {
+							setAddVisible(true);
+							updateDashboardQuery({ modal: "add-property" });
+						}}
 					>
-						{executiveDateByOptions.map((option) => (
-							<option key={option.value} value={option.value}>
-								{option.label}
-							</option>
-						))}
-					</select>
-				</ExecutiveDateSelect>
-			</ExecutiveSummaryControls>
+						<PlusOutlined />
+						{TXT.addPropertyButton}
+					</ManageAccountsButton>
+				</ExecutiveSummaryControls>
 
 			<ExecutiveSummaryPanel className='container' $isRTL={isRTL}>
 				<ExecutiveSummaryHeader>
@@ -1050,7 +1084,7 @@ const ManagerMainHotelDashboard = () => {
 					setAccountsVisible(false);
 					clearDashboardModalQuery();
 				}}
-				hotels={userData?.hotelIdsOwner || []}
+				hotels={accountsModalHotels}
 				userId={user?._id}
 				token={token}
 				WORDS={TXT}
@@ -1066,6 +1100,7 @@ const ManagerMainHotelDashboard = () => {
 				hotels={userData?.hotelIdsOwner || []}
 				userId={user?._id}
 				token={token}
+				ownerId={overallOwnerId || dashboardOwnerId}
 				isArabic={isRTL}
 			/>
 
@@ -1257,6 +1292,7 @@ const ManagerMainHotelDashboard = () => {
 						/>
 					);
 				})()}
+			</DashboardBody>
 		</Wrapper>
 	);
 };
@@ -1611,6 +1647,10 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	);
 	const assignedHotelKey = assignedHotelIds.join("|");
 	const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+	const overallView = useMemo(() => {
+		const params = new URLSearchParams(location.search);
+		return params.get("overall") || "";
+	}, [location.search]);
 	const isOrderTakerOnly = isLimitedOrderTakerDashboardUser(user);
 
 	const updateScopedDashboardQuery = useCallback(
@@ -1792,7 +1832,9 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	useEffect(() => {
 		const params = new URLSearchParams(location.search);
 		const shouldOpenAccounts =
-			params.get("modal") === "accounts" && canUseAgentAccountsModal;
+			params.get("modal") === "accounts" &&
+			!["create-account", "update-account"].includes(overallView) &&
+			canUseAgentAccountsModal;
 		if (!shouldOpenAccounts) {
 			if (agentAccountsVisible) setAgentAccountsVisible(false);
 			return;
@@ -1811,6 +1853,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		canUseAgentAccountsModal,
 		hotels,
 		location.search,
+		overallView,
 		selectedHotelId,
 	]);
 
@@ -2020,7 +2063,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	);
 
 	return (
-		<Wrapper>
+		<Wrapper $withOverallMenu $collapsed={collapsed} $isRTL={isRTL}>
 			<TopNavbar
 				fromPage='AgentDashboard'
 				AdminMenuStatus={adminMenuStatus}
@@ -2029,8 +2072,28 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 				setCollapsed={setCollapsed}
 				chosenLanguage={chosenLanguage}
 			/>
+			<AdminOverallSideMenu
+				collapsed={collapsed}
+				setCollapsed={setCollapsed}
+				setAdminMenuStatus={setAdminMenuStatus}
+				chosenLanguage={chosenLanguage}
+			/>
 
-			<AgentDashboardShell className='container' $isRTL={isRTL}>
+			{overallView && (
+				<OverallContent>
+					<OverallStructurePage
+						view={overallView}
+						userId={user?._id}
+						user={user}
+						token={token}
+						ownerId=''
+						chosenLanguage={chosenLanguage}
+					/>
+				</OverallContent>
+			)}
+
+			<DashboardBody $hidden={Boolean(overallView)}>
+				<AgentDashboardShell className='container' $isRTL={isRTL}>
 				<AgentHero>
 					<div>
 						<span>{TXT.roleLabels?.[roleKey] || TXT.eyebrow}</span>
@@ -2064,26 +2127,6 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 						)}
 					</AgentTotals>
 				</AgentHero>
-
-				<AgentSwitcher>
-					<AgentSectionHeader>
-						<strong>{TXT.assignedHotels}</strong>
-						<span>{TXT.toggleHint}</span>
-					</AgentSectionHeader>
-					<AgentHotelToggleGrid>
-						{hotels.map((hotel) => (
-							<button
-								type='button'
-								key={hotel._id}
-								data-active={hotel._id === selectedHotelId ? "true" : "false"}
-								onClick={() => setSelectedHotelId(hotel._id)}
-							>
-								<HomeOutlined />
-								<span>{titleCaseWords(hotel.hotelName || "Hotel")}</span>
-							</button>
-						))}
-					</AgentHotelToggleGrid>
-				</AgentSwitcher>
 
 				{loading ? (
 					<AgentEmpty>{TXT.loading}</AgentEmpty>
@@ -2185,6 +2228,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 				hotels={hotels}
 				userId={user?._id}
 				token={token}
+				ownerId={getScopedOwnerId(hotels[0] || {}, user)}
 				isArabic={isRTL}
 			/>
 
@@ -2274,6 +2318,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					/>
 				</OpenReservationsPanel>
 			</Modal>
+			</DashboardBody>
 		</Wrapper>
 	);
 };
@@ -2293,6 +2338,7 @@ const MainHotelDashboard = () => {
 export default MainHotelDashboard;
 
 const accountRoleOptions = [
+	{ value: "systemadmin", role: 10000, en: "System Admin", ar: "مسؤول النظام" },
 	{ value: "hotelmanager", role: 2000, en: "Hotel Manager", ar: "مدير الفندق" },
 	{ value: "reception", role: 3000, en: "Front Desk Reception", ar: "موظف الاستقبال" },
 	{
@@ -2318,6 +2364,7 @@ const accountRoleOptions = [
 ];
 
 const accountAccessOptions = [
+	{ value: "overall", en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	{ value: "dashboard", en: "Dashboard", ar: "لوحة التحكم" },
 	{ value: "reservations", en: "Reservations", ar: "الحجوزات" },
 	{ value: "ownReservations", en: "Own Reservation List", ar: "حجوزاته فقط" },
@@ -2334,6 +2381,9 @@ const getAccountRoleOption = (roleDescription, role) =>
 	accountRoleOptions[0];
 
 const getDefaultAccess = (roleDescription) => {
+	if (roleDescription === "systemadmin") {
+		return accountAccessOptions.map((option) => option.value);
+	}
 	if (roleDescription === "hotelmanager") {
 		return accountAccessOptions.map((option) => option.value);
 	}
@@ -2495,8 +2545,24 @@ const OwnerAccountsModal = ({
 	canApproveAgents = true,
 }) => {
 	const history = useHistory();
-	const defaultAccountRoles = agentOnly ? ["ordertaker"] : ["reception"];
-	const defaultAccountAccess = getDefaultAccessForRoles(defaultAccountRoles);
+	const location = useLocation();
+	const requestedAccountTab = useMemo(() => {
+		const params = new URLSearchParams(location.search || "");
+		return params.get("accountTab") === "accounts" ? "accounts" : "new";
+	}, [location.search]);
+	const requestedAccountId = useMemo(() => {
+		const params = new URLSearchParams(location.search || "");
+		return params.get("accountId") || "";
+	}, [location.search]);
+	const handledRequestedAccountId = useRef("");
+	const defaultAccountRoles = useMemo(
+		() => (agentOnly ? ["ordertaker"] : ["reception"]),
+		[agentOnly]
+	);
+	const defaultAccountAccess = useMemo(
+		() => getDefaultAccessForRoles(defaultAccountRoles),
+		[defaultAccountRoles]
+	);
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
@@ -2666,6 +2732,9 @@ const OwnerAccountsModal = ({
 				...(Array.isArray(account?.hotelsToSupport)
 					? account.hotelsToSupport
 					: []),
+				...(Array.isArray(account?.hotelIdsOwner)
+					? account.hotelIdsOwner
+					: []),
 				fallbackHotelId,
 			];
 			const ids = rawIds
@@ -2681,6 +2750,13 @@ const OwnerAccountsModal = ({
 			const populatedNames = new Map();
 			if (Array.isArray(account?.hotelsToSupport)) {
 				account.hotelsToSupport.forEach((hotel) => {
+					const id = normalizeHotelId(hotel);
+					const name = titleCaseWords(hotel?.hotelName || hotel?.name || "");
+					if (id && name) populatedNames.set(id, name);
+				});
+			}
+			if (Array.isArray(account?.hotelIdsOwner)) {
+				account.hotelIdsOwner.forEach((hotel) => {
 					const id = normalizeHotelId(hotel);
 					const name = titleCaseWords(hotel?.hotelName || hotel?.name || "");
 					if (id && name) populatedNames.set(id, name);
@@ -2786,7 +2862,7 @@ const OwnerAccountsModal = ({
 
 	useEffect(() => {
 		if (!open) return;
-		setActiveAccountTab("new");
+		setActiveAccountTab(requestedAccountTab);
 		setForm((prev) => ({
 			...prev,
 			hotelIds:
@@ -2801,7 +2877,7 @@ const OwnerAccountsModal = ({
 				: prev.accessTo,
 		}));
 		refreshAccounts();
-	}, [agentOnly, hotelOptions, open, refreshAccounts]);
+	}, [agentOnly, hotelOptions, open, refreshAccounts, requestedAccountTab]);
 
 	useEffect(() => {
 		if (!open) setDocumentPreview(null);
@@ -2995,6 +3071,7 @@ const OwnerAccountsModal = ({
 			getAccountRoleOption(item)
 		);
 		const primaryRole =
+			selectedRoles.find((item) => item.value === "systemadmin") ||
 			selectedRoles.find((item) => item.value === "hotelmanager") ||
 			selectedRoles[0];
 		const isAgentAccount = selectedRoleDescriptions.includes("ordertaker");
@@ -3050,7 +3127,7 @@ const OwnerAccountsModal = ({
 		setEditForm((prev) => ({ ...prev, [field]: value }));
 	};
 
-	const openEditAccount = (account) => {
+	const openEditAccount = useCallback((account) => {
 		const descriptions = Array.isArray(account.roleDescriptions)
 			? account.roleDescriptions
 			: [account.roleDescription || getAccountRoleOption("", account.role).value];
@@ -3089,7 +3166,22 @@ const OwnerAccountsModal = ({
 				: getDefaultAccessForRoles(effectiveRoles),
 			activeUser: account.activeUser !== false,
 		});
-	};
+	}, [accountHotelIds, agentOnly, defaultAccountRoles, hotelOptions]);
+
+	useEffect(() => {
+		if (!open || !requestedAccountId) {
+			handledRequestedAccountId.current = "";
+			return;
+		}
+		if (handledRequestedAccountId.current === requestedAccountId) return;
+		const targetAccount = accounts.find(
+			(account) => String(account._id || "") === String(requestedAccountId)
+		);
+		if (!targetAccount) return;
+		handledRequestedAccountId.current = requestedAccountId;
+		setActiveAccountTab("accounts");
+		openEditAccount(targetAccount);
+	}, [accounts, open, openEditAccount, requestedAccountId]);
 
 	const toggleEditHotel = (hotelId) => {
 		setEditForm((prev) => {
@@ -3164,6 +3256,7 @@ const OwnerAccountsModal = ({
 			getAccountRoleOption(item)
 		);
 		const primaryRole =
+			selectedRoles.find((item) => item.value === "systemadmin") ||
 			selectedRoles.find((item) => item.value === "hotelmanager") ||
 			selectedRoles[0];
 		const isAgentAccount = selectedRoles.some(
@@ -3427,6 +3520,16 @@ const OwnerAccountsModal = ({
 			width: 130,
 			render: (_, row) => {
 				const approvalStatus = String(row.agentApproval?.status || "").toLowerCase();
+				const applicationStatus = String(
+					row.applicationReview?.status || ""
+				).toLowerCase();
+				if (row.activeUser === false && applicationStatus === "pending") {
+					return (
+						<Tag color='gold'>
+							{isRTL ? "قيد المراجعة" : "Pending review"}
+						</Tag>
+					);
+				}
 				if (accountIsAgentAccount(row) && approvalStatus === "pending") {
 					return <Tag color='gold'>{agentApprovalText.pendingApproval}</Tag>;
 				}
@@ -3498,7 +3601,7 @@ const OwnerAccountsModal = ({
 			footer={null}
 			width='min(97vw, 1540px)'
 			style={{ top: 58 }}
-			bodyStyle={{ padding: "14px 18px 16px" }}
+			styles={{ body: { padding: "14px 18px 16px" } }}
 			destroyOnClose={false}
 			className='manager-accounts-modal'
 		>
@@ -4824,8 +4927,49 @@ const getReservationReasonText = (reservation = {}, isRTL = false) => {
 const Wrapper = styled.div`
 	margin-top: 70px;
 	min-height: 100vh;
-	padding: 24px;
+	width: 100%;
+	overflow-x: hidden;
+	padding: ${(props) =>
+		props.$withOverallMenu
+			? props.$isRTL
+				? `10px ${props.$collapsed ? "90px" : "295px"} 10px 10px`
+				: `10px 10px 10px ${props.$collapsed ? "90px" : "295px"}`
+			: "10px"};
 	background: var(--background-light);
+	transition: padding 0.22s ease;
+
+	@media (max-width: 1200px) {
+		padding: ${(props) =>
+			props.$withOverallMenu && props.$collapsed
+				? props.$isRTL
+					? "10px 90px 10px 10px"
+					: "10px 10px 10px 90px"
+				: "10px"};
+	}
+
+	@media (max-width: 560px) {
+		padding: 10px;
+	}
+`;
+
+const DashboardBody = styled.div`
+	display: ${(props) => (props.$hidden ? "none" : "block")};
+`;
+
+const OverallContent = styled.main`
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+	margin: 0;
+	padding-bottom: 2rem;
+
+	@media (max-width: 1200px) {
+		max-width: 100%;
+	}
+
+	@media (max-width: 640px) {
+		padding-bottom: 1.4rem;
+	}
 `;
 
 const CardsGrid = styled.div`
@@ -4833,27 +4977,44 @@ const CardsGrid = styled.div`
 	gap: 1.8rem;
 `;
 
-const PageActions = styled.div`
-	display: flex;
-	justify-content: ${(p) => (p.$isRTL ? "flex-end" : "flex-start")};
-	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
-	gap: 0.65rem;
-	flex-wrap: wrap;
-	margin: 1rem auto 1.2rem;
+const ExecutiveSummaryControls = styled.div`
+	direction: ltr;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	grid-template-areas: ${(p) =>
+		p.$isRTL ? "'action filters spacer'" : "'spacer filters action'"};
+	align-items: center;
+	gap: 0.8rem;
+	margin: 0.85rem auto 1rem;
 
-	@media (max-width: 640px) {
+	> button {
+		grid-area: action;
+		justify-self: ${(p) => (p.$isRTL ? "start" : "end")};
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			"filters"
+			"action";
+		gap: 0.65rem;
 		margin-top: 0.75rem;
+
+		> button {
+			justify-self: stretch;
+		}
 	}
 `;
 
-const ExecutiveSummaryControls = styled.div`
+const ExecutiveFilters = styled.div`
 	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
+	grid-area: filters;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 0.7rem;
+	min-width: 0;
 	flex-wrap: wrap;
-	margin: -0.2rem auto 1rem;
 `;
 
 const ExecutiveRangeGroup = styled.div`
@@ -5231,73 +5392,6 @@ const AgentSummaryTile = styled.div`
 		color: #475569;
 		font-weight: 900;
 		line-height: 1.2;
-	}
-`;
-
-const AgentSwitcher = styled.section`
-	display: grid;
-	gap: 0.65rem;
-	padding: 0.85rem;
-	border: 1px solid #cfe8ff;
-	border-radius: 14px;
-	background: #f8fbff;
-`;
-
-const AgentSectionHeader = styled.div`
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem;
-
-	strong {
-		color: #102033;
-		font-size: 1rem;
-	}
-
-	span {
-		color: #64748b;
-		font-size: 0.78rem;
-		font-weight: 800;
-	}
-
-	@media (max-width: 520px) {
-		align-items: flex-start;
-		flex-direction: column;
-	}
-`;
-
-const AgentHotelToggleGrid = styled.div`
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-	gap: 0.55rem;
-
-	button {
-		min-height: 42px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		border: 1px solid #c8daee;
-		border-radius: 10px;
-		background: #fff;
-		color: #17324d;
-		font-weight: 900;
-		transition: background 0.18s ease, border-color 0.18s ease,
-			box-shadow 0.18s ease;
-	}
-
-	button[data-active="true"] {
-		background: #e8f4ff;
-		border-color: #1677ff;
-		box-shadow: 0 8px 18px rgba(22, 119, 255, 0.14);
-		color: #0b63b6;
-	}
-
-	span {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 `;
 

@@ -1,0 +1,284 @@
+JANNATBOOKING FRONTEND APPLICATION STRUCTURE
+Audited: 2026-05-23
+
+Purpose
+This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
+
+Frontend Runtime
+- hotels_frontend is a Create React App application using React 18, react-router-dom v5, Ant Design v5, styled-components, axios, and domain-specific UI modules.
+- src/App.js is the main route registry.
+- src/auth/AdminRoute.js protects platform admin routes.
+- src/auth/HotelRoute.js protects hotel-management routes and hydrates selectedHotel context for legacy hotel screens.
+- Most API calls are grouped in:
+  - src/AdminModule/apiAdmin.js
+  - src/HotelModule/apiAdmin.js
+
+Top-Level Frontend Structure
+- src/AdminModule/
+  - Platform-admin screens for hotel setup, added hotels, admin reservation tools, support, website tools, expenses, reports, payouts, and integrations.
+- src/HotelModule/
+  - Main hotel-management product: dashboards, overall multi-hotel views, reservations, housekeeping, settings, staff, reports, financials, payments, and support.
+- src/auth/
+  - Authentication helpers and route guards for admin/hotel/public paths.
+- src/components/
+  - Shared website/client-facing components.
+- src/pages/
+  - Public website pages and standalone public flows.
+- src/ReceptionModule/, src/Finance/, src/HouseKeeping*/, src/OwnerDashboard/
+  - Legacy or role-specific wrappers that often redirect into HotelModule routes.
+- src/utils/ and module-level utils/
+  - Shared helpers, super-admin helpers, report utilities, and formatting logic.
+
+Main Route Map In src/App.js
+- Public routes
+  - /
+  - /signup
+    - Public owner/manager registration.
+    - Public agent application with multi-hotel active published hotel selection.
+    - Public job application with one active published hotel and one requested role.
+  - /contact
+  - /pms
+  - /why-x-hotel
+  - /client-payment/:reservationId
+  - /client-payment/:reservationId/:paymentLinkId
+  - password reset routes.
+- AdminRoute routes
+  - /admin/dashboard
+  - /admin/customer-service
+  - /admin/el-integrator
+  - /admin/all-reservations
+  - /admin/jannatbooking-tools
+  - /admin/new-hotel
+  - /admin/add-owner-account
+  - /admin/janat-website
+  - /admin/added-hotels
+  - /admin/overall-hotel-reports
+  - /admin/expenses-financials
+  - /admin/payouts-report
+- HotelRoute routes
+  - /hotel-management/main-dashboard
+  - /hotel-management/dashboard/:userId/:hotelId
+  - /hotel-management/customer-service/:userId/:hotelId
+  - /hotel-management/reservation-history/:userId/:hotelId
+  - /hotel-management/new-reservation/:userId/:hotelId
+  - /hotel-management/settings/:userId/:hotelId
+  - /hotel-management/staff/:userId/:hotelId
+  - /reservation-details/:confirmationNumber
+  - /hotel-management-payment/:userId/:hotelId
+  - /hotel-management/financials/:userId/:hotelId
+  - /hotel-management/house-keeping/:userId/:hotelId
+  - /receipt
+  - /hotel-management/hotel-reports/:userId/:hotelId
+- Legacy redirects
+  - /owner-dashboard redirects to /hotel-management/main-dashboard.
+  - /reception-management/new-reservation redirects to the scoped hotel-management new-reservation route.
+  - /finance/overview redirects to the scoped hotel dashboard.
+  - /house-keeping-management/house-keeping and /house-keeping-employee/house-keeping redirect to the hotel-management housekeeping route.
+
+Frontend Route Guards And Role Behavior
+- src/auth/AdminRoute.js
+  - Requires a signed-in active admin.
+  - Allows role 1000, configured super-admin users, and users whose normalized role descriptions represent superadmin/super admin.
+  - Wraps admin screens with Ant Design ConfigProvider and popup-container handling.
+- src/auth/HotelRoute.js
+  - Builds user permissions from role, roles, roleDescription, roleDescriptions, and accessTo.
+  - Treats role 10000 or roleDescription systemadmin as system-admin access, scoped by assigned hotels.
+  - Allows root owners and admins broad hotel-management access.
+  - Platform super admins must remain global in hotel-management routes even if their account has limited or stale hotel assignment arrays.
+  - Allows limited order takers only to the new-reservation/list-style flows they are allowed to use.
+  - Hydrates localStorage.selectedHotel from the route hotel id so legacy hotel screens keep working.
+  - Allows inactive public applicants with applicationReview.status pending to see only a pending-review dashboard message.
+
+Role Expectations In The Frontend
+- Super admin / role 1000
+  - AdminModule and hotel-management access across hotels.
+  - Also recognize configured super-admin users and normalized role descriptions like superadmin / super admin as the same global platform role.
+  - UI should not hide account-management, staff-management, approval, or hotel-management actions from a true super admin because of hotelIdWork, hotelIdsWork, hotelIdsOwner, hotelsToSupport, or belongsToId.
+  - Overall-dashboard account update screens may send system-admin updates without ownerId query params; the backend is responsible for validating selected hotel IDs globally for super admins.
+- Root owner / role 2000 without belongsToId
+  - Owner-level hotel-management and overall-dashboard access for owned hotels.
+- System admin / role 10000 or systemadmin
+  - Owner-like operational access but limited to assigned hotels.
+- Hotel manager / hotelmanager
+  - Hotel-management access for assigned hotel scope, including operations, settings, staff, reservations, housekeeping, and reports where authorized.
+- Reception / role 3000 or reception
+  - New reservation and reservation-list workflows for assigned hotels.
+- Finance / role 6000 or finance
+  - Financial reports, wallet/financial actions, selected reservation reports, and finance-facing dashboard areas.
+- Order taker / role 7000 or ordertaker
+  - Limited new-reservation and own-reservations access. Booking source should default to agent/company identity.
+  - Public agent applicants remain inactive and pending until a selected hotel approves them.
+- Reservation employee / role 8000 or reservationemployee
+  - Reservation operations, pending confirmations, selected settings, and reservation-related reports.
+- Housekeeping manager / role 4000 or housekeepingmanager
+  - Housekeeping reports, assignment, updates, and operational task management.
+- Housekeeper / role 5000 or housekeeping
+  - Assigned housekeeping tasks and limited housekeeping task visibility.
+
+AdminModule Structure
+- src/AdminModule/AdminDashboard/AdminDashboard.js
+  - Admin dashboard entry. Uses the added-hotels/property-management experience.
+- src/AdminModule/AddedHotels/
+  - Main admin hotel table, add/edit property modal, setup status indicators, hotel activation/deactivation, and hotel jump actions.
+  - Important files include MainHotelDashboard.js and AddHotelForm.js.
+- src/AdminModule/AllReservation/
+  - Admin reservation management, VCC/payment-related flows, and reservation operation tools.
+- src/AdminModule/CustomerService/
+  - Support-case lists, conversations, and admin support workflow.
+- src/AdminModule/Financials/
+  - Admin expenses and financial-report screens.
+- src/AdminModule/HotelsReport/
+  - Admin hotel/reservation report screens and exports.
+- src/AdminModule/JanatWebsite/
+  - Public website hotel/reservation management tools.
+- src/AdminModule/JannatTools/
+  - Admin operational tools.
+- src/AdminModule/NewHotels/
+  - New hotel/property onboarding screens.
+- src/AdminModule/Payment/
+  - Payment administration screens.
+- src/AdminModule/ElIntegrator/
+  - Integration-related admin screens.
+- src/AdminModule/AddOwner/
+  - Owner account creation/management.
+- src/AdminModule/apiAdmin.js
+  - Admin-side API wrapper. Update this file when admin backend endpoints change.
+
+HotelModule Structure
+- src/HotelModule/MainHotelDashboard.js
+  - Main hotel-management shell. Hosts TopNavbar, AdminOverallSideMenu, OverallStructurePage, hotel setup modals, financial modal, and staff/account modals.
+- src/HotelModule/AdminNavbar/
+  - Top navigation, selected hotel context, notifications, language/calendar/settings controls, and hotel switching behavior.
+- src/HotelModule/AdminOverallSideMenu/AdminOverallSideMenu.js
+  - Overall-dashboard side menu. Menu visibility is role-filtered.
+  - Reservations and Financials are expanded by default. Account Management is intentionally not expanded by default.
+  - Pure order-taker/agent accounts should see the Reservations parent with New Reservation, Reservations List, and Pending Reservations. The pending link routes to overall=pending-reservations; backend scoping keeps it to the agent's own pending confirmation, finance pending, rejected, and commission-review reservations for assigned hotels only.
+  - Mobile behavior: the menu starts collapsed on phone/tablet widths, opens as an off-canvas drawer from the language side, and closes from the backdrop or after choosing a link. Do not add effects that depend on collapsed and immediately force it closed, or the mobile toggle will appear broken.
+- src/HotelModule/TheOverallStructure/page.js
+  - Maps query string overall=... to the active overall component.
+  - Main mappings:
+    - summary -> OverallSummary/OverallSummaryMain.
+    - new-reservation -> OverallReservationsList/NewReservationOverall.
+    - reservation-main, reservations-list, reservations -> OverallReservationsList/OverallReservationMain.
+    - pending-reservations -> OverallReservationsList/OverallPendingReservations.
+    - hotel-map -> OverallHotelMap/OverallHotelMapMain.
+    - housekeeping -> OverallHouseKeeping/OverallHouseKeeping.
+    - financial-report, actions, wallet-management -> OverallFinancials components.
+    - account-management, create-account, activate-accounts, update-account -> OverallAccountManagement components.
+    - settings -> OverallSettings/OverallSettingsMain.
+- src/HotelModule/TheOverallStructure/OverallReservationsList/
+  - Multi-hotel reservation overall views, pending reservations, and the embedded overall new-reservation flow.
+  - Overall reservation detail modals reuse ReservationDetail and should keep the hotel name visible in the center action card above the update button so users know which hotel owns the selected reservation.
+  - OverallPendingReservations is read-only for approved order-taker/agent accounts. Agents can see their own pending, rejected, finance-review, and commission-review reservations across assigned hotels, but confirmation-number clicks stay inside the overall detail modal instead of navigating into hotel-staff pending workflows.
+- src/HotelModule/NewReservation/
+  - Single-hotel reservation creation, guest/reservation forms, room selection, calendar/heat-map, pending confirmations, and reservation imports.
+  - Important files include NewReservationMain.js, ZReservationForm.js, ZReservationForm2.js, HotelHeatMap.js, HotelRunnerReservationList.js, and PendingConfirmationReport.js.
+- src/HotelModule/HouseKeeping/
+  - Housekeeping task list, task details, assignment/update flows, and supplies.
+- src/HotelModule/HotelSettings/
+  - Hotel setup and configuration: details, rooms, photos, location, payment settings, OTA/payment/business setup, and completion state.
+- src/HotelModule/HotelStaff/
+  - Staff account creation and staff-role forms.
+- src/HotelModule/Financials/
+  - Hotel financial dashboards, manager financial modal, wallet/agent financial operations.
+  - In the overall financial report/wallet screens, pure order-taker/agent accounts are pinned to their own agent id even if query params are manually changed. They may see assigned-hotel financial data only for their own wallet, reservations, commissions, and claims.
+  - Single-hotel agent wallet ledgers must show rejected wallet-claim reasons clearly in the transactions table and exports, because the notification may be acknowledged before the agent reviews the financial page.
+- Agent overall regression scenario
+  - Sign in as an approved order-taker/agent with multiple assigned hotels and at least one active notification.
+  - Open /hotel-management/main-dashboard?ownerId=...&overall=pending-reservations with and without hotelId. The table should show the agent's own pending/rejected/finance-review reservations across assigned hotels, and no other agent's records.
+  - Click the confirmation number as the agent. It should open the overall reservation details modal and must not navigate into hotel-staff confirmation workflows or expose staff-only confirm/reconcile actions.
+  - Open overall=financial-report, overall=financial-actions, and overall=wallet-management. The UI must stay pinned to the logged-in agent even if agentId is manually changed in the URL, and the visible rows must be only that agent's wallet, reservation, commission, and claim data.
+  - Repeat as reservation employee, finance, manager, system admin, and super admin to confirm their broader menu/table access still works normally.
+- src/HotelModule/HotelReports/
+  - Hotel-level reservation, occupancy, status, booking-source, financial, and export reports.
+- src/HotelModule/ReservationsFolder/
+  - Reservation history/list/details workflows.
+  - ReservationDetail's cycle tracker depends on backend-sanitized adminChangeLog/reservationAuditLog data. It also hides derived tracker rows whose actor is superadmin/admin/systemadmin unless the current user is a true super admin.
+  - singlePreReservationById should send the stored Authorization header when available. The backend treats missing auth as a public/non-super-admin viewer and removes privileged tracker rows.
+- src/HotelModule/CustomerService/
+  - Hotel-side support cases and conversations.
+- src/HotelModule/apiAdmin.js
+  - Hotel-side API wrapper. Update this file when hotel-management backend endpoints change.
+
+Overall Dashboard Menu Rules
+- Owner-like users see the complete overall dashboard:
+  - super admin, role 1000, root owner role 2000, and system admin role 10000/systemadmin within assigned hotel scope.
+- Summary is visible to hotelmanager, finance, reservationemployee, housekeepingmanager, and owner-like users.
+- New reservation is visible to reception, ordertaker, reservationemployee, hotelmanager, and users with accessTo newReservation.
+- Reservation lists are visible to reception, finance, ordertaker, reservationemployee, hotelmanager, and owner-like users.
+- Pending reservations are visible to finance, reservationemployee, hotelmanager, and owner-like users.
+- Housekeeping is visible to housekeepingmanager, housekeeping, hotelmanager, and owner-like users.
+- Financial report/actions/wallet views are visible to finance, hotelmanager, and owner-like users.
+- Hotel map is visible to reception, finance, reservationemployee, hotelmanager, and owner-like users.
+- Settings are visible to reservationemployee, hotelmanager, and owner-like users.
+- Account Management sublinks are hidden for non-owner-like users.
+
+Important UI And UX Notes
+- The application is Arabic/RTL-heavy but still contains English labels and LTR values. Components that show names, emails, dates, confirmation numbers, and hotel labels must handle mixed direction safely.
+- Keep mobile behavior first-class for overall-dashboard filters, reservation forms, tables, admin modals, and side menus.
+- Ant Design dropdowns inside modals must have a popup container/z-index that keeps option clicks usable over the modal mask.
+- Tables should avoid horizontal data collisions by using controlled widths, wrapping, ellipsis/tooltips where appropriate, and responsive card/table alternatives when needed.
+- The overall new-reservation hotel selector is intentionally prominent before hotel selection and should stop attention animation on hover, focus, pointer down, keyboard interaction, or selection.
+
+Frontend Critical Workflows To Protect
+- Public signup
+  - /signup must keep the existing owner flow unchanged when Hotel Manager / Owner is selected.
+  - Without query params, Hotel Manager / Owner is selected by default.
+  - /signup supports short invitation links generated as /signup?invite=<code>. The page resolves the code through GET /api/signup-invitation/:code, then locks the signed hotels, application type, role, agent settings, and optional prefill data.
+  - Legacy /signup?invitationToken=<jwt> links remain supported for backwards compatibility, but new links should use the short invite code.
+  - Invited hotel selections must display hotel names and optional location labels, not raw hotel ObjectIds.
+  - Only hotel managers/owners can apply directly from /signup without a link.
+  - Agent and job/employee signup are invitation-only. Without a valid invitation code/token, the public signup page must show a friendly message directing the applicant to hotel management for the correct link.
+  - Invited agent/employee signup is locked to the verified invitation. The applicant can complete personal details and set password; hotel, role, and agent settings stay locked.
+  - Pending applicants should not reach reservation, finance, settings, or housekeeping workflows until approved.
+  - The pending applicant dashboard should show a clear Arabic pending message, refresh approval status immediately, poll periodically, and move the user into the dashboard after approval.
+  - Attachments are optional and are sent as companyDocuments for reviewer visibility.
+- Overall create-account invitations
+  - /hotel-management/main-dashboard?overall=create-account includes a "Generate custom link for an agent" modal.
+  - The main create-account form intentionally starts with no preselected hotels and no preselected roles. Account creation must be blocked until both sections are selected plus the required identity/password fields.
+  - The invitation modal intentionally starts with no selected application type, no selected hotels, and no selected employee role. Link generation is an explicit button action and must show a toast if required selections are missing.
+  - The modal sends hotels assigned to the manager/owner, the application type, employee role or agent commercial model, and optional prefilled contact/company data to the backend.
+  - New invitation links use a short /signup?invite=<code> URL. The backend stores the invitation payload securely and returns the code; frontend copy/email/WhatsApp actions should only enable after the link is generated.
+  - Backend public signup validation and pending approval still control final access.
+- Overall new reservation
+  - Require hotel selection from the actor's authorized hotels.
+  - Pass selected hotel id and owner id into the embedded NewReservationMain flow.
+  - Keep room inventory and room selection tied to the selected hotel, not stale localStorage.
+  - For agents/order takers, source defaults to agent/company identity. Hotel staff should provide a proper booking source.
+- Single-hotel new reservation
+  - Route /hotel-management/new-reservation/:userId/:hotelId must remain the reference behavior for the embedded overall new-reservation component.
+- Housekeeping
+  - Authorized managers can view task details, assign/update tasks, and notify housekeepers.
+  - Housekeepers should only interact with assigned/authorized tasks.
+- Reservation and housekeeping status
+  - Do not add UI paths that allow non-super-admin users to move closed/completed status backward.
+  - UI should reflect backend restrictions instead of hiding backend failures.
+- Account management
+  - Account creation/update screens must only show hotels the acting user can manage.
+  - For platform super admins, "can manage" means all relevant hotels and accounts. Do not apply scoped staff limitations to role 1000 or superadmin/super admin users.
+  - System-admin saves use /api/overall-dashboard/system-admin/:accountId/:userId. Super admins can assign any existing hotel; scoped users can only assign hotels returned by their allowed overall account context.
+  - Role selection treats System Admin as mutually exclusive. Selecting System Admin must immediately clear all other roles and disable them; unchecking System Admin must reopen the rest of the role options so the account can be changed to hotel manager, reception, finance, reservation employee, housekeeping, or agent.
+  - In update-account, endpoint selection follows the currently selected roles, not the original account role. If System Admin is selected, use the system-admin endpoint; if it is removed, use the hotel-staff update endpoint to convert the account back into a scoped hotel role.
+  - Successful account create/update responses are backed by backend ActivityTracker records. Frontend should keep sending the complete role, hotel scope, accessTo, active state, and relevant agent/company fields so backend audit entries are meaningful.
+  - /hotel-management/main-dashboard?overall=update-account must not preselect an account from accountId query params or auto-select the first table row. The editor panel should show a language-aware prompt asking the user to click an account from the table or search for one, then populate only after explicit selection.
+- Financials and wallets
+  - Finance actions should stay behind finance/owner-like role checks and must use backend validation.
+  - Overall financial-report wallet movement rows show financial status. Rejected wallet claims remain visible with a light red row, display Rejected, show the finance rejection reason when available, and show that they are audit-only/not added to reconciliation. Excel exports include the rejection reason column as well.
+  - Overall pending financial actions includes a second paginated table for pending wallet approvals from finance, separate from reservation financial-action pagination. Approval/rejection actions call the agent-wallet review endpoint so backend notifications and ActivityTracker records stay in sync.
+  - Agent/manager financial dashboards and the overall financial report must show both commission paid and unpaid/due amounts. Finance can mark commission due/paid/no-due in the finance-action modal; reports and exports should preserve that split so agents know what has already been paid out versus what is still outstanding.
+  - Agent-facing top-navbar notifications for account approval/rejection, approved/rejected wallet claims, and accepted reservation/finance decisions are one-click acknowledgements. The frontend removes them immediately and calls the notification acknowledge endpoint; pending operational items remain visible until the backend workflow changes.
+  - The top-navbar notification bell rings only when the live notification total increases after the first feed load for the current user/context. The sound uses Web Audio after the first user interaction, phones also use navigator.vibrate when supported, and the bell animates visually as a fallback.
+  - Top-navbar notification refresh has three sources: initial load, a 60-second visible-tab fallback poll, and socket events. Hidden browser tabs skip fallback/socket refreshes and refresh once when visible again. Keep the assigned hotel scope dependency as a stable string so socket listeners do not rebind on every render.
+  - Top-navbar notification routing is context-aware. Clicks from /hotel-management/main-dashboard stay inside the overall structure: pending reservation confirmation always routes first to overall=pending-reservations; only already-confirmed finance/commission work routes to overall=financial-actions. Reservation/finance overall notification links intentionally do not include reservationId, because the list page should open cleanly without auto-opening review modals. Wallet work goes to overall=wallet-management, housekeeping work goes to overall=housekeeping, and single-hotel clicks route to that hotel's single pending-confirmation flow.
+
+Frontend Change Checklist
+- Start from src/App.js to confirm the route and wrapper guard.
+- Check src/auth/HotelRoute.js or src/auth/AdminRoute.js before changing access behavior.
+- For overall-dashboard changes, check MainHotelDashboard.js, AdminOverallSideMenu.js, TheOverallStructure/page.js, and the target component.
+- For reservation changes, compare the embedded overall flow with /hotel-management/new-reservation/:userId/:hotelId and keep their business behavior aligned.
+- For backend API changes, update src/HotelModule/apiAdmin.js or src/AdminModule/apiAdmin.js and verify every caller.
+- For role-gated UI, check numeric role, roleDescription, roles, roleDescriptions, accessTo, selected hotel, and assigned hotel lists.
+- If a true super admin can see a route but a control is disabled or hidden, check frontend role normalization before assuming the backend scope is wrong. Super admins should be treated as global regardless of assigned hotel arrays.
+- For modals/dropdowns, test clickability inside the modal and ensure popup containers are not hidden by overlays.
+- For responsive changes, test desktop and phone widths, especially RTL text, tables, filters, side menus, and reservation forms.
+- Avoid changing localStorage.selectedHotel behavior without checking legacy components that still depend on it.

@@ -40,10 +40,11 @@ const labels = {
 		checkin: "Check-in",
 		checkout: "Check-out",
 		status: "Status",
-		total: "Total",
-		commission: "Commission",
-		reasons: "Needs Attention",
-		pending: "Pending Confirmation",
+	total: "Total",
+	commission: "Commission",
+	reasons: "Needs Attention",
+	moreDetails: "More Details",
+	pending: "Pending Confirmation",
 		commissionMissing: "Commission missing",
 		noData: "No pending confirmation reservations found.",
 	},
@@ -87,6 +88,7 @@ labels.ar = {
 	total: "الإجمالي",
 	commission: "العمولة",
 	reasons: "سبب المتابعة",
+	moreDetails: "تفاصيل أكثر",
 	pending: "بانتظار التأكيد",
 	commissionMissing: "العمولة غير محددة",
 	noData: "لا توجد حجوزات بانتظار التأكيد.",
@@ -305,6 +307,8 @@ const getPendingWorkflowPermissions = (account = {}) => {
 	const isManagerOrAdmin =
 		roles.includes(1000) ||
 		roles.includes(2000) ||
+		roles.includes(10000) ||
+		descriptions.includes("systemadmin") ||
 		descriptions.includes("hotelmanager");
 	const isFinance =
 		roles.includes(6000) || descriptions.includes("finance");
@@ -851,6 +855,15 @@ const PendingConfirmationReport = ({
 					);
 				},
 			},
+			{
+				title: txt.moreDetails,
+				width: 112,
+				render: (_, record) => (
+					<ClickText type='button' onClick={() => openReservation(record)}>
+						{txt.moreDetails}
+					</ClickText>
+				),
+			},
 		],
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[
@@ -904,7 +917,7 @@ const PendingConfirmationReport = ({
 					loading={loading}
 					pagination={false}
 					size='middle'
-					scroll={{ x: 1100 }}
+					scroll={{ x: 1210 }}
 					locale={{ emptyText: txt.noData }}
 				/>
 			</TableShell>

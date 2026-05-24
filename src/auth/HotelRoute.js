@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Route, Redirect } from "react-router-dom";
-import { isAuthenticated } from "./index";
+import { getSingleUser, isAuthenticated, signout } from "./index";
 import { isSuperAdminUser } from "../AdminModule/utils/superUsers";
 
 const readSelectedHotel = () => {
@@ -58,6 +58,7 @@ const getSupportedHotelIds = (user) => [
 			user?.hotelIdWork,
 			...(Array.isArray(user?.hotelIdsWork) ? user.hotelIdsWork : []),
 			...(Array.isArray(user?.hotelsToSupport) ? user.hotelsToSupport : []),
+			...(Array.isArray(user?.hotelIdsOwner) ? user.hotelIdsOwner : []),
 		]
 			.map(normalizeId)
 			.filter(Boolean)
@@ -84,9 +85,15 @@ const hasRoleDescription = (user, description) =>
 const hasAnyRoleDescription = (user, descriptions = []) =>
 	descriptions.some((description) => hasRoleDescription(user, description));
 
+const isSystemAdminUser = (user) =>
+	hasRole(user, 10000) ||
+	hasRoleDescription(user, "systemadmin") ||
+	hasRoleDescription(user, "system admin");
+
 const isFullReservationAccessUser = (user) =>
 	isSuperAdminUser(user) ||
 	hasRole(user, 1000) ||
+	isSystemAdminUser(user) ||
 	hasRole(user, 2000) ||
 	hasRole(user, 3000) ||
 	hasRole(user, 8000) ||
@@ -128,10 +135,24 @@ const isScopedHotelUser = (user) =>
 	hasScopedHotelRole(user) &&
 	getSupportedHotelIds(user).length > 0;
 
+const isPendingApplicationUser = (user = {}) =>
+	user?.activeUser === false &&
+	String(user?.applicationReview?.status || "").toLowerCase() === "pending";
+
 const pathAllowsRole = (pathname = "", user, search = "") => {
+	if (isPendingApplicationUser(user)) {
+		return pathname.includes("/hotel-management/main-dashboard");
+	}
+
 	const isScopedManager = hasRole(user, 2000) && hasRoleDescription(user, "hotelmanager");
 
 	if (hasRole(user, 1000)) return true;
+	if (isSystemAdminUser(user)) {
+		return (
+			pathname.includes("/hotel-management") ||
+			pathname.includes("/hotel-management-payment")
+		);
+	}
 	if (hasRole(user, 2000) && !isScopedHotelUser(user)) return true;
 	if (isScopedManager) return true;
 
@@ -197,6 +218,11 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 	const pathname = location?.pathname || "";
 	const search = location?.search || "";
 	if (!pathname.includes("/hotel-management")) return null;
+	if (isPendingApplicationUser(user)) {
+		return pathname.includes("/hotel-management/main-dashboard")
+			? null
+			: { pathname: "/hotel-management/main-dashboard" };
+	}
 
 	const isReceptionOnly =
 		(hasRole(user, 3000) || hasRoleDescription(user, "reception")) &&
@@ -206,7 +232,8 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 	const isReservationEmployeeOnly =
 		(hasRole(user, 8000) || hasRoleDescription(user, "reservationemployee")) &&
 		!hasRole(user, 1000) &&
-		!hasRole(user, 2000);
+		!hasRole(user, 2000) &&
+		!isSystemAdminUser(user);
 
 	if (!isReceptionOnly && !isOrderTakerOnly && !isReservationEmployeeOnly)
 		return null;
@@ -241,7 +268,10 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 };
 
 const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
-	if (!user || user.activeUser === false) return false;
+	if (!user) return false;
+	if (user.activeUser === false) {
+		return isPendingApplicationUser(user) && pathAllowsRole(pathname, user, search);
+	}
 	if (isSuperAdminUser(user)) return true;
 
 	const role = Number(user.role);
@@ -251,12 +281,22 @@ const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
 	if (!pathAllowsRole(pathname, user, search)) return false;
 
 	if (!urlHotelId) {
-		return role === 1000 || role === 2000 || isScopedHotelUser(user);
+		return (
+			role === 1000 ||
+			role === 2000 ||
+			isSystemAdminUser(user) ||
+			isScopedHotelUser(user)
+		);
 	}
 
 	if (role === 1000) {
 		const supportIds = getSupportedHotelIds(user);
 		return supportIds.length === 0 || supportIds.includes(urlHotelId);
+	}
+
+	if (isSystemAdminUser(user)) {
+		const supportIds = getSupportedHotelIds(user);
+		return supportIds.includes(urlHotelId);
 	}
 
 	if (isScopedHotelUser(user)) {
@@ -276,6 +316,199 @@ const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
 	}
 
 	return false;
+};
+
+// Legacy copy kept for compatibility while the clean RTL copy below drives the UI.
+// eslint-disable-next-line no-unused-vars
+const pendingApplicationText = (user = {}) => {
+	const type = String(user.applicationReview?.type || "").toLowerCase();
+	return {
+		title: type === "job" ? "طلب الوظيفة قيد المراجعة" : "طلب الوكيل قيد المراجعة",
+		body:
+			type === "job"
+				? "تم استلام طلبك وسيظهر للفندق المختار للمراجعة أو تحديد المقابلة. لن تتمكن من استخدام النظام حتى تتم الموافقة."
+				: "تم استلام طلب الوكيل وسيظهر للفنادق المختارة للمراجعة. لن تتمكن من إنشاء حجوزات حتى تتم الموافقة من أحد الفنادق.",
+		status: "قيد المراجعة",
+		checking: "جاري التحقق...",
+		refreshStatus: "تحديث حالة الطلب",
+		stillPending: "لا يزال الطلب قيد المراجعة. سنقوم بتحديث الصفحة تلقائيا عند الموافقة.",
+		checkFailed: "تعذر التحقق من الحالة الآن. يرجى المحاولة مرة أخرى بعد قليل.",
+		approved: "تمت الموافقة على الحساب. سيتم فتح لوحة التحكم الآن.",
+		signout: "تسجيل الخروج",
+	};
+};
+
+const pendingApplicationTextClean = (user = {}) => {
+	const type = String(user.applicationReview?.type || "").toLowerCase();
+	return {
+		title: type === "job" ? "طلب الوظيفة قيد المراجعة" : "طلب الوكيل قيد المراجعة",
+		body:
+			type === "job"
+				? "تم استلام طلبك وسيظهر للفندق المختار للمراجعة أو تحديد المقابلة. لن تتمكن من استخدام النظام حتى تتم الموافقة."
+				: "تم استلام طلب الوكيل وسيظهر للفنادق المختارة للمراجعة. لن تتمكن من إنشاء حجوزات حتى تتم الموافقة من أحد الفنادق.",
+		status: "قيد المراجعة",
+		checking: "جاري التحقق...",
+		refreshStatus: "تحديث حالة الطلب",
+		stillPending: "لا يزال الطلب قيد المراجعة. سنقوم بتحديث الصفحة تلقائيا عند الموافقة.",
+		checkFailed: "تعذر التحقق من الحالة الآن. يرجى المحاولة مرة أخرى بعد قليل.",
+		approved: "تمت الموافقة على الحساب. سيتم فتح لوحة التحكم الآن.",
+		signout: "تسجيل الخروج",
+	};
+};
+
+const PendingApplicationPage = ({ user = {} }) => {
+	const text = pendingApplicationTextClean(user);
+	const [checking, setChecking] = useState(false);
+	const [approvedMessage, setApprovedMessage] = useState("");
+	const [statusMessage, setStatusMessage] = useState("");
+
+	const refreshApplicationStatus = async ({ showPendingMessage = false } = {}) => {
+		const auth = isAuthenticated();
+		if (!auth?.token || !auth?.user?._id) return;
+		setChecking(true);
+		if (showPendingMessage) setStatusMessage("");
+		try {
+			const latest = await getSingleUser(auth.user._id, auth.token);
+			if (latest && !latest.error) {
+				const nextAuth = {
+					...auth,
+					user: {
+						...(auth.user || {}),
+						...latest,
+					},
+				};
+				localStorage.setItem("jwt", JSON.stringify(nextAuth));
+				const stillPending =
+					latest.activeUser === false &&
+					String(latest.applicationReview?.status || "").toLowerCase() ===
+						"pending";
+				if (!stillPending) {
+					setApprovedMessage(text.approved);
+					window.setTimeout(() => {
+						window.location.href = "/hotel-management/main-dashboard";
+					}, 850);
+				} else if (showPendingMessage) {
+					setStatusMessage(text.stillPending);
+				}
+			} else if (showPendingMessage) {
+				setStatusMessage(text.checkFailed);
+			}
+		} catch {
+			if (showPendingMessage) setStatusMessage(text.checkFailed);
+		} finally {
+			setChecking(false);
+		}
+	};
+
+	useEffect(() => {
+		refreshApplicationStatus();
+		const timer = window.setInterval(refreshApplicationStatus, 30000);
+		return () => window.clearInterval(timer);
+		// The status check reads current auth from localStorage intentionally.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	return (
+		<div
+			dir='rtl'
+			style={{
+				minHeight: "calc(100vh - 70px)",
+				display: "grid",
+				placeItems: "center",
+				padding: "96px 18px 32px",
+				background: "#f5f8fc",
+			}}
+		>
+			<section
+				style={{
+					width: "min(680px, 100%)",
+					border: "1px solid #cfe8ff",
+					borderRadius: 14,
+					background: "#fff",
+					boxShadow: "0 14px 34px rgba(15, 23, 42, 0.08)",
+					padding: "28px 24px",
+					textAlign: "right",
+				}}
+			>
+				<span
+					style={{
+						display: "inline-flex",
+						marginBottom: 14,
+						border: "1px solid #ffd591",
+						borderRadius: 999,
+						background: "#fff7e6",
+						color: "#ad6800",
+						fontWeight: 900,
+						padding: "6px 12px",
+					}}
+				>
+					{text.status}
+				</span>
+				<h1 style={{ color: "#102a43", fontSize: 26, margin: "0 0 12px" }}>
+					{text.title}
+				</h1>
+				<p style={{ color: "#475467", fontWeight: 800, lineHeight: 1.8, margin: 0 }}>
+					{text.body}
+				</p>
+				{approvedMessage && (
+					<p
+						style={{
+							margin: "18px 0 0",
+							color: "#027a48",
+							fontWeight: 900,
+						}}
+					>
+						{approvedMessage}
+					</p>
+				)}
+				{statusMessage && !approvedMessage && (
+					<p
+						style={{
+							margin: "18px 0 0",
+							color: "#344054",
+							fontWeight: 900,
+						}}
+					>
+						{statusMessage}
+					</p>
+				)}
+				<button
+					type='button'
+					onClick={() =>
+						refreshApplicationStatus({ showPendingMessage: true })
+					}
+					disabled={checking}
+					style={{
+						marginTop: 22,
+						marginInlineEnd: 10,
+						border: 0,
+						borderRadius: 10,
+						background: checking ? "#8cbfff" : "#1677ff",
+						color: "#fff",
+						fontWeight: 900,
+						padding: "10px 18px",
+					}}
+				>
+					{checking ? text.checking : text.refreshStatus}
+				</button>
+				<button
+					type='button'
+					onClick={() => signout(() => { window.location.href = "/"; })}
+					style={{
+						marginTop: 12,
+						border: 0,
+						borderRadius: 10,
+						background: "#344054",
+						color: "#fff",
+						fontWeight: 900,
+						padding: "10px 18px",
+					}}
+				>
+					{text.signout}
+				</button>
+			</section>
+		</div>
+	);
 };
 
 const HotelContextGate = ({ children, hotelId, userId }) => {
@@ -380,6 +613,10 @@ const HotelRoute = ({ component: Component, ...rest }) => (
 						}}
 					/>
 				);
+			}
+
+			if (isPendingApplicationUser(user)) {
+				return <PendingApplicationPage user={user} />;
 			}
 
 			const isHotelManagement =

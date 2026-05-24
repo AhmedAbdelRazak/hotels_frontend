@@ -951,6 +951,10 @@ const MainHotelDashboardAdmin = () => {
 					open={addVisible}
 					onCancel={() => setAddVisible(false)}
 					footer={null}
+					className='admin-add-hotel-modal'
+					wrapClassName='admin-add-hotel-modal-wrap'
+					zIndex={21000}
+					styles={{ body: { overflow: "visible" } }}
 					destroyOnClose
 				>
 					<AddHotelForm closeAddHotelModal={() => setAddVisible(false)} />

@@ -81,6 +81,42 @@ const isLimitedOrderTakerAccount = (account = {}) => {
 	return hasOrderTakingScope && !hasFullReservationScope;
 };
 
+const normalizeAuditRoleKey = (value = "") =>
+	String(value || "")
+		.toLowerCase()
+		.replace(/[\s_-]+/g, "")
+		.trim();
+
+const isPrivilegedAuditActor = (actor) => {
+	if (!actor || typeof actor !== "object") return false;
+	const roleValues = [
+		actor.role,
+		actor.roleDescription,
+		actor.userRole,
+		actor.adminRole,
+		...(Array.isArray(actor.roles) ? actor.roles : []),
+		...(Array.isArray(actor.roleDescriptions) ? actor.roleDescriptions : []),
+	];
+	const roleNumbers = roleValues
+		.map((role) => Number(role))
+		.filter((role) => Number.isFinite(role));
+	const roleKeys = roleValues.map(normalizeAuditRoleKey).filter(Boolean);
+	return (
+		roleNumbers.some((role) => role === 1000 || role === 10000) ||
+		roleKeys.some((role) =>
+			[
+				"admin",
+				"administrator",
+				"platformadmin",
+				"superadmin",
+				"systemadmin",
+				"systemadministrator",
+			].includes(role),
+		) ||
+		isPrivilegedAuditActor(actor.previewedBy)
+	);
+};
+
 const isOrderTakerEditableReservation = (reservation = {}) => {
 	const status = String(
 		reservation?.reservation_status || reservation?.state || "",
@@ -1177,6 +1213,24 @@ const Header = styled.div`
 	.top-guest-actions button:last-child {
 		background: var(--pms-cyan) !important;
 		border-color: var(--pms-cyan) !important;
+	}
+
+	.top-hotel-name {
+		align-self: center;
+		background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+		border: 1px solid #fed7aa;
+		border-radius: 999px;
+		box-shadow: 0 8px 18px rgba(217, 119, 6, 0.12);
+		color: #0f4c81;
+		font-size: clamp(1rem, 1.45vw, 1.28rem);
+		font-weight: 950;
+		line-height: 1.2;
+		margin: 0 auto 12px;
+		max-width: min(360px, 100%);
+		overflow-wrap: anywhere;
+		padding: 8px 18px;
+		text-align: center;
+		text-transform: capitalize;
 	}
 
 	.top-request-button {
@@ -3664,17 +3718,26 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const canSeeReservationTracker =
 		user?.activeUser !== false &&
 		(isSuperAdminUser(user) ||
-			activeRoleNumbers.some((role) => [1000, 2000, 6000, 8000].includes(role)) ||
+			activeRoleNumbers.some((role) =>
+				[1000, 2000, 6000, 8000, 10000].includes(role)
+			) ||
 			activeRoleDescriptions.some((role) =>
-				["hotelmanager", "finance", "reservationemployee"].includes(role),
+				[
+					"hotelmanager",
+					"systemadmin",
+					"finance",
+					"reservationemployee",
+				].includes(role),
 			));
 	const canManagePendingDecision =
 		user?.activeUser !== false &&
 		canFullManageReservation &&
 		(isSuperAdminUser(user) ||
-			activeRoleNumbers.some((role) => [1000, 2000, 8000].includes(role)) ||
+			activeRoleNumbers.some((role) =>
+				[1000, 2000, 8000, 10000].includes(role)
+			) ||
 			activeRoleDescriptions.some((role) =>
-				["hotelmanager", "reservationemployee"].includes(role),
+				["hotelmanager", "systemadmin", "reservationemployee"].includes(role),
 			));
 
 	const normalizeNumber = useCallback((value, fallback = 0) => {
@@ -4648,8 +4711,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [chosenLanguage, updatePendingDecision]);
 	const reservationCycleRows = useMemo(() => {
 		const rows = [];
+		const canSeePrivilegedTrackerEntries = isSuperAdminUser(user);
 		const pushRow = ({ at, title, by, detail }) => {
 			if (!at && !title && !detail) return;
+			if (!canSeePrivilegedTrackerEntries && isPrivilegedAuditActor(by)) return;
 			rows.push({
 				at: at ? new Date(at) : null,
 				title: title || "Reservation update",
@@ -4743,7 +4808,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					: 0;
 			return bTime - aTime;
 		});
-	}, [chosenLanguage, formatMoney, reservation]);
+	}, [chosenLanguage, formatMoney, reservation, user]);
 
 	const handlePaymentBreakdownValueChange = (key, rawValue) => {
 		if (key === "paid_at_hotel_cash" && isCashLocked) {
@@ -5597,6 +5662,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const currentReservationStatusValue = normalizeReservationStatusValue(
 		reservation?.reservation_status || reservation?.state,
 	);
+	const displayHotelNameRaw =
+		hotelDetails?.hotelName ||
+		reservation?.hotelName ||
+		reservation?.hotelId?.hotelName ||
+		"";
+	const displayHotelName = displayHotelNameRaw
+		? formatLeadingCapital(displayHotelNameRaw)
+		: "";
 
 	return (
 		<Wrapper
@@ -5626,7 +5699,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						}`}
 						rootClassName='reservation-update-modal-root'
 						width='min(94vw, 1580px)'
-						bodyStyle={{ padding: 0 }}
+						styles={{ body: { padding: 0 } }}
 						style={{
 							top: 10,
 							paddingBottom: 0,
@@ -6382,7 +6455,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						centered
 						width='min(92vw, 720px)'
 						zIndex={2200}
-						bodyStyle={{ paddingTop: 8 }}
+						styles={{ body: { paddingTop: 8 } }}
 					>
 						<PricingBreakdownModalContent
 							$isArabic={chosenLanguage === "Arabic"}
@@ -6470,7 +6543,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						centered
 						width='min(92vw, 620px)'
 						zIndex={2200}
-						bodyStyle={{ paddingTop: 8 }}
+						styles={{ body: { paddingTop: 8 } }}
 					>
 						{roomTableRows && roomTableRows.length > 0 ? (
 							<div style={{ overflowX: "auto" }}>
@@ -6723,6 +6796,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							</Section>
 
 							<Section className='top-request-card'>
+								{displayHotelName ? (
+									<div className='top-hotel-name'>{displayHotelName}</div>
+								) : null}
 								<button
 									className='top-request-button'
 									onClick={openEditReservationModal}

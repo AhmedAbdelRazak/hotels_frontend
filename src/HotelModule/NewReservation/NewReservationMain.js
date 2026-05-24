@@ -4,7 +4,7 @@ import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled, { createGlobalStyle, keyframes } from "styled-components";
 // eslint-disable-next-line
-import { Link, useHistory, useLocation } from "react-router-dom";
+import { Link, useHistory, useLocation, useParams } from "react-router-dom";
 import { useCartContext } from "../../cart_context";
 import moment from "moment";
 import ZReservationForm from "./ZReservationForm";
@@ -36,7 +36,53 @@ import { normalizePaymentMethod } from "../utils/paymentMethods";
 const defaultAgentBookingSource = (user) =>
 	String(user?.companyName || user?.name || user?.email || "").trim();
 
-const NewReservationMain = () => {
+const normalizeReservationId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
+
+const readSelectedHotelFromStorage = () => {
+	try {
+		return JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	} catch (error) {
+		return {};
+	}
+};
+
+const resolveReservationOwnerId = (hotel = {}, fallbackOwnerId = "") =>
+	normalizeReservationId(
+		hotel.ownerId ||
+			hotel.belongsTo?._id ||
+			hotel.belongsTo ||
+			hotel.hotelOwnerId ||
+			fallbackOwnerId,
+	);
+
+const normalizeReservationHotelSelection = (hotel = {}, fallbackOwnerId = "") => {
+	const ownerId = resolveReservationOwnerId(hotel, fallbackOwnerId);
+	return {
+		...hotel,
+		_id: normalizeReservationId(hotel._id),
+		ownerId,
+		belongsTo: ownerId
+			? {
+					...(hotel.belongsTo && typeof hotel.belongsTo === "object"
+						? hotel.belongsTo
+						: {}),
+					_id: ownerId,
+			  }
+			: hotel.belongsTo,
+	};
+};
+
+const NewReservationMain = ({
+	embedded = false,
+	forceNewReservation = false,
+	selectedHotelOverride = null,
+	hotelIdOverride = "",
+	ownerIdOverride = "",
+} = {}) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const { value: initialCollapsed, hasStored: hasStoredCollapsed } =
 		getStoredMenuCollapsed();
@@ -62,7 +108,9 @@ const NewReservationMain = () => {
 	const [searchClicked, setSearchClicked] = useState(false);
 	const [searchedReservation, setSearchedReservation] = useState("");
 	const [roomInventory, setRoomInventory] = useState([]);
-	const [activeTab, setActiveTab] = useState("list");
+	const [activeTab, setActiveTab] = useState(
+		forceNewReservation ? "newReservation" : "list",
+	);
 	const [sendEmail, setSendEmail] = useState(false);
 	const [total_guests, setTotalGuests] = useState("");
 	const [allReservationsHeatMap, setAllReservationsHeatMap] = useState([]);
@@ -104,10 +152,11 @@ const NewReservationMain = () => {
 	const roleDescriptions = getAccountRoleDescriptions(user);
 	const financeOnlyReservationView =
 		(roleNumbers.includes(6000) || roleDescriptions.includes("finance")) &&
-		![1000, 2000, 3000, 7000, 8000].some((role) =>
+		![1000, 2000, 3000, 7000, 8000, 10000].some((role) =>
 			roleNumbers.includes(role),
 		) &&
 		!roleDescriptions.includes("hotelmanager") &&
+		!roleDescriptions.includes("systemadmin") &&
 		!roleDescriptions.includes("reception") &&
 		!roleDescriptions.includes("ordertaker") &&
 		!roleDescriptions.includes("reservationemployee");
@@ -124,14 +173,42 @@ const NewReservationMain = () => {
 		role: user?.role || "",
 		roleDescription: user?.roleDescription || "",
 	};
-	const selectedHotelLocalStorage =
-		JSON.parse(localStorage.getItem("selectedHotel")) || {};
-
 	const { chosenLanguage } = useCartContext();
 
 	const history = useHistory();
 	const location = useLocation();
+	const { userId: routeOwnerId = "", hotelId: routeHotelId = "" } = useParams();
 	const lastAutoSearchRef = useRef("");
+	const selectedHotelLocalStorage = normalizeReservationHotelSelection(
+		selectedHotelOverride?._id
+			? selectedHotelOverride
+			: readSelectedHotelFromStorage(),
+		ownerIdOverride || routeOwnerId,
+	);
+	const effectiveHotelId =
+		normalizeReservationId(hotelIdOverride) ||
+		normalizeReservationId(routeHotelId) ||
+		normalizeReservationId(selectedHotelLocalStorage._id);
+	const effectiveOwnerId = resolveReservationOwnerId(
+		selectedHotelLocalStorage,
+		ownerIdOverride || routeOwnerId || (user?.role === 2000 ? user?._id : ""),
+	);
+	const navigationOwnerId =
+		effectiveOwnerId || normalizeReservationId(user?._id);
+	const navigationHotelId =
+		effectiveHotelId || normalizeReservationId(selectedHotelLocalStorage._id);
+
+	useEffect(() => {
+		if (!selectedHotelOverride?._id) return;
+		localStorage.setItem(
+			"selectedHotel",
+			JSON.stringify(selectedHotelLocalStorage),
+		);
+	}, [
+		effectiveOwnerId,
+		selectedHotelLocalStorage,
+		selectedHotelOverride?._id,
+	]);
 
 	useEffect(() => {
 		if (!limitedOrderTakerAccount || !agentDefaultBookingSource) return;
@@ -139,6 +216,13 @@ const NewReservationMain = () => {
 	}, [agentDefaultBookingSource, limitedOrderTakerAccount]);
 
 	useEffect(() => {
+		if (forceNewReservation) {
+			if (activeTab !== "newReservation") {
+				setActiveTab("newReservation");
+			}
+			return;
+		}
+
 		if (
 			limitedOrderTakerAccount &&
 			!isOrderTakerReservationSearchAllowed(location.search)
@@ -190,6 +274,7 @@ const NewReservationMain = () => {
 	}, [
 		activeTab,
 		canConfirmReservations,
+		forceNewReservation,
 		history,
 		limitedOrderTakerAccount,
 		location.pathname,
@@ -258,19 +343,15 @@ const NewReservationMain = () => {
 		return [year, month, day].join("-");
 	};
 
-	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
-
 	const gettingHotelData = () => {
+		if (!user?._id || !token || !effectiveHotelId || !effectiveOwnerId) {
+			return;
+		}
 		hotelAccount(user._id, token, user._id).then((data) => {
 			if (data && data.error) {
 				console.log(data.error);
 			} else {
 				setValues(data);
-
-				const userId =
-					user.role === 2000
-						? user._id
-						: selectedHotelLocalStorage.belongsTo._id;
 
 				const endDate = new Date();
 				const startDate = new Date();
@@ -283,21 +364,19 @@ const NewReservationMain = () => {
 				setStart_date_Map(moment(heatMapStartDate));
 				setEnd_date_Map(moment(heatMapEndDate));
 
-				const selectedHotelLS =
-					JSON.parse(localStorage.getItem("selectedHotel")) || {};
+				const selectedHotelLS = selectedHotelLocalStorage;
 				if (!selectedHotelLS || !selectedHotelLS._id) {
 					console.log("No hotel selected");
 					return;
 				}
-				const hotelId = selectedHotelLS._id;
+				const hotelId = effectiveHotelId;
 
 				getHotelById(hotelId).then((data2) => {
 					if (data2 && data2.error) {
 						console.log(data2.error);
 					} else {
 						if (data && data.name && data._id && data2) {
-							const belongsToId =
-								user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id;
+							const belongsToId = effectiveOwnerId;
 
 							if (heatMapStartDate && heatMapEndDate) {
 								getHotelReservationsCurrent(hotelId, belongsToId).then(
@@ -343,10 +422,12 @@ const NewReservationMain = () => {
 								setAllReservations([]);
 							}
 
-							if (!hotelDetails) setHotelDetails(data2);
+							if (!hotelDetails || hotelDetails._id !== data2._id) {
+								setHotelDetails(data2);
+							}
 
 							if (!hotelRooms || hotelRooms.length === 0) {
-								getHotelRooms(hotelId, userId).then((data3) => {
+								getHotelRooms(hotelId, belongsToId).then((data3) => {
 									if (data3 && data3.error) {
 										console.log(data3.error);
 									} else {
@@ -362,7 +443,7 @@ const NewReservationMain = () => {
 	};
 
 	const gettingOverallRoomsSummary = () => {
-		if (start_date && end_date) {
+		if (start_date && end_date && hotelDetails?._id) {
 			const formattedStartDate = formatDate(start_date);
 			const formattedEndDate = formatDate(end_date);
 			getListOfRoomSummary(
@@ -752,8 +833,7 @@ const NewReservationMain = () => {
 			);
 		}
 
-		const selectedHotelLS =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
+		const selectedHotelLS = selectedHotelLocalStorage;
 		if (!selectedHotelLS || !selectedHotelLS._id) {
 			console.log("No hotel selected");
 			return;
@@ -917,7 +997,7 @@ const NewReservationMain = () => {
 			});
 		} else {
 			createNewReservation(
-				user.role === 2000 ? user._id : selectedHotelLS.belongsTo._id,
+				effectiveOwnerId || selectedHotelLS.belongsTo?._id || user._id,
 				hotelDetails._id,
 				token,
 				new_reservation,
@@ -941,7 +1021,7 @@ const NewReservationMain = () => {
 	useEffect(() => {
 		gettingHotelData();
 		// eslint-disable-next-line
-	}, [start_date, end_date]);
+	}, [start_date, end_date, effectiveHotelId, effectiveOwnerId]);
 
 	const getRoomInventory = () => {
 		const formattedStartDate = formatDate(start_date);
@@ -963,7 +1043,7 @@ const NewReservationMain = () => {
 		gettingOverallRoomsSummary();
 		if (start_date && end_date) getRoomInventory();
 		// eslint-disable-next-line
-	}, [start_date, end_date]);
+	}, [start_date, end_date, hotelDetails?._id]);
 
 	useEffect(() => {
 		if (!canConfirmReservations || !hotelDetails?._id || !user?._id) {
@@ -995,33 +1075,37 @@ const NewReservationMain = () => {
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			$show={collapsed}
 			$isArabic={chosenLanguage === "Arabic"}
+			$embedded={embedded}
 		>
 			<ReservationModalLayerStyles />
 			<div className='grid-container-main'>
-				<div className='navcontent'>
-					{chosenLanguage === "Arabic" ? (
-						<AdminNavbarArabic
-							fromPage='NewReservation'
-							AdminMenuStatus={AdminMenuStatus}
-							setAdminMenuStatus={setAdminMenuStatus}
-							collapsed={collapsed}
-							setCollapsed={setCollapsed}
-							chosenLanguage={chosenLanguage}
-						/>
-					) : (
-						<AdminNavbar
-							fromPage='NewReservation'
-							AdminMenuStatus={AdminMenuStatus}
-							setAdminMenuStatus={setAdminMenuStatus}
-							collapsed={collapsed}
-							setCollapsed={setCollapsed}
-							chosenLanguage={chosenLanguage}
-						/>
-					)}
-				</div>
+				{!embedded && (
+					<div className='navcontent'>
+						{chosenLanguage === "Arabic" ? (
+							<AdminNavbarArabic
+								fromPage='NewReservation'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						) : (
+							<AdminNavbar
+								fromPage='NewReservation'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						)}
+					</div>
+				)}
 
 				<div className='otherContentWrapper'>
-					<TabsShell $wide={activeTab === "list"}>
+					{!embedded && (
+						<TabsShell $wide={activeTab === "list"}>
 						<div className='tab-grid'>
 							<Tab
 								$isHidden={!canShowReservationTab("heatmap")}
@@ -1029,11 +1113,7 @@ const NewReservationMain = () => {
 								onClick={() => {
 									setActiveTab("heatmap");
 									history.push(
-										`/hotel-management/new-reservation/${
-											user.role === 2000
-												? user._id
-												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?heatmap`,
+										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?heatmap`,
 									);
 								}}
 							>
@@ -1047,11 +1127,7 @@ const NewReservationMain = () => {
 								onClick={() => {
 									setActiveTab("reserveARoom");
 									history.push(
-										`/hotel-management/new-reservation/${
-											user.role === 2000
-												? user._id
-												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?reserveARoom`,
+										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?reserveARoom`,
 									);
 								}}
 							>
@@ -1063,11 +1139,7 @@ const NewReservationMain = () => {
 								onClick={() => {
 									setActiveTab("newReservation");
 									history.push(
-										`/hotel-management/new-reservation/${
-											user.role === 2000
-												? user._id
-												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?newReservation`,
+										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?newReservation`,
 									);
 								}}
 							>
@@ -1081,11 +1153,7 @@ const NewReservationMain = () => {
 								onClick={() => {
 									setActiveTab("list");
 									history.push(
-										`/hotel-management/new-reservation/${
-											user.role === 2000
-												? user._id
-												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?list=&page=1`,
+										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?list=&page=1`,
 									);
 								}}
 							>
@@ -1100,11 +1168,7 @@ const NewReservationMain = () => {
 								onClick={() => {
 									setActiveTab("housingreport");
 									history.push(
-										`/hotel-management/new-reservation/${
-											user.role === 2000
-												? user._id
-												: selectedHotel.belongsTo._id
-										}/${selectedHotelLocalStorage._id}?pendingConfirmation`,
+										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?pendingConfirmation`,
 									);
 								}}
 							>
@@ -1118,7 +1182,8 @@ const NewReservationMain = () => {
 								) : null}
 							</Tab>
 						</div>
-					</TabsShell>
+						</TabsShell>
+					)}
 
 					<div
 						className={`container-wrapper ${
@@ -1330,8 +1395,9 @@ function isLimitedOrderTakerAccount(account = {}) {
 		(Array.isArray(account?.accessTo) &&
 			account.accessTo.includes("ownReservations"));
 	const hasFullReservationScope =
-		[1000, 2000, 3000, 8000].some((role) => roleNumbers.includes(role)) ||
+		[1000, 2000, 3000, 8000, 10000].some((role) => roleNumbers.includes(role)) ||
 		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("systemadmin") ||
 		roleDescriptions.includes("reception") ||
 		roleDescriptions.includes("reservationemployee");
 	return hasOrderTakingScope && !hasFullReservationScope;
@@ -1341,8 +1407,9 @@ function canAccessPendingConfirmation(account = {}) {
 	const roleNumbers = getAccountRoleNumbers(account);
 	const roleDescriptions = getAccountRoleDescriptions(account);
 	return (
-		[1000, 2000, 6000, 8000].some((role) => roleNumbers.includes(role)) ||
+		[1000, 2000, 6000, 8000, 10000].some((role) => roleNumbers.includes(role)) ||
 		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("systemadmin") ||
 		roleDescriptions.includes("finance") ||
 		roleDescriptions.includes("reservationemployee")
 	);
@@ -1366,15 +1433,18 @@ const ReservationModalLayerStyles = createGlobalStyle`
 
 const NewReservationMainWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 70px;
-	min-height: calc(100vh - 70px);
+	margin-top: ${(props) => (props.$embedded ? "0" : "70px")};
+	min-height: ${(props) =>
+		props.$embedded ? "auto" : "calc(100vh - 70px)"};
 	background: #f7f8fc;
 
 	.grid-container-main {
 		direction: ltr;
 		display: grid;
 		grid-template-columns: ${(props) =>
-			props.$isArabic
+			props.$embedded
+				? "minmax(0, 1fr)"
+				: props.$isArabic
 				? props.$show
 					? "minmax(0, 1fr) 80px"
 					: "minmax(0, 1fr) 286px"
@@ -1392,7 +1462,8 @@ const NewReservationMainWrapper = styled.div`
 	.otherContentWrapper {
 		background: #f7f8fc;
 		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
-		grid-column: ${(props) => (props.$isArabic ? "1" : "2")};
+		grid-column: ${(props) =>
+			props.$embedded ? "1" : props.$isArabic ? "1" : "2"};
 		grid-row: 1;
 		min-width: 0;
 		overflow: hidden;
@@ -1432,7 +1503,9 @@ const NewReservationMainWrapper = styled.div`
 	@media (max-width: 1600px) {
 		.grid-container-main {
 			grid-template-columns: ${(props) =>
-				props.$isArabic
+				props.$embedded
+					? "minmax(0, 1fr)"
+					: props.$isArabic
 					? props.$show
 						? "minmax(0, 1fr) 80px"
 						: "minmax(0, 1fr) 286px"
@@ -1448,11 +1521,12 @@ const NewReservationMainWrapper = styled.div`
 		}
 
 		.otherContentWrapper {
-			min-height: calc(100vh - 70px);
+			min-height: ${(props) =>
+				props.$embedded ? "auto" : "calc(100vh - 70px)"};
 			padding-inline-start: ${(props) =>
-				!props.$isArabic && props.$show ? "72px" : "0"};
+				!props.$embedded && !props.$isArabic && props.$show ? "72px" : "0"};
 			padding-inline-end: ${(props) =>
-				props.$isArabic && props.$show ? "72px" : "0"};
+				!props.$embedded && props.$isArabic && props.$show ? "72px" : "0"};
 		}
 	}
 

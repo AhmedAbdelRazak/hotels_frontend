@@ -1,7 +1,7 @@
 /** @format */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import {
@@ -34,6 +34,7 @@ import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
+import { useLocation } from "react-router-dom";
 import {
 	createAgentWalletClaim,
 	createAgentWalletTransaction,
@@ -103,6 +104,7 @@ const REPORT_COLUMN_WIDTHS = {
 	Reservations: 13,
 	"Reservation Value": 17,
 	Commission: 14,
+	"Commission Paid": 16,
 	"Commission Due": 16,
 	"Pending Confirmation": 18,
 	Type: 16,
@@ -237,9 +239,9 @@ const isOrderTakerOnly = (user = {}) => {
 		descriptions.includes("ordertaker") ||
 		(Array.isArray(user.accessTo) && user.accessTo.includes("ownReservations"));
 	const hasFullAccess =
-		roles.some((role) => [1000, 2000, 3000, 6000].includes(role)) ||
+		roles.some((role) => [1000, 2000, 3000, 6000, 10000].includes(role)) ||
 		descriptions.some((description) =>
-			["hotelmanager", "reception", "finance"].includes(description)
+			["hotelmanager", "systemadmin", "reception", "finance"].includes(description)
 		);
 	return isAgent && !hasFullAccess;
 };
@@ -429,8 +431,12 @@ Object.assign(labels.en, {
 	attachmentInvalid: "Only PDF and image attachments are allowed.",
 	attachmentLimit: "You can attach up to 8 files.",
 	attachmentTotalTooLarge: "Attachments must be 32MB total or smaller.",
+	attachmentRequired:
+		"Please attach a transfer receipt, PDF, or image before submitting the wallet claim.",
 	claimWalletCredit: "Claim wallet credit",
 	claimSubmitted: "Wallet credit claim submitted for approval.",
+	commissionPaid: "Commission paid",
+	commissionUnpaid: "Unpaid commission",
 	todos: "To Do's",
 	todoHint: "Action items for your reservations and wallet claims.",
 	noTodos: "No action items right now.",
@@ -458,6 +464,21 @@ Object.assign(labels.en, {
 		"Accepts the hotel finance update and lets the commission side of the reservation move toward closure.",
 	rejectCommissionHelp:
 		"Reject when the commission amount or status is not correct. Add a reason so finance can adjust it.",
+	attachmentCount: "Attached",
+	noAttachments: "No receipts attached yet.",
+	walletEntrySubtitle:
+		"Record a wallet movement with a clear type, amount, date, and receipt when available.",
+	walletClaimSubtitle:
+		"Submit wallet credit evidence to hotel finance for review and approval.",
+	walletUpdateSubtitle:
+		"Update the wallet movement details while keeping the ledger easy to audit.",
+	selectAgent: "Select agent",
+	selectType: "Select movement type",
+	optional: "Optional",
+	requiredMark: "Required",
+	amountPlaceholder: "0.00",
+	referencePlaceholder: "Bank transfer, receipt, or internal reference",
+	notePlaceholder: "Add context for finance or auditing",
 });
 
 Object.assign(labels.ar, {
@@ -471,11 +492,15 @@ Object.assign(labels.ar, {
 	attachmentInvalid: "المسموح فقط PDF أو صور.",
 	attachmentLimit: "يمكن إرفاق 8 ملفات كحد أقصى.",
 	attachmentTotalTooLarge: "إجمالي المرفقات يجب أن يكون 32MB أو أقل.",
+	attachmentRequired:
+		"\u064a\u062c\u0628 \u0625\u0631\u0641\u0627\u0642 \u0625\u064a\u0635\u0627\u0644 \u0623\u0648 PDF \u0623\u0648 \u0635\u0648\u0631\u0629 \u0642\u0628\u0644 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 });
 
 Object.assign(labels.ar, {
 	claimWalletCredit: "\u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629 \u0628\u0631\u0635\u064a\u062f \u0644\u0644\u0645\u062d\u0641\u0638\u0629",
 	claimSubmitted: "\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0631\u0635\u064a\u062f \u0644\u0644\u0645\u0631\u0627\u062c\u0639\u0629.",
+	commissionPaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
+	commissionUnpaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
 	todos: "\u0627\u0644\u0645\u0647\u0627\u0645",
 	todoHint: "\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0645\u0637\u0644\u0648\u0628\u0629 \u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0643 \u0648\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 	noTodos: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0647\u0627\u0645 \u062d\u0627\u0644\u064a\u0627.",
@@ -503,6 +528,27 @@ Object.assign(labels.ar, {
 		"\u064a\u0639\u062a\u0645\u062f \u062a\u062d\u062f\u064a\u062b \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0641\u0646\u062f\u0642 \u0648\u064a\u0633\u0645\u062d \u0644\u062c\u0627\u0646\u0628 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0628\u0627\u0644\u062a\u0642\u062f\u0645 \u0646\u062d\u0648 \u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u062d\u062c\u0632.",
 	rejectCommissionHelp:
 		"\u0627\u0631\u0641\u0636 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0623\u0648 \u062d\u0627\u0644\u062a\u0647\u0627 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d. \u0623\u0636\u0641 \u0633\u0628\u0628\u0627 \u0648\u0627\u0636\u062d\u0627 \u0644\u0643\u064a \u062a\u0639\u062f\u0644\u0647 \u0627\u0644\u0645\u0627\u0644\u064a\u0629.",
+});
+
+Object.assign(labels.ar, {
+	attachmentCount: "\u0627\u0644\u0645\u0631\u0641\u0642",
+	noAttachments:
+		"\u0644\u0627 \u062a\u0648\u062c\u062f \u0625\u064a\u0635\u0627\u0644\u0627\u062a \u0645\u0631\u0641\u0642\u0629 \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.",
+	walletEntrySubtitle:
+		"\u0633\u062c\u0644 \u062d\u0631\u0643\u0629 \u0645\u062d\u0641\u0638\u0629 \u0628\u0646\u0648\u0639 \u0648\u0645\u0628\u0644\u063a \u0648\u062a\u0627\u0631\u064a\u062e \u0648\u0625\u064a\u0635\u0627\u0644 \u0639\u0646\u062f \u062a\u0648\u0641\u0631\u0647.",
+	walletClaimSubtitle:
+		"\u0623\u0631\u0633\u0644 \u0625\u062b\u0628\u0627\u062a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0641\u0646\u062f\u0642.",
+	walletUpdateSubtitle:
+		"\u0639\u062f\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0628\u0634\u0643\u0644 \u064a\u0633\u0647\u0644 \u0645\u0631\u0627\u062c\u0639\u062a\u0647\u0627.",
+	selectAgent: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0648\u0643\u064a\u0644",
+	selectType: "\u0627\u062e\u062a\u0631 \u0646\u0648\u0639 \u0627\u0644\u062d\u0631\u0643\u0629",
+	optional: "\u0627\u062e\u062a\u064a\u0627\u0631\u064a",
+	requiredMark: "\u0645\u0637\u0644\u0648\u0628",
+	amountPlaceholder: "0.00",
+	referencePlaceholder:
+		"\u062a\u062d\u0648\u064a\u0644 \u0628\u0646\u0643\u064a\u060c \u0625\u064a\u0635\u0627\u0644\u060c \u0623\u0648 \u0645\u0631\u062c\u0639 \u062f\u0627\u062e\u0644\u064a",
+	notePlaceholder:
+		"\u0623\u0636\u0641 \u0633\u064a\u0627\u0642\u0627 \u0644\u0644\u0645\u0627\u0644\u064a\u0629 \u0623\u0648 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629",
 });
 
 const transactionOptions = (txt) => [
@@ -541,6 +587,14 @@ const walletBalancePresentation = (record = {}, txt = labels.en) => {
 	};
 };
 
+const isRejectedWalletClaim = (row = {}) =>
+	row.source === "agent_claim" &&
+	[
+		String(row.status || "").toLowerCase(),
+		String(row.reviewStatus || "").toLowerCase(),
+		String(row.financialStatus || "").toLowerCase(),
+	].includes("rejected");
+
 const ActionInfo = ({ text, isArabic }) => (
 	<Tooltip
 		title={<ActionInfoText $isRTL={isArabic}>{text}</ActionInfoText>}
@@ -565,6 +619,7 @@ const ActionInfo = ({ text, isArabic }) => (
 
 const FinancialMain = ({ match }) => {
 	const { userId, hotelId } = match.params;
+	const location = useLocation();
 	const { user, token } = isAuthenticated();
 	const { chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -595,13 +650,23 @@ const FinancialMain = ({ match }) => {
 	});
 
 	const agentOnly = isOrderTakerOnly(user);
-	const agents = Array.isArray(summary?.agents) ? summary.agents : [];
+	const agents = useMemo(
+		() => (Array.isArray(summary?.agents) ? summary.agents : []),
+		[summary?.agents]
+	);
 	const activeAgent =
 		agents.find((item) => item.agent?._id === selectedAgentId) || agents[0] || {};
 	const activeAgentId = activeAgent?.agent?._id || selectedAgentId || "";
 	const activeTransactions = Array.isArray(activeAgent?.transactions)
 		? activeAgent.transactions
 		: [];
+	const queryParams = useMemo(
+		() => new URLSearchParams(location.search || ""),
+		[location.search]
+	);
+	const queryWalletTransactionId =
+		queryParams.get("walletTransactionId") || queryParams.get("transactionId") || "";
+	const queryAgentId = queryParams.get("agentId") || "";
 	const activeReservations = Array.isArray(activeAgent?.reservations)
 		? activeAgent.reservations
 		: [];
@@ -609,6 +674,21 @@ const FinancialMain = ({ match }) => {
 	const activeIsCommissionOnly =
 		agentCommercialModel(activeAgent) === "commission_only" ||
 		activeAgent?.walletRequired === false;
+	const entryAttachments = Array.isArray(entry.attachments)
+		? entry.attachments
+		: [];
+	const entryModalTitle =
+		agentOnly && !editingTransactionId
+			? txt.claimWalletCredit
+			: editingTransactionId
+			? txt.updateEntry
+			: txt.addFunds;
+	const entryModalSubtitle =
+		agentOnly && !editingTransactionId
+			? txt.walletClaimSubtitle
+			: editingTransactionId
+			? txt.walletUpdateSubtitle
+			: txt.walletEntrySubtitle;
 	const totalsBalancePresentation = agentOnly
 		? walletBalancePresentation(
 				{
@@ -684,6 +764,22 @@ const FinancialMain = ({ match }) => {
 	useEffect(() => {
 		loadFinancials();
 	}, [loadFinancials]);
+
+	useEffect(() => {
+		if (!agents.length) return;
+		const targetAgent =
+			(queryAgentId &&
+				agents.find((item) => item.agent?._id === queryAgentId)) ||
+			(queryWalletTransactionId &&
+				agents.find((item) =>
+					(Array.isArray(item.transactions) ? item.transactions : []).some(
+						(transaction) => transaction._id === queryWalletTransactionId
+					)
+				));
+		if (targetAgent?.agent?._id && targetAgent.agent._id !== selectedAgentId) {
+			setSelectedAgentId(targetAgent.agent._id);
+		}
+	}, [agents, queryAgentId, queryWalletTransactionId, selectedAgentId]);
 
 	useEffect(() => {
 		loadTodos();
@@ -791,6 +887,14 @@ const FinancialMain = ({ match }) => {
 			message.error(txt.required);
 			return;
 		}
+		if (
+			agentOnly &&
+			!editingTransactionId &&
+			!(Array.isArray(entry.attachments) && entry.attachments.length)
+		) {
+			message.error(txt.attachmentRequired);
+			return;
+		}
 		setEntrySaving(true);
 		const payload = {
 			...entry,
@@ -811,7 +915,9 @@ const FinancialMain = ({ match }) => {
 				  )
 				: await createAgentWalletTransaction(hotelId, userId, token, payload);
 			if (response?.error) {
-				message.error(response.error);
+				message.error(
+					isArabic && response.errorArabic ? response.errorArabic : response.error
+				);
 				return;
 			}
 			message.success(
@@ -946,6 +1052,7 @@ const FinancialMain = ({ match }) => {
 				Reservations: item.totalReservations,
 				"Reservation Value": item.totalReservationValue,
 				Commission: item.totalCommission,
+				"Commission Paid": item.commissionPaid,
 				"Commission Due": item.commissionDue,
 				"Pending Confirmation": item.pendingConfirmation,
 			});
@@ -956,6 +1063,15 @@ const FinancialMain = ({ match }) => {
 				Company: item.agent?.companyName || "",
 				Type: tx.transactionType,
 				Amount: tx.amount,
+				Status:
+					tx.source === "agent_claim" && tx.status === "pending"
+						? "Wallet claim pending"
+						: tx.source === "agent_claim" && tx.status === "rejected"
+						? "Wallet claim rejected"
+						: tx.status || "",
+				"Rejection Reason": isRejectedWalletClaim(tx)
+					? tx.rejectionReason || ""
+					: "",
 				Date: tx.transactionDate
 					? moment(tx.transactionDate).format("YYYY-MM-DD")
 					: "",
@@ -1044,6 +1160,8 @@ const FinancialMain = ({ match }) => {
 				</Tag>
 			),
 		},
+		{ title: txt.commissionPaid, dataIndex: "commissionPaid", render: money },
+		{ title: txt.commissionUnpaid, dataIndex: "commissionDue", render: money },
 		{ title: txt.walletAdded, dataIndex: "walletAdded", render: money },
 		{ title: txt.walletUsed, dataIndex: "walletUsed", render: money },
 		{
@@ -1060,7 +1178,6 @@ const FinancialMain = ({ match }) => {
 			dataIndex: "totalReservationValue",
 			render: (value) => `${money(value)} SAR`,
 		},
-		{ title: txt.commissionDue, dataIndex: "commissionDue", render: money },
 		{ title: txt.pending, dataIndex: "pendingConfirmation" },
 		{
 			title: txt.walletClaimPending,
@@ -1112,6 +1229,18 @@ const FinancialMain = ({ match }) => {
 			),
 		},
 		{
+			title: txt.rejectionReason,
+			dataIndex: "rejectionReason",
+			render: (value, row) =>
+				isRejectedWalletClaim(row) ? (
+					<RejectionReasonText $isRTL={isArabic}>
+						{value || "-"}
+					</RejectionReasonText>
+				) : (
+					"-"
+				),
+		},
+		{
 			title: txt.date,
 			dataIndex: "transactionDate",
 			render: (value) => (value ? moment(value).format("YYYY-MM-DD") : "-"),
@@ -1133,7 +1262,11 @@ const FinancialMain = ({ match }) => {
 								<Button
 									size='small'
 									icon={<EditOutlined />}
-									disabled={Boolean(row.reservationId) || row.status === "pending"}
+									disabled={
+										Boolean(row.reservationId) ||
+										row.status === "pending" ||
+										row.source === "agent_claim"
+									}
 									onClick={() => openEditTransactionModal(row)}
 								>
 									{txt.edit}
@@ -1148,7 +1281,11 @@ const FinancialMain = ({ match }) => {
 										size='small'
 										danger
 										icon={<DeleteOutlined />}
-										disabled={Boolean(row.reservationId) || row.status === "pending"}
+										disabled={
+											Boolean(row.reservationId) ||
+											row.status === "pending" ||
+											row.source === "agent_claim"
+										}
 									>
 										{txt.delete}
 									</Button>
@@ -1283,6 +1420,7 @@ const FinancialMain = ({ match }) => {
 
 	return (
 		<FinancialWrapper $show={adminMenuStatus} $isArabic={isArabic}>
+			<FinancialModalGlobalStyle />
 			{isArabic ? (
 				<AdminNavbarArabic
 					fromPage='Financials'
@@ -1405,7 +1543,11 @@ const FinancialMain = ({ match }) => {
 								<strong>{money(activeAgent.totalReservationValue)} SAR</strong>
 							</div>
 							<div>
-								<span>{txt.commissionDue}</span>
+								<span>{txt.commissionPaid}</span>
+								<strong>{money(activeAgent.commissionPaid)} SAR</strong>
+							</div>
+							<div>
+								<span>{txt.commissionUnpaid}</span>
 								<strong>{money(activeAgent.commissionDue)} SAR</strong>
 							</div>
 						</ActiveAgentBar>
@@ -1437,9 +1579,14 @@ const FinancialMain = ({ match }) => {
 									`${money(summary?.totals?.balance)} SAR`}
 							</strong>
 						</SummaryCard>
+						<SummaryCard $tone='green'>
+							<BankOutlined />
+							<span>{txt.commissionPaid}</span>
+							<strong>{money(summary?.totals?.commissionPaid)} SAR</strong>
+						</SummaryCard>
 						<SummaryCard $tone='purple'>
 							<BankOutlined />
-							<span>{txt.commissionDue}</span>
+							<span>{txt.commissionUnpaid}</span>
 							<strong>{money(summary?.totals?.commissionDue)} SAR</strong>
 						</SummaryCard>
 						{agentOnly && !activeIsCommissionOnly && (
@@ -1502,7 +1649,7 @@ const FinancialMain = ({ match }) => {
 							columns={agentColumns}
 							loading={loading}
 							size='small'
-							scroll={{ x: 1180 }}
+							scroll={{ x: 1320 }}
 							pagination={{ pageSize: 8 }}
 							locale={{ emptyText: txt.noRows }}
 							rowClassName={(row) =>
@@ -1524,7 +1671,19 @@ const FinancialMain = ({ match }) => {
 								dataSource={activeTransactions}
 								columns={txColumns}
 								size='small'
-								scroll={{ x: summary?.canManage ? 1120 : 940 }}
+								scroll={{ x: summary?.canManage ? 1320 : 1160 }}
+								rowClassName={(row) =>
+									[
+										row._id === queryWalletTransactionId
+											? "finance-wallet-row-selected"
+											: "",
+										isRejectedWalletClaim(row)
+											? "finance-wallet-row-rejected"
+											: "",
+									]
+										.filter(Boolean)
+										.join(" ")
+								}
 								pagination={{ pageSize: 6 }}
 								locale={{ emptyText: txt.noRows }}
 							/>
@@ -1548,6 +1707,8 @@ const FinancialMain = ({ match }) => {
 					</DetailsGrid>
 
 						<Modal
+							className='finance-wallet-entry-modal'
+							wrapClassName='finance-wallet-entry-modal-wrap'
 							open={modalOpen}
 							onCancel={() => {
 								setEditingTransactionId("");
@@ -1555,6 +1716,9 @@ const FinancialMain = ({ match }) => {
 							}}
 							onOk={saveEntry}
 							confirmLoading={entrySaving}
+							centered
+							destroyOnClose
+							maskClosable={!entrySaving}
 							okText={
 								agentOnly && !editingTransactionId
 									? txt.claimWalletCredit
@@ -1564,18 +1728,29 @@ const FinancialMain = ({ match }) => {
 							}
 							cancelText={txt.cancel}
 							title={
-								agentOnly && !editingTransactionId
-									? txt.claimWalletCredit
-									: editingTransactionId
-									? txt.updateEntry
-									: txt.addFunds
+								<WalletEntryModalTitle $isArabic={isArabic}>
+									<span className='modal-title-icon'>
+										<WalletOutlined />
+									</span>
+									<span>
+										<strong>{entryModalTitle}</strong>
+										<small>{entryModalSubtitle}</small>
+									</span>
+								</WalletEntryModalTitle>
 							}
-							width={760}
+							width={860}
 						>
+						<WalletEntryModalBody $isArabic={isArabic}>
 						<EntryGrid>
-							<label>
-								<span>{txt.agent}</span>
+							<label className='agent-field'>
+								<span className='field-label'>
+									{txt.agent}
+									<em>{txt.requiredMark}</em>
+								</span>
 									<Select
+										showSearch
+										optionFilterProp='label'
+										placeholder={txt.selectAgent}
 										value={entry.agentId || undefined}
 										disabled={Boolean(editingTransactionId) || agentOnly}
 										onChange={(value) =>
@@ -1588,8 +1763,12 @@ const FinancialMain = ({ match }) => {
 								/>
 							</label>
 							<label>
-								<span>{txt.transactionType}</span>
+								<span className='field-label'>
+									{txt.transactionType}
+									<em>{txt.requiredMark}</em>
+								</span>
 								<Select
+									placeholder={txt.selectType}
 									value={entry.transactionType}
 									disabled={agentOnly}
 									onChange={(value) =>
@@ -1602,11 +1781,16 @@ const FinancialMain = ({ match }) => {
 								/>
 							</label>
 							<label>
-								<span>{txt.amount}</span>
+								<span className='field-label'>
+									{txt.amount}
+									<em>{txt.requiredMark}</em>
+								</span>
 								<InputNumber
 									value={entry.amount}
 									min={0}
 									precision={2}
+									controls={false}
+									placeholder={txt.amountPlaceholder}
 									addonAfter='SAR'
 									onChange={(value) =>
 										setEntry((current) => ({ ...current, amount: value || 0 }))
@@ -1614,7 +1798,10 @@ const FinancialMain = ({ match }) => {
 								/>
 							</label>
 							<label>
-								<span>{txt.date}</span>
+								<span className='field-label'>
+									{txt.date}
+									<em>{txt.requiredMark}</em>
+								</span>
 								<DatePickerField>
 									<ReactDatePicker
 										selected={toDatePickerValue(entry.transactionDate)}
@@ -1626,6 +1813,7 @@ const FinancialMain = ({ match }) => {
 										}
 										dateFormat='yyyy-MM-dd'
 										maxDate={new Date()}
+										placeholderText='YYYY-MM-DD'
 										showPopperArrow={false}
 										className='finance-datepicker-input'
 									/>
@@ -1633,9 +1821,13 @@ const FinancialMain = ({ match }) => {
 								</DatePickerField>
 							</label>
 							<label>
-								<span>{txt.reference}</span>
+								<span className='field-label'>
+									{txt.reference}
+									<small>{txt.optional}</small>
+								</span>
 								<Input
 									value={entry.reference}
+									placeholder={txt.referencePlaceholder}
 									onChange={(event) =>
 										setEntry((current) => ({
 											...current,
@@ -1645,10 +1837,14 @@ const FinancialMain = ({ match }) => {
 								/>
 							</label>
 							<label className='wide'>
-								<span>{txt.note}</span>
+								<span className='field-label'>
+									{txt.note}
+									<small>{txt.optional}</small>
+								</span>
 								<Input.TextArea
 									value={entry.note}
-									rows={3}
+									rows={4}
+									placeholder={txt.notePlaceholder}
 									onChange={(event) =>
 										setEntry((current) => ({
 											...current,
@@ -1659,10 +1855,19 @@ const FinancialMain = ({ match }) => {
 							</label>
 							<AttachmentPicker className='wide'>
 								<div className='attachment-picker-head'>
-									<strong>
-										<PaperClipOutlined /> {txt.attachments}
-									</strong>
-									<span>{txt.attachmentHint}</span>
+									<div>
+										<strong>
+											<PaperClipOutlined /> {txt.attachments}
+											{agentOnly && !editingTransactionId && (
+												<em>{txt.requiredMark}</em>
+											)}
+										</strong>
+										<span>{txt.attachmentHint}</span>
+									</div>
+									<span className='attachment-count'>
+										{txt.attachmentCount}: {entryAttachments.length}/
+										{walletAttachmentLimit}
+									</span>
 								</div>
 								<label className='attachment-upload-button'>
 									<PaperClipOutlined />
@@ -1675,11 +1880,9 @@ const FinancialMain = ({ match }) => {
 										onChange={handleAttachmentFiles}
 									/>
 								</label>
+								{entryAttachments.length ? (
 								<AttachmentList>
-									{(Array.isArray(entry.attachments)
-										? entry.attachments
-										: []
-									).map((attachment, index) => (
+									{entryAttachments.map((attachment, index) => (
 										<li key={`${attachment.public_id || attachment.fileName || index}`}>
 											<div>
 												<PaperClipOutlined />
@@ -1709,8 +1912,15 @@ const FinancialMain = ({ match }) => {
 										</li>
 									))}
 								</AttachmentList>
+								) : (
+									<EmptyAttachments>
+										<PaperClipOutlined />
+										<span>{txt.noAttachments}</span>
+									</EmptyAttachments>
+								)}
 							</AttachmentPicker>
 						</EntryGrid>
+						</WalletEntryModalBody>
 					</Modal>
 				</main>
 			</div>
@@ -1719,6 +1929,173 @@ const FinancialMain = ({ match }) => {
 };
 
 export default FinancialMain;
+
+const FinancialModalGlobalStyle = createGlobalStyle`
+	.finance-wallet-entry-modal-wrap {
+		z-index: 120000;
+	}
+
+	.finance-wallet-entry-modal {
+		max-width: calc(100vw - 24px);
+	}
+
+	.finance-wallet-entry-modal .ant-modal-content {
+		border-radius: 12px;
+		padding: 0;
+		overflow: hidden;
+		box-shadow: 0 22px 70px rgba(15, 23, 42, 0.26);
+	}
+
+	.finance-wallet-entry-modal .ant-modal-close {
+		top: 16px;
+		inset-inline-end: 16px;
+	}
+
+	.finance-wallet-entry-modal .ant-modal-header {
+		margin: 0;
+		padding: 18px 24px 15px;
+		border-bottom: 1px solid #d8e8f7;
+		background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+	}
+
+	.finance-wallet-entry-modal .ant-modal-body {
+		padding: 18px 24px 8px;
+		background: #ffffff;
+	}
+
+	.finance-wallet-entry-modal .ant-modal-footer {
+		margin: 0;
+		padding: 14px 24px 20px;
+		border-top: 1px solid #edf2f7;
+		background: #ffffff;
+	}
+
+	.finance-wallet-entry-modal .ant-modal-footer .ant-btn {
+		min-width: 96px;
+		min-height: 38px;
+		border-radius: 9px;
+		font-weight: 900;
+	}
+
+	.finance-wallet-entry-modal .ant-modal-footer .ant-btn-primary {
+		background: #1677ff;
+		box-shadow: 0 10px 18px rgba(22, 119, 255, 0.2);
+	}
+
+	@media (max-width: 620px) {
+		.finance-wallet-entry-modal {
+			top: 8px;
+			max-width: calc(100vw - 12px);
+			margin: 0 auto;
+		}
+
+		.finance-wallet-entry-modal .ant-modal-header {
+			padding: 16px 16px 13px;
+		}
+
+		.finance-wallet-entry-modal .ant-modal-body {
+			padding: 14px 16px 4px;
+		}
+
+		.finance-wallet-entry-modal .ant-modal-footer {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 8px;
+			padding: 12px 16px 16px;
+		}
+
+		.finance-wallet-entry-modal .ant-modal-footer .ant-btn {
+			width: 100%;
+			margin-inline-start: 0 !important;
+		}
+	}
+`;
+
+const WalletEntryModalTitle = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+	padding-inline-end: 28px;
+
+	.modal-title-icon {
+		width: 40px;
+		height: 40px;
+		border-radius: 10px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 auto;
+		border: 1px solid #bfdbfe;
+		background: #eff6ff;
+		color: #0b6fdc;
+		box-shadow: 0 8px 18px rgba(22, 119, 255, 0.1);
+	}
+
+	.modal-title-icon svg {
+		font-size: 20px;
+	}
+
+	> span:last-child {
+		min-width: 0;
+		display: grid;
+		gap: 3px;
+	}
+
+	strong {
+		color: #0f172a;
+		font-size: 1.12rem;
+		font-weight: 950;
+		line-height: 1.25;
+	}
+
+	small {
+		color: #5b6b80;
+		font-size: 0.8rem;
+		font-weight: 750;
+		line-height: 1.45;
+		white-space: normal;
+	}
+
+	@media (max-width: 520px) {
+		gap: 9px;
+
+		.modal-title-icon {
+			width: 34px;
+			height: 34px;
+		}
+
+		strong {
+			font-size: 1rem;
+		}
+
+		small {
+			font-size: 0.74rem;
+		}
+	}
+`;
+
+const WalletEntryModalBody = styled.div`
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	.ant-select-selector,
+	.ant-input,
+	.ant-input-number,
+	textarea {
+		border-radius: 8px !important;
+	}
+
+	.ant-select-selection-item,
+	.ant-select-selection-placeholder {
+		font-weight: 760;
+	}
+
+	textarea {
+		resize: vertical;
+	}
+`;
 
 const FinancialWrapper = styled.div`
 	--hotel-side-width: ${(props) => (props.$show ? "80px" : "285px")};
@@ -2176,6 +2553,22 @@ const Panel = styled.section`
 		box-shadow: inset 4px 0 #1677ff;
 	}
 
+	.finance-wallet-row-selected > td {
+		background: #fff7e6 !important;
+	}
+
+	.finance-wallet-row-selected td:first-child {
+		box-shadow: inset 4px 0 #fa8c16;
+	}
+
+	.finance-wallet-row-rejected > td {
+		background: #fff1f2 !important;
+	}
+
+	.finance-wallet-row-rejected td:first-child {
+		box-shadow: inset 4px 0 #ef4444;
+	}
+
 	.ant-pagination {
 		margin: 10px 0 0 !important;
 	}
@@ -2295,6 +2688,16 @@ const WalletActionButtons = styled.div`
 	}
 `;
 
+const RejectionReasonText = styled.div`
+	max-width: 260px;
+	white-space: normal;
+	line-height: 1.45;
+	font-weight: 800;
+	color: #991b1b;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+`;
+
 const AttachmentLinks = styled.div`
 	display: flex;
 	flex-wrap: wrap;
@@ -2334,20 +2737,72 @@ const DetailsGrid = styled.section`
 
 const EntryGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 12px;
+	grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+	gap: 14px;
 
 	label {
 		display: grid;
-		gap: 6px;
+		align-content: start;
+		gap: 7px;
 		font-weight: 800;
 		color: #0f172a;
+		min-width: 0;
+	}
+
+	.agent-field {
+		grid-column: 1 / -1;
+	}
+
+	.field-label {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-width: 0;
+		color: #0f172a;
+		font-size: 0.82rem;
+		font-weight: 900;
+		line-height: 1.25;
+	}
+
+	.field-label em,
+	.field-label small {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 20px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		font-size: 0.68rem;
+		font-style: normal;
+		font-weight: 900;
+		white-space: nowrap;
+	}
+
+	.field-label em {
+		border: 1px solid #fecaca;
+		background: #fff7f7;
+		color: #dc2626;
+	}
+
+	.field-label small {
+		border: 1px solid #bfdbfe;
+		background: #eff6ff;
+		color: #0b6fdc;
 	}
 
 	.ant-select,
 	.ant-input-number,
-	.ant-picker {
+	.ant-picker,
+	.ant-input {
 		width: 100%;
+	}
+
+	.ant-select-selector,
+	.ant-input-number,
+	.ant-input,
+	.finance-datepicker-input {
+		min-height: 40px;
 	}
 
 	.wide {
@@ -2356,16 +2811,17 @@ const EntryGrid = styled.div`
 
 	@media (max-width: 620px) {
 		grid-template-columns: 1fr;
+		gap: 12px;
 	}
 `;
 
 const AttachmentPicker = styled.div`
 	display: grid;
-	gap: 9px;
-	padding: 10px;
+	gap: 12px;
+	padding: 14px;
 	border: 1px solid #d8e8f7;
-	border-radius: 10px;
-	background: linear-gradient(135deg, #f8fbff 0%, #eef7ff 100%);
+	border-radius: 12px;
+	background: linear-gradient(135deg, #f8fbff 0%, #edf7ff 100%);
 
 	.attachment-picker-head {
 		display: flex;
@@ -2373,6 +2829,12 @@ const AttachmentPicker = styled.div`
 		justify-content: space-between;
 		gap: 10px;
 		flex-wrap: wrap;
+	}
+
+	.attachment-picker-head > div {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
 	}
 
 	.attachment-picker-head strong {
@@ -2389,15 +2851,30 @@ const AttachmentPicker = styled.div`
 		font-weight: 800;
 	}
 
+	.attachment-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 26px;
+		padding: 3px 10px;
+		border: 1px solid #bfdbfe;
+		border-radius: 999px;
+		background: #ffffff;
+		color: #0b5fa8 !important;
+		font-size: 0.72rem !important;
+		font-weight: 950 !important;
+		white-space: nowrap;
+	}
+
 	.attachment-upload-button {
 		position: relative;
 		width: fit-content;
-		min-height: 34px;
+		min-height: 38px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 7px;
-		padding: 7px 14px;
+		padding: 8px 16px;
 		border-radius: 9px;
 		background: #1677ff;
 		color: #fff;
@@ -2414,9 +2891,30 @@ const AttachmentPicker = styled.div`
 	}
 
 	@media (max-width: 520px) {
+		padding: 12px;
+
 		.attachment-upload-button {
 			width: 100%;
 		}
+	}
+`;
+
+const EmptyAttachments = styled.div`
+	min-height: 48px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border: 1px dashed #b9d7f5;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.7);
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 850;
+	text-align: center;
+
+	svg {
+		color: #0b6fdc;
 	}
 `;
 
@@ -2509,14 +3007,15 @@ const DatePickerField = styled.div`
 
 	.finance-datepicker-input {
 		width: 100%;
-		min-height: 32px;
+		min-height: 40px;
 		border: 1px solid #d9d9d9;
-		border-radius: 6px;
-		padding: 4px 36px 4px 12px;
+		border-radius: 8px;
+		padding: 7px 38px 7px 12px;
 		background: #fff;
 		color: #0f172a;
 		direction: ltr;
 		font-size: 14px;
+		font-weight: 760;
 		outline: 0;
 		transition: border-color 0.2s ease, box-shadow 0.2s ease;
 	}

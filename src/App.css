@@ -16,11 +16,54 @@ body {
 	background-color: #f7f8fc;
 }
 
-.ant-modal-content {
-	z-index: 1000 !important;
+/* Keep every dialog layer above fixed hotel side menus/nav, and below
+   transient app feedback such as messages, notifications, and pickers. */
+.ant-modal-mask,
+.ant-modal-wrap,
+.ant-modal {
+	z-index: 3010 !important;
 }
 
-.ant-picker-dropdown {
+.ant-modal-mask {
+	z-index: 3000 !important;
+}
+
+.ant-modal-content {
+	position: relative;
+	z-index: 3011 !important;
+}
+
+.ant-drawer-mask {
+	z-index: 3000 !important;
+}
+
+.ant-drawer-content-wrapper,
+.ant-drawer {
+	z-index: 3010 !important;
+}
+
+.ant-image-preview-mask {
+	z-index: 3000 !important;
+}
+
+.ant-image-preview-root,
+.ant-image-preview-wrap {
+	z-index: 3010 !important;
+}
+
+.modal-backdrop {
+	z-index: 3000 !important;
+}
+
+.modal {
+	z-index: 3010 !important;
+}
+
+.ant-picker-dropdown,
+.ant-select-dropdown,
+.ant-dropdown,
+.ant-tooltip,
+.ant-popover {
 	z-index: 20000 !important;
 }
 

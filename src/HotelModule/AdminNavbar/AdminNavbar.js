@@ -89,8 +89,15 @@ const AdminNavbar = ({
 	const hasRole = (role) => roleNumbers.includes(Number(role));
 	const hasRoleDescription = (description) =>
 		roleDescriptions.includes(String(description || "").toLowerCase());
+	const isSystemAdmin =
+		hasRole(10000) ||
+		hasRoleDescription("systemadmin") ||
+		hasRoleDescription("system admin");
 	const isManagerOrAdmin =
-		hasRole(1000) || hasRole(2000) || hasRoleDescription("hotelmanager");
+		hasRole(1000) ||
+		hasRole(2000) ||
+		isSystemAdmin ||
+		hasRoleDescription("hotelmanager");
 	const hasReception = hasRole(3000) || hasRoleDescription("reception");
 	const hasOrderTaker = hasRole(7000) || hasRoleDescription("ordertaker");
 	const hasFinance = hasRole(6000) || hasRoleDescription("finance");

@@ -194,6 +194,7 @@ export const getManagerExecutiveIncompleteReservations = (
 ) => {
 	const query = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {
+		if (Array.isArray(value) && !value.length) return;
 		if (value !== undefined && value !== null && value !== "") {
 			query.append(key, value);
 		}
@@ -978,6 +979,9 @@ export const singlePreReservationById = (reservationId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}`,
 		{
 			method: "GET",
+			headers: {
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1712,6 +1716,246 @@ export const pendingConfirmationNotificationFeed = ({
 				...getStoredAuthHeaders(),
 			},
 		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const acknowledgePendingNotification = ({
+	userId,
+	ackKey,
+	notificationType = "",
+	entityId = "",
+	reservationId = "",
+	walletTransactionId = "",
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}/acknowledge`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify({
+				ackKey,
+				notificationType,
+				entityId,
+				reservationId,
+				walletTransactionId,
+			}),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({ error: err?.message || "Notification update failed." }));
+};
+
+const buildOverallQuery = (params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.append(key, value);
+		}
+	});
+	const queryString = query.toString();
+	return queryString ? `?${queryString}` : "";
+};
+
+const overallHeaders = (token = "") => ({
+	Accept: "application/json",
+	"Content-Type": "application/json",
+	...(token ? { Authorization: `Bearer ${token}` } : {}),
+	...getStoredAuthHeaders(),
+});
+
+export const getOverallSummary = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/summary/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/reservations/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const exportOverallReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/reservations-export/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallPendingReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/pending-reservations/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallFinancialActions = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/financial-actions/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const trackOverallFinancialReportExport = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/financial-report-export/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const exportOverallPendingReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/pending-reservations-export/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallHousekeeping = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/housekeeping/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallAccounts = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/accounts/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const createSignupInvitation = (userId, token, payload = {}, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/signup-invitation/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const createOverallSystemAdmin = (userId, token, payload = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/system-admin/${userId}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateOverallSystemAdmin = (
+	userId,
+	token,
+	accountId,
+	payload = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/system-admin/${accountId}/${userId}`,
+		{
+			method: "PUT",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallSettings = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));

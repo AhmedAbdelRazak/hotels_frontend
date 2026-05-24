@@ -165,6 +165,8 @@ const TEXT = {
 		requestedBy: "Requested by",
 		requestedAt: "Requested at",
 		actions: "Actions",
+		details: "Details",
+		statusLocked: "Closed tasks can only be reopened by a super admin.",
 		stockLevel: "Stock level",
 		financeRequired: "Finance approval required before purchase or receiving.",
 		noSupplies: "No supplies have been tracked yet.",
@@ -582,9 +584,15 @@ const isManagerCompletionActor = (actor = {}) => {
 	const roles = getRoles(actor);
 	const descriptions = getRoleDescriptions(actor);
 	return (
-		roles.some((role) => [1000, 2000, 4000].includes(role)) ||
+		roles.some((role) => [1000, 2000, 4000, 10000].includes(role)) ||
 		descriptions.some((role) =>
-			["hotelmanager", "housekeepingmanager", "manager", "owner"].includes(role)
+			[
+				"hotelmanager",
+				"systemadmin",
+				"housekeepingmanager",
+				"manager",
+				"owner",
+			].includes(role)
 		)
 	);
 };
@@ -749,6 +757,26 @@ const HouseKeepingMain = () => {
 		(hasRole(user, 5000) || hasRoleDescription(user, "housekeeping")) &&
 		!canManageHousekeeping;
 	const canMarkRoomsClean = canManageHousekeeping || isCleanerOnly;
+	const statusRank = (status = "") => {
+		const normalized = String(status || "").toLowerCase();
+		if (isFinishedStatus(normalized)) return 2;
+		if (normalized === "cleaning") return 1;
+		return 0;
+	};
+	const statusOptionsForTask = (task = {}) => {
+		const options = [
+			{ value: "unfinished", label: TXT.unfinished },
+			{ value: "cleaning", label: TXT.cleaningStatus },
+			{ value: "finished", label: TXT.finished },
+		];
+		if (isSuperAdmin) return options;
+		const currentRank = statusRank(task.task_status);
+		return options.filter((option) => statusRank(option.value) >= currentRank);
+	};
+	const canEditHousekeepingTask = (task = {}) =>
+		canManageHousekeeping &&
+		(!isFinishedStatus(task.task_status) || isSuperAdmin);
+	const editTaskReadOnly = Boolean(editTask && !canEditHousekeepingTask(editTask));
 
 	useEffect(() => {
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
@@ -1026,6 +1054,14 @@ const HouseKeepingMain = () => {
 	};
 
 	const updateTaskStatus = (task, task_status) => {
+		if (
+			!isSuperAdmin &&
+			(isFinishedStatus(task.task_status) ||
+				statusRank(task_status) < statusRank(task.task_status))
+		) {
+			message.warning(TXT.statusLocked || "Closed tasks can only be reopened by a super admin.");
+			return;
+		}
 		setSaving(true);
 		updatingHouseKeepingTask(task._id, {
 			task_status,
@@ -1128,6 +1164,10 @@ const HouseKeepingMain = () => {
 	};
 
 	const saveEditTask = () => {
+		if (!editTask || !canEditHousekeepingTask(editTask)) {
+			message.warning(TXT.statusLocked || "Closed tasks can only be reopened by a super admin.");
+			return;
+		}
 		editForm.validateFields().then((values) => {
 			const taskType = values.taskType === "general" ? "general" : "room";
 			setSaving(true);
@@ -1340,13 +1380,15 @@ const HouseKeepingMain = () => {
 						{TXT.markCleaning}
 					</StartCleaningButton>
 				) : null}
-				{isFinishedStatus(task.task_status) && canManageHousekeeping ? (
+				{isFinishedStatus(task.task_status) && isSuperAdmin ? (
 					<Button onClick={() => updateTaskStatus(task, "unfinished")}>
 						{TXT.reopen}
 					</Button>
 				) : null}
 				{canManageHousekeeping ? (
-					<Button onClick={() => openEditTask(task)}>{TXT.edit}</Button>
+					<Button onClick={() => openEditTask(task)}>
+						{canEditHousekeepingTask(task) ? TXT.edit : TXT.details || TXT.edit}
+					</Button>
 				) : null}
 			</TaskActions>
 		</TaskCard>
@@ -1481,13 +1523,15 @@ const HouseKeepingMain = () => {
 							{TXT.markClean}
 						</StartCleaningButton>
 					) : null}
-					{isFinishedStatus(task.task_status) && canManageHousekeeping ? (
+					{isFinishedStatus(task.task_status) && isSuperAdmin ? (
 						<Button onClick={() => updateTaskStatus(task, "unfinished")}>
 							{TXT.reopen}
 						</Button>
 					) : null}
 					{canManageHousekeeping ? (
-						<Button onClick={() => openEditTask(task)}>{TXT.edit}</Button>
+						<Button onClick={() => openEditTask(task)}>
+							{canEditHousekeepingTask(task) ? TXT.edit : TXT.details || TXT.edit}
+						</Button>
 					) : null}
 				</TaskActions>
 			</TaskCard>
@@ -2226,6 +2270,7 @@ const HouseKeepingMain = () => {
 													<th>{TXT.startedAt}</th>
 													<th>{TXT.completedAt}</th>
 													<th>{TXT.duration}</th>
+													<th>{TXT.details || TXT.actions}</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -2245,6 +2290,11 @@ const HouseKeepingMain = () => {
 														<td>{formatDateTime(getTaskCompletedAt(task))}</td>
 														<td>
 															{formatDuration(getTaskDurationMs(task), TXT.minutes)}
+														</td>
+														<td>
+															<Button size='small' onClick={() => openEditTask(task)}>
+																{TXT.details || TXT.edit}
+															</Button>
 														</td>
 													</tr>
 												))}
@@ -2369,13 +2419,17 @@ const HouseKeepingMain = () => {
 														{TXT.markCleaning}
 													</StartCleaningButton>
 												) : null}
-												{isFinishedStatus(task.task_status) && canManageHousekeeping ? (
+												{isFinishedStatus(task.task_status) && isSuperAdmin ? (
 													<Button onClick={() => updateTaskStatus(task, "unfinished")}>
 														{TXT.reopen}
 													</Button>
 												) : null}
 												{canManageHousekeeping ? (
-													<Button onClick={() => openEditTask(task)}>{TXT.edit}</Button>
+													<Button onClick={() => openEditTask(task)}>
+														{canEditHousekeepingTask(task)
+															? TXT.edit
+															: TXT.details || TXT.edit}
+													</Button>
 												) : null}
 											</TaskActions>
 										</TaskCard>
@@ -2458,9 +2512,10 @@ const HouseKeepingMain = () => {
 				title={TXT.updateTask}
 				onCancel={() => setEditTask(null)}
 				onOk={saveEditTask}
-				okText={TXT.save}
+				okText={editTaskReadOnly ? TXT.details || TXT.edit : TXT.save}
 				cancelText={TXT.cancel}
 				confirmLoading={saving}
+				okButtonProps={{ disabled: editTaskReadOnly }}
 				width='min(94vw, 720px)'
 				destroyOnClose
 			>
@@ -2470,10 +2525,15 @@ const HouseKeepingMain = () => {
 							type='date'
 							min={MIN_TASK_DATE}
 							max={MAX_TASK_DATE}
+							disabled={editTaskReadOnly}
 						/>
 					</Form.Item>
 					<Form.Item name='assignedTo' label={TXT.employee} rules={[{ required: true }]}>
-						<Select showSearch optionFilterProp='children'>
+						<Select
+							showSearch
+							optionFilterProp='children'
+							disabled={editTaskReadOnly}
+						>
 							{houseKeepingStaff.map((staff) => (
 								<Select.Option key={staff._id} value={staff._id}>
 									{staff.name}
@@ -2482,14 +2542,17 @@ const HouseKeepingMain = () => {
 						</Select>
 					</Form.Item>
 					<Form.Item name='task_status' label={TXT.status} rules={[{ required: true }]}>
-						<Select>
-							<Select.Option value='unfinished'>{TXT.unfinished}</Select.Option>
-							<Select.Option value='cleaning'>{TXT.cleaningStatus}</Select.Option>
-							<Select.Option value='finished'>{TXT.finished}</Select.Option>
+						<Select disabled={editTaskReadOnly}>
+							{statusOptionsForTask(editTask || {}).map((option) => (
+								<Select.Option key={option.value} value={option.value}>
+									{option.label}
+								</Select.Option>
+							))}
 						</Select>
 					</Form.Item>
 					<Form.Item name='taskType' label={TXT.taskKind} rules={[{ required: true }]}>
 						<Select
+							disabled={editTaskReadOnly}
 							onChange={(value) => {
 								if (value === "room") {
 									editForm.setFieldsValue({ generalAreas: [] });
@@ -2517,6 +2580,7 @@ const HouseKeepingMain = () => {
 							<Select
 								mode='multiple'
 								showSearch
+								disabled={editTaskReadOnly}
 								optionFilterProp='children'
 								placeholder={TXT.generalAreasHint}
 							>
@@ -2529,7 +2593,11 @@ const HouseKeepingMain = () => {
 						</Form.Item>
 					) : (
 						<Form.Item name='rooms' label={TXT.rooms} rules={[{ required: true }]}>
-							<Select showSearch optionFilterProp='children'>
+							<Select
+								showSearch
+								optionFilterProp='children'
+								disabled={editTaskReadOnly}
+							>
 								{sortedHotelRooms.map((room) => (
 									<Select.Option key={room._id} value={room._id}>
 										{roomLabel(room)} - {roomTypeDisplay(room)} -{" "}
@@ -2555,6 +2623,7 @@ const HouseKeepingMain = () => {
 					>
 						<Input.TextArea
 							rows={3}
+							disabled={editTaskReadOnly}
 							placeholder={
 								editTaskTypeValue === "general"
 									? TXT.generalTaskCommentHint
@@ -2563,6 +2632,11 @@ const HouseKeepingMain = () => {
 						/>
 					</Form.Item>
 				</Form>
+				{editTaskReadOnly ? (
+					<TaskLockedNotice>
+						{TXT.statusLocked || "Closed tasks can only be reopened by a super admin."}
+					</TaskLockedNotice>
+				) : null}
 			</Modal>
 		</HouseKeepingMainWrapper>
 	);
@@ -3250,6 +3324,17 @@ const ReportTableWrap = styled.div`
 	tbody tr:hover {
 		background: #f8fbff;
 	}
+`;
+
+const TaskLockedNotice = styled.div`
+	margin-top: 0.75rem;
+	padding: 0.6rem 0.75rem;
+	border: 1px solid #fde68a;
+	border-radius: 9px;
+	background: #fffbeb;
+	color: #92400e;
+	font-size: 0.8rem;
+	font-weight: 900;
 `;
 
 const PanelTitle = styled.div`

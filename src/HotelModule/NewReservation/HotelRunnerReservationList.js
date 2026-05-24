@@ -66,8 +66,9 @@ const HotelRunnerReservationList = ({
 		roleDescriptions.includes("ordertaker") ||
 		(Array.isArray(user?.accessTo) && user.accessTo.includes("ownReservations"));
 	const hasFullReservationScope =
-		[1000, 2000, 3000].some((role) => roleNumbers.includes(role)) ||
+		[1000, 2000, 3000, 10000].some((role) => roleNumbers.includes(role)) ||
 		roleDescriptions.includes("hotelmanager") ||
+		roleDescriptions.includes("systemadmin") ||
 		roleDescriptions.includes("reception");
 	const isOrderTakingUser = hasOrderTakingScope && !hasFullReservationScope;
 
