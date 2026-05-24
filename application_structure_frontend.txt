@@ -281,6 +281,8 @@ Frontend Change Checklist
 - For backend API changes, update src/HotelModule/apiAdmin.js or src/AdminModule/apiAdmin.js and verify every caller.
 - For role-gated UI, check numeric role, roleDescription, roles, roleDescriptions, accessTo, selected hotel, and assigned hotel lists.
 - If a true super admin can see a route but a control is disabled or hidden, check frontend role normalization before assuming the backend scope is wrong. Super admins should be treated as global regardless of assigned hotel arrays.
+- For reservation details, do not expose or substitute privileged admin names in workflow summaries for agents/staff. If a backend actor is hidden, show the status/date without an actor name rather than falling back to order-taker/agent names.
+- For Payment Summary, keep method and money separate: selected hotel/offline collection is pending until an onsite paid amount exists; only recorded/captured money should change paid/due totals or success styling.
 - For modals/dropdowns, test clickability inside the modal and ensure popup containers are not hidden by overlays.
 - For responsive changes, test desktop and phone widths, especially RTL text, tables, filters, side menus, and reservation forms.
 - Avoid changing localStorage.selectedHotel behavior without checking legacy components that still depend on it.
