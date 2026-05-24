@@ -130,7 +130,7 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 												chosenLanguage
 											)}
 										</td>
-										<td>{formatDate(hotel.updatedAt)}</td>
+										<td>{formatDate(hotel.updatedAt, chosenLanguage)}</td>
 										<td>
 											<button
 												type='button'

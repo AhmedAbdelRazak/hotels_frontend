@@ -29,6 +29,13 @@ Top-Level Frontend Structure
 - src/utils/ and module-level utils/
   - Shared helpers, super-admin helpers, report utilities, and formatting logic.
 
+Saudi Date And Hijri Formatting
+- src/utils/saudiDates.js is the shared formatter for PMS-facing dates.
+- It formats all Arabic PMS dates against Asia/Riyadh and uses the Umm al-Qura Hijri calendar through Intl locale ar-SA-u-ca-islamic-umalqura-nu-latn.
+- Navbar clock/date, overall reservation/financial/account/housekeeping tables, reservation notifications, reservation detail modals, and overall reservation Excel exports should use this helper instead of hand-written moment(...).format("DD/MM/YYYY") or browser-default toLocaleDateString().
+- Arabic screens should prefer readable Saudi Arabic dates such as "24 مايو 2026 | 7 ذو الحجة 1447 هـ" where space allows. Dense inputs and backend payloads should remain ISO yyyy-MM-dd.
+- Keep Latin digits for PMS consistency unless a screen is intentionally redesigned for Arabic-Indic numerals.
+
 Main Route Map In src/App.js
 - Public routes
   - /
@@ -166,9 +173,15 @@ HotelModule Structure
     - financial-report, actions, wallet-management -> OverallFinancials components.
     - account-management, create-account, activate-accounts, update-account -> OverallAccountManagement components.
     - settings -> OverallSettings/OverallSettingsMain.
+- src/HotelModule/TheOverallStructure/OverallAccountManagement/ActivateAccounts.js
+  - Overall activation view for pending/inactive scoped accounts. It must not be limited to System Admin accounts; signed-up agents and employees appear here for authorized managers/admins.
+  - System Admin rows use the overall system-admin update endpoint. Agent/staff rows use the hotel-staff update endpoint with the account's assigned hotel scope so agent approval status, approved hotel ids, realtime notifications, and audit tracking stay in sync.
 - src/HotelModule/TheOverallStructure/OverallReservationsList/
   - Multi-hotel reservation overall views, pending reservations, and the embedded overall new-reservation flow.
+  - Overall reservation tables use the shared OverallTableWrap/ReservationTableControls styling, 25-character tooltip truncation, Gregorian/Hijri date toggle with Gregorian as the default, and sort buttons for source, hotel, arrival, and departure.
+  - Reservation table rows should keep nights and price-per-day columns visible in both the regular reservation list and pending-reservations list, and Excel export should preserve those metrics.
   - Overall reservation detail modals reuse ReservationDetail and should keep the hotel name visible in the center action card above the update button so users know which hotel owns the selected reservation.
+  - ReservationDetail's top header uses three primary cards plus a secondary action strip. Keep edit-reservation centered in the strip, not inside the lifecycle card, so the lifecycle card stays focused on status progress.
   - OverallPendingReservations is read-only for approved order-taker/agent accounts. Agents can see their own pending, rejected, finance-review, and commission-review reservations across assigned hotels, but confirmation-number clicks stay inside the overall detail modal instead of navigating into hotel-staff pending workflows.
 - src/HotelModule/NewReservation/
   - Single-hotel reservation creation, guest/reservation forms, room selection, calendar/heat-map, pending confirmations, and reservation imports.
@@ -286,3 +299,20 @@ Frontend Change Checklist
 - For modals/dropdowns, test clickability inside the modal and ensure popup containers are not hidden by overlays.
 - For responsive changes, test desktop and phone widths, especially RTL text, tables, filters, side menus, and reservation forms.
 - Avoid changing localStorage.selectedHotel behavior without checking legacy components that still depend on it.
+
+Final Production Readiness Notes
+- Overall reservation tables should stay readable first and compact second. OverallReservationMain and OverallPendingReservations use the shared reservation-list-table styling from overallShared.js, with desktop fixed column widths, ellipsis/tooltips for long values, and a mobile/tablet horizontal-scroll fallback.
+- Reservation table text longer than the readable cell width should be truncated visually but preserved through the tooltip/title behavior. Do not remove TableTooltipText from hotel, guest, source, confirmation, status, or action columns.
+- Overall reservation list controls default to Gregorian dates, offer Hijri/Gregorian switching, and support sorting by booking source, hotel, check-in, and checkout. Active sorted columns should show a clear arrow in the table header. Keep exported reservation rows aligned with the visible table columns, including nights and price per day.
+- Reservation list controls now also include creation-date sorting. Keep this available on overall reservation-main, overall pending-reservations, single-hotel reservation lists, and single-hotel pending confirmation where possible.
+- Overall reservation filters use AntD multi-selects for hotel/status/source style filters so users can select multiple values. Keep RTL direction and option alignment explicit for Arabic dropdowns.
+- Overall reservation pagination writes page=<number> into the query string and keeps it on refresh. Pagination should remain compact on desktop and phone, with first/previous/next/last controls.
+- Clicking a confirmation number in overall reservation tables should open the same details modal as the Details link and must not redirect the user into the single-hotel route.
+- Reservation table cells should truncate descriptive values after roughly 20 characters with "..." and expose the full value through a tooltip/title. Date cells are the exception: Gregorian and Hijri dates should stay readable and not be clipped aggressively.
+- Money and numeric reservation columns are also exceptions to ellipsis. Amount cells should use amount-cell/number-cell styling so totals, paid amounts, nightly rates, and nights are fully visible instead of showing "...".
+- Reservation status colors: checked out/early checked out/closed are strong green; in-house/checked-in are light green; cancelled/no-show/rejected are red; pending/review work is amber; confirmed/approved is blue.
+- PMS table headers should use the shared polished blue header treatment, with headers slightly larger and heavier than the row text. This applies through App.css for AntD/native tables and through shared reservation table styles for the overall surfaces.
+- Reservation table headers should stay on one line. Use short labels when needed, for example Details / تفاصيل instead of More Details / تفاصيل أكثر.
+- PMS table text is globally displayed with capitalized words through App.css for native and AntD tables. Use the pms-preserve-case class only for future table content that must keep exact casing, such as technical identifiers.
+- Reservation detail header cards should keep the guest, lifecycle, and reservation total cards balanced. The edit/update action belongs in the secondary action strip, not inside the lifecycle card, so the first row remains clean on desktop and phone.
+- For production readiness, run npm.cmd run build from hotels_frontend, git diff --check, and a quick visual pass for Arabic RTL, desktop table width, phone side menu behavior, notification bell behavior, and modal/dropdown clickability.

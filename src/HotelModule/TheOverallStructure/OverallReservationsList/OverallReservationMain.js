@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { message } from "antd";
+import { message, Select } from "antd";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	exportOverallReservations,
@@ -7,19 +7,23 @@ import {
 } from "../../apiAdmin";
 import {
 	buildOwnerParams,
-	formatDate,
+	formatDateByCalendar,
 	formatMoney,
+	getReservationNights,
+	getReservationPricePerDay,
 	getOverallText,
 	localizeStatus,
 	OVERALL_PAGE_SIZE,
+	OverallHeader,
 	OverallPageShell,
 	OverallTableWrap,
 	OverallToolbar,
 	Pager,
 	pageRowNumber,
-	reservationSingleHotelRoute,
+	ReservationTableControls,
 	StatusPill,
 	statusTone,
+	TableTooltipText,
 	titleCase,
 } from "../overallShared";
 import OverallReservationDetailsModal, {
@@ -48,6 +52,17 @@ const statusOptions = (labels) => [
 	{ value: "no_show", label: labels.noShow },
 ];
 
+const sortOptions = (labels) => [
+	{ value: "createdAt", label: labels.createdAt },
+	{ value: "booking_source", label: labels.source },
+	{ value: "hotelName", label: labels.hotel },
+	{ value: "checkin_date", label: labels.checkIn },
+	{ value: "checkout_date", label: labels.checkOut },
+];
+
+const pageFromSearch = (search = "") =>
+	Math.max(parseInt(new URLSearchParams(search || "").get("page"), 10) || 1, 1);
+
 const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -59,19 +74,20 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const location = useLocation();
 	const [filters, setFilters] = useState({
 		search: "",
-		hotelId: "",
-		status: "",
+		hotelId: [],
+		status: [],
 		dateBy: "booked_at",
 		dateFrom: "",
 		dateTo: "",
-		sortBy: "booked_at",
+		sortBy: "createdAt",
 		sortOrder: "desc",
 	});
-	const [page, setPage] = useState(1);
+	const [page, setPage] = useState(() => pageFromSearch(location.search));
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [dateMode, setDateMode] = useState("gregorian");
 
 	const params = useMemo(
 		() => ({
@@ -109,15 +125,61 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		: [];
 	const pages = Math.max(Number(result.pages || 1), 1);
 
+	useEffect(() => {
+		const nextPage = pageFromSearch(location.search);
+		setPage((previous) => (previous === nextPage ? previous : nextPage));
+	}, [location.search]);
+
+	useEffect(() => {
+		const safePage = Math.max(Number(page) || 1, 1);
+		const query = new URLSearchParams(location.search || "");
+		if (query.get("page") === String(safePage)) return;
+		query.set("page", String(safePage));
+		history.replace({
+			pathname: location.pathname,
+			search: `?${query.toString()}`,
+		});
+	}, [history, location.pathname, location.search, page]);
+
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value }));
 		setPage(1);
 	};
 
-	const openReservation = (reservation = {}) => {
-		const route = reservationSingleHotelRoute(reservation, ownerId, "reservations");
-		if (route) history.push(route);
+	const updateSort = (sortBy) => {
+		setFilters((previous) => ({
+			...previous,
+			sortBy,
+			sortOrder:
+				previous.sortBy === sortBy && previous.sortOrder === "asc"
+					? "desc"
+					: "asc",
+		}));
+		setPage(1);
 	};
+
+	const goToPage = (nextPage) =>
+		setPage(Math.min(Math.max(Number(nextPage) || 1, 1), pages));
+
+	const sortArrow = (sortBy) =>
+		filters.sortBy === sortBy ? (filters.sortOrder === "asc" ? "▲" : "▼") : "";
+
+	const sortableHeader = (label, sortBy) => (
+		<button
+			type='button'
+			className='sortable-heading'
+			onClick={() => updateSort(sortBy)}
+			aria-pressed={filters.sortBy === sortBy}
+		>
+			<span>{label}</span>
+			{sortArrow(sortBy) ? (
+				<span className='sort-arrow'>{sortArrow(sortBy)}</span>
+			) : null}
+		</button>
+	);
+
+	const tableDate = (value) =>
+		formatDateByCalendar(value, chosenLanguage, dateMode);
 
 	const openMoreDetails = (reservation = {}) => {
 		setSelectedReservation(reservation);
@@ -146,7 +208,7 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		exportOverallReservations(userId, token, {
 			...buildOwnerParams(ownerId),
 			...filters,
-			sortBy: filters.sortBy || "booked_at",
+			sortBy: filters.sortBy || "createdAt",
 			sortOrder: filters.sortOrder || "desc",
 		})
 			.then((data) => {
@@ -174,6 +236,12 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
+			<OverallHeader>
+				<div>
+					<h2>{labels.reservationsList}</h2>
+				</div>
+			</OverallHeader>
+
 			<OverallToolbar
 				onSubmit={(event) => {
 					event.preventDefault();
@@ -185,27 +253,42 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					onChange={(event) => updateFilter("search", event.target.value)}
 					placeholder={labels.searchReservationPlaceholder}
 				/>
-				<select
+				<Select
+					mode='multiple'
+					allowClear
+					showSearch
+					maxTagCount='responsive'
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
 					value={filters.hotelId}
-					onChange={(event) => updateFilter("hotelId", event.target.value)}
-				>
-					<option value=''>{labels.allHotels}</option>
-					{hotels.map((hotel) => (
-						<option key={hotel._id} value={hotel._id}>
-							{titleCase(hotel.hotelName)}
-						</option>
-					))}
-				</select>
-				<select
+					onChange={(value) => updateFilter("hotelId", value)}
+					placeholder={labels.allHotels}
+					optionFilterProp='label'
+					options={hotels.map((hotel) => ({
+						value: hotel._id,
+						label: titleCase(hotel.hotelName),
+					}))}
+				/>
+				<Select
+					mode='multiple'
+					allowClear
+					showSearch
+					maxTagCount='responsive'
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
 					value={filters.status}
-					onChange={(event) => updateFilter("status", event.target.value)}
-				>
-					{statusOptions(labels).map((option) => (
-						<option key={option.value || "all"} value={option.value}>
-							{option.label}
-						</option>
-					))}
-				</select>
+					onChange={(value) => updateFilter("status", value)}
+					placeholder={labels.allStatuses}
+					optionFilterProp='label'
+					options={statusOptions(labels)
+						.filter((option) => option.value)
+						.map((option) => ({
+							value: option.value,
+							label: option.label,
+						}))}
+				/>
 				<input
 					type='date'
 					value={filters.dateFrom}
@@ -231,12 +314,12 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					onClick={() => {
 						setFilters({
 							search: "",
-							hotelId: "",
-							status: "",
+							hotelId: [],
+							status: [],
 							dateBy: "booked_at",
 							dateFrom: "",
 							dateTo: "",
-							sortBy: "booked_at",
+							sortBy: "createdAt",
 							sortOrder: "desc",
 						});
 						setPage(1);
@@ -246,20 +329,63 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				</button>
 			</OverallToolbar>
 
+			<ReservationTableControls>
+				<div className='control-group'>
+					<button
+						type='button'
+						className={dateMode === "gregorian" ? "active" : ""}
+						aria-pressed={dateMode === "gregorian"}
+						onClick={() => setDateMode("gregorian")}
+					>
+						{labels.gregorianDates}
+					</button>
+					<button
+						type='button'
+						className={`calendar-hijri ${
+							dateMode === "hijri" ? "active" : ""
+						}`}
+						aria-pressed={dateMode === "hijri"}
+						onClick={() => setDateMode("hijri")}
+					>
+						{labels.hijriDates}
+					</button>
+				</div>
+				<div className='control-group'>
+					<span className='control-label'>{labels.sortBy}</span>
+					{sortOptions(labels).map((option) => {
+						const active = filters.sortBy === option.value;
+						return (
+							<button
+								type='button'
+								key={option.value}
+								className={active ? "active" : ""}
+								aria-pressed={active}
+								onClick={() => updateSort(option.value)}
+							>
+								{option.label}
+								{active ? (filters.sortOrder === "asc" ? " ^" : " v") : ""}
+							</button>
+						);
+					})}
+				</div>
+			</ReservationTableControls>
+
 			<OverallTableWrap>
-				<table>
+				<table className='reservation-list-table reservation-main-table'>
 					<thead>
 						<tr>
 							<th>#</th>
-							<th>{labels.hotel}</th>
+							<th>{sortableHeader(labels.hotel, "hotelName")}</th>
 							<th>{labels.confirmation}</th>
 							<th>{labels.guest}</th>
-							<th>{labels.source}</th>
+							<th>{sortableHeader(labels.source, "booking_source")}</th>
 							<th>{labels.status}</th>
 							<th>{labels.payment}</th>
-							<th>{labels.booked}</th>
-							<th>{labels.checkIn}</th>
-							<th>{labels.checkOut}</th>
+							<th>{sortableHeader(labels.booked, "createdAt")}</th>
+							<th>{sortableHeader(labels.checkIn, "checkin_date")}</th>
+							<th>{sortableHeader(labels.checkOut, "checkout_date")}</th>
+							<th>{labels.nights}</th>
+							<th>{labels.pricePerDay}</th>
 							<th>{labels.total}</th>
 							<th>{labels.paidAmount}</th>
 							<th>{labels.moreDetails}</th>
@@ -268,40 +394,63 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					<tbody>
 						{loading ? (
 							<tr>
-								<td colSpan='13'>{labels.loading}</td>
+								<td colSpan='15'>{labels.loading}</td>
 							</tr>
 						) : reservations.length ? (
 							reservations.map((reservation, index) => (
 								<tr key={reservation._id}>
 									<td>{pageRowNumber(page, index, OVERALL_PAGE_SIZE)}</td>
-									<td>{titleCase(reservation.hotelName || "-")}</td>
+									<td className='hotel-cell'>
+										<TableTooltipText
+											value={titleCase(reservation.hotelName || "-")}
+											className='table-truncate'
+										/>
+									</td>
 									<td>
 										<button
 											type='button'
 											className='link-btn'
-											onClick={() => openReservation(reservation)}
+											onClick={() => openMoreDetails(reservation)}
 										>
 											{reservation.confirmation_number || "-"}
 										</button>
 									</td>
-									<td>{reservation.customer_details?.name || "-"}</td>
-									<td>{reservation.booking_source || "-"}</td>
+									<td className='guest-cell'>
+										<TableTooltipText
+											value={reservation.customer_details?.name || "-"}
+											className='table-truncate'
+										/>
+									</td>
+									<td className='source-cell'>
+										<TableTooltipText
+											value={reservation.booking_source || "-"}
+											className='table-truncate'
+										/>
+									</td>
 									<td>
 										<StatusPill $tone={statusTone(reservation.reservation_status)}>
-											{localizeStatus(
-												reservation.reservation_status,
-												chosenLanguage
-											)}
+											<TableTooltipText
+												value={localizeStatus(
+													reservation.reservation_status,
+													chosenLanguage
+												)}
+											/>
 										</StatusPill>
 									</td>
-									<td>{reservation.payment || "-"}</td>
-									<td>{formatDate(reservation.booked_at || reservation.createdAt)}</td>
-									<td>{formatDate(reservation.checkin_date)}</td>
-									<td>{formatDate(reservation.checkout_date)}</td>
 									<td>
+										<TableTooltipText value={reservation.payment || "-"} />
+									</td>
+									<td className='date-cell'>{tableDate(reservation.booked_at || reservation.createdAt)}</td>
+									<td className='date-cell'>{tableDate(reservation.checkin_date)}</td>
+									<td className='date-cell'>{tableDate(reservation.checkout_date)}</td>
+									<td className='amount-cell'>{getReservationNights(reservation)}</td>
+									<td className='amount-cell'>
+										{formatMoney(getReservationPricePerDay(reservation))} {labels.sar}
+									</td>
+									<td className='amount-cell'>
 										{formatMoney(reservation.total_amount)} {labels.sar}
 									</td>
-									<td>
+									<td className='amount-cell'>
 										{formatMoney(reservation.paid_amount)} {labels.sar}
 									</td>
 									<td>
@@ -317,7 +466,7 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 							))
 						) : (
 							<tr>
-								<td colSpan='13'>{labels.noReservationsFound}</td>
+								<td colSpan='15'>{labels.noReservationsFound}</td>
 							</tr>
 						)}
 					</tbody>
@@ -325,18 +474,28 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			</OverallTableWrap>
 
 			<Pager>
-				<button type='button' disabled={page <= 1} onClick={() => setPage(page - 1)}>
+				<button type='button' disabled={page <= 1} onClick={() => goToPage(1)}>
+					«
+				</button>
+				<button type='button' disabled={page <= 1} onClick={() => goToPage(page - 1)}>
 					{labels.previous}
 				</button>
-				<span>
-					{labels.page} {page} {labels.of} {pages} ({Number(result.total || 0)})
+				<span className='pager-summary'>
+					<span>{labels.page}</span>
+					<strong>{page}</strong>
+					<span>{labels.of}</span>
+					<strong>{pages}</strong>
+					<small>({Number(result.total || 0)})</small>
 				</span>
 				<button
 					type='button'
 					disabled={page >= pages}
-					onClick={() => setPage(page + 1)}
+					onClick={() => goToPage(page + 1)}
 				>
 					{labels.next}
+				</button>
+				<button type='button' disabled={page >= pages} onClick={() => goToPage(pages)}>
+					»
 				</button>
 			</Pager>
 

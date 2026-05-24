@@ -5,6 +5,7 @@ import {
 	getOverallAccounts,
 	updateOverallSystemAdmin,
 } from "../../apiAdmin";
+import { updateHotelStaffUser } from "../../../auth";
 import {
 	ActionButton,
 	buildOwnerParams,
@@ -29,11 +30,11 @@ import MultiSelectFilter from "./MultiSelectFilter";
 const ACTIVATE_ACCOUNTS_TEXT = {
 	en: {
 		title: "Activate Accounts",
-		subtitle: "Activate or deactivate System Admin accounts in this hotel group",
+		subtitle: "Activate or deactivate pending and inactive accounts in this hotel group",
 	},
 	ar: {
 		title: "تفعيل الحسابات",
-		subtitle: "تفعيل أو إلغاء تفعيل حسابات مسؤول النظام في هذه المجموعة",
+		subtitle: "تفعيل أو إلغاء تفعيل الحسابات المعلقة وغير النشطة في هذه المجموعة",
 	},
 };
 
@@ -65,10 +66,15 @@ const accountHotelTargets = (account = {}, scopedHotels = []) => {
 	const ownerHotels = Array.isArray(account.hotelIdsOwner)
 		? account.hotelIdsOwner
 		: [];
+	const workHotels = Array.isArray(account.hotelIdsWork)
+		? account.hotelIdsWork
+		: [];
 	const supportHotels = Array.isArray(account.hotelsToSupport)
 		? account.hotelsToSupport
 		: [];
-	[...ownerHotels, ...supportHotels, account.hotelIdWork].forEach(appendHotel);
+	[...ownerHotels, ...workHotels, ...supportHotels, account.hotelIdWork].forEach(
+		appendHotel
+	);
 	return picked;
 };
 
@@ -78,6 +84,25 @@ const hotelListText = (account = {}, scopedHotels = []) => {
 		.filter(Boolean);
 	return [...new Set(hotels)].map(titleCase).join(", ") || "-";
 };
+
+const accountRoleNumbers = (account = {}) =>
+	[
+		Number(account.role),
+		...(Array.isArray(account.roles) ? account.roles.map(Number) : []),
+	].filter(Boolean);
+
+const accountRoleDescriptions = (account = {}) =>
+	[
+		String(account.roleDescription || "").toLowerCase(),
+		...(Array.isArray(account.roleDescriptions)
+			? account.roleDescriptions.map((item) => String(item || "").toLowerCase())
+			: []),
+	].filter(Boolean);
+
+const isSystemAdminAccount = (account = {}) =>
+	accountRoleNumbers(account).includes(10000) ||
+	accountRoleDescriptions(account).includes("systemadmin") ||
+	accountRoleDescriptions(account).includes("system admin");
 
 const ActivateAccounts = ({
 	userId,
@@ -93,7 +118,7 @@ const ActivateAccounts = ({
 		...ACTIVATE_ACCOUNTS_TEXT[isRTL ? "ar" : "en"],
 	};
 	const history = useHistory();
-	const [filters, setFilters] = useState({ search: "", status: [] });
+	const [filters, setFilters] = useState({ search: "", status: ["inactive"] });
 	const [page, setPage] = useState(1);
 	const [loading, setLoading] = useState(false);
 	const [updatingId, setUpdatingId] = useState("");
@@ -102,7 +127,6 @@ const ActivateAccounts = ({
 	const params = useMemo(
 		() => ({
 			...buildOwnerParams(ownerId),
-			role: "systemadmin",
 			status: filters.status,
 			search: filters.search,
 			page,
@@ -134,10 +158,51 @@ const ActivateAccounts = ({
 	const selectedLabel = isRTL ? "محدد" : "selected";
 
 	const toggleAccount = (account) => {
+		const nextActiveUser = !account.activeUser;
+		const hotelTargets = accountHotelTargets(account, hotels);
+		const [primaryHotel] = hotelTargets;
+		const activationHotelIds = [
+			...new Set(hotelTargets.map((hotel) => hotel._id).filter(Boolean)),
+		];
+		const primaryHotelId =
+			primaryHotel?._id ||
+			normalizeId(account.hotelIdWork) ||
+			normalizeId((account.hotelsToSupport || [])[0]) ||
+			normalizeId((account.hotelIdsWork || [])[0]) ||
+			normalizeId((account.hotelIdsOwner || [])[0]);
+
+		if (!primaryHotelId) {
+			message.error(
+				isRTL
+					? "لم يتم العثور على فندق مرتبط بهذا الحساب."
+					: "Hotel scope was not found for this account."
+			);
+			return;
+		}
+
 		setUpdatingId(account._id);
-		updateOverallSystemAdmin(userId, token, account._id, {
-			activeUser: !account.activeUser,
-		})
+		const request = isSystemAdminAccount(account)
+			? updateOverallSystemAdmin(userId, token, account._id, {
+					activeUser: nextActiveUser,
+			  })
+			: updateHotelStaffUser(
+					userId,
+					token,
+					primaryHotelId,
+					account._id,
+					{
+						activeUser: nextActiveUser,
+						hotelIdWork: activationHotelIds[0] || primaryHotelId,
+						hotelIdsWork: activationHotelIds.length
+							? activationHotelIds
+							: [primaryHotelId],
+						hotelsToSupport: activationHotelIds.length
+							? activationHotelIds
+							: [primaryHotelId],
+					}
+			  );
+
+		request
 			.then((data) => {
 				if (!data || data.error) {
 					message.error(
@@ -204,7 +269,7 @@ const ActivateAccounts = ({
 					type='button'
 					className='secondary'
 					onClick={() => {
-						setFilters({ search: "", status: [] });
+						setFilters({ search: "", status: ["inactive"] });
 						setPage(1);
 					}}
 				>
@@ -213,7 +278,7 @@ const ActivateAccounts = ({
 			</OverallToolbar>
 
 			{!loading && !accounts.length && (
-				<InlineNote>{labels.noSystemAdminAccountsFound}</InlineNote>
+				<InlineNote>{labels.noAccountsFound}</InlineNote>
 			)}
 
 			<OverallTableWrap>
@@ -267,7 +332,7 @@ const ActivateAccounts = ({
 										})()}
 									</td>
 									<td>{hotelListText(account, hotels)}</td>
-									<td>{formatDate(account.createdAt)}</td>
+									<td>{formatDate(account.createdAt, chosenLanguage)}</td>
 									<td>
 										<button
 											type='button'

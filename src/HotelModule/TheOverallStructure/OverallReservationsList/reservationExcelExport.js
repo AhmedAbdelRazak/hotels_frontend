@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx";
 import {
 	formatDate,
+	getReservationNights,
+	getReservationPricePerDay,
 	localizeStatus,
 	titleCase,
 } from "../overallShared";
@@ -34,10 +36,12 @@ export const buildReservationExportRows = ({
 			reservation.reservation_status || reservation.state,
 			chosenLanguage
 		),
-		[labels.bookedAt]: formatDate(reservation.booked_at || reservation.createdAt),
-		[labels.createdAt]: formatDate(reservation.createdAt),
-		[labels.checkIn]: formatDate(reservation.checkin_date),
-		[labels.checkOut]: formatDate(reservation.checkout_date),
+		[labels.bookedAt]: formatDate(reservation.booked_at || reservation.createdAt, chosenLanguage),
+		[labels.createdAt]: formatDate(reservation.createdAt, chosenLanguage),
+		[labels.checkIn]: formatDate(reservation.checkin_date, chosenLanguage),
+		[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
+		[labels.nights]: getReservationNights(reservation),
+		[labels.pricePerDay]: Number(getReservationPricePerDay(reservation) || 0),
 		[labels.totalAmount]: Number(reservation.total_amount || 0),
 		[labels.paidAmount]: Number(reservation.paid_amount || 0),
 		[labels.commission]: Number(
@@ -69,6 +73,8 @@ export const downloadReservationWorkbook = ({
 		{ wch: 16 },
 		{ wch: 18 },
 		{ wch: 14 },
+		{ wch: 14 },
+		{ wch: 10 },
 		{ wch: 14 },
 		{ wch: 14 },
 		{ wch: 14 },

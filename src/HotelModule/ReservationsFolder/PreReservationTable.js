@@ -9,6 +9,7 @@ import { getReservationSearchAllMatches } from "../apiAdmin";
 import ReservationDetail from "./ReservationDetail";
 import DownloadExcel from "./DownloadExcel";
 import { useHistory, useLocation } from "react-router-dom";
+import { formatSaudiHijriDate } from "../../utils/saudiDates";
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -92,6 +93,106 @@ const getPendingRejectionReason = (reservation = {}) =>
 			"",
 	).trim();
 
+const getReservationNights = (reservation = {}) => {
+	const checkin = reservation.checkin_date
+		? new Date(reservation.checkin_date)
+		: null;
+	const checkout = reservation.checkout_date
+		? new Date(reservation.checkout_date)
+		: null;
+	const dateNights =
+		checkin &&
+		checkout &&
+		!Number.isNaN(checkin.getTime()) &&
+		!Number.isNaN(checkout.getTime())
+			? Math.round((checkout.getTime() - checkin.getTime()) / 86400000)
+			: null;
+	if (Number.isFinite(dateNights) && dateNights >= 0) return dateNights;
+	return Math.max(Number(reservation.days_of_residence || 0), 0);
+};
+
+const getReservationPricePerNight = (reservation = {}) => {
+	const nights = Math.max(getReservationNights(reservation), 1);
+	const total = Number(reservation.total_amount || 0);
+	return Number.isFinite(total) ? total / nights : 0;
+};
+
+const cellText = (value, max = 20) => {
+	const text =
+		value === null || value === undefined || value === "" ? "-" : String(value);
+	return text.length > max ? `${text.slice(0, max)}...` : text;
+};
+
+const CellTooltipText = ({ value, max = 20, dir = "auto" }) => {
+	const text =
+		value === null || value === undefined || value === "" ? "-" : String(value);
+	const content = <span dir={dir}>{cellText(text, max)}</span>;
+	if (text.length <= max) return content;
+	return (
+		<Tooltip title={<span dir={dir}>{text}</span>} placement='top'>
+			{content}
+		</Tooltip>
+	);
+};
+
+const reservationTableLabels = (chosenLanguage) => {
+	const isArabic = chosenLanguage === "Arabic";
+	return {
+		sortBy: isArabic ? "رتب حسب" : "Sort by",
+		gregorianDates: isArabic ? "ميلادي" : "Gregorian",
+		hijriDates: isArabic ? "هجري" : "Hijri",
+		createdAt: isArabic ? "تاريخ الإنشاء" : "Creation Date",
+		bookedAt: isArabic ? "تاريخ الحجز" : "Booking Date",
+		source: isArabic ? "المصدر" : "Source",
+		checkin: isArabic ? "الوصول" : "Check-in",
+		checkout: isArabic ? "المغادرة" : "Checkout",
+		nights: isArabic ? "الليالي" : "Nights",
+		pricePerNight: isArabic ? "سعر الليلة" : "Price / Night",
+		sar: isArabic ? "ر.س" : "SAR",
+	};
+};
+
+const singleHotelSortOptions = (labels) => [
+	{ value: "createdAt", label: labels.createdAt },
+	{ value: "booking_source", label: labels.source },
+	{ value: "checkin_date", label: labels.checkin },
+	{ value: "checkout_date", label: labels.checkout },
+];
+
+const reservationStatusTone = (status = "") => {
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ");
+	if (/cancel|reject|no\s?show/.test(normalized)) return "red";
+	if (/early checked out|checked out|closed/.test(normalized)) return "green";
+	if (/inhouse|in house|checked in/.test(normalized)) return "softGreen";
+	if (/pending|review/.test(normalized)) return "orange";
+	if (/confirm|approved/.test(normalized)) return "blue";
+	return "slate";
+};
+
+const reservationStatusStyle = (status = {}) => {
+	const tone = reservationStatusTone(status);
+	const palette = {
+		red: { background: "#b00000", borderColor: "#b91c1c", color: "#ffffff" },
+		green: { background: "#009b2b", borderColor: "#008a22", color: "#ffffff" },
+		softGreen: { background: "#dff7e7", borderColor: "#56b870", color: "#08722c" },
+		orange: { background: "#f2b500", borderColor: "#d89000", color: "#2a1d00" },
+		blue: { background: "#e8f1ff", borderColor: "#1d5fd3", color: "#0b4abf" },
+		slate: { background: "#e9edf7", borderColor: "#6d7a99", color: "#263452" },
+	};
+	return {
+		...(palette[tone] || palette.slate),
+		border: `1px solid ${(palette[tone] || palette.slate).borderColor}`,
+		borderRadius: "2px",
+		display: "inline-block",
+		fontWeight: 950,
+		minWidth: "78px",
+		padding: "5px 10px",
+		textAlign: "center",
+	};
+};
+
 const PreReservationTable = ({
 	allPreReservations,
 	q,
@@ -112,12 +213,20 @@ const PreReservationTable = ({
 	selectedDates,
 	setSelectedDates,
 	reservationObject,
+	sortBy = "createdAt",
+	sortOrder = "desc",
+	onSortChange,
 }) => {
 	const history = useHistory();
 	const location = useLocation();
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [modalKey, setModalKey] = useState(0);
+	const [dateMode, setDateMode] = useState("gregorian");
+	const tableLabels = useMemo(
+		() => reservationTableLabels(chosenLanguage),
+		[chosenLanguage],
+	);
 
 	console.log(allPreReservations, "allPreReservations");
 
@@ -126,6 +235,39 @@ const PreReservationTable = ({
 		if (!Number.isFinite(parsed)) return "0";
 		return parsed.toLocaleString();
 	};
+
+	const formatTableDate = useCallback(
+		(value) => {
+			if (!value) return "-";
+			const parsed = moment(value);
+			if (!parsed.isValid()) return "-";
+			if (dateMode === "hijri") {
+				return formatSaudiHijriDate(value, {
+					language: chosenLanguage,
+					month: chosenLanguage === "Arabic" ? "short" : "short",
+				});
+			}
+			return parsed.format("YYYY-MM-DD");
+		},
+		[chosenLanguage, dateMode],
+	);
+
+	const sortArrow = (field) =>
+		sortBy === field ? (sortOrder === "asc" ? "▲" : "▼") : "";
+
+	const sortableHeader = (label, field) => (
+		<button
+			type='button'
+			className='sortable-heading'
+			onClick={() => onSortChange && onSortChange(field)}
+			aria-pressed={sortBy === field}
+		>
+			<span>{label}</span>
+			{sortArrow(field) ? (
+				<span className='sort-arrow'>{sortArrow(field)}</span>
+			) : null}
+		</button>
+	);
 
 	// Define showDetailsModal before it's used and memoize it to prevent unnecessary re-renders
 	const updateQueryParams = useCallback(
@@ -255,19 +397,19 @@ const PreReservationTable = ({
 				title: chosenLanguage === "Arabic" ? "تاريخ الحجز" : "Booked On",
 				dataIndex: "booked_at",
 				key: "booked_at",
-				render: (booked_at) => new Date(booked_at).toDateString(),
+				render: (booked_at) => formatTableDate(booked_at),
 			},
 			{
 				title: chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Check In",
 				dataIndex: "checkin_date",
 				key: "checkin_date",
-				render: (checkin_date) => moment(checkin_date).format("YYYY-MM-DD"),
+				render: (checkin_date) => formatTableDate(checkin_date),
 			},
 			{
 				title: chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Check Out",
 				dataIndex: "checkout_date",
 				key: "checkout_date",
-				render: (checkout_date) => moment(checkout_date).format("YYYY-MM-DD"),
+				render: (checkout_date) => formatTableDate(checkout_date),
 			},
 
 			{
@@ -275,49 +417,7 @@ const PreReservationTable = ({
 				dataIndex: "reservation_status",
 				key: "reservation_status",
 				render: (reservation_status, record) => {
-					let style = {};
-					switch (reservation_status.toLowerCase()) {
-						case "cancelled_by_guest":
-						case "cancelled by guest":
-						case "canceled":
-						case "cancelled":
-						case "rejected":
-							style = {
-								background: "red",
-								color: "white",
-								padding: "4px",
-								textAlign: "center",
-							};
-							break;
-						case "inhouse":
-							style = {
-								background: "#FFFACD",
-								color: "black",
-								padding: "4px",
-								textAlign: "center",
-							}; // Light yellow background
-							break;
-						case "closed":
-						case "checked_out":
-						case "early_checked_out":
-							style = {
-								background: "#90EE90",
-								color: "green",
-								padding: "4px",
-								textAlign: "center",
-							}; // Light green background
-							break;
-						case "confirmed":
-							style = {
-								background: "",
-								color: "black",
-								padding: "4px",
-								textAlign: "center",
-							};
-							break;
-						default:
-							style = { padding: "4px", textAlign: "center" };
-					}
+					const style = reservationStatusStyle(reservation_status);
 					const rejectionReason = getPendingRejectionReason(record);
 					return (
 						<div>
@@ -467,6 +567,7 @@ const PreReservationTable = ({
 		[
 			chosenLanguage,
 			currentPage,
+			formatTableDate,
 			recordsPerPage,
 			// Removed 'showDetailsModal' dependency by excluding "details" column
 		],
@@ -545,6 +646,46 @@ const PreReservationTable = ({
 					reservationObject={reservationObject}
 				/>
 
+				<TableControlBar $isArabic={chosenLanguage === "Arabic"}>
+					<ControlGroup>
+						<ControlButton
+							type='button'
+							$active={dateMode === "gregorian"}
+							onClick={() => setDateMode("gregorian")}
+						>
+							{tableLabels.gregorianDates}
+						</ControlButton>
+						<ControlButton
+							type='button'
+							$active={dateMode === "hijri"}
+							onClick={() => setDateMode("hijri")}
+						>
+							{tableLabels.hijriDates}
+						</ControlButton>
+					</ControlGroup>
+					<ControlGroup>
+						<ControlLabel>{tableLabels.sortBy}</ControlLabel>
+						{singleHotelSortOptions(tableLabels).map((option) => {
+							const active = sortBy === option.value;
+							return (
+								<ControlButton
+									type='button'
+									key={option.value}
+									$active={active}
+									onClick={() =>
+										typeof onSortChange === "function"
+											? onSortChange(option.value)
+											: undefined
+									}
+								>
+									{option.label}
+									{active ? (sortOrder === "asc" ? " ^" : " v") : ""}
+								</ControlButton>
+							);
+						})}
+					</ControlGroup>
+				</TableControlBar>
+
 				{/* Custom HTML Table */}
 				<TableWrapper>
 					<StyledTable $isArabic={chosenLanguage === "Arabic"}>
@@ -560,16 +701,18 @@ const PreReservationTable = ({
 								<th>
 									{chosenLanguage === "Arabic" ? "رقم التأكيد" : "Confirmation"}
 								</th>
-								<th>{chosenLanguage === "Arabic" ? "مصدر الحجز" : "Source"}</th>
+								<th>{sortableHeader(chosenLanguage === "Arabic" ? "مصدر الحجز" : "Source", "booking_source")}</th>
 								<th>
-									{chosenLanguage === "Arabic" ? "تاريخ الحجز" : "Booked On"}
+									{sortableHeader(chosenLanguage === "Arabic" ? "تاريخ الحجز" : "Booked On", "createdAt")}
 								</th>
 								<th>
-									{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Check In"}
+									{sortableHeader(chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Check In", "checkin_date")}
 								</th>
 								<th>
-									{chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Check Out"}
+									{sortableHeader(chosenLanguage === "Arabic" ? "تاريخ المغادرة" : "Check Out", "checkout_date")}
 								</th>
+								<th>{tableLabels.nights}</th>
+								<th>{tableLabels.pricePerNight}</th>
 								<th>
 									{chosenLanguage === "Arabic"
 										? "حالة السداد"
@@ -588,7 +731,7 @@ const PreReservationTable = ({
 										: "Total Amount"}
 								</th>
 								<th>
-									{chosenLanguage === "Arabic" ? "تفاصيل أكثر" : "More Details"}
+									{chosenLanguage === "Arabic" ? "تفاصيل" : "Details"}
 								</th>
 							</tr>
 						</thead>
@@ -597,31 +740,32 @@ const PreReservationTable = ({
 								<tr key={reservation.key}>
 									<td>{reservation.index}</td>
 									<td>
-										<Tooltip title={reservation.customer_details.name}>
-											<span>{reservation.customer_details.name}</span>
-										</Tooltip>
+										<CellTooltipText value={reservation.customer_details.name} />
 									</td>
 									<td>
-										<Tooltip title={reservation.customer_details.phone}>
-											<span>{reservation.customer_details.phone}</span>
-										</Tooltip>
+										<CellTooltipText
+											value={reservation.customer_details.phone}
+											dir='ltr'
+										/>
 									</td>
 									<td>
-										<Tooltip title={reservation.confirmation_number}>
-											<span>{reservation.confirmation_number}</span>
-										</Tooltip>
+										<CellTooltipText
+											value={reservation.confirmation_number}
+											dir='ltr'
+										/>
 									</td>
 									<td>
-										<Tooltip title={reservation.booking_source}>
-											<span>{reservation.booking_source}</span>
-										</Tooltip>
+										<CellTooltipText value={reservation.booking_source} />
 									</td>
-									<td>{new Date(reservation.booked_at).toDateString()}</td>
-									<td>
-										{moment(reservation.checkin_date).format("YYYY-MM-DD")}
+									<td className='date-cell'>
+										{formatTableDate(reservation.booked_at || reservation.createdAt)}
 									</td>
-									<td>
-										{moment(reservation.checkout_date).format("YYYY-MM-DD")}
+									<td className='date-cell'>{formatTableDate(reservation.checkin_date)}</td>
+									<td className='date-cell'>{formatTableDate(reservation.checkout_date)}</td>
+									<td className='number-cell'>{getReservationNights(reservation)}</td>
+									<td className='number-cell'>
+										{formatMoney(getReservationPricePerNight(reservation))}{" "}
+										{tableLabels.sar}
 									</td>
 									<td>
 										{reservation.payment_status_display ||
@@ -648,7 +792,9 @@ const PreReservationTable = ({
 									<td>
 										{/* Room Types */}
 										{reservation.pickedRoomsType.map((room, index) => (
-											<div key={index}>{room.room_type}</div>
+											<div key={index}>
+												<CellTooltipText value={room.room_type} />
+											</div>
 										))}
 									</td>
 									<td>
@@ -768,12 +914,12 @@ const PreReservationTable = ({
 											"No Room"
 										)}
 									</td>
-									<td>{`${formatMoney(reservation.total_amount)} SAR`}</td>
+									<td className='number-cell'>{`${formatMoney(
+										reservation.total_amount
+									)} ${tableLabels.sar}`}</td>
 									<td>
 										<Button onClick={() => showDetailsModal(reservation)}>
-											{chosenLanguage === "Arabic"
-												? "تفاصيل أكثر"
-												: "More Details"}
+											{chosenLanguage === "Arabic" ? "تفاصيل" : "Details"}
 										</Button>
 									</td>
 								</tr>
@@ -998,6 +1144,70 @@ const PaginationShell = styled.div`
 	}
 `;
 
+const TableControlBar = styled.div`
+	align-items: center;
+	background: #fff;
+	border: 1px solid rgba(16, 24, 40, 0.08);
+	border-radius: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: space-between;
+	margin-bottom: 12px;
+	min-width: 0;
+	padding: 10px 12px;
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+	}
+`;
+
+const ControlGroup = styled.div`
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+
+	@media (max-width: 640px) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+`;
+
+const ControlLabel = styled.span`
+	color: #344054;
+	font-size: 13px;
+	font-weight: 950;
+
+	@media (max-width: 640px) {
+		grid-column: 1 / -1;
+	}
+`;
+
+const ControlButton = styled.button`
+	background: ${(props) => (props.$active ? "#1677ff" : "#f8fafc")};
+	border: 1px solid ${(props) => (props.$active ? "#1677ff" : "#d0d5dd")};
+	border-radius: 2px;
+	color: ${(props) => (props.$active ? "#fff" : "#1f2937")};
+	font-size: 12.5px;
+	font-weight: 950;
+	min-height: 34px;
+	padding: 0.35rem 0.8rem;
+	white-space: nowrap;
+
+	&:hover {
+		border-color: #1677ff;
+		color: ${(props) => (props.$active ? "#fff" : "#0b5cad")};
+	}
+
+	@media (max-width: 640px) {
+		width: 100%;
+	}
+`;
+
 const PreReservationTableWrapper = styled.div`
 	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 	min-width: 0;
@@ -1007,7 +1217,7 @@ const PreReservationTableWrapper = styled.div`
 	tr,
 	tbody {
 		text-transform: capitalize !important;
-		font-size: 12px;
+		font-size: 12.5px;
 	}
 
 	td .ant-btn {
@@ -1042,12 +1252,14 @@ const PreReservationTableWrapper = styled.div`
 	}
 
 	th {
-		background-color: #f8fafc;
+		background: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		color: #344054;
-		font-weight: 800;
+		color: #102033;
+		font-size: 13.5px;
+		font-weight: 950;
+		border-bottom-color: #b9d5f4;
 	}
 
 	@media (max-width: 768px) {
@@ -1090,11 +1302,11 @@ const StyledTable = styled.table`
 
 	th,
 	td {
-		padding: 8px 10px;
+		padding: 8px 8px;
 		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 		white-space: nowrap;
 		border: 1px solid #edf2f7;
-		font-size: 12px;
+		font-size: 12.5px;
 		text-transform: capitalize;
 		line-height: 1.3;
 		max-width: 220px;
@@ -1102,19 +1314,36 @@ const StyledTable = styled.table`
 		text-overflow: ellipsis;
 	}
 
+	.date-cell {
+		white-space: normal;
+		text-transform: none !important;
+		line-height: 1.35;
+	}
+
+	.number-cell {
+		direction: ltr;
+		font-weight: 900;
+		min-width: 82px;
+		overflow: visible !important;
+		text-align: center;
+		text-overflow: clip !important;
+		text-transform: none !important;
+		white-space: nowrap;
+	}
+
 	th:nth-child(1),
 	td:nth-child(1) {
-		width: 42px;
+		width: 2.7%;
 	}
 
 	th:nth-child(2),
 	td:nth-child(2) {
-		width: 12%;
+		width: 10.5%;
 	}
 
 	th:nth-child(3),
 	td:nth-child(3) {
-		width: 11%;
+		width: 8.2%;
 	}
 
 	th:nth-child(4),
@@ -1124,12 +1353,12 @@ const StyledTable = styled.table`
 
 	th:nth-child(5),
 	td:nth-child(5) {
-		width: 8%;
+		width: 8.5%;
 	}
 
 	th:nth-child(6),
 	td:nth-child(6) {
-		width: 8%;
+		width: 7%;
 	}
 
 	th:nth-child(7),
@@ -1140,36 +1369,83 @@ const StyledTable = styled.table`
 	}
 
 	th:nth-child(9),
-	td:nth-child(9),
+	td:nth-child(9) {
+		width: 4%;
+	}
+
 	th:nth-child(10),
 	td:nth-child(10) {
-		width: 7%;
+		width: 7.2%;
 	}
 
 	th:nth-child(11),
 	td:nth-child(11) {
-		width: 8%;
+		width: 7.2%;
 	}
 
 	th:nth-child(12),
 	td:nth-child(12) {
-		width: 5%;
+		width: 7.3%;
 	}
 
 	th:nth-child(13),
-	td:nth-child(13),
+	td:nth-child(13) {
+		width: 6.8%;
+	}
+
 	th:nth-child(14),
 	td:nth-child(14) {
-		width: 6%;
+		width: 5.6%;
+	}
+
+	th:nth-child(15),
+	td:nth-child(15) {
+		width: 7.3%;
+	}
+
+	th:nth-child(16),
+	td:nth-child(16) {
+		width: 3.8%;
 	}
 
 	th {
-		background-color: #f8fafc;
-		color: #344054;
-		font-weight: 800;
+		background: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
+		color: #102033;
+		font-size: 13.5px;
+		font-weight: 950;
+		overflow: visible;
 		position: sticky;
+		text-overflow: clip;
 		top: 0;
+		white-space: nowrap;
 		z-index: 1;
+		border-bottom-color: #b9d5f4;
+	}
+
+	.sortable-heading {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.22rem;
+		max-width: 100%;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		font-weight: 950;
+		padding: 0;
+		white-space: nowrap;
+	}
+
+	.sortable-heading:hover {
+		color: #0b5cad;
+	}
+
+	.sort-arrow {
+		color: #1677ff;
+		font-size: 0.72rem;
+		line-height: 1;
 	}
 
 	@media (max-width: 768px) {
@@ -1205,21 +1481,13 @@ const PaginationWrapper = styled.div`
 const StatusSpan = styled.span`
 	display: inline-block;
 	padding: 5px 10px;
-	border-radius: 999px;
-	background-color: ${(props) =>
-		props.status?.toLowerCase() === "cancelled"
-			? "darkred"
-			: props.status?.toLowerCase() === "rejected"
-			  ? "#b42318"
-			: props.status?.toLowerCase() === "not paid"
-			  ? "#222"
-			  : "transparent"};
-	color: ${(props) =>
-		props.status?.toLowerCase() === "cancelled" ||
-		props.status?.toLowerCase() === "rejected" ||
-		props.status?.toLowerCase() === "not paid"
-			? "#fff"
-			: "inherit"};
+	border: 1px solid ${(props) => reservationStatusStyle(props.status).borderColor};
+	border-radius: 2px;
+	background-color: ${(props) => reservationStatusStyle(props.status).background};
+	color: ${(props) => reservationStatusStyle(props.status).color};
+	font-weight: 950;
+	min-width: 78px;
+	text-align: center;
 `;
 
 const RejectionReason = styled.div`

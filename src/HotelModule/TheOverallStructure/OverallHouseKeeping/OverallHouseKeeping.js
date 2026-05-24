@@ -1200,8 +1200,8 @@ const OverallHouseKeeping = ({ userId, token, ownerId, chosenLanguage }) => {
 												<td>{task.assignedToName || labels.notAssigned}</td>
 												<td>{task.cleanedByName || labels.notCleaned}</td>
 												<td>{task.confirmation_number || "-"}</td>
-												<td>{formatDateTime(task.taskDate)}</td>
-												<td>{formatDateTime(task.updatedAt)}</td>
+												<td>{formatDateTime(task.taskDate, chosenLanguage)}</td>
+												<td>{formatDateTime(task.updatedAt, chosenLanguage)}</td>
 												<td>
 													<button
 														type='button'
@@ -1375,7 +1375,7 @@ const OverallHouseKeeping = ({ userId, token, ownerId, chosenLanguage }) => {
 													<td className='hotel-name'>
 														{titleCase(task.hotelName || "-")}
 													</td>
-													<td>{formatDate(task.taskDate)}</td>
+													<td>{formatDate(task.taskDate, chosenLanguage)}</td>
 													<td>{taskMainLabel(task, isRTL)}</td>
 													<td>{taskTypeLabel(task, labels)}</td>
 													<td>{task.assignedToName || labels.notAssigned}</td>
@@ -1387,8 +1387,8 @@ const OverallHouseKeeping = ({ userId, token, ownerId, chosenLanguage }) => {
 															)}
 														</Tag>
 													</td>
-													<td>{formatDateTime(getTaskStartedAt(task))}</td>
-													<td>{formatDateTime(getTaskCompletedAt(task))}</td>
+													<td>{formatDateTime(getTaskStartedAt(task), chosenLanguage)}</td>
+													<td>{formatDateTime(getTaskCompletedAt(task), chosenLanguage)}</td>
 													<td>{formatDuration(getTaskDurationMs(task), labels.minutes)}</td>
 													<td>
 														<button
@@ -1445,11 +1445,11 @@ const OverallHouseKeeping = ({ userId, token, ownerId, chosenLanguage }) => {
 							</div>
 							<div>
 								<span>{labels.startedAt}</span>
-								<strong>{formatDateTime(getTaskStartedAt(detailsTask))}</strong>
+								<strong>{formatDateTime(getTaskStartedAt(detailsTask), chosenLanguage)}</strong>
 							</div>
 							<div>
 								<span>{labels.completedAt}</span>
-								<strong>{formatDateTime(getTaskCompletedAt(detailsTask))}</strong>
+								<strong>{formatDateTime(getTaskCompletedAt(detailsTask), chosenLanguage)}</strong>
 							</div>
 							{detailsTask.task_comment ? (
 								<div className='full-span'>

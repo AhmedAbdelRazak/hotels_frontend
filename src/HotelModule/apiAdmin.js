@@ -1648,8 +1648,14 @@ export const pendingConfirmationReservationList = ({
 	hotelId,
 	userId,
 	search = "",
+	sortBy = "",
+	sortOrder = "",
 }) => {
-	const query = search ? `?search=${encodeURIComponent(search)}` : "";
+	const params = new URLSearchParams();
+	if (search) params.set("search", search);
+	if (sortBy) params.set("sortBy", sortBy);
+	if (sortOrder) params.set("sortOrder", sortOrder);
+	const query = params.toString() ? `?${params.toString()}` : "";
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/pending-confirmation/${page}/${records}/${hotelId}/${userId}${query}`,
 		{
@@ -1754,7 +1760,12 @@ export const acknowledgePendingNotification = ({
 const buildOverallQuery = (params = {}) => {
 	const query = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {
-		if (value !== undefined && value !== null && value !== "") {
+		if (Array.isArray(value)) {
+			const selected = value.filter(
+				(item) => item !== undefined && item !== null && item !== ""
+			);
+			if (selected.length) query.append(key, selected.join(","));
+		} else if (value !== undefined && value !== null && value !== "") {
 			query.append(key, value);
 		}
 	});

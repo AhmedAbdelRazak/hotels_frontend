@@ -376,39 +376,60 @@ const AdminOverallSideMenu = ({
 			getItem(
 				menuLink("", text.mainDashboard),
 				"overall-dashboard",
-				<DashboardOutlined />
+				<DashboardOutlined />,
+				null,
+				null,
+				"overall-menu-row"
 			),
 			getItem(
 				menuLink("summary", text.overallSummary),
 				"overall-summary",
-				<BarChartOutlined />
+				<BarChartOutlined />,
+				null,
+				null,
+				"overall-menu-row"
 			),
 			getItem(menuText(text.reservations), "overall-reservations", <CalendarOutlined />, [
 				getItem(
 					menuLink("new-reservation", text.newReservation),
 					"overall-new-reservation",
-					<PlusCircleOutlined />
+					<PlusCircleOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
 				getItem(
 					menuLink("reservation-main", reservationsListLabel, { tab: "list" }),
 					"overall-reservation-list",
-					<UnorderedListOutlined />
+					<UnorderedListOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
 				getItem(
 					menuLink("pending-reservations", text.pendingReservations),
 					"overall-pending-reservations",
-					<ClockCircleOutlined />
+					<ClockCircleOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
-			]),
+			], null, "overall-menu-section"),
 			getItem(
 				menuLink("hotel-map", text.hotelMap),
 				"overall-hotel-map",
-				<EnvironmentOutlined />
+				<EnvironmentOutlined />,
+				null,
+				null,
+				"overall-menu-row"
 			),
 			getItem(
 				menuLink("housekeeping", text.houseKeeping),
 				"overall-housekeeping",
-				<ClearOutlined />
+				<ClearOutlined />,
+				null,
+				null,
+				"overall-menu-row"
 			),
 			getItem(
 				menuText(text.financialAffairs),
@@ -418,46 +439,72 @@ const AdminOverallSideMenu = ({
 					getItem(
 						menuLink("financial-report", text.generalFinancialReport),
 						"overall-financial-report",
-						<FileTextOutlined />
+						<FileTextOutlined />,
+						null,
+						null,
+						"overall-menu-child"
 					),
 					getItem(
 						menuLink("financial-actions", text.pendingFinancialActions),
 						"overall-financial-actions",
-						<AuditOutlined />
+						<AuditOutlined />,
+						null,
+						null,
+						"overall-menu-child"
 					),
 					getItem(
 						menuLink("wallet-management", text.addingUpdatingWallets),
 						"overall-wallet-management",
-						<CreditCardOutlined />
+						<CreditCardOutlined />,
+						null,
+						null,
+						"overall-menu-child"
 					),
-				]
+				],
+				null,
+				"overall-menu-section"
 			),
 			getItem(menuText(text.accountManagement), "overall-account-management", <TeamOutlined />, [
 				getItem(
 					menuLink("account-management", text.accountManagementMain),
 					"overall-account-main",
-					<IdcardOutlined />
+					<IdcardOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
 				getItem(
 					menuLink("create-account", text.createNewAccount),
 					"overall-create-account",
-					<UserAddOutlined />
+					<UserAddOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
 				getItem(
 					menuLink("activate-accounts", text.activateAccounts),
 					"overall-activate-accounts",
-					<SafetyCertificateOutlined />
+					<SafetyCertificateOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
 				getItem(
 					menuLink("update-account", text.updateExistingAccount),
 					"overall-update-account",
-					<EditOutlined />
+					<EditOutlined />,
+					null,
+					null,
+					"overall-menu-child"
 				),
-			]),
+			], null, "overall-menu-section"),
 			getItem(
 				menuLink("settings", text.overallSettings),
 				"overall-settings",
-				<SettingOutlined />
+				<SettingOutlined />,
+				null,
+				null,
+				"overall-menu-row"
 			),
 			getItem(
 				<div className='margin-divider'></div>,
@@ -599,7 +646,7 @@ const MobileMenuBackdrop = styled.button`
 
 const AdminOverallSideMenuWrapper = styled.div`
 	margin-bottom: 15px;
-	background: #1e1e2d;
+	background: #1d1d2b;
 	top: 70px !important;
 	z-index: 1100;
 	overflow: hidden;
@@ -610,6 +657,11 @@ const AdminOverallSideMenuWrapper = styled.div`
 	height: calc(100dvh - 70px);
 	width: ${(props) => (props.$show ? "80px" : "286px")};
 	padding: 0 !important;
+	font-family: ${(props) =>
+		props.$isArabic
+			? `"Droid Arabic Kufi", "Tajawal", "Cairo", "Noto Kufi Arabic", "Segoe UI", Tahoma, Arial, sans-serif`
+			: `"Inter", "Segoe UI", Arial, sans-serif`};
+	letter-spacing: 0;
 
 	.menu-toggle-button {
 		display: flex;
@@ -634,7 +686,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		height: calc(100% - 50px) !important;
 		min-height: 0 !important;
 		width: 100% !important;
-		padding: 0 6px 8px !important;
+		padding: 6px 0 12px !important;
 		margin: 0 !important;
 		overflow-x: hidden !important;
 		overflow-y: auto !important;
@@ -642,10 +694,11 @@ const AdminOverallSideMenuWrapper = styled.div`
 	}
 
 	li {
-		font-size: ${(props) => (props.$show ? "0.86rem" : "0.88rem")};
-		margin-bottom: 3px !important;
+		font-size: ${(props) => (props.$show ? "0.86rem" : "0.9rem")};
+		margin-bottom: 0 !important;
 		color: white;
-		font-weight: bolder;
+		font-weight: 900;
+		letter-spacing: 0;
 
 		svg {
 			color: currentColor;
@@ -658,25 +711,43 @@ const AdminOverallSideMenuWrapper = styled.div`
 		align-items: center;
 		justify-content: center;
 		min-width: 18px;
-		font-size: 15.5px;
-		color: #72c7ff !important;
+		font-size: 15px;
+		color: #83cfff !important;
 		transition: color 0.18s ease, transform 0.18s ease;
 	}
 
 	.ant-menu-item,
 	.ant-menu-submenu-title {
-		height: clamp(29px, 4.05vh, 38px) !important;
-		line-height: clamp(29px, 4.05vh, 38px) !important;
-		margin: 0 4px 3px !important;
-		border-radius: 8px;
+		height: 42px !important;
+		line-height: 42px !important;
+		margin: 0 10px 2px !important;
+		border-radius: 3px;
 		overflow: hidden;
 		display: flex !important;
 		align-items: center !important;
+		transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+	}
+
+	.ant-menu-inline .ant-menu-item,
+	.ant-menu-inline .ant-menu-submenu-title {
+		padding-inline: 16px 12px !important;
+	}
+
+	.overall-menu-row.ant-menu-item,
+	.ant-menu-sub .overall-menu-child.ant-menu-item {
+		background: #29293d !important;
+		color: #f7f7fb !important;
+		box-shadow: inset 0 -1px rgba(255, 255, 255, 0.035);
+	}
+
+	.overall-menu-row.ant-menu-item:nth-of-type(even),
+	.ant-menu-sub .overall-menu-child.ant-menu-item:nth-of-type(even) {
+		background: #232333 !important;
 	}
 
 	.ant-menu-item:hover,
 	.ant-menu-submenu-title:hover {
-		background: rgba(24, 144, 255, 0.14) !important;
+		background: #303049 !important;
 		color: #ffffff !important;
 	}
 
@@ -689,23 +760,41 @@ const AdminOverallSideMenuWrapper = styled.div`
 	}
 
 	.ant-menu-submenu > .ant-menu-submenu-title {
-		height: clamp(32px, 4.25vh, 40px) !important;
-		line-height: clamp(32px, 4.25vh, 40px) !important;
-		font-size: ${(props) => (props.$show ? "0.9rem" : "0.94rem")};
-		font-weight: 900;
-		color: #ffffff !important;
-		background: rgba(255, 255, 255, 0.025);
+		height: 34px !important;
+		line-height: 34px !important;
+		margin: 10px 10px 2px !important;
+		font-size: ${(props) => (props.$show ? "0.86rem" : "0.94rem")};
+		font-weight: 950;
+		color: #d99225 !important;
+		background: transparent !important;
+		border-radius: 0;
+		letter-spacing: 0;
 	}
 
 	.ant-menu-submenu > .ant-menu-submenu-title .ant-menu-item-icon,
 	.ant-menu-submenu > .ant-menu-submenu-title .anticon {
-		font-size: 16.5px;
-		color: #8ed4ff !important;
+		font-size: 15px;
+		color: #d99225 !important;
+	}
+
+	.ant-menu-submenu > .ant-menu-submenu-title .overall-menu-text {
+		color: #d99225 !important;
+		font-size: inherit;
+	}
+
+	.ant-menu-submenu-arrow {
+		color: #d99225 !important;
+		opacity: 0.95;
+	}
+
+	.ant-menu-submenu-selected > .ant-menu-submenu-title {
+		color: #f3a72f !important;
 	}
 
 	.ant-menu-sub .ant-menu-item {
-		font-size: ${(props) => (props.$show ? "0.82rem" : "0.84rem")};
-		font-weight: 800;
+		font-size: ${(props) => (props.$show ? "0.82rem" : "0.88rem")};
+		font-weight: 900;
+		margin-inline: 12px 10px !important;
 	}
 
 	.ant-menu-title-content {
@@ -726,6 +815,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		color: inherit;
 		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+		line-height: 1.55;
 	}
 
 	.overall-menu-link:hover {
@@ -767,45 +857,53 @@ const AdminOverallSideMenuWrapper = styled.div`
 	.ant-menu-dark .ant-menu-sub,
 	.ant-menu.ant-menu-dark .ant-menu-sub {
 		color: rgba(255, 255, 255, 0.65);
-		background: #1e1e2d !important;
+		background: #1d1d2b !important;
 		width: 100% !important;
 		border-inline-end: 0 !important;
 	}
 
 	.ant-menu-item-selected {
-		background: ${(props) => (props.$show2 ? "none !important" : "black !important")};
+		background: ${(props) =>
+			props.$show2 ? "none !important" : "#64166e !important"};
+		color: #ffffff !important;
+		box-shadow: inset ${(props) => (props.$isArabic ? "-4px" : "4px")} 0 0
+			#d99225;
 	}
 
 	.ant-menu-item-selected .ant-menu-item-icon,
 	.ant-menu-item-selected .anticon {
-		color: #9ddcff !important;
+		color: #ffffff !important;
 	}
 
 	.reddish-bg {
-		background-color: #270000 !important;
+		background-color: #4a0505 !important;
+		border-radius: 4px !important;
+		margin: 8px 10px 0 !important;
+		box-shadow: inset ${(props) => (props.$isArabic ? "-4px" : "4px")} 0 0
+			#b91c1c;
 	}
 
 	@media (max-width: 1650px) {
 		ul > li {
-			font-size: 0.78rem !important;
-			margin-bottom: 2px !important;
+			font-size: 0.84rem !important;
+			margin-bottom: 0 !important;
 		}
 
 		.ant-menu-item,
 		.ant-menu-submenu-title {
-			height: clamp(28px, 3.95vh, 36px) !important;
-			line-height: clamp(28px, 3.95vh, 36px) !important;
+			height: 39px !important;
+			line-height: 39px !important;
 			margin-bottom: 2px !important;
 		}
 
 		.ant-menu-submenu > .ant-menu-submenu-title {
-			height: clamp(31px, 4.15vh, 38px) !important;
-			line-height: clamp(31px, 4.15vh, 38px) !important;
-			font-size: 0.84rem !important;
+			height: 32px !important;
+			line-height: 32px !important;
+			font-size: 0.86rem !important;
 		}
 
 		.ant-menu-sub .ant-menu-item {
-			font-size: 0.76rem !important;
+			font-size: 0.82rem !important;
 		}
 	}
 
@@ -817,7 +915,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		height: calc(100dvh - 70px);
 		width: ${(props) =>
 			props.$show ? "80px" : "min(92vw, 340px)"} !important;
-		background: #1e1e2d;
+		background: #1d1d2b;
 		box-shadow: ${(props) =>
 			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
 		transition: width 0.22s ease, box-shadow 0.22s ease;
@@ -872,7 +970,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 	@media (max-width: 560px) {
 		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
 			!important;
-		background: ${(props) => (props.$show ? "transparent" : "#1e1e2d")};
+		background: ${(props) => (props.$show ? "transparent" : "#1d1d2b")};
 		box-shadow: ${(props) =>
 			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
 		pointer-events: ${(props) => (props.$show ? "none" : "auto")};

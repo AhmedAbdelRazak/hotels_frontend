@@ -16,6 +16,56 @@ body {
 	background-color: #f7f8fc;
 }
 
+:root {
+	--pms-table-header-bg: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
+	--pms-table-header-color: #102033;
+	--pms-table-header-border: #b9d5f4;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th,
+.ant-table-thead > tr > th {
+	background: var(--pms-table-header-bg) !important;
+	border-bottom-color: var(--pms-table-header-border) !important;
+	color: var(--pms-table-header-color) !important;
+	font-size: 13.5px;
+	font-weight: 950 !important;
+	text-transform: capitalize;
+}
+
+table thead th {
+	background: var(--pms-table-header-bg);
+	border-bottom-color: var(--pms-table-header-border);
+	color: var(--pms-table-header-color);
+	font-weight: 950;
+	overflow: visible;
+	text-overflow: clip;
+	text-transform: capitalize;
+	white-space: nowrap;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td,
+.ant-table-tbody > tr > td,
+table tbody td {
+	text-transform: capitalize;
+}
+
+.pms-preserve-case,
+.pms-preserve-case *,
+table tbody td.pms-preserve-case,
+table tbody td .pms-preserve-case {
+	text-transform: none !important;
+}
+
+table tbody td.amount-cell,
+table tbody td.number-cell,
+.ant-table-cell.amount-cell,
+.ant-table-cell.number-cell {
+	overflow: visible !important;
+	text-overflow: clip !important;
+	text-transform: none !important;
+	white-space: nowrap !important;
+}
+
 /* Keep every dialog layer above fixed hotel side menus/nav, and below
    transient app feedback such as messages, notifications, and pickers. */
 .ant-modal-mask,
@@ -65,6 +115,20 @@ body {
 .ant-tooltip,
 .ant-popover {
 	z-index: 20000 !important;
+}
+
+.overall-filter-dropdown.rtl {
+	direction: rtl;
+	text-align: right;
+}
+
+.overall-filter-dropdown.rtl .ant-select-item-option-content {
+	text-align: right;
+}
+
+.overall-filter-dropdown.ltr {
+	direction: ltr;
+	text-align: left;
 }
 
 .Toastify__toast-container,

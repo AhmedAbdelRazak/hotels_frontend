@@ -607,7 +607,7 @@ const AccountManagementMain = ({
 											})()}
 										</td>
 										<td className='account-date-cell' data-label={labels.created}>
-											{formatDate(account.createdAt)}
+											{formatDate(account.createdAt, chosenLanguage)}
 										</td>
 										<td className='account-action-cell' data-label={labels.action}>
 											<ActionButton

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Button,
 	Input,
@@ -23,6 +23,7 @@ import {
 	updatePendingConfirmationReservation,
 } from "../apiAdmin";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
+import { formatSaudiHijriDate } from "../../utils/saudiDates";
 
 const labels = {
 	en: {
@@ -95,6 +96,11 @@ labels.ar = {
 };
 
 Object.assign(labels.en, {
+	sortBy: "Sort by",
+	gregorianDates: "Gregorian",
+	hijriDates: "Hijri",
+	createdAt: "Creation Date",
+	bookingDate: "Booking Date",
 	commissionStatus: "Commission status",
 	rejected: "Rejected",
 	commissionDue: "Commission due",
@@ -125,6 +131,11 @@ Object.assign(labels.en, {
 });
 
 Object.assign(labels.ar, {
+	sortBy: "رتب حسب",
+	gregorianDates: "ميلادي",
+	hijriDates: "هجري",
+	createdAt: "تاريخ الإنشاء",
+	bookingDate: "تاريخ الحجز",
 	commissionStatus: "حالة العمولة",
 	rejected: "مرفوض",
 	commissionDue: "العمولة مستحقة",
@@ -273,6 +284,13 @@ const formatMoney = (value) =>
 		maximumFractionDigits: 2,
 	});
 
+const pendingSortOptions = (txt) => [
+	{ value: "createdAt", label: txt.createdAt },
+	{ value: "booking_source", label: txt.source },
+	{ value: "checkin_date", label: txt.checkin },
+	{ value: "checkout_date", label: txt.checkout },
+];
+
 const getCommissionValue = (reservation = {}) =>
 	Number(
 		reservation.commission ||
@@ -371,6 +389,9 @@ const PendingConfirmationReport = ({
 	const [total, setTotal] = useState(0);
 	const [searchDraft, setSearchDraft] = useState("");
 	const [search, setSearch] = useState("");
+	const [dateMode, setDateMode] = useState("gregorian");
+	const [sortBy, setSortBy] = useState("createdAt");
+	const [sortOrder, setSortOrder] = useState("asc");
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const tableRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
 	const [statusModal, setStatusModal] = useState({
@@ -400,6 +421,34 @@ const PendingConfirmationReport = ({
 		? `${txt.totalReview} (${financeReservationTotal} SAR)`
 		: txt.totalReview;
 
+	const formatDisplayDate = useCallback(
+		(value) => {
+			if (!value) return "-";
+			const parsed = moment(value);
+			if (!parsed.isValid()) return "-";
+			if (dateMode === "hijri") {
+				return formatSaudiHijriDate(value, {
+					language: chosenLanguage,
+					month: "short",
+				});
+			}
+			return parsed.format("YYYY-MM-DD");
+		},
+		[chosenLanguage, dateMode],
+	);
+
+	const updateSort = (nextSortBy) => {
+		setSortBy((previousSortBy) => {
+			setSortOrder((previousSortOrder) =>
+				previousSortBy === nextSortBy && previousSortOrder === "asc"
+					? "desc"
+					: "asc",
+			);
+			return nextSortBy;
+		});
+		setPage(1);
+	};
+
 	const loadData = () => {
 		if (!hotelDetails?._id || !user?._id) return;
 		setLoading(true);
@@ -409,6 +458,8 @@ const PendingConfirmationReport = ({
 			hotelId: hotelDetails._id,
 			userId: user._id,
 			search,
+			sortBy,
+			sortOrder,
 		})
 			.then((data) => {
 				if (data?.error) {
@@ -433,7 +484,7 @@ const PendingConfirmationReport = ({
 	useEffect(() => {
 		loadData();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [hotelDetails?._id, user?._id, page, records, search]);
+	}, [hotelDetails?._id, user?._id, page, records, search, sortBy, sortOrder]);
 
 	useEffect(() => {
 		const params = new URLSearchParams(location.search || "");
@@ -704,19 +755,19 @@ const PendingConfirmationReport = ({
 				title: txt.bookedAt,
 				dataIndex: "booked_at",
 				width: 95,
-				render: formatDate,
+				render: (value, record) => formatDisplayDate(value || record.createdAt),
 			},
 			{
 				title: txt.checkin,
 				dataIndex: "checkin_date",
 				width: 88,
-				render: formatDate,
+				render: formatDisplayDate,
 			},
 			{
 				title: txt.checkout,
 				dataIndex: "checkout_date",
 				width: 88,
-				render: formatDate,
+				render: formatDisplayDate,
 			},
 			{
 				title: txt.status,
@@ -868,6 +919,7 @@ const PendingConfirmationReport = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[
 			isArabic,
+			formatDisplayDate,
 			page,
 			records,
 			txt,
@@ -907,6 +959,42 @@ const PendingConfirmationReport = ({
 					{txt.search}
 				</Button>
 			</FilterBar>
+
+			<TableControls $isArabic={isArabic}>
+				<ControlsGroup>
+					<ControlButton
+						type='button'
+						$active={dateMode === "gregorian"}
+						onClick={() => setDateMode("gregorian")}
+					>
+						{txt.gregorianDates}
+					</ControlButton>
+					<ControlButton
+						type='button'
+						$active={dateMode === "hijri"}
+						onClick={() => setDateMode("hijri")}
+					>
+						{txt.hijriDates}
+					</ControlButton>
+				</ControlsGroup>
+				<ControlsGroup>
+					<ControlsLabel>{txt.sortBy}</ControlsLabel>
+					{pendingSortOptions(txt).map((option) => {
+						const active = sortBy === option.value;
+						return (
+							<ControlButton
+								type='button'
+								key={option.value}
+								$active={active}
+								onClick={() => updateSort(option.value)}
+							>
+								{option.label}
+								{active ? (sortOrder === "asc" ? " ^" : " v") : ""}
+							</ControlButton>
+						);
+					})}
+				</ControlsGroup>
+			</TableControls>
 
 			<TableShell>
 				<Table
@@ -1302,6 +1390,69 @@ const FilterBar = styled.div`
 	}
 `;
 
+const TableControls = styled.div`
+	align-items: center;
+	background: #ffffff;
+	border: 1px solid #d7e8fb;
+	border-radius: 10px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: space-between;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+	}
+`;
+
+const ControlsGroup = styled.div`
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+
+	@media (max-width: 640px) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+`;
+
+const ControlsLabel = styled.span`
+	color: #344054;
+	font-size: 13px;
+	font-weight: 950;
+
+	@media (max-width: 640px) {
+		grid-column: 1 / -1;
+	}
+`;
+
+const ControlButton = styled.button`
+	background: ${(props) => (props.$active ? "#1677ff" : "#f8fafc")};
+	border: 1px solid ${(props) => (props.$active ? "#1677ff" : "#d0d5dd")};
+	border-radius: 2px;
+	color: ${(props) => (props.$active ? "#fff" : "#1f2937")};
+	font-size: 12.5px;
+	font-weight: 950;
+	min-height: 34px;
+	padding: 0.35rem 0.8rem;
+	white-space: nowrap;
+
+	&:hover {
+		border-color: #1677ff;
+		color: ${(props) => (props.$active ? "#fff" : "#0b5cad")};
+	}
+
+	@media (max-width: 640px) {
+		width: 100%;
+	}
+`;
+
 const TableShell = styled.div`
 	border: 1px solid #d7e8fb;
 	border-radius: 10px;
@@ -1309,14 +1460,16 @@ const TableShell = styled.div`
 	background: #fff;
 
 	.ant-table-thead > tr > th {
-		background: #e7f4ff;
-		color: #0f2742;
+		background: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
+		color: #102033;
+		font-size: 13.5px;
 		font-weight: 900;
 		text-align: center;
 		white-space: nowrap;
 	}
 
 	.ant-table-tbody > tr > td {
+		font-size: 12.5px;
 		text-align: center;
 		vertical-align: middle;
 	}

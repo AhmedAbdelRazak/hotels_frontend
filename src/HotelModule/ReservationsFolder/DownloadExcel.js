@@ -24,6 +24,14 @@ const DownloadExcel = ({
 
 				if (col.key === "index") {
 					cellValue = rowIndex;
+				} else if (
+					col.dataIndex === "booked_at" ||
+					col.dataIndex === "checkin_date" ||
+					col.dataIndex === "checkout_date"
+				) {
+					cellValue = row[col.dataIndex]
+						? moment(row[col.dataIndex]).format("YYYY-MM-DD")
+						: "";
 				} else if (col.key === "roomDetails" && row.roomDetails) {
 					cellValue = row.roomDetails
 						.map((room) => room.room_number || "No Room")
@@ -33,15 +41,6 @@ const DownloadExcel = ({
 				} else if (col.render && typeof cellValue !== "undefined") {
 					// For dates and other fields that use render functions in your table
 					cellValue = col.render(cellValue, row);
-				}
-
-				// Format date fields directly without using render functions
-				if (
-					col.dataIndex === "booked_at" ||
-					col.dataIndex === "checkin_date" ||
-					col.dataIndex === "checkout_date"
-				) {
-					cellValue = moment(cellValue).format("YYYY-MM-DD");
 				}
 
 				// Ensure "Total Amount" is formatted as a number

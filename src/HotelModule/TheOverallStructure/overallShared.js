@@ -1,4 +1,12 @@
+import React from "react";
+import { Tooltip } from "antd";
 import styled from "styled-components";
+import {
+	formatSaudiDate as formatSaudiDateForDisplay,
+	formatSaudiHijriDate as formatSaudiHijriDateForDisplay,
+	formatSaudiDateTime as formatSaudiDateTimeForDisplay,
+	isArabicLanguage as isArabicDateLanguage,
+} from "../../utils/saudiDates";
 
 export const normalizeId = (value) => {
 	if (!value) return "";
@@ -18,24 +26,111 @@ export const formatMoney = (value) => {
 	});
 };
 
-export const formatDate = (value) => {
+export const formatDate = (value, chosenLanguage = "English", options = {}) => {
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
+	if (
+		isArabicDateLanguage(chosenLanguage) &&
+		(options.useSaudiDisplay || options.includeHijri || options.includeWeekday)
+	) {
+		return formatSaudiDateForDisplay(date, {
+			language: chosenLanguage,
+			includeHijri: options.includeHijri ?? false,
+			includeWeekday: options.includeWeekday ?? false,
+			month: options.month || "short",
+		});
+	}
 	return date.toLocaleDateString("en-CA");
 };
 
-export const formatDateTime = (value) => {
+export const formatDateByCalendar = (
+	value,
+	chosenLanguage = "English",
+	calendarMode = "gregorian"
+) => {
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
+	if (calendarMode === "hijri") {
+		return formatSaudiHijriDateForDisplay(date, {
+			language: chosenLanguage,
+			month: isArabicDateLanguage(chosenLanguage) ? "long" : "short",
+		});
+	}
+	return date.toLocaleDateString("en-CA");
+};
+
+export const getReservationNights = (reservation = {}) => {
+	const checkin = reservation.checkin_date
+		? new Date(reservation.checkin_date)
+		: null;
+	const checkout = reservation.checkout_date
+		? new Date(reservation.checkout_date)
+		: null;
+	const fromDates =
+		checkin &&
+		checkout &&
+		!Number.isNaN(checkin.getTime()) &&
+		!Number.isNaN(checkout.getTime())
+			? Math.round(
+					(checkout.getTime() - checkin.getTime()) / (1000 * 60 * 60 * 24)
+			  )
+			: null;
+	if (Number.isFinite(fromDates) && fromDates >= 0) return fromDates;
+	return Math.max(Number(reservation.days_of_residence || 0), 0);
+};
+
+export const getReservationPricePerDay = (reservation = {}) => {
+	const nights = Math.max(getReservationNights(reservation), 1);
+	const total = Number(reservation.total_amount || 0);
+	return Number.isFinite(total) ? total / nights : 0;
+};
+
+export const TableTooltipText = ({ value, max = 20, className = "" }) => {
+	const text =
+		value === null || value === undefined || value === "" ? "-" : String(value);
+	const display = text.length > max ? `${text.slice(0, max)}...` : text;
+	const content = (
+		<span className={className} dir='auto'>
+			{display}
+		</span>
+	);
+	if (text.length <= max) return content;
+	return (
+		<Tooltip title={<span dir='auto'>{text}</span>} placement='top'>
+			{content}
+		</Tooltip>
+	);
+};
+
+export const formatDateTime = (
+	value,
+	chosenLanguage = "English",
+	options = {},
+) => {
+	if (!value) return "-";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "-";
+	if (
+		isArabicDateLanguage(chosenLanguage) &&
+		(options.useSaudiDisplay || options.includeHijri || options.includeWeekday)
+	) {
+		return formatSaudiDateTimeForDisplay(date, {
+			language: chosenLanguage,
+			includeHijri: options.includeHijri ?? false,
+			includeWeekday: options.includeWeekday ?? false,
+			month: options.month || "short",
+		});
+	}
 	return `${date.toLocaleDateString("en-CA")} ${date.toLocaleTimeString([], {
 		hour: "2-digit",
 		minute: "2-digit",
 	})}`;
 };
 
-export const isArabicLanguage = (chosenLanguage) => chosenLanguage === "Arabic";
+export const isArabicLanguage = (chosenLanguage) =>
+	isArabicDateLanguage(chosenLanguage);
 
 export const overallCommonText = {
 	en: {
@@ -72,7 +167,7 @@ export const overallCommonText = {
 		openDashboard: "Open Dashboard",
 		openSettings: "Open Settings",
 		openHousekeeping: "Open Housekeeping",
-		moreDetails: "More Details",
+		moreDetails: "Details",
 		confirmation: "Confirmation",
 		guest: "Guest",
 		source: "Source",
@@ -87,6 +182,13 @@ export const overallCommonText = {
 		checkOut: "Checkout",
 		total: "Total",
 		totalAmount: "Total Amount",
+		nights: "Nights",
+		pricePerDay: "Price / Day",
+		sortBy: "Sort by",
+		sortAscending: "Ascending",
+		sortDescending: "Descending",
+		gregorianDates: "Gregorian",
+		hijriDates: "Hijri",
 		rooms: "Rooms",
 		totalRooms: "Total Rooms",
 		availableRooms: "Available Rooms",
@@ -213,7 +315,7 @@ export const overallCommonText = {
 		openDashboard: "فتح لوحة الفندق",
 		openSettings: "فتح الإعدادات",
 		openHousekeeping: "فتح النظافة",
-		moreDetails: "تفاصيل أكثر",
+		moreDetails: "تفاصيل",
 		confirmation: "رقم التأكيد",
 		guest: "الضيف",
 		source: "المصدر",
@@ -224,6 +326,13 @@ export const overallCommonText = {
 		checkOut: "المغادرة",
 		total: "الإجمالي",
 		totalAmount: "إجمالي المبلغ",
+		nights: "الليالي",
+		pricePerDay: "سعر الليلة",
+		sortBy: "رتب حسب",
+		sortAscending: "تصاعدي",
+		sortDescending: "تنازلي",
+		gregorianDates: "ميلادي",
+		hijriDates: "هجري",
 		rooms: "الغرف",
 		totalRooms: "إجمالي الغرف",
 		availableRooms: "الغرف المتاحة",
@@ -373,11 +482,16 @@ export const localizeStatus = (status = "", chosenLanguage) => {
 };
 
 export const statusTone = (status = "") => {
-	const normalized = String(status || "").toLowerCase();
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ");
 	if (/cancel|reject|inactive|no[-_\s]?show/.test(normalized)) return "red";
+	if (/early checked out|checked out|closed/.test(normalized)) return "green";
+	if (/inhouse|in house|checked in/.test(normalized)) return "softGreen";
 	if (/pending|review|unfinished|cleaning/.test(normalized)) return "orange";
-	if (/confirm|active|finish|done|clean|approved/.test(normalized)) return "green";
-	return "blue";
+	if (/confirm|approved/.test(normalized)) return "blue";
+	if (/active|finish|done|clean/.test(normalized)) return "green";
+	return "slate";
 };
 
 export const emptyOption = { value: "", label: "All" };
@@ -454,6 +568,11 @@ export const OverallPageShell = styled.section`
 	min-width: 0;
 	max-width: 100%;
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	font-family: ${(props) =>
+		props.$isRTL
+			? `"Droid Arabic Kufi", "Tajawal", "Cairo", "Noto Kufi Arabic", "Segoe UI", Tahoma, Arial, sans-serif`
+			: `"Inter", "Segoe UI", Arial, sans-serif`};
+	letter-spacing: 0;
 
 	@media (max-width: 640px) {
 		gap: 0.8rem;
@@ -463,14 +582,16 @@ export const OverallPageShell = styled.section`
 export const OverallHeader = styled.header`
 	display: flex;
 	align-items: flex-start;
-	justify-content: space-between;
+	justify-content: center;
 	gap: 1rem;
 	flex-wrap: wrap;
 	min-width: 0;
-	padding: 14px 16px;
-	border: 1px solid #b8dcff;
-	border-radius: 10px;
-	background: linear-gradient(135deg, #e9f6ff 0%, #f7fbff 100%);
+	padding: 12px 16px;
+	border: 1px solid #d0d5dd;
+	border-radius: 0;
+	background: #ffffff;
+	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.08);
+	text-align: center;
 
 	> div {
 		min-width: 0;
@@ -479,17 +600,18 @@ export const OverallHeader = styled.header`
 
 	h2 {
 		margin: 0;
-		color: #0f4f86;
-		font-size: clamp(1.15rem, 2vw, 1.65rem);
-		font-weight: 900;
+		color: #222434;
+		font-size: clamp(1.18rem, 1.8vw, 1.55rem);
+		font-weight: 950;
 		overflow-wrap: anywhere;
+		line-height: 1.45;
 	}
 
 	p {
 		margin: 0.25rem 0 0;
-		color: #47627d;
+		color: #667085;
 		font-size: 0.88rem;
-		font-weight: 700;
+		font-weight: 850;
 		line-height: 1.45;
 		overflow-wrap: anywhere;
 	}
@@ -511,48 +633,85 @@ export const OverallHeader = styled.header`
 export const OverallToolbar = styled.form`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-	gap: 8px;
+	gap: 10px;
 	min-width: 0;
-	padding: 12px;
-	border: 1px solid #cfe5fb;
-	border-radius: 8px;
-	background: #e3f2fd;
+	padding: 12px 14px;
+	border: 1px solid #d9d9de;
+	border-radius: 0;
+	background: #ffffff;
+	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.08);
 
 	> input,
 	> select {
 		min-width: 0;
-		min-height: 38px;
+		min-height: 40px;
 		width: 100%;
-		border: 1px solid #d0d5dd;
-		border-radius: 8px;
-		background: #fff;
-		color: #101828;
-		font-size: 14px;
-		font-weight: 700;
+		border: 1px solid #cfd3da;
+		border-radius: 2px;
+		background: #fbfbfc;
+		color: #202334;
+		font-size: 0.82rem;
+		font-weight: 850;
 		padding: 0 12px;
 		outline: none;
+		text-align: inherit;
 	}
 
 	> input:focus,
 	> select:focus {
-		border-color: #1e88e5;
-		box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.12);
+		border-color: #64166e;
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.12);
+		background: #fff;
+	}
+
+	.overall-filter-select {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.overall-filter-select .ant-select-selector {
+		min-height: 40px !important;
+		border-color: #cfd3da !important;
+		border-radius: 2px !important;
+		background: #fbfbfc !important;
+		color: #202334;
+		font-size: 0.82rem;
+		font-weight: 850;
+		text-align: inherit;
+	}
+
+	.overall-filter-select .ant-select-selection-placeholder,
+	.overall-filter-select .ant-select-selection-item {
+		color: #202334;
+		font-weight: 850;
+		text-align: inherit;
+	}
+
+	.overall-filter-select .ant-select-selection-overflow {
+		align-items: center;
+		min-height: 38px;
+	}
+
+	.overall-filter-select.ant-select-focused .ant-select-selector {
+		border-color: #64166e !important;
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.12) !important;
+		background: #fff !important;
 	}
 
 	button {
 		min-width: 0;
-		min-height: 38px;
+		min-height: 40px;
 		border: 0;
-		border-radius: 8px;
-		background: #1e88e5;
+		border-radius: 2px;
+		background: #64166e;
 		color: #fff;
-		font-weight: 800;
+		font-weight: 950;
 		padding: 0 18px;
 		white-space: nowrap;
 	}
 
 	button:hover {
-		background: #0f6fc3;
+		background: #4f135b;
 	}
 
 	button:disabled {
@@ -561,13 +720,13 @@ export const OverallToolbar = styled.form`
 	}
 
 	button.secondary {
-		border: 1px solid rgba(16, 24, 40, 0.08);
-		background: #fff;
-		color: #18212f;
+		border: 1px solid #d6d9df;
+		background: #f8f8fa;
+		color: #222434;
 	}
 
 	button.secondary:hover {
-		background: #f3f7fb;
+		background: #eeeeF3;
 	}
 
 	@media (max-width: 720px) {
@@ -580,6 +739,7 @@ export const OverallToolbar = styled.form`
 
 		> input,
 		> select,
+		.overall-filter-select,
 		button {
 			min-height: 42px;
 			font-size: 0.82rem;
@@ -647,66 +807,337 @@ export const OverallTableWrap = styled.div`
 	overflow-x: auto;
 	overflow-y: hidden;
 	-webkit-overflow-scrolling: touch;
-	border: 1px solid rgba(16, 24, 40, 0.08);
+	border: 1px solid #e5edf6;
 	border-radius: 8px;
 	background: #fff;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
 
 	table {
 		width: 100%;
-		min-width: 920px;
-		border-collapse: collapse;
+		min-width: 1180px;
+		border-collapse: separate;
+		border-spacing: 0;
 	}
 
 	th,
 	td {
 		padding: 8px 10px;
-		border: 1px solid #edf2f7;
+		border-right: 1px solid #edf2f7;
+		border-bottom: 1px solid #edf2f7;
 		color: #101828;
-		font-size: 12px;
+		font-size: 12.5px;
+		font-weight: 800;
 		text-align: start;
 		vertical-align: middle;
 		white-space: nowrap;
-		line-height: 1.3;
+		line-height: 1.35;
 	}
 
 	th {
-		background: #f8fafc;
-		color: #344054;
-		font-weight: 800;
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		background: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
+		color: #102033;
+		font-size: 13.5px;
+		font-weight: 900;
+		text-align: start;
+		border-bottom: 1px solid #b9d5f4;
+	}
+
+	td:first-child,
+	th:first-child {
+		text-align: center;
+		width: 54px;
+	}
+
+	tbody tr:nth-child(even) td {
+		background: #fcfdff;
 	}
 
 	tbody tr:hover td {
 		background: #f7fbff;
 	}
 
+	.hotel-cell,
+	.guest-cell {
+		font-weight: 950;
+		color: #111827;
+	}
+
+	.source-cell {
+		max-width: 260px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.table-truncate {
+		display: inline-block;
+		max-width: 230px;
+		vertical-align: middle;
+		overflow: hidden;
+	}
+
+	table.reservation-list-table {
+		table-layout: fixed;
+	}
+
+	table.reservation-list-table td {
+		overflow: hidden;
+		padding-inline: 7px;
+		text-overflow: ellipsis;
+	}
+
+	table.reservation-list-table th {
+		overflow: visible;
+		padding-inline: 8px;
+		text-overflow: clip;
+		white-space: nowrap;
+	}
+
+	table.reservation-list-table .table-truncate,
+	table.reservation-list-table button.link-btn,
+	table.reservation-list-table a.link-btn {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	table.reservation-list-table .status-pill {
+		max-width: 100%;
+		min-width: 0;
+		padding-inline: 0.42rem;
+	}
+
+	table.reservation-list-table .sortable-heading {
+		display: inline-flex;
+		align-items: center;
+		justify-content: inherit;
+		gap: 0.22rem;
+		max-width: 100%;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		font-weight: 950;
+		padding: 0;
+		white-space: nowrap;
+	}
+
+	table.reservation-list-table .sortable-heading:hover {
+		color: #0b5cad;
+	}
+
+	table.reservation-list-table .sort-arrow {
+		color: #1677ff;
+		font-size: 0.72rem;
+		line-height: 1;
+	}
+
+	@media (min-width: 992px) {
+		table.reservation-list-table {
+			min-width: 0;
+		}
+
+		table.reservation-list-table th,
+		table.reservation-list-table td {
+			font-size: 0.74rem;
+			line-height: 1.32;
+		}
+
+		table.reservation-list-table th {
+			font-size: 0.8rem;
+		}
+
+		table.reservation-main-table th:nth-child(1),
+		table.reservation-main-table td:nth-child(1) {
+			width: 2.6%;
+		}
+
+		table.reservation-main-table th:nth-child(2),
+		table.reservation-main-table td:nth-child(2) {
+			width: 6.7%;
+		}
+
+		table.reservation-main-table th:nth-child(3),
+		table.reservation-main-table td:nth-child(3) {
+			width: 6.2%;
+		}
+
+		table.reservation-main-table th:nth-child(4),
+		table.reservation-main-table td:nth-child(4) {
+			width: 12%;
+		}
+
+		table.reservation-main-table th:nth-child(5),
+		table.reservation-main-table td:nth-child(5) {
+			width: 9.7%;
+		}
+
+		table.reservation-main-table th:nth-child(6),
+		table.reservation-main-table td:nth-child(6) {
+			width: 7.4%;
+		}
+
+		table.reservation-main-table th:nth-child(7),
+		table.reservation-main-table td:nth-child(7) {
+			width: 5.8%;
+		}
+
+		table.reservation-main-table th:nth-child(8),
+		table.reservation-main-table td:nth-child(8),
+		table.reservation-main-table th:nth-child(9),
+		table.reservation-main-table td:nth-child(9),
+		table.reservation-main-table th:nth-child(10),
+		table.reservation-main-table td:nth-child(10) {
+			width: 5.7%;
+		}
+
+		table.reservation-main-table th:nth-child(11),
+		table.reservation-main-table td:nth-child(11) {
+			width: 3.7%;
+		}
+
+		table.reservation-main-table th:nth-child(12),
+		table.reservation-main-table td:nth-child(12) {
+			width: 6.8%;
+		}
+
+		table.reservation-main-table th:nth-child(13),
+		table.reservation-main-table td:nth-child(13) {
+			width: 6.8%;
+		}
+
+		table.reservation-main-table th:nth-child(14),
+		table.reservation-main-table td:nth-child(14) {
+			width: 6.5%;
+		}
+
+		table.reservation-main-table th:nth-child(15),
+		table.reservation-main-table td:nth-child(15) {
+			width: 4.3%;
+		}
+
+		table.reservation-pending-table th:nth-child(1),
+		table.reservation-pending-table td:nth-child(1) {
+			width: 2.8%;
+		}
+
+		table.reservation-pending-table th:nth-child(2),
+		table.reservation-pending-table td:nth-child(2) {
+			width: 7%;
+		}
+
+		table.reservation-pending-table th:nth-child(3),
+		table.reservation-pending-table td:nth-child(3) {
+			width: 6.4%;
+		}
+
+		table.reservation-pending-table th:nth-child(4),
+		table.reservation-pending-table td:nth-child(4) {
+			width: 13.4%;
+		}
+
+		table.reservation-pending-table th:nth-child(5),
+		table.reservation-pending-table td:nth-child(5) {
+			width: 10.8%;
+		}
+
+		table.reservation-pending-table th:nth-child(6),
+		table.reservation-pending-table td:nth-child(6) {
+			width: 9%;
+		}
+
+		table.reservation-pending-table th:nth-child(7),
+		table.reservation-pending-table td:nth-child(7) {
+			width: 6.2%;
+		}
+
+		table.reservation-pending-table th:nth-child(8),
+		table.reservation-pending-table td:nth-child(8),
+		table.reservation-pending-table th:nth-child(9),
+		table.reservation-pending-table td:nth-child(9),
+		table.reservation-pending-table th:nth-child(10),
+		table.reservation-pending-table td:nth-child(10) {
+			width: 6.1%;
+		}
+
+		table.reservation-pending-table th:nth-child(11),
+		table.reservation-pending-table td:nth-child(11) {
+			width: 3.8%;
+		}
+
+		table.reservation-pending-table th:nth-child(12),
+		table.reservation-pending-table td:nth-child(12) {
+			width: 7.2%;
+		}
+
+		table.reservation-pending-table th:nth-child(13),
+		table.reservation-pending-table td:nth-child(13) {
+			width: 7.2%;
+		}
+
+		table.reservation-pending-table th:nth-child(14),
+		table.reservation-pending-table td:nth-child(14) {
+			width: 5.1%;
+		}
+	}
+
+	.date-cell,
+	.amount-cell {
+		font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+		text-align: center;
+	}
+
+	.date-cell {
+		direction: inherit;
+		line-height: 1.45;
+		unicode-bidi: plaintext;
+	}
+
+	.amount-cell {
+		direction: ltr;
+		font-weight: 950;
+		min-width: 82px;
+		overflow: visible !important;
+		text-overflow: clip !important;
+		white-space: nowrap;
+	}
+
 	button.link-btn,
 	a.link-btn {
 		border: 0;
 		background: transparent;
-		color: #0b6fdc;
+		color: #0050b3;
 		font-weight: 900;
 		text-decoration: underline;
 		text-underline-offset: 3px;
-		padding: 0;
+		padding: 2px 0;
 		text-align: start;
 	}
 
+	button.link-btn:hover,
+	a.link-btn:hover {
+		color: #64166e;
+	}
+
 	@media (max-width: 720px) {
-		border-radius: 10px;
+		border-radius: 8px;
 
 		table {
-			min-width: 760px;
+			min-width: 980px;
 		}
 
 		th,
 		td {
-			padding: 6px 8px;
-			font-size: 11px;
+			padding: 8px 9px;
+			font-size: 0.7rem;
 		}
 
 		th {
-			font-size: 11px;
+			font-size: 0.7rem;
 		}
 	}
 
@@ -715,45 +1146,132 @@ export const OverallTableWrap = styled.div`
 		width: calc(100% + 0.5rem);
 
 		table {
-			min-width: 700px;
+			min-width: 920px;
 		}
 	}
 `;
 
-export const StatusPill = styled.span`
+export const ReservationTableControls = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.7rem;
+	padding: 0.75rem 0.9rem;
+	border: 1px solid #e5edf6;
+	border-radius: 8px;
+	background: #ffffff;
+	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+
+	.control-group {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+		min-width: 0;
+	}
+
+	.control-label {
+		color: #344054;
+		font-size: 0.78rem;
+		font-weight: 950;
+	}
+
+	button {
+		min-height: 34px;
+		border: 1px solid #d0d5dd;
+		border-radius: 0;
+		background: #f8fafc;
+		color: #1f2937;
+		padding: 0.35rem 0.85rem;
+		font-size: 0.78rem;
+		font-weight: 950;
+		transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	}
+
+	button:hover {
+		border-color: #1677ff;
+		color: #0b5cad;
+	}
+
+	button.active {
+		border-color: #1677ff;
+		background: #1677ff;
+		color: #ffffff;
+	}
+
+	button.calendar-hijri.active {
+		border-color: #079b35;
+		background: #079b35;
+	}
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+
+		.control-group {
+			width: 100%;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.control-label {
+			grid-column: 1 / -1;
+		}
+
+		button {
+			width: 100%;
+		}
+	}
+`;
+
+export const StatusPill = styled.span.attrs((props) => ({
+	className: ["status-pill", props.className].filter(Boolean).join(" "),
+}))`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 24px;
-	padding: 0.18rem 0.55rem;
+	min-height: 26px;
+	min-width: 78px;
+	padding: 0.18rem 0.62rem;
 	border: 1px solid
 		${(props) =>
 			props.$tone === "red"
-				? "#ff7875"
+				? "#b91c1c"
 				: props.$tone === "orange"
-				  ? "#ffd666"
+				  ? "#d89000"
 				  : props.$tone === "green"
-				    ? "#8ce99a"
-				    : "#b8dcff"};
-	border-radius: 999px;
+				    ? "#008a22"
+				    : props.$tone === "softGreen"
+				      ? "#56b870"
+				      : props.$tone === "blue"
+				        ? "#1d5fd3"
+				        : "#6d7a99"};
+	border-radius: 2px;
 	background: ${(props) =>
 		props.$tone === "red"
-			? "#fff1f0"
+			? "#b00000"
 			: props.$tone === "orange"
-			  ? "#fff7df"
+			  ? "#f2b500"
 			  : props.$tone === "green"
-			    ? "#ecfdf3"
-			    : "#eef7ff"};
+			    ? "#009b2b"
+			    : props.$tone === "softGreen"
+			      ? "#dff7e7"
+			      : props.$tone === "blue"
+			        ? "#e8f1ff"
+			        : "#e9edf7"};
 	color: ${(props) =>
-		props.$tone === "red"
-			? "#a8071a"
+		props.$tone === "red" || props.$tone === "green"
+			? "#ffffff"
 			: props.$tone === "orange"
-			  ? "#8a5600"
-			  : props.$tone === "green"
-			    ? "#087f2e"
-			    : "#0b5cad"};
+			  ? "#2a1d00"
+			  : props.$tone === "softGreen"
+			    ? "#08722c"
+			    : props.$tone === "blue"
+			      ? "#0b4abf"
+			      : "#263452"};
 	font-size: 0.72rem;
 	font-weight: 950;
+	line-height: 1.25;
 `;
 
 export const EmptyState = styled.div`
@@ -776,26 +1294,35 @@ export const Pager = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
-	gap: 0.5rem;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	padding: 0.25rem 0;
 
 	button {
-		min-width: 38px;
-		min-height: 34px;
-		border: 1px solid rgba(16, 24, 40, 0.08);
+		min-width: 40px;
+		min-height: 36px;
+		border: 1px solid #bfd7f4;
 		border-radius: 8px;
-		background: #fff;
-		color: #18212f;
-		font-weight: 900;
+		background: #ffffff;
+		color: #0f315f;
+		font-size: 0.8rem;
+		font-weight: 950;
+		box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+		transition: border-color 0.15s ease, background 0.15s ease,
+			color 0.15s ease, transform 0.15s ease;
 	}
 
 	button:not(:disabled):hover {
-		border-color: #9ecdf8;
-		color: #1e88e5;
+		border-color: #1677ff;
+		background: #eef6ff;
+		color: #0b5cad;
+		transform: translateY(-1px);
 	}
 
 	button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+		box-shadow: none;
 	}
 
 	span {
@@ -803,20 +1330,44 @@ export const Pager = styled.div`
 		font-weight: 900;
 	}
 
+	.pager-summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 36px;
+		padding: 0 0.8rem;
+		border: 1px solid #d7e7f8;
+		border-radius: 999px;
+		background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+		color: #35516d;
+		font-size: 0.86rem;
+		font-weight: 900;
+		white-space: nowrap;
+	}
+
+	.pager-summary strong {
+		color: #0b5cad;
+		font-size: 0.95rem;
+	}
+
+	.pager-summary small {
+		color: #667085;
+		font-size: 0.75rem;
+		font-weight: 850;
+	}
+
 	@media (max-width: 560px) {
-		justify-content: stretch;
-		flex-wrap: wrap;
+		justify-content: center;
 
 		button {
-			flex: 1 1 86px;
+			flex: 1 1 42px;
 			min-height: 38px;
 		}
 
-		span {
+		.pager-summary {
 			order: -1;
-			flex: 1 0 100%;
-			text-align: center;
-			font-size: 0.78rem;
+			justify-content: center;
+			width: 100%;
 		}
 	}
 `;
@@ -827,13 +1378,16 @@ export const ActionButton = styled.button`
 	justify-content: center;
 	gap: 0.35rem;
 	min-width: 0;
-	min-height: 38px;
-	border: 1px solid ${(props) => (props.$danger ? "#ef4444" : "#1e88e5")};
-	border-radius: 8px;
-	background: ${(props) => (props.$danger ? "#ef4444" : "#1e88e5")};
+	min-height: 32px;
+	border: 1px solid
+		${(props) =>
+			props.$danger ? "#b00000" : props.$success ? "#009b2b" : "#64166e"};
+	border-radius: 2px;
+	background: ${(props) =>
+		props.$danger ? "#b00000" : props.$success ? "#009b2b" : "#64166e"};
 	color: #fff;
-	font-weight: 800;
-	padding: 0.42rem 0.8rem;
+	font-weight: 950;
+	padding: 0.34rem 0.82rem;
 	text-align: center;
 	line-height: 1.2;
 
@@ -843,8 +1397,10 @@ export const ActionButton = styled.button`
 	}
 
 	&:not(:disabled):hover {
-		background: ${(props) => (props.$danger ? "#dc2626" : "#0f6fc3")};
-		border-color: ${(props) => (props.$danger ? "#dc2626" : "#0f6fc3")};
+		background: ${(props) =>
+			props.$danger ? "#930000" : props.$success ? "#008022" : "#4f135b"};
+		border-color: ${(props) =>
+			props.$danger ? "#930000" : props.$success ? "#008022" : "#4f135b"};
 	}
 
 	@media (max-width: 480px) {

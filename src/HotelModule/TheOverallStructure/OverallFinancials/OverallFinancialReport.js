@@ -839,7 +839,7 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		{ title: txt.agent, dataIndex: "agentName", render: (value) => titleCase(value || "-") },
 		{ title: txt.type, dataIndex: "transactionType" },
 		{ title: txt.amount, dataIndex: "amount", render: money },
-		{ title: txt.date, dataIndex: "transactionDate", render: formatDate },
+		{ title: txt.date, dataIndex: "transactionDate", render: (value) => formatDate(value, chosenLanguage) },
 		{
 			title: txt.financialStatus,
 			render: (_, row) => {
@@ -872,7 +872,7 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		{ title: txt.agent, dataIndex: "agentName", render: (value) => titleCase(value || "-") },
 		{ title: txt.confirmation, dataIndex: "confirmation_number" },
 		{ title: txt.guest, dataIndex: ["customer_details", "name"], render: (value) => value || "-" },
-		{ title: txt.date, render: (_, row) => formatDate(row.booked_at || row.createdAt) },
+		{ title: txt.date, render: (_, row) => formatDate(row.booked_at || row.createdAt, chosenLanguage) },
 		{ title: txt.amount, dataIndex: "total_amount", render: money },
 		{
 			title: txt.commissionDue,

@@ -27,6 +27,7 @@ import {
 	pendingConfirmationNotificationFeed,
 } from "../apiAdmin";
 import socket from "../../socket";
+import { formatSaudiDate } from "../../utils/saudiDates";
 
 const normalizeTopNavId = (value) => {
 	if (!value) return "";
@@ -390,12 +391,15 @@ const formatNotificationMoney = (value) =>
 		maximumFractionDigits: 2,
 	});
 
-const formatNotificationDate = (value) => {
-	if (!value) return "";
-	const parsed = new Date(value);
-	if (Number.isNaN(parsed.getTime())) return "";
-	return parsed.toISOString().slice(0, 10);
-};
+const formatNotificationDate = (value, isArabic = false) =>
+	value
+		? formatSaudiDate(value, {
+				language: isArabic ? "Arabic" : "English",
+				includeHijri: false,
+				month: isArabic ? "short" : "short",
+				fallback: "",
+		  })
+		: "";
 
 const housekeepingTaskLabel = (task = {}) => {
 	const rooms = Array.isArray(task.rooms) ? task.rooms : [];
@@ -1623,10 +1627,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 									</span>
 									<span>
 										{housekeepingNotice
-											? formatNotificationDate(item.taskDate)
-											: `${formatNotificationDate(item.checkin_date)}${
+											? formatNotificationDate(item.taskDate, isArabic)
+											: `${formatNotificationDate(item.checkin_date, isArabic)}${
 													item.checkout_date ? " - " : ""
-											  }${formatNotificationDate(item.checkout_date)}`}
+											  }${formatNotificationDate(item.checkout_date, isArabic)}`}
 									</span>
 								</NotificationMeta>
 								<NotificationReasons $tone={tone}>
@@ -1699,7 +1703,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					/>
 				</Logo>
 				<DigitalClockWrapper>
-					<DigitalClock />
+					<DigitalClock isArabic={isArabic} />
 				</DigitalClockWrapper>
 			</LeftSection>
 
@@ -1718,9 +1722,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						</button>
 					</PreviewChip>
 				)}
-				<Icons>
+				<Icons $isArabic={isArabic}>
 					<IconWrapper
-						style={{ width: "25%" }}
+						$isArabic={isArabic}
+						className='topnav-language-action'
 						onClick={toggleLanguage}
 						role='button'
 						aria-label='Toggle language'
@@ -1744,12 +1749,17 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							getPopupContainer={() => document.body}
 							overlayClassName='top-navbar-settings-dropdown'
 						>
-							<IconWrapper role='button' aria-label='Hotel settings'>
+							<IconWrapper
+								$isArabic={isArabic}
+								role='button'
+								aria-label='Hotel settings'
+							>
 								<SettingOutlined />
 							</IconWrapper>
 						</Dropdown>
 					) : (
 						<IconWrapper
+							$isArabic={isArabic}
 							onClick={handleSettingsClick}
 							role='button'
 							aria-label='Hotel settings'
@@ -1758,7 +1768,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						</IconWrapper>
 					)}
 
-					<IconWrapper style={{ width: "25%" }}>
+					<IconWrapper $isArabic={isArabic} className='topnav-calendar-action'>
 						<Dropdown
 							menu={{
 								items: calendarMenuItems,
@@ -1773,14 +1783,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 									className='mx-2'
 									style={{ color: "#eecccc" }}
 								/>
-								<LanguageText2>Calendar</LanguageText2>
+								<LanguageText2>
+									{isArabic ? "\u0627\u0644\u062a\u0642\u0648\u064a\u0645" : "Calendar"}
+								</LanguageText2>
 							</div>
 						</Dropdown>
 					</IconWrapper>
 
 					<IconWrapper
-						className='w-25'
-						style={{ color: "white", fontWeight: "bold" }}
+						$isArabic={isArabic}
+						className='topnav-shomoos-action'
 					>
 						شُموس
 						<NotificationDot2 />
@@ -1789,12 +1801,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					{!isMobileNav &&
 						renderNotificationsDropdown(
 							<IconWrapper
+								$isArabic={isArabic}
 								className={
-									notificationBellRinging ? "notification-bell-ringing" : ""
+									notificationBellRinging
+										? "topnav-labeled-action notification-bell-ringing"
+										: "topnav-labeled-action"
 								}
 								role='button'
 								aria-label={isArabic ? "الإشعارات" : "Notifications"}
 							>
+								<ActionLabel>{isArabic ? "إشعارات" : "Alerts"}</ActionLabel>
 								<Badge
 									count={canUseNotifications ? notificationCount : 0}
 									size='small'
@@ -1812,7 +1828,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							</IconWrapper>
 						)}
 
-					<IconWrapper onClick={handleChatClick}>
+					<IconWrapper
+						$isArabic={isArabic}
+						className='topnav-labeled-action'
+						onClick={handleChatClick}
+					>
+						<ActionLabel>{isArabic ? "رسائل" : "Messages"}</ActionLabel>
 						<MessageOutlined />
 						<NotificationDot />
 					</IconWrapper>
@@ -2030,16 +2051,22 @@ const NavbarWrapper = styled.div`
 	left: 0;
 	width: 100%;
 	height: 70px;
-	background-color: #1e1e2d;
+	background: #1d1d2b;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 0 20px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	padding: 0 18px;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 	z-index: 1000;
 	direction: ${(props) => (props.$isArabic ? "rtl" : "")} !important;
 	min-width: 0;
 	overflow: hidden;
+	font-family: ${(props) =>
+		props.$isArabic
+			? `"Droid Arabic Kufi", "Tajawal", "Cairo", "Noto Kufi Arabic", "Segoe UI", Tahoma, Arial, sans-serif`
+			: `"Inter", "Segoe UI", Arial, sans-serif`};
+	letter-spacing: 0;
 
 	@media (max-width: 760px) {
 		direction: ltr !important;
@@ -2055,6 +2082,7 @@ const LeftSection = styled.div`
 	align-items: center;
 	flex: 0 0 auto;
 	min-width: 0;
+	gap: 12px;
 `;
 
 const Logo = styled.div`
@@ -2064,8 +2092,9 @@ const Logo = styled.div`
 		props.$show && props.$isArabic ? "50px" : ""} !important;
 
 	img {
-		width: 100% !important;
-		margin: auto 20px;
+		width: 156px !important;
+		margin: auto 10px;
+		display: block;
 	}
 
 	@media (max-width: 980px) {
@@ -2081,7 +2110,7 @@ const Logo = styled.div`
 `;
 
 const DigitalClockWrapper = styled.div`
-	margin-left: 20px;
+	margin-inline: 10px 0;
 
 	@media (max-width: 760px) {
 		display: none;
@@ -2103,12 +2132,13 @@ const MiddleSection = styled.div`
 const HotelName = styled.span`
 	font-weight: bold;
 	color: white;
-	font-size: 24px;
+	font-size: 22px;
 	display: block;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 
 	@media (max-width: 760px) {
 		font-size: 16px;
@@ -2119,7 +2149,7 @@ const HotelName = styled.span`
 const RightSection = styled.div`
 	display: flex;
 	align-items: center;
-	gap: 0.75rem;
+	gap: 0.6rem;
 	flex: 0 0 auto;
 	min-width: 0;
 
@@ -2181,8 +2211,8 @@ const MobileTopButton = styled.button`
 	height: 44px;
 	padding: 0 12px;
 	border: 1px solid rgba(255, 255, 255, 0.28);
-	border-radius: 13px;
-	background: linear-gradient(180deg, #1d8bff 0%, #0d6efd 100%);
+	border-radius: 4px;
+	background: linear-gradient(180deg, #64166e 0%, #4f135b 100%);
 	color: #fff;
 	display: inline-flex;
 	align-items: center;
@@ -2191,13 +2221,13 @@ const MobileTopButton = styled.button`
 	font-weight: 900;
 	line-height: 1;
 	cursor: pointer;
-	box-shadow: 0 8px 18px rgba(13, 110, 253, 0.28);
+	box-shadow: 0 8px 18px rgba(79, 19, 91, 0.34);
 	transition: transform 0.15s ease, box-shadow 0.15s ease,
 		border-color 0.15s ease;
 
 	&:active {
 		transform: translateY(1px);
-		box-shadow: 0 5px 12px rgba(13, 110, 253, 0.22);
+		box-shadow: 0 5px 12px rgba(79, 19, 91, 0.26);
 	}
 
 	&:focus-visible {
@@ -2417,11 +2447,12 @@ const NotificationEmpty = styled.div`
 const Icons = styled.div`
 	display: flex;
 	align-items: center;
-	margin-left: ${(props) => (props.isArabic ? "40px" : "40px")} !important;
-	margin-right: ${(props) => (props.isArabic ? "" : "40px")} !important;
+	gap: 5px;
+	margin-inline: 0 6px !important;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
 
 	svg {
-		font-size: 23px;
+		font-size: 21px;
 		color: #fff;
 		cursor: pointer;
 	}
@@ -2432,46 +2463,106 @@ const IconWrapper = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 40px;
-	height: 40px;
-	background-color: #161621;
-	border-radius: 5px;
-	margin-left: ${(props) => (props.isArabic ? "20px" : "")} !important;
-	margin-right: ${(props) => (props.isArabic ? "" : "20px")} !important;
+	min-width: 46px;
+	width: auto;
+	height: 46px;
+	padding: 0 10px;
+	background: #151522;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 2px;
+	margin: 0 !important;
+	color: #ffffff;
 	cursor: pointer;
+	box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+	transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+
+	&:hover {
+		background: #29293d;
+		border-color: rgba(217, 146, 37, 0.35);
+		transform: translateY(-1px);
+	}
+
+	&.topnav-labeled-action {
+		width: 52px;
+		min-width: 52px;
+		height: 48px;
+		padding: 4px 4px 5px;
+		flex-direction: column;
+		gap: 2px;
+		background: linear-gradient(180deg, #64166e 0%, #4f135b 100%);
+		border-color: rgba(126, 42, 139, 0.85);
+	}
+
+	&.topnav-labeled-action svg {
+		color: #ffd24a;
+		font-size: 21px;
+	}
+
+	&.topnav-language-action,
+	&.topnav-calendar-action,
+	&.topnav-shomoos-action {
+		min-width: 62px;
+		background: #151522;
+		font-size: 0.82rem;
+		font-weight: 950;
+	}
+
+	&.topnav-shomoos-action {
+		color: #ffffff;
+	}
+
+	@media (max-width: 1180px) {
+		&.topnav-calendar-action {
+			min-width: 46px;
+		}
+
+		&.topnav-calendar-action span {
+			display: none;
+		}
+	}
 `;
 
 const LanguageText = styled.span`
 	color: #fff;
-	margin-left: 5px;
-	font-size: 15px;
-	font-weight: bolder;
+	margin-inline-start: 5px;
+	font-size: 0.82rem;
+	font-weight: 950;
 `;
 
 const LanguageText2 = styled.span`
-	color: #eecccc;
-	margin-left: 5px;
-	font-size: 15px;
-	font-weight: bolder;
+	color: #f4e3ef;
+	margin-inline-start: 5px;
+	font-size: 0.82rem;
+	font-weight: 950;
+`;
+
+const ActionLabel = styled.span`
+	color: #ffffff;
+	font-size: 0.66rem;
+	font-weight: 950;
+	line-height: 1;
+	text-align: center;
 `;
 
 const NotificationDot = styled.div`
 	position: absolute;
 	top: 5px;
-	right: 5px;
-	width: 8px;
-	height: 8px;
-	background-color: orange;
+	right: 6px;
+	width: 9px;
+	height: 9px;
+	background-color: #f59e0b;
+	border: 1px solid #1d1d2b;
 	border-radius: 50%;
 `;
 
 const NotificationDot2 = styled.div`
 	position: absolute;
 	top: 3px;
-	right: 1px;
+	right: 4px;
 	width: 8px;
 	height: 8px;
 	background-color: lightgreen;
+	border: 1px solid #1d1d2b;
 	border-radius: 50%;
 	animation: blink 3.5s infinite;
 
@@ -2497,19 +2588,30 @@ const Profile = styled.div`
 	display: flex;
 	align-items: center;
 	cursor: pointer;
+	min-height: 46px;
+	padding: 0 10px;
+	border-radius: 2px;
+	background: #151522;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	transition: background 0.16s ease, border-color 0.16s ease;
+
+	&:hover {
+		background: #29293d;
+		border-color: rgba(217, 146, 37, 0.35);
+	}
 
 	.anticon-user {
-		margin-right: ${(props) => (props.isArabic ? "20px" : "10px")} !important;
+		margin-inline-end: 8px !important;
 	}
 
 	span {
 		font-weight: bold;
 		color: #fff;
-		margin-left: ${(props) => (props.isArabic ? "20px" : "10px")} !important;
+		margin: 0 !important;
 	}
 	small {
 		display: block;
-		color: #bbb;
+		color: #b9b6c8;
 		font-size: 12px;
 	}
 `;

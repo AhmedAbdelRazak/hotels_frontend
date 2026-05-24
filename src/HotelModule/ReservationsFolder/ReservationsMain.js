@@ -43,6 +43,8 @@ const ReservationsMain = () => {
 	const [hotelDetails, setHotelDetails] = useState(0);
 	const [reservationObject, setReservationObject] = useState("");
 	const [selectedDates, setSelectedDates] = useState("");
+	const [sortBy, setSortBy] = useState("createdAt");
+	const [sortOrder, setSortOrder] = useState("desc");
 
 	const [searchTerm, setSearchTerm] = useState(() =>
 		getSearchTermFromSearch(location.search)
@@ -93,6 +95,8 @@ const ReservationsMain = () => {
 							const filtersPayload = JSON.stringify({
 								selectedFilter,
 								searchQuery: activeSearchTerm || "",
+								sortBy,
+								sortOrder,
 								createdByUserId: isOrderTakingUser ? user?._id : "",
 							});
 
@@ -197,7 +201,7 @@ const ReservationsMain = () => {
 
 		getAllPreReservation(searchTerm);
 		// eslint-disable-next-line
-	}, [currentPage, selectedFilter, selectedDates, searchTerm]);
+	}, [currentPage, selectedFilter, selectedDates, searchTerm, sortBy, sortOrder]);
 
 	const handleSearch = (value) => {
 		const trimmed = String(value || "").trim();
@@ -212,6 +216,18 @@ const ReservationsMain = () => {
 	const handleFilterChange = (newFilter) => {
 		setSelectedFilter(newFilter);
 		setCurrentPage(1); // Reset to first page when filter changes
+	};
+
+	const handleSortChange = (nextSortBy) => {
+		setSortBy((previousSortBy) => {
+			setSortOrder((previousSortOrder) =>
+				previousSortBy === nextSortBy && previousSortOrder === "asc"
+					? "desc"
+					: "asc"
+			);
+			return nextSortBy;
+		});
+		setCurrentPage(1);
 	};
 
 	return (
@@ -295,6 +311,9 @@ const ReservationsMain = () => {
 										reservationObject={reservationObject}
 										setSelectedDates={setSelectedDates}
 										selectedDates={selectedDates}
+										sortBy={sortBy}
+										sortOrder={sortOrder}
+										onSortChange={handleSortChange}
 									/>
 								</div>
 							</div>

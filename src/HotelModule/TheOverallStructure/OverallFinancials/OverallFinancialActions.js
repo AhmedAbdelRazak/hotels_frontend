@@ -597,8 +597,8 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 											"-"
 										)}
 									</td>
-									<td>{formatDate(reservation.booked_at || reservation.createdAt)}</td>
-									<td>{formatDate(reservation.checkin_date)}</td>
+									<td>{formatDate(reservation.booked_at || reservation.createdAt, chosenLanguage)}</td>
+									<td>{formatDate(reservation.checkin_date, chosenLanguage)}</td>
 									<td>
 										{formatMoney(reservation.total_amount)} {labels.sar}
 									</td>
@@ -693,7 +693,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 									<td>
 										{formatMoney(transaction.amount)} {labels.sar}
 									</td>
-									<td>{formatDate(transaction.transactionDate)}</td>
+									<td>{formatDate(transaction.transactionDate, chosenLanguage)}</td>
 									<td>
 										<Tag color='orange'>{labels.walletPending}</Tag>
 									</td>

@@ -12,6 +12,10 @@ import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
 import { Spin, Modal, Select, Checkbox, Input, Tooltip } from "antd";
 import moment from "moment";
 import {
+	formatSaudiDate,
+	formatSaudiDateTime,
+} from "../../utils/saudiDates";
+import {
 	BankOutlined,
 	CalendarOutlined,
 	CarOutlined,
@@ -513,6 +517,28 @@ const AR_LABELS = {
 		"\u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u062c\u0632",
 	reservationWorkflow:
 		"\u062f\u0648\u0631\u0629 \u0627\u0644\u062d\u062c\u0632",
+	reservationJourney:
+		"\u0645\u062a\u0627\u0628\u0639\u0629 \u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u062c\u0632",
+	reservationRequest:
+		"\u0637\u0644\u0628 \u0627\u0644\u062d\u062c\u0632",
+	reservationsDepartmentReview:
+		"\u0645\u0631\u0627\u062c\u0639\u0629 \u0642\u0633\u0645 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+	financialReview:
+		"\u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	operationsFollowup:
+		"\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0648\u0627\u0644\u062a\u0634\u063a\u064a\u0644",
+	finalReservationStage:
+		"\u0627\u0644\u0646\u0647\u0627\u064a\u0629",
+	inHouseStatus:
+		"\u062f\u0627\u062e\u0644 \u0627\u0644\u0641\u0646\u062f\u0642",
+	checkedOutStatus:
+		"\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c",
+	cancelledStatus:
+		"\u0645\u0644\u063a\u064a",
+	noShowStatus:
+		"\u0644\u0645 \u064a\u062d\u0636\u0631",
+	currentStage:
+		"\u0627\u0644\u0645\u0631\u062d\u0644\u0629 \u0627\u0644\u062d\u0627\u0644\u064a\u0629",
 	lastUpdate:
 		"\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b",
 	bookingSource:
@@ -1109,8 +1135,8 @@ const Header = styled.div`
 	.top-request-card,
 	.top-confirm-card {
 		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
-		min-height: 112px;
-		padding: 10px;
+		min-height: 150px;
+		padding: 12px;
 		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 	}
 
@@ -1126,6 +1152,244 @@ const Header = styled.div`
 		border-color: #fed7aa;
 		text-align: center;
 		justify-content: center;
+		padding-block: 10px;
+	}
+
+	.reservation-lifecycle-card {
+		background: rgba(255, 255, 255, 0.78);
+		border: 1px solid #fed7aa;
+		border-radius: 10px;
+		display: grid;
+		gap: 6px;
+		margin: 0;
+		padding: 10px;
+		width: 100%;
+	}
+
+	.reservation-lifecycle-card.rtl {
+		direction: rtl;
+	}
+
+	.lifecycle-title {
+		align-items: center;
+		color: var(--pms-text);
+		display: inline-flex;
+		font-size: 0.88rem;
+		font-weight: 950;
+		gap: 6px;
+		justify-content: center;
+		line-height: 1.2;
+		text-align: center;
+	}
+
+	.lifecycle-title .anticon {
+		color: var(--pms-amber);
+	}
+
+	.reservation-lifecycle-steps {
+		display: grid;
+		gap: 6px;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		position: relative;
+	}
+
+	.reservation-lifecycle-steps::before {
+		background: #dbe4ef;
+		border-radius: 999px;
+		content: "";
+		height: 3px;
+		inset-inline: 9%;
+		position: absolute;
+		top: 31px;
+		z-index: 0;
+	}
+
+	.lifecycle-step {
+		align-items: center;
+		display: grid;
+		gap: 3px;
+		justify-items: center;
+		min-width: 0;
+		position: relative;
+		text-align: center;
+		z-index: 1;
+	}
+
+	.lifecycle-step::after {
+		background: var(--step-line, #dbe4ef);
+		border-radius: 999px;
+		content: "";
+		height: 3px;
+		position: absolute;
+		top: 31px;
+		width: calc(100% - 36px);
+		z-index: -1;
+	}
+
+	.reservation-lifecycle-card.ltr .lifecycle-step:not(:last-child)::after {
+		inset-inline-start: calc(50% + 18px);
+	}
+
+	.reservation-lifecycle-card.rtl .lifecycle-step:not(:last-child)::after {
+		inset-inline-end: calc(50% + 18px);
+	}
+
+	.lifecycle-step:last-child::after {
+		display: none;
+	}
+
+	.lifecycle-step .step-number {
+		align-items: center;
+		background: var(--step-number-bg, #e2e8f0);
+		border: 1px solid var(--step-border, #cbd5e1);
+		border-radius: 4px;
+		color: var(--step-number-color, #334155);
+		display: inline-flex;
+		font-size: 0.76rem;
+		font-weight: 950;
+		height: 20px;
+		justify-content: center;
+		min-width: 28px;
+		padding: 0 6px;
+	}
+
+	.lifecycle-step .step-icon {
+		align-items: center;
+		background: var(--step-icon-bg, #f8fafc);
+		border: 2px solid var(--step-border, #cbd5e1);
+		border-radius: 999px;
+		color: var(--step-icon-color, #64748b);
+		display: inline-flex;
+		font-size: 1rem;
+		height: 36px;
+		justify-content: center;
+		width: 36px;
+	}
+
+	.lifecycle-step strong {
+		color: var(--step-text, var(--pms-text));
+		font-size: 0.72rem;
+		font-weight: 950;
+		line-height: 1.17;
+		min-height: 1.7em;
+		overflow-wrap: anywhere;
+	}
+
+	.lifecycle-step small {
+		color: var(--pms-muted);
+		display: none;
+		font-size: 0.66rem;
+		font-weight: 800;
+		line-height: 1.15;
+	}
+
+	.lifecycle-step.state-complete {
+		--step-border: #22c55e;
+		--step-icon-bg: #05a857;
+		--step-icon-color: #ffffff;
+		--step-line: #22c55e;
+		--step-number-bg: #dcfce7;
+		--step-number-color: #166534;
+		--step-text: #14532d;
+	}
+
+	.lifecycle-step.state-current {
+		--step-border: #f59e0b;
+		--step-icon-bg: #facc15;
+		--step-icon-color: #111827;
+		--step-line: #f59e0b;
+		--step-number-bg: #fef3c7;
+		--step-number-color: #92400e;
+		--step-text: #92400e;
+	}
+
+	.lifecycle-step.state-issue {
+		--step-border: #ef4444;
+		--step-icon-bg: #dc2626;
+		--step-icon-color: #ffffff;
+		--step-line: #ef4444;
+		--step-number-bg: #fee2e2;
+		--step-number-color: #991b1b;
+		--step-text: #991b1b;
+	}
+
+	.lifecycle-step.state-upcoming {
+		--step-border: #cbd5e1;
+		--step-icon-bg: #ffffff;
+		--step-icon-color: #64748b;
+		--step-line: #dbe4ef;
+		--step-number-bg: #f8fafc;
+		--step-number-color: #64748b;
+		--step-text: #475569;
+	}
+
+	.lifecycle-step.state-terminal {
+		--step-border: #111827;
+		--step-icon-bg: #111827;
+		--step-icon-color: #ffffff;
+		--step-line: #111827;
+		--step-number-bg: #e5e7eb;
+		--step-number-color: #111827;
+		--step-text: #111827;
+	}
+
+	.lifecycle-step.state-current .step-icon,
+	.lifecycle-step.state-issue .step-icon {
+		animation: lifecycle-current-pulse 1.55s ease-in-out infinite;
+	}
+
+	@keyframes lifecycle-current-pulse {
+		0%,
+		100% {
+			box-shadow: 0 0 0 rgba(245, 158, 11, 0);
+			transform: scale(1);
+		}
+		50% {
+			box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.16);
+			transform: scale(1.06);
+		}
+	}
+
+	.lifecycle-summary {
+		align-items: center;
+		background: #f8fafc;
+		border: 1px solid #dbeafe;
+		border-radius: 999px;
+		color: #334155;
+		display: inline-flex;
+		font-size: 0.72rem;
+		font-weight: 950;
+		gap: 6px;
+		justify-content: center;
+		justify-self: center;
+		line-height: 1.2;
+		max-width: 100%;
+		padding: 4px 10px;
+		text-align: center;
+	}
+
+	.lifecycle-summary.complete {
+		background: #ecfdf5;
+		border-color: #86efac;
+		color: #166534;
+	}
+
+	.lifecycle-summary.current {
+		background: #fffbeb;
+		border-color: #fbbf24;
+		color: #92400e;
+	}
+
+	.lifecycle-summary.issue {
+		background: #fef2f2;
+		border-color: #fecaca;
+		color: #991b1b;
+	}
+
+	.lifecycle-hotel-name {
+		font-size: 0.86rem;
+		margin: 0 auto;
+		padding: 5px 12px;
 	}
 
 	.top-request-card > .top-document-actions,
@@ -1242,7 +1506,11 @@ const Header = styled.div`
 	}
 
 	.top-request-button {
-		min-width: min(190px, 100%);
+		align-items: center;
+		display: inline-flex;
+		gap: 7px;
+		justify-content: center;
+		min-width: min(210px, 100%);
 		background: var(--pms-amber) !important;
 		border-color: var(--pms-amber) !important;
 		font-size: 1rem !important;
@@ -1255,14 +1523,41 @@ const Header = styled.div`
 		background: rgba(255, 255, 255, 0.72);
 		border-color: #d9e9fb;
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto minmax(230px, max-content);
+		grid-template-columns: minmax(0, 1fr) minmax(190px, auto) minmax(280px, 1fr);
 		gap: 10px;
 		min-height: 0;
 		padding: 6px 10px;
 	}
 
+	.top-secondary-actions.edit-only {
+		grid-template-columns: minmax(0, 1fr);
+		justify-items: center;
+	}
+
+	.top-secondary-actions.edit-only .top-document-actions,
+	.top-secondary-actions.edit-only .top-right-actions {
+		display: none;
+	}
+
 	.top-secondary-actions .top-document-actions {
 		justify-content: flex-start;
+	}
+
+	.top-edit-action-slot {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		min-width: 0;
+	}
+
+	.top-right-actions {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		justify-content: flex-end;
+		justify-self: end;
+		min-width: 0;
 	}
 
 	.top-secondary-actions .top-payment-actions {
@@ -1279,7 +1574,7 @@ const Header = styled.div`
 		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
 		gap: 10px;
 		justify-content: flex-end;
-		justify-self: end;
+		justify-self: auto;
 		margin-top: 0;
 		min-height: 34px;
 		min-width: 0;
@@ -1460,12 +1755,16 @@ const Header = styled.div`
 		}
 
 		.top-secondary-actions .top-document-actions,
-		.top-secondary-actions .top-payment-actions {
+		.top-secondary-actions .top-payment-actions,
+		.top-edit-action-slot,
+		.top-right-actions {
 			justify-content: stretch;
+			justify-self: stretch;
 		}
 
 		.top-secondary-actions .top-status-block {
 			justify-self: stretch;
+			justify-content: center;
 		}
 	}
 
@@ -1515,6 +1814,16 @@ const Header = styled.div`
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 
+		.top-edit-action-slot {
+			display: grid;
+			grid-template-columns: 1fr;
+		}
+
+		.top-right-actions {
+			display: grid;
+			grid-template-columns: 1fr;
+		}
+
 		.top-payment-actions button,
 		.top-link-preview {
 			grid-column: 1 / -1;
@@ -1523,6 +1832,55 @@ const Header = styled.div`
 
 		.top-room-box {
 			grid-template-columns: 1fr;
+		}
+
+		.reservation-lifecycle-card {
+			padding: 8px;
+		}
+
+		.reservation-lifecycle-steps {
+			grid-template-columns: 1fr;
+			gap: 5px;
+		}
+
+		.reservation-lifecycle-steps::before,
+		.lifecycle-step::after {
+			display: none;
+		}
+
+		.lifecycle-step {
+			background: rgba(255, 255, 255, 0.82);
+			border: 1px solid var(--step-border, #dbe4ef);
+			border-radius: 8px;
+			display: grid;
+			grid-template-columns: auto auto minmax(0, 1fr);
+			justify-items: start;
+			padding: 6px 8px;
+			text-align: start;
+		}
+
+		.lifecycle-step strong,
+		.lifecycle-step small {
+			grid-column: 3;
+		}
+
+		.lifecycle-step .step-number {
+			grid-column: 1;
+			grid-row: 1 / 3;
+			margin-inline-end: 4px;
+			margin-top: 8px;
+		}
+
+		.lifecycle-step .step-icon {
+			grid-column: 2;
+			grid-row: 1 / 3;
+			height: 32px;
+			margin-inline-end: 8px;
+			width: 32px;
+		}
+
+		.lifecycle-step small {
+			display: block;
 		}
 	}
 `;
@@ -5751,6 +6109,221 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const displayHotelName = displayHotelNameRaw
 		? formatLeadingCapital(displayHotelNameRaw)
 		: "";
+	const useSaudiHijri = chosenLanguage === "Arabic";
+	const reservationDisplayDate = (value, options = {}) =>
+		formatSaudiDate(value, {
+			language: chosenLanguage,
+			includeHijri: options.includeHijri ?? useSaudiHijri,
+			includeWeekday: options.includeWeekday ?? useSaudiHijri,
+			month: options.month || "short",
+			fallback: "N/A",
+		});
+	const reservationDisplayDateTime = (value, options = {}) =>
+		formatSaudiDateTime(value, {
+			language: chosenLanguage,
+			includeHijri: options.includeHijri ?? false,
+			includeWeekday: options.includeWeekday ?? false,
+			month: options.month || "short",
+			fallback: "N/A",
+		});
+	const reservationLifecycle = useMemo(() => {
+		const isArabic = chosenLanguage === "Arabic";
+		const normalizedStatus = normalizeReservationStatusValue(
+			reservation?.reservation_status || reservation?.state,
+		);
+		const statusText = String(
+			reservation?.reservation_status || reservation?.state || "",
+		).toLowerCase();
+		const pendingStatus = String(reservation?.pendingConfirmation?.status || "")
+			.trim()
+			.toLowerCase()
+			.replace(/[-\s]+/g, "_");
+		const agentDecisionStatus = String(
+			reservation?.agentDecisionSnapshot?.status || "",
+		)
+			.trim()
+			.toLowerCase()
+			.replace(/[-\s]+/g, "_");
+		const totalReviewStatus = String(
+			reservation?.financial_cycle?.totalReviewStatus || "",
+		)
+			.trim()
+			.toLowerCase();
+		const financeCycleStatus = String(
+			reservation?.financial_cycle?.status || "",
+		)
+			.trim()
+			.toLowerCase();
+		const commissionStatus = String(reservation?.commissionStatus || "")
+			.trim()
+			.toLowerCase();
+		const hasFinanceAssignment =
+			reservation?.commissionData?.assigned === true ||
+			reservation?.financial_cycle?.commissionAssigned === true ||
+			["commission due", "commission paid", "no commission due"].includes(
+				commissionStatus,
+			);
+		const finalStatuses = [
+			"inhouse",
+			"checked_out",
+			"early_checked_out",
+			"cancelled",
+			"no_show",
+		];
+		const finalReached = finalStatuses.includes(normalizedStatus);
+		const terminalIssue = ["cancelled", "no_show"].includes(normalizedStatus);
+		const reservationRejected =
+			pendingStatus === "rejected" ||
+			agentDecisionStatus === "rejected" ||
+			(/reject/.test(statusText) && !/finance[\s_-]?reject/.test(statusText));
+		const reservationConfirmed =
+			pendingStatus === "confirmed" ||
+			agentDecisionStatus === "confirmed" ||
+			!!reservation?.pendingConfirmation?.confirmedAt ||
+			[
+				"confirmed",
+				"pending_finance_review",
+				"pending_agent_commission_approval",
+				"finance_rejected",
+				...finalStatuses,
+			].includes(normalizedStatus);
+		const financeRejected =
+			/finance[\s_-]?reject/.test(statusText) ||
+			totalReviewStatus === "rejected" ||
+			String(reservation?.commissionAgentApproval?.status || "")
+				.toLowerCase()
+				.includes("reject");
+		const financeComplete =
+			finalReached ||
+			financeCycleStatus === "closed" ||
+			totalReviewStatus === "approved" ||
+			totalReviewStatus === "accepted" ||
+			(hasFinanceAssignment &&
+				!financeRejected &&
+				![
+					"pending_finance_review",
+					"pending_agent_commission_approval",
+				].includes(normalizedStatus));
+		const operationsReached = finalReached || (reservationConfirmed && financeComplete);
+
+		const finalLabel =
+			normalizedStatus === "checked_out" ||
+			normalizedStatus === "early_checked_out"
+				? isArabic
+					? AR_LABELS.checkedOutStatus
+					: normalizedStatus === "early_checked_out"
+					  ? "Early checked out"
+					  : "Checked out"
+				: normalizedStatus === "cancelled"
+				  ? isArabic
+						? AR_LABELS.cancelledStatus
+						: "Cancelled"
+				  : normalizedStatus === "no_show"
+				    ? isArabic
+							? AR_LABELS.noShowStatus
+							: "No show"
+				    : normalizedStatus === "inhouse"
+				      ? isArabic
+								? AR_LABELS.inHouseStatus
+								: "In house"
+				      : isArabic
+				        ? AR_LABELS.housing
+				        : "Housing";
+
+		const stateForIndex = (index) => {
+			if (reservationRejected && index === 1) return "issue";
+			if (financeRejected && index === 2) return "issue";
+			if (terminalIssue && index === 4) return "issue";
+			if (finalReached) return index <= 4 ? (index === 4 ? "terminal" : "complete") : "upcoming";
+			if (operationsReached) return index < 3 ? "complete" : index === 3 ? "current" : "upcoming";
+			if (reservationConfirmed) return index < 2 ? "complete" : index === 2 ? "current" : "upcoming";
+			return index === 0 ? "complete" : index === 1 ? "current" : "upcoming";
+		};
+
+		const steps = [
+			{
+				key: "request",
+				number: 1,
+				label: isArabic ? AR_LABELS.reservationRequest : "Reservation request",
+				helper: isArabic ? "\u0628\u062f\u0627\u064a\u0629 \u0627\u0644\u0637\u0644\u0628" : "Request started",
+				icon: <FileTextOutlined />,
+			},
+			{
+				key: "reservations",
+				number: 2,
+				label: isArabic
+					? AR_LABELS.reservationsDepartmentReview
+					: "Reservations review",
+				helper: isArabic
+					? "\u0645\u0631\u0627\u062c\u0639\u0629 \u0648\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062d\u062c\u0632"
+					: "Review and confirmation",
+				icon: <CheckCircleOutlined />,
+			},
+			{
+				key: "finance",
+				number: 3,
+				label: isArabic ? AR_LABELS.financialReview : "Financial review",
+				helper: isArabic
+					? "\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+					: "Amount and commission review",
+				icon: <DollarCircleOutlined />,
+			},
+			{
+				key: "operations",
+				number: 4,
+				label: isArabic ? AR_LABELS.operationsFollowup : "Operations follow-up",
+				helper: isArabic
+					? "\u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u0644\u062a\u0634\u063a\u064a\u0644"
+					: "Operational follow-up",
+				icon: <BankOutlined />,
+			},
+			{
+				key: "final",
+				number: 5,
+				label: finalLabel,
+				helper: isArabic
+					? "\u0627\u0644\u0648\u0635\u0648\u0644 \u0625\u0644\u0649 \u0646\u0647\u0627\u064a\u0629 \u0627\u0644\u062f\u0648\u0631\u0629"
+					: "Cycle outcome",
+				icon:
+					terminalIssue || normalizedStatus === "no_show" ? (
+						<InfoCircleOutlined />
+					) : (
+						<HomeOutlined />
+					),
+			},
+		].map((step, index) => ({
+			...step,
+			state: stateForIndex(index),
+		}));
+		const activeStep =
+			steps.find((step) => ["current", "issue", "terminal"].includes(step.state)) ||
+			steps[0];
+		const summaryTone =
+			activeStep?.state === "issue"
+				? "issue"
+				: ["terminal", "complete"].includes(activeStep?.state)
+				  ? "complete"
+				  : "current";
+
+		return {
+			steps,
+			activeLabel: activeStep?.label || "",
+			summaryTone,
+		};
+	}, [
+		chosenLanguage,
+		reservation?.agentDecisionSnapshot?.status,
+		reservation?.commissionAgentApproval?.status,
+		reservation?.commissionData?.assigned,
+		reservation?.commissionStatus,
+		reservation?.financial_cycle?.commissionAssigned,
+		reservation?.financial_cycle?.status,
+		reservation?.financial_cycle?.totalReviewStatus,
+		reservation?.pendingConfirmation?.confirmedAt,
+		reservation?.pendingConfirmation?.status,
+		reservation?.reservation_status,
+		reservation?.state,
+	]);
 
 	return (
 		<Wrapper
@@ -6204,7 +6777,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											<strong>{item.title}</strong>
 											<span>
 												{item.at && !Number.isNaN(item.at.getTime())
-													? moment(item.at).format("YYYY-MM-DD HH:mm")
+													? reservationDisplayDateTime(item.at)
 													: "-"}
 												{" • "}
 												{item.by}
@@ -6877,15 +7450,47 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							</Section>
 
 							<Section className='top-request-card'>
-								{displayHotelName ? (
-									<div className='top-hotel-name'>{displayHotelName}</div>
-								) : null}
-								<button
-									className='top-request-button'
-									onClick={openEditReservationModal}
+								<div
+									className={`reservation-lifecycle-card ${
+										chosenLanguage === "Arabic" ? "rtl" : "ltr"
+									}`}
 								>
-									{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
-								</button>
+									<div className='lifecycle-title'>
+										<CheckCircleOutlined />
+										<span>
+											{chosenLanguage === "Arabic"
+												? AR_LABELS.reservationJourney
+												: "Reservation Status Journey"}
+										</span>
+									</div>
+									<div className='reservation-lifecycle-steps'>
+										{reservationLifecycle.steps.map((step) => (
+											<div
+												className={`lifecycle-step state-${step.state}`}
+												key={step.key}
+											>
+												<span className='step-number'>{step.number}</span>
+												<span className='step-icon'>{step.icon}</span>
+												<strong>{step.label}</strong>
+												<small>{step.helper}</small>
+											</div>
+										))}
+									</div>
+									<div className={`lifecycle-summary ${reservationLifecycle.summaryTone}`}>
+										<span>
+											{chosenLanguage === "Arabic"
+												? AR_LABELS.currentStage
+												: "Current stage"}
+											:
+										</span>
+										<strong>{reservationLifecycle.activeLabel}</strong>
+									</div>
+									{displayHotelName ? (
+										<div className='top-hotel-name lifecycle-hotel-name'>
+											{displayHotelName}
+										</div>
+									) : null}
+								</div>
 								{canFullManageReservation ? (
 									<div className='top-document-actions'>
 										<button onClick={() => setIsModalVisible3(true)}>
@@ -7041,117 +7646,134 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 								</div>
 							</Section>
-							{canFullManageReservation ? (
-							<Section className='top-secondary-actions'>
+							<Section
+								className={`top-secondary-actions ${
+									canFullManageReservation ? "" : "edit-only"
+								}`}
+							>
 								<div className='top-document-actions'>
-									<button onClick={() => setIsModalVisible3(true)}>
-										{chosenLanguage === "Arabic" ? AR_LABELS.invoice : "Invoice"}
-									</button>
-									<button onClick={() => setIsModalVisible5(true)}>
-										{chosenLanguage === "Arabic" ? AR_LABELS.operationOrder : "Operation Order"}
-									</button>
-									{relocationArray1 &&
-										relocationArray1.some(
-											(hotel) =>
-												hotel._id === hotelDetails._id &&
-												hotel.belongsTo === hotelDetails.belongsTo._id,
-										) && (
-											<button
-												className='top-relocate-button'
-												onClick={handleRelocateModalOpen}
-											>
-												{chosenLanguage === "Arabic" ? AR_LABELS.relocate : "Relocate"}
-											</button>
-										)}
-								</div>
-								<div className='top-payment-actions'>
-									{linkGenerate ? (
+									{canFullManageReservation ? (
 										<>
-											<button
-												onClick={() => setPaymentLinkEmailModalOpen(true)}
+											<button onClick={() => setIsModalVisible3(true)}>
+												{chosenLanguage === "Arabic" ? AR_LABELS.invoice : "Invoice"}
+											</button>
+											<button onClick={() => setIsModalVisible5(true)}>
+												{chosenLanguage === "Arabic" ? AR_LABELS.operationOrder : "Operation Order"}
+											</button>
+											{relocationArray1 &&
+												relocationArray1.some(
+													(hotel) =>
+														hotel._id === hotelDetails._id &&
+														hotel.belongsTo === hotelDetails.belongsTo._id,
+												) && (
+													<button
+														className='top-relocate-button'
+														onClick={handleRelocateModalOpen}
+													>
+														{chosenLanguage === "Arabic" ? AR_LABELS.relocate : "Relocate"}
+													</button>
+												)}
+										</>
+									) : null}
+								</div>
+								<div className='top-edit-action-slot'>
+									<button
+										className='top-request-button'
+										onClick={openEditReservationModal}
+									>
+										<EditOutlined />
+										{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
+									</button>
+								</div>
+								{canFullManageReservation ? (
+									<div className='top-right-actions'>
+										<div className='top-payment-actions'>
+											{linkGenerate ? (
+												<>
+													<button
+														onClick={() => setPaymentLinkEmailModalOpen(true)}
+														style={{
+															background: "darkgreen",
+															border: "1px darkred solid",
+														}}
+													>
+														{chosenLanguage === "Arabic" ? AR_LABELS.sendPaymentLink : "Email Payment Link"}
+													</button>
+													<div
+														className='top-link-preview'
+														onClick={() => setLinkModalVisible(true)}
+													>
+														{chosenLanguage === "Arabic" ? AR_LABELS.showLink : "Show Link"}{" "}
+														<i className='fa-solid fa-eye'></i>
+													</div>
+												</>
+											) : (
+												<button
+													style={{
+														background: "darkred",
+														border: "1px darkred solid",
+													}}
+													onClick={() => {
+														if (chosenLanguage === "Arabic") {
+															setLinkGenerated(
+																`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
+															);
+															return;
+														}
+														setLinkGenerated(
+															`${
+																process.env.REACT_APP_MAIN_URL_JANNAT
+															}/client-payment/${reservation._id}/${
+																reservation._id
+															}/${reservation._id}/${
+																hotelDetails.hotelName
+															}/roomTypes/${reservation._id}/${
+																reservation._id
+															}/${reservation.days_of_residence}/${Number(
+																reservation.total_amount,
+															).toFixed(2)}`,
+														);
+													}}
+												>
+													{chosenLanguage === "Arabic" ? AR_LABELS.generatePaymentLink : "Generate Payment Link"}
+												</button>
+											)}
+										</div>
+										<div className='top-status-block'>
+											<span className='top-status-label'>
+												{chosenLanguage === "Arabic" ? AR_LABELS.reservationStatus : "Reservation Status"}
+												<EditOutlined
+													onClick={handleStatusModalOpen}
+													style={{ cursor: "pointer" }}
+												/>
+											</span>
+											<span
+												className='top-status-pill'
 												style={{
-													background: "darkgreen",
-													border: "1px darkred solid",
+													background:
+														reservation &&
+														reservation.reservation_status.includes("cancelled")
+															? "red"
+															: reservation.reservation_status.includes("checked_out")
+															  ? "darkgreen"
+															  : reservation.reservation_status === "inhouse"
+															    ? "#c4d3e2"
+															    : "yellow",
+													color:
+														reservation &&
+														reservation.reservation_status.includes("cancelled")
+															? "white"
+															: reservation.reservation_status.includes("checked_out")
+															  ? "white"
+															  : "black",
 												}}
 											>
-												{chosenLanguage === "Arabic" ? AR_LABELS.sendPaymentLink : "Email Payment Link"}
-											</button>
-											<div
-												className='top-link-preview'
-												onClick={() => setLinkModalVisible(true)}
-											>
-												{chosenLanguage === "Arabic" ? AR_LABELS.showLink : "Show Link"}{" "}
-												<i className='fa-solid fa-eye'></i>
-											</div>
-										</>
-									) : (
-										<button
-											style={{
-												background: "darkred",
-												border: "1px darkred solid",
-											}}
-											onClick={() => {
-												if (chosenLanguage === "Arabic") {
-													setLinkGenerated(
-														`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
-													);
-													return;
-												}
-												setLinkGenerated(
-													`${
-														process.env.REACT_APP_MAIN_URL_JANNAT
-													}/client-payment/${reservation._id}/${
-														reservation._id
-													}/${reservation._id}/${
-														hotelDetails.hotelName
-													}/roomTypes/${reservation._id}/${
-														reservation._id
-													}/${reservation.days_of_residence}/${Number(
-														reservation.total_amount,
-													).toFixed(2)}`,
-												);
-											}}
-										>
-											{chosenLanguage === "Arabic" ? AR_LABELS.generatePaymentLink : "Generate Payment Link"}
-										</button>
-									)}
-								</div>
-								<div className='top-status-block'>
-									<span className='top-status-label'>
-										{chosenLanguage === "Arabic" ? AR_LABELS.reservationStatus : "Reservation Status"}
-										{canFullManageReservation ? (
-											<EditOutlined
-												onClick={handleStatusModalOpen}
-												style={{ cursor: "pointer" }}
-											/>
-										) : null}
-									</span>
-									<span
-										className='top-status-pill'
-										style={{
-											background:
-												reservation &&
-												reservation.reservation_status.includes("cancelled")
-													? "red"
-													: reservation.reservation_status.includes("checked_out")
-													  ? "darkgreen"
-													  : reservation.reservation_status === "inhouse"
-													    ? "#c4d3e2"
-													    : "yellow",
-											color:
-												reservation &&
-												reservation.reservation_status.includes("cancelled")
-													? "white"
-													: reservation.reservation_status.includes("checked_out")
-													  ? "white"
-													  : "black",
-										}}
-									>
-										{reservation?.reservation_status || "N/A"}
-									</span>
-								</div>
+												{reservation?.reservation_status || "N/A"}
+											</span>
+										</div>
+									</div>
+								) : null}
 							</Section>
-							) : null}
 							{canFullManageReservation ? (
 							<Section className='reservation-command-panel'>
 								{/* Left side of the header */}
@@ -7399,8 +8021,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<span className='detail-label'>
 											{chosenLanguage === "Arabic" ? AR_LABELS.arrival : "Arrival"}
 										</span>
-										<strong className='detail-value detail-value-ltr'>
-											{moment(reservation?.checkin_date).format("DD/MM/YYYY")}
+										<strong
+											className={`detail-value ${
+												chosenLanguage === "Arabic" ? "" : "detail-value-ltr"
+											}`}
+										>
+											{reservationDisplayDate(reservation?.checkin_date)}
 										</strong>
 									</div>
 									<div className='detail-item'>
@@ -7412,8 +8038,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												? AR_LABELS.departure
 												: "Departure"}
 										</span>
-										<strong className='detail-value detail-value-ltr'>
-											{moment(reservation?.checkout_date).format("DD/MM/YYYY")}
+										<strong
+											className={`detail-value ${
+												chosenLanguage === "Arabic" ? "" : "detail-value-ltr"
+											}`}
+										>
+											{reservationDisplayDate(reservation?.checkout_date)}
 										</strong>
 									</div>
 									<div className='detail-item stay-period-card'>
@@ -7609,9 +8239,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									<div className='col-md-5'>
 										{chosenLanguage === "Arabic" ? "تاريخ الوصول" : "Arrival"}
 										<div style={{ border: "1px solid black", padding: "3px" }}>
-											{moment(reservation && reservation.checkin_date)
-												.locale(chosenLanguage === "Arabic" ? "ar" : "en")
-												.format("DD/MM/YYYY")}
+											{reservationDisplayDate(reservation?.checkin_date)}
 										</div>
 									</div>
 									<div className='col-md-5'>
@@ -7619,9 +8247,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											? "تاريخ المغادرة"
 											: "Check-out"}
 										<div style={{ border: "1px solid black", padding: "3px" }}>
-											{moment(reservation && reservation.checkout_date)
-												.locale(chosenLanguage === "Arabic" ? "ar" : "en")
-												.format("DD/MM/YYYY")}
+											{reservationDisplayDate(reservation?.checkout_date)}
 										</div>
 									</div>
 									<div className='col-md-5 mx-auto mt-3'>
@@ -7800,9 +8426,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														? AR_LABELS.bookingDate
 														: "Booking Date"}
 												</span>
-												<strong className='detail-value-ltr'>
+												<strong
+													className={
+														chosenLanguage === "Arabic"
+															? ""
+															: "detail-value-ltr"
+													}
+												>
 													{reservation?.booked_at
-														? moment(reservation.booked_at).format("DD/MM/YYYY")
+														? reservationDisplayDate(reservation.booked_at)
 														: "N/A"}
 												</strong>
 											</div>
@@ -7835,9 +8467,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													? AR_LABELS.lastUpdate
 													: "Last Update"}
 											</span>
-											<strong className='detail-value-ltr'>
+											<strong
+												className={
+													chosenLanguage === "Arabic" ? "" : "detail-value-ltr"
+												}
+											>
 												{workflowUpdatedAt
-													? moment(workflowUpdatedAt).format("DD/MM/YYYY HH:mm")
+													? reservationDisplayDateTime(workflowUpdatedAt)
 													: "N/A"}
 											</strong>
 											{workflowUpdatedBy ? <em>{workflowUpdatedBy}</em> : null}
@@ -7867,14 +8503,20 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: paymentStatusLabel}
 											</span>
 											{hasAgentWalletSnapshot && (
-												<small className='detail-value-ltr'>
+												<small
+													className={
+														chosenLanguage === "Arabic"
+															? ""
+															: "detail-value-ltr"
+													}
+												>
 													{chosenLanguage === "Arabic"
 														? AR_LABELS.capturedSnapshotAt
 														: "Snapshot"}
 													:{" "}
 													{agentWalletSnapshot?.snapshotAt
-														? moment(agentWalletSnapshot.snapshotAt).format(
-																"DD/MM/YYYY HH:mm",
+														? reservationDisplayDateTime(
+																agentWalletSnapshot.snapshotAt,
 														  )
 														: "N/A"}
 												</small>
@@ -7976,9 +8618,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														: "Booking Date"}
 													:
 												</span>
-												<strong className='detail-value-ltr'>
+												<strong
+													className={
+														chosenLanguage === "Arabic"
+															? ""
+															: "detail-value-ltr"
+													}
+												>
 													{reservation?.booked_at
-														? moment(reservation.booked_at).format("DD/MM/YYYY")
+														? reservationDisplayDate(reservation.booked_at)
 														: "N/A"}
 												</strong>
 											</span>
@@ -8045,14 +8693,20 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														: paymentStatusLabel}
 												</strong>
 												{hasAgentWalletSnapshot && (
-													<span className='payment-preview-stamp detail-value-ltr'>
+													<span
+														className={`payment-preview-stamp ${
+															chosenLanguage === "Arabic"
+																? ""
+																: "detail-value-ltr"
+														}`}
+													>
 														{chosenLanguage === "Arabic"
 															? AR_LABELS.capturedSnapshotAt
 															: "Snapshot"}
 														:{" "}
 														{agentWalletSnapshot?.snapshotAt
-															? moment(agentWalletSnapshot.snapshotAt).format(
-																	"DD/MM/YYYY HH:mm",
+															? reservationDisplayDateTime(
+																	agentWalletSnapshot.snapshotAt,
 															  )
 															: "N/A"}
 													</span>
@@ -8149,12 +8803,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														? AR_LABELS.lastUpdate
 														: "Last update"}
 												</span>
-												<strong className='detail-value-ltr'>
+												<strong
+													className={
+														chosenLanguage === "Arabic" ? "" : "detail-value-ltr"
+													}
+												>
 													{reservation?.adminLastUpdatedAt || reservation?.updatedAt
-														? moment(
+														? reservationDisplayDateTime(
 																reservation?.adminLastUpdatedAt ||
 																	reservation?.updatedAt,
-														  ).format("DD/MM/YYYY HH:mm")
+														  )
 														: "N/A"}
 												</strong>
 											</div>
@@ -8184,14 +8842,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											: "Booking Date"}
 										<div className='mx-1'>
 											{reservation && reservation.booked_at
-												? new Intl.DateTimeFormat(
-														chosenLanguage === "Arabic" ? "ar-EG" : "en-GB",
-														{
-															year: "numeric",
-															month: "2-digit",
-															day: "2-digit",
-														},
-												  ).format(new Date(reservation.booked_at))
+												? reservationDisplayDate(reservation.booked_at)
 												: "N/A"}
 										</div>
 									</div>
