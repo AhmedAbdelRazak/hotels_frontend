@@ -283,8 +283,9 @@ const shouldApplyReservationDateDefaults = (tab, query) =>
 	tab === "reservations" && !query.has("dateFrom") && !query.has("dateTo");
 
 const initialSummaryRange = (query, filters) => {
+	if (filters.dateFrom || filters.dateTo) return "custom";
 	if (query.has("range")) return normalizeSummaryRange(query.get("range"));
-	return filters.dateFrom || filters.dateTo ? "custom" : "all";
+	return "all";
 };
 
 const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
@@ -341,10 +342,12 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		const nextTab = normalizeSummaryTab(query.get("summaryTab") || "overview");
 		const nextReportFilters = summaryReportFilterFromQuery(query, nextTab);
 		setActiveTab(nextTab);
-		if (query.has("range")) {
+		if (nextReportFilters.dateFrom || nextReportFilters.dateTo) {
+			setRange("custom");
+		} else if (query.has("range")) {
 			setRange(normalizeSummaryRange(query.get("range")));
 		} else {
-			setRange(nextReportFilters.dateFrom || nextReportFilters.dateTo ? "custom" : "all");
+			setRange("all");
 		}
 		if (query.has("dateBy") || query.has("sortBy")) {
 			setDateBy(normalizeSummaryDateBy(query.get("dateBy") || query.get("sortBy")));
