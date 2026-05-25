@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, message, Modal, Select, Tag } from "antd";
-import { DownloadOutlined } from "@ant-design/icons";
+import { Button, DatePicker, Input, InputNumber, message, Modal, Select, Tag } from "antd";
+import { DownloadOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
+import dayjs from "dayjs";
 import {
 	exportOverallFinancialActions,
 	getOverallFinancialActions,
@@ -346,6 +347,12 @@ const walletActionTrackingRows = (sourceRows = [], exportRows = []) =>
 	}));
 
 const filterLabel = (value, fallback) => value || fallback;
+
+const toDatePickerValue = (value = "") => {
+	if (!value) return null;
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed : null;
+};
 
 const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
@@ -770,51 +777,73 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					loadActions();
 				}}
 			>
-				<select
+				<Select
+					allowClear
+					showSearch
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
 					value={filters.hotelId}
-					onChange={(event) => updateFilter("hotelId", event.target.value)}
-				>
-					<option value=''>{labels.allHotels}</option>
-					{hotels.map((hotel) => (
-						<option key={hotel._id} value={hotel._id}>
-							{titleCase(hotel.hotelName)}
-						</option>
-					))}
-				</select>
-				<select
+					onChange={(value) => updateFilter("hotelId", value || "")}
+					placeholder={labels.allHotels}
+					optionFilterProp='label'
+					options={hotels.map((hotel) => ({
+						value: hotel._id,
+						label: titleCase(hotel.hotelName),
+					}))}
+				/>
+				<Select
+					allowClear
+					showSearch
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
 					value={filters.bookingSource}
-					onChange={(event) =>
-						updateFilter("bookingSource", event.target.value)
-					}
-				>
-					<option value=''>{labels.allBookingSources}</option>
-					{bookingSources.map((item) => (
-						<option key={item.source} value={item.source}>
-							{titleCase(item.source)} ({item.count})
-						</option>
-					))}
-				</select>
-				<select
+					onChange={(value) => updateFilter("bookingSource", value || "")}
+					placeholder={labels.allBookingSources}
+					optionFilterProp='label'
+					options={bookingSources.map((item) => ({
+						value: item.source,
+						label: `${titleCase(item.source)} (${item.count})`,
+					}))}
+				/>
+				<Select
+					allowClear
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
 					value={filters.actionType}
-					onChange={(event) => updateFilter("actionType", event.target.value)}
-				>
-					{actionOptions.map((option) => (
-						<option key={option.value} value={option.value}>
-							{option.label}
-						</option>
-					))}
-				</select>
-				<input
-					type='date'
-					value={filters.dateFrom}
-					onChange={(event) => updateFilter("dateFrom", event.target.value)}
+					onChange={(value) => updateFilter("actionType", value || "")}
+					placeholder={labels.allActions}
+					optionFilterProp='label'
+					options={actionOptions}
 				/>
-				<input
-					type='date'
-					value={filters.dateTo}
-					onChange={(event) => updateFilter("dateTo", event.target.value)}
+				<DatePicker
+					allowClear
+					inputReadOnly
+					format='YYYY-MM-DD'
+					className='overall-date-picker'
+					value={toDatePickerValue(filters.dateFrom)}
+					onChange={(_, dateString) => updateFilter("dateFrom", dateString)}
+					placeholder={labels.dateFrom}
+					getPopupContainer={() => document.body}
+					popupStyle={{ zIndex: 2100 }}
 				/>
-				<button type='submit'>{labels.search}</button>
+				<DatePicker
+					allowClear
+					inputReadOnly
+					format='YYYY-MM-DD'
+					className='overall-date-picker'
+					value={toDatePickerValue(filters.dateTo)}
+					onChange={(_, dateString) => updateFilter("dateTo", dateString)}
+					placeholder={labels.dateTo}
+					getPopupContainer={() => document.body}
+					popupStyle={{ zIndex: 2100 }}
+				/>
+				<button type='submit'>
+					<SearchOutlined />
+					<span>{labels.search}</span>
+				</button>
 				<button
 					type='button'
 					className='secondary'
@@ -831,7 +860,8 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 						setWalletPage(1);
 					}}
 				>
-					{labels.reset}
+					<ReloadOutlined />
+					<span>{labels.reset}</span>
 				</button>
 				<button
 					type='button'
@@ -840,7 +870,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					onClick={handleExportExcel}
 				>
 					<DownloadOutlined />
-					{exporting ? labels.exportingExcel : labels.exportExcel}
+					<span>{exporting ? labels.exportingExcel : labels.exportExcel}</span>
 				</button>
 			</OverallToolbar>
 

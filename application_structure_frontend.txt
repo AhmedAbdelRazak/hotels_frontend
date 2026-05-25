@@ -351,6 +351,7 @@ Frontend Critical Workflows To Protect
   - The page keeps the same summary filter model and assigned-hotel scoping as the other executive tabs.
 - Overall financial actions
   - src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions.js owns the pending reservation-finance queue and pending wallet-claim approval queue.
+  - The filter row should use the shared overall AntD Select and DatePicker styling classes, not native select/date inputs, so it matches reservation and executive report pages.
   - The two tables should have visible section labels, subtitles, and row-count pills so finance users understand which queue they are reviewing.
   - Export Excel pulls the full filtered queue through exportAll mode, creates a styled workbook with Summary, Reservation Actions, and Wallet Approvals sheets, then calls the financial export tracking endpoint before writing the file.
   - If export tracking fails, the workbook should not be downloaded silently; the user should see an export error.
