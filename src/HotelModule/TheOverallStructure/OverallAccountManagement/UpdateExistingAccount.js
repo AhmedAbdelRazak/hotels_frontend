@@ -28,7 +28,7 @@ import {
 import MultiSelectFilter from "./MultiSelectFilter";
 
 const roleOptions = [
-	{ value: "systemadmin", role: 10000, en: "System Admin", ar: "مسؤول النظام" },
+	{ value: "systemadmin", role: 10000, en: "Hotel System Admin", ar: "مسؤول نظام الفندق" },
 	{ value: "hotelmanager", role: 2000, en: "Hotel Manager", ar: "مدير الفندق" },
 	{ value: "reception", role: 3000, en: "Front Desk Reception", ar: "موظف الاستقبال" },
 	{
@@ -121,7 +121,7 @@ const TEXT = {
 		openingWalletHint:
 			"Leave as zero when this agent has no starting wallet credit.",
 		systemAdminRoleLocked:
-			"System Admin must be the only selected role. Remove it to choose another role.",
+			"Hotel System Admin must be the only selected role. Remove it to choose another role.",
 	},
 	ar: {
 		currentAccounts: "الحسابات الحالية",
@@ -163,7 +163,7 @@ const TEXT = {
 		openingWalletHint:
 			"اتركه صفرا إذا لم يكن للوكيل رصيد افتتاحي.",
 		systemAdminRoleLocked:
-			"حسابات مسؤول النظام الحالية تبقى بدور مسؤول النظام في هذه الصفحة.",
+			"حسابات مسؤول نظام الفندق الحالية تبقى بدور مسؤول نظام الفندق في هذه الصفحة.",
 	},
 };
 

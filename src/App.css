@@ -17,9 +17,33 @@ body {
 }
 
 :root {
-	--pms-table-header-bg: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
-	--pms-table-header-color: #102033;
-	--pms-table-header-border: #b9d5f4;
+	--pms-metal-purple-dark: #24102d;
+	--pms-metal-purple-deep: #3b1248;
+	--pms-metal-purple: #64166e;
+	--pms-metal-purple-lift: #8d4c9d;
+	--pms-metal-purple-glint: #f3dcff;
+	--pms-metal-blue-dark: #102033;
+	--pms-metal-blue: #17395f;
+	--pms-metal-blue-lift: #2d5d91;
+	--pms-metal-blue-bg: linear-gradient(180deg, #1d416b 0%, #102033 100%);
+	--pms-metal-purple-bg: linear-gradient(
+		135deg,
+		#24102d 0%,
+		#3b1248 28%,
+		#7a328b 52%,
+		#4e175d 74%,
+		#251127 100%
+	);
+	--pms-metal-purple-soft: linear-gradient(
+		135deg,
+		#fffaff 0%,
+		#f2e5f7 48%,
+		#ffffff 100%
+	);
+	--pms-gold: #d99225;
+	--pms-table-header-bg: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+	--pms-table-header-color: #ffffff;
+	--pms-table-header-border: #2d5d91;
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th,
@@ -129,6 +153,96 @@ table tbody td.number-cell,
 .overall-filter-dropdown.ltr {
 	direction: ltr;
 	text-align: left;
+}
+
+.ant-picker-dropdown .ant-picker-panel-container {
+	overflow: hidden;
+	border: 1px solid rgba(45, 93, 145, 0.2);
+	border-radius: 10px;
+	background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+	box-shadow: 0 18px 38px rgba(16, 32, 51, 0.18);
+}
+
+.ant-picker-dropdown .ant-picker-panel {
+	border-color: rgba(45, 93, 145, 0.14);
+	background: transparent;
+}
+
+.ant-picker-dropdown .ant-picker-header {
+	border-bottom-color: rgba(45, 93, 145, 0.14);
+	background: linear-gradient(
+		180deg,
+		var(--pms-metal-blue-lift, #2d5d91) 0%,
+		var(--pms-metal-blue, #17395f) 100%
+	);
+	color: #ffffff;
+}
+
+.ant-picker-dropdown .ant-picker-header button,
+.ant-picker-dropdown .ant-picker-header-view,
+.ant-picker-dropdown .ant-picker-header-view button {
+	color: #ffffff;
+	font-weight: 900;
+}
+
+.ant-picker-dropdown .ant-picker-header button:hover,
+.ant-picker-dropdown .ant-picker-header-view button:hover {
+	color: #aee9ff;
+}
+
+.ant-picker-dropdown .ant-picker-content thead tr {
+	background: linear-gradient(180deg, #17395f 0%, #102033 100%);
+}
+
+.ant-picker-dropdown .ant-picker-content th {
+	padding: 8px 0;
+	color: #ffffff;
+	font-size: 12px;
+	font-weight: 950;
+	letter-spacing: 0;
+}
+
+.ant-picker-dropdown .ant-picker-cell {
+	color: #9aa6b2;
+}
+
+.ant-picker-dropdown .ant-picker-cell-in-view {
+	color: #233246;
+}
+
+.ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-today
+	.ant-picker-cell-inner::before {
+	border-color: var(--pms-metal-purple-lift, #8d4c9d);
+}
+
+.ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-selected
+	.ant-picker-cell-inner,
+.ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-start
+	.ant-picker-cell-inner,
+.ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-end
+	.ant-picker-cell-inner {
+	background: linear-gradient(180deg, #2f86f6 0%, #1559c7 100%);
+	color: #ffffff;
+	font-weight: 950;
+	box-shadow: 0 6px 14px rgba(21, 89, 199, 0.24);
+}
+
+.ant-picker-dropdown .ant-picker-cell-in-view.ant-picker-cell-in-range::before,
+.ant-picker-dropdown
+	.ant-picker-cell-in-view.ant-picker-cell-range-start:not(.ant-picker-cell-range-start-single)::before,
+.ant-picker-dropdown
+	.ant-picker-cell-in-view.ant-picker-cell-range-end:not(.ant-picker-cell-range-end-single)::before {
+	background: #eaf3ff;
+}
+
+.ant-picker-dropdown .ant-picker-cell-in-view .ant-picker-cell-inner:hover {
+	background: #dff0ff;
+	color: #102033;
+}
+
+.ant-picker-dropdown .ant-picker-today-btn {
+	color: var(--pms-metal-blue-lift, #2d5d91);
+	font-weight: 950;
 }
 
 .Toastify__toast-container,

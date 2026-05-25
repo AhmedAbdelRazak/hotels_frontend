@@ -16,7 +16,6 @@ import {
 	localizeStatus,
 	normalizeId,
 	OVERALL_PAGE_SIZE,
-	OverallHeader,
 	OverallPageShell,
 	OverallTableWrap,
 	OverallToolbar,
@@ -452,13 +451,6 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
-			<OverallHeader>
-				<div>
-					<h2>{labels.title}</h2>
-					<p>{labels.subtitle}</p>
-				</div>
-			</OverallHeader>
-
 			<OverallToolbar
 				onSubmit={(event) => {
 					event.preventDefault();
@@ -637,13 +629,6 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					{labels.next}
 				</button>
 			</Pager>
-
-			<OverallHeader>
-				<div>
-					<h2>{labels.walletClaimsTitle}</h2>
-					<p>{labels.walletClaimsSubtitle}</p>
-				</div>
-			</OverallHeader>
 
 			<OverallTableWrap>
 				<table>

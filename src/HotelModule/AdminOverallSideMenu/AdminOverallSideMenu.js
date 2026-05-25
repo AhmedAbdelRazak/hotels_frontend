@@ -323,6 +323,14 @@ const AdminOverallSideMenu = ({
 	const buildOverallLink = useCallback(
 		(overallValue = "", extraParams = {}) => {
 			const params = new URLSearchParams(location.search || "");
+			if (overallValue === "summary") {
+				const summaryParams = new URLSearchParams();
+				const ownerId = params.get("ownerId") || user?._id || "";
+				if (ownerId) summaryParams.set("ownerId", ownerId);
+				summaryParams.set("overall", "summary");
+				summaryParams.set("page", "1");
+				return `/hotel-management/main-dashboard?${summaryParams.toString()}`;
+			}
 			[
 				"modal",
 				"hotelId",
@@ -330,10 +338,12 @@ const AdminOverallSideMenu = ({
 				"mapOwnerId",
 				"reservationId",
 				"step",
+				"summaryTab",
 				"listPage",
 				"listSearch",
 				"dateFrom",
 				"dateTo",
+				"dateBy",
 				"sortBy",
 				"tab",
 				"reservationTab",
@@ -342,6 +352,12 @@ const AdminOverallSideMenu = ({
 				"startDate",
 				"endDate",
 				"actionType",
+				"invCal",
+				"invHMonth",
+				"invHYear",
+				"invStart",
+				"invEnd",
+				"invHotel",
 			].forEach((key) => params.delete(key));
 			if (overallValue) {
 				params.set("overall", overallValue);
@@ -358,7 +374,7 @@ const AdminOverallSideMenu = ({
 			const search = params.toString();
 			return `/hotel-management/main-dashboard${search ? `?${search}` : ""}`;
 		},
-		[location.search]
+		[location.search, user?._id]
 	);
 
 	const menuLink = useCallback((overallValue, label, extraParams) => (
@@ -374,17 +390,17 @@ const AdminOverallSideMenu = ({
 	const items = useMemo(
 		() => [
 			getItem(
-				menuLink("", text.mainDashboard),
-				"overall-dashboard",
-				<DashboardOutlined />,
+				menuLink("summary", text.overallSummary),
+				"overall-summary",
+				<BarChartOutlined />,
 				null,
 				null,
 				"overall-menu-row"
 			),
 			getItem(
-				menuLink("summary", text.overallSummary),
-				"overall-summary",
-				<BarChartOutlined />,
+				menuLink("", text.mainDashboard),
+				"overall-dashboard",
+				<DashboardOutlined />,
 				null,
 				null,
 				"overall-menu-row"
@@ -646,7 +662,9 @@ const MobileMenuBackdrop = styled.button`
 
 const AdminOverallSideMenuWrapper = styled.div`
 	margin-bottom: 15px;
-	background: #1d1d2b;
+	background:
+		linear-gradient(180deg, rgba(141, 76, 157, 0.08) 0%, rgba(0, 0, 0, 0) 34%),
+		#1b1726;
 	top: 70px !important;
 	z-index: 1100;
 	overflow: hidden;
@@ -725,7 +743,17 @@ const AdminOverallSideMenuWrapper = styled.div`
 		overflow: hidden;
 		display: flex !important;
 		align-items: center !important;
-		transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+		position: relative;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			color 0.18s ease,
+			box-shadow 0.18s ease,
+			transform 0.18s ease;
+	}
+
+	.ant-menu-item::after {
+		display: none !important;
 	}
 
 	.ant-menu-inline .ant-menu-item,
@@ -735,19 +763,19 @@ const AdminOverallSideMenuWrapper = styled.div`
 
 	.overall-menu-row.ant-menu-item,
 	.ant-menu-sub .overall-menu-child.ant-menu-item {
-		background: #29293d !important;
+		background: linear-gradient(180deg, #29243a 0%, #242235 100%) !important;
 		color: #f7f7fb !important;
 		box-shadow: inset 0 -1px rgba(255, 255, 255, 0.035);
 	}
 
 	.overall-menu-row.ant-menu-item:nth-of-type(even),
 	.ant-menu-sub .overall-menu-child.ant-menu-item:nth-of-type(even) {
-		background: #232333 !important;
+		background: linear-gradient(180deg, #232031 0%, #1f1d2d 100%) !important;
 	}
 
 	.ant-menu-item:hover,
 	.ant-menu-submenu-title:hover {
-		background: #303049 !important;
+		background: linear-gradient(180deg, #342746 0%, #292238 100%) !important;
 		color: #ffffff !important;
 	}
 
@@ -788,7 +816,21 @@ const AdminOverallSideMenuWrapper = styled.div`
 	}
 
 	.ant-menu-submenu-selected > .ant-menu-submenu-title {
-		color: #f3a72f !important;
+		color: #f7f7fb !important;
+		background: linear-gradient(
+			${(props) => (props.$isArabic ? "270deg" : "90deg")},
+			rgba(217, 146, 37, 0.13),
+			rgba(255, 255, 255, 0.035) 62%,
+			transparent
+		) !important;
+		box-shadow: inset ${(props) => (props.$isArabic ? "-2px" : "2px")} 0 0
+			rgba(217, 146, 37, 0.75);
+	}
+
+	.ant-menu-submenu-selected > .ant-menu-submenu-title .overall-menu-text,
+	.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon,
+	.ant-menu-submenu-selected > .ant-menu-submenu-title .anticon {
+		color: #ffd28a !important;
 	}
 
 	.ant-menu-sub .ant-menu-item {
@@ -853,26 +895,89 @@ const AdminOverallSideMenuWrapper = styled.div`
 		font-size: 17px !important;
 	}
 
+	.ant-menu-inline-collapsed .ant-menu-item-selected {
+		margin-inline: 10px !important;
+		padding-inline: 0 !important;
+		justify-content: center !important;
+		transform: none;
+	}
+
+	.ant-menu-inline-collapsed .ant-menu-item-selected::before {
+		top: 7px;
+		bottom: 7px;
+		left: ${(props) => (props.$isArabic ? "auto" : "0")};
+		right: ${(props) => (props.$isArabic ? "0" : "auto")};
+		width: 2px;
+		height: auto;
+		transform: none;
+	}
+
+	.ant-menu-inline-collapsed .ant-menu-item-selected .ant-menu-item-icon {
+		width: 28px;
+		height: 28px;
+		min-width: 28px;
+		background: rgba(255, 255, 255, 0.08);
+	}
+
 	.ant-menu.ant-menu-dark,
 	.ant-menu-dark .ant-menu-sub,
 	.ant-menu.ant-menu-dark .ant-menu-sub {
 		color: rgba(255, 255, 255, 0.65);
-		background: #1d1d2b !important;
+		background: #1b1726 !important;
 		width: 100% !important;
 		border-inline-end: 0 !important;
 	}
 
-	.ant-menu-item-selected {
+	.ant-menu-item-selected,
+	.ant-menu-dark .ant-menu-item-selected,
+	.ant-menu-dark > .ant-menu .ant-menu-item-selected {
 		background: ${(props) =>
-			props.$show2 ? "none !important" : "#64166e !important"};
+			props.$show2
+				? "transparent !important"
+				: `linear-gradient(${
+						props.$isArabic ? "270deg" : "90deg"
+				  }, rgba(217, 146, 37, 0.15), rgba(99, 31, 115, 0.42) 48%, rgba(255, 255, 255, 0.05)) !important`};
+		border: 1px solid rgba(217, 146, 37, 0.25) !important;
+		border-radius: 5px !important;
 		color: #ffffff !important;
-		box-shadow: inset ${(props) => (props.$isArabic ? "-4px" : "4px")} 0 0
-			#d99225;
+		box-shadow:
+			inset ${(props) => (props.$isArabic ? "-3px" : "3px")} 0 0 #d99225,
+			0 5px 14px rgba(0, 0, 0, 0.22);
+		transform: none;
+	}
+
+	.ant-menu-item-selected::before {
+		content: "";
+		position: absolute;
+		inset-inline-start: ${(props) => (props.$isArabic ? "auto" : "0")};
+		inset-inline-end: ${(props) => (props.$isArabic ? "0" : "auto")};
+		top: 8px;
+		bottom: 8px;
+		width: 2px;
+		border-radius: 999px;
+		background: rgba(255, 210, 138, 0.88);
+		box-shadow: 0 0 8px rgba(255, 210, 138, 0.34);
+	}
+
+	.ant-menu-item-selected .overall-menu-link,
+	.ant-menu-item-selected .overall-menu-text {
+		color: #fff8e8 !important;
+		font-weight: 950;
 	}
 
 	.ant-menu-item-selected .ant-menu-item-icon,
 	.ant-menu-item-selected .anticon {
-		color: #ffffff !important;
+		color: #ffd28a !important;
+		filter: none;
+		transform: none;
+	}
+
+	.ant-menu-item-selected .ant-menu-item-icon {
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		border-radius: 999px;
+		background: rgba(255, 210, 138, 0.1);
 	}
 
 	.reddish-bg {
@@ -915,7 +1020,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		height: calc(100dvh - 70px);
 		width: ${(props) =>
 			props.$show ? "80px" : "min(92vw, 340px)"} !important;
-		background: #1d1d2b;
+		background: #1b1726;
 		box-shadow: ${(props) =>
 			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
 		transition: width 0.22s ease, box-shadow 0.22s ease;
@@ -970,7 +1075,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 	@media (max-width: 560px) {
 		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
 			!important;
-		background: ${(props) => (props.$show ? "transparent" : "#1d1d2b")};
+		background: ${(props) => (props.$show ? "transparent" : "#1b1726")};
 		box-shadow: ${(props) =>
 			props.$show ? "none" : "8px 0 22px rgba(0, 0, 0, 0.35)"};
 		pointer-events: ${(props) => (props.$show ? "none" : "auto")};

@@ -24,6 +24,7 @@ import {
 	getHotelDetails,
 	hotelAccount,
 	acknowledgePendingNotification,
+	getB2BChatUnreadSummary,
 	pendingConfirmationNotificationFeed,
 } from "../apiAdmin";
 import socket from "../../socket";
@@ -83,10 +84,27 @@ const isAgentNotificationUser = (user = {}) => {
 	const roles = getUserRoles(user);
 	const descriptions = getUserRoleDescriptions(user);
 	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	const staffOrAdminRoles = [1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000];
+	const staffOrAdminDescriptions = [
+		"superadmin",
+		"super admin",
+		"systemadmin",
+		"system admin",
+		"hotelmanager",
+		"reception",
+		"housekeepingmanager",
+		"housekeeping",
+		"finance",
+		"reservationemployee",
+	];
 	return (
 		roles.includes(7000) ||
 		descriptions.includes("ordertaker") ||
-		accessTo.includes("ownReservations")
+		(accessTo.includes("ownReservations") &&
+			!roles.some((role) => staffOrAdminRoles.includes(role)) &&
+			!descriptions.some((description) =>
+				staffOrAdminDescriptions.includes(description)
+			))
 	);
 };
 
@@ -100,6 +118,21 @@ const isManagerOrAdminNotificationUser = (user = {}) => {
 		roles.includes(10000) ||
 		descriptions.includes("systemadmin") ||
 		descriptions.includes("hotelmanager")
+	);
+};
+
+const isB2BPlatformMonitor = (user = {}) => {
+	const roles = getUserRoles(user);
+	return isSuperAdminUser(user) || roles.includes(1000);
+};
+
+const canMonitorB2BHotelChats = (user = {}) => {
+	const roles = getUserRoles(user);
+	return (
+		isB2BPlatformMonitor(user) ||
+		isSystemAdminTopNavUser(user) ||
+		roles.includes(10000) ||
+		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
 	);
 };
 
@@ -425,6 +458,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		data: [],
 	});
 	const [notificationBellRinging, setNotificationBellRinging] = useState(false);
+	const [chatUnreadSummary, setChatUnreadSummary] = useState({
+		unreadChats: 0,
+		unreadMessages: 0,
+		activeChats: 0,
+	});
+	const [chatPingRinging, setChatPingRinging] = useState(false);
 	const [isMobileNav, setIsMobileNav] = useState(false);
 	const [calendarHotels, setCalendarHotels] = useState([]);
 	const [calendarRooms, setCalendarRooms] = useState([]);
@@ -443,6 +482,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const notificationFeedTotalRef = useRef(0);
 	const notificationFeedReadyRef = useRef(false);
 	const lastNotificationBellAtRef = useRef(0);
+	const chatUnreadMessagesRef = useRef(0);
+	const chatUnreadReadyRef = useRef(false);
+	const chatUnreadLoadingRef = useRef(false);
+	const chatUnreadRetryTimerRef = useRef(null);
+	const chatPingTimerRef = useRef(null);
+	const lastChatPingAtRef = useRef(0);
 
 	const location = useLocation();
 	const history = useHistory();
@@ -478,7 +523,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	);
 	const isMainHotelDashboard =
 		location.pathname === "/hotel-management/main-dashboard";
-	const notificationHotelId = isMainHotelDashboard
+	const isOverallNavbarContext =
+		isMainHotelDashboard ||
+		location.pathname === "/hotel-management/b2b-chat";
+	const notificationHotelId = isOverallNavbarContext
 		? ""
 		: routeHotelContext.routeHotelId || hotelId || "";
 	const notificationOwnerId =
@@ -497,6 +545,15 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		() => (assignedHotelKey ? assignedHotelKey.split("|") : []),
 		[assignedHotelKey]
 	);
+	const b2bHotelMonitorIds = useMemo(
+		() =>
+			canMonitorB2BHotelChats(user)
+				? assignedCalendarHotelIds.filter(Boolean)
+				: [],
+		[assignedCalendarHotelIds, user]
+	);
+	const b2bHotelMonitorKey = b2bHotelMonitorIds.join("|");
+	const shouldJoinB2BPlatform = isB2BPlatformMonitor(user);
 	const canUseOwnerWideCalendarHotels = canSeeOwnerWideCalendarHotels(user);
 	const canUseMainDashboardSettingsCalendar =
 		isMainHotelDashboard && canOpenSettingsCalendar(user);
@@ -613,6 +670,62 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		}
 	}, [ensureNotificationAudioReady]);
 
+	const playChatPing = useCallback(async () => {
+		if (typeof window === "undefined") return;
+		const nowMs = Date.now();
+		if (nowMs - lastChatPingAtRef.current < 1400) return;
+		lastChatPingAtRef.current = nowMs;
+
+		setChatPingRinging(true);
+		if (chatPingTimerRef.current) {
+			clearTimeout(chatPingTimerRef.current);
+		}
+		chatPingTimerRef.current = setTimeout(() => {
+			setChatPingRinging(false);
+		}, 680);
+
+		if (typeof navigator !== "undefined" && navigator.vibrate) {
+			try {
+				navigator.vibrate([38, 25, 38]);
+			} catch (error) {
+				// Vibration support varies by browser and device.
+			}
+		}
+
+		const audioContext = await ensureNotificationAudioReady();
+		if (!audioContext || audioContext.state !== "running") return;
+
+		try {
+			const startTime = audioContext.currentTime;
+			const masterGain = audioContext.createGain();
+			masterGain.gain.setValueAtTime(0.0001, startTime);
+			masterGain.gain.exponentialRampToValueAtTime(0.095, startTime + 0.014);
+			masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.48);
+			masterGain.connect(audioContext.destination);
+
+			[
+				{ frequency: 659.25, offset: 0, duration: 0.12 },
+				{ frequency: 987.77, offset: 0.16, duration: 0.16 },
+			].forEach(({ frequency, offset, duration }) => {
+				const oscillator = audioContext.createOscillator();
+				const noteGain = audioContext.createGain();
+				const noteStart = startTime + offset;
+				const noteEnd = noteStart + duration;
+				oscillator.type = "triangle";
+				oscillator.frequency.setValueAtTime(frequency, noteStart);
+				noteGain.gain.setValueAtTime(0.0001, noteStart);
+				noteGain.gain.exponentialRampToValueAtTime(0.5, noteStart + 0.012);
+				noteGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+				oscillator.connect(noteGain);
+				noteGain.connect(masterGain);
+				oscillator.start(noteStart);
+				oscillator.stop(noteEnd + 0.035);
+			});
+		} catch (error) {
+			// Chat audio is best-effort; the badge animation still runs.
+		}
+	}, [ensureNotificationAudioReady]);
+
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
 		const unlockAudio = () => {
@@ -634,6 +747,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		return () => {
 			if (notificationBellTimerRef.current) {
 				clearTimeout(notificationBellTimerRef.current);
+			}
+			if (chatPingTimerRef.current) {
+				clearTimeout(chatPingTimerRef.current);
+			}
+			if (chatUnreadRetryTimerRef.current) {
+				clearTimeout(chatUnreadRetryTimerRef.current);
 			}
 			const audioContext = notificationAudioContextRef.current;
 			if (audioContext && audioContext.state !== "closed") {
@@ -768,6 +887,112 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
 	}, [refreshNotifications]);
+
+	const refreshChatUnread = useCallback(
+		async ({ silent = false, force = false } = {}) => {
+			if (!force && isBrowserTabHidden()) return;
+			if (chatUnreadLoadingRef.current) {
+				if (force && !chatUnreadRetryTimerRef.current) {
+					chatUnreadRetryTimerRef.current = setTimeout(() => {
+						chatUnreadRetryTimerRef.current = null;
+						refreshChatUnread({ silent: true, force: true });
+					}, 650);
+				}
+				return;
+			}
+			if (!user?._id || !token) {
+				chatUnreadReadyRef.current = false;
+				chatUnreadMessagesRef.current = 0;
+				setChatUnreadSummary({
+					unreadChats: 0,
+					unreadMessages: 0,
+					activeChats: 0,
+				});
+				return;
+			}
+			chatUnreadLoadingRef.current = true;
+			try {
+				const summary = await getB2BChatUnreadSummary(user._id, token);
+				const nextUnreadMessages = Number(summary?.unreadMessages || 0);
+				const previousUnreadMessages = Number(
+					chatUnreadMessagesRef.current || 0
+				);
+				if (
+					chatUnreadReadyRef.current &&
+					nextUnreadMessages > previousUnreadMessages
+				) {
+					playChatPing();
+				}
+				chatUnreadReadyRef.current = true;
+				chatUnreadMessagesRef.current = nextUnreadMessages;
+				setChatUnreadSummary({
+					unreadChats: Number(summary?.unreadChats || 0),
+					unreadMessages: nextUnreadMessages,
+					activeChats: Number(summary?.activeChats || 0),
+				});
+			} catch (error) {
+				if (!silent) console.error("Failed to load chat notifications", error);
+			} finally {
+				chatUnreadLoadingRef.current = false;
+			}
+		},
+		[playChatPing, token, user?._id]
+	);
+
+	useEffect(() => {
+		refreshChatUnread({ force: true });
+		const timer = setInterval(
+			() => refreshChatUnread({ silent: true }),
+			30000
+		);
+		return () => clearInterval(timer);
+	}, [refreshChatUnread]);
+
+	useEffect(() => {
+		if (!user?._id) return undefined;
+		const monitorHotelIds = b2bHotelMonitorKey
+			? b2bHotelMonitorKey.split("|").filter(Boolean)
+			: [];
+		socket.emit("joinB2BUser", { userId: user._id });
+		if (shouldJoinB2BPlatform) {
+			socket.emit("joinB2BPlatform");
+		}
+		monitorHotelIds.forEach((hotelId) => {
+			socket.emit("joinB2BHotel", { hotelId });
+		});
+		const handleChatUpdate = () => {
+			refreshChatUnread({ silent: true, force: true });
+		};
+		socket.on("b2bChatUpdated", handleChatUpdate);
+		return () => {
+			socket.emit("leaveB2BUser", { userId: user._id });
+			if (shouldJoinB2BPlatform) {
+				socket.emit("leaveB2BPlatform");
+			}
+			monitorHotelIds.forEach((hotelId) => {
+				socket.emit("leaveB2BHotel", { hotelId });
+			});
+			socket.off("b2bChatUpdated", handleChatUpdate);
+		};
+	}, [
+		b2bHotelMonitorKey,
+		refreshChatUnread,
+		shouldJoinB2BPlatform,
+		user?._id,
+	]);
+
+	useEffect(() => {
+		if (typeof document === "undefined") return undefined;
+		const handleVisibilityChange = () => {
+			if (!document.hidden) {
+				refreshChatUnread({ silent: true, force: true });
+			}
+		};
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [refreshChatUnread]);
 
 	useEffect(() => {
 		if (!canUseNotifications) return undefined;
@@ -1282,22 +1507,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	};
 
 	const handleChatClick = () => {
-		const selectedHotelLocal =
-			JSON.parse(localStorage.getItem("selectedHotel")) || {};
-		const userIdLocal =
-			selectedHotelLocal.belongsTo?._id ||
-			selectedHotelLocal.belongsTo ||
-			user.belongsToId ||
-			user._id;
-		const hotelIdLocal = selectedHotelLocal._id;
-
-		const ok =
-			location.pathname.includes(userIdLocal) &&
-			location.pathname.includes(hotelIdLocal);
-
-		if (ok) {
-			window.location.href = `/hotel-management/customer-service/${userIdLocal}/${hotelIdLocal}`;
-		}
+		history.push("/hotel-management/b2b-chat?tab=active");
 	};
 
 	const toggleLanguage = () => {
@@ -1409,7 +1619,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			setNotificationsOpen(false);
 			return;
 		}
-		if (isMainHotelDashboard) {
+		if (isOverallNavbarContext) {
 			history.push(
 				buildOverallNotificationRoute(item, targetOwnerId, targetHotelId)
 			);
@@ -1474,13 +1684,16 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	}, [user]);
 
 	const roleLabel = isSystemAdminTopNavUser(user)
-		? "System Admin"
+		? "Hotel System Admin"
 		: user.role === 1000
-		  ? "Superadmin"
+		  ? "Super Admin"
 		  : user.role === 2000
 		    ? "Owner"
 		    : "User";
 	const notificationCount = Number(notificationFeed.total || 0);
+	const chatNotificationCount = Number(
+		chatUnreadSummary.unreadMessages || chatUnreadSummary.unreadChats || 0
+	);
 	const notificationPanel = (
 		<NotificationPanel $isArabic={isArabic}>
 			{false && (
@@ -1830,12 +2043,22 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 					<IconWrapper
 						$isArabic={isArabic}
-						className='topnav-labeled-action'
+						className={
+							chatPingRinging
+								? "topnav-labeled-action chat-ping-ringing"
+								: "topnav-labeled-action"
+						}
 						onClick={handleChatClick}
 					>
 						<ActionLabel>{isArabic ? "رسائل" : "Messages"}</ActionLabel>
-						<MessageOutlined />
-						<NotificationDot />
+						<Badge
+							count={chatNotificationCount}
+							size='small'
+							overflowCount={99}
+							offset={[2, -2]}
+						>
+							<MessageOutlined />
+						</Badge>
 					</IconWrapper>
 				</Icons>
 
@@ -1899,6 +2122,21 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							</Badge>
 						</MobileTopButton>
 					)}
+				<MobileTopButton
+					type='button'
+					onClick={handleChatClick}
+					aria-label={isArabic ? "\u0627\u0644\u0631\u0633\u0627\u0626\u0644" : "Messages"}
+					className={chatPingRinging ? "chat-ping-ringing" : ""}
+				>
+					<Badge
+						count={chatNotificationCount}
+						size='small'
+						overflowCount={99}
+						offset={[4, -4]}
+					>
+						<MessageOutlined />
+					</Badge>
+				</MobileTopButton>
 				<Dropdown
 					menu={{
 						items: profileMenuItems,
@@ -1945,6 +2183,107 @@ export default TopNavbar;
 /* ======================== Styled Components ======================== */
 
 const TopNavbarGlobalStyles = createGlobalStyle`
+	:root {
+		--pms-metal-purple-dark: #24102d;
+		--pms-metal-purple-deep: #3b1248;
+		--pms-metal-purple: #64166e;
+		--pms-metal-purple-lift: #8d4c9d;
+		--pms-metal-purple-glint: #f3dcff;
+		--pms-metal-blue-dark: #102033;
+		--pms-metal-blue: #17395f;
+		--pms-metal-blue-lift: #2d5d91;
+		--pms-metal-blue-bg: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		--pms-metal-purple-bg: linear-gradient(
+			135deg,
+			#24102d 0%,
+			#3b1248 28%,
+			#7a328b 52%,
+			#4e175d 74%,
+			#251127 100%
+		);
+		--pms-metal-purple-soft: linear-gradient(
+			135deg,
+			#fffaff 0%,
+			#f2e5f7 48%,
+			#ffffff 100%
+		);
+		--pms-gold: #d99225;
+		--pms-table-header-bg: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		--pms-table-header-color: #ffffff;
+		--pms-table-header-border: #2d5d91;
+	}
+
+	body .ant-btn-primary:not(.ant-btn-dangerous) {
+		border-color: rgba(141, 76, 157, 0.88) !important;
+		background: var(--pms-metal-purple-bg) !important;
+		color: #ffffff !important;
+		font-weight: 900;
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.18),
+			0 9px 20px rgba(80, 23, 96, 0.24) !important;
+	}
+
+	body .ant-btn-primary:not(.ant-btn-dangerous):hover,
+	body .ant-btn-primary:not(.ant-btn-dangerous):focus {
+		border-color: rgba(243, 220, 255, 0.9) !important;
+		filter: brightness(1.06) saturate(1.05);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.24),
+			0 12px 24px rgba(80, 23, 96, 0.32) !important;
+	}
+
+	body .btn-primary,
+	body .btn-info {
+		border-color: rgba(141, 76, 157, 0.85) !important;
+		background: var(--pms-metal-purple-bg) !important;
+		color: #ffffff !important;
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.22);
+	}
+
+	body .ant-input:hover,
+	body .ant-input-affix-wrapper:hover,
+	body .ant-select:not(.ant-select-disabled):hover .ant-select-selector,
+	body .ant-picker:hover {
+		border-color: rgba(141, 76, 157, 0.72) !important;
+	}
+
+	body .ant-input:focus,
+	body .ant-input-focused,
+	body .ant-input-affix-wrapper-focused,
+	body .ant-input-affix-wrapper:focus-within,
+	body .ant-select-focused .ant-select-selector,
+	body .ant-picker-focused {
+		border-color: var(--pms-metal-purple-lift) !important;
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.14) !important;
+	}
+
+	body .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+		color: var(--pms-metal-purple) !important;
+		font-weight: 950;
+	}
+
+	body .ant-tabs-ink-bar,
+	body .ant-switch-checked {
+		background: var(--pms-metal-purple-bg) !important;
+	}
+
+	body .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled),
+	body .ant-pagination-item-active {
+		border-color: var(--pms-metal-purple-lift) !important;
+		color: var(--pms-metal-purple) !important;
+	}
+
+	body .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled)::before {
+		background-color: var(--pms-metal-purple-lift) !important;
+	}
+
+	body .ant-tag-purple {
+		border-color: #d9b8df;
+		background: #fbf6ff;
+		color: #5d1d6e;
+		font-weight: 800;
+	}
+
 	@keyframes topNavbarBellRing {
 		0% {
 			transform: rotate(0deg) scale(1);
@@ -1969,6 +2308,25 @@ const TopNavbarGlobalStyles = createGlobalStyle`
 		}
 	}
 
+	@keyframes topNavbarChatPing {
+		0% {
+			transform: translateY(0) scale(1);
+			filter: drop-shadow(0 0 0 rgba(45, 93, 145, 0));
+		}
+		34% {
+			transform: translateY(-2px) scale(1.11);
+			filter: drop-shadow(0 0 9px rgba(45, 93, 145, 0.62));
+		}
+		68% {
+			transform: translateY(1px) scale(0.98);
+			filter: drop-shadow(0 0 5px rgba(141, 76, 157, 0.45));
+		}
+		100% {
+			transform: translateY(0) scale(1);
+			filter: drop-shadow(0 0 0 rgba(45, 93, 145, 0));
+		}
+	}
+
 	.notification-bell-ringing {
 		animation: topNavbarBellRing 0.88s ease-in-out;
 		color: #fde047 !important;
@@ -1982,6 +2340,13 @@ const TopNavbarGlobalStyles = createGlobalStyle`
 		color: #fde047 !important;
 		filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.65));
 		transform-origin: 50% 4px;
+	}
+
+	.chat-ping-ringing .anticon-message,
+	.chat-ping-ringing svg {
+		animation: topNavbarChatPing 0.62s ease-in-out;
+		color: #9bd7ff !important;
+		transform-origin: 50% 50%;
 	}
 
 	@media (max-width: 760px) {
@@ -2051,13 +2416,19 @@ const NavbarWrapper = styled.div`
 	left: 0;
 	width: 100%;
 	height: 70px;
-	background: #1d1d2b;
+	background:
+		linear-gradient(
+			120deg,
+			rgba(255, 255, 255, 0.04) 0%,
+			rgba(255, 255, 255, 0) 36%
+		),
+		linear-gradient(180deg, #211b2d 0%, #171525 100%);
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	padding: 0 18px;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
-	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	box-shadow: 0 4px 18px rgba(26, 12, 38, 0.34);
+	border-bottom: 1px solid rgba(141, 76, 157, 0.28);
 	z-index: 1000;
 	direction: ${(props) => (props.$isArabic ? "rtl" : "")} !important;
 	min-width: 0;
@@ -2212,7 +2583,7 @@ const MobileTopButton = styled.button`
 	padding: 0 12px;
 	border: 1px solid rgba(255, 255, 255, 0.28);
 	border-radius: 4px;
-	background: linear-gradient(180deg, #64166e 0%, #4f135b 100%);
+	background: var(--pms-metal-purple-bg);
 	color: #fff;
 	display: inline-flex;
 	align-items: center;
@@ -2221,7 +2592,9 @@ const MobileTopButton = styled.button`
 	font-weight: 900;
 	line-height: 1;
 	cursor: pointer;
-	box-shadow: 0 8px 18px rgba(79, 19, 91, 0.34);
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.18),
+		0 8px 18px rgba(79, 19, 91, 0.34);
 	transition: transform 0.15s ease, box-shadow 0.15s ease,
 		border-color 0.15s ease;
 
@@ -2313,7 +2686,7 @@ const NotificationPill = styled.span`
 	height: 28px;
 	padding: 0 9px;
 	border-radius: 999px;
-	background: #1677ff;
+	background: var(--pms-metal-purple-bg);
 	color: #fff;
 	font-weight: 900;
 	display: inline-flex;
@@ -2361,8 +2734,8 @@ const NotificationItem = styled.button`
 		box-shadow 0.15s ease;
 
 	&:hover {
-		border-color: #1677ff;
-		box-shadow: 0 10px 22px rgba(22, 119, 255, 0.12);
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		box-shadow: 0 10px 22px rgba(80, 23, 96, 0.14);
 		transform: translateY(-1px);
 	}
 `;
@@ -2467,8 +2840,8 @@ const IconWrapper = styled.div`
 	width: auto;
 	height: 46px;
 	padding: 0 10px;
-	background: #151522;
-	border: 1px solid rgba(255, 255, 255, 0.06);
+	background: linear-gradient(180deg, #171525 0%, #10101a 100%);
+	border: 1px solid rgba(255, 255, 255, 0.08);
 	border-radius: 2px;
 	margin: 0 !important;
 	color: #ffffff;
@@ -2477,8 +2850,8 @@ const IconWrapper = styled.div`
 	transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 
 	&:hover {
-		background: #29293d;
-		border-color: rgba(217, 146, 37, 0.35);
+		background: linear-gradient(180deg, #2e243a 0%, #1c1728 100%);
+		border-color: rgba(217, 146, 37, 0.42);
 		transform: translateY(-1px);
 	}
 
@@ -2489,8 +2862,11 @@ const IconWrapper = styled.div`
 		padding: 4px 4px 5px;
 		flex-direction: column;
 		gap: 2px;
-		background: linear-gradient(180deg, #64166e 0%, #4f135b 100%);
-		border-color: rgba(126, 42, 139, 0.85);
+		background: var(--pms-metal-purple-bg);
+		border-color: rgba(166, 98, 180, 0.72);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.18),
+			0 8px 18px rgba(80, 23, 96, 0.2);
 	}
 
 	&.topnav-labeled-action svg {
@@ -2502,7 +2878,7 @@ const IconWrapper = styled.div`
 	&.topnav-calendar-action,
 	&.topnav-shomoos-action {
 		min-width: 62px;
-		background: #151522;
+		background: linear-gradient(180deg, #171525 0%, #10101a 100%);
 		font-size: 0.82rem;
 		font-weight: 950;
 	}
@@ -2544,17 +2920,6 @@ const ActionLabel = styled.span`
 	text-align: center;
 `;
 
-const NotificationDot = styled.div`
-	position: absolute;
-	top: 5px;
-	right: 6px;
-	width: 9px;
-	height: 9px;
-	background-color: #f59e0b;
-	border: 1px solid #1d1d2b;
-	border-radius: 50%;
-`;
-
 const NotificationDot2 = styled.div`
 	position: absolute;
 	top: 3px;
@@ -2591,13 +2956,13 @@ const Profile = styled.div`
 	min-height: 46px;
 	padding: 0 10px;
 	border-radius: 2px;
-	background: #151522;
-	border: 1px solid rgba(255, 255, 255, 0.06);
+	background: linear-gradient(180deg, #171525 0%, #10101a 100%);
+	border: 1px solid rgba(255, 255, 255, 0.08);
 	transition: background 0.16s ease, border-color 0.16s ease;
 
 	&:hover {
-		background: #29293d;
-		border-color: rgba(217, 146, 37, 0.35);
+		background: linear-gradient(180deg, #2e243a 0%, #1c1728 100%);
+		border-color: rgba(217, 146, 37, 0.42);
 	}
 
 	.anticon-user {

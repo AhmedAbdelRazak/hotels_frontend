@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { message, Modal, Select } from "antd";
+import { DatePicker, Input, message, Modal, Select } from "antd";
+import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	exportOverallPendingReservations,
@@ -17,7 +18,7 @@ import {
 	getReservationPricePerDay,
 	localizeStatus,
 	OVERALL_PAGE_SIZE,
-	OverallHeader,
+	OverallCenteredSearch,
 	OverallPageShell,
 	OverallTableWrap,
 	OverallToolbar,
@@ -62,6 +63,25 @@ const PENDING_RESERVATIONS_TEXT = {
 		updateError: "تعذر تحديث الحجز.",
 		notAllowedToConfirm: "هذا الحساب غير مصرح له بتأكيد الحجوزات المعلقة.",
 		allBookingSources: "كل مصادر الحجز",
+	},
+};
+
+const PENDING_FILTER_TEXT = {
+	en: {
+		dateByLabel: "Date By",
+		creationDate: "Creation Date",
+		checkinDate: "Checkin Date",
+		checkoutDate: "Checkout Date",
+		fromDate: "From date",
+		toDate: "To date",
+	},
+	ar: {
+		dateByLabel: "حسب التاريخ",
+		creationDate: "تاريخ الإنشاء",
+		checkinDate: "تاريخ الوصول",
+		checkoutDate: "تاريخ المغادرة",
+		fromDate: "من تاريخ",
+		toDate: "إلى تاريخ",
 	},
 };
 
@@ -136,8 +156,31 @@ const sortOptions = (labels) => [
 	{ value: "checkout_date", label: labels.checkOut },
 ];
 
+const dateByOptions = (labels) => [
+	{ value: "createdAt", label: labels.creationDate },
+	{ value: "checkin_date", label: labels.checkinDate },
+	{ value: "checkout_date", label: labels.checkoutDate },
+];
+
+const pendingStatusOptions = (labels) => [
+	{ value: "Pending Confirmation", label: labels.pendingConfirmation },
+	{ value: "Pending Finance Review", label: labels.pendingFinanceReview },
+	{
+		value: "Pending Agent Commission Approval",
+		label: labels.pendingAgentCommissionApproval,
+	},
+	{ value: "Finance Rejected", label: labels.financeRejected },
+	{ value: "rejected", label: labels.rejected },
+];
+
 const pageFromSearch = (search = "") =>
 	Math.max(parseInt(new URLSearchParams(search || "").get("page"), 10) || 1, 1);
+
+const toDatePickerValue = (value = "") => {
+	if (!value) return null;
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed : null;
+};
 
 const isPendingConfirmationReservation = (reservation = {}) => {
 	const statusText = String(
@@ -162,6 +205,7 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 	const labels = {
 		...common,
 		...PENDING_RESERVATIONS_TEXT[isRTL ? "ar" : "en"],
+		...PENDING_FILTER_TEXT[isRTL ? "ar" : "en"],
 	};
 	const history = useHistory();
 	const location = useLocation();
@@ -172,9 +216,10 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 		[currentUser]
 	);
 	const [filters, setFilters] = useState({
+		search: "",
 		hotelId: [],
-		bookingSource: [],
-		dateBy: "booked_at",
+		status: [],
+		dateBy: "createdAt",
 		dateFrom: "",
 		dateTo: "",
 		sortBy: "createdAt",
@@ -219,9 +264,6 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 	};
 
 	const hotels = Array.isArray(result.hotels) ? result.hotels : [];
-	const bookingSources = Array.isArray(result.bookingSources)
-		? result.bookingSources
-		: [];
 	const reservations = Array.isArray(result.reservations)
 		? result.reservations
 		: [];
@@ -245,6 +287,31 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value }));
+		setPage(1);
+	};
+
+	const updateDateFilter = (key, value) => {
+		const nextDate = value || "";
+		setFilters((previous) => {
+			const next = { ...previous, [key]: nextDate };
+			if (
+				key === "dateFrom" &&
+				nextDate &&
+				previous.dateTo &&
+				dayjs(previous.dateTo).isBefore(dayjs(nextDate), "day")
+			) {
+				next.dateTo = "";
+			}
+			if (
+				key === "dateTo" &&
+				nextDate &&
+				previous.dateFrom &&
+				dayjs(nextDate).isBefore(dayjs(previous.dateFrom), "day")
+			) {
+				next.dateFrom = "";
+			}
+			return next;
+		});
 		setPage(1);
 	};
 
@@ -282,6 +349,27 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	const tableDate = (value) =>
 		formatDateByCalendar(value, chosenLanguage, dateMode);
+	const dateCell = (value) => (
+		<TableTooltipText
+			value={tableDate(value)}
+			max={16}
+			className='date-truncate'
+		/>
+	);
+
+	const disabledStartDate = (current) =>
+		Boolean(
+			current &&
+				filters.dateTo &&
+				current.isAfter(dayjs(filters.dateTo), "day")
+		);
+
+	const disabledEndDate = (current) =>
+		Boolean(
+			current &&
+				filters.dateFrom &&
+				current.isBefore(dayjs(filters.dateFrom), "day")
+		);
 
 	const openMoreDetails = (reservation = {}) => {
 		setSelectedReservation(reservation);
@@ -398,12 +486,18 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
-			<OverallHeader>
-				<div>
-					<h2>{labels.title}</h2>
-					<p>{labels.subtitle}</p>
-				</div>
-			</OverallHeader>
+			<OverallCenteredSearch $isRTL={isRTL}>
+				<Input
+					allowClear
+					size='large'
+					className='overall-centered-search-input'
+					value={filters.search}
+					onChange={(event) => updateFilter("search", event.target.value)}
+					placeholder={labels.searchReservationPlaceholder}
+					aria-label={labels.searchReservationPlaceholder}
+					dir={isRTL ? "rtl" : "ltr"}
+				/>
+			</OverallCenteredSearch>
 
 			<OverallToolbar
 				onSubmit={(event) => {
@@ -436,24 +530,49 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 					className='overall-filter-select'
 					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
 					direction={isRTL ? "rtl" : "ltr"}
-					value={filters.bookingSource}
-					onChange={(value) => updateFilter("bookingSource", value)}
-					placeholder={labels.allBookingSources}
+					value={filters.status}
+					onChange={(value) => updateFilter("status", value)}
+					placeholder={labels.allStatuses}
 					optionFilterProp='label'
-					options={bookingSources.map((item) => ({
-						value: item.source,
-						label: `${titleCase(item.source)} (${item.count})`,
-					}))}
+					options={pendingStatusOptions(labels)}
 				/>
-				<input
-					type='date'
-					value={filters.dateFrom}
-					onChange={(event) => updateFilter("dateFrom", event.target.value)}
+				<Select
+					showSearch
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
+					value={filters.dateBy}
+					onChange={(value) => updateFilter("dateBy", value || "createdAt")}
+					placeholder={labels.dateByLabel}
+					optionFilterProp='label'
+					options={dateByOptions(labels)}
+					aria-label={labels.dateByLabel}
 				/>
-				<input
-					type='date'
-					value={filters.dateTo}
-					onChange={(event) => updateFilter("dateTo", event.target.value)}
+				<DatePicker
+					allowClear
+					inputReadOnly
+					size='middle'
+					format='YYYY-MM-DD'
+					className='overall-date-picker'
+					value={toDatePickerValue(filters.dateFrom)}
+					onChange={(_, dateString) => updateDateFilter("dateFrom", dateString)}
+					disabledDate={disabledStartDate}
+					placeholder={labels.fromDate}
+					getPopupContainer={() => document.body}
+					popupStyle={{ zIndex: 2100 }}
+				/>
+				<DatePicker
+					allowClear
+					inputReadOnly
+					size='middle'
+					format='YYYY-MM-DD'
+					className='overall-date-picker'
+					value={toDatePickerValue(filters.dateTo)}
+					onChange={(_, dateString) => updateDateFilter("dateTo", dateString)}
+					disabledDate={disabledEndDate}
+					placeholder={labels.toDate}
+					getPopupContainer={() => document.body}
+					popupStyle={{ zIndex: 2100 }}
 				/>
 				<button type='submit'>{labels.search}</button>
 				<button
@@ -469,9 +588,10 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 					className='secondary'
 					onClick={() => {
 						setFilters({
+							search: "",
 							hotelId: [],
-							bookingSource: [],
-							dateBy: "booked_at",
+							status: [],
+							dateBy: "createdAt",
 							dateFrom: "",
 							dateTo: "",
 							sortBy: "createdAt",
@@ -612,9 +732,9 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 											"-"
 										)}
 									</td>
-									<td className='date-cell'>{tableDate(reservation.booked_at || reservation.createdAt)}</td>
-									<td className='date-cell'>{tableDate(reservation.checkin_date)}</td>
-									<td className='date-cell'>{tableDate(reservation.checkout_date)}</td>
+									<td className='date-cell'>{dateCell(reservation.booked_at || reservation.createdAt)}</td>
+									<td className='date-cell'>{dateCell(reservation.checkin_date)}</td>
+									<td className='date-cell'>{dateCell(reservation.checkout_date)}</td>
 									<td className='amount-cell'>{getReservationNights(reservation)}</td>
 									<td className='amount-cell'>
 										{formatMoney(getReservationPricePerDay(reservation))} {labels.sar}

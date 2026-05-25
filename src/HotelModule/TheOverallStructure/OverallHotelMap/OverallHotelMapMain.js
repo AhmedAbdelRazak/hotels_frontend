@@ -17,7 +17,6 @@ import {
 	buildOwnerParams,
 	EmptyState,
 	InlineNote,
-	OverallHeader,
 	OverallPageShell,
 	StatusPill,
 	statusTone,
@@ -317,12 +316,6 @@ const OverallHotelMapMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	return (
 		<OverallPageShell $isRTL={isRTL}>
 			<HotelMapModalGlobalStyle />
-			<OverallHeader>
-				<div>
-					<h2>{labels.title}</h2>
-					<p>{labels.subtitle}</p>
-				</div>
-			</OverallHeader>
 
 			{loading ? (
 				<EmptyState>{labels.loading}</EmptyState>

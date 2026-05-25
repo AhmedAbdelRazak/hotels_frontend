@@ -14,7 +14,7 @@ import {
 } from "../overallShared";
 
 const roleOptions = [
-	{ value: "systemadmin", role: 10000, en: "System Admin", ar: "مسؤول النظام" },
+	{ value: "systemadmin", role: 10000, en: "Hotel System Admin", ar: "مسؤول نظام الفندق" },
 	{ value: "hotelmanager", role: 2000, en: "Hotel Manager", ar: "مدير الفندق" },
 	{ value: "reception", role: 3000, en: "Front Desk Reception", ar: "موظف الاستقبال" },
 	{

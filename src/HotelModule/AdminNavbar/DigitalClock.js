@@ -67,10 +67,20 @@ const ClockWrapper = styled.div`
 	min-width: 364px;
 	min-height: 52px;
 	padding: 7px 12px;
-	border: 1px solid rgba(126, 42, 139, 0.72);
-	background: linear-gradient(180deg, #64166e 0%, #4f135b 100%);
-	box-shadow: inset 0 1px rgba(255, 255, 255, 0.08),
-		0 10px 24px rgba(0, 0, 0, 0.2);
+	border: 1px solid rgba(166, 98, 180, 0.78);
+	background:
+		linear-gradient(
+			115deg,
+			rgba(255, 255, 255, 0.18) 0%,
+			rgba(255, 255, 255, 0) 27%,
+			rgba(255, 255, 255, 0.12) 48%,
+			rgba(255, 255, 255, 0) 68%
+		),
+		var(--pms-metal-purple-bg, linear-gradient(180deg, #64166e 0%, #4f135b 100%));
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.16),
+		inset 0 -1px rgba(0, 0, 0, 0.24),
+		0 10px 24px rgba(80, 23, 96, 0.28);
 	color: #ffffff;
 	font-family: ${(props) =>
 		props.$isArabic

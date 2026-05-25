@@ -5,7 +5,6 @@ import NewReservationMain from "../../NewReservation/NewReservationMain";
 import {
 	buildOwnerParams,
 	getOverallText,
-	OverallHeader,
 	OverallPageShell,
 	OverallToolbar,
 	titleCase,
@@ -198,13 +197,6 @@ const NewReservationOverall = ({
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
-			<OverallHeader>
-				<div>
-					<h2>{labels.title}</h2>
-					<p>{labels.subtitle}</p>
-				</div>
-			</OverallHeader>
-
 			<HotelSelectorToolbar
 				onSubmit={(event) => event.preventDefault()}
 				$isRTL={isRTL}

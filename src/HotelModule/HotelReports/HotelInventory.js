@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { Alert, Button, DatePicker, Modal, Select, Spin, Switch } from "antd";
+import {
+	CalendarOutlined,
+	FilterOutlined,
+	HomeOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useParams } from "react-router-dom";
 import moment from "moment-hijri";
@@ -9,25 +14,54 @@ import {
 	getHotelInventoryCalendar,
 	getHotelInventoryDayReservations,
 } from "../apiAdmin";
+import { titleCase } from "../TheOverallStructure/overallShared";
 
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const heatColor = (rate = 0) => {
 	const clamped = Math.min(Math.max(Number(rate) || 0, 0), 1);
-	const start = [240, 246, 255];
-	const end = [0, 106, 209];
+	const start = [229, 243, 255];
+	const end = clamped >= 0.78 ? [185, 28, 28] : [16, 91, 150];
 	const mix = start.map((s, i) => Math.round(s + (end[i] - s) * clamped));
 	return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
 };
 
 const getReadableText = (rate = 0) =>
-	Number(rate) > 0.62 ? "#ffffff" : "#1f1f1f";
+	Number(rate) > 0.58 ? "#ffffff" : "#102033";
 
-const getRateTone = (rate = 0) => {
+const heatBackground = (rate = 0, overbooked = false) => {
 	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
-	if (r >= 0.85) return "#c53030";
-	if (r >= 0.65) return "#d69e2e";
-	return "#2f855a";
+	if (overbooked) {
+		return "linear-gradient(135deg, #fff1f2 0%, #fb7185 46%, #991b1b 100%)";
+	}
+	if (r >= 0.86) {
+		return "linear-gradient(135deg, #fee2e2 0%, #ef4444 48%, #7f1d1d 100%)";
+	}
+	if (r >= 0.64) {
+		return "linear-gradient(135deg, #dbeafe 0%, #2563eb 54%, #102033 100%)";
+	}
+	if (r >= 0.32) {
+		return "linear-gradient(135deg, #eef7ff 0%, #7db7ec 58%, #24547d 100%)";
+	}
+	return "linear-gradient(135deg, #ffffff 0%, #edf7ff 58%, #cde7ff 100%)";
+};
+
+const heatBorder = (rate = 0, overbooked = false) => {
+	if (overbooked) return "#991b1b";
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	if (r >= 0.86) return "#b91c1c";
+	if (r >= 0.64) return "#1d4ed8";
+	if (r >= 0.32) return "#2f74b5";
+	return "#b8d8f3";
+};
+
+const heatShadow = (rate = 0, overbooked = false) => {
+	if (overbooked) return "0 8px 20px rgba(153, 27, 27, 0.2)";
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	if (r >= 0.86) return "0 8px 20px rgba(185, 28, 28, 0.16)";
+	if (r >= 0.64) return "0 8px 20px rgba(29, 78, 216, 0.14)";
+	return "0 6px 16px rgba(36, 84, 125, 0.1)";
 };
 
 const formatInt = (value) => Number(value || 0).toLocaleString("en-US");
@@ -38,6 +72,13 @@ const PAYMENT_STATUS_OPTIONS = [
 	"Captured",
 	"Paid Offline",
 ];
+
+const normalizePaymentStatuses = (statuses = []) => {
+	const allowed = new Set(PAYMENT_STATUS_OPTIONS);
+	return (Array.isArray(statuses) ? statuses : String(statuses || "").split(","))
+		.map((status) => String(status || "").trim())
+		.filter((status) => allowed.has(status));
+};
 
 const hijriMonthsEn = [
 	"Muharram",
@@ -69,8 +110,56 @@ const hijriMonthsAr = [
 	"\u0630\u0648\u0020\u0627\u0644\u062d\u062c\u0629",
 ];
 
-const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
-	const { hotelId } = useParams();
+const normalizeInitialRange = (range = {}) => {
+	if (!range?.start || !range?.end) return null;
+	const start = dayjs(range.start);
+	const end = dayjs(range.end);
+	if (!start.isValid() || !end.isValid() || end.isBefore(start, "day")) {
+		return null;
+	}
+	return {
+		start: start.format("YYYY-MM-DD"),
+		end: end.format("YYYY-MM-DD"),
+	};
+};
+
+const normalizeInitialCalendarType = (value = "") =>
+	["gregorian", "hijri"].includes(String(value || "").toLowerCase())
+		? String(value || "").toLowerCase()
+		: "";
+
+const normalizeHijriMonthValue = (value, fallback) => {
+	const parsed = Number(value);
+	if (!Number.isInteger(parsed)) return fallback;
+	if (parsed < 0 || parsed > 11) return fallback;
+	return parsed;
+};
+
+const normalizeHijriYearValue = (value, fallback) => {
+	const parsed = Number(value);
+	if (!Number.isInteger(parsed)) return fallback;
+	if (parsed < 1300 || parsed > 1600) return fallback;
+	return parsed;
+};
+
+const HotelInventory = ({
+	chosenLanguage,
+	hotelId: controlledHotelId = "",
+	hotelOptions = [],
+	onHotelChange,
+	fetchCalendarApi = getHotelInventoryCalendar,
+	fetchDayReservationsApi = getHotelInventoryDayReservations,
+	initialCalendarType = "",
+	initialHijriMonth,
+	initialHijriYear,
+	initialRange,
+	initialIncludeCancelled = false,
+	initialPaymentStatuses = [],
+	onFilterChange,
+	showControls = true,
+}) => {
+	const routeParams = useParams();
+	const hotelId = controlledHotelId || routeParams.hotelId;
 	const supportsHijri =
 		typeof moment?.fn?.iMonth === "function" &&
 		typeof moment?.fn?.iYear === "function";
@@ -78,33 +167,59 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 	const nowHijri = supportsHijri ? moment() : null;
 	const defaultHijriMonth = supportsHijri ? nowHijri.iMonth() : 0;
 	const defaultHijriYear = supportsHijri ? nowHijri.iYear() : dayjs().year();
+	const parsedInitialRange = normalizeInitialRange(initialRange);
+	const parsedInitialCalendarType = normalizeInitialCalendarType(
+		initialCalendarType,
+	);
+	const parsedInitialHijriMonth = normalizeHijriMonthValue(
+		initialHijriMonth,
+		defaultHijriMonth,
+	);
+	const parsedInitialHijriYear = normalizeHijriYearValue(
+		initialHijriYear,
+		defaultHijriYear,
+	);
 	const defaultHijriStart = supportsHijri
-		? nowHijri.clone().startOf("iMonth")
+		? moment()
+				.iYear(parsedInitialHijriYear)
+				.iMonth(parsedInitialHijriMonth)
+				.startOf("iMonth")
 		: null;
 	const defaultHijriEnd = supportsHijri
-		? nowHijri.clone().endOf("iMonth")
+		? moment()
+				.iYear(parsedInitialHijriYear)
+				.iMonth(parsedInitialHijriMonth)
+				.endOf("iMonth")
 		: null;
 
 	const [monthValue, setMonthValue] = useState(() =>
-		defaultHijriStart
+		parsedInitialRange?.start
+			? dayjs(parsedInitialRange.start).startOf("month")
+			: defaultHijriStart
 			? dayjs(defaultHijriStart.toDate())
 			: dayjs().startOf("month"),
 	);
 	const [calendarType, setCalendarType] = useState(
-		defaultHijriStart ? "hijri" : "gregorian",
+		parsedInitialCalendarType || (defaultHijriStart ? "hijri" : "gregorian"),
 	);
-	const [hijriMonth, setHijriMonth] = useState(defaultHijriMonth);
-	const [hijriYear, setHijriYear] = useState(defaultHijriYear);
+	const [hijriMonth, setHijriMonth] = useState(parsedInitialHijriMonth);
+	const [hijriYear, setHijriYear] = useState(parsedInitialHijriYear);
 	const [rangeOverride, setRangeOverride] = useState(() =>
-		defaultHijriStart
+		parsedInitialRange
+			? parsedInitialRange
+			: defaultHijriStart
 			? {
 					start: dayjs(defaultHijriStart.toDate()).format("YYYY-MM-DD"),
 					end: dayjs(defaultHijriEnd?.toDate()).format("YYYY-MM-DD"),
 			  }
 			: null,
 	);
-	const [includeCancelled, setIncludeCancelled] = useState(false);
-	const [paymentStatuses, setPaymentStatuses] = useState([]);
+	const [includeCancelled, setIncludeCancelled] = useState(
+		Boolean(initialIncludeCancelled),
+	);
+	const [paymentStatuses, setPaymentStatuses] = useState(() =>
+		normalizePaymentStatuses(initialPaymentStatuses),
+	);
 	const [data, setData] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -115,6 +230,48 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 	const [dayDetailsLoading, setDayDetailsLoading] = useState(false);
 	const [dayDetailsError, setDayDetailsError] = useState("");
 
+	useEffect(() => {
+		const nextType = normalizeInitialCalendarType(initialCalendarType);
+		if (nextType && nextType !== calendarType) {
+			setCalendarType(nextType);
+		}
+	}, [calendarType, initialCalendarType]);
+
+	useEffect(() => {
+		const nextRange = normalizeInitialRange(initialRange);
+		if (!nextRange) return;
+		if (
+			nextRange.start !== rangeOverride?.start ||
+			nextRange.end !== rangeOverride?.end
+		) {
+			setRangeOverride(nextRange);
+			setMonthValue(dayjs(nextRange.start).startOf("month"));
+		}
+	}, [initialRange, rangeOverride?.end, rangeOverride?.start]);
+
+	useEffect(() => {
+		const nextMonth = normalizeHijriMonthValue(
+			initialHijriMonth,
+			hijriMonth,
+		);
+		const nextYear = normalizeHijriYearValue(initialHijriYear, hijriYear);
+		if (nextMonth !== hijriMonth) setHijriMonth(nextMonth);
+		if (nextYear !== hijriYear) setHijriYear(nextYear);
+	}, [hijriMonth, hijriYear, initialHijriMonth, initialHijriYear]);
+
+	useEffect(() => {
+		setIncludeCancelled(Boolean(initialIncludeCancelled));
+	}, [initialIncludeCancelled]);
+
+	useEffect(() => {
+		const nextStatuses = normalizePaymentStatuses(initialPaymentStatuses);
+		setPaymentStatuses((previous) =>
+			JSON.stringify(previous) === JSON.stringify(nextStatuses)
+				? previous
+				: nextStatuses,
+		);
+	}, [initialPaymentStatuses]);
+
 	const labels = useMemo(() => {
 		if (chosenLanguage === "Arabic") {
 			return {
@@ -122,12 +279,22 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 					"\u062a\u0642\u0631\u064a\u0631\u0020\u0625\u0634\u063a\u0627\u0644\u0020\u0627\u0644\u0641\u0646\u062f\u0642",
 				selectedHotel:
 					"\u0627\u0644\u0641\u0646\u062f\u0642\u0020\u0627\u0644\u0645\u062d\u062f\u062f",
+				chooseHotel:
+					"\u0627\u062e\u062a\u0631\u0020\u0641\u0646\u062f\u0642\u0627\u064b",
 				calendar: "\u0627\u0644\u062a\u0642\u0648\u064a\u0645",
+				dateRange:
+					"\u0646\u0637\u0627\u0642\u0020\u0627\u0644\u062a\u0627\u0631\u064a\u062e",
 				gregorian: "\u0645\u064a\u0644\u0627\u062f\u064a",
 				hijri: "\u0647\u062c\u0631\u064a",
 				month: "\u0627\u0644\u0634\u0647\u0631",
 				hijriMonth:
 					"\u0627\u0644\u0634\u0647\u0631\u0020\u0627\u0644\u0647\u062c\u0631\u064a",
+				hijriYear:
+					"\u0627\u0644\u0633\u0646\u0629\u0020\u0627\u0644\u0647\u062c\u0631\u064a\u0629",
+				period:
+					"\u0627\u0644\u0641\u062a\u0631\u0629",
+				computedRange:
+					"\u0627\u0644\u0645\u062f\u0649\u0020\u0627\u0644\u0645\u062d\u062a\u0633\u0628",
 				includeCancelled:
 					"\u062a\u0636\u0645\u064a\u0646\u0020\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a\u0020\u0627\u0644\u0645\u0644\u063a\u0627\u0629",
 				totalUnits:
@@ -188,6 +355,14 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 				paymentStatusClear: "\u0645\u0633\u062d",
 				paymentStatusTip:
 					"\u0645\u0644\u0627\u062d\u0638\u0629\u003a\u0020\u064a\u0645\u0643\u0646\u0643\u0020\u0627\u062e\u062a\u064a\u0627\u0631\u0020\u0623\u0643\u062b\u0631\u0020\u0645\u0646\u0020\u062d\u0627\u0644\u0629\u002e",
+				paymentStatusLabels: {
+					"Not Paid": "\u063a\u064a\u0631\u0020\u0645\u062f\u0641\u0648\u0639",
+					"Not Captured":
+						"\u063a\u064a\u0631\u0020\u0645\u062d\u0635\u0644",
+					Captured: "\u0645\u062d\u0635\u0644",
+					"Paid Offline":
+						"\u0645\u062f\u0641\u0648\u0639\u0020\u062e\u0627\u0631\u062c\u064a\u0627\u064b",
+				},
 				exportBookingSource:
 					"\u0645\u0635\u062f\u0631\u0020\u0627\u0644\u062d\u062c\u0632",
 				exportPaymentStatus:
@@ -197,11 +372,16 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		return {
 			title: "Hotel Inventory",
 			selectedHotel: "Selected Hotel",
+			chooseHotel: "Choose hotel",
 			calendar: "Calendar",
+			dateRange: "Date range",
 			gregorian: "Gregorian",
 			hijri: "Hijri",
 			month: "Month",
 			hijriMonth: "Hijri Month",
+			hijriYear: "Hijri Year",
+			period: "Period",
+			computedRange: "Computed range",
 			includeCancelled: "Include Cancelled",
 			totalUnits: "Total Units",
 			totalRooms: "Total Rooms",
@@ -241,23 +421,20 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 			paymentStatusAll: "All",
 			paymentStatusClear: "Clear",
 			paymentStatusTip: "Tip: you can select multiple statuses.",
+			paymentStatusLabels: {},
 			exportBookingSource: "Booking Source",
 			exportPaymentStatus: "Payment Status",
 		};
 	}, [chosenLanguage]);
 
 	const range = useMemo(() => {
-		if (
-			calendarType === "hijri" &&
-			rangeOverride?.start &&
-			rangeOverride?.end
-		) {
+		if (rangeOverride?.start && rangeOverride?.end) {
 			return { start: rangeOverride.start, end: rangeOverride.end };
 		}
 		const start = monthValue.startOf("month").format("YYYY-MM-DD");
 		const end = monthValue.endOf("month").format("YYYY-MM-DD");
 		return { start, end };
-	}, [calendarType, monthValue, rangeOverride]);
+	}, [monthValue, rangeOverride]);
 
 	const roomTypes = useMemo(
 		() => (Array.isArray(data?.roomTypes) ? data.roomTypes : []),
@@ -275,6 +452,40 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		summary.totalRooms ?? summary.totalPhysicalRooms ?? 0,
 	);
 
+	const notifyFilterChange = useCallback(
+		(overrides = {}) => {
+			if (typeof onFilterChange !== "function") return;
+			const nextCalendarType = overrides.calendarType || calendarType;
+			onFilterChange({
+				hotelId: overrides.hotelId ?? hotelId,
+				calendarType: nextCalendarType,
+				hijriMonth:
+					nextCalendarType === "hijri"
+						? overrides.hijriMonth ?? hijriMonth
+						: undefined,
+				hijriYear:
+					nextCalendarType === "hijri"
+						? overrides.hijriYear ?? hijriYear
+						: undefined,
+				start: overrides.start ?? range.start,
+				end: overrides.end ?? range.end,
+				includeCancelled: overrides.includeCancelled ?? includeCancelled,
+				paymentStatuses: overrides.paymentStatuses ?? paymentStatuses,
+			});
+		},
+		[
+			calendarType,
+			hijriMonth,
+			hijriYear,
+			hotelId,
+			includeCancelled,
+			onFilterChange,
+			paymentStatuses,
+			range.end,
+			range.start,
+		],
+	);
+
 	const onHijriChange = useCallback(
 		(nextMonth, nextYear) => {
 			if (!supportsHijri) return;
@@ -286,24 +497,68 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 
 			setHijriMonth(nextMonth);
 			setHijriYear(nextYear);
-			setRangeOverride({
+			const nextRange = {
 				start: dayjs(hStart.toDate()).format("YYYY-MM-DD"),
 				end: dayjs(hEnd.toDate()).format("YYYY-MM-DD"),
+			};
+			setRangeOverride(nextRange);
+			notifyFilterChange({
+				calendarType: "hijri",
+				hijriMonth: nextMonth,
+				hijriYear: nextYear,
+				...nextRange,
 			});
 		},
-		[supportsHijri],
+		[notifyFilterChange, supportsHijri],
 	);
 
 	const onMonthChange = (value) => {
 		if (!value) return;
-		setMonthValue(value.startOf("month"));
+		setRangeOverride(null);
+		const nextMonth = value.startOf("month");
+		setMonthValue(nextMonth);
+		notifyFilterChange({
+			calendarType: "gregorian",
+			start: nextMonth.startOf("month").format("YYYY-MM-DD"),
+			end: nextMonth.endOf("month").format("YYYY-MM-DD"),
+		});
+	};
+
+	const shiftGregorianMonth = (amount) => {
+		setRangeOverride(null);
+		const nextMonth = monthValue.add(amount, "month").startOf("month");
+		setMonthValue(nextMonth);
+		notifyFilterChange({
+			calendarType: "gregorian",
+			start: nextMonth.startOf("month").format("YYYY-MM-DD"),
+			end: nextMonth.endOf("month").format("YYYY-MM-DD"),
+		});
+	};
+
+	const onRangeChange = (values) => {
+		if (!Array.isArray(values) || !values[0] || !values[1]) {
+			if (calendarType === "hijri") onHijriChange(hijriMonth, hijriYear);
+			else setRangeOverride(null);
+			return;
+		}
+		const start = values[0].format("YYYY-MM-DD");
+		const end = values[1].format("YYYY-MM-DD");
+		setRangeOverride({ start, end });
+		setMonthValue(values[0].startOf("month"));
+		notifyFilterChange({ start, end });
 	};
 
 	const handleCalendarChange = (value) => {
 		setCalendarType(value);
 		if (value === "gregorian") {
 			setRangeOverride(null);
-			setMonthValue(dayjs().startOf("month"));
+			const nextMonth = dayjs().startOf("month");
+			setMonthValue(nextMonth);
+			notifyFilterChange({
+				calendarType: "gregorian",
+				start: nextMonth.startOf("month").format("YYYY-MM-DD"),
+				end: nextMonth.endOf("month").format("YYYY-MM-DD"),
+			});
 		} else {
 			onHijriChange(hijriMonth, hijriYear);
 		}
@@ -313,7 +568,7 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		if (!hotelId) return;
 		setLoading(true);
 		setError("");
-		getHotelInventoryCalendar(hotelId, {
+		fetchCalendarApi(hotelId, {
 			start: range.start,
 			end: range.end,
 			includeCancelled,
@@ -332,7 +587,14 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 				setData(null);
 			})
 			.finally(() => setLoading(false));
-	}, [hotelId, range.start, range.end, includeCancelled, paymentStatuses]);
+	}, [
+		fetchCalendarApi,
+		hotelId,
+		range.start,
+		range.end,
+		includeCancelled,
+		paymentStatuses,
+	]);
 
 	useEffect(() => {
 		fetchCalendar();
@@ -360,7 +622,7 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		if (!hotelId || !daySelection?.date) return;
 		setDayDetailsLoading(true);
 		setDayDetailsError("");
-		getHotelInventoryDayReservations(hotelId, {
+		fetchDayReservationsApi(hotelId, {
 			date: daySelection.date,
 			roomKey: daySelection.roomKey || undefined,
 			includeCancelled,
@@ -383,6 +645,7 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		hotelId,
 		daySelection?.date,
 		daySelection?.roomKey,
+		fetchDayReservationsApi,
 		includeCancelled,
 		paymentStatuses,
 	]);
@@ -404,24 +667,35 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 
 	const modalDir = chosenLanguage === "Arabic" ? "rtl" : "ltr";
 	const modalOffsets = useMemo(() => {
-		const sideMenuWidth = collapsed ? 90 : 295;
-		const gutter = 16;
-		const width = `calc(100vw - ${sideMenuWidth + gutter * 2}px)`;
-		const left =
-			chosenLanguage === "Arabic" ? `${gutter}px` : `${sideMenuWidth + gutter}px`;
 		return {
-			width,
-			style: { top: "3%", left, position: "absolute" },
+			width: "min(1100px, calc(100vw - 24px))",
+			style: {
+				top: "clamp(10px, 3vh, 28px)",
+				left: "50%",
+				position: "absolute",
+				transform: "translateX(-50%)",
+				maxWidth: "calc(100vw - 24px)",
+			},
 		};
-	}, [chosenLanguage, collapsed]);
+	}, []);
 
 	const togglePaymentStatus = (status) => {
-		setPaymentStatuses((prev) => {
-			const set = new Set(prev || []);
-			if (set.has(status)) set.delete(status);
-			else set.add(status);
-			return PAYMENT_STATUS_OPTIONS.filter((s) => set.has(s));
-		});
+		const set = new Set(paymentStatuses || []);
+		if (set.has(status)) set.delete(status);
+		else set.add(status);
+		const nextStatuses = PAYMENT_STATUS_OPTIONS.filter((s) => set.has(s));
+		setPaymentStatuses(nextStatuses);
+		notifyFilterChange({ paymentStatuses: nextStatuses });
+	};
+
+	const clearPaymentStatuses = () => {
+		setPaymentStatuses([]);
+		notifyFilterChange({ paymentStatuses: [] });
+	};
+
+	const handleIncludeCancelledChange = (checked) => {
+		setIncludeCancelled(checked);
+		notifyFilterChange({ includeCancelled: checked });
 	};
 
 	const paymentAllActive = paymentStatuses.length === 0;
@@ -528,135 +802,185 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 		fetchDayDetails();
 	}, [dayModalOpen, fetchDayDetails]);
 
+	const selectedHotelName =
+		titleCase(
+			data?.hotel?.hotelName ||
+				hotelOptions.find((hotel) => hotel._id === hotelId)?.hotelName ||
+				labels.selectedHotel,
+		);
+	const paymentStatusLabel = (status) =>
+		labels.paymentStatusLabels?.[status] || status;
+
 	return (
 		<InventoryWrapper dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
-			<HeaderRow>
-				<div>
-					<h3>{labels.title}</h3>
-					<div className='subtitle'>
-						{data?.hotel?.hotelName || labels.selectedHotel}
-					</div>
-				</div>
-				<Controls>
-					<div className='control'>
-						<span>{labels.calendar}</span>
-						<Select
-							value={calendarType}
-							onChange={handleCalendarChange}
-							style={{ minWidth: 140 }}
-						>
-							<Option value='gregorian'>{labels.gregorian}</Option>
-							<Option value='hijri' disabled={!supportsHijri}>
-								{labels.hijri}
-							</Option>
-						</Select>
-					</div>
-					<div className='control'>
-						<span>
-							{calendarType === "hijri" ? labels.hijriMonth : labels.month}
+			{showControls && (
+				<HeaderRow>
+					<div className='inventory-title'>
+						<span className='title-icon'>
+							<HomeOutlined />
 						</span>
-						{calendarType === "hijri" && supportsHijri ? (
-							<div className='hijri-controls'>
+						<div>
+							<h3>{labels.title}</h3>
+							<div className='subtitle'>{selectedHotelName}</div>
+						</div>
+					</div>
+					<Controls>
+						{(hotelOptions.length > 0 || onHotelChange) && (
+							<div className='control hotel-control'>
+								<span>
+									<HomeOutlined /> {labels.selectedHotel}
+								</span>
 								<Select
-									value={hijriMonth}
-									onChange={(value) => onHijriChange(Number(value), hijriYear)}
-									style={{ minWidth: 160 }}
-								>
-									{(chosenLanguage === "Arabic"
-										? hijriMonthsAr
-										: hijriMonthsEn
-									).map((monthName, index) => (
-										<Option key={monthName} value={index}>
-											{monthName}
-										</Option>
-									))}
-								</Select>
-								<Select
-									value={hijriYear}
-									onChange={(value) => onHijriChange(hijriMonth, Number(value))}
-									style={{ width: 110 }}
-								>
-									{Array.from({ length: 6 }).map((_, idx) => {
-										const base = moment().iYear();
-										const year = base - 1 + idx;
-										return (
-											<Option key={year} value={year}>
-												{year}
-											</Option>
-										);
-									})}
-								</Select>
-								{rangeOverride?.start && (
-									<div className='muted'>
-										{rangeOverride.start} - {rangeOverride.end}
-									</div>
-								)}
-							</div>
-						) : (
-							<div className='month-actions'>
-								<DatePicker
-									picker='month'
-									value={monthValue}
-									onChange={onMonthChange}
-									allowClear={false}
+									value={hotelId || undefined}
+									onChange={(value) => onHotelChange?.(value)}
+									showSearch
+									optionFilterProp='label'
+									placeholder={labels.chooseHotel}
+									style={{ minWidth: 210 }}
+									options={hotelOptions.map((hotel) => ({
+										value: hotel._id,
+										label: titleCase(hotel.hotelName),
+									}))}
 								/>
-								<Button
-									size='small'
-									onClick={() =>
-										setMonthValue((current) => current.subtract(1, "month"))
-									}
-								>
-									{labels.prev}
-								</Button>
-								<Button
-									size='small'
-									onClick={() =>
-										setMonthValue((current) => current.add(1, "month"))
-									}
-								>
-									{labels.next}
-								</Button>
 							</div>
 						)}
-					</div>
-					<div className='control'>
-						<span>{labels.includeCancelled}</span>
-						<Switch
-							checked={includeCancelled}
-							onChange={(checked) => setIncludeCancelled(checked)}
-						/>
-					</div>
-				</Controls>
-			</HeaderRow>
+						<div className='control calendar-control'>
+							<span>
+								<CalendarOutlined /> {labels.calendar}
+							</span>
+							<Select
+								value={calendarType}
+								onChange={handleCalendarChange}
+								style={{ minWidth: 140 }}
+							>
+								<Option value='gregorian'>{labels.gregorian}</Option>
+								<Option value='hijri' disabled={!supportsHijri}>
+									{labels.hijri}
+								</Option>
+							</Select>
+						</div>
+						<div className='control period-control'>
+							<span>
+								<FilterOutlined />{" "}
+								{calendarType === "hijri" ? labels.period : labels.month}
+							</span>
+							{calendarType === "hijri" && supportsHijri ? (
+								<div className='hijri-controls'>
+									<Select
+										value={hijriMonth}
+										onChange={(value) => onHijriChange(Number(value), hijriYear)}
+										style={{ minWidth: 160 }}
+									>
+										{(chosenLanguage === "Arabic"
+											? hijriMonthsAr
+											: hijriMonthsEn
+										).map((monthName, index) => (
+											<Option key={monthName} value={index}>
+												{monthName}
+											</Option>
+										))}
+									</Select>
+									<Select
+										value={hijriYear}
+										onChange={(value) => onHijriChange(hijriMonth, Number(value))}
+										style={{ width: 110 }}
+										aria-label={labels.hijriYear}
+									>
+										{Array.from({ length: 6 }).map((_, idx) => {
+											const base = moment().iYear();
+											const year = base - 1 + idx;
+											return (
+												<Option key={year} value={year}>
+													{year}
+												</Option>
+											);
+										})}
+									</Select>
+								</div>
+							) : (
+								<div className='month-actions'>
+									<DatePicker
+										picker='month'
+										value={monthValue}
+										onChange={onMonthChange}
+										allowClear={false}
+									/>
+									<Button
+										size='small'
+										onClick={() => shiftGregorianMonth(-1)}
+									>
+										{labels.prev}
+									</Button>
+									<Button
+										size='small'
+										onClick={() => shiftGregorianMonth(1)}
+									>
+										{labels.next}
+									</Button>
+								</div>
+							)}
+						</div>
+						<div className='control wide range-control'>
+							<span>
+								<CalendarOutlined /> {labels.dateRange}
+							</span>
+							<RangePicker
+								value={[
+									range.start ? dayjs(range.start) : null,
+									range.end ? dayjs(range.end) : null,
+								]}
+								format='YYYY-MM-DD'
+								onChange={onRangeChange}
+								allowClear={false}
+								disabled
+							/>
+							{calendarType === "hijri" && rangeOverride?.start && (
+								<div className='muted'>
+									{labels.computedRange}: {rangeOverride.start} - {rangeOverride.end}
+								</div>
+							)}
+						</div>
+						<div className='control switch-control'>
+							<span>{labels.includeCancelled}</span>
+							<Switch
+								checked={includeCancelled}
+								onChange={handleIncludeCancelledChange}
+							/>
+						</div>
+					</Controls>
+				</HeaderRow>
+			)}
 
-			<PaymentStatusBar $rtl={modalDir === "rtl"}>
-				<div className='label'>{labels.paymentStatus}</div>
-				<div className='buttons'>
-					<StatusButton
-						size='small'
-						onClick={() => setPaymentStatuses([])}
-						isActive={paymentAllActive}
-					>
-						{labels.paymentStatusAll}
-					</StatusButton>
-					{PAYMENT_STATUS_OPTIONS.map((status) => (
+			{showControls && (
+				<PaymentStatusBar $rtl={modalDir === "rtl"}>
+					<div className='label'>{labels.paymentStatus}</div>
+					<div className='buttons'>
 						<StatusButton
-							key={status}
 							size='small'
-							onClick={() => togglePaymentStatus(status)}
-							isActive={paymentStatuses.includes(status)}
+							onClick={clearPaymentStatuses}
+							isActive={paymentAllActive}
 						>
-							{status}
+							{labels.paymentStatusAll}
 						</StatusButton>
-					))}
-					{!paymentAllActive && (
-						<Button size='small' onClick={() => setPaymentStatuses([])}>
-							{labels.paymentStatusClear}
-						</Button>
-					)}
-				</div>
-				<div className='hint'>{labels.paymentStatusTip}</div>
-			</PaymentStatusBar>
+						{PAYMENT_STATUS_OPTIONS.map((status) => (
+							<StatusButton
+								key={status}
+								size='small'
+								onClick={() => togglePaymentStatus(status)}
+								isActive={paymentStatuses.includes(status)}
+							>
+								{paymentStatusLabel(status)}
+							</StatusButton>
+						))}
+						{!paymentAllActive && (
+							<Button size='small' onClick={clearPaymentStatuses}>
+								{labels.paymentStatusClear}
+							</Button>
+						)}
+					</div>
+					<div className='hint'>{labels.paymentStatusTip}</div>
+				</PaymentStatusBar>
+			)}
 
 			{loading && (
 				<LoadingRow>
@@ -758,11 +1082,19 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 													<CellButton
 														onClick={() => openDayDetails(day.date, rt)}
 														style={{
-															backgroundColor: heatColor(rate),
+															background: heatBackground(
+																rate,
+																cell.overbooked,
+															),
 															color: getReadableText(rate),
-															borderColor: cell.overbooked
-																? "#d7191c"
-																: "#d0d7e5",
+															borderColor: heatBorder(
+																rate,
+																cell.overbooked,
+															),
+															boxShadow: heatShadow(
+																rate,
+																cell.overbooked,
+															),
 														}}
 													>
 														{rt.derived && (
@@ -792,6 +1124,12 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 													<TotalButton
 														type='button'
 														onClick={() => openTotalDetails(day.date)}
+														style={{
+															background: heatBackground(totalRate),
+															borderColor: heatBorder(totalRate),
+															boxShadow: heatShadow(totalRate),
+															color: getReadableText(totalRate),
+														}}
 													>
 														<div className='total-cell'>
 															<span className='total-main'>
@@ -800,7 +1138,7 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 															</span>
 															<span
 																className='total-rate'
-																style={{ color: getRateTone(totalRate) }}
+																style={{ color: getReadableText(totalRate) }}
 															>
 																{totalCapacity > 0
 																	? `${(totalRate * 100).toFixed(0)}%`
@@ -826,7 +1164,12 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 				title={modalTitle}
 				width={modalOffsets.width}
 				style={modalOffsets.style}
-				styles={{ body: { padding: "18px 28px 22px" } }}
+				styles={{
+					body: {
+						padding:
+							"clamp(12px, 3vw, 18px) clamp(12px, 4vw, 28px) clamp(16px, 4vw, 22px)",
+					},
+				}}
 			>
 				{dayDetailsLoading && (
 					<LoadingRow>
@@ -839,7 +1182,7 @@ const HotelInventory = ({ chosenLanguage, collapsed = false }) => {
 						<DetailHeader>
 							<div>
 								<strong>{labels.hotel}</strong>
-								<span>{dayDetails?.hotel?.hotelName || labels.na}</span>
+								<span>{titleCase(dayDetails?.hotel?.hotelName || labels.na)}</span>
 							</div>
 							<div>
 								<strong>{labels.capacity}</strong>
@@ -936,17 +1279,35 @@ const InventoryWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
+	min-width: 0;
+	max-width: 100%;
 
 	h3 {
 		margin: 0;
 		font-size: 1.4rem;
 		font-weight: bold;
 		color: #1f1f1f;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
 	}
 
 	.subtitle {
 		color: #5c5c5c;
 		font-size: 0.9rem;
+		font-weight: 700;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 520px) {
+		gap: 12px;
+
+		h3 {
+			font-size: 1.08rem;
+		}
+
+		.subtitle {
+			font-size: 0.78rem;
+		}
 	}
 `;
 
@@ -954,37 +1315,268 @@ const HeaderRow = styled.div`
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	gap: 16px;
+	gap: 18px;
 	flex-wrap: wrap;
+	min-width: 0;
+	padding: 18px;
+	border: 1px solid rgba(45, 93, 145, 0.18);
+	border-radius: 12px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.97) 0%, rgba(247, 251, 255, 0.98) 100%),
+		linear-gradient(135deg, rgba(16, 32, 51, 0.06), rgba(111, 31, 120, 0.08));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.86),
+		0 12px 28px rgba(16, 32, 51, 0.07);
+
+	> div {
+		min-width: 0;
+	}
+
+	.inventory-title {
+		flex: 0 1 280px;
+		display: flex;
+		align-items: center;
+		align-self: stretch;
+		gap: 12px;
+		padding: 12px 14px;
+		border: 1px solid rgba(45, 93, 145, 0.16);
+		border-radius: 10px;
+		background:
+			linear-gradient(135deg, rgba(16, 32, 51, 0.04), rgba(47, 102, 159, 0.08)),
+			#ffffff;
+	}
+
+	.title-icon {
+		flex: 0 0 42px;
+		width: 42px;
+		height: 42px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #102033 0%, #24547d 58%, #6f1f78 100%);
+		color: #ffffff;
+		box-shadow: 0 10px 22px rgba(16, 32, 51, 0.18);
+	}
+
+	@media (max-width: 720px) {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 12px;
+		padding: 12px;
+	}
+
+	@media (max-width: 520px) {
+		border-radius: 10px;
+
+		.inventory-title {
+			padding: 10px;
+		}
+
+		.title-icon {
+			width: 36px;
+			height: 36px;
+			flex-basis: 36px;
+		}
+	}
 `;
 
 const Controls = styled.div`
-	display: flex;
+	flex: 1 1 720px;
+	display: grid;
+	grid-template-columns:
+		minmax(190px, 1.15fr)
+		minmax(130px, 0.7fr)
+		minmax(230px, 1.2fr)
+		minmax(240px, 1.2fr)
+		minmax(150px, 0.72fr);
 	gap: 12px;
-	flex-wrap: wrap;
+	align-items: stretch;
+	min-width: 0;
 
 	.control {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		justify-content: center;
+		gap: 6px;
 		font-size: 0.8rem;
-		color: #5c5c5c;
+		color: #4b5870;
+		min-width: 0;
+		padding: 10px;
+		border: 1px solid rgba(45, 93, 145, 0.16);
+		border-radius: 10px;
+		background: rgba(255, 255, 255, 0.78);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+	}
+
+	.control > span {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		color: #102033;
+		font-weight: 800;
+		line-height: 1.25;
+		text-align: center;
+	}
+
+	.control.wide {
+		min-width: 0;
+	}
+
+	.hijri-controls,
+	.month-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.hijri-controls .muted {
+		flex-basis: 100%;
+		color: #4b5870;
+		font-size: 0.72rem;
+		font-weight: 800;
+	}
+
+	.range-control .muted {
+		margin-top: 2px;
+		padding: 5px 8px;
+		border-radius: 999px;
+		background: linear-gradient(135deg, rgba(16, 32, 51, 0.06), rgba(47, 102, 159, 0.1));
+		color: #244e7d;
+		font-size: 0.72rem;
+		font-weight: 900;
+		text-align: center;
+	}
+
+	.switch-control {
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+	}
+
+	.control .ant-select,
+	.control .ant-picker {
+		width: 100% !important;
+		min-width: 0 !important;
+	}
+
+	.ant-select-selector,
+	.ant-picker {
+		min-height: 34px;
+		display: flex !important;
+		align-items: center !important;
+	}
+
+	.ant-select-selection-item,
+	.ant-select-selection-placeholder,
+	.ant-picker-input > input {
+		text-align: center !important;
+		font-weight: 700;
+	}
+
+	.ant-select-selector,
+	.ant-picker {
+		border-color: rgba(45, 93, 145, 0.24) !important;
+		border-radius: 8px !important;
+		box-shadow: none !important;
+	}
+
+	.ant-select-focused .ant-select-selector,
+	.ant-picker-focused {
+		border-color: #6f1f78 !important;
+		box-shadow: 0 0 0 3px rgba(111, 31, 120, 0.12) !important;
+	}
+
+	.ant-picker-range {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.ant-picker-disabled {
+		background: linear-gradient(135deg, #f5f7fb 0%, #edf3fb 100%) !important;
+		color: #5f6f88;
+	}
+
+	.ant-switch {
+		background: linear-gradient(135deg, #9aa9bb 0%, #6d7d91 100%);
+	}
+
+	.ant-switch.ant-switch-checked {
+		background: linear-gradient(135deg, #6f1f78 0%, #102033 100%);
+	}
+
+	@media (max-width: 1280px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+
+		.range-control {
+			grid-column: span 2;
+		}
+	}
+
+	@media (max-width: 920px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+
+		.range-control {
+			grid-column: span 1;
+		}
+	}
+
+	@media (max-width: 720px) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+		gap: 10px;
+
+		.control {
+			min-width: 0;
+			width: 100%;
+			padding: 9px;
+		}
+
+		.hijri-controls,
+		.month-actions {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			width: 100%;
+		}
+
+		.hijri-controls .ant-select:first-child,
+		.month-actions .ant-picker {
+			grid-column: 1 / -1;
+		}
+	}
+
+	@media (max-width: 360px) {
+		.hijri-controls,
+		.month-actions {
+			grid-template-columns: 1fr;
+		}
 	}
 `;
 
 const PaymentStatusBar = styled.div`
-	border: 1px solid #e2e6ef;
+	border: 1px solid rgba(45, 93, 145, 0.18);
 	border-radius: 12px;
-	padding: 10px 12px;
-	background: #fcfcfc;
+	padding: 12px 14px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 255, 0.96)),
+		linear-gradient(135deg, rgba(47, 102, 159, 0.1), rgba(111, 31, 120, 0.08));
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	text-align: ${(p) => (p.$rtl ? "right" : "left")};
+	box-shadow: 0 10px 24px rgba(16, 32, 51, 0.05);
 
 	.label {
-		font-weight: 600;
-		color: #333;
+		font-weight: 900;
+		color: #102033;
 		text-align: ${(p) => (p.$rtl ? "right" : "left")};
 	}
 
@@ -1003,19 +1595,49 @@ const PaymentStatusBar = styled.div`
 		color: #6b7280;
 		text-align: ${(p) => (p.$rtl ? "right" : "left")};
 	}
+
+	@media (max-width: 520px) {
+		padding: 9px;
+
+		.buttons {
+			gap: 6px;
+		}
+	}
 `;
 
 const StatusButton = styled(Button)`
 	font-size: 12px;
-	border-color: ${(p) => (p.isActive ? "#0f7e6b" : "initial")};
-	background-color: ${(p) => (p.isActive ? "#dff3ef" : "initial")};
-	color: ${(p) => (p.isActive ? "#0a5a4c" : "initial")};
+	border-color: ${(p) =>
+		p.isActive ? "rgba(111, 31, 120, 0.62)" : "rgba(45, 93, 145, 0.24)"};
+	background: ${(p) =>
+		p.isActive
+			? "linear-gradient(135deg, #102033 0%, #24547d 54%, #6f1f78 100%)"
+			: "linear-gradient(135deg, #ffffff 0%, #f4f8fe 100%)"};
+	color: ${(p) => (p.isActive ? "#ffffff" : "#102033")};
+	box-shadow: ${(p) =>
+		p.isActive ? "0 8px 18px rgba(16, 32, 51, 0.16)" : "none"};
+	font-weight: 800;
+
+	&:hover,
+	&:focus {
+		border-color: rgba(111, 31, 120, 0.72) !important;
+		color: ${(p) => (p.isActive ? "#ffffff" : "#6f1f78")} !important;
+	}
 `;
 
 const SummaryRow = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 	gap: 12px;
+
+	@media (max-width: 520px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	@media (max-width: 360px) {
+		grid-template-columns: 1fr;
+	}
 `;
 
 const LegendRow = styled.div`
@@ -1023,12 +1645,16 @@ const LegendRow = styled.div`
 	flex-wrap: wrap;
 	gap: 12px;
 	align-items: center;
-	color: #5c5c5c;
+	color: #4b5870;
 	font-size: 0.8rem;
+	padding: 8px 10px;
+	border: 1px solid rgba(45, 93, 145, 0.14);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.74);
 
 	.legend-title {
-		font-weight: 600;
-		color: #1f1f1f;
+		font-weight: 900;
+		color: #102033;
 	}
 
 	.legend-item {
@@ -1042,33 +1668,62 @@ const LegendRow = styled.div`
 		height: 10px;
 		border-radius: 6px;
 		display: inline-block;
+		box-shadow: inset 0 0 0 1px rgba(16, 32, 51, 0.12);
+	}
+
+	@media (max-width: 520px) {
+		gap: 8px;
+		font-size: 0.72rem;
 	}
 `;
 
 const SummaryCard = styled.div`
-	background: #f6f8fb;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.98)),
+		linear-gradient(135deg, rgba(45, 93, 145, 0.08), rgba(111, 31, 120, 0.06));
+	border: 1px solid rgba(45, 93, 145, 0.14);
 	border-radius: 10px;
 	padding: 12px;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	box-shadow: 0 10px 22px rgba(16, 32, 51, 0.05);
 
 	span {
-		color: #5c5c5c;
+		color: #4b5870;
 		font-size: 0.85rem;
+		font-weight: 700;
 	}
 
 	strong {
 		font-size: 1.1rem;
 		color: #0f1e3d;
 	}
+
+	@media (max-width: 520px) {
+		padding: 10px;
+
+		span {
+			font-size: 0.72rem;
+			line-height: 1.3;
+		}
+
+		strong {
+			font-size: 0.98rem;
+			overflow-wrap: anywhere;
+		}
+	}
 `;
 
 const TableWrapper = styled.div`
 	max-height: 80vh;
 	overflow: auto;
-	border: 1px solid #e2e6ef;
+	-webkit-overflow-scrolling: touch;
+	border: 1px solid rgba(45, 93, 145, 0.22);
 	border-radius: 12px;
+	max-width: 100%;
+	background: #ffffff;
+	box-shadow: 0 12px 28px rgba(16, 32, 51, 0.07);
 
 	table {
 		width: 100%;
@@ -1078,32 +1733,46 @@ const TableWrapper = styled.div`
 
 	th,
 	td {
-		border-bottom: 1px solid #edf1f7;
+		border-bottom: 1px solid rgba(45, 93, 145, 0.1);
 		padding: 8px;
 		text-align: center;
 		vertical-align: middle;
 	}
 
 	th {
-		background: #f7f9fc;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #244e7d 0%, #102033 100%);
 		font-size: 0.8rem;
-		color: #2f3a4c;
+		color: #ffffff;
 		position: sticky;
 		top: 0;
 		z-index: 2;
+		height: 52px;
+		min-width: 98px;
+		line-height: 1.25;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		border-bottom-color: rgba(103, 167, 223, 0.5);
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 	}
 
 	th:first-child {
 		left: 0;
 		z-index: 3;
+		min-width: 120px;
 	}
 
 	.date-cell {
-		color: #1f1f1f;
-		background: #ffffff;
+		color: #102033;
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.96));
 		position: sticky;
 		left: 0;
 		z-index: 1;
+		box-shadow: 2px 0 12px rgba(16, 32, 51, 0.05);
 	}
 
 	.date-lines {
@@ -1115,14 +1784,14 @@ const TableWrapper = styled.div`
 	}
 
 	.hijri-date {
-		font-weight: 700;
-		color: #2f3a4c;
+		font-weight: 900;
+		color: #102033;
 	}
 
 	.greg-date {
-		color: #5c5c5c;
+		color: #47637f;
 		font-size: 0.7rem;
-		font-weight: 600;
+		font-weight: 800;
 	}
 
 	.type-header {
@@ -1130,41 +1799,73 @@ const TableWrapper = styled.div`
 		gap: 6px;
 		align-items: center;
 		justify-content: center;
+		min-height: 38px;
+		width: 100%;
+		text-align: center;
 	}
 
 	.type-label {
 		font-size: 11px;
 		line-height: 1.2;
 		max-width: 140px;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
+		display: block;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		word-break: break-word;
+		overflow-wrap: anywhere;
+		white-space: normal;
 	}
 
 	.dot {
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
+		box-shadow:
+			0 0 0 2px rgba(255, 255, 255, 0.65),
+			0 0 10px rgba(103, 167, 223, 0.45);
 	}
 
 	.total-cell {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		font-weight: 700;
-		color: #1f1f1f;
+		font-weight: 900;
+		color: inherit;
 	}
 
 	.total-main {
-		font-weight: 700;
+		font-weight: 900;
 	}
 
 	.total-rate {
 		font-size: 0.75rem;
-		font-weight: 600;
+		font-weight: 900;
+		opacity: 0.9;
+	}
+
+	@media (max-width: 520px) {
+		border-radius: 8px;
+		max-height: 70vh;
+
+		table {
+			min-width: 620px;
+		}
+
+		th,
+		td {
+			padding: 6px;
+		}
+
+		th {
+			font-size: 0.7rem;
+			height: 48px;
+			min-width: 86px;
+		}
+
+		.type-label {
+			max-width: 100px;
+			font-size: 10px;
+		}
 	}
 `;
 
@@ -1172,18 +1873,30 @@ const CellButton = styled.button`
 	width: 100%;
 	border: 1px solid #d0d7e5;
 	border-radius: 8px;
-	padding: 6px;
+	padding: 7px 6px;
 	cursor: pointer;
 	background: #ffffff;
 	position: relative;
 	overflow: hidden;
+	min-height: 52px;
 	transition:
 		transform 0.15s ease,
-		box-shadow 0.15s ease;
+		box-shadow 0.15s ease,
+		filter 0.15s ease;
 
 	&:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+		filter: saturate(1.08) contrast(1.02);
+	}
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 42%),
+			linear-gradient(0deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
+		pointer-events: none;
 	}
 
 	.derived-badge {
@@ -1203,11 +1916,16 @@ const CellButton = styled.button`
 	.cell-main {
 		font-weight: bold;
 		font-size: 0.85rem;
+		position: relative;
+		z-index: 1;
 	}
 
 	.cell-sub {
 		font-size: 0.7rem;
 		opacity: 0.8;
+		position: relative;
+		z-index: 1;
+		font-weight: 800;
 	}
 `;
 
@@ -1215,16 +1933,35 @@ const TotalButton = styled.button`
 	width: 100%;
 	border: 1px solid #d0d7e5;
 	border-radius: 8px;
-	padding: 6px;
+	padding: 7px 6px;
 	cursor: pointer;
 	background: #ffffff;
+	min-height: 52px;
+	position: relative;
+	overflow: hidden;
 	transition:
 		transform 0.15s ease,
-		box-shadow 0.15s ease;
+		box-shadow 0.15s ease,
+		filter 0.15s ease;
 
 	&:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+		filter: saturate(1.08) contrast(1.02);
+	}
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 42%),
+			linear-gradient(0deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
+		pointer-events: none;
+	}
+
+	.total-cell {
+		position: relative;
+		z-index: 1;
 	}
 `;
 
@@ -1258,6 +1995,13 @@ const DetailHeader = styled.div`
 	span {
 		color: #4a4a4a;
 		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+		padding: 9px;
+		gap: 8px;
 	}
 `;
 
@@ -1276,12 +2020,14 @@ const ReservationList = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	min-width: 0;
 
 	.card {
 		border: 1px solid #e2e6ef;
 		border-radius: 10px;
 		padding: 12px 18px;
 		background: #fafbff;
+		min-width: 0;
 	}
 
 	.row {
@@ -1289,6 +2035,8 @@ const ReservationList = styled.div`
 		justify-content: space-between;
 		font-size: 0.85rem;
 		gap: 12px;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 
 	.row-sub {
@@ -1304,19 +2052,50 @@ const ReservationList = styled.div`
 		color: #5c5c5c;
 		font-size: 0.9rem;
 	}
+
+	@media (max-width: 520px) {
+		.card {
+			padding: 10px 12px;
+		}
+
+		.row {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 4px;
+			font-size: 0.78rem;
+		}
+
+		.row-sub {
+			font-size: 0.72rem;
+		}
+	}
 `;
 
 const ModalTitle = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
+	min-width: 0;
 
 	.modal-main {
 		font-weight: 600;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
 	}
 
 	.modal-sub {
 		font-size: 0.85rem;
 		color: #5c5c5c;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 520px) {
+		.modal-main {
+			font-size: 0.9rem;
+		}
+
+		.modal-sub {
+			font-size: 0.75rem;
+		}
 	}
 `;

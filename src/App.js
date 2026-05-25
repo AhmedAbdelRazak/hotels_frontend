@@ -40,6 +40,7 @@ import HouseKeepingMain from "./HotelModule/HouseKeeping/HouseKeepingMain";
 import HotelReportsMain from "./HotelModule/HotelReports/HotelReportsMain";
 import MainHotelDashboard from "./HotelModule/MainHotelDashboard";
 import CustomerServiceHotelMain from "./HotelModule/CustomerService/CustomerServiceHotelMain";
+import B2BChatMain from "./HotelModule/B2BChat/B2BChatMain";
 import { isAuthenticated } from "./auth";
 
 import Navmenu from "./pages/Navmenu";
@@ -226,6 +227,11 @@ function App() {
 				/>
 
 				{/* ============== Hotel Routes ============== */}
+				<HotelRoute
+					path='/hotel-management/b2b-chat'
+					exact
+					component={B2BChatMain}
+				/>
 				<HotelRoute
 					path='/hotel-management/main-dashboard'
 					exact

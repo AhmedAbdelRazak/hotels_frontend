@@ -452,7 +452,9 @@ const MobileMenuBackdrop = styled.button`
 
 const AdminNavbarWrapper = styled.div`
 	margin-bottom: 15px;
-	background: #1e1e2d;
+	background:
+		linear-gradient(180deg, rgba(141, 76, 157, 0.08) 0%, rgba(0, 0, 0, 0) 34%),
+		#1b1726;
 	top: 70px !important;
 	z-index: 1100;
 	overflow: hidden;
@@ -550,7 +552,7 @@ const AdminNavbarWrapper = styled.div`
 	.ant-menu.ant-menu-dark,
 	.ant-menu.ant-menu-dark {
 		color: rgba(255, 255, 255, 0.65);
-		background: #1e1e2d !important;
+		background: #1b1726 !important;
 		width: 100% !important;
 		border-inline-end: 0 !important;
 	}
@@ -560,10 +562,10 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.black-bg {
-		background-color: #0e0e15 !important;
+		background: linear-gradient(180deg, #171525 0%, #10101a 100%) !important;
 
 		&:hover {
-			background-color: #001427 !important; // Or any other color for hover state
+			background: linear-gradient(180deg, #342746 0%, #292238 100%) !important;
 		}
 	}
 
@@ -576,11 +578,19 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.ant-menu-item-selected {
-		background: black !important;
+		background: linear-gradient(
+			270deg,
+			rgba(217, 146, 37, 0.15),
+			rgba(99, 31, 115, 0.42) 48%,
+			rgba(255, 255, 255, 0.05)
+		) !important;
+		box-shadow:
+			inset -3px 0 0 #d99225,
+			0 5px 14px rgba(0, 0, 0, 0.22);
 	}
 
 	@media (max-width: 1650px) {
-		background: #1e1e2d;
+		background: #1b1726;
 
 		ul {
 			width: 100% !important;
@@ -607,7 +617,7 @@ const AdminNavbarWrapper = styled.div`
 		height: calc(100vh - 70px);
 		width: ${(props) =>
 			props.$show ? "80px" : "min(90vw, 340px)"} !important;
-		background: #1e1e2d;
+		background: #1b1726;
 		border-left: ${(props) =>
 			props.$show ? "none" : "1px solid rgba(255, 255, 255, 0.08)"};
 		box-shadow: ${(props) =>
@@ -641,7 +651,7 @@ const AdminNavbarWrapper = styled.div`
 		.ant-menu.ant-menu-dark,
 		.ant-menu-dark .ant-menu-sub,
 		.ant-menu.ant-menu-dark .ant-menu-sub {
-			background: ${(props) => (props.$show ? "transparent" : "#1e1e2d")}
+			background: ${(props) => (props.$show ? "transparent" : "#1b1726")}
 				!important;
 		}
 
@@ -659,7 +669,7 @@ const AdminNavbarWrapper = styled.div`
 	@media (max-width: 560px) {
 		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
 			!important;
-		background: ${(props) => (props.$show ? "transparent" : "#1e1e2d")};
+		background: ${(props) => (props.$show ? "transparent" : "#1b1726")};
 		box-shadow: ${(props) =>
 			props.$show ? "none" : "-8px 0 22px rgba(0, 0, 0, 0.35)"};
 		pointer-events: ${(props) => (props.$show ? "none" : "auto")};

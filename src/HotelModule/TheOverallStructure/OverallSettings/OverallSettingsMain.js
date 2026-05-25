@@ -7,7 +7,6 @@ import {
 	formatDate,
 	getOverallText,
 	localizeStatus,
-	OverallHeader,
 	OverallPageShell,
 	OverallTableWrap,
 	singleHotelRoute,
@@ -52,13 +51,6 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
-			<OverallHeader>
-				<div>
-					<h2>{labels.title}</h2>
-					<p>{labels.subtitle}</p>
-				</div>
-			</OverallHeader>
-
 			{!loading && !rows.length ? (
 				<EmptyState>{labels.noHotelsFound}</EmptyState>
 			) : (

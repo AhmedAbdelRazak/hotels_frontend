@@ -1794,6 +1794,82 @@ export const getOverallSummary = (userId, token, params = {}) => {
 		.catch((err) => console.log(err));
 };
 
+export const getOverallExecutiveReservationsReport = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/overall-dashboard/executive-report/reservations/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallExecutiveInventoryReport = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/overall-dashboard/executive-report/inventory/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallExecutiveInventoryDayReport = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/overall-dashboard/executive-report/inventory-day/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getOverallExecutivePaidReport = (userId, token, params = {}) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/overall-dashboard/executive-report/paid/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getOverallReservations = (userId, token, params = {}) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/overall-dashboard/reservations/${userId}${buildOverallQuery(
@@ -1816,6 +1892,26 @@ export const exportOverallReservations = (userId, token, params = {}) => {
 		{
 			method: "GET",
 			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const trackOverallReservationSummaryExport = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/reservation-summary-export/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
 		}
 	)
 		.then((response) => response.json())
@@ -2873,3 +2969,72 @@ export async function markCommissionPaid(payload, { token } = {}) {
 	if (!res.ok) throw new Error("Failed to mark commission paid");
 	return res.json();
 }
+
+const b2bJsonRequest = async (url, { method = "GET", token, body } = {}) => {
+	const res = await fetch(url, {
+		method,
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...authHeaders(token),
+			...getStoredAuthHeaders(),
+		},
+		body: body ? JSON.stringify(body) : undefined,
+		cache: "no-store",
+	});
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		throw new Error(data?.error || data?.message || "Chat request failed");
+	}
+	return data;
+};
+
+export const getB2BChatRecipients = (userId, token) =>
+	b2bJsonRequest(`${API}/b2b-chat/recipients/${userId}`, { token });
+
+export const listB2BChats = (userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.set(key, value);
+		}
+	});
+	return b2bJsonRequest(
+		`${API}/b2b-chat/chats/${userId}${query.toString() ? `?${query}` : ""}`,
+		{ token },
+	);
+};
+
+export const getB2BChatUnreadSummary = (userId, token) =>
+	b2bJsonRequest(`${API}/b2b-chat/unread/${userId}`, { token });
+
+export const readB2BChat = (chatId, userId, token) =>
+	b2bJsonRequest(`${API}/b2b-chat/${chatId}/${userId}`, { token });
+
+export const startB2BChat = (userId, token, payload = {}) =>
+	b2bJsonRequest(`${API}/b2b-chat/start/${userId}`, {
+		method: "POST",
+		token,
+		body: payload,
+	});
+
+export const sendB2BChatMessage = (chatId, userId, token, payload = {}) =>
+	b2bJsonRequest(`${API}/b2b-chat/${chatId}/message/${userId}`, {
+		method: "POST",
+		token,
+		body: payload,
+	});
+
+export const markB2BChatSeen = (chatId, userId, token) =>
+	b2bJsonRequest(`${API}/b2b-chat/${chatId}/seen/${userId}`, {
+		method: "POST",
+		token,
+		body: {},
+	});
+
+export const closeB2BChat = (chatId, userId, token, reason = "manual") =>
+	b2bJsonRequest(`${API}/b2b-chat/${chatId}/close/${userId}`, {
+		method: "POST",
+		token,
+		body: { reason },
+	});

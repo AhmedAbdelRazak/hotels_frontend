@@ -2338,7 +2338,7 @@ const MainHotelDashboard = () => {
 export default MainHotelDashboard;
 
 const accountRoleOptions = [
-	{ value: "systemadmin", role: 10000, en: "System Admin", ar: "مسؤول النظام" },
+	{ value: "systemadmin", role: 10000, en: "Hotel System Admin", ar: "مسؤول نظام الفندق" },
 	{ value: "hotelmanager", role: 2000, en: "Hotel Manager", ar: "مدير الفندق" },
 	{ value: "reception", role: 3000, en: "Front Desk Reception", ar: "موظف الاستقبال" },
 	{
@@ -5042,17 +5042,17 @@ const ExecutiveRangeGroup = styled.div`
 	}
 
 	button[data-active="true"] {
-		background: #0d6efd;
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 		color: #fff;
-		box-shadow: 0 8px 18px rgba(13, 110, 253, 0.24);
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.24);
 	}
 
 	button:hover {
-		background: rgba(13, 110, 253, 0.1);
+		background: rgba(100, 22, 110, 0.1);
 	}
 
 	button[data-active="true"]:hover {
-		background: #0d6efd;
+		filter: brightness(1.06);
 	}
 
 	@media (max-width: 520px) {
@@ -5196,7 +5196,7 @@ const ExecutiveSummaryGrid = styled.div`
 const executiveTone = {
 	blue: { bg: "#e8f4ff", border: "#91caff", color: "#0b63b6" },
 	green: { bg: "#eafaf0", border: "#9ee3b4", color: "#0b7a3d" },
-	purple: { bg: "#f1ecff", border: "#c8b6ff", color: "#5b21b6" },
+	purple: { bg: "#fbf6ff", border: "#d9b8df", color: "#5d1d6e" },
 	red: { bg: "#fff0f2", border: "#ffb3bd", color: "#be123c" },
 };
 
@@ -5347,7 +5347,7 @@ const AgentTotals = styled.div`
 
 const agentTone = {
 	blue: { bg: "#e8f4ff", border: "#91caff", color: "#0b63b6" },
-	purple: { bg: "#f0e8ff", border: "#cbb7ff", color: "#5b21b6" },
+	purple: { bg: "#fbf6ff", border: "#d9b8df", color: "#5d1d6e" },
 	red: { bg: "#fff1f2", border: "#fecdd3", color: "#be123c" },
 	orange: { bg: "#fff7ed", border: "#fed7aa", color: "#c2410c" },
 };
@@ -5496,17 +5496,17 @@ const AgentCardActions = styled.div`
 		align-items: center;
 		justify-content: center;
 		gap: 0.42rem;
-		border: 1px solid #1677ff;
+		border: 1px solid var(--pms-metal-purple-lift, #8d4c9d);
 		border-radius: 10px;
-		background: #1677ff;
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 		color: #fff;
 		font-weight: 900;
-		box-shadow: 0 8px 18px rgba(22, 119, 255, 0.16);
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.18);
 	}
 
 	button:last-child {
-		background: #e8f4ff;
-		color: #0b63b6;
+		background: linear-gradient(180deg, #ffffff 0%, #fbf6ff 100%);
+		color: var(--pms-metal-purple, #64166e);
 	}
 
 	@media (max-width: 430px) {
@@ -5585,14 +5585,14 @@ const AccountsModalShell = styled.div`
 	}
 
 	.ant-tabs-tab:hover {
-		color: #0d6ec8;
-		border-color: #98ceff;
+		color: var(--pms-metal-purple, #64166e);
+		border-color: #d9b8df;
 	}
 
 	.ant-tabs-tab-active {
-		background: linear-gradient(135deg, #1677ff 0%, #0d6ec8 100%);
-		border-color: #1677ff;
-		box-shadow: 0 8px 18px rgba(22, 119, 255, 0.2);
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.22);
 	}
 
 	.account-tab-label {
@@ -5892,7 +5892,7 @@ const ActiveAccountToggle = styled.label`
 		height: 17px;
 		min-height: auto;
 		padding: 0;
-		accent-color: #1677ff;
+		accent-color: var(--pms-metal-purple, #64166e);
 	}
 
 	span {
@@ -6007,7 +6007,7 @@ const DocumentPreviewButton = styled.button`
 
 	svg {
 		flex: 0 0 auto;
-		color: #1677ff;
+		color: var(--pms-metal-purple, #64166e);
 	}
 
 	span {
@@ -6123,14 +6123,14 @@ const AgentCommercialOption = styled.button`
 	gap: 0.18rem;
 	min-height: 72px;
 	padding: 0.62rem 0.72rem;
-	border: 1px solid ${(p) => (p.$active ? "#1677ff" : "#d8e6f5")};
+	border: 1px solid ${(p) => (p.$active ? "#8d4c9d" : "#d8e6f5")};
 	border-radius: 10px;
 	background: ${(p) => (p.$active ? "#eef7ff" : "#ffffff")};
 	color: #102033;
 	text-align: inherit;
 	cursor: pointer;
 	box-shadow: ${(p) =>
-		p.$active ? "0 8px 18px rgba(22, 119, 255, 0.12)" : "none"};
+		p.$active ? "0 8px 18px rgba(80, 23, 96, 0.12)" : "none"};
 
 	strong {
 		font-size: 0.86rem;
@@ -6147,7 +6147,7 @@ const AgentCommercialOption = styled.button`
 
 const SelectionPill = styled.button`
 	min-height: 44px;
-	border: 1px solid ${(p) => (p.$active ? "#1677ff" : "#cfe1f5")};
+	border: 1px solid ${(p) => (p.$active ? "#8d4c9d" : "#cfe1f5")};
 	border-radius: 12px;
 	background: ${(p) =>
 		p.$active ? "linear-gradient(135deg, #e7f3ff, #ffffff)" : "#ffffff"};
@@ -6159,7 +6159,7 @@ const SelectionPill = styled.button`
 	gap: 0.55rem;
 	text-align: start;
 	box-shadow: ${(p) =>
-		p.$active ? "0 8px 18px rgba(22, 119, 255, 0.12)" : "none"};
+		p.$active ? "0 8px 18px rgba(80, 23, 96, 0.12)" : "none"};
 	cursor: pointer;
 
 	input {
@@ -6167,7 +6167,7 @@ const SelectionPill = styled.button`
 		height: 16px;
 		min-height: auto;
 		padding: 0;
-		accent-color: #1677ff;
+		accent-color: var(--pms-metal-purple, #64166e);
 	}
 
 	strong {
@@ -6208,7 +6208,7 @@ const AccessPicker = styled.div`
 		height: 16px;
 		min-height: auto;
 		padding: 0;
-		accent-color: #1677ff;
+		accent-color: var(--pms-metal-purple, #64166e);
 	}
 `;
 
@@ -6219,7 +6219,7 @@ const CreateAccountButton = styled.button`
 	min-height: 42px;
 	border: none;
 	border-radius: 10px;
-	background: #1677ff;
+	background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 	color: #fff;
 	font-weight: 900;
 	padding: 0 1.25rem;
@@ -6236,7 +6236,7 @@ const CreateAccountButton = styled.button`
 const statTone = {
 	blue: { bg: "#e7f3ff", border: "#9dd1ff", color: "#0d6ec8" },
 	green: { bg: "#e9f9ef", border: "#9be2b1", color: "#0d8d46" },
-	purple: { bg: "#f2ebff", border: "#c7adff", color: "#6741d9" },
+	purple: { bg: "#fbf6ff", border: "#d9b8df", color: "#5d1d6e" },
 	orange: { bg: "#fff3df", border: "#ffd199", color: "#c46b00" },
 	red: { bg: "#ffecec", border: "#ffb7b7", color: "#d4380d" },
 };
@@ -6522,9 +6522,9 @@ const OpenFilters = styled.form`
 	}
 
 	button[type="submit"] {
-		background: #1677ff;
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 		color: #fff;
-		border-color: #1677ff;
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
 	}
 
 	.export-btn {

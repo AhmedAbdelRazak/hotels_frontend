@@ -156,6 +156,9 @@ const pathAllowsRole = (pathname = "", user, search = "") => {
 	if (hasRole(user, 2000) && !isScopedHotelUser(user)) return true;
 	if (isScopedManager) return true;
 
+	if (pathname.includes("/hotel-management/b2b-chat")) {
+		return hasRole(user, 2000) || isSystemAdminUser(user) || isScopedHotelUser(user);
+	}
 	if (pathname.includes("/hotel-management/main-dashboard")) {
 		return hasRole(user, 2000) || isScopedHotelUser(user);
 	}

@@ -229,7 +229,7 @@ export const overallCommonText = {
 		assignedTo: "Assigned To",
 		cleanedBy: "Cleaned By",
 		totalTasks: "Total Tasks",
-		systemAdmin: "System Admin",
+		systemAdmin: "Hotel System Admin",
 		ownerRole: "Owner",
 		superAdmin: "Super Admin",
 		hotelManager: "Hotel Manager",
@@ -245,7 +245,7 @@ export const overallCommonText = {
 		noReservationsFound: "No reservations found.",
 		noPendingReservationsFound: "No pending reservations found.",
 		noAccountsFound: "No accounts found.",
-		noSystemAdminAccountsFound: "No System Admin accounts found.",
+		noSystemAdminAccountsFound: "No Hotel System Admin accounts found.",
 		noHousekeepingTasksFound: "No housekeeping tasks found.",
 		searchReservationPlaceholder: "Search guest, confirmation, room, hotel",
 		searchHousekeepingPlaceholder:
@@ -254,16 +254,16 @@ export const overallCommonText = {
 		searchAccountCompanyPlaceholder: "Search name, email, phone, company",
 		chooseAtLeastOneHotel: "Choose at least one hotel.",
 		chooseAccountFirst: "Choose an account first.",
-		couldNotCreateSystemAdmin: "Could not create System Admin.",
-		systemAdminCreated: "System Admin created.",
-		couldNotUpdateSystemAdmin: "Could not update System Admin.",
-		systemAdminUpdated: "System Admin updated.",
+		couldNotCreateSystemAdmin: "Could not create Hotel System Admin.",
+		systemAdminCreated: "Hotel System Admin created.",
+		couldNotUpdateSystemAdmin: "Could not update Hotel System Admin.",
+		systemAdminUpdated: "Hotel System Admin updated.",
 		couldNotUpdateAccount: "Could not update account.",
 		accountUpdated: "Account updated.",
 		saving: "Saving...",
 		creating: "Creating...",
-		createSystemAdmin: "Create System Admin",
-		updateSystemAdmin: "Update System Admin",
+		createSystemAdmin: "Create Hotel System Admin",
+		updateSystemAdmin: "Update Hotel System Admin",
 		activate: "Activate",
 		deactivate: "Deactivate",
 		password: "Password",
@@ -275,7 +275,7 @@ export const overallCommonText = {
 		loadingAccounts: "Loading accounts...",
 		noHotelsForScope: "No hotels are available for this scope.",
 		systemAdminScopeNote:
-			"System Admin accounts can see the same overall views as the owner for the hotels selected below.",
+			"Hotel System Admin accounts are hotel employees with owner-like overall access only for the hotels selected below.",
 	},
 	ar: {
 		index: "#",
@@ -373,7 +373,7 @@ export const overallCommonText = {
 		assignedTo: "معين إلى",
 		cleanedBy: "تم التنظيف بواسطة",
 		totalTasks: "إجمالي المهام",
-		systemAdmin: "مسؤول النظام",
+		systemAdmin: "مسؤول نظام الفندق",
 		ownerRole: "المالك",
 		superAdmin: "المدير العام",
 		hotelManager: "مدير الفندق",
@@ -389,7 +389,7 @@ export const overallCommonText = {
 		noReservationsFound: "لا توجد حجوزات.",
 		noPendingReservationsFound: "لا توجد حجوزات معلقة.",
 		noAccountsFound: "لا توجد حسابات.",
-		noSystemAdminAccountsFound: "لا توجد حسابات مسؤول نظام.",
+		noSystemAdminAccountsFound: "لا توجد حسابات مسؤول نظام الفندق.",
 		noHousekeepingTasksFound: "لا توجد مهام نظافة.",
 		searchReservationPlaceholder: "ابحث بالضيف، رقم التأكيد، الغرفة، الفندق",
 		searchHousekeepingPlaceholder:
@@ -399,16 +399,16 @@ export const overallCommonText = {
 			"ابحث بالاسم أو البريد الإلكتروني أو الهاتف أو الشركة",
 		chooseAtLeastOneHotel: "اختر فندقا واحدا على الأقل.",
 		chooseAccountFirst: "اختر حسابا أولا.",
-		couldNotCreateSystemAdmin: "تعذر إنشاء مسؤول النظام.",
-		systemAdminCreated: "تم إنشاء مسؤول النظام.",
-		couldNotUpdateSystemAdmin: "تعذر تحديث مسؤول النظام.",
-		systemAdminUpdated: "تم تحديث مسؤول النظام.",
+		couldNotCreateSystemAdmin: "تعذر إنشاء مسؤول نظام الفندق.",
+		systemAdminCreated: "تم إنشاء مسؤول نظام الفندق.",
+		couldNotUpdateSystemAdmin: "تعذر تحديث مسؤول نظام الفندق.",
+		systemAdminUpdated: "تم تحديث مسؤول نظام الفندق.",
 		couldNotUpdateAccount: "تعذر تحديث الحساب.",
 		accountUpdated: "تم تحديث الحساب.",
 		saving: "جار الحفظ...",
 		creating: "جار الإنشاء...",
-		createSystemAdmin: "إنشاء مسؤول نظام",
-		updateSystemAdmin: "تحديث مسؤول النظام",
+		createSystemAdmin: "إنشاء مسؤول نظام الفندق",
+		updateSystemAdmin: "تحديث مسؤول نظام الفندق",
 		activate: "تفعيل",
 		deactivate: "إلغاء التفعيل",
 		password: "كلمة المرور",
@@ -420,7 +420,7 @@ export const overallCommonText = {
 		loadingAccounts: "جار تحميل الحسابات...",
 		noHotelsForScope: "لا توجد فنادق متاحة لهذا النطاق.",
 		systemAdminScopeNote:
-			"يمكن لحسابات مسؤول النظام مشاهدة نفس الواجهات العامة التي يراها المالك للفنادق المحددة أدناه.",
+			"مسؤول نظام الفندق موظف بصلاحيات واسعة داخل الفنادق المحددة أدناه فقط، وليس مسؤول منصة.",
 	},
 };
 
@@ -488,6 +488,7 @@ export const statusTone = (status = "") => {
 	if (/cancel|reject|inactive|no[-_\s]?show/.test(normalized)) return "red";
 	if (/early checked out|checked out|closed/.test(normalized)) return "green";
 	if (/inhouse|in house|checked in/.test(normalized)) return "softGreen";
+	if (/agent|commission/.test(normalized)) return "purple";
 	if (/pending|review|unfinished|cleaning/.test(normalized)) return "orange";
 	if (/confirm|approved/.test(normalized)) return "blue";
 	if (/active|finish|done|clean/.test(normalized)) return "green";
@@ -587,10 +588,14 @@ export const OverallHeader = styled.header`
 	flex-wrap: wrap;
 	min-width: 0;
 	padding: 12px 16px;
-	border: 1px solid #d0d5dd;
+	border: 1px solid #b8cce3;
 	border-radius: 0;
-	background: #ffffff;
-	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.08);
+	background:
+		linear-gradient(115deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.96)),
+		linear-gradient(180deg, #dcecff 0%, #f8fbff 100%);
+	box-shadow:
+		0 1px 0 rgba(16, 32, 51, 0.1),
+		0 8px 22px rgba(16, 32, 51, 0.06);
 	text-align: center;
 
 	> div {
@@ -600,7 +605,7 @@ export const OverallHeader = styled.header`
 
 	h2 {
 		margin: 0;
-		color: #222434;
+		color: var(--pms-metal-blue-dark, #102033);
 		font-size: clamp(1.18rem, 1.8vw, 1.55rem);
 		font-weight: 950;
 		overflow-wrap: anywhere;
@@ -609,7 +614,7 @@ export const OverallHeader = styled.header`
 
 	p {
 		margin: 0.25rem 0 0;
-		color: #667085;
+		color: #536f8d;
 		font-size: 0.88rem;
 		font-weight: 850;
 		line-height: 1.45;
@@ -630,16 +635,65 @@ export const OverallHeader = styled.header`
 	}
 `;
 
+export const OverallCenteredSearch = styled.div`
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	min-width: 0;
+	padding: 0 0.25rem;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+
+	.overall-centered-search-input {
+		width: min(50%, 720px);
+		min-width: min(360px, 100%);
+		max-width: 100%;
+	}
+
+	.overall-centered-search-input .ant-input,
+	.overall-centered-search-input.ant-input {
+		min-height: 44px;
+		border-color: #cfd3da;
+		border-radius: 6px;
+		color: #202334;
+		font-size: 0.92rem;
+		font-weight: 850;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	.overall-centered-search-input.ant-input-affix-wrapper {
+		min-height: 44px;
+		border-color: #cfd3da;
+		border-radius: 6px;
+		background: #ffffff;
+		box-shadow: 0 1px 0 rgba(16, 24, 40, 0.08);
+	}
+
+	.overall-centered-search-input.ant-input-affix-wrapper-focused,
+	.overall-centered-search-input.ant-input-affix-wrapper:focus-within {
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.14);
+	}
+
+	@media (max-width: 720px) {
+		.overall-centered-search-input {
+			width: 95%;
+			min-width: 0;
+		}
+	}
+`;
+
 export const OverallToolbar = styled.form`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 10px;
 	min-width: 0;
 	padding: 12px 14px;
-	border: 1px solid #d9d9de;
+	border: 1px solid #dcc5e2;
 	border-radius: 0;
-	background: #ffffff;
-	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.08);
+	background: linear-gradient(135deg, #ffffff 0%, #fbf7ff 100%);
+	box-shadow:
+		0 1px 0 rgba(80, 23, 96, 0.08),
+		0 8px 22px rgba(40, 16, 52, 0.05);
 
 	> input,
 	> select {
@@ -659,14 +713,34 @@ export const OverallToolbar = styled.form`
 
 	> input:focus,
 	> select:focus {
-		border-color: #64166e;
-		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.12);
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.14);
 		background: #fff;
 	}
 
 	.overall-filter-select {
 		min-width: 0;
 		width: 100%;
+	}
+
+	.overall-date-picker.ant-picker {
+		min-width: 0;
+		min-height: 40px;
+		width: 100%;
+		border-color: #cfd3da;
+		border-radius: 2px;
+		background: #fbfbfc;
+		color: #202334;
+		font-size: 0.82rem;
+		font-weight: 850;
+		text-align: inherit;
+	}
+
+	.overall-date-picker .ant-picker-input > input {
+		color: #202334;
+		font-size: 0.82rem;
+		font-weight: 850;
+		text-align: inherit;
 	}
 
 	.overall-filter-select .ant-select-selector {
@@ -693,25 +767,43 @@ export const OverallToolbar = styled.form`
 	}
 
 	.overall-filter-select.ant-select-focused .ant-select-selector {
-		border-color: #64166e !important;
-		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.12) !important;
+		border-color: var(--pms-metal-purple-lift, #8d4c9d) !important;
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.14) !important;
 		background: #fff !important;
 	}
 
+	.overall-date-picker.ant-picker-focused {
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		box-shadow: 0 0 0 3px rgba(100, 22, 110, 0.14);
+		background: #fff;
+	}
+
 	button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.42rem;
 		min-width: 0;
 		min-height: 40px;
-		border: 0;
-		border-radius: 2px;
-		background: #64166e;
+		border: 1px solid rgba(141, 76, 157, 0.86);
+		border-radius: 5px;
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 		color: #fff;
 		font-weight: 950;
 		padding: 0 18px;
 		white-space: nowrap;
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.18),
+			0 8px 18px rgba(80, 23, 96, 0.2);
+		transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
 	}
 
 	button:hover {
-		background: #4f135b;
+		filter: brightness(1.07) saturate(1.05);
+		transform: translateY(-1px);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.22),
+			0 12px 24px rgba(80, 23, 96, 0.28);
 	}
 
 	button:disabled {
@@ -720,13 +812,14 @@ export const OverallToolbar = styled.form`
 	}
 
 	button.secondary {
-		border: 1px solid #d6d9df;
-		background: #f8f8fa;
-		color: #222434;
+		border: 1px solid #d9b8df;
+		background: linear-gradient(180deg, #ffffff 0%, #fbf6ff 100%);
+		color: #3b1248;
+		box-shadow: 0 5px 14px rgba(80, 23, 96, 0.08);
 	}
 
 	button.secondary:hover {
-		background: #eeeeF3;
+		background: #fbf6ff;
 	}
 
 	@media (max-width: 720px) {
@@ -740,6 +833,7 @@ export const OverallToolbar = styled.form`
 		> input,
 		> select,
 		.overall-filter-select,
+		.overall-date-picker,
 		button {
 			min-height: 42px;
 			font-size: 0.82rem;
@@ -768,19 +862,19 @@ export const OverallCard = styled.article`
 	align-content: center;
 	gap: 0.25rem;
 	padding: 0.9rem;
-	border: 1px solid rgba(16, 24, 40, 0.08);
+	border: 1px solid rgba(141, 76, 157, 0.16);
 	border-radius: 8px;
-	background: #fff;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+	background: linear-gradient(135deg, #ffffff 0%, #fbf6ff 100%);
+	box-shadow: 0 8px 18px rgba(40, 16, 52, 0.07);
 
 	strong {
-		color: #0f4f86;
+		color: #5d1d6e;
 		font-size: 1.5rem;
 		line-height: 1;
 	}
 
 	span {
-		color: #47627d;
+		color: #6d5875;
 		font-size: 0.78rem;
 		font-weight: 900;
 	}
@@ -807,10 +901,10 @@ export const OverallTableWrap = styled.div`
 	overflow-x: auto;
 	overflow-y: hidden;
 	-webkit-overflow-scrolling: touch;
-	border: 1px solid #e5edf6;
+	border: 1px solid #e6d3eb;
 	border-radius: 8px;
 	background: #fff;
-	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+	box-shadow: 0 8px 22px rgba(40, 16, 52, 0.06);
 
 	table {
 		width: 100%;
@@ -837,12 +931,12 @@ export const OverallTableWrap = styled.div`
 		position: sticky;
 		top: 0;
 		z-index: 2;
-		background: linear-gradient(180deg, #eef6ff 0%, #deebff 100%);
-		color: #102033;
+		background: var(--pms-table-header-bg, linear-gradient(180deg, #fbf6ff 0%, #eadcf3 100%));
+		color: var(--pms-table-header-color, #24102d);
 		font-size: 13.5px;
 		font-weight: 900;
 		text-align: start;
-		border-bottom: 1px solid #b9d5f4;
+		border-bottom: 1px solid var(--pms-table-header-border, #d9b8df);
 	}
 
 	td:first-child,
@@ -856,7 +950,7 @@ export const OverallTableWrap = styled.div`
 	}
 
 	tbody tr:hover td {
-		background: #f7fbff;
+		background: #fbf6ff;
 	}
 
 	.hotel-cell,
@@ -927,11 +1021,11 @@ export const OverallTableWrap = styled.div`
 	}
 
 	table.reservation-list-table .sortable-heading:hover {
-		color: #0b5cad;
+		color: #f3dcff;
 	}
 
 	table.reservation-list-table .sort-arrow {
-		color: #1677ff;
+		color: #f4c84f;
 		font-size: 0.72rem;
 		line-height: 1;
 	}
@@ -1097,6 +1191,15 @@ export const OverallTableWrap = styled.div`
 		unicode-bidi: plaintext;
 	}
 
+	.date-cell .date-truncate {
+		display: inline-block;
+		max-width: 16ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		vertical-align: middle;
+	}
+
 	.amount-cell {
 		direction: ltr;
 		font-weight: 950;
@@ -1120,7 +1223,7 @@ export const OverallTableWrap = styled.div`
 
 	button.link-btn:hover,
 	a.link-btn:hover {
-		color: #64166e;
+		color: var(--pms-metal-purple, #64166e);
 	}
 
 	@media (max-width: 720px) {
@@ -1142,8 +1245,8 @@ export const OverallTableWrap = styled.div`
 	}
 
 	@media (max-width: 420px) {
-		margin-inline: -0.25rem;
-		width: calc(100% + 0.5rem);
+		margin-inline: 0;
+		width: 100%;
 
 		table {
 			min-width: 920px;
@@ -1152,16 +1255,17 @@ export const OverallTableWrap = styled.div`
 `;
 
 export const ReservationTableControls = styled.div`
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 0.7rem;
+	gap: 0.7rem 1rem;
 	padding: 0.75rem 0.9rem;
-	border: 1px solid #e5edf6;
+	border: 1px solid #e6d3eb;
 	border-radius: 8px;
-	background: #ffffff;
-	box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+	background: linear-gradient(135deg, #ffffff 0%, #fbf7ff 100%);
+	box-shadow: 0 4px 16px rgba(40, 16, 52, 0.05);
 
 	.control-group {
 		display: inline-flex;
@@ -1177,6 +1281,16 @@ export const ReservationTableControls = styled.div`
 		font-weight: 950;
 	}
 
+	.summary-control {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		display: flex;
+		justify-content: center;
+		pointer-events: none;
+	}
+
 	button {
 		min-height: 34px;
 		border: 1px solid #d0d5dd;
@@ -1190,19 +1304,46 @@ export const ReservationTableControls = styled.div`
 	}
 
 	button:hover {
-		border-color: #1677ff;
-		color: #0b5cad;
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		color: var(--pms-metal-purple, #64166e);
 	}
 
 	button.active {
-		border-color: #1677ff;
-		background: #1677ff;
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
 		color: #ffffff;
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.2);
 	}
 
 	button.calendar-hijri.active {
 		border-color: #079b35;
 		background: #079b35;
+	}
+
+	button.summary-trigger {
+		min-width: 148px;
+		border-color: rgba(141, 76, 157, 0.88);
+		background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
+		color: #ffffff;
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.18),
+			0 10px 22px rgba(80, 23, 96, 0.22);
+		pointer-events: auto;
+	}
+
+	button.summary-trigger:hover {
+		border-color: rgba(243, 220, 255, 0.9);
+		filter: brightness(1.06) saturate(1.05);
+		color: #ffffff;
+	}
+
+	@media (max-width: 1100px) {
+		.summary-control {
+			position: static;
+			order: -1;
+			width: 100%;
+			transform: none;
+		}
 	}
 
 	@media (max-width: 640px) {
@@ -1218,6 +1359,11 @@ export const ReservationTableControls = styled.div`
 			grid-column: 1 / -1;
 		}
 
+		.summary-control {
+			display: grid;
+			width: 100%;
+		}
+
 		button {
 			width: 100%;
 		}
@@ -1230,48 +1376,81 @@ export const StatusPill = styled.span.attrs((props) => ({
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 0.34rem;
 	min-height: 26px;
 	min-width: 78px;
-	padding: 0.18rem 0.62rem;
+	padding: 0.2rem 0.66rem;
 	border: 1px solid
 		${(props) =>
 			props.$tone === "red"
-				? "#b91c1c"
+				? "#d45b68"
 				: props.$tone === "orange"
-				  ? "#d89000"
+				  ? "#d89b2e"
 				  : props.$tone === "green"
-				    ? "#008a22"
+				    ? "#14a064"
 				    : props.$tone === "softGreen"
-				      ? "#56b870"
-				      : props.$tone === "blue"
-				        ? "#1d5fd3"
-				        : "#6d7a99"};
-	border-radius: 2px;
+				      ? "#87d6a0"
+				    : props.$tone === "blue"
+				      ? "#5b8bdc"
+				      : props.$tone === "purple"
+				        ? "#b47dc2"
+				        : "#aab2c0"};
+	border-radius: 999px;
 	background: ${(props) =>
 		props.$tone === "red"
-			? "#b00000"
+			? "linear-gradient(135deg, #7f1d1d 0%, #c33546 100%)"
 			: props.$tone === "orange"
-			  ? "#f2b500"
+			  ? "linear-gradient(135deg, #fff3d8 0%, #f7bf4b 100%)"
 			  : props.$tone === "green"
-			    ? "#009b2b"
+			    ? "linear-gradient(135deg, #064e3b 0%, #0fa66b 100%)"
 			    : props.$tone === "softGreen"
-			      ? "#dff7e7"
-			      : props.$tone === "blue"
-			        ? "#e8f1ff"
-			        : "#e9edf7"};
+			      ? "linear-gradient(135deg, #eefbf3 0%, #d8f7e4 100%)"
+			    : props.$tone === "blue"
+			      ? "linear-gradient(135deg, #eef4ff 0%, #dfeaff 100%)"
+			      : props.$tone === "purple"
+			        ? "linear-gradient(135deg, #fffaff 0%, #ecd9f3 100%)"
+			        : "linear-gradient(135deg, #f7f8fb 0%, #e9edf7 100%)"};
 	color: ${(props) =>
 		props.$tone === "red" || props.$tone === "green"
 			? "#ffffff"
 			: props.$tone === "orange"
-			  ? "#2a1d00"
+			  ? "#4c3000"
 			  : props.$tone === "softGreen"
 			    ? "#08722c"
 			    : props.$tone === "blue"
-			      ? "#0b4abf"
-			      : "#263452"};
+			      ? "#1d4f9d"
+			      : props.$tone === "purple"
+			        ? "#5d1d6e"
+			        : "#263452"};
 	font-size: 0.72rem;
 	font-weight: 950;
 	line-height: 1.25;
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.28),
+		0 4px 10px rgba(40, 16, 52, 0.08);
+
+	&::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		flex: 0 0 7px;
+		border-radius: 999px;
+		background: ${(props) =>
+			props.$tone === "red"
+				? "#ffd1d6"
+				: props.$tone === "orange"
+				  ? "#7a4c00"
+				  : props.$tone === "green"
+				    ? "#c9ffe1"
+				    : props.$tone === "softGreen"
+				      ? "#14a064"
+				      : props.$tone === "blue"
+				        ? "#356ed1"
+				        : props.$tone === "purple"
+				          ? "#8d4c9d"
+				          : "#6d7a99"};
+		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28);
+	}
 `;
 
 export const EmptyState = styled.div`
@@ -1313,9 +1492,9 @@ export const Pager = styled.div`
 	}
 
 	button:not(:disabled):hover {
-		border-color: #1677ff;
-		background: #eef6ff;
-		color: #0b5cad;
+		border-color: var(--pms-metal-purple-lift, #8d4c9d);
+		background: #fbf6ff;
+		color: var(--pms-metal-purple, #64166e);
 		transform: translateY(-1px);
 	}
 
@@ -1381,10 +1560,14 @@ export const ActionButton = styled.button`
 	min-height: 32px;
 	border: 1px solid
 		${(props) =>
-			props.$danger ? "#b00000" : props.$success ? "#009b2b" : "#64166e"};
+			props.$danger ? "#b00000" : props.$success ? "#009b2b" : "#8d4c9d"};
 	border-radius: 2px;
 	background: ${(props) =>
-		props.$danger ? "#b00000" : props.$success ? "#009b2b" : "#64166e"};
+		props.$danger
+			? "#b00000"
+			: props.$success
+			  ? "#009b2b"
+			  : "var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e))"};
 	color: #fff;
 	font-weight: 950;
 	padding: 0.34rem 0.82rem;
@@ -1398,9 +1581,14 @@ export const ActionButton = styled.button`
 
 	&:not(:disabled):hover {
 		background: ${(props) =>
-			props.$danger ? "#930000" : props.$success ? "#008022" : "#4f135b"};
+			props.$danger
+				? "#930000"
+				: props.$success
+				  ? "#008022"
+				  : "var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e))"};
 		border-color: ${(props) =>
-			props.$danger ? "#930000" : props.$success ? "#008022" : "#4f135b"};
+			props.$danger ? "#930000" : props.$success ? "#008022" : "#f3dcff"};
+		filter: ${(props) => (props.$danger || props.$success ? "none" : "brightness(1.06)")};
 	}
 
 	@media (max-width: 480px) {
