@@ -309,7 +309,9 @@ Frontend Critical Workflows To Protect
   - Those three non-inventory executive tabs intentionally allow multiple hotels, multiple selected months, status/search/dateBy filters, include-cancelled toggling, and a full reset to all historical data.
   - The shared executive filter panel writes stable query params for hotelId/invHotel, invMonths/invHMonth, invHYear, invCal, dateFrom/dateTo, invStart/invEnd, dateBy, status, search, and includeCancelled so refresh/share links preserve the report state.
   - The initial visible range must be derived from query/default report filters before the first API call. If dateFrom/dateTo exist, the UI starts in custom-range mode instead of briefly showing all-history state.
+  - dateFrom/dateTo should force custom-range behavior even when an old/shared URL still contains range=all. The user-visible filter state, API params, and backend result set must describe the same data.
   - Summary, reservation analytics, and paid overview requests are latest-request guarded so slow production responses cannot overwrite newer filter results on mount or rapid filter changes.
+  - Manual refresh actions use the same latest-request guard as automatic fetches.
   - Inventory remains the exception: it requires exactly one hotel and uses computed read-only month dates from calendar/month/year selectors.
 - Reservation list improvements
   - Overall reservation-main and pending-reservation lists use AntD date pickers and a centered search field above the table.
@@ -414,6 +416,7 @@ Frontend Change Checklist
 - Avoid changing localStorage.selectedHotel behavior without checking legacy components that still depend on it.
 
 Final Production Readiness Notes
+- 2026-05-25 production validation: local frontend, GitHub origin, and production frontend were synchronized at the deployed HEAD; production backend HEAD matched origin; hotels-frontend and hotels-backend were online in PM2; executive summary reservation, inventory, paid-overview, B2B chat SPA routes returned 200; /api/currency-rates returned 200; local port 3000 was not left running.
 - Overall reservation tables should stay readable first and compact second. OverallReservationMain and OverallPendingReservations use the shared reservation-list-table styling from overallShared.js, with desktop fixed column widths, ellipsis/tooltips for long values, and a mobile/tablet horizontal-scroll fallback.
 - Reservation table text longer than the readable cell width should be truncated visually but preserved through the tooltip/title behavior. Do not remove TableTooltipText from hotel, guest, source, confirmation, status, or action columns.
 - Overall reservation list controls default to Gregorian dates, offer Hijri/Gregorian switching, and support sorting by booking source, hotel, check-in, and checkout. Active sorted columns should show a clear arrow in the table header. Keep exported reservation rows aligned with the visible table columns, including nights and price per day.
