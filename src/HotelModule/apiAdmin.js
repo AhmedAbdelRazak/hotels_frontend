@@ -1946,6 +1946,20 @@ export const getOverallFinancialActions = (userId, token, params = {}) => {
 		.catch((err) => console.log(err));
 };
 
+export const exportOverallFinancialActions = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/financial-actions/${userId}${buildOverallQuery(
+			{ ...params, exportAll: "true" }
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const trackOverallFinancialReportExport = (
 	userId,
 	token,

@@ -324,11 +324,13 @@ Frontend Critical Workflows To Protect
   - Booking source, status, and room-type summaries are sorted descending by total amount.
   - Summary export creates a multi-sheet Excel report in the finance-report style and is tracked through backend activity logging.
 - Reservation executive analytics
+  - Overview, reservations overview, and paid reservations overview default to Gregorian/Melady calendar controls. Inventory is the only executive tab that defaults to Hijri.
   - Default reservation executive date range is past 60 days plus today, so 61 days total, based on Creation Date.
   - Arrival and Departure charts are line charts and occupy their own first row.
   - Status donut and Creation Date chart sit on the second chart row.
   - Charts include enlarge controls that open a modal for larger PowerBI-style viewing.
-  - Expanded chart x-axis labels must show readable dates, not only the first tick.
+  - Chart labels and tooltips must resolve the real category date by data-point index before formatting. Do not format Apex numeric category indexes directly, because that can display wrong dates such as Dec 31.
+  - Expanded chart x-axis labels must show readable Gregorian dates, not only the first tick.
   - Status donut colors follow the reservation lifecycle palette: pending/review amber or gold, confirmed blue, in-house teal, checked-out green, cancelled/no-show/rejected red/slate.
   - The cancelled/no-show exclusion switch must match the actual backend query output. If a status filter requires cancelled/no-show data, the UI should not silently exclude it.
 - Inventory and occupancy report
@@ -346,6 +348,11 @@ Frontend Critical Workflows To Protect
   - The hotel-name breakdown table appears first.
   - The remaining paid-reservation tables and charts stay below it.
   - The page keeps the same summary filter model and assigned-hotel scoping as the other executive tabs.
+- Overall financial actions
+  - src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions.js owns the pending reservation-finance queue and pending wallet-claim approval queue.
+  - The two tables should have visible section labels, subtitles, and row-count pills so finance users understand which queue they are reviewing.
+  - Export Excel pulls the full filtered queue through exportAll mode, creates a styled workbook with Summary, Reservation Actions, and Wallet Approvals sheets, then calls the financial export tracking endpoint before writing the file.
+  - If export tracking fails, the workbook should not be downloaded silently; the user should see an export error.
 - B2B chat frontend
   - The top navbar chat icon routes users to the B2B chat page across overall and single-hotel pages.
   - The B2B chat page must always render the hotel-management overall navbar and AdminOverallSideMenu, not the single-hotel AdminNavbar/AdminNavbarArabic menu.

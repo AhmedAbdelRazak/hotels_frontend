@@ -264,12 +264,45 @@ const chartFont = (isRTL) =>
 		? `"Droid Arabic Kufi", "Tajawal", "Cairo", "Segoe UI", sans-serif`
 		: `"Inter", "Segoe UI", Arial, sans-serif`;
 
-const formatChartDateLabel = (value = "") => {
-	const parsed = dayjs(value);
-	return parsed.isValid() ? parsed.format("MMM D") : String(value || "");
+const chartCategoriesFromOptions = (options = {}) => {
+	const categories = options?.w?.config?.xaxis?.categories;
+	return Array.isArray(categories) ? categories : [];
 };
 
-const chartLabelFormatter = () => (value) => formatChartDateLabel(value);
+const chartIndexFromOptions = (options = {}) => {
+	const candidates = [
+		options?.dataPointIndex,
+		options?.tickIndex,
+		options?.i,
+		options?.index,
+	];
+	const index = candidates.find(
+		(value) => Number.isInteger(Number(value)) && Number(value) >= 0
+	);
+	return index === undefined ? -1 : Number(index);
+};
+
+const resolveChartCategory = (value = "", options = {}) => {
+	const categories = chartCategoriesFromOptions(options);
+	const optionIndex = chartIndexFromOptions(options);
+	if (categories[optionIndex]) return categories[optionIndex];
+	if (typeof value === "number" && categories[value]) return categories[value];
+	if (/^\d+$/.test(String(value || "")) && categories[Number(value)]) {
+		return categories[Number(value)];
+	}
+	return value;
+};
+
+const formatChartDateLabel = (value = "") => {
+	const raw = String(value || "");
+	const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+	if (!isoMatch) return raw;
+	const parsed = dayjs(isoMatch[1]);
+	return parsed.isValid() ? parsed.format("MMM D") : raw;
+};
+
+const chartLabelFormatter = () => (value, _timestamp, options) =>
+	formatChartDateLabel(resolveChartCategory(value, options));
 
 const chartTickAmount = (categories = [], expanded = false) => {
 	const count = Array.isArray(categories) ? categories.length : 0;
@@ -380,7 +413,8 @@ const barOptions = ({
 	},
 	tooltip: {
 		x: {
-			formatter: (value) => formatChartDateLabel(value),
+			formatter: (value, options) =>
+				formatChartDateLabel(resolveChartCategory(value, options)),
 		},
 		y: { formatter: (value) => formatMoney(value) },
 	},

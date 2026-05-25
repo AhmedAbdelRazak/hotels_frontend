@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, Input, InputNumber, message, Modal, Select, Tag } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
+import styled from "styled-components";
 import {
+	exportOverallFinancialActions,
 	getOverallFinancialActions,
 	reviewAgentWalletClaim,
+	trackOverallFinancialReportExport,
 	updatePendingConfirmationReservation,
 } from "../../apiAdmin";
 import { isAuthenticated } from "../../../auth";
@@ -79,6 +83,20 @@ const TEXT = {
 		walletRejected: "Wallet claim rejected.",
 		walletRejectTitle: "Reject wallet claim?",
 		walletRejectReasonRequired: "Rejection reason is required.",
+		reservationActionsTitle: "Reservation finance queue",
+		reservationActionsSubtitle:
+			"Reservations that need finance review, commission setup, or agent commission approval.",
+		exportExcel: "Export Excel",
+		exportingExcel: "Exporting...",
+		exportNoData: "No financial action rows are available to export.",
+		exportError: "Could not export financial actions.",
+		exportSuccess: "Financial actions exported and tracked.",
+		rowsCount: "Rows",
+		filterSummary: "Applied filters",
+		generatedAt: "Generated at",
+		dateFrom: "Date from",
+		dateTo: "Date to",
+		all: "All",
 	},
 	ar: {
 		title: "الإجراءات المالية المعلقة",
@@ -130,6 +148,27 @@ const TEXT = {
 		walletRejectReasonRequired: "سبب الرفض مطلوب.",
 	},
 };
+
+Object.assign(TEXT.ar, {
+	reservationActionsTitle:
+		"\u0637\u0627\u0628\u0648\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+	reservationActionsSubtitle:
+		"\u062d\u062c\u0648\u0632\u0627\u062a \u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 \u0623\u0648 \u062a\u062d\u062f\u064a\u062f \u0639\u0645\u0648\u0644\u0629 \u0623\u0648 \u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0648\u0643\u064a\u0644.",
+	exportExcel: "\u062a\u0635\u062f\u064a\u0631 Excel",
+	exportingExcel: "\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u0635\u062f\u064a\u0631...",
+	exportNoData:
+		"\u0644\u0627 \u062a\u0648\u062c\u062f \u0635\u0641\u0648\u0641 \u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0645\u0627\u0644\u064a\u0629 \u0644\u0644\u062a\u0635\u062f\u064a\u0631.",
+	exportError:
+		"\u062a\u0639\u0630\u0631 \u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0627\u0644\u0645\u0627\u0644\u064a\u0629.",
+	exportSuccess:
+		"\u062a\u0645 \u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0648\u062a\u0633\u062c\u064a\u0644\u0647\u0627.",
+	rowsCount: "\u0627\u0644\u0635\u0641\u0648\u0641",
+	filterSummary: "\u0627\u0644\u0641\u0644\u0627\u062a\u0631 \u0627\u0644\u0645\u0637\u0628\u0642\u0629",
+	generatedAt: "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
+	dateFrom: "\u0645\u0646 \u062a\u0627\u0631\u064a\u062e",
+	dateTo: "\u0625\u0644\u0649 \u062a\u0627\u0631\u064a\u062e",
+	all: "\u0627\u0644\u0643\u0644",
+});
 
 const reasonTone = (reason = "") => {
 	if (/rejected/.test(reason)) return "red";
@@ -188,6 +227,126 @@ const hasCommissionAssignment = (reservation = {}) =>
 		String(reservation?.commissionStatus || "").trim().toLowerCase()
 	);
 
+const n2 = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+const safeFileSegment = (value = "financial-actions") =>
+	String(value || "financial-actions")
+		.replace(/[\\/:*?"<>|]+/g, "-")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.slice(0, 90) || "financial-actions";
+
+const safeSheetName = (value = "Sheet") =>
+	String(value || "Sheet")
+		.replace(/[\\/?*[\]:]/g, " ")
+		.slice(0, 31) || "Sheet";
+
+const loadStyledXlsx = async () => {
+	const xlsxModule = await import("xlsx-js-style");
+	return xlsxModule.default || xlsxModule["module.exports"] || xlsxModule;
+};
+
+const getColumnWidth = (key, rows = []) => {
+	const minWidth = Math.max(10, Math.ceil(String(key).length * 0.8));
+	const contentWidth = rows.reduce((max, row) => {
+		const value = row?.[key];
+		const length = value === null || value === undefined ? 0 : String(value).length;
+		return Math.max(max, Math.ceil(length * 0.9) + 2);
+	}, minWidth);
+	return Math.min(32, Math.max(minWidth, contentWidth));
+};
+
+const appendJsonSheet = (XLSX, workbook, rows, sheetName, emptyText = "No data") => {
+	const safeRows = Array.isArray(rows) && rows.length ? rows : [{ Message: emptyText }];
+	const worksheet = XLSX.utils.json_to_sheet(safeRows);
+	const headers = Object.keys(safeRows[0] || {});
+	worksheet["!cols"] = headers.map((key) => ({ wch: getColumnWidth(key, safeRows) }));
+	if (worksheet["!ref"]) {
+		const range = XLSX.utils.decode_range(worksheet["!ref"]);
+		worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+		worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+		for (let column = range.s.c; column <= range.e.c; column += 1) {
+			const address = XLSX.utils.encode_cell({ r: 0, c: column });
+			if (!worksheet[address]) continue;
+			worksheet[address].s = {
+				fill: { patternType: "solid", fgColor: { rgb: "D9EAF7" } },
+				font: { bold: true, color: { rgb: "0F2842" } },
+				alignment: { horizontal: "center", vertical: "center", wrapText: true },
+				border: {
+					top: { style: "thin", color: { rgb: "B7D7F0" } },
+					bottom: { style: "thin", color: { rgb: "B7D7F0" } },
+					left: { style: "thin", color: { rgb: "B7D7F0" } },
+					right: { style: "thin", color: { rgb: "B7D7F0" } },
+				},
+			};
+		}
+		for (let row = 1; row <= range.e.r; row += 1) {
+			for (let column = range.s.c; column <= range.e.c; column += 1) {
+				const address = XLSX.utils.encode_cell({ r: row, c: column });
+				if (!worksheet[address]) continue;
+				worksheet[address].s = {
+					alignment: { vertical: "top", wrapText: true },
+					border: { bottom: { style: "thin", color: { rgb: "E5E7EB" } } },
+				};
+				if (worksheet[address].t === "n") worksheet[address].z = "#,##0.00";
+			}
+		}
+	}
+	XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(sheetName));
+};
+
+const reservationActionExportRows = (rows = [], labels = TEXT.en, chosenLanguage) =>
+	rows.map((reservation, index) => ({
+		"#": index + 1,
+		Hotel: titleCase(reservation.hotelName || ""),
+		Confirmation: reservation.confirmation_number || "",
+		Guest: reservation.customer_details?.name || "",
+		"Booking Source": reservation.booking_source || "",
+		Status: localizeStatus(reservation.reservation_status, chosenLanguage),
+		"Needs Action": (reservation.financialActionReasons || [])
+			.map((reason) => reasonLabel(reason, labels))
+			.join(", "),
+		"Booked At": formatDate(reservation.booked_at || reservation.createdAt, chosenLanguage),
+		Arrival: formatDate(reservation.checkin_date, chosenLanguage),
+		"Total Amount": n2(reservation.total_amount),
+		Commission: n2(getCommissionValue(reservation)),
+		"Commission Status": reservation.commissionStatus || "",
+		"Total Review Status": reservation?.financial_cycle?.totalReviewStatus || "",
+	}));
+
+const walletActionExportRows = (rows = [], labels = TEXT.en, chosenLanguage) =>
+	rows.map((transaction, index) => ({
+		"#": index + 1,
+		Hotel: titleCase(transaction.hotelName || ""),
+		Agent: titleCase(transaction.agent?.name || transaction.agent?.email || ""),
+		Company: titleCase(transaction.agent?.companyName || ""),
+		Amount: n2(transaction.amount),
+		Date: formatDate(transaction.transactionDate, chosenLanguage),
+		"Finance Status": labels.walletPending,
+		Reference: transaction.reference || "",
+		Note: transaction.note || "",
+		Attachments: (transaction.attachments || []).length,
+	}));
+
+const financialActionTrackingRows = (sourceRows = [], exportRows = []) =>
+	exportRows.map((row, index) => ({
+		...row,
+		hotelId: normalizeId(sourceRows[index]?.hotelId),
+		_reservationId: normalizeId(sourceRows[index]?._id),
+		confirmationNumber: sourceRows[index]?.confirmation_number || "",
+	}));
+
+const walletActionTrackingRows = (sourceRows = [], exportRows = []) =>
+	exportRows.map((row, index) => ({
+		...row,
+		hotelId: normalizeId(sourceRows[index]?.hotelId),
+		agentId: normalizeId(sourceRows[index]?.agentId || sourceRows[index]?.agent),
+		transactionId: normalizeId(sourceRows[index]?._id),
+		reference: sourceRows[index]?.reference || "",
+	}));
+
+const filterLabel = (value, fallback) => value || fallback;
+
 const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -211,6 +370,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	const [page, setPage] = useState(1);
 	const [walletPage, setWalletPage] = useState(1);
 	const [loading, setLoading] = useState(false);
+	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [actionLoading, setActionLoading] = useState(false);
@@ -449,6 +609,158 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		});
 	};
 
+	const handleExportExcel = async () => {
+		if (!userId || !token || exporting) return;
+		setExporting(true);
+		try {
+			const exportData = await exportOverallFinancialActions(userId, token, {
+				...params,
+				page: 1,
+				limit: 5000,
+				walletPage: 1,
+				walletLimit: 5000,
+			});
+			if (!exportData || exportData.error) {
+				message.error(exportData?.error || labels.exportError);
+				return;
+			}
+			const exportReservations = Array.isArray(exportData.reservations)
+				? exportData.reservations
+				: [];
+			const exportWalletClaims = exportData.walletClaims || {};
+			const exportWalletRows = Array.isArray(exportWalletClaims.transactions)
+				? exportWalletClaims.transactions
+				: [];
+			if (!exportReservations.length && !exportWalletRows.length) {
+				message.info(labels.exportNoData);
+				return;
+			}
+
+			const reservationRows = reservationActionExportRows(
+				exportReservations,
+				labels,
+				chosenLanguage
+			);
+			const walletRows = walletActionExportRows(
+				exportWalletRows,
+				labels,
+				chosenLanguage
+			);
+			const selectedHotelIds = filters.hotelId
+				? [filters.hotelId]
+				: (exportData.hotels || []).map((hotel) => normalizeId(hotel._id)).filter(Boolean);
+			const selectedHotelName =
+				filters.hotelId &&
+				(hotels.find((hotel) => normalizeId(hotel._id) === filters.hotelId)
+					?.hotelName ||
+					"");
+			const selectedAction = actionOptions.find(
+				(option) => option.value === filters.actionType
+			);
+			const summaryRows = [
+				{ Metric: labels.generatedAt, Value: new Date().toLocaleString() },
+				{
+					Metric: labels.hotel,
+					Value: filterLabel(titleCase(selectedHotelName), labels.allHotels),
+				},
+				{
+					Metric: labels.source,
+					Value: filterLabel(titleCase(filters.bookingSource), labels.allBookingSources),
+				},
+				{
+					Metric: labels.actionType,
+					Value: selectedAction?.label || labels.allActions,
+				},
+				{ Metric: labels.dateFrom, Value: filters.dateFrom || labels.all },
+				{ Metric: labels.dateTo, Value: filters.dateTo || labels.all },
+				{
+					Metric: labels.reservationActionsTitle,
+					Value: reservationRows.length,
+				},
+				{ Metric: labels.walletClaimsTitle, Value: walletRows.length },
+			];
+			const reservationColumns = Object.keys(reservationRows[0] || {});
+			const transactionColumns = Object.keys(walletRows[0] || {});
+			const tracking = await trackOverallFinancialReportExport(
+				userId,
+				token,
+				{
+					dataset: "overall_financial_actions",
+					format: "XLSX",
+					totalRows: reservationRows.length + walletRows.length,
+					filters: {
+						...filters,
+						ownerId: ownerId || "",
+						hotelIds: selectedHotelIds,
+						scope: "financial-actions",
+						reportType: "pending-financial-actions",
+					},
+					columns: [...new Set([...reservationColumns, ...transactionColumns])],
+					reservationColumns,
+					transactionColumns,
+					totals: {
+						reservationActions: reservationRows.length,
+						walletClaims: walletRows.length,
+						reservationAmount: n2(
+							exportReservations.reduce(
+								(total, reservation) => total + Number(reservation.total_amount || 0),
+								0
+							)
+						),
+						walletAmount: n2(
+							exportWalletRows.reduce(
+								(total, transaction) => total + Number(transaction.amount || 0),
+								0
+							)
+						),
+					},
+					reservations: financialActionTrackingRows(
+						exportReservations,
+						reservationRows
+					),
+					transactions: walletActionTrackingRows(exportWalletRows, walletRows),
+				},
+				buildOwnerParams(ownerId)
+			);
+			if (!tracking || tracking.error || !tracking.exportTracked) {
+				message.error(tracking?.error || labels.exportError);
+				return;
+			}
+
+			const XLSX = await loadStyledXlsx();
+			const workbook = XLSX.utils.book_new();
+			appendJsonSheet(XLSX, workbook, summaryRows, "Summary", labels.noRows);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				reservationRows,
+				"Reservation Actions",
+				labels.noRows
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				walletRows,
+				"Wallet Approvals",
+				labels.walletClaimNoRows
+			);
+			const fileParts = [
+				"overall-financial-actions",
+				selectedHotelName ? titleCase(selectedHotelName) : "all-hotels",
+				new Date().toISOString().slice(0, 10),
+			];
+			XLSX.writeFile(workbook, `${safeFileSegment(fileParts.join("-"))}.xlsx`, {
+				cellStyles: true,
+			});
+			message.success(labels.exportSuccess);
+		} catch (error) {
+			console.error(error);
+			message.error(labels.exportError);
+		} finally {
+			setExporting(false);
+		}
+	};
+
 	return (
 		<OverallPageShell $isRTL={isRTL}>
 			<OverallToolbar
@@ -521,7 +833,26 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				>
 					{labels.reset}
 				</button>
+				<button
+					type='button'
+					className='export-button'
+					disabled={exporting || loading}
+					onClick={handleExportExcel}
+				>
+					<DownloadOutlined />
+					{exporting ? labels.exportingExcel : labels.exportExcel}
+				</button>
 			</OverallToolbar>
+
+			<FinancialSectionHeader>
+				<div>
+					<strong>{labels.reservationActionsTitle}</strong>
+					<span>{labels.reservationActionsSubtitle}</span>
+				</div>
+				<Tag color='blue'>
+					{labels.rowsCount}: {Number(result.total || 0)}
+				</Tag>
+			</FinancialSectionHeader>
 
 			<OverallTableWrap>
 				<table>
@@ -629,6 +960,16 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					{labels.next}
 				</button>
 			</Pager>
+
+			<FinancialSectionHeader>
+				<div>
+					<strong>{labels.walletClaimsTitle}</strong>
+					<span>{labels.walletClaimsSubtitle}</span>
+				</div>
+				<Tag color='orange'>
+					{labels.rowsCount}: {walletClaimTotal}
+				</Tag>
+			</FinancialSectionHeader>
 
 			<OverallTableWrap>
 				<table>
@@ -859,5 +1200,53 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		</OverallPageShell>
 	);
 };
+
+const FinancialSectionHeader = styled.header`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid #d7e7f8;
+	border-radius: 8px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.98)),
+		linear-gradient(135deg, rgba(36, 84, 125, 0.08), rgba(100, 22, 110, 0.05));
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.75),
+		0 8px 22px rgba(15, 40, 66, 0.06);
+
+	div {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 1rem;
+		font-weight: 950;
+		line-height: 1.35;
+	}
+
+	span {
+		color: #53627a;
+		font-size: 0.78rem;
+		font-weight: 850;
+		line-height: 1.45;
+	}
+
+	.ant-tag {
+		flex: 0 0 auto;
+		margin: 0;
+		border-radius: 999px;
+		font-weight: 900;
+	}
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+		flex-direction: column;
+	}
+`;
 
 export default OverallFinancialActions;

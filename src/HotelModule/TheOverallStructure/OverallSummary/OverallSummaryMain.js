@@ -239,12 +239,15 @@ const monthRangeFromSelection = (calendarType, months = [], year) => {
 	};
 };
 
+const defaultSummaryCalendarType = (tab = "overview") =>
+	tab === "inventory" ? "hijri" : "gregorian";
+
 const summaryReportFilterFromQuery = (query, tab) => {
 	const defaultHijri = currentHijriSelection();
 	const calendarType =
 		["gregorian", "hijri"].includes(String(query.get("invCal") || "").toLowerCase())
 			? String(query.get("invCal")).toLowerCase()
-			: "hijri";
+			: defaultSummaryCalendarType(tab);
 	const year =
 		Number(query.get("invHYear")) ||
 		(calendarType === "hijri" ? defaultHijri.year : dayjs().year());
@@ -553,7 +556,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		syncReportQuery(nextFilters);
 	};
 	const resetFilters = () => {
-		const defaults = currentHijriSelection();
+		const defaultCalendar = defaultSummaryCalendarType(activeTab);
+		const defaults =
+			defaultCalendar === "hijri"
+				? currentHijriSelection()
+				: { month: dayjs().month(), year: dayjs().year() };
 		const nextFilters = {
 			hotelId: [],
 			status: [],
@@ -561,7 +568,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			dateFrom: "",
 			dateTo: "",
 			includeCancelled: false,
-			calendarType: "hijri",
+			calendarType: defaultCalendar,
 			reportMonths: [],
 			reportYear: defaults.year,
 		};
@@ -629,8 +636,8 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 								value={filters.calendarType}
 								onChange={updateCalendarType}
 								options={[
-									{ value: "hijri", label: filterLabels.hijri },
 									{ value: "gregorian", label: filterLabels.gregorian },
+									{ value: "hijri", label: filterLabels.hijri },
 								]}
 							/>
 						</label>
