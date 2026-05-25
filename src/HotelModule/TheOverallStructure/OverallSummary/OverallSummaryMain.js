@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { DatePicker, Input, Select, Switch } from "antd";
 import {
@@ -282,6 +282,11 @@ const defaultReservationDateRange = () => ({
 const shouldApplyReservationDateDefaults = (tab, query) =>
 	tab === "reservations" && !query.has("dateFrom") && !query.has("dateTo");
 
+const initialSummaryRange = (query, filters) => {
+	if (query.has("range")) return normalizeSummaryRange(query.get("range"));
+	return filters.dateFrom || filters.dateTo ? "custom" : "all";
+};
+
 const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -300,7 +305,9 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const [activeTab, setActiveTab] = useState(() =>
 		initialTab
 	);
-	const [range, setRange] = useState("all");
+	const [range, setRange] = useState(() =>
+		initialSummaryRange(initialQuery, initialReportFilters)
+	);
 	const [dateBy, setDateBy] = useState(() =>
 		initialQuery.has("dateBy") || initialQuery.has("sortBy")
 			? normalizeSummaryDateBy(
@@ -311,6 +318,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const [filters, setFilters] = useState(initialReportFilters);
 	const [loading, setLoading] = useState(false);
 	const [summary, setSummary] = useState(null);
+	const summaryRequestRef = useRef(0);
 
 	const urlParams = useMemo(
 		() => queryParamsObject(location.search),
@@ -352,12 +360,20 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 
 	useEffect(() => {
 		if (!userId || !token) return;
+		const requestId = summaryRequestRef.current + 1;
+		summaryRequestRef.current = requestId;
 		setLoading(true);
 		getOverallSummary(userId, token, params)
 			.then((data) => {
+				if (summaryRequestRef.current !== requestId) return;
 				setSummary(data && !data.error ? data : null);
 			})
-			.finally(() => setLoading(false));
+			.catch(() => {
+				if (summaryRequestRef.current === requestId) setSummary(null);
+			})
+			.finally(() => {
+				if (summaryRequestRef.current === requestId) setLoading(false);
+			});
 	}, [params, token, userId]);
 
 	const stats = summary?.stats || {};
@@ -715,11 +731,24 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					<div className='filter-actions'>
 						<button
 							type='button'
-							onClick={() =>
-								getOverallSummary(userId, token, params).then((data) =>
-									setSummary(data && !data.error ? data : null)
-								)
-							}
+							onClick={() => {
+								const requestId = summaryRequestRef.current + 1;
+								summaryRequestRef.current = requestId;
+								setLoading(true);
+								getOverallSummary(userId, token, params)
+									.then((data) => {
+										if (summaryRequestRef.current !== requestId) return;
+										setSummary(data && !data.error ? data : null);
+									})
+									.catch(() => {
+										if (summaryRequestRef.current === requestId) setSummary(null);
+									})
+									.finally(() => {
+										if (summaryRequestRef.current === requestId) {
+											setLoading(false);
+										}
+									});
+							}}
 						>
 							{labels.refresh}
 						</button>
@@ -1012,20 +1041,26 @@ const ExecutiveFilterPanel = styled.section`
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		flex-wrap: wrap;
 		gap: 12px;
+		min-width: 0;
 		color: #102033;
 		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	}
 
 	.filter-title strong {
+		min-width: 0;
 		font-size: 0.98rem;
 		font-weight: 950;
+		overflow-wrap: anywhere;
 	}
 
 	.filter-title span {
+		min-width: 0;
 		color: #53627a;
 		font-size: 0.8rem;
 		font-weight: 850;
+		overflow-wrap: anywhere;
 	}
 
 	.filter-grid {
@@ -1058,6 +1093,7 @@ const ExecutiveFilterPanel = styled.section`
 	.filter-control .ant-input-affix-wrapper,
 	.filter-control .ant-input {
 		width: 100%;
+		min-width: 0;
 		min-height: 38px;
 	}
 
@@ -1139,6 +1175,37 @@ const ExecutiveFilterPanel = styled.section`
 		.filter-actions button {
 			flex: 1 1 130px;
 			min-width: 0;
+		}
+	}
+
+	@media (max-width: 480px) {
+		gap: 10px;
+		padding: 9px;
+
+		.filter-title strong {
+			font-size: 0.9rem;
+		}
+
+		.filter-title span,
+		.filter-control > span {
+			font-size: 0.72rem;
+		}
+
+		.switch-control {
+			min-height: auto;
+			align-items: center;
+			flex-wrap: wrap;
+			padding: 9px;
+		}
+
+		.filter-actions {
+			display: grid;
+			grid-template-columns: 1fr;
+		}
+
+		.filter-actions button {
+			width: 100%;
+			min-height: 42px;
 		}
 	}
 `;

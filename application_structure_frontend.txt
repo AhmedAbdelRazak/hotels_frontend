@@ -308,6 +308,8 @@ Frontend Critical Workflows To Protect
   - Overview, reservations overview, and paid reservations overview share the polished executive filter panel style used by the inventory report.
   - Those three non-inventory executive tabs intentionally allow multiple hotels, multiple selected months, status/search/dateBy filters, include-cancelled toggling, and a full reset to all historical data.
   - The shared executive filter panel writes stable query params for hotelId/invHotel, invMonths/invHMonth, invHYear, invCal, dateFrom/dateTo, invStart/invEnd, dateBy, status, search, and includeCancelled so refresh/share links preserve the report state.
+  - The initial visible range must be derived from query/default report filters before the first API call. If dateFrom/dateTo exist, the UI starts in custom-range mode instead of briefly showing all-history state.
+  - Summary, reservation analytics, and paid overview requests are latest-request guarded so slow production responses cannot overwrite newer filter results on mount or rapid filter changes.
   - Inventory remains the exception: it requires exactly one hotel and uses computed read-only month dates from calendar/month/year selectors.
 - Reservation list improvements
   - Overall reservation-main and pending-reservation lists use AntD date pickers and a centered search field above the table.

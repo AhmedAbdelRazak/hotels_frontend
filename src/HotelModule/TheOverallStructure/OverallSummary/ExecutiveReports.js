@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "react-apexcharts";
 import { Alert, Button, Modal, Select, Spin } from "antd";
 import { FullscreenOutlined } from "@ant-design/icons";
@@ -657,6 +657,7 @@ export const ExecutiveReservationsReport = ({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [report, setReport] = useState(null);
+	const reservationsRequestRef = useRef(0);
 	const statusRequiresCancelledScope = statusNeedsCancelledScope(params?.status);
 	const includeCancelledFromFilters =
 		String(params?.includeCancelled || "").toLowerCase() === "true";
@@ -665,6 +666,8 @@ export const ExecutiveReservationsReport = ({
 
 	useEffect(() => {
 		if (!active || !userId || !token) return;
+		const requestId = reservationsRequestRef.current + 1;
+		reservationsRequestRef.current = requestId;
 		setLoading(true);
 		setError("");
 		getOverallExecutiveReservationsReport(userId, token, {
@@ -673,6 +676,7 @@ export const ExecutiveReservationsReport = ({
 			excludeCancelled: effectiveExcludeCancelled,
 		})
 			.then((data) => {
+				if (reservationsRequestRef.current !== requestId) return;
 				if (data?.error) {
 					setError(data.error);
 					setReport(null);
@@ -680,8 +684,14 @@ export const ExecutiveReservationsReport = ({
 				}
 				setReport(data || null);
 			})
-			.catch(() => setError("Could not load reservations report."))
-			.finally(() => setLoading(false));
+			.catch(() => {
+				if (reservationsRequestRef.current === requestId) {
+					setError("Could not load reservations report.");
+				}
+			})
+			.finally(() => {
+				if (reservationsRequestRef.current === requestId) setLoading(false);
+			});
 	}, [active, effectiveExcludeCancelled, params, reloadKey, token, userId]);
 
 	const creationRows = safeRows(report?.reservationsByDay);
@@ -1331,13 +1341,16 @@ export const ExecutivePaidReport = ({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [report, setReport] = useState(null);
+	const paidRequestRef = useRef(0);
 
 	useEffect(() => {
-		setPage(1);
+		setPage((value) => (value === 1 ? value : 1));
 	}, [params]);
 
 	useEffect(() => {
 		if (!active || !userId || !token) return;
+		const requestId = paidRequestRef.current + 1;
+		paidRequestRef.current = requestId;
 		setLoading(true);
 		setError("");
 		getOverallExecutivePaidReport(userId, token, {
@@ -1347,6 +1360,7 @@ export const ExecutivePaidReport = ({
 			limit: 50,
 		})
 			.then((data) => {
+				if (paidRequestRef.current !== requestId) return;
 				if (data?.error) {
 					setError(data.error);
 					setReport(null);
@@ -1354,8 +1368,14 @@ export const ExecutivePaidReport = ({
 				}
 				setReport(data || null);
 			})
-			.catch(() => setError("Could not load paid report."))
-			.finally(() => setLoading(false));
+			.catch(() => {
+				if (paidRequestRef.current === requestId) {
+					setError("Could not load paid report.");
+				}
+			})
+			.finally(() => {
+				if (paidRequestRef.current === requestId) setLoading(false);
+			});
 	}, [active, page, params, token, userId]);
 
 	const scorecards = report?.scorecards || {};
@@ -1832,6 +1852,16 @@ const ExecutiveReportShell = styled.div`
 
 		.report-panel {
 			padding: 10px;
+		}
+
+		.filter-switch-card {
+			align-items: stretch;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.scope-switch {
+			align-self: ${(props) => (props.$isRTL ? "flex-start" : "flex-end")};
 		}
 
 		.report-panel > header {
