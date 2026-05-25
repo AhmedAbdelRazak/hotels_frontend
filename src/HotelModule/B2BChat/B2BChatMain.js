@@ -13,6 +13,7 @@ import {
 	Empty,
 	Input,
 	Modal,
+	Popover,
 	Select,
 	Spin,
 	Tag,
@@ -27,9 +28,11 @@ import {
 	MessageOutlined,
 	PaperClipOutlined,
 	SendOutlined,
+	SmileOutlined,
 	TeamOutlined,
 	UserAddOutlined,
 } from "@ant-design/icons";
+import EmojiPicker from "emoji-picker-react";
 import { useHistory, useLocation } from "react-router-dom";
 import TopNavbar from "../AdminNavbar/TopNavbar";
 import AdminOverallSideMenu from "../AdminOverallSideMenu/AdminOverallSideMenu";
@@ -77,6 +80,7 @@ const TEXT = {
 		startChat: "Start chat",
 		messagePlaceholder: "Write a message or paste a screenshot...",
 		send: "Send",
+		emoji: "Emoji",
 		attach: "Attach",
 		close: "Close chat",
 		closed: "Closed",
@@ -96,6 +100,8 @@ const TEXT = {
 		chooseFiles: "Choose files",
 		tooLarge: "Some files are larger than 6MB and were skipped.",
 		backToChats: "Chats",
+		typing: "{name} is typing...",
+		typingMany: "{name} are typing...",
 	},
 	ar: {
 		title: "\u0645\u062d\u0627\u062f\u062b\u0627\u062a\u0020\u0627\u0644\u0623\u0639\u0645\u0627\u0644",
@@ -111,6 +117,7 @@ const TEXT = {
 		messagePlaceholder:
 			"\u0627\u0643\u062a\u0628\u0020\u0631\u0633\u0627\u0644\u0629\u0020\u0623\u0648\u0020\u0627\u0644\u0635\u0642\u0020\u0644\u0642\u0637\u0629\u0020\u0634\u0627\u0634\u0629...",
 		send: "\u0625\u0631\u0633\u0627\u0644",
+		emoji: "\u0631\u0645\u0648\u0632",
 		attach: "\u0625\u0631\u0641\u0627\u0642",
 		close: "\u0625\u063a\u0644\u0627\u0642\u0020\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629",
 		closed: "\u0645\u063a\u0644\u0642\u0629",
@@ -135,6 +142,8 @@ const TEXT = {
 		tooLarge:
 			"\u062a\u0645\u0020\u062a\u062c\u0627\u0647\u0644\u0020\u0628\u0639\u0636\u0020\u0627\u0644\u0645\u0644\u0641\u0627\u062a\u0020\u0644\u0623\u0646\u0647\u0627\u0020\u0623\u0643\u0628\u0631\u0020\u0645\u0646\u00206MB.",
 		backToChats: "\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a",
+		typing: "{name} \u064a\u0643\u062a\u0628 \u0627\u0644\u0622\u0646...",
+		typingMany: "{name} \u064a\u0643\u062a\u0628\u0648\u0646 \u0627\u0644\u0622\u0646...",
 	},
 };
 
@@ -329,6 +338,21 @@ const chatTitle = (chat = {}, userId = "") => {
 	return names.length ? names.join(", ") : "Chat";
 };
 
+const chatUserDisplayName = (user = {}) =>
+	titleCase(user.name || user.companyName || user.email || "Someone");
+
+const typingStatusText = (typingUsers = {}, labels) => {
+	const names = Object.values(typingUsers || {}).filter(Boolean);
+	if (!names.length) return "";
+	const joined = names.slice(0, 2).join(", ");
+	const nameText =
+		names.length > 2 ? `${joined} +${names.length - 2}` : joined;
+	return (names.length > 1 ? labels.typingMany : labels.typing).replace(
+		"{name}",
+		nameText
+	);
+};
+
 const lastMessageText = (chat = {}, labels) => {
 	const last = chat.lastMessage;
 	if (!last) return labels.noChats;
@@ -373,9 +397,13 @@ const B2BChatMain = () => {
 	const [body, setBody] = useState("");
 	const [attachments, setAttachments] = useState([]);
 	const [previewAttachment, setPreviewAttachment] = useState(null);
+	const [emojiOpen, setEmojiOpen] = useState(false);
+	const [typingUsers, setTypingUsers] = useState({});
 	const [sending, setSending] = useState(false);
 	const fileInputRef = useRef(null);
 	const seenInFlightRef = useRef(new Set());
+	const typingStopTimerRef = useRef(null);
+	const typingUsersTimerRef = useRef(new Map());
 
 	useEffect(() => {
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
@@ -533,6 +561,101 @@ const B2BChatMain = () => {
 		return () => socket.emit("leaveB2BChat", { chatId: selectedChatId });
 	}, [selectedChatId]);
 
+	const clearTypingUser = useCallback((typingUserId) => {
+		if (!typingUserId) return;
+		const existingTimer = typingUsersTimerRef.current.get(typingUserId);
+		if (existingTimer) {
+			window.clearTimeout(existingTimer);
+			typingUsersTimerRef.current.delete(typingUserId);
+		}
+		setTypingUsers((previous) => {
+			if (!previous[typingUserId]) return previous;
+			const next = { ...previous };
+			delete next[typingUserId];
+			return next;
+		});
+	}, []);
+
+	const emitStopTyping = useCallback(() => {
+		if (typingStopTimerRef.current) {
+			window.clearTimeout(typingStopTimerRef.current);
+			typingStopTimerRef.current = null;
+		}
+		if (!selectedChatId || !userId) return;
+		socket.emit("b2bStopTyping", {
+			chatId: selectedChatId,
+			userId,
+			name: chatUserDisplayName(user),
+		});
+	}, [selectedChatId, user, userId]);
+
+	const emitTyping = useCallback(() => {
+		if (!selectedChatId || !userId || selectedChat?.status === "closed") return;
+		socket.emit("b2bTyping", {
+			chatId: selectedChatId,
+			userId,
+			name: chatUserDisplayName(user),
+		});
+		if (typingStopTimerRef.current) {
+			window.clearTimeout(typingStopTimerRef.current);
+		}
+		typingStopTimerRef.current = window.setTimeout(emitStopTyping, 1800);
+	}, [emitStopTyping, selectedChat?.status, selectedChatId, user, userId]);
+
+	useEffect(() => {
+		setTypingUsers({});
+		typingUsersTimerRef.current.forEach((timer) => window.clearTimeout(timer));
+		typingUsersTimerRef.current.clear();
+		return () => {
+			emitStopTyping();
+		};
+	}, [emitStopTyping, selectedChatId]);
+
+	useEffect(() => {
+		const handleTyping = (payload = {}) => {
+			if (
+				!payload.chatId ||
+				payload.chatId !== selectedChatId ||
+				payload.userId === userId
+			) {
+				return;
+			}
+			const typingUserId = String(payload.userId || "");
+			if (!typingUserId) return;
+			setTypingUsers((previous) => ({
+				...previous,
+				[typingUserId]: titleCase(payload.name || "Someone"),
+			}));
+			const existingTimer = typingUsersTimerRef.current.get(typingUserId);
+			if (existingTimer) window.clearTimeout(existingTimer);
+			typingUsersTimerRef.current.set(
+				typingUserId,
+				window.setTimeout(() => clearTypingUser(typingUserId), 3200)
+			);
+		};
+		const handleStopTyping = (payload = {}) => {
+			if (payload.chatId !== selectedChatId || payload.userId === userId) return;
+			clearTypingUser(String(payload.userId || ""));
+		};
+		socket.on("b2bTyping", handleTyping);
+		socket.on("b2bStopTyping", handleStopTyping);
+		return () => {
+			socket.off("b2bTyping", handleTyping);
+			socket.off("b2bStopTyping", handleStopTyping);
+		};
+	}, [clearTypingUser, selectedChatId, userId]);
+
+	useEffect(
+		() => () => {
+			if (typingStopTimerRef.current) {
+				window.clearTimeout(typingStopTimerRef.current);
+			}
+			typingUsersTimerRef.current.forEach((timer) => window.clearTimeout(timer));
+			typingUsersTimerRef.current.clear();
+		},
+		[]
+	);
+
 	const addFiles = useCallback(
 		async (files = []) => {
 			const fileList = Array.from(files || []);
@@ -560,6 +683,23 @@ const B2BChatMain = () => {
 		if (!files.length) return;
 		event.preventDefault();
 		addFiles(files);
+	};
+
+	const handleBodyChange = (event) => {
+		const value = event.target.value;
+		setBody(value);
+		if (value.trim()) {
+			emitTyping();
+		} else {
+			emitStopTyping();
+		}
+	};
+
+	const handleEmojiSelect = (emojiData = {}) => {
+		const emoji = emojiData.emoji || "";
+		if (!emoji) return;
+		setBody((previous) => `${previous}${emoji}`);
+		emitTyping();
 	};
 
 	const removeAttachment = (index) => {
@@ -612,6 +752,8 @@ const B2BChatMain = () => {
 			setSelectedChat(data?.chat || null);
 			setBody("");
 			setAttachments([]);
+			setEmojiOpen(false);
+			emitStopTyping();
 			antdMessage.success(labels.sent);
 			loadChats(true);
 		} catch (err) {
@@ -661,6 +803,7 @@ const B2BChatMain = () => {
 	];
 
 	const selectedClosed = selectedChat?.status === "closed";
+	const typingStatus = typingStatusText(typingUsers, labels);
 
 	return (
 		<ChatShell $show={collapsed} $isArabic={isArabic} dir={isArabic ? "rtl" : "ltr"}>
@@ -875,13 +1018,22 @@ const B2BChatMain = () => {
 											})}
 										</MessageList>
 
+										{typingStatus && (
+											<TypingIndicator>
+												<span>{typingStatus}</span>
+												<i />
+												<i />
+												<i />
+											</TypingIndicator>
+										)}
+
 										{selectedClosed ? (
 											<ClosedNotice>{labels.closedNotice}</ClosedNotice>
 										) : (
 											<Composer>
 												<Input.TextArea
 													value={body}
-													onChange={(event) => setBody(event.target.value)}
+													onChange={handleBodyChange}
 													onKeyDown={handleComposerKeyDown}
 													onPaste={handlePaste}
 													autoSize={{ minRows: 2, maxRows: 5 }}
@@ -913,6 +1065,29 @@ const B2BChatMain = () => {
 															event.target.value = "";
 														}}
 													/>
+													<Popover
+														open={emojiOpen}
+														onOpenChange={setEmojiOpen}
+														trigger='click'
+														placement='top'
+														content={
+															<EmojiPanel>
+																<EmojiPicker
+																	onEmojiClick={handleEmojiSelect}
+																	lazyLoadEmojis
+																	searchDisabled={false}
+																	skinTonesDisabled
+																	width='100%'
+																	height={360}
+																/>
+															</EmojiPanel>
+														}
+													>
+														<Button icon={<SmileOutlined />}>
+															<span aria-hidden='true'>🙂</span>
+															{labels.emoji}
+														</Button>
+													</Popover>
 													<Button
 														icon={<PaperClipOutlined />}
 														onClick={() => fileInputRef.current?.click()}
@@ -1342,6 +1517,62 @@ const MessageList = styled.div`
 	}
 `;
 
+const TypingIndicator = styled.div`
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 6px;
+	margin: 0 14px 10px;
+	padding: 8px 12px;
+	border: 1px solid rgba(45, 93, 145, 0.16);
+	border-radius: 999px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.98)),
+		linear-gradient(135deg, rgba(141, 76, 157, 0.1), rgba(36, 84, 125, 0.08));
+	box-shadow: 0 8px 18px rgba(16, 32, 51, 0.06);
+	color: #40536f;
+	font-size: 0.82rem;
+	font-weight: 900;
+
+	span {
+		margin-inline-end: 2px;
+	}
+
+	i {
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: #6f1f78;
+		animation: b2bTypingPulse 1s infinite ease-in-out;
+	}
+
+	i:nth-of-type(2) {
+		animation-delay: 0.16s;
+	}
+
+	i:nth-of-type(3) {
+		animation-delay: 0.32s;
+	}
+
+	@keyframes b2bTypingPulse {
+		0%,
+		80%,
+		100% {
+			opacity: 0.35;
+			transform: translateY(0);
+		}
+		40% {
+			opacity: 1;
+			transform: translateY(-3px);
+		}
+	}
+
+	@media (max-width: 760px) {
+		margin: 0 8px 8px;
+		font-size: 0.76rem;
+	}
+`;
+
 const MessageBubble = styled.article`
 	align-self: ${(props) => (props.$mine ? "flex-end" : "flex-start")};
 	width: min(680px, 88%);
@@ -1525,7 +1756,7 @@ const Composer = styled.div`
 
 		.composer-actions {
 			display: grid;
-			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 			gap: 8px;
 		}
 
@@ -1534,6 +1765,20 @@ const Composer = styled.div`
 			height: 40px;
 			padding-inline: 8px;
 		}
+	}
+`;
+
+const EmojiPanel = styled.div`
+	width: min(352px, calc(100vw - 28px));
+
+	.epr-main {
+		border: 0;
+		box-shadow: none;
+		font-family: inherit;
+	}
+
+	@media (max-width: 420px) {
+		width: calc(100vw - 28px);
 	}
 `;
 

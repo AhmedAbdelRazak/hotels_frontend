@@ -355,6 +355,8 @@ Frontend Critical Workflows To Protect
   - Unread badges should update from active chat events and stable fallback refreshes, not render loops.
   - Chat notification sound is distinct from the normal notification bell sound.
   - The message box sends on Enter and inserts a new line with Ctrl+Enter.
+  - The chat composer includes an emoji picker for quick reactions and friendly B2B messages.
+  - Active conversations show live "{name} is typing..." feedback from socket events. Typing state is transient UI state and should not be persisted in the database.
   - Attachments and pasted screenshots should preview inline. Clicking an image opens it immediately in a preview/modal instead of forcing a device download.
   - Chat attachment rendering must tolerate legacy/null attachment records. Use the attachment normalization helpers in B2BChatMain before reading kind, type, dataUrl, url, secureUrl, path, name, fileName, or originalName.
   - Image/PDF previews should use the best available source field and skip invalid attachment rows instead of crashing the B2B chat route.
