@@ -330,6 +330,7 @@ Frontend Critical Workflows To Protect
   - Status donut and Creation Date chart sit on the second chart row.
   - Charts include enlarge controls that open a modal for larger PowerBI-style viewing.
   - Chart labels and tooltips must resolve the real category date by data-point index before formatting. Do not format Apex numeric category indexes directly, because that can display wrong dates such as Dec 31.
+  - Executive report chart axis labels stay compact, but hover tooltips should show the full Gregorian date with month, day, and year.
   - Expanded chart x-axis labels must show readable Gregorian dates, not only the first tick.
   - Status donut colors follow the reservation lifecycle palette: pending/review amber or gold, confirmed blue, in-house teal, checked-out green, cancelled/no-show/rejected red/slate.
   - The cancelled/no-show exclusion switch must match the actual backend query output. If a status filter requires cancelled/no-show data, the UI should not silently exclude it.

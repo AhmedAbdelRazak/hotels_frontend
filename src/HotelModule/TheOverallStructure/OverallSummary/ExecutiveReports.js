@@ -293,16 +293,38 @@ const resolveChartCategory = (value = "", options = {}) => {
 	return value;
 };
 
-const formatChartDateLabel = (value = "") => {
+const formatChartDateLabel = (value = "", options = {}) => {
 	const raw = String(value || "");
 	const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
 	if (!isoMatch) return raw;
 	const parsed = dayjs(isoMatch[1]);
-	return parsed.isValid() ? parsed.format("MMM D") : raw;
+	return parsed.isValid()
+		? parsed.format(options.full ? "MMM D, YYYY" : "MMM D")
+		: raw;
 };
 
 const chartLabelFormatter = () => (value, _timestamp, options) =>
 	formatChartDateLabel(resolveChartCategory(value, options));
+
+const chartTooltip = ({ labels, isRTL }) => ({
+	custom: ({ series, seriesIndex, dataPointIndex, w }) => {
+		const categories = w?.config?.xaxis?.categories || [];
+		const rawDate = categories[dataPointIndex] || "";
+		const title = formatChartDateLabel(rawDate, { full: true });
+		const seriesName = w?.config?.series?.[seriesIndex]?.name || labels.count;
+		const value = series?.[seriesIndex]?.[dataPointIndex] || 0;
+		const color = w?.globals?.colors?.[seriesIndex] || "#24547d";
+		return `
+			<div class="executive-chart-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
+				<div class="tooltip-date">${title}</div>
+				<div class="tooltip-row">
+					<span class="tooltip-dot" style="background:${color}"></span>
+					<span>${seriesName}: <strong>${formatMoney(value)}</strong></span>
+				</div>
+			</div>
+		`;
+	},
+});
 
 const chartTickAmount = (categories = [], expanded = false) => {
 	const count = Array.isArray(categories) ? categories.length : 0;
@@ -404,6 +426,13 @@ const barOptions = ({
 				fontSize: expanded ? "12px" : "11px",
 			},
 		},
+		tooltip: {
+			enabled: true,
+			formatter: (value, options) =>
+				formatChartDateLabel(resolveChartCategory(value, options), {
+					full: true,
+				}),
+		},
 	},
 	yaxis: {
 		labels: {
@@ -412,9 +441,12 @@ const barOptions = ({
 		},
 	},
 	tooltip: {
+		...chartTooltip({ labels, isRTL }),
 		x: {
 			formatter: (value, options) =>
-				formatChartDateLabel(resolveChartCategory(value, options)),
+				formatChartDateLabel(resolveChartCategory(value, options), {
+					full: true,
+				}),
 		},
 		y: { formatter: (value) => formatMoney(value) },
 	},
@@ -1684,6 +1716,46 @@ const ExecutiveReportShell = styled.div`
 		color: #6f1f78;
 		border-color: rgba(111, 31, 120, 0.36);
 		background: rgba(111, 31, 120, 0.06);
+	}
+
+	.executive-chart-tooltip {
+		display: grid;
+		gap: 7px;
+		min-width: 132px;
+		padding: 9px 11px;
+		border: 1px solid #d7e7f8;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.98);
+		box-shadow: 0 12px 28px rgba(15, 40, 66, 0.16);
+		color: #102033;
+		font-family: inherit;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	.executive-chart-tooltip .tooltip-date {
+		padding-bottom: 5px;
+		border-bottom: 1px solid #e7eef8;
+		color: #17395f;
+		font-size: 0.8rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	.executive-chart-tooltip .tooltip-row {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		color: #1e293b;
+		font-size: 0.78rem;
+		font-weight: 850;
+		white-space: nowrap;
+	}
+
+	.executive-chart-tooltip .tooltip-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 999px;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 	}
 
 	.table-panel {
