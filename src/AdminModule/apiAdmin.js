@@ -1,4 +1,5 @@
 import axios from "axios";
+import { isJwtExpired, stopDashboardPreview } from "../auth";
 
 const authHeaders = (token) =>
 	token ? { Authorization: `Bearer ${token}` } : {};
@@ -8,6 +9,11 @@ const getStoredBaseAuthHeaders = () => {
 		if (typeof window === "undefined") return {};
 		const raw = localStorage.getItem("jwt");
 		const parsed = raw ? JSON.parse(raw) : null;
+		if (parsed?.token && isJwtExpired(parsed.token)) {
+			localStorage.removeItem("jwt");
+			localStorage.removeItem("dashboardPreviewAuth");
+			return {};
+		}
 		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
 	} catch (error) {
 		return {};
@@ -26,6 +32,10 @@ const getStoredActiveAuthHeaders = () => {
 		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
 		const preview = previewRaw ? JSON.parse(previewRaw) : null;
 		if (preview?.auth?.token) {
+			if (isJwtExpired(preview.auth.token)) {
+				stopDashboardPreview();
+				return getStoredBaseAuthHeaders();
+			}
 			return { Authorization: `Bearer ${preview.auth.token}` };
 		}
 		return getStoredBaseAuthHeaders();
@@ -1602,7 +1612,7 @@ const attachReservationActor = (reservation = {}) => {
 			localStorage.getItem("dashboardPreviewAuth") || "null"
 		);
 		const previewUserId = previewAuth?.auth?.user?._id;
-		if (previewUserId) {
+		if (previewUserId && !isJwtExpired(previewAuth?.auth?.token)) {
 			return {
 				...reservation,
 				requestingUserId: previewUserId,
@@ -1610,6 +1620,9 @@ const attachReservationActor = (reservation = {}) => {
 				__previewAuditActorId:
 					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
 			};
+		}
+		if (previewAuth?.auth?.token && isJwtExpired(previewAuth.auth.token)) {
+			stopDashboardPreview();
 		}
 	} catch (error) {
 		// Keep the update usable even if preview storage is unavailable.

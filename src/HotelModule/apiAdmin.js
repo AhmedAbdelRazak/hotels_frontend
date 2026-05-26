@@ -1,4 +1,5 @@
 import axios from "axios";
+import { isJwtExpired, stopDashboardPreview } from "../auth";
 
 const getStoredAuthHeaders = () => {
 	try {
@@ -6,13 +7,37 @@ const getStoredAuthHeaders = () => {
 		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
 		const preview = previewRaw ? JSON.parse(previewRaw) : null;
 		if (preview?.auth?.token) {
-			return { Authorization: `Bearer ${preview.auth.token}` };
+			if (isJwtExpired(preview.auth.token)) {
+				stopDashboardPreview();
+			} else {
+				return { Authorization: `Bearer ${preview.auth.token}` };
+			}
 		}
 		const raw = localStorage.getItem("jwt");
 		const parsed = raw ? JSON.parse(raw) : null;
+		if (parsed?.token && isJwtExpired(parsed.token)) {
+			localStorage.removeItem("jwt");
+			localStorage.removeItem("dashboardPreviewAuth");
+			return {};
+		}
 		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
 	} catch (err) {
 		return {};
+	}
+};
+
+const getStoredPreviewAuth = () => {
+	try {
+		if (typeof window === "undefined") return null;
+		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
+		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		if (preview?.auth?.token && isJwtExpired(preview.auth.token)) {
+			stopDashboardPreview();
+			return null;
+		}
+		return preview;
+	} catch (err) {
+		return null;
 	}
 };
 
@@ -992,9 +1017,7 @@ export const singlePreReservationById = (reservationId) => {
 
 const attachReservationActor = (reservation = {}) => {
 	try {
-		const previewAuth = JSON.parse(
-			localStorage.getItem("dashboardPreviewAuth") || "null"
-		);
+		const previewAuth = getStoredPreviewAuth();
 		const previewUserId = previewAuth?.auth?.user?._id;
 		if (previewUserId) {
 			return {

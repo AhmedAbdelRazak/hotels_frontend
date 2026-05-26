@@ -155,6 +155,7 @@ export const signout = (next) => {
 };
 
 const DASHBOARD_PREVIEW_STORAGE_KEY = "dashboardPreviewAuth";
+const TOKEN_EXPIRY_GRACE_SECONDS = 30;
 
 const safeParseLocalJson = (key) => {
 	if (typeof window === "undefined") return null;
@@ -166,9 +167,54 @@ const safeParseLocalJson = (key) => {
 	}
 };
 
+const decodeJwtPayload = (token = "") => {
+	try {
+		const [, payload] = String(token || "").split(".");
+		if (!payload) return null;
+		const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+		const padded = normalized.padEnd(
+			normalized.length + ((4 - (normalized.length % 4)) % 4),
+			"="
+		);
+		return JSON.parse(window.atob(padded));
+	} catch (error) {
+		return null;
+	}
+};
+
+export const isJwtExpired = (token = "") => {
+	if (!token) return true;
+	const payload = decodeJwtPayload(token);
+	if (!payload?.exp) return false;
+	return payload.exp <= Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_GRACE_SECONDS;
+};
+
+const restorePreviewSelectedHotel = (preview) => {
+	if (!preview || typeof window === "undefined") return;
+	if (Object.prototype.hasOwnProperty.call(preview, "originalSelectedHotel")) {
+		if (preview.originalSelectedHotel) {
+			localStorage.setItem(
+				"selectedHotel",
+				JSON.stringify(preview.originalSelectedHotel)
+			);
+		} else {
+			localStorage.removeItem("selectedHotel");
+		}
+	}
+};
+
+const clearExpiredDashboardPreview = (preview) => {
+	restorePreviewSelectedHotel(preview);
+	localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
+};
+
 export const getDashboardPreview = () => {
 	const preview = safeParseLocalJson(DASHBOARD_PREVIEW_STORAGE_KEY);
 	if (!preview?.auth?.token || !preview?.auth?.user) return null;
+	if (isJwtExpired(preview.auth.token)) {
+		clearExpiredDashboardPreview(preview);
+		return null;
+	}
 	return preview;
 };
 
@@ -179,11 +225,24 @@ const isAdminRoutePath = () =>
 export const getBaseAuthentication = () => {
 	if (typeof window === "undefined") return false;
 	const baseAuth = safeParseLocalJson("jwt");
-	return baseAuth?.token && baseAuth?.user ? baseAuth : false;
+	if (!baseAuth?.token || !baseAuth?.user) return false;
+	if (isJwtExpired(baseAuth.token)) {
+		localStorage.removeItem("jwt");
+		localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
+		return false;
+	}
+	return baseAuth;
 };
 
 export const startDashboardPreview = ({ auth, preview, selectedHotel }) => {
-	if (typeof window === "undefined" || !auth?.token || !auth?.user) return;
+	if (
+		typeof window === "undefined" ||
+		!auth?.token ||
+		!auth?.user ||
+		isJwtExpired(auth.token)
+	) {
+		return;
+	}
 	const baseAuth = safeParseLocalJson("jwt");
 	const originalSelectedHotel = safeParseLocalJson("selectedHotel");
 	localStorage.setItem(
@@ -205,16 +264,7 @@ export const stopDashboardPreview = () => {
 	if (typeof window === "undefined") return null;
 	const preview = getDashboardPreview();
 	localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
-	if (preview && Object.prototype.hasOwnProperty.call(preview, "originalSelectedHotel")) {
-		if (preview.originalSelectedHotel) {
-			localStorage.setItem(
-				"selectedHotel",
-				JSON.stringify(preview.originalSelectedHotel),
-			);
-		} else {
-			localStorage.removeItem("selectedHotel");
-		}
-	}
+	restorePreviewSelectedHotel(preview);
 	return preview;
 };
 

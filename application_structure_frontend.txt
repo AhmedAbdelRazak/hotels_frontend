@@ -698,3 +698,144 @@ Final Production Readiness Notes
   - The deployment was a fast-forward pull; no server-side merge conflict occurred.
   - Because the frontend serves compiled assets, future source changes require npm run build on the server or an equivalent CI build before restart.
   - Future deployments should repeat: local npm.cmd run build, commit/push, ssh jannat, git pull --ff-only, npm run build, PM2 restart, route/API smoke checks, and documentation update.
+
+Future TODO Backlog - Added 2026-05-26
+- TODO 1: Executive summary data-quality UI audit and user-readability guide
+  - Route to audit first:
+    - /hotel-management/main-dashboard?ownerId=68b74714fb50e159d48c714d&overall=summary&page=1
+  - Frontend references:
+    - src/HotelModule/HotelOverall/OverallSummaryMain.js
+    - src/HotelModule/HotelOverall/ExecutiveReports.js
+    - src/HotelModule/HotelOverall/overallShared.js
+    - src/HotelModule/apiAdmin.js
+  - User-readability goals:
+    - Make it obvious how to read each score card and table value without crowding the report.
+    - Occupancy should be explained as occupied/sellable rooms for the active date range.
+    - Cleanliness should be explained as clean/dirty room counts where the room-map data supports it.
+    - Blocked/out-of-service rooms should be clearly excluded from sellable room capacity.
+    - The grand-total row should be visibly a total of raw values before formatting.
+    - The UI should show enough active filter context for the user to understand why the numbers changed.
+  - Data-quality UI checklist:
+    - Compare displayed cards, table row, and grand total against backend output and MongoDB for Zad Al Safa.
+    - Verify Hijri/Gregorian calendar filters, date range, dateBy, selected hotels, and include-cancelled/no-show state are reflected in the display.
+    - Verify in-house rooms remain occupied until operational checkout, even when the planned checkout date has passed.
+    - If a help popover/drawer is added, keep it compact and operational rather than instructional-heavy.
+
+- TODO 2: Chatbot UX restructure aligned with SereneJannat
+  - Before implementation, inspect the SereneJannat reference setup on the home server or matching repository/folder if available.
+  - The JannatBooking chatbot should become a stateful assistant experience rather than a prompt-only interface.
+  - UX goals:
+    - Preserve the existing support/chat flows while introducing clearer AI state, handoff state, action previews, and audit visibility.
+    - Show useful context when the bot is acting on a hotel, support case, reservation, guest, or owner account.
+    - Keep B2B and B2C chat behavior distinct where permissions and notifications differ.
+    - If AI learning is used in a response, expose admin-facing traceability without exposing private data to normal users.
+  - Integration goals:
+    - Align with backend aiagent routes and socket events.
+    - Keep support-case history, chat dropdowns, active-chat redirects, and notification counters in sync.
+    - Do not break existing hotel-management chat behavior while adding platform-admin capabilities.
+
+- TODO 3: AI Learning admin UX
+  - Backend learning references already exist:
+    - hotels_backend/models/aiagent_learning.js
+    - hotels_backend/models/aiagent_learning_batch.js
+    - hotels_backend/controllers/aiagent_learning.js
+    - hotels_backend/routes/aiagent_learning.js
+  - Future frontend should provide admin tools to:
+    - View learning records generated from support cases or AI interactions.
+    - Review, approve, disable, or version learned rules and recommended responses.
+    - See hotel scope versus platform/global scope.
+    - Inspect source cases in a privacy-aware way.
+    - Preview which approved learning records would affect a sample chatbot response.
+  - Permission expectations:
+    - Super admins can manage global and hotel-specific learning.
+    - Platform employees only see learning/admin tools that match their assigned route, hotel, and client scopes.
+    - Hotel owners should not see another hotel's private learning records.
+
+- TODO 4: Optional later - SSR migration plan for the public JannatBooking frontend
+  - Current local public frontend:
+    - D:\JannatBooking\jannatbooking_frontend
+  - Proposed new SSR sibling directory:
+    - D:\JannatBooking\jannatbooking_ssr
+  - Goal:
+    - Move toward an SSR-style application using best practices without changing the user's visible experience.
+  - Planning notes:
+    - Audit current public routes, pages, components, assets, API calls, environment variables, metadata, SEO needs, and authentication/session assumptions first.
+    - Choose the SSR framework only after that audit. Candidate approaches may include Next.js, Remix, or a Vite SSR setup.
+    - Keep URL behavior, visual layout, content, forms, and booking/user flows identical unless a change is intentionally approved.
+    - Build route parity and screenshot comparisons before switching traffic.
+    - Keep the existing React app as the production-safe baseline until the SSR app passes parity, build, smoke, SEO, and performance checks.
+  - Migration phases:
+    - Phase 1: Inventory current jannatbooking_frontend routes, data dependencies, public assets, and SEO requirements.
+    - Phase 2: Scaffold jannatbooking_ssr and create shared API/config utilities.
+    - Phase 3: Port layout and routes while preserving design and behavior.
+    - Phase 4: Compare SSR output with the current React app through screenshots and route smoke checks.
+    - Phase 5: Deploy side by side, validate logs and analytics, then switch only after approval.
+
+- TODO 5: Chat authorization and visibility UX hardening
+  - User-facing rule:
+    - A user should only see chats they are authorized to participate in or supervise.
+  - Allowed visibility expectations:
+    - Direct conversation participants see their own conversation.
+    - Hotel Managers and Hotel System Admins see chats for their authorized hotels.
+    - Jannat/XHotelPro SUPER ADMINS see platform-wide B2B and B2C chats.
+    - Platform employees see only their assigned route, hotel, client, and role scope.
+  - Frontend tasks:
+    - Audit all chat lists, unread counters, dropdowns, modal selectors, active-chat redirects, and socket event listeners.
+    - Hide unavailable chats in the UI, but rely on backend authorization as the source of truth.
+    - Ensure chat notification counters only show conversations the current user is allowed to open.
+    - Ensure clicking a chat notification redirects to the exact authorized chat thread.
+    - Add empty, denied, and loading states that make sense in Arabic and English.
+  - Verification:
+    - Test as hotel owner, hotel manager, hotel system admin, platform employee, and SUPER ADMIN.
+    - Confirm unauthorized conversations do not appear in lists and cannot be opened by direct URL.
+
+- TODO 6: Outbound email provider migration UI impact
+  - Backend owns the SendGrid retirement and provider migration, but frontend should verify user-visible flows.
+  - Frontend audit areas:
+    - Reservation confirmation emails.
+    - Support-case/customer-service emails.
+    - Admin/account invitation or password/reset emails if used.
+    - Any visible success/error messages after email-triggering actions.
+  - UI goals:
+    - Keep user-facing behavior unchanged during provider migration.
+    - Show clear Arabic/English errors if email sending fails after a user action.
+    - Avoid exposing provider names, API keys, or technical DNS details to normal users.
+    - Admin-only diagnostics may show delivery status if a future admin email log screen is created.
+
+- TODO 7: OTA inbound UI/reporting verification
+  - Backend owns OTA inbound processing, but frontend must prove that OTA data appears correctly everywhere users rely on it.
+  - Routes and areas to verify:
+    - Reservation lists and reservation details.
+    - Hotel-management summary reports.
+    - Inventory/occupancy reports.
+    - Paid-reservations report.
+    - Hotel room map occupancy where live state is affected.
+    - Admin overall hotel reports.
+  - UI/reporting expectations:
+    - OTA booking source/channel should display consistently.
+    - Modified, cancelled, no-show, and checked-in/checked-out OTA reservations should update reports correctly.
+    - Duplicate OTA retries should not create duplicate rows or inflate counts.
+    - Date filtering should treat OTA reservations exactly like manual reservations once saved internally.
+  - Verification:
+    - Use test OTA payloads for create, modify, cancel, and retry scenarios.
+    - Compare UI totals with backend reservation records after each scenario.
+
+2026-05-26 JWT Expired Session Handling Fix
+- Problem observed:
+  - Hotel-management pages could briefly call protected APIs with an expired dashboard-preview token stored in localStorage.
+  - This created 401 jwt expired responses and noisy backend log lines before a fresh/base session was used.
+- Frontend fix:
+  - Files:
+    - src/auth/index.js
+    - src/AdminModule/apiAdmin.js
+    - src/HotelModule/apiAdmin.js
+  - Added client-side JWT expiry detection with a small clock-skew grace period.
+  - Expired base auth is removed from localStorage and route guards can redirect normally.
+  - Expired dashboard-preview auth is removed before API calls and the original selected hotel is restored.
+  - API helpers now avoid attaching expired preview/base Authorization headers.
+  - Reservation update audit helpers no longer use expired preview actors.
+- Backend companion fix:
+  - server.js now converts express-jwt expired-token errors into clean 401 JSON with code TOKEN_EXPIRED.
+- User-facing expectation:
+  - Users should not see repeated failed requests from stale preview sessions.
+  - If the main login session itself expires, the app should treat the user as signed out instead of continuing to call APIs with the expired token.
