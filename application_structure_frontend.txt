@@ -668,3 +668,33 @@ Final Production Readiness Notes
     - /hotel-management/b2b-chat
     - /hotel-management/main-dashboard?overall=summary&page=1
     - /hotel-management/main-dashboard?overall=hotel-map&page=1
+
+2026-05-26 Production Deployment Record
+- Local Git publication
+  - Frontend repo: hotels_frontend on master.
+  - Commit pushed before deployment: 56f886d, message "Finalize admin platform and hotel management updates".
+  - Remote: origin https://github.com/AhmedAbdelRazak/hotels_frontend.git.
+  - Source/docs/assets were staged and committed. Transient local audit logs audit-frontend.err.log and audit-frontend.out.log were intentionally left uncommitted.
+  - .env stayed ignored by .gitignore and was not committed.
+  - GitHub reported existing Dependabot vulnerability counts after push. Treat those as follow-up dependency/security work, not as deployment blockers for this application-code push.
+- Production server pull
+  - SSH target: jannat.
+  - Production directory: /home/ahmedadmin/Hotels/hotels_frontend.
+  - Pull command: git pull --ff-only origin master.
+  - Production frontend HEAD after pull: 56f886d.
+  - Production working tree was clean before pull and clean after pull.
+- Production build and restart
+  - Production build command on server: npm run build.
+  - Build result: Compiled successfully.
+  - PM2 process restarted: hotels-frontend.
+  - PM2 status after restart: hotels-frontend online.
+  - The frontend PM2 process serves the build directory through /home/ahmedadmin/Hotels/hotels_frontend/server.js on port 3080.
+- Production smoke checks
+  - curl -I http://localhost:3080/admin/dashboard returned HTTP 200 from Express static serving.
+  - Backend smoke check from the same deployment:
+    - curl http://localhost:8080/api/currency-rates returned HTTP 200 JSON.
+  - PM2 status after deployment showed both hotels-backend and hotels-frontend online.
+- Deployment notes
+  - The deployment was a fast-forward pull; no server-side merge conflict occurred.
+  - Because the frontend serves compiled assets, future source changes require npm run build on the server or an equivalent CI build before restart.
+  - Future deployments should repeat: local npm.cmd run build, commit/push, ssh jannat, git pull --ff-only, npm run build, PM2 restart, route/API smoke checks, and documentation update.
