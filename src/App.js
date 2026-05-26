@@ -24,6 +24,7 @@ import JannatBookingToolsMain from "./AdminModule/JannatTools/JannatBookingTools
 import HotelReportsMainAdmin from "./AdminModule/HotelsReport/HotelReportsMainAdmin";
 import CustomerServiceMain from "./AdminModule/CustomerService/CustomerServiceMain";
 import JanatWebsiteMain from "./AdminModule/JanatWebsite/JanatWebsiteMain";
+import AdminAccountsMain from "./AdminModule/AdminAccounts/AdminAccountsMain";
 
 // Hotel Routes
 import HotelRoute from "./auth/HotelRoute";
@@ -224,6 +225,11 @@ function App() {
 					path='/admin/payouts-report'
 					exact
 					component={AdminPaymentMain}
+				/>
+				<AdminRoute
+					path='/admin/accounts-management'
+					exact
+					component={AdminAccountsMain}
 				/>
 
 				{/* ============== Hotel Routes ============== */}

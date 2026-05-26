@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
@@ -9,9 +9,30 @@ import CustomerServiceDetails from "./CustomerServiceDetails";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import { NotificationProvider } from "./NotificationContext";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
+
+const CUSTOMER_SERVICE_TEXT = {
+	en: {
+		passwordTitle: "Enter Password",
+		passwordPlaceholder: "Enter password",
+		verify: "Verify Password",
+		passwordVerified: "Password verified successfully",
+		incorrectPassword: "Incorrect password. Please try again.",
+	},
+	ar: {
+		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		passwordPlaceholder: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		verify: "\u062a\u062d\u0642\u0642",
+		passwordVerified:
+			"\u062a\u0645 \u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631.",
+		incorrectPassword:
+			"\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629.",
+	},
+};
 
 const CustomerServiceMain = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const L = CUSTOMER_SERVICE_TEXT[isArabic ? "ar" : "en"];
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
@@ -19,26 +40,30 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [getUser, setGetUser] = useState("");
 
-	const { user, token } = isAuthenticated();
+	const { user, token } = isAuthenticated() || {};
+	const authUserId = user?._id || "";
+	const authIsConfiguredSuperAdmin = isConfiguredSuperAdminUser(authUserId);
 	const history = useHistory();
 
 	// Fetch user details
 	const gettingUserId = useCallback(() => {
-		readUserId(user._id, token).then((data) => {
+		if (!authUserId || !token) return;
+		readUserId(authUserId, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error);
 			} else {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [authUserId, token]);
 
-	// Determine if the user is a Super Admin
+	const accessTo = useMemo(
+		() => (Array.isArray(getUser?.accessTo) ? getUser.accessTo : []),
+		[getUser]
+	);
 	const isSuperAdmin =
-		!getUser.accessTo ||
-		getUser.accessTo.length === 0 ||
-		getUser.accessTo.includes("all");
-	const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
+		authIsConfiguredSuperAdmin ||
+		isConfiguredSuperAdminUser(getUser?._id);
 
 	// Validate user and handle access control
 	useEffect(() => {
@@ -49,10 +74,8 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 				return;
 			}
 
-			const accessTo = getUser.accessTo || [];
-
 			// Check if the user has access to CustomerService or is a Super Admin
-			if (accessTo.includes("CustomerService") || isSuperAdmin || isSuperUser) {
+			if (accessTo.includes("CustomerService") || isSuperAdmin) {
 				setIsPasswordVerified(true);
 				setIsModalVisible(false); // Ensure modal does not show
 				return;
@@ -73,7 +96,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 				history.push("/"); // Redirect to home if no valid access
 			}
 		}
-	}, [getUser, history, isSuperAdmin, isSuperUser]);
+	}, [accessTo, getUser, history, isSuperAdmin]);
 
 	// Initial setup
 	useEffect(() => {
@@ -83,31 +106,40 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 			setCollapsed(true);
 		}
 
-		// If user is a Super Admin, skip modal
-		if (isSuperAdmin || isSuperUser) {
+		if (authIsConfiguredSuperAdmin) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+		}
+	}, [gettingUserId, authIsConfiguredSuperAdmin]);
+
+	useEffect(() => {
+		if (authIsConfiguredSuperAdmin || isSuperAdmin) {
+			setIsPasswordVerified(true);
+			setIsModalVisible(false);
+			return;
+		}
+
+		if (!getUser) return;
+
+		const customerServiceVerified = localStorage.getItem(
+			"CustomerServiceVerified"
+		);
+		if (customerServiceVerified) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 		} else {
-			// Check if password is already verified
-			const customerServiceVerified = localStorage.getItem(
-				"CustomerServiceVerified"
-			);
-			if (customerServiceVerified) {
-				setIsPasswordVerified(true);
-			} else {
-				setIsModalVisible(true);
-			}
+			setIsModalVisible(true);
 		}
-	}, [gettingUserId, isSuperAdmin, isSuperUser]);
+	}, [authIsConfiguredSuperAdmin, getUser, isSuperAdmin]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_CUSTOMER_SERVICE) {
 			setIsPasswordVerified(true);
-			message.success("Password verified successfully");
+			message.success(L.passwordVerified);
 			localStorage.setItem("CustomerServiceVerified", "true");
 			setIsModalVisible(false);
 		} else {
-			message.error("Incorrect password. Please try again.");
+			message.error(L.incorrectPassword);
 		}
 	};
 
@@ -118,13 +150,13 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 				show={collapsed}
 			>
 				<Modal
-					title='Enter Password'
-					visible={isModalVisible}
+					title={L.passwordTitle}
+					open={isModalVisible}
 					footer={null}
 					closable={false}
 				>
 					<Input.Password
-						placeholder='Enter password'
+						placeholder={L.passwordPlaceholder}
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
 						iconRender={(visible) =>
@@ -136,7 +168,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 						style={{ marginTop: "10px", width: "100%" }}
 						onClick={handlePasswordVerification}
 					>
-						Verify Password
+						{L.verify}
 					</Button>
 				</Modal>
 
@@ -169,6 +201,7 @@ const CustomerServiceMain = ({ chosenLanguage }) => {
 								<CustomerServiceDetails
 									getUser={getUser}
 									isSuperAdmin={isSuperAdmin}
+									chosenLanguage={chosenLanguage}
 								/>
 							</div>
 						</div>
@@ -188,6 +221,7 @@ const CustomerServiceMainWrapper = styled.div`
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -198,24 +232,44 @@ const CustomerServiceMainWrapper = styled.div`
 
 	.navcontent {
 		grid-area: nav;
+		min-width: 0;
 	}
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.97);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		box-sizing: border-box;
+		overflow: hidden;
 	}
 
 	@media (max-width: 992px) {
 		.grid-container-main {
 			grid-template-columns: 1fr;
-			grid-template-areas: "nav" "content";
+			grid-template-areas: "content";
+		}
+
+		.navcontent {
+			position: relative;
+			z-index: 2;
+		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
 		}
 	}
 `;

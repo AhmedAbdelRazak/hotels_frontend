@@ -12,7 +12,39 @@ import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
 import { isSuperAdminUser } from "../utils/superUsers";
 
+const VALID_REPORT_TABS = ["reservations", "inventory", "paid-overview"];
+
+const HOTEL_REPORTS_TEXT = {
+	en: {
+		passwordTitle: "Enter Password",
+		passwordPlaceholder: "Enter password",
+		verify: "Verify Password",
+		passwordVerified: "Password verified successfully",
+		incorrectPassword: "Incorrect password. Please try again.",
+		reservations: "Reservations Overview",
+		inventory: "Hotels Inventory",
+		paidOverview: "Paid Reservations Overview",
+	},
+	ar: {
+		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		passwordPlaceholder: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		verify: "\u062a\u062d\u0642\u0642",
+		passwordVerified:
+			"\u062a\u0645 \u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631.",
+		incorrectPassword:
+			"\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629.",
+		reservations:
+			"\u0646\u0638\u0631\u0629 \u0639\u0627\u0645\u0629 \u0639\u0644\u0649 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		inventory:
+			"\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+		paidOverview:
+			"\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
+	},
+};
+
 const HotelReportsMainAdmin = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const L = HOTEL_REPORTS_TEXT[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated() || {};
 	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -29,8 +61,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	}, [getUser?.accessTo]);
 	const isSuperAdmin =
 		isConfiguredSuperAdmin ||
-		isSuperAdminUser(getUser) ||
-		(!!getUser && (accessList.length === 0 || accessList.includes("all")));
+		isSuperAdminUser(getUser);
 	const location = useLocation();
 	const history = useHistory();
 
@@ -73,18 +104,18 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 			return;
 		}
 
-		// If unrestricted or includes "all", keep password flow
-		if (accessTo.length === 0 || accessTo.includes("all") || isSuperUser) {
+		// Configured platform owners may keep the password flow.
+		if (isSuperUser) {
 			return;
 		}
 
 		// Otherwise, redirect based on first available module (adjust as needed)
 		switch (accessTo[0]) {
 			case "reservations":
-				history.push("/super-admin/hotel-reports?tab=reservations");
+				history.push("/admin/overall-hotel-reports?tab=reservations");
 				break;
 			case "inventory":
-				history.push("/super-admin/hotel-reports?tab=inventory");
+				history.push("/admin/overall-hotel-reports?tab=inventory");
 				break;
 			default:
 				history.push("/");
@@ -126,46 +157,62 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_REPORTS) {
 			setIsPasswordVerified(true);
-			message.success("Password verified successfully");
+			message.success(L.passwordVerified);
 			localStorage.setItem("ReportsVerified", "true");
 			setIsModalVisible(false);
 		} else {
-			message.error("Incorrect password. Please try again.");
+			message.error(L.incorrectPassword);
 		}
 	};
 
 	/* ------------------ 5) Tabs in URL ------------------ */
 	const handleTabChange = (tab) => {
+		if (!VALID_REPORT_TABS.includes(tab)) return;
 		setActiveTab(tab);
-		history.push(`?tab=${tab}`);
+		history.push({
+			pathname: location.pathname,
+			search: `?tab=${tab}`,
+		});
 	};
 
 	useEffect(() => {
 		const queryParams = new URLSearchParams(location.search);
 		const tab = queryParams.get("tab");
+		const nextTab = VALID_REPORT_TABS.includes(tab) ? tab : "reservations";
 
-		if (tab) {
-			setActiveTab(tab);
-		} else {
-			history.replace("?tab=reservations");
+		if (activeTab !== nextTab) {
+			setActiveTab(nextTab);
 		}
-	}, [location.search, history]);
+
+		if (tab !== nextTab) {
+			history.replace({
+				pathname: location.pathname,
+				search: `?tab=${nextTab}`,
+			});
+		}
+	}, [activeTab, history, location.pathname, location.search]);
+
+	const reportTabs = [
+		{ key: "reservations", label: L.reservations },
+		{ key: "inventory", label: L.inventory },
+		{ key: "paid-overview", label: L.paidOverview },
+	];
 
 	return (
 		<HotelReportsMainWrapper
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+			dir={isArabic ? "rtl" : "ltr"}
 			show={collapsed}
 		>
 			{/* Password Modal */}
 			{!isConfiguredSuperAdmin && (
 				<Modal
-					title='Enter Password'
+					title={L.passwordTitle}
 					open={isModalVisible}
 					footer={null}
 					closable={false}
 				>
 					<Input.Password
-						placeholder='Enter password'
+						placeholder={L.passwordPlaceholder}
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
 						iconRender={(visible) =>
@@ -177,7 +224,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 						style={{ marginTop: "10px", width: "100%" }}
 						onClick={handlePasswordVerification}
 					>
-						Verify Password
+						{L.verify}
 					</Button>
 				</Modal>
 			)}
@@ -209,45 +256,38 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							<TabNavigation>
-								<button
-									className={activeTab === "reservations" ? "active" : ""}
-									onClick={() => handleTabChange("reservations")}
-								>
-									Reservations Overview
-								</button>
-								<button
-									className={activeTab === "inventory" ? "active" : ""}
-									onClick={() => handleTabChange("inventory")}
-								>
-									Hotels' Inventory
-								</button>
-
-								<button
-									className={activeTab === "paid-overview" ? "active" : ""}
-									onClick={() => handleTabChange("paid-overview")}
-								>
-									Paid Reservations Overview
-								</button>
+							<TabNavigation role='tablist'>
+								{reportTabs.map((tab) => (
+									<button
+										key={tab.key}
+										type='button'
+										role='tab'
+										aria-selected={activeTab === tab.key}
+										className={activeTab === tab.key ? "active" : ""}
+										onClick={() => handleTabChange(tab.key)}
+									>
+										{tab.label}
+									</button>
+								))}
 							</TabNavigation>
 
 							{activeTab === "reservations" && (
-								<div>
-									<h3>Reservations Overview</h3>
+								<div className='report-section'>
+									<h3 className='report-heading'>{L.reservations}</h3>
 									<ReservationsOverview />
 								</div>
 							)}
 
 							{activeTab === "inventory" && (
-								<div>
-									<h3>Hotels Inventory</h3>
-									<HotelsInventoryMap />
+								<div className='report-section'>
+									<h3 className='report-heading'>{L.inventory}</h3>
+									<HotelsInventoryMap chosenLanguage={chosenLanguage} />
 								</div>
 							)}
 
 							{activeTab === "paid-overview" && (
-								<div>
-									<h3>Paid Reservations Overview</h3>
+								<div className='report-section'>
+									<h3 className='report-heading'>{L.paidOverview}</h3>
 									<PaidReportAdmin />
 								</div>
 							)}
@@ -265,9 +305,11 @@ export default HotelReportsMainAdmin;
 const HotelReportsMainWrapper = styled.div`
 	margin-top: 0;
 	min-height: 715px;
+	overflow-x: hidden;
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -278,58 +320,119 @@ const HotelReportsMainWrapper = styled.div`
 
 	.navcontent {
 		grid-area: nav;
+		min-width: 0;
 	}
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.97);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		box-sizing: border-box;
+		overflow: hidden;
+	}
+
+	.report-section {
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+	}
+
+	.report-heading {
+		margin: 0 0 12px;
+		color: #0f2b46;
+		font-size: 1.05rem;
+		font-weight: 900;
+	}
+
+	.table-container,
+	.table-responsive,
+	.ant-table-wrapper {
+		max-width: 100%;
+		overflow: auto;
 	}
 
 	@media (max-width: 992px) {
 		.grid-container-main {
 			grid-template-columns: 1fr;
-			grid-template-areas: "nav" "content";
+			grid-template-areas: "content";
+		}
+
+		.navcontent {
+			position: relative;
+			z-index: 2;
+		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
 		}
 	}
 `;
 
 const TabNavigation = styled.div`
 	display: flex;
-	gap: 10px;
-	margin-bottom: 20px;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding: 6px;
+	border: 1px solid rgba(139, 190, 227, 0.38);
+	border-radius: 8px;
+	background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 
 	button {
-		padding: 10px 20px;
-		border: none;
-		background-color: #ddd;
+		appearance: none;
+		min-height: 44px;
+		min-width: 190px;
+		padding: 10px 14px;
+		border: 1px solid rgba(118, 166, 208, 0.42);
+		background: linear-gradient(180deg, #ffffff 0%, #f3f8fd 100%);
 		cursor: pointer;
-		font-weight: bold;
-		border-radius: 5px;
-		flex: 1;
+		font-weight: 800;
+		border-radius: 8px;
+		flex: 1 1 220px;
+		color: #18334f;
+		box-shadow: 0 6px 14px rgba(13, 49, 88, 0.08);
+		transition: transform 0.18s ease, box-shadow 0.18s ease,
+			border-color 0.18s ease;
 
 		&.active {
-			background-color: #006ad1;
+			border-color: #62c6ef;
+			background: linear-gradient(180deg, #1d6c9f 0%, #0b2c49 100%);
 			color: white;
+			box-shadow:
+				0 10px 24px rgba(19, 104, 155, 0.24),
+				inset 0 1px 0 rgba(255, 255, 255, 0.18);
 		}
 
 		&:hover {
-			background-color: #bbb;
+			transform: translateY(-1px);
+			box-shadow: 0 12px 24px rgba(13, 49, 88, 0.14);
+		}
+
+		&:focus-visible {
+			outline: 3px solid rgba(76, 181, 230, 0.28);
+			outline-offset: 2px;
 		}
 	}
 
 	@media (max-width: 768px) {
-		flex-wrap: wrap;
-		gap: 8px;
-
 		button {
-			width: 48%;
+			flex: 1 1 100%;
+			min-width: 0;
 			padding: 8px;
 			font-size: 0.9rem;
 		}

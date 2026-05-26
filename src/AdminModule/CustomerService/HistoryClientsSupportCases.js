@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
-import { useLocation, useHistory } from "react-router-dom"; // For mobile param logic
-import { List, Select, Spin } from "antd";
+import { useHistory, useLocation } from "react-router-dom";
+import { List, Pagination, Select, Spin } from "antd";
 import {
 	getFilteredClosedSupportCasesClients,
 	updateSupportCase,
@@ -13,43 +13,174 @@ import StarRatings from "react-star-ratings";
 
 const { Option } = Select;
 
-const HistoryClientsSupportCases = () => {
-	const { token } = isAuthenticated();
+const TEXT = {
+	en: {
+		back: "Back",
+		closedCases: "Closed Client Support Cases",
+		loading: "Loading closed cases...",
+		loadingCase: "Loading case...",
+		chatWith: "Chat with",
+		closed: "Closed",
+		open: "Open",
+		noHotel: "No hotel",
+		noSubject: "No subject",
+		noCases: "No closed client support cases found.",
+		totalCases: "Total",
+	},
+	ar: {
+		back: "\u0631\u062c\u0648\u0639",
+		closedCases:
+			"\u0633\u062c\u0644 \u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0645\u063a\u0644\u0642\u0629",
+		loading:
+			"\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0645\u063a\u0644\u0642\u0629...",
+		loadingCase:
+			"\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0628\u0644\u0627\u063a...",
+		chatWith: "\u0645\u062d\u0627\u062f\u062b\u0629 \u0645\u0639",
+		closed: "\u0645\u063a\u0644\u0642",
+		open: "\u0645\u0641\u062a\u0648\u062d",
+		noHotel: "\u0644\u0627 \u064a\u0648\u062c\u062f \u0641\u0646\u062f\u0642",
+		noSubject: "\u0628\u062f\u0648\u0646 \u0645\u0648\u0636\u0648\u0639",
+		noCases:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u0644\u0627\u063a\u0627\u062a \u0639\u0645\u0644\u0627\u0621 \u0645\u063a\u0644\u0642\u0629.",
+		totalCases: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	},
+};
+
+const normalizeClosedCasesResponse = (data, fallback = {}) => {
+	if (Array.isArray(data)) {
+		return {
+			cases: data,
+			page: fallback.page || 1,
+			limit: fallback.limit || data.length || 20,
+			total: data.length,
+		};
+	}
+
+	return {
+		cases: Array.isArray(data?.cases) ? data.cases : [],
+		page: Number(data?.page || fallback.page || 1),
+		limit: Number(data?.limit || fallback.limit || 20),
+		total: Number(data?.total || 0),
+	};
+};
+
+const latestCaseTime = (item = {}) => {
+	const dates = [
+		item.closedAt,
+		item.updatedAt,
+		item.createdAt,
+		...(Array.isArray(item.conversation)
+			? item.conversation.map((entry) => entry?.date)
+			: []),
+	]
+		.map((value) => (value ? new Date(value).getTime() : 0))
+		.filter(Boolean);
+
+	return dates.length ? Math.max(...dates) : 0;
+};
+
+const sortCasesNewestFirst = (cases = []) =>
+	[...cases].sort((a, b) => latestCaseTime(b) - latestCaseTime(a));
+
+const caseSubtitle = (item = {}, labels) => {
+	const hotelName =
+		item.hotelId?.hotelName ||
+		item.hotelId?.hotelName_OtherLanguage ||
+		labels.noHotel;
+	const firstInquiry =
+		item.conversation?.[0]?.inquiryAbout ||
+		item.inquiryAbout ||
+		labels.noSubject;
+	return `${hotelName} | ${firstInquiry}`;
+};
+
+const HistoryClientsSupportCases = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const labels = TEXT[isArabic ? "ar" : "en"];
+	const { token } = isAuthenticated() || {};
 	const [closedCases, setClosedCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [loading, setLoading] = useState(true);
+	const [pagination, setPagination] = useState({
+		current: 1,
+		pageSize: 20,
+		total: 0,
+	});
 
-	// For mobile routing:
 	const location = useLocation();
 	const history = useHistory();
 	const queryParams = new URLSearchParams(location.search);
 	const caseIdParam = queryParams.get("id");
-	const isMobile = window.innerWidth <= 768; // Basic detection
+	const isMobile = window.innerWidth <= 768;
+
+	const sortedClosedCases = useMemo(
+		() => sortCasesNewestFirst(closedCases),
+		[closedCases]
+	);
+
+	const fetchClosedCases = useCallback(
+		async ({ page = 1, limit = 20 } = {}) => {
+			if (!token) {
+				setClosedCases([]);
+				setLoading(false);
+				return;
+			}
+
+			setLoading(true);
+			try {
+				const data = await getFilteredClosedSupportCasesClients(token, {
+					page,
+					limit,
+				});
+				if (data?.error) {
+					setClosedCases([]);
+					setPagination((current) => ({
+						...current,
+						current: page,
+						pageSize: limit,
+						total: 0,
+					}));
+					return;
+				}
+
+				const normalized = normalizeClosedCasesResponse(data, { page, limit });
+				setClosedCases(sortCasesNewestFirst(normalized.cases));
+				setPagination({
+					current: normalized.page,
+					pageSize: normalized.limit,
+					total: normalized.total,
+				});
+			} catch (error) {
+				setClosedCases([]);
+				setPagination((current) => ({ ...current, total: 0 }));
+			} finally {
+				setLoading(false);
+			}
+		},
+		[token]
+	);
 
 	useEffect(() => {
-		const fetchClosedCases = () => {
-			getFilteredClosedSupportCasesClients(token) // Using client-specific API
-				.then((data) => {
-					if (!data.error) {
-						setClosedCases(data);
-					}
-					setLoading(false);
-				})
-				.catch(() => {
-					setLoading(false);
-				});
-		};
-
 		fetchClosedCases();
+	}, [fetchClosedCases]);
 
+	useEffect(() => {
 		const handleCaseReopened = (reopenedCase) => {
 			setClosedCases((prevCases) =>
-				prevCases.filter((c) => c._id !== reopenedCase.case._id)
+				prevCases.filter((caseItem) => caseItem._id !== reopenedCase?.case?._id)
+			);
+			setPagination((current) => ({
+				...current,
+				total: Math.max(current.total - 1, 0),
+			}));
+			setSelectedCase((current) =>
+				current?._id === reopenedCase?.case?._id ? null : current
 			);
 		};
 
 		const handleCaseClosed = (closedCase) => {
-			setClosedCases((prevCases) => [...prevCases, closedCase.case]);
+			if (closedCase?.case?.openedBy !== "client") return;
+			fetchClosedCases({ page: 1, limit: pagination.pageSize });
 		};
 
 		socket.on("reopenCase", handleCaseReopened);
@@ -59,199 +190,121 @@ const HistoryClientsSupportCases = () => {
 			socket.off("reopenCase", handleCaseReopened);
 			socket.off("closeCase", handleCaseClosed);
 		};
-	}, [token]);
+	}, [fetchClosedCases, pagination.pageSize]);
 
 	const handleCaseSelection = (caseObj) => {
-		// Desktop: local state, side-by-side
 		if (!isMobile) {
 			setSelectedCase(caseObj);
-		} else {
-			// Mobile: add ?id=someCase
-			history.push(`?id=${caseObj._id}`);
+			return;
+		}
+
+		const params = new URLSearchParams(location.search);
+		params.set("tab", "history-client-cases");
+		params.set("id", caseObj._id);
+		history.push({
+			pathname: location.pathname,
+			search: params.toString(),
+		});
+	};
+
+	const handlePaginationChange = (page, pageSize) => {
+		setSelectedCase(null);
+		fetchClosedCases({ page, limit: pageSize });
+	};
+
+	const handleChangeStatus = async (value, caseOverride = null) => {
+		const caseToUpdate = caseOverride || selectedCase;
+		if (!caseToUpdate) return;
+
+		try {
+			await updateSupportCase(caseToUpdate._id, { caseStatus: value }, token);
+			if (value === "open") {
+				socket.emit("reopenCase", { case: caseToUpdate });
+				setClosedCases((prevCases) =>
+					prevCases.filter((caseItem) => caseItem._id !== caseToUpdate._id)
+				);
+				setPagination((current) => ({
+					...current,
+					total: Math.max(current.total - 1, 0),
+				}));
+			} else if (value === "closed") {
+				socket.emit("closeCase", { case: caseToUpdate });
+				fetchClosedCases({ page: 1, limit: pagination.pageSize });
+			}
+			setSelectedCase(null);
+		} catch (error) {
+			console.error("Error updating the case.");
 		}
 	};
 
-	const handleChangeStatus = async (value) => {
-		if (selectedCase) {
-			try {
-				await updateSupportCase(selectedCase._id, { caseStatus: value }, token);
-				if (value === "open") {
-					socket.emit("reopenCase", { case: selectedCase });
-					setClosedCases((prevCases) =>
-						prevCases.filter((c) => c._id !== selectedCase._id)
-					);
-				} else if (value === "closed") {
-					socket.emit("closeCase", { case: selectedCase });
-					setClosedCases((prevCases) => [...prevCases, selectedCase]);
-				}
-				setSelectedCase(null);
-			} catch (error) {
-				console.error("Error reopening the case.");
-			}
-		}
-	};
-
-	/* ---------------- MOBILE LOGIC ---------------- */
-	if (isMobile) {
-		// If there's a param => show only chat detail
-		if (caseIdParam) {
-			const foundCase = closedCases.find((c) => c._id === caseIdParam);
-			if (!foundCase) {
-				return <div>Loading case...</div>;
-			}
-
+	if (isMobile && caseIdParam) {
+		const foundCase = closedCases.find((caseItem) => caseItem._id === caseIdParam);
+		if (!foundCase) {
 			return (
-				<HistoryClientsSupportCasesWrapper>
-					<MobileBackArrow
-						onClick={() => {
-							// Remove ?id from the URL
-							const params = new URLSearchParams(location.search);
-							params.delete("id");
-							history.replace({ search: params.toString() });
-						}}
-					>
-						← Back
-					</MobileBackArrow>
-
-					<MobileChatWrapper>
-						<h3>Chat with {foundCase.displayName2}</h3>
-						<StatusSelect
-							value={foundCase.caseStatus}
-							onChange={(val) => {
-								setSelectedCase(foundCase); // temporarily store
-								handleChangeStatus(val);
-							}}
-						>
-							<Option value='closed'>Closed</Option>
-							<Option value='open'>Open</Option>
-						</StatusSelect>
-						<ChatDetail chat={foundCase} isHistory={true} />
-					</MobileChatWrapper>
+				<HistoryClientsSupportCasesWrapper dir={isArabic ? "rtl" : "ltr"}>
+					{labels.loadingCase}
 				</HistoryClientsSupportCasesWrapper>
 			);
 		}
 
-		// Else show only the list
 		return (
-			<HistoryClientsSupportCasesWrapper>
-				{loading ? (
-					<Spin tip='Loading closed cases...' />
-				) : (
-					<List
-						style={{ marginTop: "20px" }}
-						header={
-							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
-								Closed Client Support Cases
-							</div>
-						}
-						bordered
-						dataSource={closedCases}
-						renderItem={(item) => (
-							<List.Item
-								key={item._id}
-								onClick={() => handleCaseSelection(item)}
-								style={{
-									cursor: "pointer",
-									textTransform: "capitalize",
-									backgroundColor: "white",
-									marginBottom: "8px",
-									display: "flex",
-									flexDirection: "column",
-									alignItems: "flex-start",
-								}}
-							>
-								<div>
-									{item.inquiryAbout} -{" "}
-									{item.hotelId
-										? item.hotelId.hotelName +
-										  " | " +
-										  item.conversation[0].inquiryAbout
-										: ""}
-								</div>
-								<StarRatingWrapper>
-									<StarRatings
-										rating={item.rating || 0}
-										starRatedColor='gold'
-										numberOfStars={5}
-										starDimension='20px'
-										starSpacing='2px'
-									/>
-								</StarRatingWrapper>
-							</List.Item>
-						)}
-					/>
-				)}
+			<HistoryClientsSupportCasesWrapper dir={isArabic ? "rtl" : "ltr"}>
+				<MobileBackArrow
+					onClick={() => {
+						const params = new URLSearchParams(location.search);
+						params.delete("id");
+						history.replace({ search: params.toString() });
+					}}
+				>
+					{isArabic ? "\u2192" : "\u2190"} {labels.back}
+				</MobileBackArrow>
+
+				<MobileChatWrapper>
+					<h3>
+						{labels.chatWith} {foundCase.displayName2}
+					</h3>
+					<StatusSelect
+						value={foundCase.caseStatus}
+						onChange={(value) => handleChangeStatus(value, foundCase)}
+					>
+						<Option value='closed'>{labels.closed}</Option>
+						<Option value='open'>{labels.open}</Option>
+					</StatusSelect>
+					<ChatDetail chat={foundCase} isHistory={true} />
+				</MobileChatWrapper>
 			</HistoryClientsSupportCasesWrapper>
 		);
 	}
 
-	/* ---------------- DESKTOP / LARGE SCREENS ---------------- */
 	return (
-		<HistoryClientsSupportCasesWrapper>
+		<HistoryClientsSupportCasesWrapper dir={isArabic ? "rtl" : "ltr"}>
 			<MainContentWrapper>
-				<SupportCasesList>
+				<SupportCasesList $hasSelection={Boolean(selectedCase)}>
 					{loading ? (
-						<Spin tip='Loading closed cases...' />
+						<Spin tip={labels.loading} />
 					) : (
-						<List
-							style={{ marginTop: "20px" }}
-							header={
-								<div
-									style={{ fontWeight: "bold", textDecoration: "underline" }}
-								>
-									Closed Client Support Cases
-								</div>
-							}
-							bordered
-							dataSource={closedCases}
-							renderItem={(item) => (
-								<List.Item
-									key={item._id}
-									onClick={() => handleCaseSelection(item)}
-									style={{
-										cursor: "pointer",
-										textTransform: "capitalize",
-										backgroundColor:
-											selectedCase && selectedCase._id === item._id
-												? "#e6f7ff"
-												: "white",
-										display: "flex",
-										flexDirection: "column",
-										alignItems: "flex-start",
-									}}
-								>
-									<div>
-										{item.inquiryAbout} -{" "}
-										{item.hotelId
-											? item.hotelId.hotelName +
-											  " | " +
-											  item.conversation[0].inquiryAbout
-											: ""}
-									</div>
-									<StarRatingWrapper>
-										<StarRatings
-											rating={item.rating || 0}
-											starRatedColor='gold'
-											numberOfStars={5}
-											starDimension='20px'
-											starSpacing='2px'
-										/>
-									</StarRatingWrapper>
-								</List.Item>
-							)}
+						<CaseList
+							cases={sortedClosedCases}
+							selectedCase={selectedCase}
+							onSelect={handleCaseSelection}
+							pagination={pagination}
+							onPaginationChange={handlePaginationChange}
+							labels={labels}
 						/>
 					)}
 				</SupportCasesList>
 
 				{selectedCase && (
 					<ChatDetailWrapper>
-						<h3>Chat with {selectedCase.displayName2}</h3>
+						<h3>
+							{labels.chatWith} {selectedCase.displayName2}
+						</h3>
 						<StatusSelect
 							value={selectedCase.caseStatus}
-							onChange={(val) => handleChangeStatus(val)}
+							onChange={(value) => handleChangeStatus(value)}
 						>
-							<Option value='closed'>Closed</Option>
-							<Option value='open'>Open</Option>
+							<Option value='closed'>{labels.closed}</Option>
+							<Option value='open'>{labels.open}</Option>
 						</StatusSelect>
 						<ChatDetail chat={selectedCase} isHistory={true} />
 					</ChatDetailWrapper>
@@ -261,65 +314,187 @@ const HistoryClientsSupportCases = () => {
 	);
 };
 
+const CaseList = ({
+	cases,
+	selectedCase,
+	onSelect,
+	pagination,
+	onPaginationChange,
+	labels,
+}) => (
+	<ListShell>
+		<ListHeader>
+			<strong>{labels.closedCases}</strong>
+			<span>
+				{labels.totalCases}: {pagination.total}
+			</span>
+		</ListHeader>
+		<List
+			bordered
+			locale={{ emptyText: labels.noCases }}
+			dataSource={cases}
+			renderItem={(item) => (
+				<CaseListItem
+					key={item._id}
+					onClick={() => onSelect(item)}
+					$isActive={selectedCase && selectedCase._id === item._id}
+				>
+					<div className='case-title'>{item.inquiryAbout || labels.noSubject}</div>
+					<div className='case-subtitle'>{caseSubtitle(item, labels)}</div>
+					<StarRatingWrapper>
+						<StarRatings
+							rating={item.rating || 0}
+							starRatedColor='gold'
+							numberOfStars={5}
+							starDimension='20px'
+							starSpacing='2px'
+						/>
+					</StarRatingWrapper>
+				</CaseListItem>
+			)}
+		/>
+		{pagination.total > pagination.pageSize && (
+			<PaginationBar
+				current={pagination.current}
+				pageSize={pagination.pageSize}
+				total={pagination.total}
+				showSizeChanger
+				pageSizeOptions={["10", "20", "50", "100"]}
+				onChange={onPaginationChange}
+				onShowSizeChange={onPaginationChange}
+			/>
+		)}
+	</ListShell>
+);
+
 export default HistoryClientsSupportCases;
 
-/* ------------------ STYLES ------------------ */
-
 const HistoryClientsSupportCasesWrapper = styled.div`
-	padding: 20px;
+	padding: 12px 0 0;
+	direction: ${(props) => props.dir || "ltr"};
 
 	@media (max-width: 1000px) {
 		padding: 5px;
 
 		ul {
-			font-size: 0.75rem !important;
+			font-size: 0.82rem !important;
 		}
 	}
 `;
 
-/* For desktop two-column layout */
 const MainContentWrapper = styled.div`
 	display: flex;
 	width: 100%;
-	margin-top: 20px;
+	gap: 12px;
+
+	@media (max-width: 768px) {
+		display: block;
+	}
 `;
 
-/* The left column with the list */
 const SupportCasesList = styled.div`
-	width: 25%;
-	padding-right: 10px;
+	width: ${(props) => (props.$hasSelection ? "30%" : "100%")};
+	min-width: 300px;
+
+	@media (max-width: 768px) {
+		width: 100%;
+		min-width: 0;
+	}
 `;
 
-/* The right column with chat details */
 const ChatDetailWrapper = styled.div`
-	width: 75%;
-	padding-left: 10px;
-	border: 1px solid #e8e8e8;
-	background-color: #f9f9f9;
-	border-radius: 4px;
+	flex: 1;
+	min-width: 0;
+	padding: 14px;
+	border: 1px solid #d8e8f5;
+	background-color: #f9fcff;
+	border-radius: 8px;
+`;
+
+const ListShell = styled.div`
+	border: 1px solid #d8e8f5;
+	border-radius: 8px;
+	background: #ffffff;
+	overflow: hidden;
+	box-shadow: 0 10px 24px rgba(13, 49, 88, 0.06);
+
+	.ant-list {
+		border: 0;
+	}
+`;
+
+const ListHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 11px 14px;
+	background: linear-gradient(180deg, #154a78 0%, #09223a 100%);
+	color: #ffffff;
+	font-weight: 900;
+
+	span {
+		font-size: 0.84rem;
+		opacity: 0.9;
+	}
+`;
+
+const CaseListItem = styled(List.Item)`
+	cursor: pointer;
+	text-transform: capitalize;
+	display: flex !important;
+	flex-direction: column;
+	align-items: flex-start !important;
+	gap: 4px;
+	background: ${(props) => (props.$isActive ? "#e9f6ff" : "#ffffff")};
+	border-inline-start: 4px solid
+		${(props) => (props.$isActive ? "#1583c7" : "transparent")};
+	transition:
+		background 140ms ease,
+		border-color 140ms ease;
+
+	&:hover {
+		background: #f3f9ff;
+		border-inline-start-color: #50a7dc;
+	}
+
+	.case-title {
+		color: #0b3158;
+		font-weight: 900;
+	}
+
+	.case-subtitle {
+		color: #536b80;
+		font-size: 0.84rem;
+		line-height: 1.35;
+	}
+`;
+
+const PaginationBar = styled(Pagination)`
+	display: flex;
+	justify-content: center;
+	padding: 12px;
+	border-top: 1px solid #e6f0fa;
 `;
 
 const StatusSelect = styled(Select)`
 	width: 150px;
-	margin-top: 20px;
+	margin: 4px 0 14px;
 `;
 
-/* For star ratings in the list items */
 const StarRatingWrapper = styled.div`
-	margin-top: 5px;
+	margin-top: 2px;
 `;
 
-/* For mobile full-width arrangement */
 const MobileChatWrapper = styled.div`
-	margin-top: 20px;
+	margin-top: 12px;
 `;
 
-/* Simple back arrow link on mobile */
 const MobileBackArrow = styled.div`
-	color: blue;
+	color: #0b5c91;
 	cursor: pointer;
-	font-size: 1.1rem;
-	font-weight: bold;
+	font-size: 1.02rem;
+	font-weight: 900;
 	margin-bottom: 12px;
 	width: fit-content;
 

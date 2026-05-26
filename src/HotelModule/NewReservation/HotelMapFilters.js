@@ -1,7 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
-import { Input, Select, Button } from "antd";
-import { SearchOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button, Drawer, Input, Select } from "antd";
+import {
+	CheckOutlined,
+	FilterOutlined,
+	ReloadOutlined,
+	SearchOutlined,
+} from "@ant-design/icons";
+
+const getHotelMapDrawerContainer = () =>
+	typeof document !== "undefined" ? document.body : false;
 
 const HotelMapFilters = ({
 	chosenLanguage,
@@ -14,10 +22,46 @@ const HotelMapFilters = ({
 	selectedFloor,
 	selectedRoomStatus,
 	fromComponent,
+	useMobileDrawer = false,
+	useRoomMapLayout = false,
 }) => {
+	const [drawerOpen, setDrawerOpen] = useState(false);
+	const isArabic = chosenLanguage === "Arabic";
 	const roomOptions = Array.isArray(distinctRoomTypesWithColors)
 		? distinctRoomTypesWithColors
 		: [];
+	const activeFilterCount = [
+		selectedAvailability,
+		selectedRoomType,
+		selectedFloor,
+		selectedRoomStatus,
+	].filter((value) => value !== null && value !== undefined && value !== "")
+		.length;
+	const filterButtonLabel = isArabic
+		? activeFilterCount > 0
+			? `الفلاتر (${activeFilterCount})`
+			: "الفلاتر"
+		: activeFilterCount > 0
+			? `Filters (${activeFilterCount})`
+			: "Filters";
+
+	const text = {
+		search: isArabic
+			? "البحث عن طريق رقم الحجز أو الضيف"
+			: "Search by booking number or guest",
+		roomName: isArabic ? "اسم الغرفة" : "Room Name",
+		availability: isArabic ? "التوفر" : "Availability",
+		floor: isArabic ? "الطابق" : "Floor",
+		roomStatus: isArabic ? "حالة الغرفة" : "Room Status",
+		all: isArabic ? "الكل" : "All",
+		occupied: isArabic ? "مشغولة" : "Occupied",
+		vacant: isArabic ? "متاحة" : "Vacant",
+		clean: isArabic ? "نظيفة" : "Clean",
+		dirty: isArabic ? "متسخة" : "Dirty",
+		reset: isArabic ? "إعادة ضبط" : "Reset",
+		drawerTitle: isArabic ? "فلاتر الخريطة" : "Map Filters",
+		done: isArabic ? "تم" : "Done",
+	};
 
 	const handleAvailabilityChange = (value) => {
 		handleFilterChange("availability", value === "all" ? null : value);
@@ -35,127 +79,187 @@ const HotelMapFilters = ({
 		handleFilterChange("roomStatus", value === "all" ? null : value);
 	};
 
-	return (
-		<Wrapper
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-			$filtersOnly={fromComponent === "Taskeen"}
-		>
-			<SearchSlot $hidden={fromComponent === "Taskeen"}>
-				{fromComponent === "Taskeen" ? null : (
-					<SearchContainer dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
-						<Input
-							placeholder={
-								chosenLanguage === "Arabic"
-									? "البحث عن طريق رقم الحجز أو الضيف"
-									: "Search by booking number or guest"
-							}
-							prefix={<SearchOutlined />}
-							style={{ width: "100%" }}
-						/>
-					</SearchContainer>
-				)}
-			</SearchSlot>
+	const searchInput = (
+		<SearchContainer dir={isArabic ? "rtl" : "ltr"}>
+			<Input
+				placeholder={text.search}
+				prefix={<SearchOutlined />}
+				style={{ width: "100%" }}
+			/>
+		</SearchContainer>
+	);
 
-			<FiltersContainer>
-				<StyledSelect
-					className='filter-select'
-					placeholder={
-						chosenLanguage === "Arabic" ? "اسم الغرفة" : "Room Name"
-					}
-					onChange={handleRoomTypeChange}
-					value={selectedRoomType}
-					dir={chosenLanguage === "Arabic" ? "ltr" : "ltr"}
-				>
-					<Select.Option value='all'>
-						{chosenLanguage === "Arabic" ? "الكل" : "All"}
-					</Select.Option>
-					{roomOptions.map((room) => {
-						const displayName =
-							room.displayName || room.display_name || room.room_type;
-						return (
-							<Select.Option key={displayName} value={displayName}>
-							<div
-								style={{
-									display: "flex",
-									alignItems: "center",
-									textTransform: "capitalize",
-								}}
-							>
-								<div
-									style={{
-										width: "10px",
-										height: "10px",
-										backgroundColor: room.roomColorCode,
-										borderRadius: "50%",
-										marginRight: "5px",
-									}}
-								></div>
-								{displayName}
-							</div>
+	const filterControls = ({ inDrawer = false, includeReset = true } = {}) => (
+		<FiltersContainer
+			$inDrawer={inDrawer}
+			$roomMapLayout={useRoomMapLayout}
+			$hasReset={includeReset}
+		>
+			<StyledSelect
+				className='filter-select room-name-select'
+				placeholder={text.roomName}
+				onChange={handleRoomTypeChange}
+				value={selectedRoomType}
+				dir='ltr'
+				showSearch
+				optionFilterProp='label'
+				popupMatchSelectWidth={false}
+			>
+				<Select.Option value='all' label={text.all}>
+					{text.all}
+				</Select.Option>
+				{roomOptions.map((room) => {
+					const displayName =
+						room.displayName || room.display_name || room.room_type;
+					return (
+						<Select.Option
+							key={displayName}
+							value={displayName}
+							label={displayName}
+						>
+							<RoomOption>
+								<OptionSwatch $color={room.roomColorCode} />
+								<RoomOptionText>{displayName}</RoomOptionText>
+							</RoomOption>
 						</Select.Option>
-						);
-					})}
-				</StyledSelect>
-				<StyledSelect
-					className='filter-select'
-					placeholder={
-						chosenLanguage === "Arabic" ? "التوفر" : "Availability"
-					}
-					onChange={handleAvailabilityChange}
-					value={selectedAvailability}
-				>
-					<Select.Option value='all'>
-						{chosenLanguage === "Arabic" ? "الكل" : "All"}
+					);
+				})}
+			</StyledSelect>
+
+			<StyledSelect
+				className='filter-select'
+				placeholder={text.availability}
+				onChange={handleAvailabilityChange}
+				value={selectedAvailability}
+			>
+				<Select.Option value='all'>{text.all}</Select.Option>
+				<Select.Option value='occupied'>{text.occupied}</Select.Option>
+				<Select.Option value='vacant'>{text.vacant}</Select.Option>
+			</StyledSelect>
+
+			<StyledSelect
+				className='filter-select'
+				placeholder={text.floor}
+				onChange={handleFloorChange}
+				value={selectedFloor}
+			>
+				<Select.Option value='all'>{text.all}</Select.Option>
+				{floors.map((floor) => (
+					<Select.Option key={floor} value={floor}>
+						{floor}
 					</Select.Option>
-					<Select.Option value='occupied'>
-						{chosenLanguage === "Arabic" ? "مشغولة" : "Occupied"}
-					</Select.Option>
-					<Select.Option value='vacant'>
-						{chosenLanguage === "Arabic" ? "متاحة" : "Vacant"}
-					</Select.Option>
-				</StyledSelect>
-				<StyledSelect
-					className='filter-select'
-					placeholder={chosenLanguage === "Arabic" ? "الطابق" : "Floor"}
-					onChange={handleFloorChange}
-					value={selectedFloor}
-				>
-					<Select.Option value='all'>
-						{chosenLanguage === "Arabic" ? "الكل" : "All"}
-					</Select.Option>
-					{floors.map((floor) => (
-						<Select.Option key={floor} value={floor}>
-							{floor}
-						</Select.Option>
-					))}
-				</StyledSelect>
-				<StyledSelect
-					className='filter-select'
-					placeholder={
-						chosenLanguage === "Arabic" ? "حالة الغرفة" : "Room Status"
-					}
-					onChange={handleRoomStatusChange}
-					value={selectedRoomStatus}
-				>
-					<Select.Option value='all'>
-						{chosenLanguage === "Arabic" ? "الكل" : "All"}
-					</Select.Option>
-					<Select.Option value='clean'>
-						{chosenLanguage === "Arabic" ? "نظيفة" : "Clean"}
-					</Select.Option>
-					<Select.Option value='dirty'>
-						{chosenLanguage === "Arabic" ? "متسخة" : "Dirty"}
-					</Select.Option>
-				</StyledSelect>
+				))}
+			</StyledSelect>
+
+			<StyledSelect
+				className='filter-select'
+				placeholder={text.roomStatus}
+				onChange={handleRoomStatusChange}
+				value={selectedRoomStatus}
+			>
+				<Select.Option value='all'>{text.all}</Select.Option>
+				<Select.Option value='clean'>{text.clean}</Select.Option>
+				<Select.Option value='dirty'>{text.dirty}</Select.Option>
+			</StyledSelect>
+
+			{includeReset ? (
 				<StyledButton icon={<ReloadOutlined />} onClick={handleResetFilters}>
-					{chosenLanguage === "Arabic" ? "إعادة ضبط" : "Reset"}
+					{text.reset}
 				</StyledButton>
-			</FiltersContainer>
-		</Wrapper>
+			) : null}
+		</FiltersContainer>
+	);
+
+	return (
+		<>
+			{useMobileDrawer ? (
+				<MobileFilterBar
+					dir={isArabic ? "rtl" : "ltr"}
+					$active={activeFilterCount > 0}
+				>
+					<MobileFilterButton
+						type='button'
+						onClick={() => setDrawerOpen(true)}
+						aria-pressed={activeFilterCount > 0}
+						$active={activeFilterCount > 0}
+					>
+						<FilterOutlined />
+						<span>{filterButtonLabel}</span>
+					</MobileFilterButton>
+				</MobileFilterBar>
+			) : null}
+
+			<Wrapper
+				dir={isArabic ? "rtl" : "ltr"}
+				$filtersOnly={fromComponent === "Taskeen"}
+				$drawerEnabled={useMobileDrawer}
+				$roomMapLayout={useRoomMapLayout}
+			>
+				<SearchSlot $hidden={fromComponent === "Taskeen"}>
+					{fromComponent === "Taskeen" ? null : searchInput}
+				</SearchSlot>
+				{filterControls()}
+			</Wrapper>
+
+			{useMobileDrawer ? (
+				<Drawer
+					title={text.drawerTitle}
+					placement={isArabic ? "right" : "left"}
+					width='min(92vw, 390px)'
+					open={drawerOpen}
+					onClose={() => setDrawerOpen(false)}
+					getContainer={getHotelMapDrawerContainer}
+					destroyOnClose={false}
+					className='hotel-map-filter-drawer'
+				>
+					<DrawerContent dir={isArabic ? "rtl" : "ltr"}>
+						{fromComponent === "Taskeen" ? null : searchInput}
+						{filterControls({ inDrawer: true, includeReset: false })}
+						<DrawerActions>
+							<StyledButton icon={<ReloadOutlined />} onClick={handleResetFilters}>
+								{text.reset}
+							</StyledButton>
+							<DoneButton
+								type='primary'
+								icon={<CheckOutlined />}
+								onClick={() => setDrawerOpen(false)}
+							>
+								{text.done}
+							</DoneButton>
+						</DrawerActions>
+					</DrawerContent>
+				</Drawer>
+			) : null}
+		</>
 	);
 };
 
 export default HotelMapFilters;
+
+const MobileFilterBar = styled.div`
+	display: none;
+	margin-bottom: 10px;
+
+	@media (max-width: 760px) {
+		display: block;
+	}
+`;
+
+const MobileFilterButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 40px;
+	border: 1px solid ${({ $active }) => ($active ? "#1677ff" : "#c7d7ea")};
+	border-radius: 8px;
+	background: ${({ $active }) => ($active ? "#eaf4ff" : "#ffffff")};
+	color: #0f4f86;
+	font-size: 0.88rem;
+	font-weight: 900;
+	box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+`;
 
 const Wrapper = styled.div`
 	background: #ffffff;
@@ -163,10 +267,12 @@ const Wrapper = styled.div`
 	border-radius: 8px;
 	border: 1px solid #e6edf5;
 	display: grid;
-	grid-template-columns: ${({ $filtersOnly }) =>
+	grid-template-columns: ${({ $filtersOnly, $roomMapLayout }) =>
 		$filtersOnly
 			? "1fr"
-			: "minmax(220px, 0.75fr) minmax(0, 1.25fr)"};
+			: $roomMapLayout
+				? "minmax(260px, 0.55fr) minmax(0, 1.45fr)"
+				: "minmax(220px, 0.75fr) minmax(0, 1.25fr)"};
 	gap: 10px;
 	align-items: center;
 	margin-bottom: 16px;
@@ -175,6 +281,10 @@ const Wrapper = styled.div`
 
 	@media (max-width: 900px) {
 		grid-template-columns: 1fr;
+	}
+
+	@media (max-width: 760px) {
+		display: ${({ $drawerEnabled }) => ($drawerEnabled ? "none" : "grid")};
 	}
 
 	@media (max-width: 560px) {
@@ -204,17 +314,34 @@ const SearchContainer = styled.div`
 
 const FiltersContainer = styled.div`
 	display: grid;
-	grid-template-columns: repeat(5, minmax(0, 1fr));
-	gap: 8px;
+	grid-template-columns: ${({ $inDrawer, $roomMapLayout, $hasReset }) => {
+		if ($inDrawer) return "1fr";
+		if ($roomMapLayout && $hasReset) {
+			return "minmax(240px, 1.7fr) repeat(3, minmax(126px, 0.95fr)) minmax(126px, 0.85fr)";
+		}
+		return "repeat(5, minmax(0, 1fr))";
+	}};
+	gap: ${({ $inDrawer }) => ($inDrawer ? "10px" : "8px")};
 	align-items: center;
 	min-width: 0;
 
 	@media (max-width: 1180px) {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: ${({ $inDrawer, $roomMapLayout }) =>
+			$inDrawer
+				? "1fr"
+				: $roomMapLayout
+					? "minmax(230px, 1.45fr) repeat(2, minmax(128px, 1fr))"
+					: "repeat(4, minmax(0, 1fr))"};
+	}
+
+	@media (max-width: 760px) {
+		grid-template-columns: ${({ $inDrawer }) =>
+			$inDrawer ? "1fr" : "repeat(2, minmax(0, 1fr))"};
 	}
 
 	@media (max-width: 560px) {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: ${({ $inDrawer }) =>
+			$inDrawer ? "1fr" : "repeat(2, minmax(0, 1fr))"};
 		gap: 8px;
 	}
 `;
@@ -229,10 +356,12 @@ const StyledSelect = styled(Select)`
 		border-color: #d7e0ea !important;
 		display: flex;
 		align-items: center;
+		min-width: 0;
 	}
 
 	.ant-select-selection-placeholder,
 	.ant-select-selection-item {
+		min-width: 0;
 		font-size: 0.86rem;
 		font-weight: 700;
 		color: #334155;
@@ -240,6 +369,35 @@ const StyledSelect = styled(Select)`
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+
+	&.room-name-select .ant-select-selection-item {
+		text-align: start;
+	}
+`;
+
+const RoomOption = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	max-width: min(420px, 82vw);
+	text-transform: capitalize;
+`;
+
+const OptionSwatch = styled.span`
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: ${({ $color }) => $color || "#64748b"};
+	border: 1px solid rgba(15, 23, 42, 0.22);
+`;
+
+const RoomOptionText = styled.span`
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 `;
 
 const StyledButton = styled(Button)`
@@ -253,4 +411,23 @@ const StyledButton = styled(Button)`
 	@media (max-width: 560px) {
 		grid-column: 1 / -1;
 	}
+`;
+
+const DrawerContent = styled.div`
+	display: grid;
+	gap: 12px;
+	min-width: 0;
+`;
+
+const DrawerActions = styled.div`
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+`;
+
+const DoneButton = styled(Button)`
+	width: 100%;
+	height: 38px;
+	border-radius: 8px;
+	font-weight: 900;
 `;

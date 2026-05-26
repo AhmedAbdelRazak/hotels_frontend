@@ -1724,7 +1724,11 @@ export const pendingConfirmationNotificationFeed = ({
 		},
 	)
 		.then((response) => response.json())
-		.catch((err) => console.log(err));
+		.catch((err) => ({
+			error: err?.message || "Network error while loading notifications.",
+			data: [],
+			total: 0,
+		}));
 };
 
 export const acknowledgePendingNotification = ({

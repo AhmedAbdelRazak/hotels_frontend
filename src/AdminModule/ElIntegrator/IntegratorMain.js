@@ -57,9 +57,6 @@ const IntegratorMain = ({ chosenLanguage }) => {
 
 	// Determine if the user is a Super Admin
 	const isSuperAdmin =
-		!getUser?.accessTo ||
-		getUser?.accessTo.length === 0 ||
-		getUser?.accessTo.includes("all") ||
 		isSuperAdminUser(getUser);
 
 	// Validate user and handle access control

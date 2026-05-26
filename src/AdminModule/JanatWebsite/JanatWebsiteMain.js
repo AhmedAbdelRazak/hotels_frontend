@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
+import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import ZLogoAdd from "./ZLogoAdd";
 import ZHomePageBanners from "./ZHomePageBanners";
@@ -14,12 +15,79 @@ import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 import ZPrivacyPolicy from "./ZPrivacyPolicy";
 import { Modal, Input, Button, message } from "antd";
-import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import {
+	ContactsOutlined,
+	FileProtectOutlined,
+	HomeOutlined,
+	InfoCircleOutlined,
+	LockOutlined,
+	SaveOutlined,
+	SafetyCertificateOutlined,
+	EyeInvisibleOutlined,
+	EyeTwoTone,
+} from "@ant-design/icons";
 import ZHomePageBanner3 from "./ZHomePageBanner3";
 import { isAuthenticated } from "../../auth";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
+
+const TEXT = {
+	en: {
+		title: "Jannat Booking Website",
+		passwordTitle: "Enter Password",
+		passwordPlaceholder: "Enter password",
+		verify: "Verify Password",
+		save: "Save Changes",
+		saved: "Jannat Booking website was updated successfully.",
+		incorrectPassword: "Incorrect password. Please try again.",
+		passwordVerified: "Password verified successfully",
+		home: "Home Page",
+		about: "About Us",
+		contact: "Contact Us",
+		guestTerms: "Guest Terms",
+		hotelTerms: "Hotel Terms",
+		privacy: "Privacy Policy",
+	},
+	ar: {
+		title: "\u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
+		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		passwordPlaceholder: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		verify: "\u062a\u062d\u0642\u0642",
+		save: "\u062d\u0641\u0638 \u0627\u0644\u062a\u063a\u064a\u064a\u0631\u0627\u062a",
+		saved:
+			"\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c \u0628\u0646\u062c\u0627\u062d.",
+		incorrectPassword:
+			"\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629.",
+		passwordVerified:
+			"\u062a\u0645 \u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631.",
+		home: "\u0627\u0644\u0635\u0641\u062d\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629",
+		about: "\u0645\u0646 \u0646\u062d\u0646",
+		contact: "\u062a\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627",
+		guestTerms: "\u0634\u0631\u0648\u0637 \u0627\u0644\u0636\u064a\u0648\u0641",
+		hotelTerms: "\u0634\u0631\u0648\u0637 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+		privacy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
+	},
+};
+
+const TAB_DEFS = [
+	{ key: "home", labelKey: "home", icon: <HomeOutlined /> },
+	{ key: "about", labelKey: "about", icon: <InfoCircleOutlined /> },
+	{ key: "contact", labelKey: "contact", icon: <ContactsOutlined /> },
+	{
+		key: "termsandconditions",
+		labelKey: "guestTerms",
+		icon: <FileProtectOutlined />,
+	},
+	{
+		key: "termsandconditions_B2B",
+		labelKey: "hotelTerms",
+		icon: <SafetyCertificateOutlined />,
+	},
+	{ key: "privacyPolicy", labelKey: "privacy", icon: <LockOutlined /> },
+];
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const L = TEXT[isArabic ? "ar" : "en"];
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const [logo, setLogo] = useState([]);
@@ -47,6 +115,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [getUser, setGetUser] = useState(null);
 
 	const { user, token } = isAuthenticated() || {};
+	const activeTabLabel =
+		L[TAB_DEFS.find((tab) => tab.key === activeTab)?.labelKey] || L.home;
 
 	const loadCurrentUser = useCallback(() => {
 		if (!user?._id || !token) return;
@@ -119,10 +189,8 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 
 		const accessTo = getUser.accessTo || [];
 		const hasAccess =
-			SUPER_USER_IDS.includes(getUser?._id) ||
-			accessTo.includes("JannatBookingWebsite") ||
-			accessTo.includes("all") ||
-			accessTo.length === 0;
+			isConfiguredSuperAdminUser(getUser?._id) ||
+			accessTo.includes("JannatBookingWebsite");
 
 		// Check if password is already verified
 		const websitePasswordVerified = localStorage.getItem(
@@ -140,11 +208,11 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const handlePasswordVerification = () => {
 		if (password === "JannatBookingWebsite2025") {
 			setIsPasswordVerified(true);
-			message.success("Password verified successfully");
+			message.success(L.passwordVerified);
 			localStorage.setItem("JannatBookingWebsiteVerified", "true");
 			setIsModalVisible(false);
 		} else {
-			message.error("Incorrect password. Please try again.");
+			message.error(L.incorrectPassword);
 		}
 	};
 
@@ -180,7 +248,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			if (data && data.error) {
 				console.log(data.error, "Error creating a document");
 			} else {
-				toast.success("Janat Website Was Successfully Updated!");
+				toast.success(L.saved);
 			}
 		});
 	};
@@ -191,13 +259,13 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			show={collapsed}
 		>
 			<Modal
-				title='Enter Password'
-				visible={isModalVisible}
+				title={L.passwordTitle}
+				open={isModalVisible}
 				footer={null}
 				closable={false}
 			>
 				<Input.Password
-					placeholder='Enter password'
+					placeholder={L.passwordPlaceholder}
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
 					iconRender={(visible) =>
@@ -209,168 +277,164 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 					style={{ marginTop: "10px", width: "100%" }}
 					onClick={handlePasswordVerification}
 				>
-					Verify Password
+					{L.verify}
 				</Button>
 			</Modal>
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
-						<AdminNavbar
-							fromPage='JanatWebsite'
-							AdminMenuStatus={AdminMenuStatus}
-							setAdminMenuStatus={setAdminMenuStatus}
-							collapsed={collapsed}
-							setCollapsed={setCollapsed}
-							chosenLanguage={chosenLanguage}
-						/>
+						{isArabic ? (
+							<AdminNavbarArabic
+								fromPage='WebsiteManagement'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						) : (
+							<AdminNavbar
+								fromPage='JanatWebsite'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						)}
 					</div>
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							<h3 className='mb-3'>Janat Booking Website Edit</h3>
+							<PageHeader>
+								<h1>{L.title}</h1>
+								<ActivePill>{activeTabLabel}</ActivePill>
+							</PageHeader>
 
 							{/* Tab Navigation */}
-							<TabNavigation>
-								<button
-									className={activeTab === "home" ? "active" : ""}
-									onClick={() => setActiveTab("home")}
-								>
-									Home Page
-								</button>
-								<button
-									className={activeTab === "about" ? "active" : ""}
-									onClick={() => setActiveTab("about")}
-								>
-									About Us
-								</button>
-								<button
-									className={activeTab === "contact" ? "active" : ""}
-									onClick={() => setActiveTab("contact")}
-								>
-									Contact Us
-								</button>
-
-								<button
-									className={activeTab === "termsandconditions" ? "active" : ""}
-									onClick={() => setActiveTab("termsandconditions")}
-								>
-									Terms & Condition For Guests
-								</button>
-
-								<button
-									className={
-										activeTab === "termsandconditions_B2B" ? "active" : ""
-									}
-									onClick={() => setActiveTab("termsandconditions_B2B")}
-								>
-									Terms & Condition For Hotels
-								</button>
-
-								<button
-									className={activeTab === "privacyPolicy" ? "active" : ""}
-									onClick={() => setActiveTab("privacyPolicy")}
-								>
-									Privacy Policy
-								</button>
+							<TabNavigation role='tablist' aria-label={L.title}>
+								{TAB_DEFS.map((tab) => (
+									<button
+										type='button'
+										key={tab.key}
+										role='tab'
+										aria-selected={activeTab === tab.key}
+										className={activeTab === tab.key ? "active" : ""}
+										onClick={() => setActiveTab(tab.key)}
+									>
+										{tab.icon}
+										<span>{L[tab.labelKey]}</span>
+									</button>
+								))}
 							</TabNavigation>
 
 							{/* Conditional Rendering Based on Active Tab */}
-							{activeTab === "home" && (
-								<>
-									<div>
-										<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
-									</div>
-									<div>
-										<ZHomePageBanners
-											addThumbnail={homeMainBanners}
-											setAddThumbnail={setHomeMainBanners}
-										/>
-									</div>
-									<div>
-										<ZHomePageBanner2
-											addThumbnail={homeSecondBanner}
-											setAddThumbnail={setHomeSecondBanner}
-										/>
-									</div>
-									<div>
-										<ZHomePageBanner3
-											addThumbnail={homeThirdBanner}
-											setAddThumbnail={setHomeThirdBanner}
-										/>
-									</div>
-									{/* <div>
+							<TabPanel>
+								{activeTab === "home" && (
+									<>
+										<div>
+											<ZLogoAdd addThumbnail={logo} setAddThumbnail={setLogo} />
+										</div>
+										<div>
+											<ZHomePageBanners
+												addThumbnail={homeMainBanners}
+												setAddThumbnail={setHomeMainBanners}
+											/>
+										</div>
+										<div>
+											<ZHomePageBanner2
+												addThumbnail={homeSecondBanner}
+												setAddThumbnail={setHomeSecondBanner}
+											/>
+										</div>
+										<div>
+											<ZHomePageBanner3
+												addThumbnail={homeThirdBanner}
+												setAddThumbnail={setHomeThirdBanner}
+											/>
+										</div>
+										{/* <div>
 										<ZHotelsMainBanner
 											addThumbnail={hotelPageBanner}
 											setAddThumbnail={setHotelPageBanner}
 										/>
 									</div> */}
-								</>
-							)}
+									</>
+								)}
 
-							{activeTab === "about" && (
-								<div>
-									<ZAboutUsAdd
-										addThumbnail={aboutUsBanner}
-										setAddThumbnail={setAboutUsBanner}
-										aboutUsArabic={aboutUsArabic}
-										setAboutUsArabic={setAboutUsArabic}
-										aboutUsEnglish={aboutUsEnglish}
-										setAboutUsEnglish={setAboutUsEnglish}
-									/>
-								</div>
-							)}
+								{activeTab === "about" && (
+									<div>
+										<ZAboutUsAdd
+											addThumbnail={aboutUsBanner}
+											setAddThumbnail={setAboutUsBanner}
+											aboutUsArabic={aboutUsArabic}
+											setAboutUsArabic={setAboutUsArabic}
+											aboutUsEnglish={aboutUsEnglish}
+											setAboutUsEnglish={setAboutUsEnglish}
+										/>
+									</div>
+								)}
 
-							{activeTab === "contact" && (
-								<div>
-									<ZContactusBannerAdd
-										addThumbnail={contactUsBanner}
-										setAddThumbnail={setContactUsBanner}
-									/>
-								</div>
-							)}
+								{activeTab === "contact" && (
+									<div>
+										<ZContactusBannerAdd
+											addThumbnail={contactUsBanner}
+											setAddThumbnail={setContactUsBanner}
+										/>
+									</div>
+								)}
 
-							{activeTab === "termsandconditions" && (
-								<div>
-									<ZTermsAndConditions
-										termsAndConditionEnglish={termsAndConditionEnglish}
-										termsAndConditionArabic={termsAndConditionArabic}
-										setTermsAndConditionEnglish={setTermsAndConditionEnglish}
-										setTermsAndConditionArabic={setTermsAndConditionArabic}
-									/>
-								</div>
-							)}
+								{activeTab === "termsandconditions" && (
+									<div>
+										<ZTermsAndConditions
+											termsAndConditionEnglish={termsAndConditionEnglish}
+											termsAndConditionArabic={termsAndConditionArabic}
+											setTermsAndConditionEnglish={setTermsAndConditionEnglish}
+											setTermsAndConditionArabic={setTermsAndConditionArabic}
+										/>
+									</div>
+								)}
 
-							{activeTab === "termsandconditions_B2B" && (
-								<div>
-									<ZTermsAndConditionsB2B
-										termsAndConditionEnglish_B2B={termsAndConditionEnglish_B2B}
-										termsAndConditionArabic_B2B={termsAndConditionArabic_B2B}
-										setTermsAndConditionEnglish_B2B={
-											setTermsAndConditionEnglish_B2B
-										}
-										setTermsAndConditionArabic_B2B={
-											setTermsAndConditionArabic_B2B
-										}
-									/>
-								</div>
-							)}
+								{activeTab === "termsandconditions_B2B" && (
+									<div>
+										<ZTermsAndConditionsB2B
+											termsAndConditionEnglish_B2B={
+												termsAndConditionEnglish_B2B
+											}
+											termsAndConditionArabic_B2B={
+												termsAndConditionArabic_B2B
+											}
+											setTermsAndConditionEnglish_B2B={
+												setTermsAndConditionEnglish_B2B
+											}
+											setTermsAndConditionArabic_B2B={
+												setTermsAndConditionArabic_B2B
+											}
+										/>
+									</div>
+								)}
 
-							{activeTab === "privacyPolicy" && (
-								<div>
-									<ZPrivacyPolicy
-										privacyPolicy={privacyPolicy}
-										setPrivacyPolicy={setPrivacyPolicy}
-										privacyPolicyArabic={privacyPolicyArabic}
-										setPrivacyPolicyArabic={setPrivacyPolicyArabic}
-									/>
-								</div>
-							)}
+								{activeTab === "privacyPolicy" && (
+									<div>
+										<ZPrivacyPolicy
+											privacyPolicy={privacyPolicy}
+											setPrivacyPolicy={setPrivacyPolicy}
+											privacyPolicyArabic={privacyPolicyArabic}
+											setPrivacyPolicyArabic={setPrivacyPolicyArabic}
+										/>
+									</div>
+								)}
+							</TabPanel>
 
-							<div className='' style={{ marginTop: "80px" }}>
-								<button className='btn btn-primary' onClick={submitDocument}>
-									Submit...
-								</button>
-							</div>
+							<ActionFooter>
+								<Button
+									type='primary'
+									icon={<SaveOutlined />}
+									onClick={submitDocument}
+								>
+									{L.save}
+								</Button>
+							</ActionFooter>
 						</div>
 					</div>
 				</div>
@@ -388,6 +452,7 @@ const JanatWebsiteMainWrapper = styled.div`
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -402,21 +467,32 @@ const JanatWebsiteMainWrapper = styled.div`
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.96);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		overflow: hidden;
+		box-sizing: border-box;
 	}
 
-	h3 {
-		font-weight: bold;
-		font-size: 1.5rem;
-		text-align: center;
-		color: #006ad1;
+	.container-wrapper .container {
+		max-width: 100%;
+	}
+
+	.container-wrapper h3 {
+		color: #0b5484 !important;
+		font-weight: 950 !important;
+		letter-spacing: 0;
 	}
 
 	@media (max-width: 1400px) {
@@ -428,29 +504,164 @@ const JanatWebsiteMainWrapper = styled.div`
 			grid-template-columns: 1fr;
 			grid-template-areas: "nav" "content";
 		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
+		}
 	}
+`;
+
+const PageHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 13px 15px;
+	margin-bottom: 12px;
+	border: 1px solid rgba(139, 190, 227, 0.4);
+	border-radius: 8px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(235, 247, 255, 0.92)),
+		#f8fbff;
+
+	h1 {
+		margin: 0;
+		color: #0b3158;
+		font-size: clamp(1.12rem, 1.4vw, 1.45rem);
+		font-weight: 950;
+		line-height: 1.35;
+		letter-spacing: 0;
+	}
+
+	@media (max-width: 620px) {
+		align-items: stretch;
+		flex-direction: column;
+	}
+`;
+
+const ActivePill = styled.span`
+	min-height: 30px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 5px 12px;
+	border: 1px solid rgba(36, 144, 200, 0.36);
+	border-radius: 999px;
+	background: rgba(36, 144, 200, 0.08);
+	color: #0d4773;
+	font-size: 0.78rem;
+	font-weight: 950;
+	white-space: nowrap;
 `;
 
 const TabNavigation = styled.div`
 	display: flex;
-	gap: 10px;
-	margin-bottom: 20px;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding: 6px;
+	border: 1px solid rgba(139, 190, 227, 0.36);
+	border-radius: 8px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 251, 255, 0.96)),
+		#f8fbff;
 
 	button {
-		padding: 10px 20px;
-		border: none;
-		background-color: #ddd;
+		min-height: 44px;
+		padding: 9px 14px;
+		border: 1px solid rgba(139, 190, 227, 0.46);
+		background: #ffffff;
+		color: #173a5f;
 		cursor: pointer;
-		font-weight: bold;
-		border-radius: 5px;
+		font-weight: 950;
+		border-radius: 6px;
+		flex: 1 1 175px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		line-height: 1.2;
+		box-shadow: 0 8px 18px rgba(13, 49, 88, 0.06);
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease,
+			box-shadow 160ms ease,
+			transform 160ms ease;
 
 		&.active {
-			background-color: #006ad1;
-			color: white;
+			border-color: rgba(122, 209, 245, 0.95);
+			background: var(
+				--admin-metal-blue-bg,
+				linear-gradient(135deg, #081a2d 0%, #155d95 52%, #071827 100%)
+			);
+			color: #ffffff;
+			box-shadow:
+				inset 0 1px rgba(255, 255, 255, 0.22),
+				0 10px 22px rgba(8, 42, 75, 0.18);
 		}
 
 		&:hover {
-			background-color: #bbb;
+			border-color: rgba(36, 144, 200, 0.7);
+			transform: translateY(-1px);
+		}
+
+		svg {
+			font-size: 16px;
+			flex: 0 0 auto;
+		}
+
+		span {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
+
+	@media (max-width: 768px) {
+		button {
+			flex-basis: 100%;
+			font-size: 0.9rem;
+		}
+	}
+`;
+
+const TabPanel = styled.section`
+	min-width: 0;
+	overflow: hidden;
+
+	> div,
+	.container {
+		min-width: 0;
+	}
+
+	.ql-toolbar,
+	.ql-container,
+	.card {
+		max-width: 100%;
+	}
+`;
+
+const ActionFooter = styled.div`
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 24px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(139, 190, 227, 0.28);
+
+	.ant-btn {
+		min-width: 150px;
+		min-height: 42px;
+		border-radius: 6px;
+		font-weight: 950;
+	}
+
+	@media (max-width: 575px) {
+		.ant-btn {
+			width: 100%;
 		}
 	}
 `;

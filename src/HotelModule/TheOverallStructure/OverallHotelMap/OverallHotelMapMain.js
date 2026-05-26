@@ -25,10 +25,10 @@ import {
 
 const TEXT = {
 	en: {
-		title: "Hotel Map",
+		title: "Hotel Rooms Map",
 		subtitle: "Live room status maps for the hotels assigned to this account",
 		openFullMap: "Open Full Heat Map",
-		openMapSettings: "Open Hotel Map Settings",
+		openMapSettings: "Open Rooms Map Settings",
 		loading: "Loading hotel maps...",
 		noHotels: "No assigned hotels were found.",
 		noMap: "No room map is available for this hotel yet.",
@@ -41,7 +41,8 @@ const TEXT = {
 		hotel: "Hotel",
 	},
 	ar: {
-		title: "خريطة الفنادق",
+		title: "\u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+		openMapSettings: "\u0641\u062a\u062d \u0625\u0639\u062f\u0627\u062f\u0627\u062a \u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u062f\u0642",
 		subtitle: "خرائط حالة الغرف للفنادق المخصصة لهذا الحساب",
 		openFullMap: "فتح خريطة الفندق كاملة",
 		loading: "جاري تحميل خرائط الفنادق...",
@@ -57,7 +58,8 @@ const TEXT = {
 };
 
 const AR_TEXT = {
-	title: "خريطة الفنادق",
+	title: "\u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	openMapSettings: "\u0641\u062a\u062d \u0625\u0639\u062f\u0627\u062f\u0627\u062a \u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u062f\u0642",
 	subtitle: "خرائط حالة الغرف للفنادق المخصصة لهذا الحساب",
 	openFullMap: "فتح خريطة الفندق كاملة",
 	loading: "جار تحميل خرائط الفنادق...",
@@ -381,7 +383,7 @@ const OverallHotelMapMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				open={!!queryState.mapHotelId}
 				onCancel={closeFullMap}
 				footer={null}
-				width='min(96vw, 1400px)'
+				width='min(99vw, 1680px)'
 				zIndex={2200}
 				centered
 				destroyOnClose
@@ -412,8 +414,8 @@ const OverallHotelMapMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						>
 							{labels.openMapSettings ||
 								(isRTL
-									? "فتح إعدادات خريطة الفندق"
-									: "Open Hotel Map Settings")}
+									? "\u0641\u062a\u062d \u0625\u0639\u062f\u0627\u062f\u0627\u062a \u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u062f\u0642"
+									: "Open Rooms Map Settings")}
 						</MapSettingsButton>
 					</ModalMapToolbar>
 					{!loading && queryState.mapHotelId && !selectedMapHotel ? (
@@ -435,6 +437,7 @@ const OverallHotelMapMain = ({ userId, token, ownerId, chosenLanguage }) => {
 							chosenLanguage={chosenLanguage}
 							useCurrentOccupancy
 							mapSummary={mapData.summary}
+							showRoomColorLegend
 						/>
 					)}
 				</ModalMapBody>
@@ -601,7 +604,7 @@ const PanelActions = styled.div`
 
 const HotelMapModalGlobalStyle = createGlobalStyle`
 	.overall-hotel-map-modal {
-		max-width: min(96vw, 1400px);
+		max-width: min(99vw, 1680px);
 	}
 
 	.overall-hotel-map-modal .ant-modal-close {

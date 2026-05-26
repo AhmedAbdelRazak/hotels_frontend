@@ -1,7 +1,20 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, {
+	useEffect,
+	useState,
+	useContext,
+	useCallback,
+	useMemo,
+} from "react";
 import styled from "styled-components";
 import { useHistory, useLocation } from "react-router-dom";
 import { Badge } from "antd";
+import {
+	BankOutlined,
+	CustomerServiceOutlined,
+	HistoryOutlined,
+	SoundOutlined,
+	TeamOutlined,
+} from "@ant-design/icons";
 import ActiveHotelSupportCases from "./ActiveHotelSupportCases";
 import ActiveClientsSupportCases from "./ActiveClientsSupportCases";
 import HistoryHotelSupportCases from "./HistoryHotelSupportCases";
@@ -15,9 +28,33 @@ import socket from "../../socket";
 // 1) Import your NotificationContext here
 import { NotificationContext } from "./NotificationContext";
 
-const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
+const CUSTOMER_SERVICE_DETAILS_TEXT = {
+	en: {
+		enableSound: "Enable Notification Sound",
+		activeHotelCases: "Active Hotel Cases",
+		activeClientCases: "Active Client Cases",
+		hotelHistory: "Hotel Case History",
+		clientHistory: "Client Case History",
+	},
+	ar: {
+		enableSound:
+			"\u062a\u0641\u0639\u064a\u0644 \u0635\u0648\u062a \u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
+		activeHotelCases:
+			"\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0646\u0634\u0637\u0629",
+		activeClientCases:
+			"\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0646\u0634\u0637\u0629",
+		hotelHistory:
+			"\u0633\u062c\u0644 \u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+		clientHistory:
+			"\u0633\u062c\u0644 \u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+	},
+};
+
+const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 	const history = useHistory();
 	const location = useLocation();
+	const isArabic = chosenLanguage === "Arabic";
+	const L = CUSTOMER_SERVICE_DETAILS_TEXT[isArabic ? "ar" : "en"];
 	const [activeTab, setActiveTab] = useState("active-hotel-cases");
 
 	// State for case counts
@@ -27,14 +64,66 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 	// 2) Destructure your notification context
 	const { soundEnabled, enableSound } = useContext(NotificationContext);
 
+	const tabItems = useMemo(() => {
+		const baseTabs = [
+			{
+				key: "active-hotel-cases",
+				label: L.activeHotelCases,
+				icon: <BankOutlined />,
+				badge: activeHotelCasesCount,
+				badgeColor: "#e5484d",
+			},
+			{
+				key: "active-client-cases",
+				label: L.activeClientCases,
+				icon: <TeamOutlined />,
+				badge: activeClientCasesCount,
+				badgeColor: "#18a058",
+			},
+		];
+
+		if (!isSuperAdmin) return baseTabs;
+
+		return [
+			...baseTabs,
+			{
+				key: "history-hotel-cases",
+				label: L.hotelHistory,
+				icon: <HistoryOutlined />,
+			},
+			{
+				key: "history-client-cases",
+				label: L.clientHistory,
+				icon: <CustomerServiceOutlined />,
+			},
+		];
+	}, [
+		L.activeClientCases,
+		L.activeHotelCases,
+		L.clientHistory,
+		L.hotelHistory,
+		activeClientCasesCount,
+		activeHotelCasesCount,
+		isSuperAdmin,
+	]);
+
+	const validTabKeys = useMemo(
+		() => new Set(tabItems.map((tab) => tab.key)),
+		[tabItems]
+	);
+
 	// Handle tab changes
 	const handleTabChange = (tab) => {
+		if (!validTabKeys.has(tab)) return;
 		setActiveTab(tab);
-		history.push(`?tab=${tab}`);
+		history.push({
+			pathname: location.pathname,
+			search: `?tab=${tab}`,
+		});
 	};
 
 	// Fetch active case counts
-	const fetchCaseCounts = async () => {
+	const fetchCaseCounts = useCallback(async () => {
 		try {
 			const hotelCount = await getFilteredSupportCases(); // Fetch active hotel cases
 			const clientCount = await getFilteredSupportCasesClients(); // Fetch active client cases
@@ -43,12 +132,12 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 		} catch (error) {
 			console.error("Error fetching case counts", error);
 		}
-	};
+	}, []);
 
 	// Initial fetch
 	useEffect(() => {
 		fetchCaseCounts();
-	}, []);
+	}, [fetchCaseCounts]);
 
 	// Socket real-time updates
 	useEffect(() => {
@@ -66,19 +155,28 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCloseCase);
 		};
-	}, []);
+	}, [fetchCaseCounts]);
 
 	// Sync active tab with URL query param
 	useEffect(() => {
 		const query = new URLSearchParams(location.search);
 		const tab = query.get("tab");
-		if (tab) {
-			setActiveTab(tab);
+		const nextTab = validTabKeys.has(tab) ? tab : "active-hotel-cases";
+
+		if (activeTab !== nextTab) {
+			setActiveTab(nextTab);
 		}
-	}, [location.search]);
+
+		if (tab && tab !== nextTab) {
+			history.replace({
+				pathname: location.pathname,
+				search: `?tab=${nextTab}`,
+			});
+		}
+	}, [activeTab, history, location.pathname, location.search, validTabKeys]);
 
 	return (
-		<CustomerServiceDetailsWrapper>
+		<CustomerServiceDetailsWrapper dir={isArabic ? "rtl" : "ltr"}>
 			{/* 3) Minimal button to enable sound (and optional vibration) */}
 			{!soundEnabled && (
 				<EnableSoundButton
@@ -90,59 +188,36 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 						}
 					}}
 				>
-					Enable Notification Sound
+					<SoundOutlined />
+					{L.enableSound}
 				</EnableSoundButton>
 			)}
 
-			<div className='tab-grid'>
-				<Tab
-					isActive={activeTab === "active-hotel-cases"}
-					onClick={() => handleTabChange("active-hotel-cases")}
-				>
-					Active Hotel Support Cases{" "}
-					<Badge
-						count={activeHotelCasesCount}
-						style={{
-							backgroundColor: "#f5222d",
-							fontSize: "16px",
-							fontWeight: "bold",
-						}}
-					/>
-				</Tab>
-
-				<Tab
-					isActive={activeTab === "active-client-cases"}
-					onClick={() => handleTabChange("active-client-cases")}
-				>
-					Active Clients Support Cases{" "}
-					<Badge
-						count={activeClientCasesCount}
-						style={{
-							backgroundColor: "#52c41a",
-							fontSize: "16px",
-							fontWeight: "bold",
-						}}
-					/>
-				</Tab>
-
-				{/* History tabs only if super admin */}
-				{isSuperAdmin && (
-					<>
-						<Tab
-							isActive={activeTab === "history-hotel-cases"}
-							onClick={() => handleTabChange("history-hotel-cases")}
-						>
-							History Of Hotel Support Cases
-						</Tab>
-
-						<Tab
-							isActive={activeTab === "history-client-cases"}
-							onClick={() => handleTabChange("history-client-cases")}
-						>
-							History Of Client Support Cases
-						</Tab>
-					</>
-				)}
+			<div className='tab-grid' role='tablist'>
+				{tabItems.map((tab) => (
+					<Tab
+						key={tab.key}
+						type='button'
+						role='tab'
+						aria-selected={activeTab === tab.key}
+						$isActive={activeTab === tab.key}
+						onClick={() => handleTabChange(tab.key)}
+					>
+						<span className='tab-icon'>{tab.icon}</span>
+						<span className='tab-label'>{tab.label}</span>
+						{typeof tab.badge === "number" && (
+							<Badge
+								count={tab.badge}
+								style={{
+									backgroundColor: tab.badgeColor,
+									fontSize: "13px",
+									fontWeight: "bold",
+									boxShadow: "none",
+								}}
+							/>
+						)}
+					</Tab>
+				))}
 			</div>
 
 			<div className='content-wrapper'>
@@ -169,7 +244,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin }) => {
 				)}
 				{activeTab === "history-client-cases" && (
 					<div>
-						<HistoryClientsSupportCases />
+						<HistoryClientsSupportCases chosenLanguage={chosenLanguage} />
 					</div>
 				)}
 			</div>
@@ -182,73 +257,128 @@ export default CustomerServiceDetails;
 /* ---------------- Styled-components ---------------- */
 
 const CustomerServiceDetailsWrapper = styled.div`
-	padding: 20px;
-	background-color: #f5f5f5;
+	padding: 0;
+	background: transparent;
+	min-width: 0;
 
 	.tab-grid {
 		display: flex;
-		margin-bottom: 20px;
-		/* On mobile, allow wrapping so we can have 2 tabs per row */
-		@media (max-width: 768px) {
-			flex-wrap: wrap;
-			gap: 8px; /* small gap between wrapped tabs */
-		}
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 16px;
+		padding: 6px;
+		border: 1px solid rgba(139, 190, 227, 0.38);
+		border-radius: 8px;
+		background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 	}
 
 	.content-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 14px;
+		border-radius: 8px;
 		background: white;
+		overflow: hidden;
+		box-shadow: 0 12px 28px rgba(13, 49, 88, 0.08);
+	}
+
+	.ant-table-wrapper,
+	.ant-table,
+	.ant-table-container {
+		max-width: 100%;
+	}
+
+	.ant-table-content,
+	.ant-table-body {
+		overflow: auto !important;
+	}
+
+	@media (max-width: 768px) {
+		.content-wrapper {
+			padding: 10px;
+		}
 	}
 `;
 
-const Tab = styled.div`
+const Tab = styled.button`
+	appearance: none;
 	cursor: pointer;
-	margin: 0 3px;
-	padding: 15px 5px;
-	font-weight: ${(props) => (props.isActive ? "bold" : "normal")};
-	background-color: ${(props) => (props.isActive ? "transparent" : "#e0e0e0")};
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	flex: 1 1 220px;
+	min-height: 44px;
+	min-width: 180px;
+	padding: 10px 14px;
+	border: 1px solid
+		${(props) => (props.$isActive ? "#62c6ef" : "rgba(118, 166, 208, 0.42)")};
+	border-radius: 8px;
+	font-weight: ${(props) => (props.$isActive ? "800" : "700")};
+	background: ${(props) =>
+		props.$isActive
+			? "linear-gradient(180deg, #1d6c9f 0%, #0b2c49 100%)"
+			: "linear-gradient(180deg, #ffffff 0%, #f3f8fd 100%)"};
 	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
-	transition: all 0.3s ease;
-	min-width: 25px;
-	width: 100%; /* Each tab expands equally in the row */
+		props.$isActive
+			? "0 10px 24px rgba(19, 104, 155, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18)"
+			: "0 6px 14px rgba(13, 49, 88, 0.08)"};
+	transition: transform 0.18s ease, box-shadow 0.18s ease,
+		border-color 0.18s ease;
 	text-align: center;
-	z-index: 100;
-	font-size: 1.2rem;
-	color: black; /* same color whether active or not */
+	font-size: 0.95rem;
+	color: ${(props) => (props.$isActive ? "#fff" : "#18334f")};
 
-	/* Adjust slightly for medium-ish screens */
-	@media (max-width: 1600px) {
+	.tab-icon {
+		display: inline-flex;
 		font-size: 1rem;
-		padding: 10px 1px;
 	}
 
-	/* On mobile, 2 tabs per row */
+	.tab-label {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	&:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 12px 24px rgba(13, 49, 88, 0.14);
+	}
+
+	&:focus-visible {
+		outline: 3px solid rgba(76, 181, 230, 0.28);
+		outline-offset: 2px;
+	}
+
 	@media (max-width: 768px) {
-		flex: 1 0 48%; /* each tab ~48% so two fit in one row */
-		box-sizing: border-box;
-		font-size: 0.95rem; /* slightly smaller font on mobile */
-		margin: 0; /* override the 0 3px for consistent spacing within .tab-grid gap */
-		padding: 10px 0;
+		flex: 1 1 100%;
+		min-width: 0;
+
+		.tab-label {
+			white-space: normal;
+		}
 	}
 `;
 
 const EnableSoundButton = styled.button`
-	display: inline-block;
-	margin-bottom: 20px;
-	padding: 8px 16px;
-	font-size: 1rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	padding: 9px 15px;
+	font-size: 0.95rem;
 	font-weight: bold;
-	background-color: #1890ff;
+	background: linear-gradient(180deg, #1678b1 0%, #0c3b63 100%);
 	color: #fff;
-	border: none;
-	border-radius: 6px;
+	border: 1px solid rgba(102, 198, 239, 0.5);
+	border-radius: 8px;
 	cursor: pointer;
+	box-shadow: 0 10px 22px rgba(13, 49, 88, 0.16);
 
 	&:hover {
-		background-color: #40a9ff;
+		background: linear-gradient(180deg, #1f88c3 0%, #0d4774 100%);
 	}
 
 	@media (max-width: 768px) {

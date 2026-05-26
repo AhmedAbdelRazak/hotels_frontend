@@ -1,7 +1,6 @@
 /** @format */
 
 @import url("https://fonts.googleapis.com/css?family=Montserrat:400,700|Open+Sans&display=swap");
-@import url("//fonts.googleapis.com/earlyaccess/droidarabickufi.css");
 
 /* @import "~react-image-gallery/styles/css/image-gallery.css"; */
 
@@ -139,6 +138,15 @@ table tbody td.number-cell,
 .ant-tooltip,
 .ant-popover {
 	z-index: 20000 !important;
+	pointer-events: auto !important;
+}
+
+.ant-select-dropdown {
+	overscroll-behavior: contain;
+}
+
+.ant-select-dropdown .ant-select-item-option {
+	cursor: pointer;
 }
 
 .overall-filter-dropdown.rtl {
@@ -557,5 +565,6 @@ table tbody td.number-cell,
 }
 
 .arabicFonts {
-	font-family: "Droid Arabic Kufi";
+	font-family: "Droid Arabic Kufi", "Noto Kufi Arabic", "Tajawal", "Cairo",
+		"Segoe UI", Tahoma, Arial, sans-serif;
 }

@@ -3,17 +3,32 @@ import axios from "axios";
 const authHeaders = (token) =>
 	token ? { Authorization: `Bearer ${token}` } : {};
 
+const getStoredBaseAuthHeaders = () => {
+	try {
+		if (typeof window === "undefined") return {};
+		const raw = localStorage.getItem("jwt");
+		const parsed = raw ? JSON.parse(raw) : null;
+		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
+	} catch (error) {
+		return {};
+	}
+};
+
 const getStoredActiveAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
+		const isAdminRoute = String(window.location?.pathname || "").startsWith(
+			"/admin",
+		);
+		if (isAdminRoute) {
+			return getStoredBaseAuthHeaders();
+		}
 		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
 		const preview = previewRaw ? JSON.parse(previewRaw) : null;
 		if (preview?.auth?.token) {
 			return { Authorization: `Bearer ${preview.auth.token}` };
 		}
-		const raw = localStorage.getItem("jwt");
-		const parsed = raw ? JSON.parse(raw) : null;
-		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
+		return getStoredBaseAuthHeaders();
 	} catch (error) {
 		return {};
 	}
@@ -164,6 +179,70 @@ export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
+const buildAdminAccountQuery = (params = {}) => {
+	const searchParams = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		searchParams.set(key, Array.isArray(value) ? value.join(",") : value);
+	});
+	const query = searchParams.toString();
+	return query ? `?${query}` : "";
+};
+
+export const getAdminAccounts = (userId, token, params = {}) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/accounts/${userId}${buildAdminAccountQuery(
+			params,
+		)}`,
+		{
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
+
+export const createAdminHotelStaffAccount = (userId, token, payload = {}) =>
+	fetch(`${process.env.REACT_APP_API_URL}/admin/accounts/hotel-staff/${userId}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(payload),
+	})
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
+
+export const createAdminPlatformStaffAccount = (userId, token, payload = {}) =>
+	fetch(`${process.env.REACT_APP_API_URL}/admin/accounts/platform-staff/${userId}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(payload),
+	})
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
+
+export const updateAdminAccount = (userId, token, accountId, payload = {}) =>
+	fetch(`${process.env.REACT_APP_API_URL}/admin/accounts/${accountId}/${userId}`, {
+		method: "PUT",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(payload),
+	})
+		.then((res) => res.json())
+		.catch((err) => console.error(err));
+
 export const sendReservationConfirmationSMS = (reservationId, opts = {}) => {
 	const params = { notifyAdmins: opts.notifyAdmins ? "true" : "false" };
 	return axios
@@ -302,6 +381,150 @@ export const gettingAllHotelAccounts = (userId, token) => {
 		.catch((err) => console.log(err));
 };
 
+export const getSupportChatRecipients = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/support-cases/recipients/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			return { error: "Could not load support chat recipients" };
+	});
+};
+
+export const getAdminHotelNotificationFeed = ({
+	userId,
+	token,
+	limit = 8,
+}) => {
+	const query = new URLSearchParams();
+	if (limit) query.append("limit", limit);
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load hotel notifications",
+			total: 0,
+			data: [],
+		}));
+};
+
+export const getAdminSupportNotificationSummary = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/support-cases/notifications/summary/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load support notifications",
+			openCases: 0,
+			unseenMessages: 0,
+		}));
+};
+
+export const getAdminB2BChatUnreadSummary = (userId, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/b2b-chat/unread/${userId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
+		},
+		cache: "no-store",
+	})
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load B2B chat notifications",
+			unreadChats: 0,
+			unreadMessages: 0,
+			activeChats: 0,
+		}));
+};
+
+export const listAdminB2BChats = (userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && value !== "") {
+			query.set(key, value);
+		}
+	});
+	const suffix = query.toString() ? `?${query.toString()}` : "";
+	return fetch(`${process.env.REACT_APP_API_URL}/b2b-chat/chats/${userId}${suffix}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
+		},
+		cache: "no-store",
+	})
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load B2B chats",
+			chats: [],
+		}));
+};
+
+export const acknowledgeAdminHotelNotification = ({
+	userId,
+	token,
+	ackKey = "",
+	notificationType = "",
+	entityId = "",
+	reservationId = "",
+	walletTransactionId = "",
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}/acknowledge`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			body: JSON.stringify({
+				ackKey,
+				notificationType,
+				entityId,
+				reservationId,
+				walletTransactionId,
+			}),
+		},
+	).then((response) => response.json());
+};
+
 export const reassignHotelOwner = (
 	hotelId,
 	userId,
@@ -353,7 +576,8 @@ export const updateSupportCase = (caseId, data, token) => {
 		headers: {
 			Accept: "application/json",
 			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
 		},
 		body: JSON.stringify(data),
 	})
@@ -369,7 +593,8 @@ export const getFilteredSupportCases = (token) => {
 		headers: {
 			"Content-Type": "application/json",
 			Accept: "application/json",
-			Authorization: `Bearer ${token}`,
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
 		},
 	})
 		.then((response) => response.json())
@@ -384,7 +609,8 @@ export const getFilteredSupportCasesClients = (token) => {
 			headers: {
 				"Content-Type": "application/json",
 				Accept: "application/json",
-				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
 			},
 		},
 	)
@@ -398,22 +624,30 @@ export const getFilteredClosedSupportCases = (token) => {
 		headers: {
 			"Content-Type": "application/json",
 			Accept: "application/json",
-			Authorization: `Bearer ${token}`,
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
 		},
 	})
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 
-export const getFilteredClosedSupportCasesClients = (token) => {
+export const getFilteredClosedSupportCasesClients = (token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		query.set(key, value);
+	});
+	const suffix = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/closed/clients`,
+		`${process.env.REACT_APP_API_URL}/support-cases/closed/clients${suffix}`,
 		{
 			method: "GET",
 			headers: {
 				"Content-Type": "application/json",
 				Accept: "application/json",
-				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
 			},
 		},
 	)
@@ -467,7 +701,8 @@ export const getSupportCases = (status, token) => {
 		headers: {
 			Accept: "application/json",
 			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
 		},
 	})
 		.then((response) => response.json())
@@ -480,7 +715,8 @@ export const getSupportCaseById = (caseId, token) => {
 		headers: {
 			Accept: "application/json",
 			"Content-Type": "application/json",
-			Authorization: `Bearer ${token}`,
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
 		},
 	})
 		.then((response) => {
@@ -497,6 +733,7 @@ export const updateSeenByCustomer = async (caseId) => {
 			headers: {
 				Accept: "application/json",
 				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
 			},
 		},
 	)
@@ -531,6 +768,7 @@ export const getUnseenMessagesCountByAdmin = async (userId) => {
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
 			},
 		},
 	)
@@ -643,6 +881,7 @@ export const markAllMessagesAsSeenByAdmin = async (caseId, userId) => {
 			headers: {
 				Accept: "application/json",
 				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
 			},
 			body: JSON.stringify({ userId }), // Pass the current user's ID
 		},

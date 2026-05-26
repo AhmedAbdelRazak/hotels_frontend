@@ -26,9 +26,7 @@ const ContentOfIntegrator = ({ allHotelDetailsAdmin, currentUser }) => {
 		const accessTo = currentUser?.accessTo || [];
 		const hasAccess =
 			SUPER_USER_IDS.includes(currentUser?._id) ||
-			accessTo.includes("Integrator") ||
-			accessTo.includes("all") ||
-			accessTo.length === 0;
+			accessTo.includes("Integrator");
 
 		if (IntegratorVerified || hasAccess) {
 			setIsPasswordVerified(true); // Skip password step

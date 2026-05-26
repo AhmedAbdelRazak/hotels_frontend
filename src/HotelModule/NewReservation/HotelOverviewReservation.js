@@ -10,6 +10,16 @@ const CHECKED_OUT_STATUS_REGEX =
 	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
 const INHOUSE_STATUS_REGEX = /in[_\s-]?house/i;
 
+const roomTooltipProps = (isArabic = false) => ({
+	placement: isArabic ? "left" : "right",
+	align: { offset: [isArabic ? -12 : 12, 0] },
+	mouseEnterDelay: 0.18,
+	mouseLeaveDelay: 0.04,
+	autoAdjustOverflow: true,
+	overlayStyle: { zIndex: 100000000, pointerEvents: "none" },
+	overlayInnerStyle: { pointerEvents: "none" },
+});
+
 const HotelOverviewReservation = ({
 	hotelRooms,
 	hotelDetails,
@@ -1196,6 +1206,9 @@ const HotelOverviewReservation = ({
 														);
 														return (
 															<Tooltip
+																{...roomTooltipProps(
+																	chosenLanguage === "Arabic",
+																)}
 																title={
 																	<div
 																		style={{
@@ -1259,7 +1272,6 @@ const HotelOverviewReservation = ({
 																	</div>
 																}
 																key={roomKey}
-																overlayStyle={{ zIndex: 100000000 }}
 																color='white'
 															>
 																<RoomSquare
@@ -1326,6 +1338,9 @@ const HotelOverviewReservation = ({
 															);
 															return (
 																<Tooltip
+																	{...roomTooltipProps(
+																		chosenLanguage === "Arabic",
+																	)}
 																	title={
 																		<div
 																			style={{
@@ -1401,7 +1416,6 @@ const HotelOverviewReservation = ({
 																		</div>
 																	}
 																	key={roomKey}
-																	overlayStyle={{ zIndex: 100000000 }}
 																	color='white'
 																>
 																	<RoomSquare

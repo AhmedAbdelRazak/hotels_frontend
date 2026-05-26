@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
-import { DatePicker, Input, Select, Switch } from "antd";
+import { DatePicker, Drawer, Input, Select, Switch } from "antd";
 import {
 	CalendarOutlined,
 	FilterOutlined,
@@ -61,6 +61,7 @@ const SUMMARY_TEXT = {
 		includeCancelled: "Include cancelled/no show",
 		status: "Status",
 		dateBy: "Date by",
+		grandTotal: "Grand Total",
 	},
 	ar: {
 		title: "الملخص العام",
@@ -68,6 +69,7 @@ const SUMMARY_TEXT = {
 		today: "اليوم",
 		yesterday: "أمس",
 		last7: "آخر 7 أيام",
+		grandTotal: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0639\u0627\u0645",
 	},
 };
 
@@ -239,8 +241,7 @@ const monthRangeFromSelection = (calendarType, months = [], year) => {
 	};
 };
 
-const defaultSummaryCalendarType = (tab = "overview") =>
-	tab === "inventory" ? "hijri" : "gregorian";
+const defaultSummaryCalendarType = () => "hijri";
 
 const summaryReportFilterFromQuery = (query, tab) => {
 	const defaultHijri = currentHijriSelection();
@@ -288,6 +289,19 @@ const initialSummaryRange = (query, filters) => {
 	return "all";
 };
 
+const formatCount = (value) => Number(value || 0).toLocaleString("en-US");
+
+const formatRoomsFraction = (numerator, denominator) =>
+	`${formatCount(numerator)}/${formatCount(denominator)}`;
+
+const formatCleanlinessFraction = (row = {}) =>
+	row.cleanlinessAvailable
+		? formatRoomsFraction(row.cleanRooms, row.dirtyRooms)
+		: "-";
+
+const getSummaryDrawerContainer = () =>
+	typeof document !== "undefined" ? document.body : false;
+
 const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -319,6 +333,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const [filters, setFilters] = useState(initialReportFilters);
 	const [loading, setLoading] = useState(false);
 	const [summary, setSummary] = useState(null);
+	const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 	const summaryRequestRef = useRef(0);
 
 	const urlParams = useMemo(
@@ -333,8 +348,9 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			range,
 			dateBy,
 			...filters,
+			search: activeTab === "overview" ? "" : filters.search,
 		}),
-		[dateBy, filters, ownerId, range, urlParams]
+		[activeTab, dateBy, filters, ownerId, range, urlParams]
 	);
 
 	useEffect(() => {
@@ -360,6 +376,10 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				: nextReportFilters
 		);
 	}, [location.search]);
+
+	useEffect(() => {
+		if (activeTab === "inventory") setFilterDrawerOpen(false);
+	}, [activeTab]);
 
 	useEffect(() => {
 		if (!userId || !token) return;
@@ -434,6 +454,20 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		filters.dateFrom && filters.dateTo
 			? [dayjs(filters.dateFrom), dayjs(filters.dateTo)]
 			: null;
+	const activeFilterCount = useMemo(() => {
+		let count = 0;
+		if (parseSummaryList(filters.hotelId).length) count += 1;
+		if (filters.reportMonths?.length) count += 1;
+		else if (filters.dateFrom || filters.dateTo) count += 1;
+		if (parseSummaryList(filters.status).length) count += 1;
+		if (activeTab !== "overview" && filters.search) count += 1;
+		if (filters.includeCancelled) count += 1;
+		if (dateBy !== "createdAt") count += 1;
+		return count;
+	}, [activeTab, dateBy, filters]);
+	const filterButtonText = activeFilterCount
+		? `${filterLabels.reportFilters} (${activeFilterCount})`
+		: filterLabels.reportFilters;
 	const openHotel = (hotel = {}, section = "dashboard") => {
 		const route = singleHotelRoute(hotel.ownerId || ownerId, hotel._id, section);
 		if (route) history.push(route);
@@ -478,7 +512,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			query.set("invEnd", nextFilters.dateTo);
 		}
 		const hasMonthSelection = Boolean(nextFilters.reportMonths?.length);
-		if (hasMonthSelection && nextFilters.calendarType) {
+		const defaultCalendar = defaultSummaryCalendarType(tab);
+		if (
+			nextFilters.calendarType &&
+			(hasMonthSelection || nextFilters.calendarType !== defaultCalendar)
+		) {
 			query.set("invCal", nextFilters.calendarType);
 		}
 		if (hasMonthSelection && nextFilters.reportYear) {
@@ -601,6 +639,154 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		setActiveTab(nextTab);
 		syncReportQuery(filters, dateBy, nextTab);
 	};
+	const renderFilterPanelContent = () => (
+		<>
+			<div className='filter-title'>
+				<strong>{filterLabels.reportFilters}</strong>
+				<span>
+					{filters.dateFrom && filters.dateTo
+						? `${filterLabels.computedRange}: ${filters.dateFrom} - ${filters.dateTo}`
+						: filterLabels.allHistorical}
+				</span>
+			</div>
+			<div className='filter-grid'>
+				<label className='filter-control hotel-control'>
+					<span>
+						<HomeOutlined /> {filterLabels.selectedHotels}
+					</span>
+					<Select
+						mode='multiple'
+						allowClear
+						maxTagCount='responsive'
+						value={filters.hotelId}
+						onChange={(value) => updateFilter("hotelId", value)}
+						options={hotelOptions.map((hotel) => ({
+							value: hotel._id,
+							label: titleCase(hotel.hotelName),
+						}))}
+						showSearch
+						optionFilterProp='label'
+						placeholder={labels.allHotels}
+					/>
+				</label>
+				<label className='filter-control'>
+					<span>
+						<CalendarOutlined /> {filterLabels.calendar}
+					</span>
+					<Select
+						value={filters.calendarType}
+						onChange={updateCalendarType}
+						options={[
+							{ value: "gregorian", label: filterLabels.gregorian },
+							{ value: "hijri", label: filterLabels.hijri },
+						]}
+					/>
+				</label>
+				<label className='filter-control months-control'>
+					<span>
+						<FilterOutlined /> {filterLabels.months}
+					</span>
+					<Select
+						mode='multiple'
+						allowClear
+						maxTagCount='responsive'
+						value={filters.reportMonths}
+						onChange={updateReportMonths}
+						options={monthOptions}
+						placeholder={filterLabels.allHistorical}
+					/>
+				</label>
+				<label className='filter-control'>
+					<span>{filterLabels.year}</span>
+					<Select
+						value={filters.reportYear}
+						onChange={updateReportYear}
+						options={yearOptions}
+					/>
+				</label>
+				<label className='filter-control wide-control'>
+					<span>
+						<CalendarOutlined /> {filterLabels.computedRange}
+					</span>
+					<RangePicker
+						value={selectedRangeValues}
+						format='YYYY-MM-DD'
+						allowClear={false}
+						disabled
+						placeholder={[filterLabels.dateFrom, filterLabels.dateTo]}
+					/>
+				</label>
+				<label className='filter-control'>
+					<span>{filterLabels.dateBy}</span>
+					<Select
+						value={dateBy}
+						onChange={updateDateBy}
+						options={dateByOptions}
+					/>
+				</label>
+				<label className='filter-control status-control'>
+					<span>{filterLabels.status}</span>
+					<Select
+						mode='multiple'
+						allowClear
+						maxTagCount='responsive'
+						value={filters.status}
+						onChange={(value) => updateFilter("status", value)}
+						options={statusOptions.filter((option) => option.value)}
+						placeholder={filterLabels.operationalReservations}
+					/>
+				</label>
+				{activeTab !== "overview" && (
+					<label className='filter-control search-control'>
+						<span>{labels.search}</span>
+						<Input
+							allowClear
+							value={filters.search}
+							onChange={(event) => updateFilter("search", event.target.value)}
+							placeholder={filterLabels.searchPlaceholder}
+						/>
+					</label>
+				)}
+				<div className='filter-control switch-control'>
+					<span>{filterLabels.includeCancelled}</span>
+					<Switch
+						checked={filters.includeCancelled}
+						onChange={(checked) => updateFilter("includeCancelled", checked)}
+					/>
+				</div>
+			</div>
+			{activeTab !== "overview" && (
+				<div className='filter-actions'>
+					<button
+						type='button'
+						onClick={() => {
+							const requestId = summaryRequestRef.current + 1;
+							summaryRequestRef.current = requestId;
+							setLoading(true);
+							getOverallSummary(userId, token, params)
+								.then((data) => {
+									if (summaryRequestRef.current !== requestId) return;
+									setSummary(data && !data.error ? data : null);
+								})
+								.catch(() => {
+									if (summaryRequestRef.current === requestId) setSummary(null);
+								})
+								.finally(() => {
+									if (summaryRequestRef.current === requestId) {
+										setLoading(false);
+									}
+								});
+						}}
+					>
+						{labels.refresh}
+					</button>
+					<button type='button' className='secondary' onClick={resetFilters}>
+						{labels.reset}
+					</button>
+				</div>
+			)}
+		</>
+	);
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
@@ -617,182 +803,70 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				))}
 			</ExecutiveTabs>
 
+			{activeTab === "overview" && (
+				<SummaryScoreCards>
+					<OverallCard>
+						<strong>{loading ? "..." : Number(stats.totalHotels || 0)}</strong>
+						<span>{labels.hotels}</span>
+					</OverallCard>
+					<OverallCard>
+						<strong>{loading ? "..." : Number(stats.totalRooms || 0)}</strong>
+						<span>{labels.totalRooms}</span>
+					</OverallCard>
+					<OverallCard>
+						<strong>{loading ? "..." : Number(stats.availableRooms || 0)}</strong>
+						<span>{labels.availableRooms}</span>
+					</OverallCard>
+					<OverallCard>
+						<strong>{loading ? "..." : Number(stats.totalReservations || 0)}</strong>
+						<span>{labels.reservations}</span>
+					</OverallCard>
+					<OverallCard>
+						<strong>{loading ? "..." : formatMoney(stats.totalAmount)}</strong>
+						<span>{labels.totalAmount}</span>
+					</OverallCard>
+					<OverallCard>
+						<strong>{loading ? "..." : Number(stats.pendingReservations || 0)}</strong>
+						<span>{labels.pending}</span>
+					</OverallCard>
+				</SummaryScoreCards>
+			)}
+
 			{activeTab !== "inventory" && (
-				<ExecutiveFilterPanel $isRTL={isRTL}>
-					<div className='filter-title'>
-						<strong>{filterLabels.reportFilters}</strong>
-						<span>
-							{filters.dateFrom && filters.dateTo
-								? `${filterLabels.computedRange}: ${filters.dateFrom} - ${filters.dateTo}`
-								: filterLabels.allHistorical}
-						</span>
-					</div>
-					<div className='filter-grid'>
-						<label className='filter-control hotel-control'>
-							<span>
-								<HomeOutlined /> {filterLabels.selectedHotels}
-							</span>
-							<Select
-								mode='multiple'
-								allowClear
-								maxTagCount='responsive'
-								value={filters.hotelId}
-								onChange={(value) => updateFilter("hotelId", value)}
-								options={hotelOptions.map((hotel) => ({
-									value: hotel._id,
-									label: titleCase(hotel.hotelName),
-								}))}
-								showSearch
-								optionFilterProp='label'
-								placeholder={labels.allHotels}
-							/>
-						</label>
-						<label className='filter-control'>
-							<span>
-								<CalendarOutlined /> {filterLabels.calendar}
-							</span>
-							<Select
-								value={filters.calendarType}
-								onChange={updateCalendarType}
-								options={[
-									{ value: "gregorian", label: filterLabels.gregorian },
-									{ value: "hijri", label: filterLabels.hijri },
-								]}
-							/>
-						</label>
-						<label className='filter-control months-control'>
-							<span>
-								<FilterOutlined /> {filterLabels.months}
-							</span>
-							<Select
-								mode='multiple'
-								allowClear
-								maxTagCount='responsive'
-								value={filters.reportMonths}
-								onChange={updateReportMonths}
-								options={monthOptions}
-								placeholder={filterLabels.allHistorical}
-							/>
-						</label>
-						<label className='filter-control'>
-							<span>{filterLabels.year}</span>
-							<Select
-								value={filters.reportYear}
-								onChange={updateReportYear}
-								options={yearOptions}
-							/>
-						</label>
-						<label className='filter-control wide-control'>
-							<span>
-								<CalendarOutlined /> {filterLabels.computedRange}
-							</span>
-							<RangePicker
-								value={selectedRangeValues}
-								format='YYYY-MM-DD'
-								allowClear={false}
-								disabled
-								placeholder={[filterLabels.dateFrom, filterLabels.dateTo]}
-							/>
-						</label>
-						<label className='filter-control'>
-							<span>{filterLabels.dateBy}</span>
-							<Select
-								value={dateBy}
-								onChange={updateDateBy}
-								options={dateByOptions}
-							/>
-						</label>
-						<label className='filter-control status-control'>
-							<span>{filterLabels.status}</span>
-							<Select
-								mode='multiple'
-								allowClear
-								maxTagCount='responsive'
-								value={filters.status}
-								onChange={(value) => updateFilter("status", value)}
-								options={statusOptions.filter((option) => option.value)}
-								placeholder={filterLabels.operationalReservations}
-							/>
-						</label>
-						<label className='filter-control search-control'>
-							<span>{labels.search}</span>
-							<Input
-								allowClear
-								value={filters.search}
-								onChange={(event) => updateFilter("search", event.target.value)}
-								placeholder={filterLabels.searchPlaceholder}
-							/>
-						</label>
-						<div className='filter-control switch-control'>
-							<span>{filterLabels.includeCancelled}</span>
-							<Switch
-								checked={filters.includeCancelled}
-								onChange={(checked) => updateFilter("includeCancelled", checked)}
-							/>
-						</div>
-					</div>
-					<div className='filter-actions'>
+				<>
+					<MobileFilterBar $active={activeFilterCount > 0}>
 						<button
 							type='button'
-							onClick={() => {
-								const requestId = summaryRequestRef.current + 1;
-								summaryRequestRef.current = requestId;
-								setLoading(true);
-								getOverallSummary(userId, token, params)
-									.then((data) => {
-										if (summaryRequestRef.current !== requestId) return;
-										setSummary(data && !data.error ? data : null);
-									})
-									.catch(() => {
-										if (summaryRequestRef.current === requestId) setSummary(null);
-									})
-									.finally(() => {
-										if (summaryRequestRef.current === requestId) {
-											setLoading(false);
-										}
-									});
-							}}
+							aria-pressed={activeFilterCount > 0}
+							onClick={() => setFilterDrawerOpen(true)}
 						>
-							{labels.refresh}
+							<FilterOutlined />
+							<span>{filterButtonText}</span>
 						</button>
-						<button type='button' className='secondary' onClick={resetFilters}>
-							{labels.reset}
-						</button>
-					</div>
-				</ExecutiveFilterPanel>
+					</MobileFilterBar>
+					<ExecutiveFilterPanel $isRTL={isRTL} className='desktop-filter-panel'>
+						{renderFilterPanelContent()}
+					</ExecutiveFilterPanel>
+					<Drawer
+						title={filterLabels.reportFilters}
+						placement={isRTL ? "right" : "left"}
+						width='min(92vw, 390px)'
+						open={filterDrawerOpen}
+						onClose={() => setFilterDrawerOpen(false)}
+						getContainer={getSummaryDrawerContainer}
+						destroyOnClose={false}
+						className='summary-filter-drawer'
+					>
+						<DrawerFilterPanel $isRTL={isRTL}>
+							{renderFilterPanelContent()}
+						</DrawerFilterPanel>
+					</Drawer>
+				</>
 			)}
 
 			{activeTab === "overview" && (
-				<>
-					<OverallCards>
-				<OverallCard>
-					<strong>{loading ? "..." : Number(stats.totalHotels || 0)}</strong>
-					<span>{labels.hotels}</span>
-				</OverallCard>
-				<OverallCard>
-					<strong>{loading ? "..." : Number(stats.totalRooms || 0)}</strong>
-					<span>{labels.totalRooms}</span>
-				</OverallCard>
-				<OverallCard>
-					<strong>{loading ? "..." : Number(stats.availableRooms || 0)}</strong>
-					<span>{labels.availableRooms}</span>
-				</OverallCard>
-				<OverallCard>
-					<strong>{loading ? "..." : Number(stats.totalReservations || 0)}</strong>
-					<span>{labels.reservations}</span>
-				</OverallCard>
-				<OverallCard>
-					<strong>{loading ? "..." : formatMoney(stats.totalAmount)}</strong>
-					<span>{labels.totalAmount}</span>
-				</OverallCard>
-				<OverallCard>
-					<strong>{loading ? "..." : Number(stats.pendingReservations || 0)}</strong>
-					<span>{labels.pending}</span>
-				</OverallCard>
-			</OverallCards>
-
-			<OverallTableWrap>
-				<table>
+				<SummaryTableWrap>
+				<table className='summary-table'>
 					<thead>
 						<tr>
 							<th>#</th>
@@ -805,13 +879,12 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 							<th>{labels.pending}</th>
 							<th>{labels.housekeeping}</th>
 							<th>{labels.settings}</th>
-							<th>{labels.singleHotel}</th>
 						</tr>
 					</thead>
 					<tbody>
 						{loading ? (
 							<tr>
-								<td colSpan='11'>{labels.loading}</td>
+								<td colSpan='10'>{labels.loading}</td>
 							</tr>
 						) : hotels.length ? (
 							hotels.map((hotel, index) => (
@@ -820,21 +893,25 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 									<td>
 										<button
 											type='button'
-											className='link-btn'
+											className='link-btn summary-hotel-link'
 											onClick={() => openHotel(hotel)}
 										>
 											{titleCase(hotel.hotelName)}
 										</button>
 									</td>
-									<td>{hotel.totalRooms}</td>
-									<td>{hotel.availableRooms}</td>
-									<td>{hotel.occupiedRooms}</td>
-									<td>{hotel.totalReservations}</td>
+									<td>{formatCount(hotel.totalRooms)}</td>
+									<td>{formatCount(hotel.availableRooms)}</td>
+									<td className='fraction-cell'>
+										{formatRoomsFraction(hotel.occupiedRooms, hotel.totalRooms)}
+									</td>
+									<td>{formatCount(hotel.totalReservations)}</td>
 									<td>
 										{formatMoney(hotel.totalAmount)} {labels.sar}
 									</td>
-									<td>{hotel.pendingReservations}</td>
-									<td>{hotel.openHousekeepingTasks}</td>
+									<td>{formatCount(hotel.pendingReservations)}</td>
+									<td className='fraction-cell'>
+										{formatCleanlinessFraction(hotel)}
+									</td>
 									<td>
 										<StatusPill
 											$tone={statusTone(
@@ -847,26 +924,38 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 											)}
 										</StatusPill>
 									</td>
-									<td>
-										<button
-											type='button'
-											className='link-btn'
-											onClick={() => openHotel(hotel, "dashboard")}
-										>
-											{labels.openDashboard}
-										</button>
-									</td>
 								</tr>
 							))
 						) : (
 							<tr>
-								<td colSpan='11'>{labels.noHotelsFound}</td>
+								<td colSpan='10'>{labels.noHotelsFound}</td>
 							</tr>
 						)}
 					</tbody>
+					{!loading && hotels.length ? (
+						<tfoot>
+							<tr className='summary-total-row'>
+								<td>-</td>
+								<td>{labels.grandTotal}</td>
+								<td>{formatCount(stats.totalRooms)}</td>
+								<td>{formatCount(stats.availableRooms)}</td>
+								<td className='fraction-cell'>
+									{formatRoomsFraction(stats.occupiedRooms, stats.totalRooms)}
+								</td>
+								<td>{formatCount(stats.totalReservations)}</td>
+								<td>
+									{formatMoney(stats.totalAmount)} {labels.sar}
+								</td>
+								<td>{formatCount(stats.pendingReservations)}</td>
+								<td className='fraction-cell'>
+									{formatCleanlinessFraction(stats)}
+								</td>
+								<td>-</td>
+							</tr>
+						</tfoot>
+					) : null}
 				</table>
-			</OverallTableWrap>
-				</>
+			</SummaryTableWrap>
 			)}
 
 			{activeTab === "reservations" && (
@@ -1026,10 +1115,129 @@ const ExecutiveTabs = styled.div`
 	}
 `;
 
+const SummaryTableWrap = styled(OverallTableWrap)`
+	width: max-content;
+	max-width: 100%;
+	margin-inline: auto;
+
+	table.summary-table {
+		width: max-content;
+		min-width: 0;
+		margin-inline: auto;
+		table-layout: auto;
+	}
+
+	table.summary-table th,
+	table.summary-table td {
+		padding: 8px 12px;
+		text-align: center;
+	}
+
+	table.summary-table th:nth-child(2),
+	table.summary-table td:nth-child(2) {
+		min-width: 172px;
+		max-width: 210px;
+		text-align: start;
+	}
+
+	.summary-hotel-link {
+		display: inline-block;
+		max-width: 190px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	.fraction-cell {
+		color: #173d64;
+		font-variant-numeric: tabular-nums;
+		font-weight: 950;
+	}
+
+	tfoot td {
+		border-top: 2px solid rgba(45, 93, 145, 0.28);
+		background:
+			linear-gradient(180deg, rgba(236, 244, 255, 0.96), rgba(247, 250, 255, 0.98)) !important;
+		color: #102033;
+		font-weight: 950;
+	}
+
+	.summary-total-row td:nth-child(2) {
+		color: #5d1d6e;
+	}
+
+	@media (max-width: 900px) {
+		width: 100%;
+
+		table.summary-table {
+			min-width: 840px;
+			margin-inline: 0;
+		}
+	}
+`;
+
+const SummaryScoreCards = styled(OverallCards)`
+	grid-template-columns: repeat(6, minmax(112px, 1fr));
+	gap: 0.55rem;
+
+	${OverallCard} {
+		min-height: 72px;
+		padding: 0.62rem 0.68rem;
+	}
+
+	${OverallCard} strong {
+		font-size: 1.18rem;
+	}
+
+	${OverallCard} span {
+		font-size: 0.7rem;
+		line-height: 1.25;
+	}
+
+	@media (max-width: 1280px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+`;
+
+const MobileFilterBar = styled.div`
+	display: none;
+
+	button {
+		width: 100%;
+		min-height: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		border: 1px solid
+			${(props) => (props.$active ? "#6f1f78" : "rgba(45, 93, 145, 0.28)")};
+		border-radius: 8px;
+		background: ${(props) =>
+			props.$active
+				? "linear-gradient(135deg, #2a1236 0%, #64166e 58%, #8d4c9d 100%)"
+				: "linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%)"};
+		color: ${(props) => (props.$active ? "#ffffff" : "#102033")};
+		font-weight: 950;
+		box-shadow: ${(props) =>
+			props.$active
+				? "0 10px 22px rgba(80, 23, 96, 0.22)"
+				: "0 8px 18px rgba(16, 32, 51, 0.08)"};
+	}
+
+	@media (max-width: 640px) {
+		display: flex;
+	}
+`;
+
 const ExecutiveFilterPanel = styled.section`
 	display: grid;
-	gap: 12px;
-	padding: 14px;
+	gap: 10px;
+	padding: 12px;
 	border: 1px solid rgba(45, 93, 145, 0.22);
 	border-radius: 8px;
 	background:
@@ -1068,9 +1276,19 @@ const ExecutiveFilterPanel = styled.section`
 
 	.filter-grid {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(170px, 1fr));
+		grid-template-columns:
+			minmax(190px, 1fr)
+			minmax(190px, 1fr)
+			minmax(150px, 0.7fr)
+			minmax(230px, 1.05fr)
+			minmax(190px, 0.85fr);
 		gap: 10px;
 		align-items: end;
+	}
+
+	.hotel-control,
+	.wide-control {
+		grid-column: span 2;
 	}
 
 	.filter-control {
@@ -1100,10 +1318,13 @@ const ExecutiveFilterPanel = styled.section`
 		min-height: 38px;
 	}
 
-	.wide-control,
-	.hotel-control,
 	.search-control {
 		grid-column: span 2;
+	}
+
+	.wide-control .ant-picker {
+		max-width: 100%;
+		min-width: 330px;
 	}
 
 	.switch-control {
@@ -1112,7 +1333,7 @@ const ExecutiveFilterPanel = styled.section`
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		min-height: 64px;
+		min-height: 60px;
 		padding: 9px 12px;
 		border: 1px solid #d8e6f7;
 		border-radius: 8px;
@@ -1155,10 +1376,19 @@ const ExecutiveFilterPanel = styled.section`
 		.filter-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
+
+		.hotel-control,
+		.wide-control {
+			grid-column: span 2;
+		}
 	}
 
 	@media (max-width: 640px) {
 		padding: 10px;
+
+		&.desktop-filter-panel {
+			display: none;
+		}
 
 		.filter-title {
 			display: grid;
@@ -1173,6 +1403,11 @@ const ExecutiveFilterPanel = styled.section`
 		.hotel-control,
 		.search-control {
 			grid-column: auto;
+		}
+
+		.wide-control .ant-picker {
+			max-width: 100%;
+			min-width: 0;
 		}
 
 		.filter-actions button {
@@ -1210,5 +1445,41 @@ const ExecutiveFilterPanel = styled.section`
 			width: 100%;
 			min-height: 42px;
 		}
+	}
+`;
+
+const DrawerFilterPanel = styled(ExecutiveFilterPanel)`
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+
+	.filter-title {
+		display: none;
+	}
+
+	.filter-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.hotel-control,
+	.wide-control,
+	.search-control {
+		grid-column: auto;
+	}
+
+	.wide-control .ant-picker {
+		max-width: 100%;
+		min-width: 0;
+	}
+
+	.filter-actions {
+		display: grid;
+		grid-template-columns: 1fr;
+	}
+
+	.filter-actions button {
+		width: 100%;
+		min-width: 0;
 	}
 `;

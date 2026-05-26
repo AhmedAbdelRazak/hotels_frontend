@@ -8,21 +8,43 @@ const socketUrl =
 	process.env.REACT_APP_API_URL_MAIN;
 
 const socket = io(socketUrl, {
-	transports: ["websocket"],
-	reconnectionAttempts: 5,
-	timeout: 20000,
+	autoConnect: Boolean(socketUrl),
+	transports: ["polling", "websocket"],
+	reconnectionAttempts: 3,
+	reconnectionDelay: 1500,
+	reconnectionDelayMax: 8000,
+	randomizationFactor: 0.35,
+	timeout: 10000,
 });
 
 socket.on("connect", () => {
-	console.log("Connected to WebSocket server");
+	if (process.env.NODE_ENV === "development") {
+		console.info("Connected to realtime server");
+	}
 });
 
 socket.on("disconnect", (reason) => {
-	console.log(`Disconnected from WebSocket server: ${reason}`);
+	if (process.env.NODE_ENV === "development" && reason !== "io client disconnect") {
+		console.info(`Realtime server disconnected: ${reason}`);
+	}
 });
 
+let hasLoggedConnectionError = false;
 socket.on("connect_error", (error) => {
-	console.error(`Connection error: ${error.message}`);
+	if (process.env.NODE_ENV === "development" && !hasLoggedConnectionError) {
+		hasLoggedConnectionError = true;
+		console.warn(`Realtime server unavailable: ${error.message}`);
+	}
+});
+
+socket.io.on("reconnect_failed", () => {
+	if (process.env.NODE_ENV === "development") {
+		console.warn("Realtime reconnect stopped after repeated failures.");
+	}
+});
+
+socket.io.on("reconnect", () => {
+	hasLoggedConnectionError = false;
 });
 
 export default socket;

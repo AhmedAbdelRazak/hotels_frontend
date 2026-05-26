@@ -12,6 +12,7 @@ import {
 	DeleteOutlined,
 } from "@ant-design/icons";
 import HelperSideDrawer from "./HelperSideDrawer";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 
 const { Option } = Select;
 
@@ -24,6 +25,7 @@ const ChatDetail = ({
 	setSupportCases,
 }) => {
 	const { user, token } = isAuthenticated();
+	const canEditChatDisplayName = isConfiguredSuperAdminUser(user);
 	const [messages, setMessages] = useState(chat.conversation);
 	const [newMessage, setNewMessage] = useState("");
 	const [caseStatus, setCaseStatus] = useState(chat.caseStatus);
@@ -31,7 +33,7 @@ const ChatDetail = ({
 	const [typingStatus, setTypingStatus] = useState("");
 	const [fileList, setFileList] = useState([]);
 	const [displayName, setDisplayName] = useState(
-		chat.displayName1 || chat.supporterName || user.name.split(" ")[0]
+		chat.displayName1 || chat.supporterName || user.name || user.email || "Account"
 	);
 	const [drawerVisible, setDrawerVisible] = useState(false);
 	const messagesEndRef = useRef(null);
@@ -49,13 +51,16 @@ const ChatDetail = ({
 	};
 
 	useEffect(() => {
-		let foundDisplayName = user.name.split(" ")[0];
+		let foundDisplayName =
+			user.name || user.email || chat.supporterName || chat.displayName1 || "Account";
 
 		// Find the most recent name used by the admin in the chat
-		for (let i = chat.conversation.length - 1; i >= 0; i--) {
-			if (chat.conversation[i].messageBy.userId === user._id) {
-				foundDisplayName = chat.conversation[i].messageBy.customerName;
-				break;
+		if (canEditChatDisplayName) {
+			for (let i = chat.conversation.length - 1; i >= 0; i--) {
+				if (chat.conversation[i].messageBy.userId === user._id) {
+					foundDisplayName = chat.conversation[i].messageBy.customerName;
+					break;
+				}
 			}
 		}
 
@@ -89,7 +94,7 @@ const ChatDetail = ({
 			socket.off("messageDeleted", handleMessageDeleted);
 			socket.emit("leaveRoom", { caseId: chat._id });
 		};
-	}, [chat, chat._id, user._id, user.name]);
+	}, [canEditChatDisplayName, chat, chat._id, user._id, user.email, user.name]);
 
 	// Automatically scroll when messages change
 	useEffect(() => {
@@ -121,7 +126,10 @@ const ChatDetail = ({
 	const handleInputChange = (e) => {
 		const inputValue = e.target.value;
 		setNewMessage(inputValue);
-		socket.emit("typing", { name: displayName, caseId: chat._id });
+		socket.emit("typing", {
+			name: canEditChatDisplayName ? displayName : user.name || user.email,
+			caseId: chat._id,
+		});
 	};
 
 	const handleKeyPress = (e) => {
@@ -132,21 +140,27 @@ const ChatDetail = ({
 	};
 
 	const handleInputBlur = () => {
-		socket.emit("stopTyping", { name: displayName, caseId: chat._id });
+		socket.emit("stopTyping", {
+			name: canEditChatDisplayName ? displayName : user.name || user.email,
+			caseId: chat._id,
+		});
 	};
 
 	const handleSendMessage = async () => {
-		if (
-			["management", "Management"].includes(displayName.toLowerCase()) ||
-			!displayName
-		) {
-			alert("Please change your name before sending a message.");
+		const finalDisplayName = canEditChatDisplayName
+			? displayName.trim()
+			: user.name || user.email || "Account";
+		if (!finalDisplayName) {
+			alert("Please enter a display name before sending a message.");
+			return;
+		}
+		if (!newMessage.trim()) {
 			return;
 		}
 
 		const messageData = {
 			messageBy: {
-				customerName: displayName,
+				customerName: finalDisplayName,
 				customerEmail: user.email,
 				userId: user._id,
 			},
@@ -160,7 +174,7 @@ const ChatDetail = ({
 			await updateSupportCase(chat._id, { conversation: messageData });
 			socket.emit("sendMessage", messageData);
 			setNewMessage("");
-			socket.emit("stopTyping", { name: displayName, caseId: chat._id });
+			socket.emit("stopTyping", { name: finalDisplayName, caseId: chat._id });
 			fetchChats();
 		} catch (err) {
 			console.error("Error sending message", err);
@@ -202,13 +216,19 @@ const ChatDetail = ({
 
 	useEffect(() => {
 		const handleTyping = (data) => {
-			if (data.caseId === chat._id && data.name !== displayName) {
+			if (
+				data.caseId === chat._id &&
+				data.name !== (canEditChatDisplayName ? displayName : user.name || user.email)
+			) {
 				setTypingStatus(`${data.name} is typing...`);
 			}
 		};
 
 		const handleStopTyping = (data) => {
-			if (data.caseId === chat._id && data.name !== displayName) {
+			if (
+				data.caseId === chat._id &&
+				data.name !== (canEditChatDisplayName ? displayName : user.name || user.email)
+			) {
 				setTypingStatus("");
 			}
 		};
@@ -220,7 +240,7 @@ const ChatDetail = ({
 			socket.off("typing", handleTyping);
 			socket.off("stopTyping", handleStopTyping);
 		};
-	}, [chat._id, displayName]);
+	}, [canEditChatDisplayName, chat._id, displayName, user.email, user.name]);
 
 	// On mobile + we have a case param => show back arrow
 	const handleBackArrow = () => {
@@ -300,7 +320,7 @@ const ChatDetail = ({
 				agentName={displayName}
 			/>
 
-			{caseStatus === "open" && (
+			{caseStatus === "open" && canEditChatDisplayName && (
 				<Form layout='vertical'>
 					<Form.Item label='Custom Display Name'>
 						<Input

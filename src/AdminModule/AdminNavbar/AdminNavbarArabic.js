@@ -142,6 +142,107 @@ const items = [
 	// getItem("Option 3", "4", <ContainerOutlined />),
 ];
 
+const adminArabicItems = [
+	getItem(<Link to='/admin/dashboard'>لوحة التحكم الرئيسية</Link>, "sub1", <PieChartOutlined />),
+	getItem(
+		<Link to='/admin/janat-website' style={{ fontWeight: "bold" }}>
+			موقع جنات بوكينج
+		</Link>,
+		"sub10",
+		<DollarCircleOutlined />
+	),
+	getItem(<Link to='/admin/customer-service'>خدمة العملاء</Link>, "sub2", <AreaChartOutlined />),
+	getItem(<Link to='/admin/all-reservations'>حجوزات الفنادق</Link>, "sub4", <ShopOutlined />),
+	getItem(<Link to='/admin/jannatbooking-tools'>أدوات جنات بوكينج</Link>, "sub6", <AreaChartOutlined />),
+	getItem(<Link to='/admin/overall-hotel-reports'>تقارير الفنادق</Link>, "sub7", <TeamOutlined />),
+	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
+	getItem(<Link to='/admin/add-owner-account'>إضافة حساب مالك</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
+	getItem("إدارة علاقات العملاء", "sub14", <CustomerServiceOutlined />, null, null, "black-bg"),
+	getItem("نقاط البيع والمنتجات", "sub15", <ShopOutlined />, null, null, "black-bg"),
+	getItem(<Link to='/admin/expenses-financials'>المالية</Link>, "sub16", <DollarCircleOutlined />, null, null, "black-bg"),
+	getItem("حسابات الموظفين", "sub17", <TeamOutlined />, null, null, "black-bg"),
+	getItem(<div className='margin-divider'></div>, "divider2", null, null, "divider2"),
+	getItem(<Link to='/admin/payouts-report'>المدفوعات</Link>, "sub18", <CreditCardOutlined />, null, null, "red-bg"),
+	getItem(
+		<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
+			تسجيل الخروج
+		</div>,
+		"signout",
+		<CreditCardOutlined />,
+		null,
+		null,
+		"reddish-bg"
+	),
+];
+
+void items;
+void adminArabicItems;
+
+const AR = {
+	dashboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629",
+	website: "\u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
+	customerService: "\u062e\u062f\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+	reservations: "\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	tools: "\u0623\u062f\u0648\u0627\u062a \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
+	reports: "\u062a\u0642\u0627\u0631\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	newHotel: "\u0625\u0636\u0627\u0641\u0629 \u0641\u0646\u062f\u0642 \u062c\u062f\u064a\u062f",
+	ownerAccount: "\u0625\u0636\u0627\u0641\u0629 \u062d\u0633\u0627\u0628 \u0645\u0627\u0644\u0643",
+	customerRelations: "\u0625\u062f\u0627\u0631\u0629 \u0639\u0644\u0627\u0642\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+	pos: "\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639 \u0648\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
+	financials: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	employees: "\u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0645\u0648\u0638\u0641\u064a\u0646",
+	payouts: "\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a",
+	signout: "\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c",
+};
+
+const adminArabicItemsClean = [
+	getItem(<Link to='/admin/dashboard'>{AR.dashboard}</Link>, "sub1", <PieChartOutlined />),
+	getItem(
+		<Link to='/admin/janat-website' style={{ fontWeight: "bold" }}>
+			{AR.website}
+		</Link>,
+		"sub10",
+		<DollarCircleOutlined />
+	),
+	getItem(<Link to='/admin/customer-service'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
+	getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <ShopOutlined />),
+	getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),
+	getItem(<Link to='/admin/overall-hotel-reports'>{AR.reports}</Link>, "sub7", <TeamOutlined />),
+	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
+	getItem(<Link to='/admin/add-owner-account'>{AR.ownerAccount}</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
+	getItem(<Link to='/admin/expenses-financials'>{AR.financials}</Link>, "sub16", <DollarCircleOutlined />, null, null, "black-bg"),
+	getItem(<Link to='/admin/accounts-management'>{AR.employees}</Link>, "sub17", <TeamOutlined />, null, null, "black-bg"),
+	getItem(<div className='margin-divider'></div>, "divider2", null, null, "divider2"),
+	getItem(<Link to='/admin/payouts-report'>{AR.payouts}</Link>, "sub18", <CreditCardOutlined />, null, null, "red-bg"),
+	getItem(
+		<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
+			{AR.signout}
+		</div>,
+		"signout",
+		<CreditCardOutlined />,
+		null,
+		null,
+		"reddish-bg"
+	),
+];
+
+const selectedKeyByPage = {
+	AdminDasboard: "sub1",
+	CustomerService: "sub2",
+	ElIntegrator: "sub3",
+	AllReservations: "sub4",
+	Tools: "sub6",
+	AdminReports: "sub7",
+	AddedHotels: "sub8",
+	WebsiteManagement: "sub10",
+	JanatWebsite: "sub10",
+	NewHotel: "sub12",
+	OwnerAccount: "sub13",
+	Financials: "sub16",
+	AdminAccounts: "sub17",
+	Payouts: "sub18",
+};
+
 const AdminNavbarArabic = ({
 	fromPage,
 	setAdminMenuStatus,
@@ -149,6 +250,25 @@ const AdminNavbarArabic = ({
 	setCollapsed,
 }) => {
 	const { chosenLanguage } = useCartContext();
+
+	React.useEffect(() => {
+		if (typeof window === "undefined" || typeof document === "undefined") {
+			return undefined;
+		}
+
+		const syncSidebarWidth = () => {
+			const width = window.innerWidth <= 992 ? "0px" : collapsed ? "70px" : "285px";
+			document.documentElement.style.setProperty(
+				"--admin-sidebar-width",
+				width
+			);
+		};
+
+		syncSidebarWidth();
+		window.addEventListener("resize", syncSidebarWidth);
+
+		return () => window.removeEventListener("resize", syncSidebarWidth);
+	}, [collapsed]);
 
 	const toggleCollapsed = () => {
 		setCollapsed(!collapsed);
@@ -182,12 +302,6 @@ const AdminNavbarArabic = ({
 				dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
 			>
 				<NavHeader $rtl={chosenLanguage === "Arabic"}>
-					<div className='logo'>
-						<img
-							src='https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png'
-							alt='XHotel Logo'
-						/>
-					</div>
 					<Button
 						type='text'
 						shape='circle'
@@ -198,29 +312,7 @@ const AdminNavbarArabic = ({
 				</NavHeader>
 				<Menu
 					dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-					defaultSelectedKeys={
-						fromPage === "AdminDasboard"
-							? "sub1"
-							: fromPage === "OverallReports"
-						  ? "sub2"
-						  : fromPage === "StoreSettings"
-						    ? "sub3"
-						    : fromPage === "AddCategories"
-						      ? "sub4"
-						      : fromPage === "StoreBilling"
-						        ? "sub5"
-						        : fromPage === "AddSubCategory"
-						          ? "sub6"
-						          : fromPage === "AddOccasions"
-						            ? "sub7"
-						            : fromPage === "AddProducts"
-						              ? "sub8"
-						              : fromPage === "WebsiteManagement"
-						                ? "sub10"
-						                : fromPage === "CouponManagement"
-							? "sub12"
-							: "sub1"
-					}
+					defaultSelectedKeys={[selectedKeyByPage[fromPage] || "sub1"]}
 					defaultOpenKeys={[
 						"sub1",
 
@@ -237,7 +329,7 @@ const AdminNavbarArabic = ({
 					mode='inline'
 					theme='dark'
 					inlineCollapsed={collapsed}
-					items={items}
+					items={adminArabicItemsClean}
 					onClick={(e) => {
 						if (e.key === "signout") {
 							handleSignout(history);
@@ -256,14 +348,14 @@ export default AdminNavbarArabic;
 const AdminNavbarWrapper = styled.div`
 	width: ${(props) => (props.show ? "70px" : "285px")};
 	margin-bottom: 0;
-	background: #1e1e2d;
-	top: 0;
+	background: #0c1d31;
+	top: var(--admin-topbar-height, 0px);
 	left: auto;
 	right: 0;
 	z-index: 900;
 	overflow: hidden;
 	position: fixed;
-	height: 100vh;
+	height: calc(100vh - var(--admin-topbar-height, 0px));
 	padding: 0 !important;
 	display: flex;
 	flex-direction: column;
@@ -293,7 +385,7 @@ const AdminNavbarWrapper = styled.div`
 	.ant-menu.ant-menu-dark .ant-menu-sub,
 	.ant-menu.ant-menu-dark .ant-menu-sub {
 		color: rgba(255, 255, 255, 0.65);
-		background: #1e1e2d;
+		background: #0c1d31;
 	}
 
 	svg {
@@ -301,23 +393,24 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.black-bg {
-		background-color: #0e0e15 !important;
+		background-color: #071626 !important;
 
 		&:hover {
-			background-color: #001427 !important; // Or any other color for hover state
+			background-color: #0e3157 !important; // Or any other color for hover state
 		}
 	}
 
 	.red-bg {
-		background-color: #270000 !important;
+		background-color: #102033 !important;
 
 		&:hover {
-			background-color: #270000 !important; // Or any other color for hover state
+			background-color: #0e3157 !important; // Or any other color for hover state
 		}
 	}
 
 	.ant-menu-item-selected {
-		background: black !important;
+		background: linear-gradient(180deg, #1b6fa5 0%, #09223a 100%) !important;
+		border-inline-start: 3px solid #73cdf4;
 	}
 
 	@media (max-width: 1650px) {
@@ -333,6 +426,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 992px) {
+		right: 0;
 		width: min(86vw, 320px);
 		transform: translateX(${(props) => (props.show ? "110%" : "0")});
 		box-shadow: ${(props) =>
@@ -352,20 +446,14 @@ const AdminNavbarWrapper = styled.div`
 const NavHeader = styled.div`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: ${(props) => (props.$rtl ? "flex-start" : "flex-end")};
 	padding: 10px 12px;
-	background: #0f1726;
+	background: linear-gradient(180deg, #102d4f 0%, #071827 100%);
 	position: sticky;
 	top: 0;
 	z-index: 2;
 	border-bottom: 1px solid #1f2937;
 	flex-direction: ${(props) => (props.$rtl ? "row-reverse" : "row")};
-
-	.logo img {
-		height: 40px;
-		object-fit: contain;
-		display: block;
-	}
 
 	button {
 		color: #fff;
@@ -373,16 +461,13 @@ const NavHeader = styled.div`
 
 	@media (max-width: 1200px) {
 		padding: 8px 10px;
-		.logo img {
-			height: 34px;
-		}
 	}
 `;
 
 const MobileToggleButton = styled(Button)`
 	display: none;
 	position: fixed;
-	top: 12px;
+	top: calc(var(--admin-topbar-height, 0px) + 12px);
 	right: 12px;
 	z-index: 910;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);

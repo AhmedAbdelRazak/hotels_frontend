@@ -25,7 +25,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	const location = useLocation();
 	const history = useHistory();
 	const queryParams = new URLSearchParams(location.search);
-	const caseIdParam = queryParams.get("id");
+	const caseIdParam = queryParams.get("caseId") || queryParams.get("id");
 
 	// Detect if user is on a mobile screen
 	const isMobile = window.innerWidth <= 768;
@@ -199,7 +199,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	}, [fetchSupportCases, selectedCase, soundEnabled, playSound]);
 
 	/* ------------------- MARK CASE AS SEEN ------------------- */
-	const markCaseAsSeen = async (caseObj) => {
+	const markCaseAsSeen = useCallback(async (caseObj) => {
 		if (!caseObj || !caseObj._id) return;
 
 		// Join the socket room
@@ -219,7 +219,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		} catch (error) {
 			console.error("Error marking messages as seen:", error);
 		}
-	};
+	}, [user._id]);
 
 	/* ------------------- HANDLE CASE SELECTION ------------------- */
 	const handleCaseSelection = async (item) => {
@@ -261,6 +261,17 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			socket.off("hotelChanged", handleHotelChanged);
 		};
 	}, [selectedCase, setSupportCases]);
+
+	useEffect(() => {
+		if (isMobile || !caseIdParam || !supportCases.length) return;
+		const foundCase = supportCases.find((item) => item._id === caseIdParam);
+		if (!foundCase || selectedCase?._id === foundCase._id) return;
+		if (selectedCase?._id) {
+			socket.emit("leaveRoom", { caseId: selectedCase._id });
+		}
+		setSelectedCase(foundCase);
+		markCaseAsSeen(foundCase);
+	}, [caseIdParam, isMobile, markCaseAsSeen, selectedCase?._id, supportCases]);
 
 	/* ------------------- MOBILE LOGIC ------------------- */
 	if (isMobile) {

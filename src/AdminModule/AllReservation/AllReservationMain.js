@@ -227,9 +227,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 	/** 2) Determine if super admin (based on fetched user, not auth payload). */
 	const isSuperAdmin =
-		!getUser?.accessTo ||
-		getUser?.accessTo.length === 0 ||
-		getUser?.accessTo.includes("all");
+		SUPER_USER_IDS.includes(getUser?._id);
 
 	const allowAllReservedBy = SUPER_USER_IDS.includes(getUser?._id);
 
@@ -269,9 +267,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		if (SUPER_USER_IDS.includes(usr._id)) return true;
 		const accessTo = usr.accessTo || [];
 		return (
-			accessTo.includes("HotelsReservations") ||
-			accessTo.includes("all") ||
-			accessTo.length === 0
+			accessTo.includes("HotelsReservations")
 		);
 	};
 
@@ -479,8 +475,6 @@ const AllReservationMain = ({ chosenLanguage }) => {
 					}
 					return allowedIds.includes(hotelId);
 				});
-			} else if (hts === "all") {
-				// show all
 			} else {
 				finalList = [];
 			}

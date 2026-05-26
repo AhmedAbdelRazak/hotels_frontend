@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
+import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { isAuthenticated } from "../../auth";
 import {
 	Alert,
@@ -103,13 +104,12 @@ function renderLastNoteCell(r) {
 }
 
 /* ======================= Component ======================= */
-const AdminPaymentMain = () => {
+const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 	/* ---------- Navbar controls ---------- */
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 
 	/* ---------- Language / Auth ---------- */
-	const chosenLanguage = "English"; // keep as-is
 	const isArabic = chosenLanguage === "Arabic";
 	const { token, user } = isAuthenticated();
 
@@ -918,17 +918,32 @@ const AdminPaymentMain = () => {
 	);
 
 	return (
-		<AdminPaymentMainWrapper show={collapsed} isArabic={isArabic}>
+		<AdminPaymentMainWrapper
+			show={collapsed}
+			isArabic={isArabic}
+			dir={isArabic ? "rtl" : "ltr"}
+		>
 			<div className='grid-container-main'>
 				<div className='navcontent'>
-					<AdminNavbar
-						fromPage='Payouts'
-						AdminMenuStatus={AdminMenuStatus}
-						setAdminMenuStatus={setAdminMenuStatus}
-						collapsed={collapsed}
-						setCollapsed={setCollapsed}
-						chosenLanguage={chosenLanguage}
-					/>
+					{isArabic ? (
+						<AdminNavbarArabic
+							fromPage='Payouts'
+							AdminMenuStatus={AdminMenuStatus}
+							setAdminMenuStatus={setAdminMenuStatus}
+							collapsed={collapsed}
+							setCollapsed={setCollapsed}
+							chosenLanguage={chosenLanguage}
+						/>
+					) : (
+						<AdminNavbar
+							fromPage='Payouts'
+							AdminMenuStatus={AdminMenuStatus}
+							setAdminMenuStatus={setAdminMenuStatus}
+							collapsed={collapsed}
+							setCollapsed={setCollapsed}
+							chosenLanguage={chosenLanguage}
+						/>
+					)}
 				</div>
 
 				<div className='otherContentWrapper'>
@@ -1453,6 +1468,7 @@ const AdminPaymentMainWrapper = styled.div`
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -1463,18 +1479,27 @@ const AdminPaymentMainWrapper = styled.div`
 
 	.navcontent {
 		grid-area: nav;
+		min-width: 0;
 	}
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.97);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		box-sizing: border-box;
+		overflow: hidden;
 	}
 
 	@media (max-width: 1400px) {
@@ -1484,7 +1509,18 @@ const AdminPaymentMainWrapper = styled.div`
 	@media (max-width: 992px) {
 		.grid-container-main {
 			grid-template-columns: 1fr;
-			grid-template-areas: "nav" "content";
+			grid-template-areas: "content";
+		}
+
+		.navcontent {
+			position: relative;
+			z-index: 2;
+		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
 		}
 	}
 `;

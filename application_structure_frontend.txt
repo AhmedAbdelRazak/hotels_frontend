@@ -432,3 +432,239 @@ Final Production Readiness Notes
 - PMS table text is globally displayed with capitalized words through App.css for native and AntD tables. Use the pms-preserve-case class only for future table content that must keep exact casing, such as technical identifiers.
 - Reservation detail header cards should keep the guest, lifecycle, and reservation total cards balanced. The edit/update action belongs in the secondary action strip, not inside the lifecycle card, so the first row remains clean on desktop and phone.
 - For production readiness, run npm.cmd run build from hotels_frontend, git diff --check, and a quick visual pass for Arabic RTL, desktop table width, phone side menu behavior, notification bell behavior, and modal/dropdown clickability.
+
+2026-05-26 Thread Addendum - Frontend Decisions, UI Rules, And References
+- Purpose of this addendum
+  - This section documents the latest hotel-management and admin-platform UI work from the full session.
+  - It should be read together with hotels_backend/application_structure_backend.txt under the matching 2026-05-26 backend addendum.
+  - The dominant goals were data quality, role/scope correctness, no infinite loops, Arabic/RTL polish, responsive admin layouts, and clean operational reporting.
+
+- Hotel-management executive summary route
+  - Main route:
+    - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=summary&page=1
+  - Primary files:
+    - src/HotelModule/MainHotelDashboard.js
+    - src/HotelModule/TheOverallStructure/page.js
+    - src/HotelModule/TheOverallStructure/OverallSummary/OverallSummaryMain.js
+    - src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js
+    - src/HotelModule/TheOverallStructure/overallShared.js
+    - src/HotelModule/apiAdmin.js
+  - The score cards sit directly under the summary tabs.
+  - The summary table is centered as a table element. Centering the table must not mean center-aligning every unrelated page section.
+  - The table removed the old hotel path column.
+  - Occupancy displays as occupied/totalRooms, for example 30/100.
+  - Cleaning displays as a fraction based on room-map/housekeeping cleanliness state, not reservation count shortcuts.
+  - A grand-total row is required and must total raw counts before formatting.
+  - Search, refresh, and reset controls were removed from the summary table because the page is a summary, not a searchable list.
+  - Desktop filter layout:
+    - Row 1: selected hotels, calendar, months, year.
+    - Row 2: calculated range, date basis/dateBy, status, include cancelled/no-show toggle.
+  - The calculated range input should be wide enough to display the active range comfortably.
+  - On phone screens, the report filters are a side drawer. The main page should show a compact filter button and indicate when filters are active.
+  - Hijri is the default calendar for inventory-style summary/report tabs where requested.
+  - If date query params exist, the visible filter state must match those params on first render. Avoid initial all-history flashes followed by corrected data.
+
+- Executive summary data-quality UI notes
+  - Blocked/out-of-service rooms must not be included in sellable-room denominators in summary reporting.
+  - A reservation that is still in-house remains occupied even after its planned checkout date.
+  - If a screenshot or user report shows lower-than-expected figures, first verify active filters, hotelId/invHotel, dateFrom/dateTo, dateBy, includeCancelled, and current route context before changing UI math.
+  - Data-quality verification should compare UI totals against backend responses and the database. Do not rely only on chart/table visuals.
+
+- Reservations overview report route
+  - Route discussed:
+    - /hotel-management/main-dashboard?overall=summary&page=1&summaryTab=reservations
+  - Chart behavior:
+    - Arrival and departure charts should show date, reservation count, and total amount in hover tooltip.
+    - Creation-date chart should use the same tooltip quality.
+    - Tooltips must use the real category date, not Apex numeric point indexes.
+    - Donut/status chart should use clear lifecycle colors and readable center/legend labels.
+  - Export to Excel:
+    - A UX-friendly Export to Excel action belongs near the top of the reservations overview.
+    - The workbook should separate each desktop chart/table row into its own worksheet where feasible.
+    - If actual interactive chart objects cannot be created in Excel, export the underlying chart data cleanly so users can recreate or pivot.
+    - Keep workbook names, sheet names, headers, and totals readable for Arabic and English users.
+
+- Hotel inventory/admin inventory report UI
+  - Hotel-management inventory remains the visual reference for admin inventory.
+  - Admin route:
+    - /admin/overall-hotel-reports?tab=inventory
+  - Primary admin files:
+    - src/AdminModule/HotelsReport/HotelReportsMainAdmin.js
+    - src/AdminModule/HotelsReport/HotelsInventoryMap.js
+    - src/AdminModule/apiAdmin.js
+  - Admin inventory colors, occupancy cell states, and table logic should match hotel-management inventory.
+  - Date/day column must remain visible in RTL and LTR. Do not allow the right/left date column to become blank or white-on-white.
+  - Content above the table should be organized into a clear filter panel and summary cards with icons, color, and RTL support.
+  - Filters should be grouped, readable, and not visually crowded:
+    - hotel, calendar, month/year/date range, column labels/display names, include cancelled/no-show, payment status, and booking source.
+  - Modal reservation tables opened from occupancy cells should use polished table styling matching PMS tables:
+    - dark-blue header, readable text, controlled widths, clear status/payment tags, and responsive horizontal scroll.
+  - The inventory report should not introduce emojis into professional report cells.
+
+- Hotel rooms map route and modal
+  - Route:
+    - /hotel-management/main-dashboard?overall=hotel-map&page=1&mapHotelId=<hotelId>&mapOwnerId=<ownerId>
+  - Primary files:
+    - src/HotelModule/TheOverallStructure/OverallHotelMap/OverallHotelMapMain.js
+    - src/HotelModule/NewReservation/HotelHeatMap.js
+    - src/HotelModule/NewReservation/HotelMapFilters.js
+    - src/HotelModule/NewReservation/HotelMapCards.js
+  - Menu label was changed from generic Hotel Map to Hotel Rooms Map in Arabic wording equivalent to "map of hotel rooms."
+  - The live room map is current-state only. It can differ from date-range occupancy reports.
+  - Room type/display-name color legend belongs in the modal:
+    - desktop: side legend with enough width so names do not wrap unnecessarily.
+    - mobile: horizontal/wrapping legend above floors and below filters.
+  - The modal width may expand toward the menu on desktop so room display names and legend labels are readable.
+  - Filter row adjustments:
+    - Search input slightly narrower.
+    - Room-name select wider so room display names are not clipped.
+    - Clean/dirty status filter must actually filter the map.
+  - Room hover tooltips should not overlap the room tile, because users need to click the tile for details. Use offset/placement that keeps the tile clickable.
+  - Cell-phone filters may use a drawer if it improves usability.
+
+- Admin route family and platform-control UI
+  - Main admin routes discussed:
+    - /admin/dashboard
+    - /admin/jannatbooking-tools?tab=calculator
+    - /admin/janat-website
+    - /admin/customer-service
+    - /admin/overall-hotel-reports
+    - /admin/accounts-management
+  - Primary files:
+    - src/AdminModule/AdminNavbar/AdminTopNavbar.js
+    - src/AdminModule/AdminNavbar/AdminNavbar.js
+    - src/AdminModule/AdminNavbar/AdminNavbarArabic.js
+    - src/auth/AdminRoute.js
+    - src/AdminModule/AdminDashboard/AdminDashboard.js
+    - src/AdminModule/JannatTools/JannatBookingToolsMain.js
+    - src/AdminModule/CustomerService/CustomerServiceMain.js
+    - src/AdminModule/AdminAccounts/AdminAccountsMain.js
+  - Admin UI identity is metallic blue, not purple.
+  - Admin top navbar is fixed/sticky and side menu starts directly beneath it.
+  - Side menu must never overlap admin tables/content in collapsed or expanded states.
+  - RTL and LTR side-menu adjacency must mirror properly; the side menu sits on the correct side and the content padding follows it.
+  - The brand spelling is Jannat in English and the correct Arabic equivalent. Do not use "Janna."
+  - XHotel/Jannat logo should live in the admin top navbar, not the side menu.
+  - Removed/admin side-menu links:
+    - "Added Hotels" / Fanadek Modafa.
+    - "Add New Hotel" side-menu link, because add-hotel exists as a dashboard modal/action.
+    - "Integrator" / Al Motakamel from the menu only; keep the component for possible future use.
+  - Removed top-navbar quick links:
+    - Reports quick link.
+    - Financials quick link/icon.
+    - Hotels and Customer Service text labels were removed from quick actions where icon-only notifications/chat are better.
+  - Admin quick actions now focus on dashboard, reservations, tools, notification bell, and chat dropdown.
+  - Arabic font size was increased in admin tables/labels where the previous text was hard to read.
+  - Grid/margin spacing between admin dashboard rows should be consistent across admin routes, not one-off per page.
+
+- Admin top navbar time/language/flag rules
+  - File:
+    - src/AdminModule/AdminNavbar/AdminTopNavbar.js
+  - Language button shows En/Ar instead of English/Arabic to save width.
+  - Top-left profile/account control is intentionally compact.
+  - Admin topbar shows three timezone blocks:
+    - Egypt time.
+    - Saudi Arabia time.
+    - USA Pacific time.
+  - Do not write PST in the UI; use the time/date only.
+  - Country names were removed from the blocks because EG/SA context and flags are enough.
+  - Hijri date is shown above Gregorian date in each timezone block.
+  - Do not add explicit "Hijri" or "Melady" labels inside the compact block.
+  - Real PNG flag assets are used instead of abbreviations or emoji:
+    - src/GeneralImages/EG_FLAG.png
+    - src/GeneralImages/KSA_FLAG.png
+    - src/GeneralImages/USA_FLAG.png
+  - Flags should render in a compact rounded rectangle with object-fit: contain so they are clear and not distorted.
+  - The flag frame must not increase the navbar height.
+
+- Admin notification and chat dropdown rules
+  - Notification bell:
+    - Shows pending notifications across all hotels for configured super admins.
+    - Clicking a notification should route to the exact hotel-management workflow page where the action is pending.
+    - It should not redirect to a generic admin page.
+  - Chat icon:
+    - Has a dropdown.
+    - Shows active/open chat notifications across B2B and relevant support contexts.
+    - Clicking a dropdown item routes to the exact active chat using chatId.
+  - Hotel-management notifications remain assigned-hotel/owner scoped; admin-platform notifications are platform-wide only for configured super admins.
+
+- B2B chat frontend rules
+  - File:
+    - src/HotelModule/B2BChat/B2BChatMain.js
+  - The B2B chat page uses the overall hotel-management navbar and side menu, not a single-hotel navbar.
+  - Active chats, historical chats, and start-new-chat tabs remain the main tabs.
+  - Clicking a chat list item writes chatId into the URL query so dropdown deep links can open exact chats.
+  - Start-new-chat recipient lists must show active B2B users only, with friendly role labels.
+  - Recipient dropdowns/modals must remain scrollable and clickable. If a modal select cannot scroll/click, check popup container and overlay z-index first.
+  - Configured super admins can use a custom chat sender name:
+    - Field is shown only to configured super admins.
+    - Stored locally per super-admin account.
+    - Sent as chatDisplayName with B2B messages.
+    - Used for typing labels.
+  - Non-super-admin users should never see this alias field.
+  - The backend still enforces the alias permission, so hiding the field is not the security boundary.
+
+- Support/customer-service chat frontend rules
+  - Primary files:
+    - src/AdminModule/CustomerService/ChatDetail.js
+    - src/AdminModule/CustomerService/ActiveHotelSupportCases.js
+    - src/AdminModule/CustomerService/ActiveClientsSupportCases.js
+    - src/AdminModule/CustomerService/HistoryClientsSupportCases.js
+  - Custom Display Name is now visible only for configured super admins.
+  - Non-super-admin support users send messages using their actual account name/email fallback.
+  - History client cases must be paginated and sorted newest first.
+  - Customer-service tabs and tables should match the shared admin tab/table styling.
+
+- Admin accounts management UI
+  - Route:
+    - /admin/accounts-management
+  - File:
+    - src/AdminModule/AdminAccounts/AdminAccountsMain.js
+  - Tabs should sit at the top of the page.
+  - Remove the large page header.
+  - Tabs should match the admin styled tabs used elsewhere.
+  - Role filters and table role display must never expose raw numeric roles such as 1000 as the primary display. Use friendly role names:
+    - Platform Employee / Super Admin / Hotel Owner / Hotel System Admin / Hotel Manager / Finance / Reception / Housekeeping / Reservations Officer / Agent.
+  - The filter "Hotel Employees" must align with the rows shown; if platform employees appear, the filter label and data logic must make that explicit.
+  - Platform employees require route access plus hotel/client scope; they do not inherit global visibility unless configured as super admin.
+
+- Admin dashboard table and layout
+  - Route:
+    - /admin/dashboard
+  - The hotel table should fit one desktop screen as much as practical without damaging readability.
+  - Use consistent row spacing/margins.
+  - Table must not slide under or behind the side menu.
+  - Action/filter bands should be compact but readable.
+  - Arabic table text should be readable and slightly larger where needed.
+
+- Visual and responsive system reminders
+  - Admin tabs should be standardized and slightly fancier than hotel-management tabs while staying professional.
+  - Page headers that duplicate selected tabs may be removed to reduce clutter.
+  - Buttons and icons should remain compact and aligned.
+  - RTL should be tested on every admin route touched by this session.
+  - Wide tables need horizontal scroll inside their container, not page/menu overlap.
+  - Modal/dropdown popup containers must be usable inside overlays and fixed side-menu layouts.
+  - Avoid nested cards and excessive decorative gradients. Admin screens should feel polished, dense, and operational.
+
+- Error/loop lessons from this thread
+  - Repeated GET /api/user/<id> logs indicate a frontend effect/dependency loop. Fix callers and memoization before changing the user endpoint.
+  - EADDRINUSE on port 8080 means duplicate backend process/listener. Do not run multiple nodemon/server instances on the same port.
+  - WebSocket repeated errors may be a symptom of backend not running, not a socket infinite loop.
+  - Font CORS errors from remote Droid Arabic Kufi URLs should be solved by local fonts/fallbacks or safer font loading, not backend changes.
+
+- Verification commands used during this session
+  - node --check src/AdminModule/AdminNavbar/AdminTopNavbar.js
+  - node --check src/HotelModule/B2BChat/B2BChatMain.js
+  - node --check src/AdminModule/CustomerService/ChatDetail.js
+  - npm.cmd run build
+  - Backend checks also included:
+    - node --check controllers/b2b_chat.js
+    - node --check controllers/supportcase.js
+  - Future visual verification should open:
+    - /admin/dashboard
+    - /admin/overall-hotel-reports?tab=inventory
+    - /admin/accounts-management
+    - /admin/customer-service
+    - /hotel-management/b2b-chat
+    - /hotel-management/main-dashboard?overall=summary&page=1
+    - /hotel-management/main-dashboard?overall=hotel-map&page=1

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "react-apexcharts";
-import { Alert, Button, Modal, Select, Spin } from "antd";
-import { FullscreenOutlined } from "@ant-design/icons";
+import { Alert, Button, message, Modal, Select, Spin } from "antd";
+import { DownloadOutlined, FullscreenOutlined } from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import dayjs from "dayjs";
@@ -11,6 +11,7 @@ import {
 	getOverallExecutiveInventoryReport,
 	getOverallExecutivePaidReport,
 	getOverallExecutiveReservationsReport,
+	trackOverallReservationSummaryExport,
 } from "../../apiAdmin";
 import HotelInventory from "../../HotelReports/HotelInventory";
 import {
@@ -97,6 +98,19 @@ const reportText = {
 		cancelledScopeLocked: "The selected status requires including these reservations.",
 		excludeShort: "Exclude",
 		includeShort: "Include",
+		exportExcel: "Export to Excel",
+		exportingExcel: "Exporting...",
+		exportNoData: "No reservations report data is ready to export.",
+		exportSuccess: "Reservations report exported.",
+		exportError: "Could not export reservations report.",
+		reportSummary: "Report Summary",
+		reportRow: "Report Row",
+		metric: "Metric",
+		value: "Value",
+		arrivalsDepartures: "Arrivals / Departures",
+		statusCreation: "Status / Creation",
+		hotelsSources: "Hotels / Sources",
+		capturedPayments: "Captured Payments",
 	},
 	ar: {
 		refresh: "تحديث",
@@ -151,6 +165,27 @@ const reportText = {
 		cancelledScopeLocked: "فلتر الحالة المختار يتطلب تضمين هذه الحجوزات.",
 		excludeShort: "استبعاد",
 		includeShort: "تضمين",
+		exportExcel: "\u062a\u0635\u062f\u064a\u0631 \u0625\u0644\u0649 Excel",
+		exportingExcel: "\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u0635\u062f\u064a\u0631...",
+		exportNoData:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u062d\u062c\u0648\u0632\u0627\u062a \u062c\u0627\u0647\u0632\u0629 \u0644\u0644\u062a\u0635\u062f\u064a\u0631.",
+		exportSuccess:
+			"\u062a\u0645 \u062a\u0635\u062f\u064a\u0631 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a.",
+		exportError:
+			"\u062a\u0639\u0630\u0631 \u062a\u0635\u062f\u064a\u0631 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a.",
+		reportSummary:
+			"\u0645\u0644\u062e\u0635 \u0627\u0644\u062a\u0642\u0631\u064a\u0631",
+		reportRow: "\u0635\u0641 \u0627\u0644\u062a\u0642\u0631\u064a\u0631",
+		metric: "\u0627\u0644\u0645\u0624\u0634\u0631",
+		value: "\u0627\u0644\u0642\u064a\u0645\u0629",
+		arrivalsDepartures:
+			"\u0627\u0644\u0648\u0635\u0648\u0644 / \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		statusCreation:
+			"\u0627\u0644\u062d\u0627\u0644\u0627\u062a / \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
+		hotelsSources:
+			"\u0627\u0644\u0641\u0646\u0627\u062f\u0642 / \u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u062d\u062c\u0632",
+		capturedPayments:
+			"\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a \u0627\u0644\u0645\u062d\u0635\u0644\u0629",
 	},
 };
 
@@ -165,6 +200,16 @@ const toNumber = (value) => {
 };
 
 const money = (value, labels) => `${formatMoney(value)} ${labels.sar}`;
+
+const currencyNumber = (value) => Math.round(toNumber(value) * 100) / 100;
+
+const escapeHtml = (value = "") =>
+	String(value ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
 
 const INVENTORY_QUERY_KEYS = {
 	hotelId: "invHotel",
@@ -306,20 +351,30 @@ const formatChartDateLabel = (value = "", options = {}) => {
 const chartLabelFormatter = () => (value, _timestamp, options) =>
 	formatChartDateLabel(resolveChartCategory(value, options));
 
-const chartTooltip = ({ labels, isRTL }) => ({
+const chartTooltip = ({ labels, isRTL, rows = [], countLabel = "" }) => ({
 	custom: ({ series, seriesIndex, dataPointIndex, w }) => {
 		const categories = w?.config?.xaxis?.categories || [];
 		const rawDate = categories[dataPointIndex] || "";
 		const title = formatChartDateLabel(rawDate, { full: true });
 		const seriesName = w?.config?.series?.[seriesIndex]?.name || labels.count;
-		const value = series?.[seriesIndex]?.[dataPointIndex] || 0;
+		const row = Array.isArray(rows) ? rows[dataPointIndex] || {} : {};
+		const value = toNumber(
+			row.reservationsCount ?? series?.[seriesIndex]?.[dataPointIndex] ?? 0
+		);
+		const amount = currencyNumber(row.total_amount);
 		const color = w?.globals?.colors?.[seriesIndex] || "#24547d";
+		const valueLabel = countLabel || seriesName || labels.reservations;
 		return `
 			<div class="executive-chart-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
-				<div class="tooltip-date">${title}</div>
+				<div class="tooltip-date">${escapeHtml(title)}</div>
 				<div class="tooltip-row">
 					<span class="tooltip-dot" style="background:${color}"></span>
-					<span>${seriesName}: <strong>${formatMoney(value)}</strong></span>
+					<span>${escapeHtml(valueLabel)}</span>
+					<strong>${escapeHtml(formatMoney(value))}</strong>
+				</div>
+				<div class="tooltip-row tooltip-amount">
+					<span>${escapeHtml(labels.totalAmount)}</span>
+					<strong>${escapeHtml(money(amount, labels))}</strong>
 				</div>
 			</div>
 		`;
@@ -395,6 +450,8 @@ const barOptions = ({
 	isRTL,
 	colors = ["#7a328b"],
 	expanded = false,
+	rows = [],
+	countLabel = "",
 }) => ({
 	chart: {
 		toolbar: { show: false },
@@ -441,7 +498,7 @@ const barOptions = ({
 		},
 	},
 	tooltip: {
-		...chartTooltip({ labels, isRTL }),
+		...chartTooltip({ labels, isRTL, rows, countLabel }),
 		x: {
 			formatter: (value, options) =>
 				formatChartDateLabel(resolveChartCategory(value, options), {
@@ -483,7 +540,7 @@ const lineOptions = (config) => {
 	};
 };
 
-const donutOptions = ({ labels: sliceLabels, colors, text, isRTL }) => ({
+const donutOptions = ({ labels: sliceLabels, colors, text, isRTL, rows = [] }) => ({
 	chart: {
 		toolbar: { show: false },
 		fontFamily: chartFont(isRTL),
@@ -491,24 +548,27 @@ const donutOptions = ({ labels: sliceLabels, colors, text, isRTL }) => ({
 	labels: sliceLabels,
 	colors,
 	stroke: {
-		width: 3,
+		width: 4,
 		colors: ["#ffffff"],
 	},
 	plotOptions: {
 		pie: {
+			expandOnClick: false,
 			donut: {
-				size: "66%",
+				size: "72%",
 				labels: {
 					show: true,
 					name: {
 						show: true,
 						fontWeight: 900,
 						color: "#172033",
+						offsetY: -4,
 					},
 					value: {
 						show: true,
 						fontWeight: 950,
 						color: "#102033",
+						offsetY: 4,
 						formatter: (value) => formatMoney(value),
 					},
 					total: {
@@ -533,6 +593,10 @@ const donutOptions = ({ labels: sliceLabels, colors, text, isRTL }) => ({
 		horizontalAlign: "center",
 		fontWeight: 800,
 		labels: { colors: "#18212f" },
+		formatter: (seriesName, opts) => {
+			const value = opts?.w?.globals?.series?.[opts.seriesIndex] || 0;
+			return `${seriesName} (${formatMoney(value)})`;
+		},
 		markers: {
 			width: 10,
 			height: 10,
@@ -550,13 +614,151 @@ const donutOptions = ({ labels: sliceLabels, colors, text, isRTL }) => ({
 			fontWeight: 950,
 			colors: ["#ffffff"],
 		},
-		formatter: (value) => `${Number(value || 0).toFixed(value < 10 ? 1 : 0)}%`,
+		formatter: (value) =>
+			Number(value || 0) >= 4
+				? `${Number(value || 0).toFixed(value < 10 ? 1 : 0)}%`
+				: "",
 	},
 	tooltip: {
-		y: { formatter: (value) => formatMoney(value) },
+		custom: ({ seriesIndex, w }) => {
+			const row = Array.isArray(rows) ? rows[seriesIndex] || {} : {};
+			const label =
+				sliceLabels?.[seriesIndex] ||
+				w?.globals?.labels?.[seriesIndex] ||
+				text.status;
+			const count = toNumber(row.reservationsCount ?? w?.globals?.series?.[seriesIndex]);
+			const amount = currencyNumber(row.total_amount);
+			const color = colors?.[seriesIndex] || "#24547d";
+			return `
+				<div class="executive-chart-tooltip donut-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
+					<div class="tooltip-date">${escapeHtml(label)}</div>
+					<div class="tooltip-row">
+						<span class="tooltip-dot" style="background:${color}"></span>
+						<span>${escapeHtml(text.reservations)}</span>
+						<strong>${escapeHtml(formatMoney(count))}</strong>
+					</div>
+					<div class="tooltip-row tooltip-amount">
+						<span>${escapeHtml(text.totalAmount)}</span>
+						<strong>${escapeHtml(money(amount, text))}</strong>
+					</div>
+				</div>
+			`;
+		},
 	},
+	responsive: [
+		{
+			breakpoint: 640,
+			options: {
+				plotOptions: { pie: { donut: { size: "68%" } } },
+				legend: { fontSize: "11px", itemMargin: { horizontal: 6, vertical: 4 } },
+			},
+		},
+	],
 	noData: { text: text.noData },
 });
+
+const loadStyledXlsx = async () => {
+	const xlsxModule = await import("xlsx-js-style");
+	return xlsxModule.default || xlsxModule["module.exports"] || xlsxModule;
+};
+
+const safeSheetName = (value = "Sheet") => {
+	const cleaned = String(value || "Sheet")
+		.replace(/[\\/?*:]/g, " ")
+		.replace(/\[/g, " ")
+		.replace(/\]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 31);
+	return cleaned || "Sheet";
+};
+
+const safeFileSegment = (value = "") =>
+	String(value || "")
+		.replace(/[<>:"/\\|?*]+/g, "-")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 120) || "report";
+
+const getExportColumnWidth = (key, rows = []) => {
+	const headerWidth = Math.ceil(String(key || "").length * 0.9) + 3;
+	const contentWidth = rows.reduce((max, row) => {
+		const value = row?.[key];
+		const length =
+			value === null || value === undefined ? 0 : String(value).length;
+		return Math.max(max, Math.ceil(length * 0.85) + 3);
+	}, headerWidth);
+	return Math.min(34, Math.max(12, contentWidth));
+};
+
+const appendJsonSheet = (XLSX, workbook, rows, sheetName, emptyText) => {
+	const safeRows =
+		Array.isArray(rows) && rows.length ? rows : [{ Message: emptyText }];
+	const worksheet = XLSX.utils.json_to_sheet(safeRows);
+	const headers = Object.keys(safeRows[0] || {});
+	worksheet["!cols"] = headers.map((key) => ({
+		wch: getExportColumnWidth(key, safeRows),
+	}));
+	if (worksheet["!ref"]) {
+		const range = XLSX.utils.decode_range(worksheet["!ref"]);
+		worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+		worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+		worksheet["!rows"] = Array.from({ length: range.e.r + 1 }, (_, index) => ({
+			hpt: index === 0 ? 28 : 24,
+		}));
+		for (let column = range.s.c; column <= range.e.c; column += 1) {
+			const headerAddress = XLSX.utils.encode_cell({ r: 0, c: column });
+			if (!worksheet[headerAddress]) continue;
+			worksheet[headerAddress].s = {
+				fill: { patternType: "solid", fgColor: { rgb: "12324D" } },
+				font: { bold: true, color: { rgb: "FFFFFF" } },
+				alignment: { horizontal: "center", vertical: "center", wrapText: true },
+				border: {
+					top: { style: "thin", color: { rgb: "B7D7F0" } },
+					bottom: { style: "thin", color: { rgb: "B7D7F0" } },
+					left: { style: "thin", color: { rgb: "B7D7F0" } },
+					right: { style: "thin", color: { rgb: "B7D7F0" } },
+				},
+			};
+		}
+		for (let row = 1; row <= range.e.r; row += 1) {
+			for (let column = range.s.c; column <= range.e.c; column += 1) {
+				const address = XLSX.utils.encode_cell({ r: row, c: column });
+				if (!worksheet[address]) continue;
+				worksheet[address].s = {
+					fill: {
+						patternType: "solid",
+						fgColor: { rgb: row % 2 ? "FFFFFF" : "F7FBFF" },
+					},
+					alignment: { vertical: "top", wrapText: true },
+					border: {
+						bottom: { style: "thin", color: { rgb: "E5E7EB" } },
+					},
+				};
+				if (worksheet[address].t === "n") {
+					worksheet[address].z = "#,##0.00";
+				}
+			}
+		}
+	}
+	XLSX.utils.book_append_sheet(
+		workbook,
+		worksheet,
+		safeSheetName(sheetName)
+	);
+};
+
+const buildTimelineExportRows = (rows, section, labels) =>
+	safeRows(rows).map((row) => ({
+		[labels.reportRow]: section,
+		[labels.date]: formatChartDateLabel(row.groupKey, { full: true }),
+		[labels.reservations]: toNumber(row.reservationsCount),
+		[labels.totalAmount]: currencyNumber(row.total_amount),
+		[labels.paidAmount]: currencyNumber(row.paidAmount),
+		[labels.commission]: currencyNumber(row.commission),
+		[labels.capturedPayments]: toNumber(row.capturedCount),
+	}));
 
 const ExpandableChartPanel = ({ title, labels, renderChart }) => {
 	const [open, setOpen] = useState(false);
@@ -655,6 +857,7 @@ export const ExecutiveReservationsReport = ({
 	const isRTL = chosenLanguage === "Arabic";
 	const [reloadKey, setReloadKey] = useState(0);
 	const [loading, setLoading] = useState(false);
+	const [exporting, setExporting] = useState(false);
 	const [error, setError] = useState("");
 	const [report, setReport] = useState(null);
 	const reservationsRequestRef = useRef(0);
@@ -700,7 +903,7 @@ export const ExecutiveReservationsReport = ({
 	const statusRows = safeRows(report?.reservationsByBookingStatus);
 	const topHotels = safeRows(report?.topHotels);
 	const bookingSources = safeRows(report?.bookingSources);
-	const stats = report?.stats || {};
+	const stats = useMemo(() => report?.stats || {}, [report]);
 
 	const commonColumns = [
 		{ key: "name", label: labels.source },
@@ -726,6 +929,190 @@ export const ExecutiveReservationsReport = ({
 		},
 	];
 
+	const handleExportExcel = useCallback(async () => {
+		const hasData =
+			creationRows.length ||
+			checkinRows.length ||
+			checkoutRows.length ||
+			statusRows.length ||
+			topHotels.length ||
+			bookingSources.length;
+		if (!hasData || !report) {
+			message.info(labels.exportNoData);
+			return;
+		}
+
+		setExporting(true);
+		try {
+			const XLSX = await loadStyledXlsx();
+			const workbook = XLSX.utils.book_new();
+			const summaryRows = [
+				{
+					[labels.metric]: labels.date,
+					[labels.value]: `${params?.dateFrom || "-"} - ${params?.dateTo || "-"}`,
+				},
+				{
+					[labels.metric]: labels.cancelledExcluded,
+					[labels.value]: effectiveExcludeCancelled
+						? labels.excludeShort
+						: labels.includeShort,
+				},
+				{
+					[labels.metric]: labels.hotels,
+					[labels.value]: toNumber(stats.totalHotels),
+				},
+				{
+					[labels.metric]: labels.reservations,
+					[labels.value]: toNumber(stats.reservationsCount),
+				},
+				{
+					[labels.metric]: labels.totalAmount,
+					[labels.value]: currencyNumber(stats.total_amount),
+				},
+				{
+					[labels.metric]: labels.paidAmount,
+					[labels.value]: currencyNumber(stats.paidAmount),
+				},
+				{
+					[labels.metric]: labels.commission,
+					[labels.value]: currencyNumber(stats.commission),
+				},
+			];
+			const arrivalsDeparturesRows = [
+				...buildTimelineExportRows(checkinRows, labels.checkins, labels),
+				...buildTimelineExportRows(checkoutRows, labels.checkouts, labels),
+			];
+			const statusCreationRows = [
+				...statusRows.map((row) => ({
+					[labels.reportRow]: labels.statusSummary,
+					[labels.status]: readableStatusLabel(
+						row.reservation_status,
+						chosenLanguage
+					),
+					[labels.date]: "",
+					[labels.reservations]: toNumber(row.reservationsCount),
+					[labels.totalAmount]: currencyNumber(row.total_amount),
+					[labels.paidAmount]: currencyNumber(row.paidAmount),
+					[labels.commission]: currencyNumber(row.commission),
+					[labels.capturedPayments]: toNumber(row.capturedCount),
+				})),
+				...buildTimelineExportRows(creationRows, labels.creationDate, labels).map(
+					(row) => ({
+						...row,
+						[labels.status]: "",
+					})
+				),
+			];
+			const hotelSourceRows = [
+				...topHotels.map((row) => ({
+					[labels.reportRow]: labels.topHotels,
+					[labels.hotel]: titleCase(row.hotelName),
+					[labels.source]: "",
+					[labels.reservations]: toNumber(row.reservationsCount),
+					[labels.totalAmount]: currencyNumber(row.total_amount),
+					[labels.paidAmount]: currencyNumber(row.paidAmount),
+					[labels.commission]: currencyNumber(row.commission),
+					[labels.capturedPayments]: toNumber(row.capturedCount),
+				})),
+				...bookingSources.map((row) => ({
+					[labels.reportRow]: labels.bookingSources,
+					[labels.hotel]: "",
+					[labels.source]: titleCase(row.source),
+					[labels.reservations]: toNumber(row.reservationsCount),
+					[labels.totalAmount]: currencyNumber(row.total_amount),
+					[labels.paidAmount]: currencyNumber(row.paidAmount),
+					[labels.commission]: currencyNumber(row.commission),
+					[labels.capturedPayments]: toNumber(row.capturedCount),
+				})),
+			];
+
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				summaryRows,
+				labels.reportSummary,
+				labels.noData
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				arrivalsDeparturesRows,
+				labels.arrivalsDepartures,
+				labels.noData
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				statusCreationRows,
+				labels.statusCreation,
+				labels.noData
+			);
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				hotelSourceRows,
+				labels.hotelsSources,
+				labels.noData
+			);
+
+			await trackOverallReservationSummaryExport(
+				userId,
+				token,
+				{
+					filters: {
+						...(params || {}),
+						includeCancelled: !effectiveExcludeCancelled,
+						excludeCancelled: effectiveExcludeCancelled,
+					},
+					dataset: "overall_reservation_summary_charts",
+					format: "XLSX",
+					dateBy: params?.dateBy || report?.period?.dateBy || "createdAt",
+					totalRows:
+						summaryRows.length +
+						arrivalsDeparturesRows.length +
+						statusCreationRows.length +
+						hotelSourceRows.length,
+					summary: stats,
+					reservations: topHotels.map((row) => ({
+						hotelId: row.hotelId,
+						hotelName: row.hotelName,
+						reservationsCount: row.reservationsCount,
+						total_amount: row.total_amount,
+					})),
+				},
+				params
+			);
+
+			XLSX.writeFile(
+				workbook,
+				`${safeFileSegment("overall-reservations-summary")}-${dayjs().format(
+					"YYYY-MM-DD-HHmm"
+				)}.xlsx`,
+				{ compression: true }
+			);
+			message.success(labels.exportSuccess);
+		} catch (error) {
+			message.error(labels.exportError);
+		} finally {
+			setExporting(false);
+		}
+	}, [
+		bookingSources,
+		checkinRows,
+		checkoutRows,
+		chosenLanguage,
+		creationRows,
+		effectiveExcludeCancelled,
+		labels,
+		params,
+		report,
+		stats,
+		statusRows,
+		token,
+		topHotels,
+		userId,
+	]);
+
 	const renderCreationChart = (height = 300, options = {}) => (
 		<Chart
 			type='bar'
@@ -736,6 +1123,8 @@ export const ExecutiveReservationsReport = ({
 				isRTL,
 				colors: ["#24547d"],
 				expanded: !!options.expanded,
+				rows: creationRows,
+				countLabel: labels.reservations,
 			})}
 			series={[
 				{
@@ -756,6 +1145,8 @@ export const ExecutiveReservationsReport = ({
 				isRTL,
 				colors: ["#0f766e"],
 				expanded: !!options.expanded,
+				rows: checkinRows,
+				countLabel: labels.checkins,
 			})}
 			series={[
 				{
@@ -776,6 +1167,8 @@ export const ExecutiveReservationsReport = ({
 				isRTL,
 				colors: ["#d97706"],
 				expanded: !!options.expanded,
+				rows: checkoutRows,
+				countLabel: labels.checkouts,
 			})}
 			series={[
 				{
@@ -797,6 +1190,7 @@ export const ExecutiveReservationsReport = ({
 				colors: statusRows.map((row) => statusChartColor(row.reservation_status)),
 				text: labels,
 				isRTL,
+				rows: statusRows,
 			})}
 			series={statusRows.map((row) => toNumber(row.reservationsCount))}
 		/>
@@ -819,9 +1213,20 @@ export const ExecutiveReservationsReport = ({
 						</span>
 					</div>
 				</div>
-				<Button onClick={() => setReloadKey((value) => value + 1)}>
-					{labels.refresh}
-				</Button>
+				<div className='report-actions'>
+					<Button
+						type='primary'
+						icon={<DownloadOutlined />}
+						loading={exporting}
+						disabled={loading || !report}
+						onClick={handleExportExcel}
+					>
+						{exporting ? labels.exportingExcel : labels.exportExcel}
+					</Button>
+					<Button onClick={() => setReloadKey((value) => value + 1)}>
+						{labels.refresh}
+					</Button>
+				</div>
 			</div>
 
 			<LoadingBlock loading={loading} error={error} labels={labels}>
@@ -1597,6 +2002,20 @@ const ExecutiveReportShell = styled.div`
 		grid-template-columns: minmax(180px, 1fr) auto;
 	}
 
+	.report-actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.report-actions .ant-btn {
+		min-height: 38px;
+		border-radius: 8px;
+		font-weight: 900;
+	}
+
 	.report-toolbar.inventory-summary-toolbar {
 		align-items: center;
 	}
@@ -1740,9 +2159,9 @@ const ExecutiveReportShell = styled.div`
 
 	.executive-chart-tooltip {
 		display: grid;
-		gap: 7px;
-		min-width: 132px;
-		padding: 9px 11px;
+		gap: 8px;
+		min-width: 178px;
+		padding: 10px 12px;
 		border: 1px solid #d7e7f8;
 		border-radius: 8px;
 		background: rgba(255, 255, 255, 0.98);
@@ -1764,11 +2183,23 @@ const ExecutiveReportShell = styled.div`
 	.executive-chart-tooltip .tooltip-row {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 7px;
 		color: #1e293b;
 		font-size: 0.78rem;
 		font-weight: 850;
 		white-space: nowrap;
+	}
+
+	.executive-chart-tooltip .tooltip-row strong {
+		color: #102033;
+		font-size: 0.82rem;
+		font-weight: 950;
+	}
+
+	.executive-chart-tooltip .tooltip-amount {
+		padding-top: 2px;
+		color: #334155;
 	}
 
 	.executive-chart-tooltip .tooltip-dot {
@@ -1840,6 +2271,14 @@ const ExecutiveReportShell = styled.div`
 		.report-grid.two {
 			grid-template-columns: 1fr;
 		}
+
+		.report-actions {
+			justify-content: stretch;
+		}
+
+		.report-actions .ant-btn {
+			flex: 1 1 0;
+		}
 	}
 
 	@media (max-width: 520px) {
@@ -1848,6 +2287,14 @@ const ExecutiveReportShell = styled.div`
 		.report-toolbar {
 			padding: 10px;
 			gap: 8px;
+		}
+
+		.report-actions {
+			flex-direction: column;
+		}
+
+		.report-actions .ant-btn {
+			width: 100%;
 		}
 
 		.report-panel {

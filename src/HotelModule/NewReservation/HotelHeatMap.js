@@ -44,6 +44,16 @@ const CHECKED_OUT_STATUS_REGEX =
 	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
 const INHOUSE_STATUS_REGEX = /in[_\s-]?house/i;
 
+const roomTooltipProps = (isArabic = false) => ({
+	placement: isArabic ? "left" : "right",
+	align: { offset: [isArabic ? -12 : 12, 0] },
+	mouseEnterDelay: 0.18,
+	mouseLeaveDelay: 0.04,
+	autoAdjustOverflow: true,
+	overlayStyle: { zIndex: 100000000, pointerEvents: "none" },
+	overlayInnerStyle: { pointerEvents: "none" },
+});
+
 const HotelHeatMap = ({
 	hotelRooms,
 	hotelDetails,
@@ -55,6 +65,7 @@ const HotelHeatMap = ({
 	chosenLanguage,
 	useCurrentOccupancy = false,
 	mapSummary,
+	showRoomColorLegend = false,
 }) => {
 	const history = useHistory();
 	const location = useLocation();
@@ -730,6 +741,12 @@ const HotelHeatMap = ({
 		}
 		return null;
 	};
+	const roomColorLegendTitle =
+		chosenLanguage === "Arabic"
+			? "\u062f\u0644\u064a\u0644 \u0623\u0644\u0648\u0627\u0646 \u0627\u0644\u063a\u0631\u0641"
+			: "Room Color Code";
+	const showLegend =
+		showRoomColorLegend && distinctRoomTypesWithColors.length > 0;
 
 	return (
 		<HotelOverviewWrapper $fixIt={fixIt}>
@@ -747,10 +764,12 @@ const HotelHeatMap = ({
 					selectedRoomType={selectedRoomType}
 					selectedFloor={selectedFloor}
 					selectedRoomStatus={selectedRoomStatus}
+					useMobileDrawer={showRoomColorLegend}
+					useRoomMapLayout={showRoomColorLegend}
 				/>
 			</div>
 			<div className='canvas-grid'>
-				<div>
+				<div className='floors-area'>
 					<FloorsContainer>
 						{selectedFloor === null
 							? floorsDesc.map((floor, index) => (
@@ -795,6 +814,9 @@ const HotelHeatMap = ({
 														const showBedSummary = isBedRoom && totalBeds > 0;
 														return (
 															<Tooltip
+																{...roomTooltipProps(
+																	chosenLanguage === "Arabic",
+																)}
 																title={
 																	<div
 																		style={{
@@ -865,7 +887,6 @@ const HotelHeatMap = ({
 																	</div>
 																}
 																key={idx}
-																overlayStyle={{ zIndex: 100000000 }}
 																color='white'
 															>
 																<RoomSquare
@@ -989,6 +1010,9 @@ const HotelHeatMap = ({
 															const showBedSummary = isBedRoom && totalBeds > 0;
 															return (
 																<Tooltip
+																	{...roomTooltipProps(
+																		chosenLanguage === "Arabic",
+																	)}
 																	title={
 																		<div style={{ textAlign: "center" }}>
 																			{roomImage && (
@@ -1152,6 +1176,31 @@ const HotelHeatMap = ({
 						{parkingLot && <ParkingLot>Parking Lot</ParkingLot>}
 					</FloorsContainer>
 				</div>
+				{showLegend ? (
+					<RoomColorLegend
+						className='legend-area'
+						dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+						aria-label={roomColorLegendTitle}
+					>
+						<LegendTitle>{roomColorLegendTitle}</LegendTitle>
+						<LegendItems>
+							{distinctRoomTypesWithColors.map((room) => {
+								const displayName =
+									room.displayName || room.display_name || room.room_type || "-";
+								const color = room.roomColorCode || "#64748b";
+								return (
+									<LegendItem
+										key={`${displayName}-${color}`}
+										title={displayName}
+									>
+										<LegendSwatch $color={color} />
+										<LegendText>{displayName}</LegendText>
+									</LegendItem>
+								);
+							})}
+						</LegendItems>
+					</RoomColorLegend>
+				) : null}
 			</div>
 
 			<Modal
@@ -1323,7 +1372,20 @@ const HotelOverviewWrapper = styled.div`
 
 	.canvas-grid {
 		display: grid;
-		grid-template-columns: 95% 5%;
+		grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+		grid-template-areas: "floors legend";
+		gap: 14px;
+		align-items: start;
+		min-width: 0;
+	}
+
+	.floors-area {
+		grid-area: floors;
+		min-width: 0;
+	}
+
+	.legend-area {
+		grid-area: legend;
 		min-width: 0;
 	}
 
@@ -1345,11 +1407,91 @@ const HotelOverviewWrapper = styled.div`
 
 		.canvas-grid {
 			grid-template-columns: 1fr;
+			grid-template-areas:
+				"legend"
+				"floors";
+			gap: 10px;
 		}
 
 		.colors-grid {
 			display: none;
 		}
+	}
+`;
+
+const RoomColorLegend = styled.aside`
+	position: sticky;
+	top: 58px;
+	display: grid;
+	gap: 8px;
+	padding: 10px 12px;
+	background: #ffffff;
+	border: 1px solid #dbe7f3;
+	border-radius: 8px;
+	box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+	max-height: calc(84vh - 190px);
+	overflow-y: auto;
+	text-align: start;
+
+	@media (max-width: 760px) {
+		position: static;
+		max-height: none;
+		overflow: visible;
+		padding: 9px;
+	}
+`;
+
+const LegendTitle = styled.div`
+	color: #12324d;
+	font-size: 0.74rem;
+	font-weight: 900;
+	line-height: 1.2;
+`;
+
+const LegendItems = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+	min-width: 0;
+`;
+
+const LegendItem = styled.div`
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	justify-content: flex-start;
+	max-width: 100%;
+	min-width: 0;
+	width: 100%;
+	padding: 5px 7px;
+	background: #f8fbff;
+	border: 1px solid #e2ebf4;
+	border-radius: 999px;
+	color: #102033;
+	font-size: 0.72rem;
+	font-weight: 800;
+	line-height: 1.2;
+`;
+
+const LegendSwatch = styled.span`
+	flex: 0 0 auto;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: ${({ $color }) => $color || "#64748b"};
+	border: 1px solid rgba(15, 23, 42, 0.28);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+`;
+
+const LegendText = styled.span`
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: clip;
+	white-space: nowrap;
+
+	@media (max-width: 760px) {
+		overflow-wrap: anywhere;
+		white-space: normal;
 	}
 `;
 

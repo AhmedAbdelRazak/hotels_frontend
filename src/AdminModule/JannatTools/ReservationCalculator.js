@@ -9,9 +9,67 @@ import EquivalentHotels from "./EquivalentHotels";
 const { Option } = Select;
 const { Panel } = Collapse;
 
-const ReservationCalculator = () => {
+const CALCULATOR_TEXT = {
+	en: {
+		title: "Reservation Calculator",
+		checkDates: "Check-in and check-out dates:",
+		checkIn: "Check-in date:",
+		checkOut: "Check-out date:",
+		roomTypes: "Select room types:",
+		roomTypesPlaceholder: "Select room types",
+		hotel: "Select hotel:",
+		hotelPlaceholder: "Select a hotel",
+		roomDisplayName: "Select room display name:",
+		roomPlaceholder: "Select a room",
+		showDetails: "Show Details",
+		fillFields: "Please fill in all fields to calculate the summary.",
+		invalidHotel: "Invalid hotel selected.",
+		invalidRoom: "Invalid room selected.",
+		summaryFor: "Summary for",
+		roomType: "Room Type:",
+		displayName: "Display Name:",
+		nights: "Number of Nights:",
+		averagePrice: "Average Price per Day:",
+		totalAmount: "Total Amount:",
+		totalCommission: "Total Commission:",
+		grandTotal: "Grand Total:",
+		pricingBreakdown: "Pricing Breakdown",
+		rootPrice: "Root Price",
+	},
+	ar: {
+		title: "حاسبة الحجوزات",
+		checkDates: "تواريخ الوصول والمغادرة:",
+		checkIn: "تاريخ الوصول:",
+		checkOut: "تاريخ المغادرة:",
+		roomTypes: "اختر أنواع الغرف:",
+		roomTypesPlaceholder: "اختر أنواع الغرف",
+		hotel: "اختر الفندق:",
+		hotelPlaceholder: "اختر فندقًا",
+		roomDisplayName: "اختر اسم الغرفة:",
+		roomPlaceholder: "اختر غرفة",
+		showDetails: "عرض التفاصيل",
+		fillFields: "يرجى تعبئة كل الحقول لحساب الملخص.",
+		invalidHotel: "الفندق المحدد غير صحيح.",
+		invalidRoom: "الغرفة المحددة غير صحيحة.",
+		summaryFor: "ملخص",
+		roomType: "نوع الغرفة:",
+		displayName: "اسم الغرفة:",
+		nights: "عدد الليالي:",
+		averagePrice: "متوسط السعر في الليلة:",
+		totalAmount: "إجمالي التكلفة:",
+		totalCommission: "إجمالي العمولة:",
+		grandTotal: "الإجمالي:",
+		pricingBreakdown: "تفاصيل التسعير",
+		rootPrice: "التكلفة الأساسية",
+	},
+};
+
+const ReservationCalculator = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const TXT = CALCULATOR_TEXT[isArabic ? "ar" : "en"];
+	const currency = isArabic ? "ر.س" : "SAR";
 	// Detect if user is on mobile (<= 768px)
-	const isMobile = window.innerWidth <= 768;
+	const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
 
 	const [allHotels, setAllHotels] = useState([]);
 	const [checkInDate, setCheckInDate] = useState(null);
@@ -23,10 +81,11 @@ const ReservationCalculator = () => {
 	const [selectedDisplayName, setSelectedDisplayName] = useState(null);
 	const [summary, setSummary] = useState(null);
 
-	const { user, token } = isAuthenticated();
+	const { user, token } = isAuthenticated() || {};
 
 	// Fetch all hotels
 	const getAllHotels = useCallback(async () => {
+		if (!user?._id || !token) return;
 		try {
 			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
@@ -46,7 +105,7 @@ const ReservationCalculator = () => {
 		} catch (error) {
 			console.error("Error fetching hotels:", error);
 		}
-	}, [user._id, token]);
+	}, [user?._id, token]);
 
 	useEffect(() => {
 		getAllHotels();
@@ -167,13 +226,13 @@ const ReservationCalculator = () => {
 	// If user clicks "Show Details"
 	const handleShowDetails = () => {
 		if (!checkInDate || !checkOutDate || !selectedDisplayName) {
-			message.error("Please fill in all fields to calculate the summary.");
+			message.error(TXT.fillFields);
 			return;
 		}
 
 		const hotel = allHotels.find((h) => h._id === selectedHotel);
 		if (!hotel) {
-			message.error("Invalid hotel selected.");
+			message.error(TXT.invalidHotel);
 			return;
 		}
 
@@ -181,7 +240,7 @@ const ReservationCalculator = () => {
 			(r) => `${r.displayName} | ${r.roomType}` === selectedDisplayName
 		);
 		if (!room) {
-			message.error("Invalid room selected.");
+			message.error(TXT.invalidRoom);
 			return;
 		}
 
@@ -227,7 +286,7 @@ const ReservationCalculator = () => {
 			return (
 				<MobileDateFields>
 					<label style={{ display: "block", marginBottom: 4 }}>
-						Check-in Date:
+						{TXT.checkIn}
 					</label>
 					<DatePicker
 						style={{ width: "100%", marginBottom: 12 }}
@@ -236,7 +295,7 @@ const ReservationCalculator = () => {
 						onChange={(val) => setCheckInDate(val)}
 					/>
 					<label style={{ display: "block", marginBottom: 4 }}>
-						Check-out Date:
+						{TXT.checkOut}
 					</label>
 					<DatePicker
 						style={{ width: "100%" }}
@@ -264,18 +323,18 @@ const ReservationCalculator = () => {
 		<ReservationCalculatorWrapper>
 			{/* Left Form */}
 			<FormWrapper>
-				<h2>Reservation Calculator</h2>
+				<h2>{TXT.title}</h2>
 				<div style={{ marginBottom: "20px" }}>
-					<label>Check-in and Check-out Dates:</label>
+					<label>{TXT.checkDates}</label>
 					{renderDateControls()}
 				</div>
 
 				{checkInDate && checkOutDate && (
 					<div style={{ marginBottom: "20px" }}>
-						<label>Select Room Types:</label>
+						<label>{TXT.roomTypes}</label>
 						<Select
 							mode='multiple'
-							placeholder='Select room types'
+							placeholder={TXT.roomTypesPlaceholder}
 							style={{ width: "100%" }}
 							onChange={(value) => setSelectedRoomTypes(value)}
 						>
@@ -296,9 +355,9 @@ const ReservationCalculator = () => {
 
 				{selectedRoomTypes.length > 0 && (
 					<div style={{ marginBottom: "20px" }}>
-						<label>Select Hotel:</label>
+						<label>{TXT.hotel}</label>
 						<Select
-							placeholder='Select a hotel'
+							placeholder={TXT.hotelPlaceholder}
 							style={{ width: "100%" }}
 							onChange={(value) => setSelectedHotel(value)}
 						>
@@ -313,9 +372,9 @@ const ReservationCalculator = () => {
 
 				{selectedHotel && displayNames.length > 0 && (
 					<div style={{ marginBottom: "20px" }}>
-						<label>Select Room Display Name:</label>
+						<label>{TXT.roomDisplayName}</label>
 						<Select
-							placeholder='Select a room'
+							placeholder={TXT.roomPlaceholder}
 							style={{ width: "100%" }}
 							onChange={(value) => setSelectedDisplayName(value)}
 						>
@@ -329,46 +388,49 @@ const ReservationCalculator = () => {
 				)}
 				{selectedDisplayName && (
 					<Button type='primary' onClick={handleShowDetails}>
-						Show Details
+						{TXT.showDetails}
 					</Button>
 				)}
 
 				{summary && (
 					<SummaryWrapper>
-						<h3>Summary for {summary.hotelName}</h3>
+						<h3>
+							{TXT.summaryFor} {summary.hotelName}
+						</h3>
 						<p>
-							<strong>Room Type:</strong> {summary.roomType}
+							<strong>{TXT.roomType}</strong> {summary.roomType}
 						</p>
 						<p>
-							<strong>Display Name:</strong> {summary.displayName}
+							<strong>{TXT.displayName}</strong> {summary.displayName}
 						</p>
 						<p>
-							<strong>Number of Nights:</strong> {summary.nights}
+							<strong>{TXT.nights}</strong> {summary.nights}
 						</p>
 						<p>
-							<strong>Average Price per Day:</strong>{" "}
-							{(summary.grandTotal / summary.nights).toFixed(2)} SAR
+							<strong>{TXT.averagePrice}</strong>{" "}
+							{(summary.grandTotal / summary.nights).toFixed(2)} {currency}
 						</p>
 						<p>
-							<strong>Total Amount:</strong> {summary.totalAmount.toFixed(2)}{" "}
-							SAR
+							<strong>{TXT.totalAmount}</strong> {summary.totalAmount.toFixed(2)}{" "}
+							{currency}
 						</p>
 						<p>
-							<strong>Total Commission:</strong>{" "}
-							{summary.totalCommission.toFixed(2)} SAR
+							<strong>{TXT.totalCommission}</strong>{" "}
+							{summary.totalCommission.toFixed(2)} {currency}
 						</p>
 						<p>
-							<strong>Grand Total:</strong> {summary.grandTotal.toFixed(2)} SAR
+							<strong>{TXT.grandTotal}</strong> {summary.grandTotal.toFixed(2)}{" "}
+							{currency}
 						</p>
 
 						<Collapse>
-							<Panel header='Pricing Breakdown' key='1'>
+							<Panel header={TXT.pricingBreakdown} key='1'>
 								<ul>
 									{summary.pricingBreakdown.map((day, idx) => (
 										<li key={idx}>
 											<strong>{day.date}:</strong>{" "}
-											{day.totalPriceWithCommission.toFixed(2)} SAR (Root Price:{" "}
-											{day.rootPrice.toFixed(2)} SAR)
+											{day.totalPriceWithCommission.toFixed(2)} {currency} (
+											{TXT.rootPrice}: {day.rootPrice.toFixed(2)} {currency})
 										</li>
 									))}
 								</ul>
@@ -387,6 +449,7 @@ const ReservationCalculator = () => {
 						selectedRoomTypes={selectedRoomTypes}
 						selectedHotel={selectedHotel}
 						allHotels={allHotels.filter((hotel) => hotel._id !== selectedHotel)}
+						chosenLanguage={chosenLanguage}
 					/>
 				)}
 			</ChildWrapper>
@@ -401,47 +464,61 @@ export default ReservationCalculator;
 /* ----------------------------------------------------- */
 
 const ReservationCalculatorWrapper = styled.div`
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(285px, 380px) minmax(0, 1fr);
+	gap: 16px;
+	align-items: start;
+	min-width: 0;
 
 	h2 {
-		font-size: 1.4rem;
-		font-weight: bolder;
-		text-transform: capitalize;
+		margin: 0 0 14px;
+		color: #0b3158;
+		font-size: 1.18rem;
+		font-weight: 950;
+		line-height: 1.35;
+		letter-spacing: 0;
 	}
 
 	h3 {
 		font-size: 1.1rem;
-		font-weight: bolder;
-		text-transform: capitalize;
+		font-weight: 950;
+		letter-spacing: 0;
 	}
 
 	p {
 		font-size: 0.9rem;
-		text-transform: capitalize;
+		line-height: 1.7;
 	}
 
 	@media (max-width: 768px) {
-		/* On mobile, stack the form & child components vertically */
-		flex-direction: column;
+		grid-template-columns: 1fr;
 	}
 `;
 
 /* Left Container */
 const FormWrapper = styled.div`
-	flex: 0 0 31%;
-	background: #f9f9f9;
+	min-width: 0;
+	background: linear-gradient(180deg, #ffffff, #f6fbff);
 	padding: 20px;
 	border-radius: 8px;
+	border: 1px solid rgba(139, 190, 227, 0.38);
+	box-shadow: 0 10px 22px rgba(13, 49, 88, 0.08);
+
+	label {
+		display: block;
+		margin-bottom: 7px;
+		color: #173a5f;
+		font-weight: 900;
+	}
 
 	@media (max-width: 768px) {
 		width: 100%;
-		margin-bottom: 20px;
 	}
 `;
 
 /* Right container */
 const ChildWrapper = styled.div`
-	flex: 0 0 69%;
+	min-width: 0;
 
 	@media (max-width: 768px) {
 		width: 100%;
@@ -450,10 +527,11 @@ const ChildWrapper = styled.div`
 
 const SummaryWrapper = styled.div`
 	margin-top: 20px;
-	padding: 10px;
-	border: 1px solid #ddd;
+	padding: 13px;
+	border: 1px solid rgba(139, 190, 227, 0.42);
 	border-radius: 8px;
-	background-color: #f9f9f9;
+	background-color: #ffffff;
+	box-shadow: inset 0 1px rgba(255, 255, 255, 0.78);
 
 	h3 {
 		margin-bottom: 10px;

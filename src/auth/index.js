@@ -172,6 +172,16 @@ export const getDashboardPreview = () => {
 	return preview;
 };
 
+const isAdminRoutePath = () =>
+	typeof window !== "undefined" &&
+	String(window.location?.pathname || "").startsWith("/admin");
+
+export const getBaseAuthentication = () => {
+	if (typeof window === "undefined") return false;
+	const baseAuth = safeParseLocalJson("jwt");
+	return baseAuth?.token && baseAuth?.user ? baseAuth : false;
+};
+
 export const startDashboardPreview = ({ auth, preview, selectedHotel }) => {
 	if (typeof window === "undefined" || !auth?.token || !auth?.user) return;
 	const baseAuth = safeParseLocalJson("jwt");
@@ -213,7 +223,11 @@ export const isAuthenticated = () => {
 		return false;
 	}
 	if (localStorage.getItem("jwt")) {
-		const baseAuth = JSON.parse(localStorage.getItem("jwt"));
+		const baseAuth = getBaseAuthentication();
+		if (!baseAuth) return false;
+		if (isAdminRoutePath()) {
+			return baseAuth;
+		}
 		const preview = getDashboardPreview();
 		if (preview?.auth?.token && preview?.auth?.user) {
 			return {

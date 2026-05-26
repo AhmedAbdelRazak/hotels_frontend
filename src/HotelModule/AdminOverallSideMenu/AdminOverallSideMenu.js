@@ -48,7 +48,7 @@ const SIDE_MENU_TEXT = {
 		newReservation: "New Reservation",
 		reservationsList: "Reservations List",
 		pendingReservations: "Pending Reservations",
-		hotelMap: "Hotel Map",
+		hotelMap: "Hotel Rooms Map",
 		houseKeeping: "House Keeping",
 		financialAffairs: "Financial Affairs",
 		generalFinancialReport: "General Financial Report",
@@ -69,7 +69,7 @@ const SIDE_MENU_TEXT = {
 		reservations: "الحجوزات",
 		newReservation: "حجز جديد",
 		pendingReservations: "الحجوزات المعلقة",
-		hotelMap: "خريطة الفندق",
+		hotelMap: "\u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		houseKeeping: "النظافة",
 		financialAffairs: "الشؤون المالية",
 		generalFinancialReport: "التقرير المالي العام",
@@ -91,7 +91,7 @@ const SIDE_MENU_AR_TEXT = {
 	reservations: "الحجوزات",
 	newReservation: "حجز جديد",
 	pendingReservations: "الحجوزات المعلقة",
-	hotelMap: "خريطة الفندق",
+	hotelMap: "\u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	houseKeeping: "النظافة",
 	financialAffairs: "الشؤون المالية",
 	generalFinancialReport: "التقرير المالي العام",
@@ -152,7 +152,6 @@ const isSystemAdmin = (user = {}) =>
 
 const isOwnerLike = (user = {}) =>
 	isSuperAdminUser(user) ||
-	hasRole(user, 1000) ||
 	(hasRole(user, 2000) && !user.belongsToId) ||
 	isSystemAdmin(user);
 

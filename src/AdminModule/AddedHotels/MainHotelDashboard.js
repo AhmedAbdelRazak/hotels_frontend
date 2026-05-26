@@ -43,12 +43,17 @@ import {
 } from "@ant-design/icons";
 
 import { useCartContext } from "../../cart_context";
-import { isAuthenticated } from "../../auth";
+import {
+	isAuthenticated,
+	previewHotelStaffDashboard,
+	startDashboardPreview,
+} from "../../auth";
 import { updateHotelDetails } from "../../HotelModule/apiAdmin";
 import { gettingHotelDetailsForAdmin } from "../apiAdmin";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 import { STEP_MODAL_REGISTRY_ADMIN } from "../utils/hotel-setup-modals-admin";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const { Option } = Select;
 
@@ -383,6 +388,38 @@ const PMS_DIAGRAM_HOTSPOTS = [
 	{ key: "roles", label: "Main roles", x: 11.2, y: 82.3, w: 76.7, h: 14.2 },
 ];
 
+const formatRouteDate = (date) => {
+	const parsed = date instanceof Date ? date : new Date(date);
+	if (Number.isNaN(parsed.getTime())) return "";
+	const year = parsed.getFullYear();
+	const month = String(parsed.getMonth() + 1).padStart(2, "0");
+	const day = String(parsed.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+};
+
+const overallHotelManagementRouteForOwner = (ownerId = "") => {
+	const end = new Date();
+	const start = new Date(end);
+	start.setDate(start.getDate() - 60);
+	const dateFrom = formatRouteDate(start);
+	const dateTo = formatRouteDate(end);
+	const params = new URLSearchParams({
+		ownerId,
+		overall: "summary",
+		page: "1",
+		dateFrom,
+		invStart: dateFrom,
+		dateTo,
+		invEnd: dateTo,
+		dateBy: "createdAt",
+		range: "custom",
+	});
+	return `/hotel-management/main-dashboard?${params.toString()}`;
+};
+
+const normalizeDashboardId = (value) =>
+	String(value?._id || value?.id || value || "").trim();
+
 const getHotspotStyle = ({ x, y, w, h }) => ({
 	left: `${x}%`,
 	top: `${y}%`,
@@ -395,7 +432,7 @@ const getHotspotStyle = ({ x, y, w, h }) => ({
 	}%`,
 });
 
-const MainHotelDashboardAdmin = () => {
+const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 	/* context & i18n */
 	const { chosenLanguage, languageToggle } = useCartContext();
 	const L = WORDS[chosenLanguage === "Arabic" ? "ar" : "en"];
@@ -512,6 +549,41 @@ const MainHotelDashboardAdmin = () => {
 	};
 
 	const gotoHotelDashboard = (hotel) => {
+		const hotelId = normalizeDashboardId(hotel?._id);
+		const ownerId = normalizeDashboardId(hotel?.belongsTo);
+
+		if (isSuperAdminUser(admin)) {
+			if (!hotelId || !ownerId) {
+				message.error("Hotel owner scope was not found.");
+				return;
+			}
+			previewHotelStaffDashboard(admin._id, token, hotelId, ownerId).then(
+				(data) => {
+					if (data?.error || !data?.token || !data?.user) {
+						message.error(data?.error || "Unable to open owner dashboard.");
+						return;
+					}
+					const selectedHotel = {
+						...hotel,
+						_id: hotelId,
+						belongsTo:
+							hotel.belongsTo && typeof hotel.belongsTo === "object"
+								? hotel.belongsTo
+								: { _id: ownerId },
+					};
+					startDashboardPreview({
+						auth: { token: data.token, user: data.user },
+						preview: data.preview,
+						selectedHotel,
+					});
+					window.open(overallHotelManagementRouteForOwner(ownerId), "_blank");
+				}
+			).catch((error) => {
+				message.error(error?.message || "Unable to open owner dashboard.");
+			});
+			return;
+		}
+
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
 		window.open(
 			`/hotel-management/dashboard/${hotel.belongsTo._id}/${hotel._id}`,
@@ -524,16 +596,51 @@ const MainHotelDashboardAdmin = () => {
 
 	const BoolIcon = ({ val }) =>
 		val ? (
-			<CheckCircleTwoTone twoToneColor='#52c41a' style={{ fontSize: 18 }} />
+			<CheckCircleTwoTone
+				twoToneColor='#52c41a'
+				style={{ fontSize: viewportFit ? 16 : 18 }}
+			/>
 		) : (
-			<CloseCircleTwoTone twoToneColor='#ff4d4f' style={{ fontSize: 18 }} />
+			<CloseCircleTwoTone
+				twoToneColor='#ff4d4f'
+				style={{ fontSize: viewportFit ? 16 : 18 }}
+			/>
 		);
+
+	const W = viewportFit
+		? {
+				index: 30,
+				hotel: 150,
+				owner: 145,
+				phone: 108,
+				status: 88,
+				step: 52,
+				location: 60,
+				ready: 78,
+				complete: 78,
+				action: 92,
+		  }
+		: {
+				index: 34,
+				hotel: 190,
+				owner: 165,
+				phone: 120,
+				status: 105,
+				step: 64,
+				location: 72,
+				ready: 100,
+				complete: 100,
+				action: 110,
+		  };
+	const tableScroll = viewportFit
+		? { x: 1050, y: "max(280px, calc(100vh - 430px))" }
+		: { x: 1260 };
 
 	const columns = [
 		{
 			title: L.index,
 			dataIndex: "__index",
-			width: 34,
+			width: W.index,
 			align: "center",
 			render: (_t, _r, i) => indexStart + i + 1,
 			fixed: "left",
@@ -542,7 +649,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.hotel,
 			dataIndex: "hotelName",
 			key: "hotelName",
-			width: 190,
+			width: W.hotel,
 			render: (_t, record) => {
 				const fullName = record.hotelName || "-";
 				const fullAddress = [
@@ -591,7 +698,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.owner,
 			dataIndex: "belongsTo",
 			key: "owner",
-			width: 165,
+			width: W.owner,
 			render: (owner) => {
 				const name = owner?.name || "-";
 				const email = owner?.email || "-";
@@ -615,7 +722,7 @@ const MainHotelDashboardAdmin = () => {
 			title: L.phone,
 			dataIndex: "phone",
 			key: "phone",
-			width: 120,
+			width: W.phone,
 			render: (v) => (
 				<Tooltip title={v ? `+${v}` : "-"}>
 					<div className='ellip-1'>
@@ -628,19 +735,27 @@ const MainHotelDashboardAdmin = () => {
 			title: L.status,
 			dataIndex: "activateHotel",
 			key: "activateHotel",
-			width: 105,
+			width: W.status,
 			render: (val) =>
 				val ? (
-					<Tag color='success'>{L.active}</Tag>
+					<Tooltip title={L.active}>
+						<Tag className='status-tag' color='success'>
+							{L.active}
+						</Tag>
+					</Tooltip>
 				) : (
-					<Tag color='warning'>{L.ribbon_review}</Tag>
+					<Tooltip title={L.ribbon_review}>
+						<Tag className='status-tag' color='warning'>
+							{L.ribbon_review}
+						</Tag>
+					</Tooltip>
 				),
 		},
 		{
 			title: "Rooms",
 			dataIndex: "roomsDone",
 			align: "center",
-			width: 64,
+			width: W.step,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(1, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[1]}>
@@ -655,7 +770,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Photos",
 			dataIndex: "photosDone",
 			align: "center",
-			width: 64,
+			width: W.step,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(2, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[2]}>
@@ -670,7 +785,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Location",
 			dataIndex: "locationDone",
 			align: "center",
-			width: 72,
+			width: W.location,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(3, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[3]}>
@@ -685,7 +800,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Data",
 			dataIndex: "dataDone",
 			align: "center",
-			width: 64,
+			width: W.step,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(4, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[4]}>
@@ -700,7 +815,7 @@ const MainHotelDashboardAdmin = () => {
 			title: "Bank",
 			dataIndex: "bankDone",
 			align: "center",
-			width: 64,
+			width: W.step,
 			render: (v, r) => (
 				<div onClick={() => openStepModal(5, r)} style={{ cursor: "pointer" }}>
 					<Tooltip title={L.steps[5]}>
@@ -715,21 +830,21 @@ const MainHotelDashboardAdmin = () => {
 			title: <span title={L.activationReady}>{L.activationReady}</span>,
 			dataIndex: "activationReady",
 			align: "center",
-			width: 100,
+			width: W.ready,
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
 			title: <span title={L.fullyComplete}>{L.fullyComplete}</span>,
 			dataIndex: "fullyComplete",
 			align: "center",
-			width: 100,
+			width: W.complete,
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
 			title: L.activateCol,
 			dataIndex: "activateHotel",
 			key: "activationAction",
-			width: 110,
+			width: W.action,
 			fixed: "right",
 			render: (_v, r) => {
 				const canActivate = !!(
@@ -741,6 +856,7 @@ const MainHotelDashboardAdmin = () => {
 				return (
 					<Tooltip title={canActivate ? "" : "Finish steps 1‑5 first"}>
 						<StatusSelect
+							$viewportFit={viewportFit}
 							value={r.activateHotel}
 							onChange={(v) => handleActivationChange(r, v)}
 							disabled={!canActivate}
@@ -781,7 +897,10 @@ const MainHotelDashboardAdmin = () => {
 			</ul>
 			)}
 
-			<Wrapper dir={isRTL ? "rtl" : "ltr"}>
+			<Wrapper
+				dir={isRTL ? "rtl" : "ltr"}
+				className={viewportFit ? "dashboard-fit" : ""}
+			>
 				<DashboardToolbar>
 					<DiagramLaunch>
 					<Button
@@ -820,8 +939,8 @@ const MainHotelDashboardAdmin = () => {
 
 				{/* Filters row */}
 				<FiltersBar dir={isRTL ? "rtl" : "ltr"}>
-					<FilterGroup>
-						<GroupTitle>
+					<FilterGroup $isArabic={isRTL}>
+						<GroupTitle $isArabic={isRTL}>
 							<ContainerOutlined /> {L.statusFilter}
 						</GroupTitle>
 						<Space wrap>
@@ -838,8 +957,8 @@ const MainHotelDashboardAdmin = () => {
 						</Space>
 					</FilterGroup>
 
-					<FilterGroup>
-						<GroupTitle>
+					<FilterGroup $isArabic={isRTL}>
+						<GroupTitle $isArabic={isRTL}>
 							<FilterOutlined /> {L.completenessFilter}
 						</GroupTitle>
 						<Space wrap>
@@ -863,10 +982,11 @@ const MainHotelDashboardAdmin = () => {
 					isRTL={isRTL}
 					summary={summary}
 					pageMeta={L.pageMeta(page, startIdx, endIdx, total)}
+					viewportFit={viewportFit}
 				/>
 
-				<ContentArea>
-					<PaginationRow isRTL={isRTL} style={{ marginBottom: "1.0rem" }}>
+				<ContentArea $viewportFit={viewportFit}>
+					<PaginationRow isRTL={isRTL}>
 						<Pagination
 							current={page}
 							pageSize={limit}
@@ -892,15 +1012,17 @@ const MainHotelDashboardAdmin = () => {
 							columns={columns}
 							rowKey={(r) => r._id}
 							pagination={false}
-							scroll={{ x: 1260 }}
+							scroll={tableScroll}
 							tableLayout='fixed'
 							size='small'
 							rowClassName='compact-row'
 							isRTL={isRTL}
+							$isArabic={isRTL}
+							$viewportFit={viewportFit}
 						/>
 					)}
 
-					<PaginationRow isRTL={isRTL} style={{ marginTop: "1.0rem" }}>
+					<PaginationRow isRTL={isRTL}>
 						<Pagination
 							current={page}
 							pageSize={limit}
@@ -1053,7 +1175,7 @@ const SummaryGrid = styled.div`
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
 	gap: 8px;
-	margin-top: 6px;
+	margin-top: 0;
 `;
 
 const SummaryHeader = styled.div`
@@ -1061,7 +1183,7 @@ const SummaryHeader = styled.div`
 	justify-content: space-between;
 	align-items: center;
 	gap: 8px;
-	margin: 6px 0;
+	margin: 0 0 var(--admin-inner-row-gap, 8px);
 	flex-wrap: wrap;
 `;
 
@@ -1074,7 +1196,7 @@ const SummaryRight = styled.div`
 	flex-wrap: wrap;
 `;
 
-const HotelsSummary = ({ L, isRTL, summary, pageMeta }) => {
+const HotelsSummary = ({ L, isRTL, summary, pageMeta, viewportFit = false }) => {
 	const [mode, setMode] = useState("current"); // "current" | "overall"
 
 	const S =
@@ -1150,7 +1272,7 @@ const HotelsSummary = ({ L, isRTL, summary, pageMeta }) => {
 				</SummaryRight>
 			</SummaryHeader>
 
-			<SummaryGrid>
+			<SummaryGrid className={viewportFit ? "summary-grid-fit" : ""}>
 				{Cards.map((c, idx) => (
 					<StatCard key={idx}>
 						<span className='stat-icon'>{c.icon}</span>
@@ -1206,10 +1328,88 @@ const DiagramModalGlobalStyles = createGlobalStyle`
 `;
 
 const Wrapper = styled.div`
+	--admin-dashboard-row-gap: 10px;
+	--admin-inner-row-gap: 8px;
 	margin-top: 0;
 	min-height: auto;
 	max-width: 100%;
 	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: var(--admin-dashboard-row-gap);
+
+	&.dashboard-fit {
+		--admin-dashboard-row-gap: 8px;
+		--admin-inner-row-gap: 7px;
+
+		.ant-btn {
+			height: 28px;
+			padding-inline: 8px;
+			font-size: 11px;
+		}
+
+		.ant-input,
+		.ant-input-affix-wrapper,
+		.ant-select-selector {
+			min-height: 30px;
+			font-size: 12px;
+		}
+
+		.ant-pagination {
+			font-size: 12px;
+		}
+
+		.ant-pagination-options {
+			margin-inline-start: 8px;
+		}
+
+		.summary-grid-fit {
+			grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+			gap: 6px;
+			margin-top: 0;
+		}
+
+		.stat-icon {
+			font-size: 15px;
+		}
+
+		.stat-title {
+			font-size: 0.68rem;
+		}
+
+		.stat-value {
+			font-size: 0.98rem;
+		}
+
+		.ant-card-body {
+			padding: 6px 8px;
+			gap: 6px;
+		}
+	}
+
+	&[dir="rtl"].dashboard-fit {
+		.ant-btn {
+			font-size: 12px;
+		}
+
+		.ant-input,
+		.ant-input-affix-wrapper,
+		.ant-select,
+		.ant-select-selector,
+		.ant-segmented,
+		.ant-pagination,
+		.ant-tag {
+			font-size: 13px;
+		}
+
+		.stat-title {
+			font-size: 0.75rem;
+		}
+
+		.stat-value {
+			font-size: 1.05rem;
+		}
+	}
 `;
 
 const DashboardToolbar = styled.div`
@@ -1218,7 +1418,7 @@ const DashboardToolbar = styled.div`
 	justify-content: space-between;
 	gap: 10px;
 	flex-wrap: wrap;
-	margin-bottom: 10px;
+	margin-bottom: 0;
 	max-width: 100%;
 `;
 
@@ -1227,7 +1427,7 @@ const DiagramLaunch = styled.div`
 	flex: 0 1 auto;
 
 	.ant-btn {
-		height: 36px;
+		height: 32px;
 		border-radius: 999px;
 		font-weight: 800;
 		max-width: 100%;
@@ -1244,7 +1444,7 @@ const DiagramLaunch = styled.div`
 `;
 
 const LanguageToggleButton = styled.button`
-	height: 36px;
+	height: 32px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1294,7 +1494,7 @@ const FiltersBar = styled.div`
 	justify-content: flex-start;
 	gap: 8px;
 	flex-wrap: wrap;
-	margin-bottom: 8px;
+	margin-bottom: 0;
 	max-width: 100%;
 `;
 
@@ -1302,7 +1502,7 @@ const FilterGroup = styled.div`
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 6px 8px;
+	padding: 5px 7px;
 	background: #fbfdff;
 	border: 1px solid #e7edf7;
 	border-radius: 6px;
@@ -1313,9 +1513,9 @@ const FilterGroup = styled.div`
 	}
 
 	.ant-btn {
-		height: 30px;
+		height: 28px;
 		padding-inline: 10px;
-		font-size: 12px;
+		font-size: ${(p) => (p.$isArabic ? "13px" : "12px")};
 	}
 `;
 
@@ -1325,17 +1525,18 @@ const GroupTitle = styled.div`
 	align-items: center;
 	gap: 5px;
 	color: #555;
-	font-size: 12px;
+	font-size: ${(p) => (p.$isArabic ? "13px" : "12px")};
 	white-space: nowrap;
 `;
 
 const ContentArea = styled.div`
 	position: relative;
-	min-height: 200px;
+	min-height: ${(p) => (p.$viewportFit ? "0" : "200px")};
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
 	justify-content: flex-start;
+	gap: var(--admin-dashboard-row-gap);
 
 	> .ant-spin-nested-loading {
 		margin: 0 auto;
@@ -1351,10 +1552,20 @@ const Search = styled(Input)`
 const PaginationRow = styled.div`
 	display: flex;
 	justify-content: ${(p) => (p.isRTL ? "flex-start" : "flex-end")};
+	margin: 0;
 `;
 
 const StatusSelect = styled(Select)`
-	width: 160px;
+	width: ${(p) => (p.$viewportFit ? "88px" : "160px")};
+
+	${(p) =>
+		p.$viewportFit
+			? `
+				.ant-select-selector {
+					padding-inline: 6px !important;
+				}
+			`
+			: ""}
 `;
 
 const DiagramModalBody = styled.div`
@@ -1441,14 +1652,18 @@ const DiagramHotspot = styled.button`
 /* Compact, consistent row height & 2-line total per text cell (name+address / name+email) */
 const StyledTable = styled(Table)`
 	.ant-table-thead > tr > th {
-		padding: 8px 8px;
+		padding: ${(p) => (p.$viewportFit ? "5px 5px" : "8px 8px")};
 		white-space: nowrap;
-		font-size: 12px;
+		font-size: ${(p) =>
+			p.$isArabic ? (p.$viewportFit ? "12px" : "13px") : p.$viewportFit ? "11px" : "12px"};
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.ant-table-tbody > tr > td {
-		padding: 7px 8px;
+		padding: ${(p) => (p.$viewportFit ? "4px 5px" : "7px 8px")};
 		vertical-align: middle;
-		font-size: 12px;
+		font-size: ${(p) =>
+			p.$isArabic ? (p.$viewportFit ? "12px" : "13px") : p.$viewportFit ? "11px" : "12px"};
 	}
 
 	th {
@@ -1471,7 +1686,16 @@ const StyledTable = styled(Table)`
 
 	.sub-line {
 		opacity: 0.85;
-		font-size: 11px;
+		font-size: ${(p) =>
+			p.$isArabic ? (p.$viewportFit ? "11px" : "12px") : p.$viewportFit ? "10px" : "11px"};
+	}
+
+	.status-tag {
+		max-width: 100%;
+		margin-inline-end: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.hotel-line {
@@ -1480,6 +1704,10 @@ const StyledTable = styled(Table)`
 	}
 
 	.compact-row td {
-		max-height: 48px;
+		max-height: ${(p) => (p.$viewportFit ? "38px" : "48px")};
+	}
+
+	.ant-table-body {
+		scrollbar-width: thin;
 	}
 `;

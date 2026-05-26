@@ -7,9 +7,7 @@ import {
 	MenuFoldOutlined,
 	MenuUnfoldOutlined,
 	PieChartOutlined,
-	SettingOutlined,
 	ImportOutlined,
-	CustomerServiceOutlined,
 	CreditCardOutlined,
 	DollarCircleOutlined,
 	ShopOutlined,
@@ -51,19 +49,14 @@ const items = [
 			<DollarCircleOutlined />
 		</>
 	),
-	getItem(
-		<Link to='/admin/customer-service'>Customer Service</Link>,
-		"sub2",
-		<AreaChartOutlined />
-	),
-	getItem(
-		<Link to='/admin/el-integrator'>El Integrator</Link>,
-		"sub3",
-		<SettingOutlined />
-	),
-	getItem(
-		<Link to='/admin/all-reservations'>Hotels' Reservations</Link>,
-		"sub4",
+getItem(
+	<Link to='/admin/customer-service'>Customer Service</Link>,
+	"sub2",
+	<AreaChartOutlined />
+),
+getItem(
+	<Link to='/admin/all-reservations'>Hotels' Reservations</Link>,
+	"sub4",
 		<ShopOutlined />
 	),
 
@@ -73,43 +66,41 @@ const items = [
 		<AreaChartOutlined />
 	),
 
-	getItem(
-		<Link to='/admin/overall-hotel-reports'>Hotel Reports</Link>,
-		"sub7",
-		<TeamOutlined />
-	),
+getItem(
+	<Link to='/admin/overall-hotel-reports'>Hotel Reports</Link>,
+	"sub7",
+	<TeamOutlined />
+),
 
-	getItem(
-		<div className='margin-divider'></div>,
-		"divider1",
-		null,
+getItem(
+	<div className='margin-divider'></div>,
+	"divider1",
+	null,
 		null,
 		"divider"
-	),
-	getItem(
-		"Create Hotel Subscription",
-		"sub13",
-		<ImportOutlined />,
+),
+getItem(
+	<Link to='/admin/add-owner-account'>Add Owner Account</Link>,
+	"sub13",
+	<ImportOutlined />,
+	null,
+	null,
+	"black-bg"
+),
+getItem(
+	<Link to='/admin/expenses-financials'>Financials</Link>,
+	"sub16",
+	<DollarCircleOutlined />,
 		null,
 		null,
 		"black-bg"
-	),
-	getItem("CRM", "sub14", <CustomerServiceOutlined />, null, null, "black-bg"),
-	getItem("POS & Products", "sub15", <ShopOutlined />, null, null, "black-bg"),
-	getItem(
-		<Link to='/admin/expenses-financials'>Financials</Link>,
-		"sub16",
-		<DollarCircleOutlined />,
-		null,
-		null,
-		"black-bg"
-	),
-	getItem(
-		"Employee Accounts",
-		"sub17",
-		<TeamOutlined />,
-		null,
-		null,
+),
+getItem(
+	<Link to='/admin/accounts-management'>Employee Accounts</Link>,
+	"sub17",
+	<TeamOutlined />,
+	null,
+	null,
 		"black-bg"
 	),
 	getItem(
@@ -147,6 +138,25 @@ const AdminNavbar = ({
 	collapsed,
 	setCollapsed,
 }) => {
+	React.useEffect(() => {
+		if (typeof window === "undefined" || typeof document === "undefined") {
+			return undefined;
+		}
+
+		const syncSidebarWidth = () => {
+			const width = window.innerWidth <= 992 ? "0px" : collapsed ? "70px" : "285px";
+			document.documentElement.style.setProperty(
+				"--admin-sidebar-width",
+				width
+			);
+		};
+
+		syncSidebarWidth();
+		window.addEventListener("resize", syncSidebarWidth);
+
+		return () => window.removeEventListener("resize", syncSidebarWidth);
+	}, [collapsed]);
+
 	const toggleCollapsed = () => {
 		setCollapsed(!collapsed);
 		setAdminMenuStatus(!collapsed);
@@ -176,12 +186,6 @@ const AdminNavbar = ({
 			<MobileBackdrop onClick={toggleCollapsed} $visible={!collapsed} />
 			<AdminNavbarWrapper show={collapsed}>
 				<NavHeader>
-					<div className='logo'>
-						<img
-							src='https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png'
-							alt='XHotel Logo'
-						/>
-					</div>
 					<Button
 						type='text'
 						shape='circle'
@@ -210,13 +214,17 @@ const AdminNavbar = ({
 							              ? "sub8"
 							              : fromPage === "JanatWebsite"
 							                ? "sub10"
-							                : fromPage === "CouponManagement"
+							                : fromPage === "NewHotel"
 							                  ? "sub12"
-							                  : fromPage === "Payouts"
-							                    ? "sub18"
-							                    : fromPage === "Financials"
-							                      ? "sub16"
-							                      : "sub1"
+							                  : fromPage === "OwnerAccount"
+							                    ? "sub13"
+							                    : fromPage === "Payouts"
+							                      ? "sub18"
+							                      : fromPage === "Financials"
+							                        ? "sub16"
+							                        : fromPage === "AdminAccounts"
+							                          ? "sub17"
+							                          : "sub1"
 					}
 					defaultOpenKeys={[
 						"sub1",
@@ -253,13 +261,13 @@ export default AdminNavbar;
 const AdminNavbarWrapper = styled.div`
 	width: ${(props) => (props.show ? "70px" : "285px")};
 	margin-bottom: 0;
-	background: #1e1e2d;
-	top: 0;
+	background: #0c1d31;
+	top: var(--admin-topbar-height, 0px);
 	left: 0;
 	z-index: 900; /* stays behind app modals */
 	overflow: hidden;
 	position: fixed;
-	height: 100vh;
+	height: calc(100vh - var(--admin-topbar-height, 0px));
 	padding: 0 !important;
 	display: flex;
 	flex-direction: column;
@@ -296,7 +304,7 @@ const AdminNavbarWrapper = styled.div`
 	.ant-menu-dark .ant-menu-sub,
 	.ant-menu.ant-menu-dark .ant-menu-sub {
 		color: rgba(255, 255, 255, 0.65);
-		background: #1e1e2d !important;
+		background: #0c1d31 !important;
 	}
 
 	.ant-menu.ant-menu-dark,
@@ -304,23 +312,24 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	.black-bg {
-		background-color: #0e0e15 !important;
+		background-color: #071626 !important;
 
 		&:hover {
-			background-color: #001427 !important; // Or any other color for hover state
+			background-color: #0e3157 !important; // Or any other color for hover state
 		}
 	}
 
 	.red-bg {
-		background-color: #270000 !important;
+		background-color: #102033 !important;
 
 		&:hover {
-			background-color: #270000 !important; // Or any other color for hover state
+			background-color: #0e3157 !important; // Or any other color for hover state
 		}
 	}
 
 	.ant-menu-item-selected {
-		background: black !important;
+		background: linear-gradient(180deg, #1b6fa5 0%, #09223a 100%) !important;
+		border-inline-end: 3px solid #73cdf4;
 	}
 
 	@media (max-width: 1650px) {
@@ -336,6 +345,7 @@ const AdminNavbarWrapper = styled.div`
 	}
 
 	@media (max-width: 992px) {
+		left: 0;
 		width: min(86vw, 320px);
 		transform: translateX(${(props) => (props.show ? "-110%" : "0")});
 		box-shadow: ${(props) =>
@@ -355,19 +365,13 @@ const AdminNavbarWrapper = styled.div`
 const NavHeader = styled.div`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-end;
 	padding: 10px 12px;
-	background: #0f1726;
+	background: linear-gradient(180deg, #102d4f 0%, #071827 100%);
 	position: sticky;
 	top: 0;
 	z-index: 2;
 	border-bottom: 1px solid #1f2937;
-
-	.logo img {
-		height: 40px;
-		object-fit: contain;
-		display: block;
-	}
 
 	button {
 		color: #fff;
@@ -375,16 +379,13 @@ const NavHeader = styled.div`
 
 	@media (max-width: 1200px) {
 		padding: 8px 10px;
-		.logo img {
-			height: 34px;
-		}
 	}
 `;
 
 const MobileToggleButton = styled(Button)`
 	display: none;
 	position: fixed;
-	top: 12px;
+	top: calc(var(--admin-topbar-height, 0px) + 12px);
 	left: 12px;
 	z-index: 910;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);

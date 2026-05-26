@@ -4,12 +4,47 @@ import { Table, Input, Button, Space } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
+const EQUIVALENT_TEXT = {
+	en: {
+		title: "Equivalent Hotels",
+		search: "Search",
+		reset: "Reset",
+		searchPlaceholder: "Search",
+		hotelName: "Hotel Name",
+		roomType: "Room Type",
+		displayName: "Display Name",
+		nights: "Nights",
+		pricePerNight: "Price / Night",
+		totalAmount: "Total Amount",
+		totalCommission: "Total Commission",
+		grandTotal: "Grand Total",
+	},
+	ar: {
+		title: "الفنادق المكافئة",
+		search: "بحث",
+		reset: "إعادة ضبط",
+		searchPlaceholder: "بحث",
+		hotelName: "اسم الفندق",
+		roomType: "نوع الغرفة",
+		displayName: "اسم الغرفة",
+		nights: "الليالي",
+		pricePerNight: "السعر / ليلة",
+		totalAmount: "إجمالي التكلفة",
+		totalCommission: "إجمالي العمولة",
+		grandTotal: "الإجمالي",
+	},
+};
+
 const EquivalentHotels = ({
 	checkInDate,
 	checkOutDate,
 	selectedRoomTypes,
 	allHotels,
+	chosenLanguage,
 }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const TXT = EQUIVALENT_TEXT[isArabic ? "ar" : "en"];
+	const currency = isArabic ? "ر.س" : "SAR";
 	// eslint-disable-next-line
 	const [searchedColumn, setSearchedColumn] = useState("");
 
@@ -181,7 +216,13 @@ const EquivalentHotels = ({
 		}) => (
 			<div style={{ padding: 8 }}>
 				<Input
-					placeholder={`Search ${dataIndex}`}
+					placeholder={`${TXT.searchPlaceholder} ${
+						{
+							hotelName: TXT.hotelName,
+							roomType: TXT.roomType,
+							displayName: TXT.displayName,
+						}[dataIndex] || dataIndex
+					}`}
 					value={selectedKeys[0]}
 					onChange={(e) =>
 						setSelectedKeys(e.target.value ? [e.target.value] : [])
@@ -197,7 +238,7 @@ const EquivalentHotels = ({
 						size='small'
 						style={{ width: 90 }}
 					>
-						Search
+						{TXT.search}
 					</Button>
 					<Button
 						onClick={() => {
@@ -207,7 +248,7 @@ const EquivalentHotels = ({
 						size='small'
 						style={{ width: 90 }}
 					>
-						Reset
+						{TXT.reset}
 					</Button>
 				</Space>
 			</div>
@@ -233,60 +274,60 @@ const EquivalentHotels = ({
 	// Define table columns
 	const columns = [
 		{
-			title: "Hotel Name",
+			title: TXT.hotelName,
 			dataIndex: "hotelName",
 			key: "hotelName",
 			...getColumnSearchProps("hotelName"),
 			sorter: (a, b) => a.hotelName.localeCompare(b.hotelName),
 		},
 		{
-			title: "Room Type",
+			title: TXT.roomType,
 			dataIndex: "roomType",
 			key: "roomType",
 			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
 		},
 		{
-			title: "Display Name",
+			title: TXT.displayName,
 			dataIndex: "displayName",
 			key: "displayName",
 			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
 		},
 		{
-			title: "Nights",
+			title: TXT.nights,
 			dataIndex: "nights",
 			key: "nights",
 			render: (value) => <TruncatedText title={value}>{value}</TruncatedText>,
 		},
 		{
-			title: "Price / Night",
+			title: TXT.pricePerNight,
 			dataIndex: "averagePricePerNight",
 			key: "averagePricePerNight",
-			render: (value) => `${value.toFixed(2)} SAR`,
+			render: (value) => `${value.toFixed(2)} ${currency}`,
 		},
 		{
-			title: "Total Amount",
+			title: TXT.totalAmount,
 			dataIndex: "totalAmount",
 			key: "totalAmount",
-			render: (value) => `${value.toFixed(2)} SAR`,
+			render: (value) => `${value.toFixed(2)} ${currency}`,
 		},
 		{
-			title: "Total Commission",
+			title: TXT.totalCommission,
 			dataIndex: "totalCommission",
 			key: "totalCommission",
-			render: (value) => `${value.toFixed(2)} SAR`,
+			render: (value) => `${value.toFixed(2)} ${currency}`,
 		},
 		{
-			title: "Grand Total",
+			title: TXT.grandTotal,
 			dataIndex: "grandTotal",
 			key: "grandTotal",
 			sorter: (a, b) => a.grandTotal - b.grandTotal,
-			render: (value) => `${value.toFixed(2)} SAR`,
+			render: (value) => `${value.toFixed(2)} ${currency}`,
 		},
 	];
 
 	return (
 		<EquivalentHotelsWrapper>
-			<h2>Equivalent Hotels</h2>
+			<h2>{TXT.title}</h2>
 			<Table
 				columns={columns}
 				dataSource={equivalentHotels.map((hotel, index) => ({
@@ -294,6 +335,7 @@ const EquivalentHotels = ({
 					key: index,
 				}))}
 				pagination={{ pageSize: 100 }}
+				scroll={{ x: "max-content" }}
 			/>
 		</EquivalentHotelsWrapper>
 	);
@@ -305,11 +347,22 @@ const EquivalentHotelsWrapper = styled.div`
 	padding: 20px;
 	background: #fff;
 	border-radius: 8px;
-	box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+	border: 1px solid rgba(139, 190, 227, 0.36);
+	box-shadow: 0 10px 24px rgba(13, 49, 88, 0.08);
+	min-width: 0;
+	overflow: hidden;
+
+	h2 {
+		margin: 0 0 12px;
+		color: #0b3158;
+		font-size: 1.12rem;
+		font-weight: 950;
+		letter-spacing: 0;
+	}
 
 	.ant-table-wrapper {
 		max-height: 700px;
-		overflow-y: auto;
+		overflow: auto;
 	}
 
 	.ant-table {

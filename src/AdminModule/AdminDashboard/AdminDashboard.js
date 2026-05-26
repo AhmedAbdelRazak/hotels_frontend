@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
@@ -8,7 +8,7 @@ import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
 import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { useHistory } from "react-router-dom";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 
 const AdminDashboard = ({ chosenLanguage }) => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -18,25 +18,29 @@ const AdminDashboard = ({ chosenLanguage }) => {
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [getUser, setGetUser] = useState("");
 	const { user, token } = isAuthenticated();
+	const authUserId = user?._id || "";
+	const authIsConfiguredSuperAdmin = isConfiguredSuperAdminUser(authUserId);
 	const history = useHistory();
 
 	// Fetch user details
 	const gettingUserId = useCallback(() => {
-		readUserId(user._id, token).then((data) => {
+		if (!authUserId || !token) return;
+		readUserId(authUserId, token).then((data) => {
 			if (data && data.error) {
 				console.error(data.error);
 			} else {
 				setGetUser(data);
 			}
 		});
-	}, [user._id, token]);
+	}, [authUserId, token]);
 
-	// Determine if the user is a Super Admin
+	// Determine if the user is a configured platform Super Admin.
+	const accessTo = useMemo(
+		() => (Array.isArray(getUser?.accessTo) ? getUser.accessTo : []),
+		[getUser]
+	);
 	const isSuperAdmin =
-		!getUser.accessTo ||
-		getUser.accessTo.length === 0 ||
-		getUser.accessTo.includes("all");
-	const isSuperUser = SUPER_USER_IDS.includes(getUser?._id);
+		isConfiguredSuperAdminUser(getUser?._id || authUserId);
 
 	// Validate user and handle access control
 	useEffect(() => {
@@ -47,10 +51,8 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				return;
 			}
 
-			const accessTo = getUser.accessTo || [];
-
 			// Check if the user has access to AdminDashboard
-			if (accessTo.includes("AdminDashboard") || isSuperAdmin || isSuperUser) {
+			if (accessTo.includes("AdminDashboard") || isSuperAdmin) {
 				setIsPasswordVerified(true);
 				setIsModalVisible(false); // Ensure modal does not show
 				return;
@@ -69,7 +71,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				history.push("/"); // Redirect to home if no valid access
 			}
 		}
-	}, [getUser, history, isSuperAdmin, isSuperUser]);
+	}, [accessTo, getUser, history, isSuperAdmin]);
 
 	// Initial setup
 	useEffect(() => {
@@ -79,8 +81,8 @@ const AdminDashboard = ({ chosenLanguage }) => {
 			setCollapsed(true);
 		}
 
-		// If user is a Super Admin, skip modal
-		if (isSuperAdmin || isSuperUser) {
+		// If user is a configured Super Admin, skip modal
+		if (authIsConfiguredSuperAdmin) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 		} else {
@@ -94,7 +96,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 				setIsModalVisible(true);
 			}
 		}
-	}, [gettingUserId, isSuperAdmin, isSuperUser]);
+	}, [gettingUserId, authIsConfiguredSuperAdmin]);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_ADMIN_DASHBOARD) {
@@ -164,7 +166,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
 							<div>
-								<MainHotelDashboard />
+								<MainHotelDashboard viewportFit />
 							</div>
 						</div>
 					</div>
@@ -204,10 +206,10 @@ const AdminDashboardWrapper = styled.div`
 
 	.container-wrapper {
 		border: 1px solid lightgrey;
-		padding: 12px;
-		border-radius: 16px;
+		padding: 8px 10px;
+		border-radius: 12px;
 		background: white;
-		margin: 0 8px;
+		margin: 0 6px;
 		max-width: 100%;
 		overflow: hidden;
 	}

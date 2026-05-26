@@ -22,6 +22,7 @@ import {
 } from "antd";
 import {
 	CloseCircleOutlined,
+	EditOutlined,
 	FileImageOutlined,
 	HistoryOutlined,
 	InboxOutlined,
@@ -50,6 +51,7 @@ import {
 	startB2BChat,
 } from "../apiAdmin";
 import { titleCase } from "../TheOverallStructure/overallShared";
+import { isConfiguredSuperAdminUser } from "../../AdminModule/utils/superUsers";
 
 const TABS = ["active", "history", "start"];
 const MAX_CLIENT_ATTACHMENT_SIZE = 6 * 1024 * 1024;
@@ -102,6 +104,8 @@ const TEXT = {
 		backToChats: "Chats",
 		typing: "{name} is typing...",
 		typingMany: "{name} are typing...",
+		chatAlias: "Chat name",
+		chatAliasPlaceholder: "Name shown on your messages",
 	},
 	ar: {
 		title: "\u0645\u062d\u0627\u062f\u062b\u0627\u062a\u0020\u0627\u0644\u0623\u0639\u0645\u0627\u0644",
@@ -144,7 +148,31 @@ const TEXT = {
 		backToChats: "\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a",
 		typing: "{name} \u064a\u0643\u062a\u0628 \u0627\u0644\u0622\u0646...",
 		typingMany: "{name} \u064a\u0643\u062a\u0628\u0648\u0646 \u0627\u0644\u0622\u0646...",
+		chatAlias: "\u0627\u0633\u0645\u0643 \u0641\u064a \u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629",
+		chatAliasPlaceholder:
+			"\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0638\u0627\u0647\u0631 \u0639\u0644\u0649 \u0631\u0633\u0627\u0626\u0644\u0643",
 	},
+};
+
+const superAdminChatAliasKey = (userId = "") =>
+	`jannat:super-admin-chat-alias:${userId || "unknown"}`;
+
+const readStoredChatAlias = (userId = "") => {
+	try {
+		return window.localStorage.getItem(superAdminChatAliasKey(userId)) || "";
+	} catch (error) {
+		return "";
+	}
+};
+
+const writeStoredChatAlias = (userId = "", value = "") => {
+	try {
+		const key = superAdminChatAliasKey(userId);
+		if (value) window.localStorage.setItem(key, value);
+		else window.localStorage.removeItem(key);
+	} catch (error) {
+		// Local storage is optional; the typed alias still works for the current session.
+	}
 };
 
 const normalizeTab = (value = "") => (TABS.includes(value) ? value : "active");
@@ -169,21 +197,6 @@ const roleKeysForUser = (user = {}) => [
 		: []),
 ];
 
-const isChatPlatformMonitor = (user = {}) =>
-	roleNumbersForUser(user).includes(1000) ||
-	roleKeysForUser(user).includes("superadmin");
-
-const isChatHotelMonitor = (user = {}) => {
-	const roles = roleNumbersForUser(user);
-	const roleKeys = roleKeysForUser(user);
-	return (
-		isChatPlatformMonitor(user) ||
-		roles.includes(10000) ||
-		roleKeys.includes("systemadmin") ||
-		(roles.includes(2000) && !normalizeUserId(user.belongsToId))
-	);
-};
-
 const assignedChatHotelIds = (user = {}) =>
 	[
 		user.hotelIdWork,
@@ -194,6 +207,31 @@ const assignedChatHotelIds = (user = {}) =>
 		.map(normalizeUserId)
 		.filter(Boolean)
 		.filter((item, index, list) => list.indexOf(item) === index);
+
+const hasScopedPlatformChatAccess = (user = {}) => {
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	return (
+		roleNumbersForUser(user).includes(1000) &&
+		assignedChatHotelIds(user).length > 0 &&
+		["CustomerService", "HotelsReservations", "AllReservations"].some((key) =>
+			accessTo.includes(key)
+		)
+	);
+};
+
+const isChatPlatformMonitor = (user = {}) =>
+	isConfiguredSuperAdminUser(user);
+
+const isChatHotelMonitor = (user = {}) => {
+	const roles = roleNumbersForUser(user);
+	const roleKeys = roleKeysForUser(user);
+	return (
+		hasScopedPlatformChatAccess(user) ||
+		roles.includes(10000) ||
+		roleKeys.includes("systemadmin") ||
+		(roles.includes(2000) && !normalizeUserId(user.belongsToId))
+	);
+};
 
 const ROLE_LABELS = {
 	en: {
@@ -375,6 +413,7 @@ const B2BChatMain = () => {
 	const user = useMemo(() => auth?.user || {}, [auth]);
 	const token = auth?.token || "";
 	const userId = user?._id || "";
+	const canUseChatAlias = isConfiguredSuperAdminUser(user);
 	const chatHotelMonitorKey = useMemo(
 		() => (isChatHotelMonitor(user) ? assignedChatHotelIds(user).join("|") : ""),
 		[user],
@@ -384,6 +423,8 @@ const B2BChatMain = () => {
 	const [activeTab, setActiveTab] = useState(() =>
 		normalizeTab(new URLSearchParams(location.search || "").get("tab"))
 	);
+	const selectedChatIdFromQuery =
+		new URLSearchParams(location.search || "").get("chatId") || "";
 	const [chats, setChats] = useState([]);
 	const [selectedChatId, setSelectedChatId] = useState("");
 	const [selectedChat, setSelectedChat] = useState(null);
@@ -396,6 +437,7 @@ const B2BChatMain = () => {
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
 	const [attachments, setAttachments] = useState([]);
+	const [chatAlias, setChatAlias] = useState("");
 	const [previewAttachment, setPreviewAttachment] = useState(null);
 	const [emojiOpen, setEmojiOpen] = useState(false);
 	const [typingUsers, setTypingUsers] = useState({});
@@ -404,6 +446,25 @@ const B2BChatMain = () => {
 	const seenInFlightRef = useRef(new Set());
 	const typingStopTimerRef = useRef(null);
 	const typingUsersTimerRef = useRef(new Map());
+	const effectiveChatDisplayName = useMemo(() => {
+		const alias = String(chatAlias || "").trim();
+		return canUseChatAlias && alias ? alias : chatUserDisplayName(user);
+	}, [canUseChatAlias, chatAlias, user]);
+
+	useEffect(() => {
+		if (!canUseChatAlias || !userId) {
+			setChatAlias("");
+			return;
+		}
+		setChatAlias(readStoredChatAlias(userId));
+	}, [canUseChatAlias, userId]);
+
+	const handleChatAliasChange = (event) => {
+		if (!canUseChatAlias) return;
+		const nextAlias = String(event.target.value || "").slice(0, 80);
+		setChatAlias(nextAlias);
+		writeStoredChatAlias(userId, nextAlias.trim());
+	};
 
 	useEffect(() => {
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
@@ -429,6 +490,18 @@ const B2BChatMain = () => {
 		setActiveTab(nextTab);
 	};
 
+	const selectChatFromList = (chatId) => {
+		if (!chatId) return;
+		const query = new URLSearchParams(location.search || "");
+		query.set("tab", activeTab);
+		query.set("chatId", chatId);
+		history.push({
+			pathname: location.pathname,
+			search: `?${query.toString()}`,
+		});
+		setSelectedChatId(chatId);
+	};
+
 	const loadChats = useCallback(
 		async (silent = false) => {
 			if (!userId || !token || activeTab === "start") return;
@@ -440,8 +513,13 @@ const B2BChatMain = () => {
 				const rows = Array.isArray(data?.chats) ? data.chats : [];
 				setChats(rows);
 				setSelectedChatId((previous) => {
-					if (previous && rows.some((chat) => chat._id === previous)) {
-						return previous;
+					const preferred = previous || selectedChatIdFromQuery;
+					if (
+						preferred &&
+						(rows.some((chat) => chat._id === preferred) ||
+							preferred === selectedChatIdFromQuery)
+					) {
+						return preferred;
 					}
 					return "";
 				});
@@ -451,8 +529,12 @@ const B2BChatMain = () => {
 				if (!silent) setChatsLoading(false);
 			}
 		},
-		[activeTab, token, userId]
+		[activeTab, selectedChatIdFromQuery, token, userId]
 	);
+
+	useEffect(() => {
+		if (selectedChatIdFromQuery) setSelectedChatId(selectedChatIdFromQuery);
+	}, [selectedChatIdFromQuery]);
 
 	const loadSelectedChat = useCallback(
 		async (chatId, silent = false) => {
@@ -471,6 +553,22 @@ const B2BChatMain = () => {
 				) {
 					seenInFlightRef.current.add(chatId);
 					markB2BChatSeen(chatId, userId, token)
+						.then((seenData) => {
+							const updatedChat = seenData?.chat;
+							if (!updatedChat?._id) return;
+							setSelectedChat(updatedChat);
+							setChats((previous) =>
+								previous.map((chat) =>
+									chat._id === updatedChat._id
+										? {
+												...chat,
+												...updatedChat,
+												messages: chat.messages,
+										  }
+										: chat
+								)
+							);
+						})
 						.catch(() => {})
 						.finally(() => {
 							seenInFlightRef.current.delete(chatId);
@@ -585,22 +683,22 @@ const B2BChatMain = () => {
 		socket.emit("b2bStopTyping", {
 			chatId: selectedChatId,
 			userId,
-			name: chatUserDisplayName(user),
+			name: effectiveChatDisplayName,
 		});
-	}, [selectedChatId, user, userId]);
+	}, [effectiveChatDisplayName, selectedChatId, userId]);
 
 	const emitTyping = useCallback(() => {
 		if (!selectedChatId || !userId || selectedChat?.status === "closed") return;
 		socket.emit("b2bTyping", {
 			chatId: selectedChatId,
 			userId,
-			name: chatUserDisplayName(user),
+			name: effectiveChatDisplayName,
 		});
 		if (typingStopTimerRef.current) {
 			window.clearTimeout(typingStopTimerRef.current);
 		}
 		typingStopTimerRef.current = window.setTimeout(emitStopTyping, 1800);
-	}, [emitStopTyping, selectedChat?.status, selectedChatId, user, userId]);
+	}, [effectiveChatDisplayName, emitStopTyping, selectedChat?.status, selectedChatId, userId]);
 
 	useEffect(() => {
 		setTypingUsers({});
@@ -748,6 +846,7 @@ const B2BChatMain = () => {
 			const data = await sendB2BChatMessage(selectedChatId, userId, token, {
 				body,
 				attachments,
+				chatDisplayName: effectiveChatDisplayName,
 			});
 			setSelectedChat(data?.chat || null);
 			setBody("");
@@ -832,7 +931,24 @@ const B2BChatMain = () => {
 						</h1>
 						<p>{labels.subtitle}</p>
 					</div>
-					<TeamOutlined />
+					<HeaderActions>
+						{canUseChatAlias && (
+							<SuperAdminAliasControl>
+								<span className='alias-label'>
+									<EditOutlined />
+									{labels.chatAlias}
+								</span>
+								<Input
+									value={chatAlias}
+									onChange={handleChatAliasChange}
+									placeholder={labels.chatAliasPlaceholder}
+									maxLength={80}
+									allowClear
+								/>
+							</SuperAdminAliasControl>
+						)}
+						<TeamOutlined />
+					</HeaderActions>
 				</ChatHeader>
 
 					<ChatTabs $isArabic={isArabic}>
@@ -916,7 +1032,7 @@ const B2BChatMain = () => {
 											key={chat._id}
 											type='button'
 											className={selectedChatId === chat._id ? "active" : ""}
-											onClick={() => setSelectedChatId(chat._id)}
+											onClick={() => selectChatFromList(chat._id)}
 										>
 											<div className='chat-row-top'>
 												<strong>{chatTitle(chat, userId)}</strong>
@@ -1229,6 +1345,8 @@ const ChatHeader = styled.header`
 	}
 
 	@media (max-width: 760px) {
+		align-items: stretch;
+		flex-direction: column;
 		margin-bottom: 8px;
 		padding: 12px 14px;
 		border-radius: 8px;
@@ -1242,9 +1360,62 @@ const ChatHeader = styled.header`
 			line-height: 1.55;
 		}
 
+	}
+`;
+
+const HeaderActions = styled.div`
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	min-width: 0;
+
+	> .anticon {
+		font-size: 28px;
+		color: #64166e;
+		flex: 0 0 auto;
+	}
+
+	@media (max-width: 760px) {
+		width: 100%;
+
 		> .anticon {
 			display: none;
 		}
+	}
+`;
+
+const SuperAdminAliasControl = styled.label`
+	width: min(340px, 34vw);
+	min-width: 240px;
+	display: grid;
+	gap: 5px;
+	text-align: start;
+
+	.alias-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: #1a456a;
+		font-size: 0.78rem;
+		font-weight: 950;
+	}
+
+	.alias-label .anticon {
+		color: #0c79af;
+		font-size: 0.9rem;
+	}
+
+	.ant-input-affix-wrapper,
+	.ant-input {
+		border-color: rgba(36, 108, 158, 0.28);
+		border-radius: 8px;
+		font-weight: 850;
+	}
+
+	@media (max-width: 760px) {
+		width: 100%;
+		min-width: 0;
 	}
 `;
 

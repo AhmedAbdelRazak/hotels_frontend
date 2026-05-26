@@ -1,19 +1,51 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { Modal, Input, Button, message } from "antd";
-import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import {
+	CalculatorOutlined,
+	EyeInvisibleOutlined,
+	EyeTwoTone,
+	ToolOutlined,
+	WarningOutlined,
+} from "@ant-design/icons";
 import { readUserId } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ReservationCalculator from "./ReservationCalculator";
 import OrderTaker from "./OrderTaker";
-import EmployeeRegister from "./EmployeeRegister";
 import UncompletedReservations from "./UncompletedReservations";
 import { SUPER_USER_IDS } from "../utils/superUsers";
 
+const TOOL_TEXT = {
+	en: {
+		passwordTitle: "Enter Password",
+		passwordPlaceholder: "Enter password",
+		verify: "Verify Password",
+		pageTitle: "Jannat Booking Tools",
+		pageSubtitle: "Reservation pricing, reservation tools, and follow-up workspace.",
+		calculator: "Reservation Calculator",
+		reservations: "Reservation Tools",
+		uncompleted: "Uncompleted Reservations",
+	},
+	ar: {
+		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		passwordPlaceholder: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		verify: "\u062a\u062d\u0642\u0642",
+		pageTitle: "\u0623\u062f\u0648\u0627\u062a \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
+		pageSubtitle:
+			"\u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0648\u0623\u062f\u0648\u0627\u062a \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0648\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629.",
+		calculator: "\u062d\u0627\u0633\u0628\u0629 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		reservations: "\u0623\u062f\u0648\u0627\u062a \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		uncompleted:
+			"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u063a\u064a\u0631 \u0627\u0644\u0645\u0643\u062a\u0645\u0644\u0629",
+	},
+};
+
 const JannatBookingToolsMain = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const TXT = TOOL_TEXT[isArabic ? "ar" : "en"];
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 
@@ -58,15 +90,10 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 			return;
 		}
 
-		const isSuperAdminAccess =
-			!getUser?.accessTo ||
-			getUser.accessTo.length === 0 ||
-			getUser.accessTo.includes("all");
-
 		const accessTo = getUser.accessTo || [];
 		const includesJannatTools = accessTo.includes("JannatTools");
 
-		if (SUPER_USER_IDS.includes(getUser?._id) || isSuperAdminAccess) {
+		if (SUPER_USER_IDS.includes(getUser?._id)) {
 			setIsPasswordVerified(true);
 			setIsModalVisible(false);
 			localStorage.setItem("ToolsVerified", "true");
@@ -101,11 +128,6 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 			return;
 		}
 
-		// If user has no restrictions or 'all', do nothing
-		if (accessTo.length === 0 || accessTo.includes("all")) {
-			return;
-		}
-
 		// Otherwise, send them to the first available module
 		switch (accessTo[0]) {
 			case "CustomerService":
@@ -129,11 +151,32 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	}, [getUser, history]);
 
 	// isSuperAdmin logic
-	const isSuperAdmin =
-		!getUser?.accessTo ||
-		getUser?.accessTo.length === 0 ||
-		getUser?.accessTo.includes("all") ||
-		SUPER_USER_IDS.includes(getUser?._id);
+	const isSuperAdmin = SUPER_USER_IDS.includes(getUser?._id);
+
+	const availableTabs = useMemo(
+		() => [
+			{
+				key: "calculator",
+				label: TXT.calculator,
+				icon: <CalculatorOutlined />,
+			},
+			{
+				key: "reservations",
+				label: TXT.reservations,
+				icon: <ToolOutlined />,
+			},
+			...(isSuperAdmin
+				? [
+						{
+							key: "uncompleted",
+							label: TXT.uncompleted,
+							icon: <WarningOutlined />,
+						},
+				  ]
+				: []),
+		],
+		[TXT, isSuperAdmin]
+	);
 
 	// Handle password verification
 	const handlePasswordVerification = () => {
@@ -150,19 +193,24 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 	// Tabs
 	const handleTabChange = (tab) => {
 		setActiveTab(tab);
-		history.push(`?tab=${tab}`);
+		history.push({
+			pathname: location.pathname,
+			search: `?tab=${tab}`,
+		});
 	};
 
 	useEffect(() => {
+		if (!isPasswordVerified) return;
 		const queryParams = new URLSearchParams(location.search);
 		const tab = queryParams.get("tab");
+		const allowedTabKeys = availableTabs.map((item) => item.key);
 
-		if (tab) {
+		if (tab && allowedTabKeys.includes(tab)) {
 			setActiveTab(tab);
 		} else {
 			history.replace("?tab=calculator");
 		}
-	}, [location.search, history]);
+	}, [availableTabs, history, isPasswordVerified, location.search]);
 
 	return (
 		<JannatBookingToolsMainWrapper
@@ -171,13 +219,13 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 		>
 			{/* Password Verification Modal */}
 			<Modal
-				title='Enter Password'
+				title={TXT.passwordTitle}
 				open={isModalVisible}
 				footer={null}
 				closable={false}
 			>
 				<Input.Password
-					placeholder='Enter password'
+					placeholder={TXT.passwordPlaceholder}
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
 					iconRender={(visible) =>
@@ -189,7 +237,7 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 					style={{ marginTop: "10px", width: "100%" }}
 					onClick={handlePasswordVerification}
 				>
-					Verify Password
+					{TXT.verify}
 				</Button>
 			</Modal>
 
@@ -222,78 +270,40 @@ const JannatBookingToolsMain = ({ chosenLanguage }) => {
 						<div className='container-wrapper'>
 							{/* Tab Navigation */}
 							<TabNavigation>
-								<button
-									className={activeTab === "calculator" ? "active" : ""}
-									onClick={() => handleTabChange("calculator")}
-								>
-									Reservation Calculator
-								</button>
-								<button
-									className={activeTab === "reservations" ? "active" : ""}
-									onClick={() => handleTabChange("reservations")}
-								>
-									Reservations Tools
-								</button>
-
-								{isSuperAdmin && (
-									<>
-										<button
-											className={activeTab === "uncompleted" ? "active" : ""}
-											onClick={() => handleTabChange("uncompleted")}
-										>
-											Uncompleted Reservations
-										</button>
-										<button
-											className={activeTab === "addEmployee" ? "active" : ""}
-											onClick={() => handleTabChange("addEmployee")}
-										>
-											Add Employee
-										</button>
-										<button
-											className={activeTab === "updateEmployee" ? "active" : ""}
-											onClick={() => handleTabChange("updateEmployee")}
-										>
-											Update Employee
-										</button>
-									</>
-								)}
+								{availableTabs.map((tab) => (
+									<button
+										type='button'
+										key={tab.key}
+										className={activeTab === tab.key ? "active" : ""}
+										onClick={() => handleTabChange(tab.key)}
+									>
+										{tab.icon}
+										<span>{tab.label}</span>
+									</button>
+								))}
 							</TabNavigation>
 
 							{/* Tab Content */}
 							{activeTab === "calculator" && (
-								<div>
-									<h3>Reservation Calculator</h3>
+								<TabPanel>
+									<h2>{TXT.calculator}</h2>
 									<ReservationCalculator
 										getUser={getUser}
 										isSuperAdmin={isSuperAdmin}
+										chosenLanguage={chosenLanguage}
 									/>
-								</div>
+								</TabPanel>
 							)}
 							{activeTab === "reservations" && (
-								<div>
-									<h3>Reservation Taker</h3>
+								<TabPanel>
+									<h2>{TXT.reservations}</h2>
 									<OrderTaker getUser={getUser} isSuperAdmin={isSuperAdmin} />
-								</div>
-							)}
-							{isSuperAdmin && activeTab === "addEmployee" && (
-								<div>
-									<h3>Register a New Employee</h3>
-									<EmployeeRegister
-										getUser={getUser}
-										isSuperAdmin={isSuperAdmin}
-									/>
-								</div>
-							)}
-							{isSuperAdmin && activeTab === "updateEmployee" && (
-								<div>
-									<h3>Update an Employee</h3>
-									<p>Create a new component for employee update</p>
-								</div>
+								</TabPanel>
 							)}
 							{isSuperAdmin && activeTab === "uncompleted" && (
-								<div>
+								<TabPanel>
 									<UncompletedReservations />
-								</div>
+								</TabPanel>
 							)}
 						</div>
 					</div>
@@ -310,6 +320,7 @@ export default JannatBookingToolsMain;
 const JannatBookingToolsMainWrapper = styled.div`
 	margin-top: 0;
 	min-height: 715px;
+	overflow-x: hidden;
 
 	.grid-container-main {
 		display: grid;
@@ -319,6 +330,7 @@ const JannatBookingToolsMainWrapper = styled.div`
 		}};
 		grid-template-areas: ${(props) =>
 			props.dir === "rtl" ? "'content nav'" : "'nav content'"};
+		min-width: 0;
 	}
 
 	.navcontent {
@@ -327,14 +339,22 @@ const JannatBookingToolsMainWrapper = styled.div`
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.96);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		overflow: hidden;
+		box-sizing: border-box;
 	}
 
 	@media (max-width: 992px) {
@@ -342,42 +362,103 @@ const JannatBookingToolsMainWrapper = styled.div`
 			grid-template-columns: 1fr;
 			grid-template-areas: "nav" "content";
 		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
+		}
 	}
 `;
 
 const TabNavigation = styled.div`
 	display: flex;
-	gap: 10px;
-	margin-bottom: 20px;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding: 6px;
+	border: 1px solid rgba(139, 190, 227, 0.36);
+	border-radius: 8px;
+	background: #f8fbff;
 
 	button {
-		padding: 10px 20px;
-		border: none;
-		background-color: #ddd;
+		min-height: 44px;
+		padding: 9px 14px;
+		border: 1px solid rgba(139, 190, 227, 0.46);
+		background: #ffffff;
+		color: #173a5f;
 		cursor: pointer;
-		font-weight: bold;
-		border-radius: 5px;
-		flex: 1; /* so the buttons share the row's space */
+		font-weight: 950;
+		border-radius: 6px;
+		flex: 1 1 220px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		line-height: 1.2;
+		box-shadow: 0 8px 18px rgba(13, 49, 88, 0.06);
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease,
+			box-shadow 160ms ease,
+			transform 160ms ease;
 
 		&.active {
-			background-color: #006ad1;
-			color: white;
+			border-color: rgba(122, 209, 245, 0.95);
+			background: var(
+				--admin-metal-blue-bg,
+				linear-gradient(135deg, #081a2d 0%, #155d95 52%, #071827 100%)
+			);
+			color: #ffffff;
+			box-shadow:
+				inset 0 1px rgba(255, 255, 255, 0.22),
+				0 10px 22px rgba(8, 42, 75, 0.18);
 		}
 
 		&:hover {
-			background-color: #bbb;
+			border-color: rgba(36, 144, 200, 0.7);
+			transform: translateY(-1px);
+		}
+
+		span {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 	}
 
-	/* ------------- MOBILE TABS: 2 PER ROW ------------- */
 	@media (max-width: 768px) {
-		flex-wrap: wrap;
-		gap: 8px;
-
 		button {
-			width: 48%;
-			padding: 8px;
+			flex-basis: 100%;
 			font-size: 0.9rem;
 		}
+	}
+`;
+
+const TabPanel = styled.section`
+	min-width: 0;
+	overflow: hidden;
+
+	h2 {
+		margin: 0 0 12px;
+		color: #0b3158;
+		font-size: 1.06rem;
+		font-weight: 950;
+		line-height: 1.35;
+		letter-spacing: 0;
+	}
+
+	.ant-table-wrapper,
+	.ant-table-container,
+	.ant-table-content,
+	.ant-table-body {
+		max-width: 100%;
+	}
+
+	.ant-table-content,
+	.ant-table-body {
+		overflow: auto !important;
 	}
 `;

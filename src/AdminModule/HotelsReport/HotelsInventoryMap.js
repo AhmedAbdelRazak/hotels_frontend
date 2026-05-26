@@ -19,6 +19,22 @@ import {
 	Tag,
 	Tooltip,
 } from "antd";
+import {
+	ApartmentOutlined,
+	BankOutlined,
+	BarChartOutlined,
+	CalendarOutlined,
+	CheckCircleOutlined,
+	CreditCardOutlined,
+	DatabaseOutlined,
+	DollarCircleOutlined,
+	FilterOutlined,
+	FundOutlined,
+	LoginOutlined,
+	ProfileOutlined,
+	TagsOutlined,
+	WarningOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
 import moment from "moment-hijri";
 import { useHistory, useLocation } from "react-router-dom";
@@ -61,24 +77,154 @@ const ModalZFix = createGlobalStyle`
 	.payment-breakdown-modal .ant-modal-mask {
 		z-index: 50049 !important;
 	}
+
+	.day-details-modal .ant-modal-content,
+	.report-reservations-modal .ant-modal-content {
+		border-radius: 14px;
+		overflow: hidden;
+		border: 1px solid rgba(45, 93, 145, 0.22);
+		box-shadow: 0 24px 70px rgba(6, 26, 47, 0.28);
+	}
+
+	.day-details-modal .ant-modal-header,
+	.report-reservations-modal .ant-modal-header {
+		margin: 0;
+		padding: 16px 22px;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		border-bottom: 1px solid rgba(103, 167, 223, 0.5);
+	}
+
+	.day-details-modal .ant-modal-title,
+	.report-reservations-modal .ant-modal-title {
+		color: #ffffff;
+		font-weight: 950;
+		font-size: 15px;
+		line-height: 1.45;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+	}
+
+	.day-details-modal .ant-modal-close,
+	.report-reservations-modal .ant-modal-close {
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.12);
+		border-radius: 999px;
+		inset-block-start: 12px;
+	}
+
+	.day-details-modal .ant-modal-close:hover,
+	.report-reservations-modal .ant-modal-close:hover {
+		color: #ffffff;
+		background: rgba(255, 255, 255, 0.2);
+	}
+
+	.day-details-modal .ant-modal-body,
+	.report-reservations-modal .ant-modal-body {
+		background:
+			linear-gradient(135deg, rgba(229, 243, 255, 0.55), rgba(255, 255, 255, 0.98) 42%),
+			#ffffff;
+	}
 `;
 
 const heatColor = (rate = 0) => {
 	const clamped = Math.min(Math.max(Number(rate) || 0, 0), 1);
-	const start = [230, 245, 241]; // light mint
-	const end = [0, 140, 115]; // deep teal
+	const start = [229, 243, 255];
+	const end = clamped >= 0.78 ? [185, 28, 28] : [16, 91, 150];
 	const mix = start.map((s, i) => Math.round(s + (end[i] - s) * clamped));
 	return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
 };
 
+const heatBackground = (rate = 0, overbooked = false) => {
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	if (overbooked) {
+		return "linear-gradient(135deg, #fff1f2 0%, #fb7185 46%, #991b1b 100%)";
+	}
+	if (r >= 0.86) {
+		return "linear-gradient(135deg, #fee2e2 0%, #ef4444 48%, #7f1d1d 100%)";
+	}
+	if (r >= 0.64) {
+		return "linear-gradient(135deg, #dbeafe 0%, #2563eb 54%, #102033 100%)";
+	}
+	if (r >= 0.32) {
+		return "linear-gradient(135deg, #eef7ff 0%, #7db7ec 58%, #24547d 100%)";
+	}
+	return "linear-gradient(135deg, #ffffff 0%, #edf7ff 58%, #cde7ff 100%)";
+};
+
+const heatBorder = (rate = 0, overbooked = false) => {
+	if (overbooked) return "#991b1b";
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	if (r >= 0.86) return "#b91c1c";
+	if (r >= 0.64) return "#1d4ed8";
+	if (r >= 0.32) return "#2f74b5";
+	return "#b8d8f3";
+};
+
+const heatShadow = (rate = 0, overbooked = false) => {
+	if (overbooked) return "inset 0 0 0 1px #991b1b";
+	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
+	if (r >= 0.86) return "inset 0 0 0 1px rgba(185, 28, 28, 0.45)";
+	if (r >= 0.64) return "inset 0 0 0 1px rgba(29, 78, 216, 0.42)";
+	return "inset 0 0 0 1px rgba(47, 116, 181, 0.28)";
+};
+
 const getReadableCellColors = (rate = 0) => {
 	const r = Math.min(Math.max(Number(rate) || 0, 0), 1);
-	const isDark = r >= 0.62;
+	const isDark = r >= 0.58;
 	return {
 		text: isDark ? "#ffffff" : "#1f1f1f",
-		muted: isDark ? "rgba(255,255,255,0.85)" : "#666",
+		muted: isDark ? "rgba(255,255,255,0.92)" : "#334155",
 	};
 };
+
+const metricTone = (tone = "blue") =>
+	({
+		money: {
+			main: "#0f766e",
+			soft: "rgba(15, 118, 110, 0.12)",
+			border: "rgba(15, 118, 110, 0.22)",
+		},
+		arrival: {
+			main: "#2563eb",
+			soft: "rgba(37, 99, 235, 0.12)",
+			border: "rgba(37, 99, 235, 0.22)",
+		},
+		occupancy: {
+			main: "#0f766e",
+			soft: "rgba(15, 118, 110, 0.12)",
+			border: "rgba(15, 118, 110, 0.22)",
+		},
+		nights: {
+			main: "#24547d",
+			soft: "rgba(36, 84, 125, 0.12)",
+			border: "rgba(36, 84, 125, 0.22)",
+		},
+		rooms: {
+			main: "#4f46e5",
+			soft: "rgba(79, 70, 229, 0.11)",
+			border: "rgba(79, 70, 229, 0.22)",
+		},
+		mapping: {
+			main: "#16a34a",
+			soft: "rgba(22, 163, 74, 0.12)",
+			border: "rgba(22, 163, 74, 0.22)",
+		},
+		peak: {
+			main: "#b45309",
+			soft: "rgba(180, 83, 9, 0.13)",
+			border: "rgba(180, 83, 9, 0.24)",
+		},
+		warning: {
+			main: "#b91c1c",
+			soft: "rgba(185, 28, 28, 0.1)",
+			border: "rgba(185, 28, 28, 0.22)",
+		},
+	}[tone] || {
+		main: "#24547d",
+		soft: "rgba(36, 84, 125, 0.12)",
+		border: "rgba(36, 84, 125, 0.22)",
+	});
 
 const extractHotels = (payload) => {
 	if (Array.isArray(payload)) return payload;
@@ -101,6 +247,284 @@ const hijriMonthsEn = [
 	"Dhul-Qadah",
 	"Dhul-Hijjah",
 ];
+
+const hijriMonthsAr = [
+	"\u0645\u062d\u0631\u0645",
+	"\u0635\u0641\u0631",
+	"\u0631\u0628\u064a\u0639 \u0627\u0644\u0623\u0648\u0644",
+	"\u0631\u0628\u064a\u0639 \u0627\u0644\u062b\u0627\u0646\u064a",
+	"\u062c\u0645\u0627\u062f\u0649 \u0627\u0644\u0623\u0648\u0644\u0649",
+	"\u062c\u0645\u0627\u062f\u0649 \u0627\u0644\u0622\u062e\u0631\u0629",
+	"\u0631\u062c\u0628",
+	"\u0634\u0639\u0628\u0627\u0646",
+	"\u0631\u0645\u0636\u0627\u0646",
+	"\u0634\u0648\u0627\u0644",
+	"\u0630\u0648 \u0627\u0644\u0642\u0639\u062f\u0629",
+	"\u0630\u0648 \u0627\u0644\u062d\u062c\u0629",
+];
+
+const INVENTORY_TEXT = {
+	en: {
+		date: "Date",
+		total: "Total",
+		availableShort: "Avail",
+		monthTotal: "Month total",
+		dayOverDay: "Day-over-day occupancy",
+		cellHint: "Cells show booked/capacity, availability, and occupancy%.",
+		hijri: "Hijri",
+		gregorian: "Gregorian",
+		legendLow: "0-30%",
+		legendMid: "30-70%",
+		legendHigh: "70-100%",
+		derived: "Derived",
+		derivedTooltip:
+			"Derived from reservations (not found in HotelDetails inventory).",
+		shared: "Shared",
+		single: "Single",
+		double: "Double",
+		triple: "Triple",
+		quad: "Quad",
+		familyBeds: "Family {beds} Beds",
+		room: "Room",
+		filtersTitle: "Inventory filters",
+		hotel: "Hotel",
+		selectHotel: "Select a hotel",
+		calendar: "Calendar",
+		month: "Month",
+		hijriMonth: "Hijri Month",
+		columnLabels: "Column labels",
+		displayNameDefault: "Display name (default)",
+		roomTypeGrouped: "Room type (grouped)",
+		includeCancelledNoShow: "Include cancelled / no-show",
+		paymentStatus: "Payment status",
+		all: "All",
+		clear: "Clear",
+		bookingSource: "Booking source",
+		allBookingSources: "All booking sources",
+		filterTip: "You can select multiple statuses and booking sources.",
+		prev: "Prev",
+		next: "Next",
+		loading: "Loading occupancy...",
+		loadError: "Could not load occupancy data",
+		selectHotelMessage: "Select a hotel to view its occupancy map.",
+		paymentStatusLabels: {
+			"Not Paid": "Not Paid",
+			"Not Captured": "Not Captured",
+			Captured: "Captured",
+			"Paid Offline": "Paid Offline",
+		},
+		totalAmountSar: "Total Amount (SAR)",
+		grossCheckoutBasis: "Gross (checkout-date basis)",
+		reservationsCheckedOut: "Reservations checked out",
+		checkinReservationsSelectedPeriod:
+			"Check-in Reservations (Selected Period)",
+		totalCheckins: "Total check-ins",
+		checkinGrossSar: "Check-in gross (SAR)",
+		averageOccupancyCapped: "Average Occupancy (capped)",
+		occupiedFormula: "Occupied = min(booked, capacity) per day / room.",
+		roomNights: "Room Nights",
+		occupied: "Occupied",
+		remaining: "Remaining",
+		capacity: "Capacity",
+		bookedRaw: "Booked (raw)",
+		roomCounts: "Room Counts",
+		inventoryUnits: "Inventory units",
+		physicalRooms: "Physical rooms",
+		inventoryMapping: "Inventory mapping",
+		unmappedTypes: "Unmapped types",
+		unmapped: "Unmapped",
+		unmappedMessage:
+			"These types exist in reservations but not HotelDetails inventory.",
+		viewList: "View list",
+		allMapped: "All mapped",
+		allMappedMessage:
+			"All reservation room labels matched HotelDetails inventory.",
+		peakDay: "Peak Day",
+		booked: "Booked",
+		warnings: "Warnings",
+		overbooked: "Overbooked",
+		more: "more",
+		noOverbooking: "No overbooking detected",
+		occupancyByRoomType: "Occupancy by room type",
+		occupiedNights: "occupied nights",
+		bookedLower: "booked",
+		paymentStatusBreakdown: "Payment status breakdown",
+		bookingSourceTotalsCheckoutSar:
+			"Booking source totals by checkout date (SAR)",
+		bookingSourceHeader: "Booking source",
+		totalSar: "Total (SAR)",
+		unknown: "Unknown",
+		noBookingSourceData: "No booking source data in this range",
+		paymentStatusTotals: "Payment status totals",
+		status: "Status",
+		reservations: "Reservations",
+		totalAmount: "Total amount",
+		paidAmount: "Paid amount",
+		onsitePaid: "Onsite paid",
+		noPaymentData: "No payment data in this range",
+		checkinDateTotalsSar: "Checkin date totals by payment status (SAR)",
+		checkinDate: "Checkin date",
+		noCheckinPaymentData: "No checkin-date payment data in this range",
+		checkoutDateTotalsSar: "Checkout date totals by payment status (SAR)",
+		checkoutDate: "Checkout date",
+		noCheckoutPaymentData: "No checkout-date payment data in this range",
+		detailedReservationsList: "Detailed Reservations List",
+		loadingReservations: "Loading reservations...",
+		noReservationsFound: "No reservations found",
+		reservationsOn: "Reservations on",
+		selectedDay: "selected day",
+		unableDayReservations: "Unable to load reservations for this day",
+		selectedHotelFallback: "Selected hotel",
+		allRoomTypes: "All room types",
+		bookedCapacity: "Booked / Capacity",
+		overBy: "Over by",
+		confirmation: "Confirmation",
+		guest: "Guest",
+		phone: "Phone",
+		checkIn: "Check-in",
+		checkOut: "Check-out",
+		roomTypeHeader: "Room Type",
+		count: "Count",
+		payment: "Payment",
+		showDetails: "Show Details",
+		noReservationsDay: "No reservations for this day.",
+		loadingReservationDetails: "Loading reservation details...",
+	},
+	ar: {
+		date: "\u0627\u0644\u062a\u0627\u0631\u064a\u062e",
+		total: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+		availableShort: "\u0645\u062a\u0627\u062d",
+		monthTotal: "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u062f\u0649",
+		dayOverDay: "\u0627\u0644\u0625\u0634\u063a\u0627\u0644 \u064a\u0648\u0645\u0627\u064b \u0628\u064a\u0648\u0645",
+		cellHint:
+			"\u0627\u0644\u062e\u0644\u0627\u064a\u0627 \u062a\u0639\u0631\u0636 \u0627\u0644\u0645\u062d\u062c\u0648\u0632/\u0627\u0644\u0637\u0627\u0642\u0629 \u0648\u0627\u0644\u0645\u062a\u0627\u062d \u0648\u0646\u0633\u0628\u0629 \u0627\u0644\u0625\u0634\u063a\u0627\u0644.",
+		hijri: "\u0647\u062c\u0631\u064a",
+		gregorian: "\u0645\u064a\u0644\u0627\u062f\u064a",
+		legendLow: "0-30%",
+		legendMid: "30-70%",
+		legendHigh: "70-100%",
+		derived: "\u0645\u0633\u062a\u0646\u062a\u062c",
+		derivedTooltip:
+			"\u0645\u0633\u062a\u0646\u062a\u062c \u0645\u0646 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0648\u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u0641\u064a \u0645\u062e\u0632\u0648\u0646 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0641\u0646\u062f\u0642.",
+		shared: "\u0645\u0634\u062a\u0631\u0643\u0629",
+		single: "\u0641\u0631\u062f\u064a\u0629",
+		double: "\u0645\u0632\u062f\u0648\u062c\u0629",
+		triple: "\u062b\u0644\u0627\u062b\u064a\u0629",
+		quad: "\u0631\u0628\u0627\u0639\u064a\u0629",
+		familyBeds: "\u0639\u0627\u0626\u0644\u064a\u0629 {beds} \u0623\u0633\u0631\u0629",
+		room: "\u063a\u0631\u0641\u0629",
+		filtersTitle: "\u0641\u0644\u0627\u062a\u0631 \u0627\u0644\u0645\u062e\u0632\u0648\u0646",
+		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
+		selectHotel: "\u0627\u062e\u062a\u0631 \u0641\u0646\u062f\u0642\u0627\u064b",
+		calendar: "\u0627\u0644\u062a\u0642\u0648\u064a\u0645",
+		month: "\u0627\u0644\u0634\u0647\u0631",
+		hijriMonth: "\u0627\u0644\u0634\u0647\u0631 \u0627\u0644\u0647\u062c\u0631\u064a",
+		columnLabels: "\u0639\u0646\u0627\u0648\u064a\u0646 \u0627\u0644\u0623\u0639\u0645\u062f\u0629",
+		displayNameDefault:
+			"\u0627\u0633\u0645 \u0627\u0644\u0639\u0631\u0636 (\u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a)",
+		roomTypeGrouped:
+			"\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629 (\u0645\u062c\u0645\u0639)",
+		includeCancelledNoShow:
+			"\u062a\u0636\u0645\u064a\u0646 \u0627\u0644\u0645\u0644\u063a\u0649 \u0648\u0639\u062f\u0645 \u0627\u0644\u062d\u0636\u0648\u0631",
+		paymentStatus: "\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639",
+		all: "\u0627\u0644\u0643\u0644",
+		clear: "\u0645\u0633\u062d",
+		bookingSource: "\u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632",
+		allBookingSources:
+			"\u0643\u0644 \u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u062d\u062c\u0632",
+		filterTip:
+			"\u064a\u0645\u0643\u0646\u0643 \u0627\u062e\u062a\u064a\u0627\u0631 \u0623\u0643\u062b\u0631 \u0645\u0646 \u062d\u0627\u0644\u0629 \u062f\u0641\u0639 \u0648\u0645\u0635\u062f\u0631 \u062d\u062c\u0632.",
+		prev: "\u0627\u0644\u0633\u0627\u0628\u0642",
+		next: "\u0627\u0644\u062a\u0627\u0644\u064a",
+		loading:
+			"\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0625\u0634\u063a\u0627\u0644...",
+		loadError:
+			"\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0625\u0634\u063a\u0627\u0644",
+		selectHotelMessage:
+			"\u0627\u062e\u062a\u0631 \u0641\u0646\u062f\u0642\u0627\u064b \u0644\u0639\u0631\u0636 \u062e\u0631\u064a\u0637\u0629 \u0627\u0644\u0625\u0634\u063a\u0627\u0644.",
+		paymentStatusLabels: {
+			"Not Paid": "\u063a\u064a\u0631 \u0645\u062f\u0641\u0648\u0639",
+			"Not Captured": "\u063a\u064a\u0631 \u0645\u062d\u0635\u0644",
+			Captured: "\u0645\u062d\u0635\u0644",
+			"Paid Offline": "\u0645\u062f\u0641\u0648\u0639 \u062e\u0627\u0631\u062c\u064a\u0627\u064b",
+		},
+		totalAmountSar: "إجمالي المبلغ (ر.س)",
+		grossCheckoutBasis: "الإجمالي حسب تاريخ المغادرة",
+		reservationsCheckedOut: "حجوزات تمت مغادرتها",
+		checkinReservationsSelectedPeriod: "حجوزات الوصول في المدى المحدد",
+		totalCheckins: "إجمالي الوصول",
+		checkinGrossSar: "إجمالي الوصول (ر.س)",
+		averageOccupancyCapped: "متوسط الإشغال",
+		occupiedFormula: "الإشغال = الأقل بين المحجوز والطاقة لكل يوم / غرفة.",
+		roomNights: "ليالي الغرف",
+		occupied: "مشغول",
+		remaining: "متبقي",
+		capacity: "الطاقة",
+		bookedRaw: "المحجوز الخام",
+		roomCounts: "أعداد الغرف",
+		inventoryUnits: "وحدات المخزون",
+		physicalRooms: "الغرف الفعلية",
+		inventoryMapping: "مطابقة المخزون",
+		unmappedTypes: "أنواع غير مطابقة",
+		unmapped: "غير مطابق",
+		unmappedMessage:
+			"هذه الأنواع موجودة في الحجوزات وليست موجودة في مخزون بيانات الفندق.",
+		viewList: "عرض القائمة",
+		allMapped: "كلها مطابقة",
+		allMappedMessage: "كل أسماء غرف الحجوزات مطابقة لمخزون بيانات الفندق.",
+		peakDay: "أعلى يوم",
+		booked: "محجوز",
+		warnings: "تنبيهات",
+		overbooked: "حجز زائد",
+		more: "أخرى",
+		noOverbooking: "لا يوجد حجز زائد",
+		occupancyByRoomType: "الإشغال حسب نوع الغرفة",
+		occupiedNights: "ليالي مشغولة",
+		bookedLower: "محجوز",
+		paymentStatusBreakdown: "تفصيل حالات الدفع",
+		bookingSourceTotalsCheckoutSar:
+			"إجماليات مصدر الحجز حسب تاريخ المغادرة (ر.س)",
+		bookingSourceHeader: "مصدر الحجز",
+		totalSar: "الإجمالي (ر.س)",
+		unknown: "غير معروف",
+		noBookingSourceData: "لا توجد بيانات لمصادر الحجز في هذا المدى",
+		paymentStatusTotals: "إجماليات حالات الدفع",
+		status: "الحالة",
+		reservations: "الحجوزات",
+		totalAmount: "إجمالي المبلغ",
+		paidAmount: "المبلغ المدفوع",
+		onsitePaid: "المدفوع في الفندق",
+		noPaymentData: "لا توجد بيانات دفع في هذا المدى",
+		checkinDateTotalsSar: "إجماليات تاريخ الوصول حسب حالة الدفع (ر.س)",
+		checkinDate: "تاريخ الوصول",
+		noCheckinPaymentData: "لا توجد بيانات دفع حسب تاريخ الوصول في هذا المدى",
+		checkoutDateTotalsSar: "إجماليات تاريخ المغادرة حسب حالة الدفع (ر.س)",
+		checkoutDate: "تاريخ المغادرة",
+		noCheckoutPaymentData:
+			"لا توجد بيانات دفع حسب تاريخ المغادرة في هذا المدى",
+		detailedReservationsList: "قائمة الحجوزات التفصيلية",
+		loadingReservations: "جاري تحميل الحجوزات...",
+		noReservationsFound: "لا توجد حجوزات",
+		reservationsOn: "الحجوزات في",
+		selectedDay: "اليوم المحدد",
+		unableDayReservations: "تعذر تحميل حجوزات هذا اليوم",
+		selectedHotelFallback: "الفندق المحدد",
+		allRoomTypes: "كل أنواع الغرف",
+		bookedCapacity: "المحجوز / الطاقة",
+		overBy: "زيادة بمقدار",
+		confirmation: "رقم التأكيد",
+		guest: "النزيل",
+		phone: "الهاتف",
+		checkIn: "الوصول",
+		checkOut: "المغادرة",
+		roomTypeHeader: "نوع الغرفة",
+		count: "العدد",
+		payment: "الدفع",
+		showDetails: "عرض التفاصيل",
+		noReservationsDay: "لا توجد حجوزات لهذا اليوم.",
+		loadingReservationDetails: "جاري تحميل تفاصيل الحجز...",
+	},
+};
 
 const PAYMENT_STATUS_OPTIONS = [
 	"Not Paid",
@@ -169,18 +593,21 @@ const roomSortRank = (rt = {}) => {
 	return 80;
 };
 
-const roomHeaderMain = (rt = {}) => {
-	if (isSharedRoom(rt)) return "Shared";
+const roomHeaderMain = (rt = {}, isArabic = false) => {
+	const text = INVENTORY_TEXT[isArabic ? "ar" : "en"];
+	if (isSharedRoom(rt)) return text.shared;
 	const beds = detectBedCount(rt);
 
-	if (beds === 1) return "Single";
-	if (beds === 2) return "Double";
-	if (beds === 3) return "Triple";
-	if (beds === 4) return "Quad";
-	if (beds && beds >= 5) return `Family ${beds} Beds`;
+	if (beds === 1) return text.single;
+	if (beds === 2) return text.double;
+	if (beds === 3) return text.triple;
+	if (beds === 4) return text.quad;
+	if (beds && beds >= 5) {
+		return text.familyBeds.replace("{beds}", beds);
+	}
 
 	// Fallback (rare)
-	return shortLabel(rt.label) || "Room";
+	return shortLabel(rt.label) || text.room;
 };
 
 const roomHeaderSub = (rt = {}) => {
@@ -299,12 +726,24 @@ const normalizeCalendarType = (value, fallback = "gregorian") => {
 const getReservationId = (reservation) =>
 	toCleanString(reservation?._id || reservation?.id || "");
 
-const HotelsInventoryMap = () => {
+const formatHijriCellDate = (date, isArabic = false) => {
+	if (!date || !supportsMomentHijri()) return "";
+	const m = moment(date);
+	if (!m.isValid()) return "";
+	const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
+	return `${m.iDate()} ${months[m.iMonth()] || ""} ${m.iYear()}`;
+};
+
+const supportsMomentHijri = () =>
+	typeof moment?.fn?.iMonth === "function" &&
+	typeof moment?.fn?.iYear === "function";
+
+const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const tableLabels = INVENTORY_TEXT[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated() || {};
 
-	const supportsHijri =
-		typeof moment?.fn?.iMonth === "function" &&
-		typeof moment?.fn?.iYear === "function";
+	const supportsHijri = supportsMomentHijri();
 
 	const nowHijri = supportsHijri ? moment() : null;
 	const defaultHijriMonth = supportsHijri ? nowHijri.iMonth() : 0;
@@ -702,9 +1141,28 @@ const HotelsInventoryMap = () => {
 	}, [data?.hotel?.hotelName, selectedHotelId, sortedHotels]);
 
 	const monthLabel = useMemo(() => {
-		if (rangeOverride?.label) return `Hijri: ${rangeOverride.label}`;
-		return `Gregorian: ${monthValue.format("MMMM YYYY")}`;
-	}, [monthValue, rangeOverride]);
+		if (rangeOverride?.label || calendarType === "hijri") {
+			const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
+			const monthName = months[Number(hijriMonth)] || rangeOverride?.label || "";
+			return `${tableLabels.hijri}: ${monthName} ${hijriYear}`;
+		}
+		const gregorianLabel = isArabic
+			? new Intl.DateTimeFormat("ar-EG", {
+					month: "long",
+					year: "numeric",
+			  }).format(monthValue.toDate())
+			: monthValue.format("MMMM YYYY");
+		return `${tableLabels.gregorian}: ${gregorianLabel}`;
+	}, [
+		calendarType,
+		hijriMonth,
+		hijriYear,
+		isArabic,
+		monthValue,
+		rangeOverride?.label,
+		tableLabels.gregorian,
+		tableLabels.hijri,
+	]);
 
 	const firstWarning = summary?.warnings?.[0];
 
@@ -1698,20 +2156,39 @@ const HotelsInventoryMap = () => {
 
 	const paymentAllActive = paymentStatuses.length === 0;
 	const bookingSourceAllActive = bookingSources.length === 0;
+	const hijriMonthOptions = isArabic ? hijriMonthsAr : hijriMonthsEn;
+	const renderMetricTitle = (Icon, label) => (
+		<CardTitle>
+			<span className='title-icon'>
+				<Icon />
+			</span>
+			<span>{label}</span>
+		</CardTitle>
+	);
 
 	return (
-		<Wrapper>
+		<Wrapper dir={isArabic ? "rtl" : "ltr"} $isArabic={isArabic}>
 			<ModalZFix />
 
+			<FilterShell $isArabic={isArabic}>
+				<div className='filter-header'>
+					<span className='filter-icon'>
+						<FilterOutlined />
+					</span>
+					<span>{tableLabels.filtersTitle}</span>
+				</div>
 			<ControlBar>
 				<div className='control'>
-					<label>Hotel</label>
+					<FieldLabel>
+						<BankOutlined />
+						<span>{tableLabels.hotel}</span>
+					</FieldLabel>
 					<Select
 						showSearch
 						style={{ minWidth: 220 }}
 						value={selectedHotelId || undefined}
 						onChange={(val) => setSelectedHotelId(val)}
-						placeholder='Select a hotel'
+						placeholder={tableLabels.selectHotel}
 						optionFilterProp='children'
 						filterOption={(input, option) =>
 							String(option?.children || "")
@@ -1728,7 +2205,10 @@ const HotelsInventoryMap = () => {
 				</div>
 
 				<div className='control'>
-					<label>Calendar</label>
+					<FieldLabel>
+						<CalendarOutlined />
+						<span>{tableLabels.calendar}</span>
+					</FieldLabel>
 					<Select
 						value={calendarType}
 						onChange={(v) => {
@@ -1741,15 +2221,22 @@ const HotelsInventoryMap = () => {
 							}
 						}}
 					>
-						<Option value='gregorian'>Gregorian</Option>
+						<Option value='gregorian'>{tableLabels.gregorian}</Option>
 					<Option value='hijri' disabled={!moment?.fn?.iMonth}>
-							Hijri
+							{tableLabels.hijri}
 						</Option>
 					</Select>
 				</div>
 
 				<div className='control month-picker'>
-					<label>{calendarType === "hijri" ? "Hijri Month" : "Month"}</label>
+					<FieldLabel>
+						<CalendarOutlined />
+						<span>
+						{calendarType === "hijri"
+							? tableLabels.hijriMonth
+							: tableLabels.month}
+						</span>
+					</FieldLabel>
 
 					{calendarType === "hijri" && moment?.fn?.iMonth ? (
 						<div className='hijri-controls'>
@@ -1759,7 +2246,7 @@ const HotelsInventoryMap = () => {
 									onChange={(v) => onHijriChange(Number(v), hijriYear)}
 									style={{ minWidth: 170 }}
 								>
-									{hijriMonthsEn.map((m, idx) => (
+									{hijriMonthOptions.map((m, idx) => (
 										<Option key={m} value={idx}>
 											{m}
 										</Option>
@@ -1776,7 +2263,7 @@ const HotelsInventoryMap = () => {
 										const y = base - 1 + idx;
 										return (
 											<Option key={y} value={y}>
-												{y}
+												{formatInt(y)}
 											</Option>
 										);
 									})}
@@ -1803,27 +2290,32 @@ const HotelsInventoryMap = () => {
 								size='small'
 								onClick={() => setMonthValue((m) => m.subtract(1, "month"))}
 							>
-								Prev
+								{tableLabels.prev}
 							</Button>
 							<Button
 								size='small'
 								onClick={() => setMonthValue((m) => m.add(1, "month"))}
 							>
-								Next
+								{tableLabels.next}
 							</Button>
 						</div>
 					)}
 				</div>
 
 				<div className='control'>
-					<label>Column labels</label>
+					<FieldLabel>
+						<TagsOutlined />
+						<span>{tableLabels.columnLabels}</span>
+					</FieldLabel>
 					<Select
 						value={displayMode}
 						onChange={(v) => setDisplayMode(v)}
 						style={{ minWidth: 180 }}
 					>
-						<Option value='displayName'>Display name (default)</Option>
-						<Option value='roomType'>Room type (grouped)</Option>
+						<Option value='displayName'>
+							{tableLabels.displayNameDefault}
+						</Option>
+						<Option value='roomType'>{tableLabels.roomTypeGrouped}</Option>
 					</Select>
 				</div>
 
@@ -1833,7 +2325,7 @@ const HotelsInventoryMap = () => {
 						checked={includeCancelled}
 						onChange={(checked) => setIncludeCancelled(checked)}
 					/>
-					<span>Include cancelled / no-show</span>
+					<span className='switch-text'>{tableLabels.includeCancelledNoShow}</span>
 				</SwitchRow>
 			</ControlBar>
 
@@ -1841,14 +2333,17 @@ const HotelsInventoryMap = () => {
 			<PaymentStatusBar>
 				<div className='filters-row'>
 					<div className='filter-panel'>
-						<div className='label'>Payment status</div>
+						<FieldLabel className='label'>
+							<CreditCardOutlined />
+							<span>{tableLabels.paymentStatus}</span>
+						</FieldLabel>
 						<div className='buttons'>
 							<StatusButton
 								size='small'
 								onClick={() => setPaymentStatuses([])}
 								isActive={paymentAllActive}
 							>
-								All
+								{tableLabels.all}
 							</StatusButton>
 
 							{PAYMENT_STATUS_OPTIONS.map((status) => (
@@ -1858,25 +2353,28 @@ const HotelsInventoryMap = () => {
 									onClick={() => togglePaymentStatus(status)}
 									isActive={paymentStatuses.includes(status)}
 								>
-									{status}
+									{tableLabels.paymentStatusLabels?.[status] || status}
 								</StatusButton>
 							))}
 
 							{!paymentAllActive && (
 								<Button size='small' onClick={() => setPaymentStatuses([])}>
-									Clear
+									{tableLabels.clear}
 								</Button>
 							)}
 						</div>
 					</div>
 
 					<div className='filter-panel'>
-						<div className='label'>Booking source</div>
+						<FieldLabel className='label'>
+							<ProfileOutlined />
+							<span>{tableLabels.bookingSource}</span>
+						</FieldLabel>
 						<div className='source-controls'>
 							<Select
 								mode='multiple'
 								allowClear
-								placeholder='All booking sources'
+								placeholder={tableLabels.allBookingSources}
 								value={bookingSources}
 								onChange={(values) =>
 									setBookingSources(
@@ -1903,7 +2401,7 @@ const HotelsInventoryMap = () => {
 
 							{!bookingSourceAllActive && (
 								<Button size='small' onClick={() => setBookingSources([])}>
-									Clear
+									{tableLabels.clear}
 								</Button>
 							)}
 						</div>
@@ -1911,14 +2409,15 @@ const HotelsInventoryMap = () => {
 				</div>
 
 				<div className='hint muted'>
-					Tip: you can select multiple statuses and booking sources.
+					{tableLabels.filterTip}
 				</div>
 			</PaymentStatusBar>
+			</FilterShell>
 
 			{error && (
 				<Alert
 					type='error'
-					message='Could not load occupancy data'
+					message={tableLabels.loadError}
 					description={error}
 					showIcon
 					style={{ marginBottom: 12 }}
@@ -1926,41 +2425,56 @@ const HotelsInventoryMap = () => {
 			)}
 
 			{loading ? (
-				<Spin tip='Loading occupancy...' />
+				<Spin tip={tableLabels.loading} />
 			) : !data ? (
 				<Alert
 					type='info'
-					message='Select a hotel to view its occupancy map.'
+					message={tableLabels.selectHotelMessage}
 					showIcon
 				/>
 			) : (
 				<>
 					<FinancialSummaryRow>
-						<Card size='small' title='Total Amount (SAR)'>
+						<MetricCard
+							size='small'
+							$tone='money'
+							title={renderMetricTitle(DollarCircleOutlined, tableLabels.totalAmountSar)}
+						>
 							<div className='metric'>
-								<span>Gross (checkout-date basis)</span>
+								<span>{tableLabels.grossCheckoutBasis}</span>
 								<b>{formatCurrency(checkoutGrossAmount)}</b>
 							</div>
 							<div className='metric muted'>
-								<span>Reservations checked out</span>
+								<span>{tableLabels.reservationsCheckedOut}</span>
 								<b>{formatInt(checkoutReservationsCount)}</b>
 							</div>
-						</Card>
+						</MetricCard>
 
-						<Card size='small' title='Check-in Reservations (Selected Period)'>
+						<MetricCard
+							size='small'
+							$tone='arrival'
+							title={renderMetricTitle(
+								LoginOutlined,
+								tableLabels.checkinReservationsSelectedPeriod,
+							)}
+						>
 							<div className='metric'>
-								<span>Total check-ins</span>
+								<span>{tableLabels.totalCheckins}</span>
 								<b>{formatInt(checkinReservationsCount)}</b>
 							</div>
 							<div className='metric muted'>
-								<span>Check-in gross (SAR)</span>
+								<span>{tableLabels.checkinGrossSar}</span>
 								<b>{formatCurrency(checkinGrossAmount)}</b>
 							</div>
-						</Card>
+						</MetricCard>
 					</FinancialSummaryRow>
 
 					<SummaryGrid>
-						<Card size='small' title='Average Occupancy (capped)'>
+						<MetricCard
+							size='small'
+							$tone='occupancy'
+							title={renderMetricTitle(BarChartOutlined, tableLabels.averageOccupancyCapped)}
+						>
 							<Progress
 								percent={Math.round(
 									(Number(summary.averageOccupancyRate || 0) || 0) * 100,
@@ -1969,67 +2483,84 @@ const HotelsInventoryMap = () => {
 								strokeColor='#007f6b'
 							/>
 							<div className='muted' style={{ marginTop: 6 }}>
-								Occupied = min(booked, capacity) per day / room.
+								{tableLabels.occupiedFormula}
 							</div>
-						</Card>
+						</MetricCard>
 
-						<Card size='small' title='Room Nights'>
+						<MetricCard
+							size='small'
+							$tone='nights'
+							title={renderMetricTitle(FundOutlined, tableLabels.roomNights)}
+						>
 							<div className='metric'>
-								<span>Occupied</span>
+								<span>{tableLabels.occupied}</span>
 								<b>{formatInt(occupiedRoomNights)}</b>
 							</div>
 							<div className='metric'>
-								<span>Remaining</span>
+								<span>{tableLabels.remaining}</span>
 								<b>{formatInt(remainingRoomNights)}</b>
 							</div>
 							<div className='metric muted'>
-								<span>Capacity</span>
+								<span>{tableLabels.capacity}</span>
 								<b>{formatInt(capacityRoomNights)}</b>
 							</div>
 							{typeof bookedRoomNights === "number" && (
 								<div className='metric muted'>
-									<span>Booked (raw)</span>
+									<span>{tableLabels.bookedRaw}</span>
 									<b>{formatInt(bookedRoomNights)}</b>
 								</div>
 							)}
-						</Card>
+						</MetricCard>
 
-						<Card size='small' title='Room Counts'>
+						<MetricCard
+							size='small'
+							$tone='rooms'
+							title={renderMetricTitle(ApartmentOutlined, tableLabels.roomCounts)}
+						>
 							<div className='metric'>
-								<span>Inventory units</span>
+								<span>{tableLabels.inventoryUnits}</span>
 								<b>{formatInt(totalRoomsAll)}</b>
 							</div>
 							<div className='metric muted'>
-								<span>Physical rooms</span>
+								<span>{tableLabels.physicalRooms}</span>
 								<b>{formatInt(totalPhysicalRooms)}</b>
 							</div>
-						</Card>
+						</MetricCard>
 
-						<Card size='small' title='Inventory mapping'>
+						<MetricCard
+							size='small'
+							$tone='mapping'
+							title={renderMetricTitle(CheckCircleOutlined, tableLabels.inventoryMapping)}
+						>
 							{derivedCount ? (
 								<>
-									<Tag color='orange'>Unmapped types: {derivedCount}</Tag>
+									<Tag color='orange'>
+										{tableLabels.unmappedTypes}: {formatInt(derivedCount)}
+									</Tag>
 									<div className='muted' style={{ marginTop: 6 }}>
-										These types exist in reservations but not HotelDetails
-										inventory.
+										{tableLabels.unmappedMessage}
 									</div>
 									<Tooltip title={derivedTooltip}>
 										<div className='muted' style={{ marginTop: 6 }}>
-											View list
+											{tableLabels.viewList}
 										</div>
 									</Tooltip>
 								</>
 							) : (
 								<>
-									<Tag color='green'>All mapped</Tag>
+									<Tag color='green'>{tableLabels.allMapped}</Tag>
 									<div className='muted' style={{ marginTop: 6 }}>
-										All reservation room labels matched HotelDetails inventory.
+										{tableLabels.allMappedMessage}
 									</div>
 								</>
 							)}
-						</Card>
+						</MetricCard>
 
-						<Card size='small' title='Peak Day'>
+						<MetricCard
+							size='small'
+							$tone='peak'
+							title={renderMetricTitle(CalendarOutlined, tableLabels.peakDay)}
+						>
 							<div className='metric'>
 								<span>{summary?.peakDay?.date || "n/a"}</span>
 								<b>
@@ -2041,44 +2572,53 @@ const HotelsInventoryMap = () => {
 							</div>
 							{typeof summary?.peakDay?.booked === "number" && (
 								<div className='muted' style={{ marginTop: 6 }}>
-									Booked {formatInt(summary.peakDay.booked)} / Capacity{" "}
+									{tableLabels.booked} {formatInt(summary.peakDay.booked)} /{" "}
+									{tableLabels.capacity}{" "}
 									{formatInt(summary.peakDay.capacity || 0)}
 								</div>
 							)}
-						</Card>
+						</MetricCard>
 
-						<Card
+						<MetricCard
 							size='small'
-							title='Warnings'
+							$tone='warning'
+							title={renderMetricTitle(WarningOutlined, tableLabels.warnings)}
 							bodyStyle={{ cursor: firstWarning ? "pointer" : "default" }}
 							onClick={() => firstWarning && setWarningsModalOpen(true)}
 						>
 							{firstWarning ? (
 								<div className='warning single'>
-									<Tag color='red'>Overbooked</Tag> {firstWarning.date} -{" "}
+									<Tag color='red'>{tableLabels.overbooked}</Tag>{" "}
+									{firstWarning.date} -{" "}
 									{firstWarning.roomType} ({firstWarning.booked}/
 									{firstWarning.capacity})
 									{summary.warnings?.length > 1 && (
 										<span className='muted'>
 											{" "}
-											+{summary.warnings.length - 1} more
+											+{formatInt(summary.warnings.length - 1)}{" "}
+											{tableLabels.more}
 										</span>
 									)}
 								</div>
 							) : (
-								<span className='muted'>No overbooking detected</span>
+								<span className='muted'>{tableLabels.noOverbooking}</span>
 							)}
-						</Card>
+						</MetricCard>
 					</SummaryGrid>
 
-					<Card
+					<SectionCard
 						size='small'
 						title={
 							<TitleWithFlag>
-								<span>Occupancy by room type</span>
+								<span className='section-title-icon'>
+									<DatabaseOutlined />
+								</span>
+								<span>{tableLabels.occupancyByRoomType}</span>
 								{derivedCount ? (
 									<Tooltip title={derivedTooltip}>
-										<span className='flag'>Unmapped: {derivedCount}</span>
+										<span className='flag'>
+											{tableLabels.unmapped}: {formatInt(derivedCount)}
+										</span>
 									</Tooltip>
 								) : null}
 							</TitleWithFlag>
@@ -2090,12 +2630,12 @@ const HotelsInventoryMap = () => {
 									<div className='type-title'>
 										<Tooltip title={item.label}>
 											<span className='type-main'>
-												{roomHeaderMain({ label: item.label })}
+												{roomHeaderMain({ label: item.label }, isArabic)}
 											</span>
 										</Tooltip>
 										{item.derived ? (
-											<Tooltip title='This column is derived from reservations (not in HotelDetails inventory).'>
-												<span className='derived-pill'>Derived</span>
+											<Tooltip title={tableLabels.derivedTooltip}>
+												<span className='derived-pill'>{tableLabels.derived}</span>
 											</Tooltip>
 										) : null}
 									</div>
@@ -2114,27 +2654,35 @@ const HotelsInventoryMap = () => {
 
 									<div className='type-meta muted'>
 										{formatInt(item.occupiedNights || 0)}/
-										{formatInt(item.capacityNights || 0)} occupied nights
+										{formatInt(item.capacityNights || 0)}{" "}
+										{tableLabels.occupiedNights}
 										{typeof item.bookedNights === "number" && (
-											<> | booked {formatInt(item.bookedNights)}</>
+											<>
+												{" "}
+												| {tableLabels.bookedLower}{" "}
+												{formatInt(item.bookedNights)}
+											</>
 										)}
 									</div>
 								</div>
 							))}
 						</TypeGrid>
-					</Card>
+					</SectionCard>
 
-					<Card
+					<SectionCard
 						size='small'
 						title={
 							<HeaderRow>
 								<div className='card-title-text'>
-									Day-over-day occupancy | {data?.hotel?.hotelName || ""} |{" "}
+									<span className='section-title-icon'>
+										<BarChartOutlined />
+									</span>
+									{tableLabels.dayOverDay} | {data?.hotel?.hotelName || ""} |{" "}
 									{monthLabel}
 									{derivedCount ? (
 										<Tooltip title={derivedTooltip}>
 											<span className='inline-flag'>
-												Unmapped: {derivedCount}
+												{tableLabels.unmapped}: {formatInt(derivedCount)}
 											</span>
 										</Tooltip>
 									) : null}
@@ -2142,24 +2690,25 @@ const HotelsInventoryMap = () => {
 
 								<Legend>
 									<div className='legend-swatch'>
-										<span className='swatch low' /> <span>0-30%</span>
+										<span className='swatch low' /> <span>{tableLabels.legendLow}</span>
 									</div>
 									<div className='legend-swatch'>
-										<span className='swatch mid' /> <span>30-70%</span>
+										<span className='swatch mid' /> <span>{tableLabels.legendMid}</span>
 									</div>
 									<div className='legend-swatch'>
-										<span className='swatch high' /> <span>70-100%</span>
+										<span className='swatch high' /> <span>{tableLabels.legendHigh}</span>
 									</div>
 								</Legend>
 							</HeaderRow>
 						}
 						extra={
 							<span className='muted'>
-								Cells show booked/capacity, availability, and occupancy%.
+								{tableLabels.cellHint}
 							</span>
 						}
 					>
 						<TableWrapper
+							$isArabic={isArabic}
 							style={{
 								"--col-w": `${colWidth}px`,
 								"--date-col-w": "130px",
@@ -2169,10 +2718,10 @@ const HotelsInventoryMap = () => {
 							<table>
 								<thead>
 									<tr>
-										<th className='sticky-left date-th'>Date</th>
+										<th className='sticky-left date-th'>{tableLabels.date}</th>
 
 										{roomTypes.map((rt) => {
-											const main = roomHeaderMain(rt);
+											const main = roomHeaderMain(rt, isArabic);
 											const sub = roomHeaderSub(rt);
 											return (
 												<th key={rt.key} className='room-th'>
@@ -2182,8 +2731,8 @@ const HotelsInventoryMap = () => {
 														</Tooltip>
 														{sub ? <div className='th-sub'>{sub}</div> : null}
 														{rt.derived ? (
-															<Tooltip title='Derived from reservations (not found in HotelDetails inventory).'>
-																<span className='derived-flag'>Derived</span>
+															<Tooltip title={tableLabels.derivedTooltip}>
+																<span className='derived-flag'>{tableLabels.derived}</span>
 															</Tooltip>
 														) : null}
 													</div>
@@ -2191,7 +2740,7 @@ const HotelsInventoryMap = () => {
 											);
 										})}
 
-										<th className='sticky-right total-th'>Total</th>
+										<th className='sticky-right total-th'>{tableLabels.total}</th>
 									</tr>
 								</thead>
 
@@ -2210,7 +2759,8 @@ const HotelsInventoryMap = () => {
 												  ? totalOccupied / totalCapacity
 												  : 0;
 
-										const totalBg = heatColor(totalOccRate);
+										const totalIsOver =
+											Boolean(totals.overbooked) || totalBooked > totalCapacity;
 										const totalColors = getReadableCellColors(totalOccRate);
 
 										return (
@@ -2218,9 +2768,7 @@ const HotelsInventoryMap = () => {
 												<td className='sticky-left date-td'>
 													{hijriAvailable && (
 														<div className='hijri-date'>
-															{moment(day.date)
-																.locale("en")
-																.format("iD iMMMM iYYYY")}
+															{formatHijriCellDate(day.date, isArabic)}
 														</div>
 													)}
 													<div className='greg-date'>{day.date}</div>
@@ -2256,7 +2804,6 @@ const HotelsInventoryMap = () => {
 															? Number(cell.overage)
 															: Math.max(booked - capacity, 0);
 
-													const bg = heatColor(occRate);
 													const colors = getReadableCellColors(occRate);
 
 													return (
@@ -2264,8 +2811,10 @@ const HotelsInventoryMap = () => {
 															key={`${day.date}-${rt.key}`}
 															className='cell clickable'
 															style={{
-																backgroundColor: bg,
+																background: heatBackground(occRate, isOver),
 																color: colors.text,
+																borderColor: heatBorder(occRate, isOver),
+																boxShadow: heatShadow(occRate, isOver),
 															}}
 															onClick={() =>
 																fetchDayDetails({
@@ -2287,10 +2836,10 @@ const HotelsInventoryMap = () => {
 
 															<div className='cell-bottom'>
 																<span
-																	className='muted'
-																	style={{ color: colors.muted }}
-																>
-																	Avail {formatInt(available)}
+																className='muted'
+																style={{ color: colors.muted }}
+															>
+																	{tableLabels.availableShort} {formatInt(available)}
 																</span>
 
 																<span className='percent'>
@@ -2304,8 +2853,10 @@ const HotelsInventoryMap = () => {
 												<td
 													className='sticky-right cell total clickable'
 													style={{
-														backgroundColor: totalBg,
+														background: heatBackground(totalOccRate, totalIsOver),
 														color: totalColors.text,
+														borderColor: heatBorder(totalOccRate, totalIsOver),
+														boxShadow: heatShadow(totalOccRate, totalIsOver),
 													}}
 													onClick={() => fetchDayDetails({ date: day.date })}
 												>
@@ -2320,7 +2871,7 @@ const HotelsInventoryMap = () => {
 															className='muted'
 															style={{ color: totalColors.muted }}
 														>
-															Avail {formatInt(totalAvail)}
+															{tableLabels.availableShort} {formatInt(totalAvail)}
 														</span>
 														<span className='percent'>
 															{Math.round(totalOccRate * 100)}%
@@ -2335,7 +2886,7 @@ const HotelsInventoryMap = () => {
 									{data?.summary?.occupancyByType?.length ? (
 										<tr className='month-total-row'>
 											<td className='sticky-left date-td month-total-left'>
-												<div className='month-total-title'>Month total</div>
+												<div className='month-total-title'>{tableLabels.monthTotal}</div>
 												<div className='muted'>{monthLabel}</div>
 											</td>
 
@@ -2355,7 +2906,6 @@ const HotelsInventoryMap = () => {
 														  : 0;
 
 												const availN = Math.max(capN - occN, 0);
-												const bg = heatColor(occRate);
 												const colors = getReadableCellColors(occRate);
 
 												const over = bookedN > capN && capN > 0;
@@ -2365,7 +2915,12 @@ const HotelsInventoryMap = () => {
 													<td
 														key={`month-total-${rt.key}`}
 														className='cell month-total-cell'
-														style={{ backgroundColor: bg, color: colors.text }}
+														style={{
+															background: heatBackground(occRate, over),
+															color: colors.text,
+															borderColor: heatBorder(occRate, over),
+															boxShadow: heatShadow(occRate, over),
+														}}
 													>
 														<div className='cell-top'>
 															<span className='numbers'>
@@ -2379,10 +2934,10 @@ const HotelsInventoryMap = () => {
 														</div>
 														<div className='cell-bottom'>
 															<span
-																className='muted'
-																style={{ color: colors.muted }}
-															>
-																Avail {formatInt(availN)}
+															className='muted'
+															style={{ color: colors.muted }}
+														>
+																{tableLabels.availableShort} {formatInt(availN)}
 															</span>
 															<span className='percent'>
 																{Math.round(occRate * 100)}%
@@ -2397,13 +2952,18 @@ const HotelsInventoryMap = () => {
 												const booked = Number(summary.bookedRoomNights || 0);
 												const occ = Number(summary.occupiedRoomNights || 0);
 												const occRate = cap ? occ / cap : 0;
-												const bg = heatColor(occRate);
 												const colors = getReadableCellColors(occRate);
+												const over = booked > cap && cap > 0;
 
 												return (
 													<td
 														className='sticky-right cell total month-total-cell'
-														style={{ backgroundColor: bg, color: colors.text }}
+														style={{
+															background: heatBackground(occRate, over),
+															color: colors.text,
+															borderColor: heatBorder(occRate, over),
+															boxShadow: heatShadow(occRate, over),
+														}}
 													>
 														<div className='cell-top'>
 															<span className='numbers'>
@@ -2412,10 +2972,11 @@ const HotelsInventoryMap = () => {
 														</div>
 														<div className='cell-bottom'>
 															<span
-																className='muted'
-																style={{ color: colors.muted }}
-															>
-																Avail {formatInt(Math.max(cap - occ, 0))}
+															className='muted'
+															style={{ color: colors.muted }}
+														>
+																{tableLabels.availableShort}{" "}
+																{formatInt(Math.max(cap - occ, 0))}
 															</span>
 															<span className='percent'>
 																{Math.round(occRate * 100)}%
@@ -2429,29 +2990,31 @@ const HotelsInventoryMap = () => {
 								</tbody>
 							</table>
 						</TableWrapper>
-					</Card>
+					</SectionCard>
 
-					<Card size='small' title='Payment status breakdown'>
+					<Card size='small' title={tableLabels.paymentStatusBreakdown}>
 						<BreakdownTablesRow>
 							<BreakdownTable>
 								<div className='table-title'>
-									Booking source totals by checkout date (SAR)
+									{tableLabels.bookingSourceTotalsCheckoutSar}
 								</div>
 								<table>
 									<thead>
 										<tr>
-											<th>Booking source</th>
+											<th>{tableLabels.bookingSourceHeader}</th>
 											{paymentStatusHeaders.map((status) => (
-												<th key={status}>{status}</th>
+												<th key={status}>
+													{tableLabels.paymentStatusLabels?.[status] || status}
+												</th>
 											))}
-											<th>Total (SAR)</th>
+											<th>{tableLabels.totalSar}</th>
 										</tr>
 									</thead>
 									<tbody>
 										{bookingSourceRows.length ? (
 											bookingSourceRows.map((row) => (
-												<tr key={row.booking_source || "Unknown"}>
-													<td>{row.booking_source || "Unknown"}</td>
+												<tr key={row.booking_source || tableLabels.unknown}>
+													<td>{row.booking_source || tableLabels.unknown}</td>
 													{paymentStatusHeaders.map((status) => (
 														<td key={`${row.booking_source}-${status}`}>
 															{formatCurrency(
@@ -2468,7 +3031,7 @@ const HotelsInventoryMap = () => {
 													colSpan={paymentStatusHeaders.length + 2}
 													className='empty'
 												>
-													No booking source data in this range
+													{tableLabels.noBookingSourceData}
 												</td>
 											</tr>
 										)}
@@ -2476,7 +3039,7 @@ const HotelsInventoryMap = () => {
 									{bookingSourceRows.length ? (
 										<tfoot>
 											<tr className='totals'>
-												<td>Total</td>
+												<td>{tableLabels.total}</td>
 												{paymentStatusHeaders.map((status) => (
 													<td key={`total-${status}`}>
 														{formatCurrency(
@@ -2492,22 +3055,27 @@ const HotelsInventoryMap = () => {
 							</BreakdownTable>
 
 							<BreakdownTable>
-								<div className='table-title'>Payment status totals</div>
+								<div className='table-title'>
+									{tableLabels.paymentStatusTotals}
+								</div>
 								<table>
 									<thead>
 										<tr>
-											<th>Status</th>
-											<th>Reservations</th>
-											<th>Total amount (SAR)</th>
-											<th>Paid amount</th>
-											<th>Onsite paid</th>
+											<th>{tableLabels.status}</th>
+											<th>{tableLabels.reservations}</th>
+											<th>{tableLabels.totalAmountSar}</th>
+											<th>{tableLabels.paidAmount}</th>
+											<th>{tableLabels.onsitePaid}</th>
 										</tr>
 									</thead>
 									<tbody>
 										{paymentBreakdown.length ? (
 											paymentBreakdown.map((pmt) => (
 												<tr key={pmt.status}>
-													<td>{paymentLabel(pmt.status, pmt.label)}</td>
+													<td>
+														{tableLabels.paymentStatusLabels?.[pmt.status] ||
+															paymentLabel(pmt.status, pmt.label)}
+													</td>
 													<td>{formatInt(pmt.count)}</td>
 													<td>{formatCurrency(pmt.totalAmount)}</td>
 													<td>{formatCurrency(pmt.paidAmount)}</td>
@@ -2517,7 +3085,7 @@ const HotelsInventoryMap = () => {
 										) : (
 											<tr>
 												<td colSpan={5} className='empty'>
-													No payment data in this range
+													{tableLabels.noPaymentData}
 												</td>
 											</tr>
 										)}
@@ -2529,17 +3097,19 @@ const HotelsInventoryMap = () => {
 						<BreakdownTablesRow style={{ marginTop: 12 }}>
 							<BreakdownTable>
 								<div className='table-title'>
-									Checkin date totals by payment status (SAR)
+									{tableLabels.checkinDateTotalsSar}
 								</div>
 								<table>
 									<thead>
 										<tr>
-											<th>Checkin date</th>
-											<th>Reservations</th>
+											<th>{tableLabels.checkinDate}</th>
+											<th>{tableLabels.reservations}</th>
 											{paymentStatusHeaders.map((status) => (
-												<th key={`checkin-date-${status}`}>{status}</th>
+												<th key={`checkin-date-${status}`}>
+													{tableLabels.paymentStatusLabels?.[status] || status}
+												</th>
 											))}
-											<th>Total (SAR)</th>
+											<th>{tableLabels.totalSar}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -2596,7 +3166,7 @@ const HotelsInventoryMap = () => {
 													colSpan={paymentStatusHeaders.length + 3}
 													className='empty'
 												>
-													No checkin-date payment data in this range
+													{tableLabels.noCheckinPaymentData}
 												</td>
 											</tr>
 										)}
@@ -2604,7 +3174,7 @@ const HotelsInventoryMap = () => {
 									{checkinDateRows.length ? (
 										<tfoot>
 											<tr className='totals'>
-												<td>Total</td>
+												<td>{tableLabels.total}</td>
 												<td>{formatInt(checkinDateOverallReservations)}</td>
 												{paymentStatusHeaders.map((status) => (
 													<td key={`checkin-date-total-${status}`}>
@@ -2622,17 +3192,19 @@ const HotelsInventoryMap = () => {
 
 							<BreakdownTable>
 								<div className='table-title'>
-									Checkout date totals by payment status (SAR)
+									{tableLabels.checkoutDateTotalsSar}
 								</div>
 								<table>
 									<thead>
 										<tr>
-											<th>Checkout date</th>
-											<th>Reservations</th>
+											<th>{tableLabels.checkoutDate}</th>
+											<th>{tableLabels.reservations}</th>
 											{paymentStatusHeaders.map((status) => (
-												<th key={`date-${status}`}>{status}</th>
+												<th key={`date-${status}`}>
+													{tableLabels.paymentStatusLabels?.[status] || status}
+												</th>
 											))}
-											<th>Total (SAR)</th>
+											<th>{tableLabels.totalSar}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -2689,7 +3261,7 @@ const HotelsInventoryMap = () => {
 													colSpan={paymentStatusHeaders.length + 3}
 													className='empty'
 												>
-													No checkout-date payment data in this range
+													{tableLabels.noCheckoutPaymentData}
 												</td>
 											</tr>
 										)}
@@ -2697,7 +3269,7 @@ const HotelsInventoryMap = () => {
 									{checkoutDateRows.length ? (
 										<tfoot>
 											<tr className='totals'>
-												<td>Total</td>
+												<td>{tableLabels.total}</td>
 												<td>{formatInt(checkoutDateOverallReservations)}</td>
 												{paymentStatusHeaders.map((status) => (
 													<td key={`checkout-date-total-${status}`}>
@@ -2718,7 +3290,7 @@ const HotelsInventoryMap = () => {
 			)}
 
 			<Modal
-				title='Detailed Reservations List'
+				title={tableLabels.detailedReservationsList}
 				open={reportModalOpen}
 				onCancel={() => {
 					setReportModalOpen(false);
@@ -2731,9 +3303,9 @@ const HotelsInventoryMap = () => {
 				wrapClassName='report-reservations-modal'
 			>
 				{reportModalLoading ? (
-					<Spin tip='Loading reservations...' />
+					<Spin tip={tableLabels.loadingReservations} />
 				) : reportModalData.data.length === 0 ? (
-					<p>No reservations found</p>
+					<p>{tableLabels.noReservationsFound}</p>
 				) : (
 					<EnhancedContentTable
 						data={reportModalData.data}
@@ -2754,7 +3326,9 @@ const HotelsInventoryMap = () => {
 
 			{/* Day details modal */}
 			<Modal
-				title={`Reservations on ${dayDetails?.date || "selected day"}${
+				title={`${tableLabels.reservationsOn} ${
+					dayDetails?.date || tableLabels.selectedDay
+				}${
 					dayDetails?.roomLabel ? ` | ${dayDetails.roomLabel}` : ""
 				}`}
 				open={dayDetailsOpen}
@@ -2776,13 +3350,13 @@ const HotelsInventoryMap = () => {
 				wrapClassName='day-details-modal'
 			>
 				{dayDetailsLoading ? (
-					<Spin tip='Loading reservations...' />
+					<Spin tip={tableLabels.loadingReservations} />
 				) : (
 					<>
 						{dayDetailsError && (
 							<Alert
 								type='error'
-								message='Unable to load reservations for this day'
+								message={tableLabels.unableDayReservations}
 								description={dayDetailsError}
 								showIcon
 								style={{ marginBottom: 8 }}
@@ -2792,34 +3366,35 @@ const HotelsInventoryMap = () => {
 						{dayDetails && (
 							<DetailsSummary>
 								<div>
-									<div className='label'>Hotel</div>
+									<div className='label'>{tableLabels.hotel}</div>
 									<div className='value'>
 										{dayDetails?.hotel?.hotelName ||
 											data?.hotel?.hotelName ||
-											"Selected hotel"}
+											tableLabels.selectedHotelFallback}
 									</div>
 								</div>
 
 								<div>
-									<div className='label'>Date</div>
+									<div className='label'>{tableLabels.date}</div>
 									<div className='value'>{dayDetails?.date || "n/a"}</div>
 								</div>
 
 								<div>
-									<div className='label'>Room</div>
+									<div className='label'>{tableLabels.room}</div>
 									<div className='value'>
-										{dayDetails?.roomLabel || "All room types"}
+										{dayDetails?.roomLabel || tableLabels.allRoomTypes}
 									</div>
 								</div>
 
 								<div>
-									<div className='label'>Booked / Capacity</div>
+									<div className='label'>{tableLabels.bookedCapacity}</div>
 									<div className='value'>
 										{formatInt(dayDetails?.booked || 0)} /{" "}
 										{formatInt(dayDetails?.capacity || 0)}
 										{dayDetails?.overbooked && (
 											<Tag color='red' style={{ marginLeft: 6 }}>
-												Over by {formatInt(dayDetails?.overage || 0)}
+												{tableLabels.overBy}{" "}
+												{formatInt(dayDetails?.overage || 0)}
 											</Tag>
 										)}
 									</div>
@@ -2833,18 +3408,18 @@ const HotelsInventoryMap = () => {
 									<thead>
 										<tr>
 											<th>#</th>
-											<th>Confirmation</th>
-											<th>Guest</th>
-											<th>Phone</th>
-											<th>Status</th>
-											<th>Check-in</th>
-											<th>Check-out</th>
-											<th>Room Type</th>
-											<th>Count</th>
-											<th>Booking source</th>
-											<th>Payment</th>
-											<th>Total (SAR)</th>
-											<th>Show Details</th>
+											<th>{tableLabels.confirmation}</th>
+											<th>{tableLabels.guest}</th>
+											<th>{tableLabels.phone}</th>
+											<th>{tableLabels.status}</th>
+											<th>{tableLabels.checkIn}</th>
+											<th>{tableLabels.checkOut}</th>
+											<th>{tableLabels.roomTypeHeader}</th>
+											<th>{tableLabels.count}</th>
+											<th>{tableLabels.bookingSourceHeader}</th>
+											<th>{tableLabels.payment}</th>
+											<th>{tableLabels.totalSar}</th>
+											<th>{tableLabels.showDetails}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -2894,9 +3469,14 @@ const HotelsInventoryMap = () => {
 													<td style={getPaymentStatusStyles(paymentStatus)}>
 														{paymentHint ? (
 															<Tooltip title={paymentHint}>
-																<span>{paymentStatus}</span>
+																<span>
+																	{tableLabels.paymentStatusLabels?.[
+																		paymentStatus
+																	] || paymentStatus}
+																</span>
 															</Tooltip>
 														) : (
+															tableLabels.paymentStatusLabels?.[paymentStatus] ||
 															paymentStatus
 														)}
 													</td>
@@ -2904,11 +3484,11 @@ const HotelsInventoryMap = () => {
 													<td>
 														<Button
 															size='small'
-															onClick={() => openReservationDetails(res)}
-														>
-															Show Details
-														</Button>
-													</td>
+														onClick={() => openReservationDetails(res)}
+													>
+														{tableLabels.showDetails}
+													</Button>
+												</td>
 												</tr>
 											);
 										})}
@@ -2916,7 +3496,7 @@ const HotelsInventoryMap = () => {
 								</DetailTable>
 							</DetailTableWrapper>
 						) : (
-							<div className='muted'>No reservations for this day.</div>
+							<div className='muted'>{tableLabels.noReservationsDay}</div>
 						)}
 					</>
 				)}
@@ -2951,7 +3531,7 @@ const HotelsInventoryMap = () => {
 			>
 				{detailsModalLoading && !selectedReservation ? (
 					<div style={{ padding: "24px 0", textAlign: "center" }}>
-						<Spin tip='Loading reservation details...' />
+						<Spin tip={tableLabels.loadingReservationDetails} />
 					</div>
 				) : selectedReservation && selectedReservation.hotelId ? (
 					<MoreDetails
@@ -2981,12 +3561,27 @@ export default HotelsInventoryMap;
 const Wrapper = styled.div`
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 14px;
+	font-family: ${(p) =>
+		p.$isArabic
+			? "'Droid Arabic Kufi', 'Cairo', Tahoma, Arial, sans-serif"
+			: "inherit"};
 
 	.metric {
 		display: flex;
 		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
 		margin-bottom: 6px;
+		color: #102033;
+		line-height: 1.35;
+	}
+
+	.metric b {
+		color: #061a2f;
+		font-size: ${(p) => (p.$isArabic ? "1rem" : "0.96rem")};
+		font-weight: 950;
+		white-space: nowrap;
 	}
 
 	.warning {
@@ -3006,21 +3601,86 @@ const Wrapper = styled.div`
 	}
 
 	.muted {
-		color: #777;
+		color: #5f7285;
 		font-size: 12px;
+		line-height: 1.45;
+	}
+`;
+
+const FilterShell = styled.section`
+	border: 1px solid rgba(45, 93, 145, 0.2);
+	border-radius: 12px;
+	background:
+		linear-gradient(135deg, rgba(229, 243, 255, 0.5), rgba(255, 255, 255, 0.98) 46%),
+		linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 251, 255, 0.96)),
+		#ffffff;
+	box-shadow: 0 10px 24px rgba(16, 32, 51, 0.06);
+	padding: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+
+	.filter-header {
+		color: #102033;
+		font-weight: 900;
+		font-size: ${(p) => (p.$isArabic ? "1rem" : "0.95rem")};
+		line-height: 1.3;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.filter-icon {
+		width: 28px;
+		height: 28px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: #ffffff;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #2f74b5 0%, #102033 100%);
+		box-shadow: 0 6px 14px rgba(16, 32, 51, 0.14);
+	}
+`;
+
+const FieldLabel = styled.label`
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	color: #102033;
+	font-size: 12px;
+	font-weight: 900;
+	line-height: 1.25;
+
+	.anticon {
+		color: #2f74b5;
+		font-size: 14px;
 	}
 `;
 
 const ControlBar = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	grid-template-columns: minmax(260px, 1.2fr) minmax(160px, 0.7fr) minmax(
+			300px,
+			1.25fr
+		) minmax(220px, 0.9fr) minmax(240px, 0.9fr);
 	gap: 12px;
-	align-items: end;
+	align-items: stretch;
 
 	.control {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
+		min-width: 0;
+	}
+
+	label {
+		color: #102033;
+		font-size: 12px;
+		font-weight: 900;
+		line-height: 1.25;
 	}
 
 	.month-picker .month-actions {
@@ -3043,7 +3703,22 @@ const ControlBar = styled.div`
 		flex-wrap: nowrap;
 	}
 
-	@media (max-width: 768px) {
+	.ant-select,
+	.ant-picker {
+		width: 100%;
+	}
+
+	@media (max-width: 1300px) {
+		grid-template-columns: repeat(3, minmax(220px, 1fr));
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: repeat(2, minmax(220px, 1fr));
+	}
+
+	@media (max-width: 640px) {
+		grid-template-columns: 1fr;
+
 		.hijri-row {
 			flex-wrap: wrap;
 		}
@@ -3051,17 +3726,17 @@ const ControlBar = styled.div`
 `;
 
 const PaymentStatusBar = styled.div`
-	border: 1px solid #f0f0f0;
+	border: 1px solid rgba(45, 93, 145, 0.14);
 	border-radius: 10px;
 	padding: 10px 12px;
-	background: #fcfcfc;
+	background: rgba(255, 255, 255, 0.74);
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 
 	.filters-row {
 		display: grid;
-		grid-template-columns: minmax(300px, 1.15fr) minmax(260px, 1fr);
+		grid-template-columns: minmax(360px, 1.05fr) minmax(420px, 1.25fr);
 		gap: 12px;
 		align-items: start;
 	}
@@ -3075,7 +3750,7 @@ const PaymentStatusBar = styled.div`
 
 	.label {
 		font-weight: 600;
-		color: #333;
+		color: #102033;
 	}
 
 	.buttons {
@@ -3099,6 +3774,7 @@ const PaymentStatusBar = styled.div`
 
 	.hint {
 		margin-top: 2px;
+		font-weight: 700;
 	}
 
 	@media (max-width: 992px) {
@@ -3124,15 +3800,25 @@ const SwitchRow = styled.div`
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	justify-content: flex-start;
+	justify-content: center;
 	font-size: 12px;
-	color: #444;
+	color: #102033;
+	font-weight: 900;
+	border: 1px solid rgba(45, 93, 145, 0.14);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.78);
+	padding: 8px 10px;
+	min-height: 42px;
+
+	.switch-text {
+		line-height: 1.35;
+	}
 `;
 
 const SummaryGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+	gap: 12px;
 `;
 
 const FinancialSummaryRow = styled.div`
@@ -3145,10 +3831,99 @@ const FinancialSummaryRow = styled.div`
 	}
 `;
 
+const CardTitle = styled.div`
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: #102033;
+	font-weight: 950;
+	line-height: 1.3;
+
+	.title-icon {
+		width: 28px;
+		height: 28px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: var(--metric-main, #24547d);
+		background: var(--metric-soft, rgba(36, 84, 125, 0.12));
+		border: 1px solid var(--metric-border, rgba(36, 84, 125, 0.22));
+	}
+`;
+
+const MetricCard = styled(Card)`
+	--metric-main: ${(p) => metricTone(p.$tone).main};
+	--metric-soft: ${(p) => metricTone(p.$tone).soft};
+	--metric-border: ${(p) => metricTone(p.$tone).border};
+	position: relative;
+	overflow: hidden;
+	border: 1px solid var(--metric-border);
+	border-radius: 10px;
+	background:
+		linear-gradient(135deg, var(--metric-soft), rgba(255, 255, 255, 0.96) 42%),
+		#ffffff;
+	box-shadow: 0 9px 22px rgba(16, 32, 51, 0.055);
+
+	&::before {
+		content: "";
+		position: absolute;
+		inset-block: 0;
+		inset-inline-start: 0;
+		width: 4px;
+		background: var(--metric-main);
+	}
+
+	.ant-card-head {
+		min-height: 46px;
+		border-bottom-color: rgba(45, 93, 145, 0.1);
+		padding-inline: 12px;
+	}
+
+	.ant-card-body {
+		padding: 12px 14px;
+	}
+
+	.ant-progress-inner {
+		background: rgba(16, 32, 51, 0.08);
+	}
+`;
+
+const SectionCard = styled(Card)`
+	border: 1px solid rgba(45, 93, 145, 0.16);
+	border-radius: 12px;
+	box-shadow: 0 10px 24px rgba(16, 32, 51, 0.055);
+
+	.ant-card-head {
+		min-height: 48px;
+		border-bottom-color: rgba(45, 93, 145, 0.12);
+		background: linear-gradient(180deg, rgba(247, 251, 255, 0.9), rgba(255, 255, 255, 0.98));
+	}
+
+	.ant-card-body {
+		padding: 12px;
+	}
+`;
+
 const TitleWithFlag = styled.div`
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	flex-wrap: wrap;
+	font-weight: 950;
+	color: #102033;
+
+	.section-title-icon {
+		width: 28px;
+		height: 28px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: #24547d;
+		background: rgba(36, 84, 125, 0.11);
+		border: 1px solid rgba(36, 84, 125, 0.2);
+	}
 
 	.flag {
 		font-size: 11px;
@@ -3204,6 +3979,19 @@ const HeaderRow = styled.div`
 		align-items: center;
 		gap: 10px;
 		flex-wrap: wrap;
+		color: #102033;
+	}
+
+	.section-title-icon {
+		width: 28px;
+		height: 28px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: #24547d;
+		background: rgba(36, 84, 125, 0.11);
+		border: 1px solid rgba(36, 84, 125, 0.2);
 	}
 
 	.inline-flag {
@@ -3219,9 +4007,11 @@ const HeaderRow = styled.div`
 const TableWrapper = styled.div`
 	width: 100%;
 	overflow: auto;
-	/* max-height: 760px; */
-	border: 1px solid #f0f0f0;
-	border-radius: 10px;
+	-webkit-overflow-scrolling: touch;
+	border: 1px solid rgba(45, 93, 145, 0.22);
+	border-radius: 12px;
+	background: #ffffff;
+	box-shadow: 0 12px 28px rgba(16, 32, 51, 0.07);
 
 	/* dynamic column width */
 	--col-w: 145px;
@@ -3233,27 +4023,35 @@ const TableWrapper = styled.div`
 		min-width: 100%;
 		border-collapse: separate;
 		border-spacing: 0;
-		font-size: 12px;
+		font-size: ${(p) => (p.$isArabic ? "12.5px" : "12px")};
 		table-layout: fixed;
 	}
 
 	th,
 	td {
-		border-right: 1px solid #f0f0f0;
-		border-bottom: 1px solid #f0f0f0;
+		border-inline-end: 1px solid rgba(45, 93, 145, 0.12);
+		border-bottom: 1px solid rgba(45, 93, 145, 0.12);
 		padding: 8px 8px;
 		text-align: center;
 		min-width: var(--col-w);
 		width: var(--col-w);
 		max-width: var(--col-w);
 		font-variant-numeric: tabular-nums;
+		vertical-align: middle;
 	}
 
 	thead th {
 		position: sticky;
 		top: 0;
-		background: #f6f8f8;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		color: #ffffff;
 		z-index: 5;
+		height: 52px;
+		border-bottom-color: rgba(103, 167, 223, 0.5);
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.24);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 	}
 
 	.date-th,
@@ -3261,15 +4059,28 @@ const TableWrapper = styled.div`
 		min-width: var(--date-col-w);
 		width: var(--date-col-w);
 		max-width: var(--date-col-w);
-		text-align: left;
-		background: #fff;
+		text-align: ${(p) => (p.$isArabic ? "right" : "left")};
+	}
+
+	.date-th {
+		text-align: center;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		color: #ffffff;
+		font-weight: 900;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.24);
 	}
 
 	.sticky-left {
 		position: sticky;
-		left: 0;
+		left: ${(p) => (p.$isArabic ? "auto" : "0")};
+		right: ${(p) => (p.$isArabic ? "0" : "auto")};
 		z-index: 6;
-		box-shadow: 6px 0 12px rgba(0, 0, 0, 0.03);
+		box-shadow: ${(p) =>
+			p.$isArabic
+				? "-6px 0 12px rgba(16, 32, 51, 0.06)"
+				: "6px 0 12px rgba(16, 32, 51, 0.06)"};
 	}
 
 	.total-th,
@@ -3282,9 +4093,18 @@ const TableWrapper = styled.div`
 
 	.sticky-right {
 		position: sticky;
-		right: 0;
+		right: ${(p) => (p.$isArabic ? "auto" : "0")};
+		left: ${(p) => (p.$isArabic ? "0" : "auto")};
 		z-index: 6;
-		box-shadow: -6px 0 12px rgba(0, 0, 0, 0.03);
+		box-shadow: ${(p) =>
+			p.$isArabic
+				? "6px 0 12px rgba(16, 32, 51, 0.06)"
+				: "-6px 0 12px rgba(16, 32, 51, 0.06)"};
+	}
+
+	thead .sticky-left,
+	thead .sticky-right {
+		z-index: 8;
 	}
 
 	.room-th .th-inner {
@@ -3297,44 +4117,63 @@ const TableWrapper = styled.div`
 	}
 
 	.th-main {
-		font-weight: 700;
+		font-weight: 900;
+		color: #ffffff;
 		max-width: calc(var(--col-w) - 16px);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		line-height: 1.2;
 	}
 
 	.th-sub {
-		font-size: 11px;
-		color: #666;
+		font-size: ${(p) => (p.$isArabic ? "11.5px" : "11px")};
+		color: rgba(224, 241, 255, 0.96);
+		font-weight: 850;
 		max-width: calc(var(--col-w) - 16px);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		line-height: 1.2;
 	}
 
 	.derived-flag {
 		font-size: 10px;
 		padding: 1px 8px;
 		border-radius: 999px;
-		background: #fff7e6;
+		background: rgba(255, 247, 230, 0.98);
 		border: 1px solid #ffd591;
-		color: #ad6800;
+		color: #9a4f00;
+		text-shadow: none;
+		font-weight: 900;
+	}
+
+	.date-td,
+	.month-total-left {
+		background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 255, 0.98));
+		color: #102033;
 	}
 
 	.hijri-date {
-		font-weight: 800;
-		color: #234f45;
+		font-weight: 900;
+		color: #102033;
+		line-height: 1.25;
 	}
 
 	.greg-date {
-		color: #444;
-		font-weight: 600;
+		color: #47637f;
+		font-weight: 800;
 		margin-top: 2px;
+		line-height: 1.25;
 	}
 
 	.cell {
 		cursor: default;
+		position: relative;
+		overflow: hidden;
+		background-image:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 42%),
+			linear-gradient(0deg, rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0));
 	}
 
 	.clickable {
@@ -3345,7 +4184,7 @@ const TableWrapper = styled.div`
 	}
 
 	.clickable:hover {
-		box-shadow: inset 0 0 0 1px #0f7e6b;
+		box-shadow: inset 0 0 0 2px rgba(16, 32, 51, 0.22);
 		transform: translateY(-1px);
 	}
 
@@ -3355,10 +4194,15 @@ const TableWrapper = styled.div`
 		justify-content: center;
 		gap: 8px;
 		font-weight: 800;
+		position: relative;
+		z-index: 1;
 	}
 
 	.numbers {
 		font-size: 13px;
+		font-weight: 900;
+		direction: ltr;
+		unicode-bidi: isolate;
 	}
 
 	.over-pill {
@@ -3376,22 +4220,55 @@ const TableWrapper = styled.div`
 		justify-content: space-between;
 		margin-top: 8px;
 		gap: 10px;
+		position: relative;
+		z-index: 1;
 	}
 
 	.percent {
 		font-weight: 900;
+		direction: ltr;
+		unicode-bidi: isolate;
+	}
+
+	.cell .muted,
+	.cell-bottom .muted {
+		font-weight: 850;
+		opacity: 0.96;
 	}
 
 	.month-total-row td {
-		font-weight: 700;
+		font-weight: 800;
+		border-top: 2px solid rgba(16, 32, 51, 0.18);
 	}
 
-	.month-total-left {
-		background: #fff;
+	.month-total-row .cell {
+		background-image:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 42%),
+			linear-gradient(0deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
 	}
 
 	.month-total-title {
 		font-weight: 900;
+		color: #102033;
+	}
+
+	@media (max-width: 720px) {
+		--col-w: 126px;
+		--date-col-w: 118px;
+		--total-col-w: 108px;
+
+		table {
+			font-size: ${(p) => (p.$isArabic ? "11.5px" : "11px")};
+		}
+
+		th,
+		td {
+			padding: 7px 6px;
+		}
+
+		.th-sub {
+			font-size: 10px;
+		}
 	}
 `;
 
@@ -3526,46 +4403,156 @@ const TypeGrid = styled.div`
 
 const DetailsSummary = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-	gap: 10px;
-	margin-bottom: 12px;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 12px;
+	margin-bottom: 14px;
+
+	> div {
+		position: relative;
+		border: 1px solid rgba(45, 93, 145, 0.16);
+		border-radius: 10px;
+		background:
+			linear-gradient(135deg, rgba(229, 243, 255, 0.8), rgba(255, 255, 255, 0.98) 54%),
+			#ffffff;
+		padding: 12px 14px;
+		min-height: 70px;
+		box-shadow: 0 8px 18px rgba(16, 32, 51, 0.055);
+		overflow: hidden;
+	}
+
+	> div::before {
+		content: "";
+		position: absolute;
+		inset-block: 0;
+		inset-inline-start: 0;
+		width: 4px;
+		background: linear-gradient(180deg, #2f74b5 0%, #102033 100%);
+	}
 
 	.label {
-		color: #666;
-		font-size: 12px;
+		color: #5f7285;
+		font-size: 11px;
+		font-weight: 850;
+		letter-spacing: 0;
+		line-height: 1.3;
+		margin-bottom: 7px;
 	}
 
 	.value {
-		font-weight: 600;
+		color: #102033;
+		font-size: 13px;
+		font-weight: 950;
+		line-height: 1.35;
+		word-break: break-word;
 	}
 `;
 
 const DetailTableWrapper = styled.div`
-	overflow-x: auto;
+	overflow: auto;
+	max-height: min(58vh, 620px);
+	border: 1px solid rgba(45, 93, 145, 0.18);
+	border-radius: 12px;
+	background: #ffffff;
+	box-shadow: 0 14px 30px rgba(16, 32, 51, 0.08);
+	-webkit-overflow-scrolling: touch;
 `;
 
 const DetailTable = styled.table`
 	width: 100%;
-	border-collapse: collapse;
+	min-width: 1180px;
+	border-collapse: separate;
+	border-spacing: 0;
 	font-size: 12px;
+	table-layout: auto;
 
 	th,
 	td {
-		border: 1px solid #f0f0f0;
-		padding: 6px 8px;
-		text-align: left;
+		border-inline-end: 1px solid rgba(45, 93, 145, 0.1);
+		border-bottom: 1px solid rgba(45, 93, 145, 0.1);
+		padding: 9px 10px;
+		text-align: start;
 		white-space: nowrap;
+		vertical-align: middle;
 	}
 
 	th {
-		background: #f6f8f8;
-		font-weight: 600;
+		position: sticky;
+		top: 0;
+		z-index: 3;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+			linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		color: #ffffff;
+		font-weight: 950;
+		height: 44px;
+		border-bottom-color: rgba(103, 167, 223, 0.5);
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+	}
+
+	tbody tr {
+		background: #ffffff;
+		transition:
+			background 0.12s ease,
+			box-shadow 0.12s ease;
+	}
+
+	tbody tr:nth-child(even) {
+		background: #f8fbff;
+	}
+
+	tbody tr:hover {
+		background: #edf7ff;
+		box-shadow: inset 0 0 0 1px rgba(47, 116, 181, 0.18);
+	}
+
+	td {
+		color: #102033;
+		font-weight: 650;
+	}
+
+	td:first-child,
+	th:first-child {
+		text-align: center;
+		width: 54px;
+	}
+
+	td:nth-child(2),
+	td:nth-child(3),
+	td:nth-child(4) {
+		font-weight: 800;
+	}
+
+	td:nth-child(12) {
+		font-weight: 950;
+		color: #0f766e;
+	}
+
+	.ant-btn {
+		border-radius: 8px;
+		border-color: rgba(47, 116, 181, 0.36);
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(237, 247, 255, 0.95)),
+			#ffffff;
+		color: #17405f;
+		font-weight: 850;
+		box-shadow: 0 5px 12px rgba(16, 32, 51, 0.06);
+	}
+
+	.ant-btn:hover,
+	.ant-btn:focus {
+		border-color: #2f74b5;
+		color: #102033;
+		background: #edf7ff;
 	}
 
 	@media (max-width: 768px) {
+		min-width: 980px;
+
 		th,
 		td {
 			font-size: 11px;
+			padding: 8px;
 		}
 	}
 `;

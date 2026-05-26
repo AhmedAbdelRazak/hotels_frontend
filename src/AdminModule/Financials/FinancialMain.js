@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
+import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
 import { Modal, Input, Button, message } from "antd";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
@@ -10,7 +11,32 @@ import FinancialReport from "./FinancialReport";
 import ExpensesManagement from "./ExpensesManagement";
 import { isSuperAdminUser } from "../utils/superUsers";
 
+const FINANCIAL_TEXT = {
+	en: {
+		passwordTitle: "Enter Password",
+		passwordPlaceholder: "Enter password",
+		verify: "Verify Password",
+		passwordVerified: "Password verified successfully",
+		incorrectPassword: "Incorrect password. Please try again.",
+		expenses: "Expenses Management",
+		report: "Financial Report",
+	},
+	ar: {
+		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		passwordPlaceholder: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
+		verify: "\u062a\u062d\u0642\u0642",
+		passwordVerified:
+			"\u062a\u0645 \u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631.",
+		incorrectPassword:
+			"\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629.",
+		expenses: "\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a",
+		report: "\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0645\u0627\u0644\u064a",
+	},
+};
+
 const FinancialMain = ({ chosenLanguage }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const L = FINANCIAL_TEXT[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated() || {};
 	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -24,11 +50,7 @@ const FinancialMain = ({ chosenLanguage }) => {
 	const [getUser, setGetUser] = useState(null);
 	const isSuperAdmin =
 		isConfiguredSuperAdmin ||
-		isSuperAdminUser(getUser) ||
-		(!!getUser &&
-			(!getUser?.accessTo ||
-				getUser?.accessTo.length === 0 ||
-				getUser?.accessTo.includes("all")));
+		isSuperAdminUser(getUser);
 	const location = useLocation();
 	const history = useHistory();
 
@@ -64,8 +86,8 @@ const FinancialMain = ({ chosenLanguage }) => {
 			return;
 		}
 
-		// If unrestricted or includes "all", keep password flow
-		if (accessTo.length === 0 || accessTo.includes("all") || isSuperUser) {
+		// Configured platform owners may keep the password flow.
+		if (isSuperUser) {
 			return;
 		}
 
@@ -115,11 +137,11 @@ const FinancialMain = ({ chosenLanguage }) => {
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_REPORTS) {
 			setIsPasswordVerified(true);
-			message.success("Password verified successfully");
+			message.success(L.passwordVerified);
 			localStorage.setItem("ReportsVerified", "true");
 			setIsModalVisible(false);
 		} else {
-			message.error("Incorrect password. Please try again.");
+			message.error(L.incorrectPassword);
 		}
 	};
 
@@ -148,13 +170,13 @@ const FinancialMain = ({ chosenLanguage }) => {
 			{/* Password Modal */}
 			{!isConfiguredSuperAdmin && (
 				<Modal
-					title='Enter Password'
+					title={L.passwordTitle}
 					open={isModalVisible}
 					footer={null}
 					closable={false}
 				>
 					<Input.Password
-						placeholder='Enter password'
+						placeholder={L.passwordPlaceholder}
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
 						iconRender={(visible) =>
@@ -166,7 +188,7 @@ const FinancialMain = ({ chosenLanguage }) => {
 						style={{ marginTop: "10px", width: "100%" }}
 						onClick={handlePasswordVerification}
 					>
-						Verify Password
+						{L.verify}
 					</Button>
 				</Modal>
 			)}
@@ -175,14 +197,25 @@ const FinancialMain = ({ chosenLanguage }) => {
 			{isPasswordVerified && (
 				<div className='grid-container-main'>
 					<div className='navcontent'>
-						<AdminNavbar
-							fromPage='Financials'
-							AdminMenuStatus={AdminMenuStatus}
-							setAdminMenuStatus={setAdminMenuStatus}
-							collapsed={collapsed}
-							setCollapsed={setCollapsed}
-							chosenLanguage={chosenLanguage}
-						/>
+						{isArabic ? (
+							<AdminNavbarArabic
+								fromPage='Financials'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						) : (
+							<AdminNavbar
+								fromPage='Financials'
+								AdminMenuStatus={AdminMenuStatus}
+								setAdminMenuStatus={setAdminMenuStatus}
+								collapsed={collapsed}
+								setCollapsed={setCollapsed}
+								chosenLanguage={chosenLanguage}
+							/>
+						)}
 					</div>
 
 					<div className='otherContentWrapper'>
@@ -192,26 +225,26 @@ const FinancialMain = ({ chosenLanguage }) => {
 									className={activeTab === "expenses" ? "active" : ""}
 									onClick={() => handleTabChange("expenses")}
 								>
-									Expenses Management
+									{L.expenses}
 								</button>
 								<button
 									className={activeTab === "finances" ? "active" : ""}
 									onClick={() => handleTabChange("finances")}
 								>
-									Financial Report
+									{L.report}
 								</button>
 							</TabNavigation>
 
 							{activeTab === "expenses" && (
 								<div>
-									<h3>Expenses Management</h3>
+									<h3>{L.expenses}</h3>
 									<ExpensesManagement />
 								</div>
 							)}
 
 							{activeTab === "finances" && (
 								<div>
-									<h3>Financial Report</h3>
+									<h3>{L.report}</h3>
 									<FinancialReport />
 								</div>
 							)}
@@ -229,9 +262,11 @@ export default FinancialMain;
 const HotelReportsMainWrapper = styled.div`
 	margin-top: 0;
 	min-height: 715px;
+	overflow-x: hidden;
 
 	.grid-container-main {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: ${(props) => {
 			const nav = props.show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
@@ -242,24 +277,44 @@ const HotelReportsMainWrapper = styled.div`
 
 	.navcontent {
 		grid-area: nav;
+		min-width: 0;
 	}
 
 	.otherContentWrapper {
 		grid-area: content;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.container-wrapper {
-		border: 2px solid lightgrey;
-		padding: 20px;
-		border-radius: 20px;
-		background: white;
-		margin: 20px 10px;
+		width: auto;
+		max-width: calc(100% - 20px);
+		min-width: 0;
+		border: 1px solid rgba(139, 190, 227, 0.42);
+		padding: 16px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.97);
+		margin: 14px 10px;
+		box-shadow: 0 14px 34px rgba(13, 49, 88, 0.11);
+		box-sizing: border-box;
+		overflow: hidden;
 	}
 
 	@media (max-width: 992px) {
 		.grid-container-main {
 			grid-template-columns: 1fr;
-			grid-template-areas: "nav" "content";
+			grid-template-areas: "content";
+		}
+
+		.navcontent {
+			position: relative;
+			z-index: 2;
+		}
+
+		.container-wrapper {
+			max-width: calc(100% - 12px);
+			margin: 10px 6px;
+			padding: 12px;
 		}
 	}
 `;

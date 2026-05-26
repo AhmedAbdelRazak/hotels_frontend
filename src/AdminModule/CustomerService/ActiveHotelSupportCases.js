@@ -11,7 +11,7 @@ import {
 	Badge,
 } from "antd";
 import {
-	gettingAllHotelAccounts,
+	getSupportChatRecipients,
 	createSupportCase,
 	getFilteredSupportCases,
 	markAllMessagesAsSeenByAdmin,
@@ -19,7 +19,6 @@ import {
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
-import { hotelsForAccount } from "../../HotelModule/apiAdmin";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
 import notificationSound from "./Notification.wav"; // Make sure the path is correct
@@ -28,6 +27,11 @@ import { useLocation, useHistory } from "react-router-dom"; // for mobile param
 const { Option } = Select;
 const { Title } = Typography;
 const { TextArea } = Input;
+
+const selectPopupContainer = (triggerNode) =>
+	triggerNode?.closest(".support-case-modal") ||
+	triggerNode?.parentElement ||
+	document.body;
 
 const ActiveHotelSupportCases = () => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
@@ -91,36 +95,19 @@ const ActiveHotelSupportCases = () => {
 	// Fetch hotel owners when the modal is opened
 	useEffect(() => {
 		if (isModalVisible) {
-			gettingAllHotelAccounts(user._id, token)
+			getSupportChatRecipients(user._id, token)
 				.then((data) => {
 					if (data.error) {
-						toast.error("Failed to fetch hotel accounts");
+						toast.error("Failed to fetch active hotel users");
 					} else {
-						setHotelOwners(data);
+						setHotelOwners(Array.isArray(data?.recipients) ? data.recipients : []);
 					}
 				})
 				.catch(() => {
-					toast.error("Failed to fetch hotel accounts");
+					toast.error("Failed to fetch active hotel users");
 				});
 		}
 	}, [isModalVisible, user._id, token]);
-
-	// Fetch hotels when a hotel owner is selected
-	useEffect(() => {
-		if (selectedOwner) {
-			hotelsForAccount(selectedOwner)
-				.then((data) => {
-					if (data.error) {
-						toast.error("Failed to fetch hotels for the selected owner");
-					} else {
-						setHotels(data);
-					}
-				})
-				.catch(() => {
-					toast.error("Failed to fetch hotels for the selected owner");
-				});
-		}
-	}, [selectedOwner]);
 
 	// Fetch open support cases and setup socket listeners
 	useEffect(() => {
@@ -197,8 +184,12 @@ const ActiveHotelSupportCases = () => {
 
 	const handleOwnerSelection = (value) => {
 		setSelectedOwner(value);
-		setSelectedHotel(null);
-		setHotels([]);
+		const selectedRecipient = hotelOwners.find((owner) => owner._id === value);
+		const recipientHotels = Array.isArray(selectedRecipient?.hotels)
+			? selectedRecipient.hotels
+			: [];
+		setHotels(recipientHotels);
+		setSelectedHotel(recipientHotels.length === 1 ? recipientHotels[0]._id : null);
 	};
 
 	const handleHotelSelection = (value) => {
@@ -213,6 +204,7 @@ const ActiveHotelSupportCases = () => {
 		setIsModalVisible(false);
 		setSelectedOwner(null);
 		setSelectedHotel(null);
+		setHotels([]);
 		setInquiryAbout("");
 		setInquiryDetails("");
 		setAdminName("Xhotelpro Management");
@@ -233,6 +225,12 @@ const ActiveHotelSupportCases = () => {
 		const selectedOwnerData = hotelOwners.find(
 			(owner) => owner._id === selectedOwner
 		);
+		const selectedHotelData = hotels.find((hotel) => hotel._id === selectedHotel);
+		const targetOwnerId =
+			selectedHotelData?.belongsTo ||
+			selectedOwnerData?.hotels?.find((hotel) => hotel._id === selectedHotel)
+				?.belongsTo ||
+			selectedOwner;
 		const displayName2 = selectedOwnerData ? selectedOwnerData.name : "";
 
 		setIsLoading(true);
@@ -241,8 +239,11 @@ const ActiveHotelSupportCases = () => {
 			const response = await createSupportCase(
 				{
 					supporterId: user._id,
-					ownerId: selectedOwner,
+					ownerId: targetOwnerId,
 					hotelId: selectedHotel,
+					targetUserId: selectedOwner,
+					targetUserName: displayName2,
+					targetUserRole: selectedOwnerData?.roleLabel || "",
 					inquiryAbout,
 					inquiryDetails,
 					supporterName: user.name,
@@ -293,6 +294,21 @@ const ActiveHotelSupportCases = () => {
 		}
 	};
 
+	useEffect(() => {
+		if (isMobile || !caseIdParam || !supportCases.length) return;
+		const foundCase = supportCases.find((item) => item._id === caseIdParam);
+		if (!foundCase || selectedCase?._id === foundCase._id) return;
+		setSelectedCase(foundCase);
+		markAllMessagesAsSeenByAdmin(foundCase._id, user._id)
+			.then(() => getUnseenMessagesCountByAdmin(user._id))
+			.then((result) => {
+				if (result && result.count !== undefined) setUnseenCount(result.count);
+			})
+			.catch((error) => {
+				console.error("Error opening support case from URL:", error);
+			});
+	}, [caseIdParam, isMobile, selectedCase?._id, supportCases, user._id]);
+
 	// On mobile, if we have ?caseId => find that case and show only ChatDetail
 	if (isMobile && caseIdParam) {
 		const foundCase = supportCases.find((c) => c._id === caseIdParam);
@@ -323,22 +339,29 @@ const ActiveHotelSupportCases = () => {
 				</Button>
 
 				<Modal
-					title='Choose a Hotel Owner'
+					title='Choose a Hotel User'
 					visible={isModalVisible}
 					onCancel={handleCloseModal}
 					footer={null}
+					wrapClassName='support-case-modal'
 				>
 					<Form layout='vertical'>
-						<Title level={5}>Select Hotel Owner</Title>
+						<Title level={5}>Select Active Hotel User</Title>
 						<Form.Item>
 							<Select
-								placeholder='Select a hotel owner'
+								showSearch
+								optionFilterProp='children'
+								getPopupContainer={selectPopupContainer}
+								listHeight={280}
+								virtual={false}
+								dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+								placeholder='Select an active hotel user'
 								onChange={handleOwnerSelection}
 								value={selectedOwner}
 							>
 								{hotelOwners.map((owner) => (
 									<Option key={owner._id} value={owner._id}>
-										{owner.name} | {owner.email}
+										{owner.name} | {owner.email} | {owner.roleLabel}
 									</Option>
 								))}
 							</Select>
@@ -347,6 +370,12 @@ const ActiveHotelSupportCases = () => {
 						{selectedOwner && (
 							<Form.Item label='Select Hotel'>
 								<Select
+									showSearch
+									optionFilterProp='children'
+									getPopupContainer={selectPopupContainer}
+									listHeight={260}
+									virtual={false}
+									dropdownStyle={{ maxHeight: 300, overflowY: "auto" }}
 									placeholder='Select a hotel'
 									onChange={handleHotelSelection}
 									value={selectedHotel}
@@ -468,22 +497,29 @@ const ActiveHotelSupportCases = () => {
 			</Button>
 
 			<Modal
-				title='Choose a Hotel Owner'
+				title='Choose a Hotel User'
 				visible={isModalVisible}
 				onCancel={handleCloseModal}
 				footer={null}
+				wrapClassName='support-case-modal'
 			>
 				<Form layout='vertical'>
-					<Title level={5}>Select Hotel Owner</Title>
+					<Title level={5}>Select Active Hotel User</Title>
 					<Form.Item>
 						<Select
-							placeholder='Select a hotel owner'
+							showSearch
+							optionFilterProp='children'
+							getPopupContainer={selectPopupContainer}
+							listHeight={280}
+							virtual={false}
+							dropdownStyle={{ maxHeight: 320, overflowY: "auto" }}
+							placeholder='Select an active hotel user'
 							onChange={handleOwnerSelection}
 							value={selectedOwner}
 						>
 							{hotelOwners.map((owner) => (
 								<Option key={owner._id} value={owner._id}>
-									{owner.name} | {owner.email}
+									{owner.name} | {owner.email} | {owner.roleLabel}
 								</Option>
 							))}
 						</Select>
@@ -492,6 +528,12 @@ const ActiveHotelSupportCases = () => {
 					{selectedOwner && (
 						<Form.Item label='Select Hotel'>
 							<Select
+								showSearch
+								optionFilterProp='children'
+								getPopupContainer={selectPopupContainer}
+								listHeight={260}
+								virtual={false}
+								dropdownStyle={{ maxHeight: 300, overflowY: "auto" }}
 								placeholder='Select a hotel'
 								onChange={handleHotelSelection}
 								value={selectedHotel}

@@ -92,7 +92,6 @@ const isSystemAdminUser = (user) =>
 
 const isFullReservationAccessUser = (user) =>
 	isSuperAdminUser(user) ||
-	hasRole(user, 1000) ||
 	isSystemAdminUser(user) ||
 	hasRole(user, 2000) ||
 	hasRole(user, 3000) ||
@@ -146,7 +145,7 @@ const pathAllowsRole = (pathname = "", user, search = "") => {
 
 	const isScopedManager = hasRole(user, 2000) && hasRoleDescription(user, "hotelmanager");
 
-	if (hasRole(user, 1000)) return true;
+	if (isSuperAdminUser(user)) return true;
 	if (isSystemAdminUser(user)) {
 		return (
 			pathname.includes("/hotel-management") ||
@@ -229,12 +228,10 @@ const getLimitedAccountRedirect = (user, location, { hotelId, userId }) => {
 
 	const isReceptionOnly =
 		(hasRole(user, 3000) || hasRoleDescription(user, "reception")) &&
-		!hasRole(user, 1000) &&
 		!hasRole(user, 2000);
 	const isOrderTakerOnly = isLimitedOrderTakerUser(user);
 	const isReservationEmployeeOnly =
 		(hasRole(user, 8000) || hasRoleDescription(user, "reservationemployee")) &&
-		!hasRole(user, 1000) &&
 		!hasRole(user, 2000) &&
 		!isSystemAdminUser(user);
 
@@ -285,16 +282,10 @@ const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
 
 	if (!urlHotelId) {
 		return (
-			role === 1000 ||
 			role === 2000 ||
 			isSystemAdminUser(user) ||
 			isScopedHotelUser(user)
 		);
-	}
-
-	if (role === 1000) {
-		const supportIds = getSupportedHotelIds(user);
-		return supportIds.length === 0 || supportIds.includes(urlHotelId);
 	}
 
 	if (isSystemAdminUser(user)) {

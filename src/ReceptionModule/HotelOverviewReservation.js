@@ -7,6 +7,16 @@ import { isPendingConfirmationReservation } from "../utils/reservationStatus";
 // eslint-disable-next-line
 const { Option } = Select;
 
+const roomTooltipProps = (isArabic = false) => ({
+	placement: isArabic ? "left" : "right",
+	align: { offset: [isArabic ? -12 : 12, 0] },
+	mouseEnterDelay: 0.18,
+	mouseLeaveDelay: 0.04,
+	autoAdjustOverflow: true,
+	overlayStyle: { zIndex: 100000000, pointerEvents: "none" },
+	overlayInnerStyle: { pointerEvents: "none" },
+});
+
 const HotelOverviewReservation = ({
 	hotelRooms,
 	hotelDetails,
@@ -241,6 +251,9 @@ const HotelOverviewReservation = ({
 												const roomIsBooked = isRoomBooked(room._id);
 												return (
 													<Tooltip
+														{...roomTooltipProps(
+															chosenLanguage === "Arabic",
+														)}
 														title={
 															<span style={{ textTransform: "capitalize" }}>
 																{room.room_type}

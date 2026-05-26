@@ -121,15 +121,34 @@ const isManagerOrAdminNotificationUser = (user = {}) => {
 	);
 };
 
-const isB2BPlatformMonitor = (user = {}) => {
-	const roles = getUserRoles(user);
-	return isSuperAdminUser(user) || roles.includes(1000);
+const scopedPlatformB2BHotelIds = (user = {}) =>
+	[
+		user.hotelIdWork,
+		...(Array.isArray(user.hotelIdsWork) ? user.hotelIdsWork : []),
+		...(Array.isArray(user.hotelsToSupport) ? user.hotelsToSupport : []),
+		...(Array.isArray(user.hotelIdsOwner) ? user.hotelIdsOwner : []),
+	]
+		.map(normalizeTopNavId)
+		.filter(Boolean);
+
+const hasScopedPlatformB2BAccess = (user = {}) => {
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	return (
+		getUserRoles(user).includes(1000) &&
+		scopedPlatformB2BHotelIds(user).length > 0 &&
+		["CustomerService", "HotelsReservations", "AllReservations"].some((key) =>
+			accessTo.includes(key)
+		)
+	);
 };
+
+const isB2BPlatformMonitor = (user = {}) => isSuperAdminUser(user);
 
 const canMonitorB2BHotelChats = (user = {}) => {
 	const roles = getUserRoles(user);
 	return (
 		isB2BPlatformMonitor(user) ||
+		hasScopedPlatformB2BAccess(user) ||
 		isSystemAdminTopNavUser(user) ||
 		roles.includes(10000) ||
 		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
@@ -167,8 +186,7 @@ const canOpenSettingsCalendar = (user = {}) => {
 		roles.includes(10000) ||
 		descriptions.includes("systemadmin") ||
 		descriptions.includes("hotelmanager") ||
-		accessTo.includes("settings") ||
-		accessTo.includes("all")
+		accessTo.includes("settings")
 	);
 };
 
@@ -849,7 +867,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				notificationFeedTotalRef.current = nextTotal;
 				setNotificationFeed(nextFeed);
 			} catch (error) {
-				console.error("Failed to load notification feed", error);
+				if (!silent) console.error("Failed to load notification feed", error);
 				setNotificationFeed({ total: 0, data: [] });
 			} finally {
 				if (!silent) setNotificationsLoading(false);
