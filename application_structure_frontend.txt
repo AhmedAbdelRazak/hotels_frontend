@@ -825,6 +825,29 @@ Future TODO Backlog - Added 2026-05-26
     - Use test OTA payloads for create, modify, cancel, and retry scenarios.
     - Compare UI totals with backend reservation records after each scenario.
 
+2026-05-27 Email Provider And OTA Backend Migration Frontend Notes
+- Backend migration summary:
+  - SendGrid-specific backend calls were replaced by a central SMTP/Nodemailer adapter.
+  - OTA inbound email endpoints are provider-neutral:
+    - GET /api/inbound/email.
+    - GET /api/ota/inbound/email.
+    - POST /api/inbound/email.
+    - POST /api/ota/inbound/email.
+  - The home-server mailbox poller will post OTA mailbox messages to the backend after SMTP/IMAP credentials are configured.
+- Frontend impact:
+  - No PMS frontend code needed provider-specific changes because email sending is backend-owned.
+  - User-visible flows to keep testing after production SMTP activation:
+    - Reservation confirmation send paths.
+    - Manual reservation email/re-send paths.
+    - Support/customer-service email notification paths.
+    - Password reset/account/admin invitation paths if used.
+    - OTA-created reservation visibility in reservation lists, dashboards, room map, and reports.
+- Validation:
+  - npm.cmd run build in hotels_frontend compiled successfully after the backend email/OTA migration.
+- Production caution:
+  - The backend should not be restarted onto the new provider-neutral mail code until SMTP credentials are set in the home-server .env.
+  - Without SMTP credentials, backend email sends will fail by design instead of silently using SendGrid.
+
 2026-05-26 JWT Expired Session Handling Fix
 - Problem observed:
   - Hotel-management pages could briefly call protected APIs with an expired dashboard-preview token stored in localStorage.
