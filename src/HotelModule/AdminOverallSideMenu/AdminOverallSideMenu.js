@@ -223,7 +223,8 @@ const canViewOverallKey = (user = {}, key = "") => {
 	) {
 		return (
 			hasRole(user, 6000) ||
-			["hotelmanager", "finance"].some((role) => hasDescription(user, role))
+			["hotelmanager", "finance"].some((role) => hasDescription(user, role)) ||
+			isOrderTakingScope(user)
 		);
 	}
 

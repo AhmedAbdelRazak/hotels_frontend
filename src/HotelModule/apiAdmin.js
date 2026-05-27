@@ -160,6 +160,10 @@ export const commitReservationExcelImport = ({
 export const getHotelDetails = (userId) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${userId}`, {
 		method: "GET",
+		headers: {
+			Accept: "application/json",
+			...getStoredAuthHeaders(),
+		},
 	})
 		.then((response) => {
 			return response.json();
@@ -770,7 +774,7 @@ export const getHotelInventoryDayReservations = (
 
 export const getHotelInventoryAvailability = (
 	hotelId,
-	{ start, end, includeCancelled = false } = {},
+	{ start, end, includeCancelled = false, agentId = "" } = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -779,6 +783,7 @@ export const getHotelInventoryAvailability = (
 	if (start) params.set("start", start);
 	if (end) params.set("end", end);
 	if (includeCancelled) params.set("includeCancelled", "true");
+	if (agentId) params.set("agentId", agentId);
 
 	return fetch(
 		`${
@@ -786,6 +791,10 @@ export const getHotelInventoryAvailability = (
 		}/hotel-inventory/${hotelId}/availability?${params.toString()}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -1236,13 +1245,47 @@ export const updateHotelDetails = (hotelId, userId, token, details) => {
 		.catch((err) => console.log(err));
 };
 
+export const updateRoomAgentOverrides = (
+	hotelId,
+	roomId,
+	userId,
+	token,
+	payload,
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}/rooms/${roomId}/agent-overrides/${userId}`,
+		{
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error: data?.error || data?.message || "Request failed",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Could not save agent room settings",
+		}));
+};
+
 export const getHotelById = (hotelId) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}`, {
 		method: "GET",
 		headers: {
-			// content type?
 			"Content-Type": "application/json",
 			Accept: "application/json",
+			...getStoredAuthHeaders(),
 		},
 	})
 		.then((response) => {

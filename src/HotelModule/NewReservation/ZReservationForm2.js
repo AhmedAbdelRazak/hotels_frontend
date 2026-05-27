@@ -52,6 +52,15 @@ const splitRoomKey = (key = "") => {
 	if (idx === -1) return { room_type: key, displayName: "" };
 	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
 };
+const normalizeId = (value) => String(value?._id || value?.id || value || "").trim();
+const normalizeDateKey = (value) => {
+	if (!value) return "";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+		return value.slice(0, 10);
+	}
+	const parsed = moment(value);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
+};
 
 /* Build pricing rows like OrderTaker (commission fallback=10%) */
 const buildPricingByDay = ({
@@ -70,7 +79,10 @@ const buildPricingByDay = ({
 	const rows = [];
 	for (let d = start.clone(); d.isSameOrBefore(end, "day"); d.add(1, "day")) {
 		const ds = d.format("YYYY-MM-DD");
-		const rate = (pricingRate || []).find((r) => r.calendarDate === ds) || {};
+		const rate =
+			(pricingRate || []).find(
+				(r) => normalizeDateKey(r.calendarDate) === ds
+			) || {};
 		const blockedOnCalendar = calendarRateIsBlocked(rate);
 		const effectiveRate = blockedOnCalendar ? {} : rate;
 		const fallbackPrice = positiveNumber(basePrice, positiveNumber(defaultCost, 0));
@@ -246,19 +258,48 @@ const ZReservationForm2 = ({
 		[hotelDetails?.roomCountDetails]
 	);
 
+	const getEffectivePricingRate = useCallback(
+		(detail = {}) => {
+			const hotelRows = Array.isArray(detail.pricingRate)
+				? detail.pricingRate
+				: [];
+			if (!limitedOrderTakerAccount || !user?._id) return hotelRows;
+
+			const agentRows = Array.isArray(detail.agentPricingRate)
+				? detail.agentPricingRate.filter(
+						(row) => normalizeId(row.agentId) === normalizeId(user._id)
+				  )
+				: [];
+			if (!agentRows.length) return hotelRows;
+
+			const agentDates = new Set(
+				agentRows.map((row) => normalizeDateKey(row.calendarDate)).filter(Boolean)
+			);
+			return [
+				...hotelRows.filter(
+					(row) => !agentDates.has(normalizeDateKey(row.calendarDate))
+				),
+				...agentRows,
+			];
+		},
+		[limitedOrderTakerAccount, user?._id]
+	);
+
 	const getBlockedDatesForRoom = useCallback(
 		(room_type, displayName) => {
 			if (!start_date || !end_date) return [];
 			const detail = findRoomDetail(room_type, displayName);
 			if (!detail) return [];
 			const stayDates = buildStayDateKeysForCalendar(start_date, end_date);
-			const rates = Array.isArray(detail.pricingRate) ? detail.pricingRate : [];
+			const rates = getEffectivePricingRate(detail);
 			return stayDates.filter((date) => {
-				const rate = rates.find((item) => item?.calendarDate === date);
+				const rate = rates.find(
+					(item) => normalizeDateKey(item?.calendarDate) === date
+				);
 				return calendarRateIsBlocked(rate);
 			});
 		},
-		[start_date, end_date, findRoomDetail]
+		[start_date, end_date, findRoomDetail, getEffectivePricingRate]
 	);
 
 	const getInventoryForRoom = useCallback(
@@ -347,7 +388,7 @@ const ZReservationForm2 = ({
 			}
 
 			const rows = buildPricingByDay({
-				pricingRate: detail.pricingRate || [],
+				pricingRate: getEffectivePricingRate(detail),
 				startDate: start_date,
 				endDate: end_date,
 				basePrice: positiveNumber(detail?.price?.basePrice, 0),
@@ -391,6 +432,7 @@ const ZReservationForm2 = ({
 			end_date,
 			findRoomDetail,
 			commissionForRoom,
+			getEffectivePricingRate,
 			limitedOrderTakerAccount,
 			getBlockedDatesForRoom,
 		]
@@ -1385,6 +1427,8 @@ const ZReservationForm2 = ({
 											const active = selectedKeys.includes(key);
 											const availableCount =
 												room.available ?? room.total_available ?? 0;
+											const assignedStockApplies =
+												limitedOrderTakerAccount && room.agentInventoryApplied;
 											const blockedDates = getBlockedDatesForRoom(
 												room.room_type,
 												resolvedDisplayName
@@ -1437,6 +1481,14 @@ const ZReservationForm2 = ({
 															: "Available"}
 														: {availableCount}
 													</span>
+													{assignedStockApplies && (
+														<span className='avail'>
+															{chosenLanguage === "Arabic"
+																? "\u0627\u0644\u0645\u062e\u0635\u0635"
+																: "Assigned"}
+															: {room.agentAssignedStock ?? 0}
+														</span>
+													)}
 													{active && (
 														<CheckCircleTwoTone
 															twoToneColor='#52c41a'

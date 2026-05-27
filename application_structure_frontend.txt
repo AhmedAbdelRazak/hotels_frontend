@@ -156,6 +156,7 @@ AdminModule Structure
 HotelModule Structure
 - src/HotelModule/MainHotelDashboard.js
   - Main hotel-management shell. Hosts TopNavbar, AdminOverallSideMenu, OverallStructurePage, hotel setup modals, financial modal, and staff/account modals.
+  - For pure order-taker/agent accounts, the per-hotel Financials action must route to overall=financial-report for the logged-in agent instead of the single-hotel financial page, so agents can see their own cross-hotel financials and export them from one place.
 - src/HotelModule/AdminNavbar/
   - Top navigation, selected hotel context, notifications, language/calendar/settings controls, and hotel switching behavior.
 - src/HotelModule/AdminOverallSideMenu/AdminOverallSideMenu.js
@@ -188,15 +189,22 @@ HotelModule Structure
 - src/HotelModule/NewReservation/
   - Single-hotel reservation creation, guest/reservation forms, room selection, calendar/heat-map, pending confirmations, and reservation imports.
   - Important files include NewReservationMain.js, ZReservationForm.js, ZReservationForm2.js, HotelHeatMap.js, HotelRunnerReservationList.js, and PendingConfirmationReport.js.
+  - Agent/order-taker availability requests pass the current agent id so assigned stock is prioritized, and room chips show assigned stock when an override applies.
+  - Agent-scoped availability now treats pending-confirmation agent reservations as consuming that agent's assigned stock. This keeps the room chips aligned with backend enforcement: stock=1 becomes available=0 after the first pending agent reservation, and stock=0 blocks all agent reservation attempts for that room.
 - src/HotelModule/HouseKeeping/
   - Housekeeping task list, task details, assignment/update flows, and supplies.
 - src/HotelModule/HotelSettings/
   - Hotel setup and configuration: details, rooms, photos, location, payment settings, OTA/payment/business setup, and completion state.
+  - ZUpdateCase1.js should mirror the clean add-room details layout from ZCase1.js: English and Arabic name/description fields are inline, not hidden behind separate black modal buttons, while edits still update the selected existing room object.
+  - In both ZCase1.js and ZUpdateCase1.js, keep Active/Inactive and the agent stock/pricing action on the same row but in separate framed controls so the agent assignment action reads as independent functionality.
+  - ZCase3.js and ZUpdateCase3.js custom-calendar room pricing must show both regular/range price and root price to authorized room editors in add and update flows. The root price is not super-admin-only inside the room settings workflow.
+  - ZAgentRoomOverridesButton.js adds the wide room-level modal for authorized users to assign private agent stock and agent-specific calendar pricing while adding or updating a room. It uses the lightweight /hotel-agents option endpoint with server-side search/limit instead of loading full staff records. On existing rooms, the modal save actions call the narrow agent-overrides PATCH endpoint and persist only that override portion; on brand-new unsaved rooms, the data stays local until the room itself is saved. The modal should remain a roomy PMS-style workspace, with Stock/Pricing rendered as polished top sub-tabs, and the pricing calendar must support drag-selecting a date range that syncs into the pricing range picker.
 - src/HotelModule/HotelStaff/
   - Staff account creation and staff-role forms.
 - src/HotelModule/Financials/
   - Hotel financial dashboards, manager financial modal, wallet/agent financial operations.
   - In the overall financial report/wallet screens, pure order-taker/agent accounts are pinned to their own agent id even if query params are manually changed. They may see assigned-hotel financial data only for their own wallet, reservations, commissions, and claims.
+  - Overall financial report, financial actions, and wallet-management menu entries are visible to order-taker/agent users, but the backend and frontend must keep those users scoped to their own agent records only.
   - Single-hotel agent wallet ledgers must show rejected wallet-claim reasons clearly in the transactions table and exports, because the notification may be acknowledged before the agent reviews the financial page.
 - Agent overall regression scenario
   - Sign in as an approved order-taker/agent with multiple assigned hotels and at least one active notification.
@@ -225,7 +233,7 @@ Overall Dashboard Menu Rules
 - Reservation lists are visible to reception, finance, ordertaker, reservationemployee, hotelmanager, and owner-like users.
 - Pending reservations are visible to finance, reservationemployee, hotelmanager, and owner-like users.
 - Housekeeping is visible to housekeepingmanager, housekeeping, hotelmanager, and owner-like users.
-- Financial report/actions/wallet views are visible to finance, hotelmanager, and owner-like users.
+- Financial report/actions/wallet views are visible to finance, hotelmanager, owner-like users, and order-taker/agent users scoped to their own records only.
 - Hotel map is visible to reception, finance, reservationemployee, hotelmanager, and owner-like users.
 - Settings are visible to reservationemployee, hotelmanager, and owner-like users.
 - Account Management sublinks are hidden for non-owner-like users.

@@ -9,15 +9,17 @@ import {
 	Table,
 	InputNumber,
 	Popconfirm,
-	message,
 	Radio,
 	Checkbox,
 } from "antd";
 import styled from "styled-components";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { isAuthenticated } from "../../auth";
+import ZAgentRoomOverridesButton from "./ZAgentRoomOverridesButton";
 
 const { Option } = Select;
+
+const normalizeId = (value) => String(value || "").trim();
 
 const parseNonNegativeDecimal = (value) => {
 	if (value === "" || value === null || value === undefined) return 0;
@@ -30,11 +32,9 @@ const ZUpdateCase1 = ({
 	setHotelDetails,
 	chosenLanguage,
 	roomTypes,
-	setSelectedRoomType,
 	amenitiesList,
 	roomTypeSelected,
 	setRoomTypeSelected,
-	fromPage,
 	setCustomRoomType,
 	customRoomType,
 	form,
@@ -43,302 +43,267 @@ const ZUpdateCase1 = ({
 	extraAmenitiesList = [],
 }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
-	const [isArabicModalVisible, setIsArabicModalVisible] = useState(false);
-	const [arabicField, setArabicField] = useState(""); // 'displayName' or 'description'
 	const [pricedExtrasData, setPricedExtrasData] = useState([]);
 	const [editingKey, setEditingKey] = useState("");
+	const [currentRoomTypeValue, setCurrentRoomTypeValue] = useState(
+		existingRoomDetails?.roomType || ""
+	);
 	const [formPricedExtras] = Form.useForm();
-	const [formArabic] = Form.useForm();
-
 	const { user } = isAuthenticated();
 	const isArabic = chosenLanguage === "Arabic";
-	const currentRoomType =
-		form.getFieldValue("roomType") || existingRoomDetails?.roomType;
 
-	const getSelectedRoomId = () =>
-		form.getFieldValue("_id") || existingRoomDetails?._id;
+	const labels = {
+		roomType: isArabic ? "اختر نوع الغرفة" : "Select Room Type",
+		customRoomType: isArabic ? "نوع الغرفة الآخر" : "Other Room Type",
+		nameEn: isArabic ? "الاسم بالإنجليزية" : "Name In English",
+		nameAr: isArabic ? "الاسم بالعربية" : "Name In Arabic",
+		descEn: isArabic
+			? "وصف الغرفة باللغة الإنجليزية"
+			: "Room Description (English)",
+		descAr: isArabic ? "الوصف بالعربية" : "Room Description (Arabic)",
+		roomCount: isArabic ? "عدد الغرف" : "Room Count",
+		rootCost: isArabic ? "السعر الجذري" : "Root Price",
+		basePrice: isArabic ? "سعر الغرفة الأساسي" : "Main Price",
+		commission: isArabic ? "العمولة" : "Commission",
+		commissionRate: isArabic ? "معدل العمولة (%)" : "Commission Rate (%)",
+		amenities: isArabic ? "وسائل الراحة" : "Room Amenities",
+		views: isArabic ? "إطلالات" : "Room Views",
+		extraAmenities: isArabic
+			? "وسائل الراحة الإضافية"
+			: "Extra Amenities",
+		pricedExtras: isArabic ? "إضافات بسعر" : "Priced Extras",
+		active: isArabic ? "نشط / غير نشط" : "Active / Inactive",
+		activeHint: isArabic ? "الغرفة نشطة" : "Room is active",
+	};
 
-	const updateRoomCountDetails = (roomId, updates) => {
-		if (!roomId) return;
+	const getCurrentRoomDetails = () => {
+		const id = normalizeId(form.getFieldValue("_id") || existingRoomDetails?._id);
+		return (
+			(Array.isArray(hotelDetails?.roomCountDetails)
+				? hotelDetails.roomCountDetails
+				: []
+			).find((room) => normalizeId(room._id) === id) ||
+			existingRoomDetails ||
+			{}
+		);
+	};
+
+	const updateCurrentRoom = (updates = {}) => {
+		const id = normalizeId(form.getFieldValue("_id") || existingRoomDetails?._id);
+		if (!id) return;
+
 		setHotelDetails((prevDetails) => {
-			const updatedRoomCountDetails = Array.isArray(
-				prevDetails.roomCountDetails
-			)
+			const list = Array.isArray(prevDetails.roomCountDetails)
 				? [...prevDetails.roomCountDetails]
 				: [];
-
-			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room._id === roomId
+			const existingIndex = list.findIndex(
+				(room) => normalizeId(room._id) === id
 			);
-
-			if (existingRoomIndex > -1) {
-				updatedRoomCountDetails[existingRoomIndex] = {
-					...updatedRoomCountDetails[existingRoomIndex],
-					...updates,
-				};
-			} else {
-				updatedRoomCountDetails.push({
-					_id: roomId,
-					...updates,
-				});
-			}
-
-			return {
-				...prevDetails,
-				roomCountDetails: updatedRoomCountDetails,
+			const current =
+				existingIndex > -1 ? list[existingIndex] : existingRoomDetails || {};
+			const next = {
+				...current,
+				_id: id,
+				...updates,
 			};
+
+			if (existingIndex > -1) list[existingIndex] = next;
+			else list.push(next);
+
+			return { ...prevDetails, roomCountDetails: list };
 		});
 	};
 
-	// Prepopulate fields based on selectedRoomType
 	useEffect(() => {
 		window.scrollTo({ top: 90, behavior: "smooth" });
-		if (roomTypeSelected && existingRoomDetails) {
-			form.setFieldsValue({
-				_id: existingRoomDetails._id || "",
-				displayName: existingRoomDetails.displayName || "",
-				displayName_OtherLanguage:
-					existingRoomDetails.displayName_OtherLanguage || "",
-				roomCount: existingRoomDetails.count || 1,
-				bedsCount: existingRoomDetails.bedsCount || 1,
-				basePrice: existingRoomDetails.price?.basePrice || 50,
-				defaultCost: existingRoomDetails.defaultCost || 30,
-				description: existingRoomDetails.description || "",
-				description_OtherLanguage:
-					existingRoomDetails.description_OtherLanguage || "",
-				amenities: existingRoomDetails.amenities || [],
-				views: existingRoomDetails.views || [],
-				extraAmenities: existingRoomDetails.extraAmenities || [],
-				activeRoom: existingRoomDetails.activeRoom || false,
-				commisionIncluded: existingRoomDetails.commisionIncluded || false,
-				roomCommission: existingRoomDetails.roomCommission ?? 10, // Preserve 0; default only when missing.
-				pricedExtras: existingRoomDetails.pricedExtras || [],
-				roomForGender: existingRoomDetails.roomForGender || "Unisex",
-			});
-
-			setPricedExtrasData(existingRoomDetails.pricedExtras || []); // Ensure pricedExtrasData updates
-		} else {
-			setPricedExtrasData([]); // Reset pricedExtrasData when no room is selected
+		if (!roomTypeSelected || !existingRoomDetails) {
+			setPricedExtrasData([]);
+			return;
 		}
-	}, [roomTypeSelected, existingRoomDetails, form, arabicField, formArabic]);
 
-	const handleOpenModal = () => {
-		// Re-set the formPricedExtras fields with the current pricedExtrasData
-		formPricedExtras.setFieldsValue({
-			pricedExtras: pricedExtrasData || [],
+		const nextRoomType = existingRoomDetails.roomType || "";
+		setCurrentRoomTypeValue(nextRoomType);
+		form.setFieldsValue({
+			_id: existingRoomDetails._id || "",
+			roomType: nextRoomType,
+			customRoomType: existingRoomDetails.customRoomType || "",
+			displayName: existingRoomDetails.displayName || "",
+			displayName_OtherLanguage:
+				existingRoomDetails.displayName_OtherLanguage || "",
+			roomCount: existingRoomDetails.count || 1,
+			bedsCount: existingRoomDetails.bedsCount || 1,
+			basePrice:
+				existingRoomDetails.price?.basePrice ??
+				existingRoomDetails.basePrice ??
+				0,
+			defaultCost:
+				existingRoomDetails.defaultCost ??
+				existingRoomDetails.rootPrice ??
+				existingRoomDetails.price?.basePrice ??
+				0,
+			description: existingRoomDetails.description || "",
+			description_OtherLanguage:
+				existingRoomDetails.description_OtherLanguage || "",
+			amenities: existingRoomDetails.amenities || [],
+			views: existingRoomDetails.views || [],
+			extraAmenities: existingRoomDetails.extraAmenities || [],
+			activeRoom: existingRoomDetails.activeRoom ?? false,
+			commisionIncluded: existingRoomDetails.commisionIncluded || false,
+			roomCommission: existingRoomDetails.roomCommission ?? 10,
+			pricedExtras: existingRoomDetails.pricedExtras || [],
+			roomForGender: existingRoomDetails.roomForGender || "Unisex",
 		});
-		setIsModalVisible(true);
+		setPricedExtrasData(existingRoomDetails.pricedExtras || []);
+	}, [roomTypeSelected, existingRoomDetails, form]);
+
+	const handleRoomTypeChange = (value) => {
+		setCurrentRoomTypeValue(value);
+		setRoomTypeSelected(true);
+		form.setFieldsValue({ roomType: value });
+
+		if (value === "other") {
+			setCustomRoomType("");
+			form.setFieldsValue({ customRoomType: "" });
+			return;
+		}
+
+		updateCurrentRoom({ roomType: value });
 	};
 
-	const handleModalOk = () => {
-		const selectedRoomId = form.getFieldValue("_id");
-
-		setHotelDetails((prevDetails) => {
-			const updatedRoomCountDetails = Array.isArray(
-				prevDetails.roomCountDetails
-			)
-				? [...prevDetails.roomCountDetails]
-				: [];
-
-			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room._id === selectedRoomId
-			);
-
-			if (existingRoomIndex > -1) {
-				updatedRoomCountDetails[existingRoomIndex].pricedExtras =
-					pricedExtrasData.filter(
-						(item) => item.name && item.price !== undefined
-					);
-			} else {
-				updatedRoomCountDetails.push({
-					_id: selectedRoomId,
-					pricedExtras: pricedExtrasData.filter(
-						(item) => item.name && item.price !== undefined
-					),
-				});
-			}
-
-			return {
-				...prevDetails,
-				roomCountDetails: updatedRoomCountDetails,
-			};
-		});
-
-		setIsModalVisible(false);
-	};
-
-	const handleModalCancel = () => {
+	const handlePricedExtrasSave = () => {
+		const cleanedExtras = pricedExtrasData.filter(
+			(item) => item.name && item.price !== undefined
+		);
+		updateCurrentRoom({ pricedExtras: cleanedExtras });
 		setIsModalVisible(false);
 	};
 
 	const handleAddRow = () => {
-		setPricedExtrasData([
-			...pricedExtrasData,
-			{
-				key: Date.now(),
-				name: "",
-				price: undefined,
-				paymentFrequency: "", // Start as empty
-			},
+		setPricedExtrasData((current) => [
+			...current,
+			{ key: Date.now(), name: "", price: undefined, paymentFrequency: "" },
 		]);
 	};
 
 	const handleDeleteRow = (key) => {
-		setPricedExtrasData(pricedExtrasData.filter((item) => item.key !== key));
+		setPricedExtrasData((current) => current.filter((item) => item.key !== key));
 	};
 
 	const isEditing = (record) => record.key === editingKey;
 
 	const edit = (record) => {
 		formPricedExtras.setFieldsValue({
-			name: "",
-			price: "",
-			paymentFrequency: "", // Default to empty
-			...record,
+			name: record.name || "",
+			price: record.price || "",
+			paymentFrequency: record.paymentFrequency || "",
 		});
 		setEditingKey(record.key);
-	};
-
-	const cancel = () => {
-		setEditingKey("");
 	};
 
 	const save = async (key) => {
 		try {
 			const row = await formPricedExtras.validateFields();
-			const newData = [...pricedExtrasData];
-			const index = newData.findIndex((item) => item.key === key);
+			const nextData = [...pricedExtrasData];
+			const index = nextData.findIndex((item) => item.key === key);
 
-			if (index > -1) {
-				const item = newData[index];
-				newData.splice(index, 1, { ...item, ...row });
-				setPricedExtrasData(newData);
-				setEditingKey("");
-			} else {
-				newData.push(row);
-				setPricedExtrasData(newData);
-				setEditingKey("");
-			}
-		} catch (errInfo) {
+			if (index > -1) nextData.splice(index, 1, { ...nextData[index], ...row });
+			else nextData.push(row);
+
+			setPricedExtrasData(nextData);
+			setEditingKey("");
+		} catch (error) {
 			return;
 		}
 	};
 
 	const columns = [
 		{
-			title: "Name",
+			title: isArabic ? "الاسم" : "Name",
 			dataIndex: "name",
 			width: "30%",
-			editable: true,
-			render: (text, record) => {
-				if (isEditing(record)) {
-					return (
-						<Form.Item
-							name='name'
-							style={{ margin: 0 }}
-							rules={[
-								{
-									required: true,
-									message: "Please Input Name!",
-								},
-							]}
-						>
-							<Input placeholder='Enter Name' />
-						</Form.Item>
-					);
-				} else {
-					return text;
-				}
-			},
+			render: (text, record) =>
+				isEditing(record) ? (
+					<Form.Item
+						name='name'
+						style={{ margin: 0 }}
+						rules={[{ required: true, message: "Required" }]}
+					>
+						<Input />
+					</Form.Item>
+				) : (
+					text
+				),
 		},
 		{
-			title: "Price",
+			title: isArabic ? "السعر" : "Price",
 			dataIndex: "price",
 			width: "20%",
-			editable: true,
-			render: (text, record) => {
-				if (isEditing(record)) {
-					return (
-						<Form.Item
-							name='price'
-							style={{ margin: 0 }}
-							rules={[
-								{
-									required: true,
-									message: "Please Input Price!",
-								},
-							]}
-						>
-							<InputNumber
-								min={0}
-								style={{ width: "100%" }}
-								placeholder='Enter Price'
-							/>
-						</Form.Item>
-					);
-				} else {
-					return text !== undefined ? `${text} SAR` : "";
-				}
-			},
+			render: (text, record) =>
+				isEditing(record) ? (
+					<Form.Item
+						name='price'
+						style={{ margin: 0 }}
+						rules={[{ required: true, message: "Required" }]}
+					>
+						<InputNumber min={0} style={{ width: "100%" }} />
+					</Form.Item>
+				) : text !== undefined ? (
+					`${text} SAR`
+				) : (
+					""
+				),
 		},
 		{
-			title: "Payment Frequency",
+			title: isArabic ? "التكرار" : "Payment Frequency",
 			dataIndex: "paymentFrequency",
 			width: "30%",
-			editable: true,
-			render: (text, record) => {
-				if (isEditing(record)) {
-					return (
-						<Form.Item
-							name='paymentFrequency'
-							style={{ margin: 0 }}
-							rules={[
-								{
-									required: true,
-									message: "Please select a payment frequency!",
-								},
-							]}
-						>
-							<Radio.Group>
-								<Radio value='Per Night'>Per Night</Radio>
-								<Radio value='One Time'>One Time</Radio>
-							</Radio.Group>
-						</Form.Item>
-					);
-				} else {
-					return text;
-				}
-			},
+			render: (text, record) =>
+				isEditing(record) ? (
+					<Form.Item
+						name='paymentFrequency'
+						style={{ margin: 0 }}
+						rules={[{ required: true, message: "Required" }]}
+					>
+						<Radio.Group>
+							<Radio value='Per Night'>
+								{isArabic ? "لكل ليلة" : "Per Night"}
+							</Radio>
+							<Radio value='One Time'>
+								{isArabic ? "مرة واحدة" : "One Time"}
+							</Radio>
+						</Radio.Group>
+					</Form.Item>
+				) : (
+					text || ""
+				),
 		},
 		{
-			title: "Action",
+			title: isArabic ? "الإجراء" : "Action",
 			dataIndex: "action",
-			render: (_, record) => {
-				const editable = isEditing(record);
-				return editable ? (
+			render: (_, record) =>
+				isEditing(record) ? (
 					<span>
-						<Button
-							onClick={() => save(record.key)}
-							type='link'
-							style={{ marginRight: 8 }}
-						>
-							Save
+						<Button type='link' onClick={() => save(record.key)}>
+							{isArabic ? "حفظ" : "Save"}
 						</Button>
-						<Popconfirm title='Sure to cancel?' onConfirm={cancel}>
-							<Button type='link'>Cancel</Button>
+						<Popconfirm
+							title={isArabic ? "إلغاء التعديل؟" : "Cancel edit?"}
+							onConfirm={() => setEditingKey("")}
+						>
+							<Button type='link'>{isArabic ? "إلغاء" : "Cancel"}</Button>
 						</Popconfirm>
 					</span>
 				) : (
 					<span>
 						<Button
+							type='link'
 							disabled={editingKey !== ""}
 							onClick={() => edit(record)}
-							type='link'
 						>
-							Edit
+							{isArabic ? "تعديل" : "Edit"}
 						</Button>
 						<Popconfirm
-							title='Sure to delete?'
+							title={isArabic ? "حذف الإضافة؟" : "Delete this extra?"}
 							onConfirm={() => handleDeleteRow(record.key)}
 						>
 							<Button
@@ -349,1089 +314,448 @@ const ZUpdateCase1 = ({
 							/>
 						</Popconfirm>
 					</span>
-				);
-			},
+				),
 		},
 	];
 
-	const mergedColumns = columns.map((col) => {
-		if (!col.editable) {
-			return col;
-		}
-
-		return {
-			...col,
-			onCell: (record) => ({
-				record,
-				inputType: col.dataIndex === "price" ? "number" : "text",
-				dataIndex: col.dataIndex,
-				title: col.title,
-				editing: isEditing(record),
-			}),
-		};
-	});
-
-	const handleArabicModalOpen = (field) => {
-		setArabicField(field);
-
-		const selectedRoomId = form.getFieldValue("_id");
-
-		// Find the existing room details based on selectedRoomId
-		const roomDetails = hotelDetails.roomCountDetails.find(
-			(room) => room._id === selectedRoomId
-		);
-
-		// Set the initial value for the Arabic field in the form
-		if (roomDetails) {
-			formArabic.setFieldsValue({
-				arabicValue: roomDetails[`${field}_OtherLanguage`] || "",
-			});
-		}
-
-		setIsArabicModalVisible(true);
-	};
-
-	const handleArabicModalOk = () => {
-		const selectedRoomId = form.getFieldValue("_id");
-		const value = String(formArabic.getFieldValue("arabicValue") || "").trim();
-		const fieldName = `${arabicField}_OtherLanguage`;
-
-		if (!value) {
-			message.error(
-				isArabic
-					? "يرجى إدخال النص العربي أولاً."
-					: "Please enter the Arabic text first."
-			);
-			return;
-		}
-
-		form.setFieldsValue({ [fieldName]: value });
-
-		setHotelDetails((prevDetails) => {
-			const updatedRoomCountDetails = Array.isArray(
-				prevDetails.roomCountDetails
-			)
-				? [...prevDetails.roomCountDetails]
-				: [];
-
-			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room._id === selectedRoomId
-			);
-
-			if (existingRoomIndex > -1) {
-				updatedRoomCountDetails[existingRoomIndex][fieldName] = value;
-			} else {
-				updatedRoomCountDetails.push({
-					_id: selectedRoomId,
-					[fieldName]: value,
-				});
-			}
-
-			return {
-				...prevDetails,
-				roomCountDetails: updatedRoomCountDetails,
-			};
-		});
-
-		setIsArabicModalVisible(false);
-		formArabic.resetFields();
-	};
-
-	const handleArabicModalCancel = () => {
-		setIsArabicModalVisible(false);
-		formArabic.resetFields();
-	};
-
-	const handleCheckboxChange = (checked) => {
-		form.setFieldsValue({ commisionIncluded: checked });
-
-		const selectedRoomId = form.getFieldValue("_id");
-
-		setHotelDetails((prevDetails) => {
-			const updatedRoomCountDetails = Array.isArray(
-				prevDetails.roomCountDetails
-			)
-				? [...prevDetails.roomCountDetails]
-				: [];
-
-			const existingRoomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room._id === selectedRoomId
-			);
-
-			if (existingRoomIndex > -1) {
-				updatedRoomCountDetails[existingRoomIndex].commisionIncluded = checked;
-			} else {
-				updatedRoomCountDetails.push({
-					_id: selectedRoomId,
-					commisionIncluded: checked,
-				});
-			}
-
-			return {
-				...prevDetails,
-				roomCountDetails: updatedRoomCountDetails,
-			};
-		});
-	};
-
-	const arabicModalTitle =
-		arabicField === "displayName"
-			? isArabic
-				? "اسم الغرفة بالعربية"
-				: "Arabic Room Name"
-			: isArabic
-			  ? "وصف الغرفة بالعربية"
-			  : "Arabic Room Description";
-	const arabicModalHelp =
-		arabicField === "displayName"
-			? isArabic
-				? "اكتب الاسم الذي سيظهر للمستخدمين عند اختيار اللغة العربية."
-				: "Enter the name guests will see when Arabic is selected."
-			: isArabic
-			  ? "اكتب الوصف العربي للغرفة. الوصف الإنجليزي لن يتغير."
-			  : "Enter the Arabic room description. The English description will stay unchanged.";
+	const roomTypeIsOther = currentRoomTypeValue === "other";
+	const activeRoom = getCurrentRoomDetails();
 
 	return (
-		<ZUpdateCase1Wrapper
-			isArabic={chosenLanguage === "Arabic"}
-			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-		>
-			<Modal
-				title={arabicModalTitle}
-				open={isArabicModalVisible}
-				onOk={handleArabicModalOk}
-				onCancel={handleArabicModalCancel}
-				okText={isArabic ? "حفظ" : "Save"}
-				cancelText={isArabic ? "إلغاء" : "Cancel"}
-			>
-				<ModalHelp>{arabicModalHelp}</ModalHelp>
-				<Form form={formArabic} layout='vertical'>
+		<ZUpdateCase1Wrapper $isArabic={isArabic} dir={isArabic ? "rtl" : "ltr"}>
+			<FormSection>
+				<FieldsGrid $columns={3}>
 					<Form.Item
-						name='arabicValue'
-						label={
-							arabicField === "displayName"
-								? isArabic
-									? "الاسم بالعربية"
-									: "Arabic Name"
-								: isArabic
-								  ? "الوصف بالعربية"
-								  : "Arabic Description"
-						}
-						rules={[
-							{
-								required: true,
-								message: isArabic
-									? "يرجى إدخال النص العربي"
-									: "Please enter the Arabic text",
-							},
-						]}
+						name='roomType'
+						label={labels.roomType}
+						rules={[{ required: true, message: "Please select a room type" }]}
 					>
-						{arabicField === "displayName" ? (
-							<Input dir='rtl' />
-						) : (
-							<Input.TextArea dir='rtl' rows={4} />
-						)}
-					</Form.Item>
-				</Form>
-			</Modal>
-
-			<>
-				<Form.Item
-					name='roomType'
-					label={
-						chosenLanguage === "Arabic" ? "اختر نوع الغرفة" : "Select Room Type"
-					}
-					rules={[{ required: true, message: "Please select a room type" }]}
-				>
-					<Select
-						value={form.getFieldValue("roomType")}
-						style={{ textAlign: chosenLanguage === "Arabic" ? "right" : "" }}
-						onChange={(value) => {
-							const selectedRoomId = getSelectedRoomId();
-
-							form.setFieldsValue({ roomType: value });
-							if (value === "other") {
-								setCustomRoomType("");
-								form.setFieldsValue({ customRoomType: "" });
-							}
-							setRoomTypeSelected(true);
-
-							if (value !== "other") {
-								updateRoomCountDetails(selectedRoomId, { roomType: value });
-							}
-						}}
-					>
-						{roomTypes.map((room) => (
-							<Option
-								key={room.value}
-								value={room.value}
-								style={{
-									textAlign: chosenLanguage === "Arabic" ? "right" : "",
-									paddingRight: chosenLanguage === "Arabic" ? "20px" : "",
-								}}
-							>
-								{room.label}
+						<Select onChange={handleRoomTypeChange}>
+							{roomTypes.map((room) => (
+								<Option key={room.value} value={room.value}>
+									{room.label}
+								</Option>
+							))}
+							<Option key='other' value='other'>
+								{isArabic ? "أخرى" : "Other"}
 							</Option>
-						))}
-						<Option
-							key='other'
-							value='other'
-							style={{
-								textAlign: chosenLanguage === "Arabic" ? "right" : "",
-								paddingRight: chosenLanguage === "Arabic" ? "20px" : "",
-							}}
-						>
-							{chosenLanguage === "Arabic" ? "أخرى" : "Other"}
-						</Option>
-					</Select>
-				</Form.Item>
-				{form.getFieldValue("roomType") === "other" && (
+						</Select>
+					</Form.Item>
+
 					<Form.Item
-						name='customRoomType'
-						label={
-							chosenLanguage === "Arabic"
-								? "حدد نوع الغرفة الأخرى"
-								: "Specify Other Room Type"
-						}
-						rules={[
-							{ required: true, message: "Please specify the room type" },
-						]}
+						name='displayName'
+						label={labels.nameEn}
+						rules={[{ required: true, message: "Please input the display name" }]}
 					>
 						<Input
-							value={customRoomType}
-							onChange={(e) => {
-								const nextValue = e.target.value;
-								setCustomRoomType(nextValue);
-								form.setFieldsValue({ customRoomType: nextValue });
-
-								if (form.getFieldValue("roomType") === "other") {
-									const selectedRoomId = getSelectedRoomId();
-									updateRoomCountDetails(selectedRoomId, {
-										roomType: nextValue,
-									});
-								}
-							}}
+							onChange={(e) => updateCurrentRoom({ displayName: e.target.value })}
 						/>
 					</Form.Item>
-				)}
-				{roomTypeSelected && (
-					<>
-						<Form.Item
-							name='displayName'
-							label={
-								chosenLanguage === "Arabic"
-									? "اسم العرض (الاسم المعروض للعملاء باللغة الإنجليزية)"
-									: "Display Name (In English)"
+
+					<Form.Item name='displayName_OtherLanguage' label={labels.nameAr}>
+						<Input
+							dir='rtl'
+							onChange={(e) =>
+								updateCurrentRoom({
+									displayName_OtherLanguage: e.target.value,
+								})
 							}
-							rules={[
-								{ required: true, message: "Please input the display name" },
-							]}
+						/>
+					</Form.Item>
+				</FieldsGrid>
+
+				{roomTypeIsOther && (
+					<FieldsGrid $columns={1}>
+						<Form.Item
+							name='customRoomType'
+							label={labels.customRoomType}
+							rules={[{ required: true, message: "Please specify the room type" }]}
 						>
 							<Input
+								value={customRoomType}
 								onChange={(e) => {
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
-
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room._id === existingRoomDetails._id
-										);
-
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].displayName =
-												e.target.value;
-										} else {
-											updatedRoomCountDetails.push({
-												_id: existingRoomDetails._id,
-												roomType: form.getFieldValue("roomType"),
-												displayName: e.target.value,
-											});
-										}
-
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
+									const value = e.target.value;
+									setCustomRoomType(value);
+									updateCurrentRoom({ roomType: value, customRoomType: value });
 								}}
 							/>
 						</Form.Item>
-						<Button
-							className='mb-4'
-							style={{
-								marginLeft: "8px",
-								fontWeight: "bold",
-								fontSize: "small",
-								color: "white",
-								background: "black",
-								marginBottom: "5px",
-							}}
-							type='link'
-						onClick={() => handleArabicModalOpen("displayName")}
-					>
-						{isArabic ? "الاسم بالعربية" : "Arabic Name"}
-					</Button>
+					</FieldsGrid>
+				)}
 
-						<div className='row'>
-							<div className='col-md-4'>
-								<Form.Item
-									name='roomCount'
-									label={
-										chosenLanguage === "Arabic" ? "عدد الغرف" : "Room Count"
+				{roomTypeSelected && (
+					<>
+						<FieldsGrid $columns={2}>
+							<Form.Item
+								name='description'
+								label={labels.descEn}
+								rules={[
+									{ required: true, message: "Please input the room description" },
+								]}
+							>
+								<Input.TextArea
+									rows={4}
+									onChange={(e) =>
+										updateCurrentRoom({ description: e.target.value })
 									}
-									rules={[
-										{ required: true, message: "Please input the room count" },
-									]}
-								>
-									<Input
-										type='number'
+								/>
+							</Form.Item>
+
+							<Form.Item name='description_OtherLanguage' label={labels.descAr}>
+								<Input.TextArea
+									dir='rtl'
+									rows={4}
+									onChange={(e) =>
+										updateCurrentRoom({
+											description_OtherLanguage: e.target.value,
+										})
+									}
+								/>
+							</Form.Item>
+						</FieldsGrid>
+
+						<FieldsGrid $columns={user?.role === 1000 ? 4 : 3}>
+							<Form.Item
+								name='roomCount'
+								label={labels.roomCount}
+								rules={[{ required: true, message: "Please input the room count" }]}
+							>
+								<Input
+									type='number'
+									min={0}
+									onChange={(e) =>
+										updateCurrentRoom({
+											count: parseInt(e.target.value, 10) || 0,
+										})
+									}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name='defaultCost'
+								label={labels.rootCost}
+								rules={[{ required: true, message: "Please input the root price" }]}
+							>
+								<Input
+									type='number'
+									min={0}
+									onChange={(e) =>
+										updateCurrentRoom({
+											defaultCost: parseFloat(e.target.value) || 0,
+											rootPrice: parseFloat(e.target.value) || 0,
+										})
+									}
+								/>
+							</Form.Item>
+
+							<Form.Item
+								name='basePrice'
+								label={labels.basePrice}
+								rules={[{ required: true, message: "Please input the room price" }]}
+							>
+								<Input
+									type='number'
+									min={0}
+									onChange={(e) => {
+										const basePrice = parseFloat(e.target.value) || 0;
+										const current = getCurrentRoomDetails();
+										updateCurrentRoom({
+											basePrice,
+											price: {
+												...(current.price || {}),
+												basePrice,
+											},
+										});
+									}}
+								/>
+							</Form.Item>
+
+							{user?.role === 1000 && (
+								<CommissionField>
+									<Checkbox
+										checked={form.getFieldValue("commisionIncluded")}
 										onChange={(e) => {
-											const selectedRoomId = form.getFieldValue("_id");
-
-											setHotelDetails((prevDetails) => {
-												const updatedRoomCountDetails = Array.isArray(
-													prevDetails.roomCountDetails
-												)
-													? prevDetails.roomCountDetails
-													: [];
-
-												const existingRoomIndex =
-													updatedRoomCountDetails.findIndex(
-														(room) => room._id === selectedRoomId
-													);
-
-												if (existingRoomIndex > -1) {
-													updatedRoomCountDetails[existingRoomIndex].count =
-														parseInt(e.target.value, 10);
-												} else {
-													updatedRoomCountDetails.push({
-														_id: selectedRoomId,
-														count: parseInt(e.target.value, 10),
-													});
-												}
-
-												return {
-													...prevDetails,
-													roomCountDetails: updatedRoomCountDetails,
-												};
+											form.setFieldsValue({
+												commisionIncluded: e.target.checked,
+											});
+											updateCurrentRoom({
+												commisionIncluded: e.target.checked,
 											});
 										}}
-									/>
-								</Form.Item>
-							</div>
-
-							{currentRoomType === "individualBed" ? (
-								<div className='col-md-4'>
+									>
+										{labels.commission}
+									</Checkbox>
 									<Form.Item
-										name='bedsCount'
-										label={
-											chosenLanguage === "Arabic"
-												? "عدد ٱلْأَسِرَّةُ لكل غرفة"
-												: "Beds Per Room"
-										}
+										name='roomCommission'
+										label={labels.commissionRate}
 										rules={[
+											{ required: true, message: "Please input the commission rate" },
 											{
-												required: true,
-												message: "Please input the beds count per room",
+												validator: (_, value) =>
+													value === undefined || value === "" || Number(value) >= 0
+														? Promise.resolve()
+														: Promise.reject(
+																new Error(
+																	isArabic
+																		? "يمكن إدخال 1% أو أي نسبة موجبة."
+																		: "You can enter 1% or any positive rate."
+																)
+														  ),
 											},
 										]}
 									>
 										<Input
 											type='number'
-											onChange={(e) => {
-												const selectedRoomId = form.getFieldValue("_id");
-
-												setHotelDetails((prevDetails) => {
-													const updatedRoomCountDetails = Array.isArray(
-														prevDetails.roomCountDetails
-													)
-														? prevDetails.roomCountDetails
-														: [];
-
-													const existingRoomIndex =
-														updatedRoomCountDetails.findIndex(
-															(room) => room._id === selectedRoomId
-														);
-
-													if (existingRoomIndex > -1) {
-														updatedRoomCountDetails[
-															existingRoomIndex
-														].bedsCount = parseInt(e.target.value, 10);
-													} else {
-														updatedRoomCountDetails.push({
-															_id: selectedRoomId,
-															bedsCount: parseInt(e.target.value, 10),
-														});
-													}
-
-													return {
-														...prevDetails,
-														roomCountDetails: updatedRoomCountDetails,
-													};
-												});
-											}}
+											min={0}
+											step='any'
+											onChange={(e) =>
+												updateCurrentRoom({
+													roomCommission: parseNonNegativeDecimal(e.target.value),
+												})
+											}
 										/>
 									</Form.Item>
-								</div>
-							) : null}
+								</CommissionField>
+							)}
+						</FieldsGrid>
 
-							{currentRoomType === "individualBed" ? (
-								<div className='col-md-4'>
-									<Form.Item
-										name='roomForGender'
-										label={chosenLanguage === "Arabic" ? "غرفة ل" : "Room For"}
-										rules={[
-											{
-												required: true,
-												message: "Please select the room's guest gender",
-											},
-										]}
-									>
-										<Select
-											placeholder={
-												chosenLanguage === "Arabic"
-													? "اختر الغرفة لرجال أو نساء"
-													: "Select For Men or Women"
-											}
-											onChange={(value) => {
-												const selectedRoomId = form.getFieldValue("_id");
-
-												setHotelDetails((prevDetails) => {
-													const updatedRoomCountDetails = Array.isArray(
-														prevDetails.roomCountDetails
-													)
-														? prevDetails.roomCountDetails
-														: [];
-
-													const existingRoomIndex =
-														updatedRoomCountDetails.findIndex(
-															(room) => room._id === selectedRoomId
-														);
-
-													if (existingRoomIndex > -1) {
-														updatedRoomCountDetails[
-															existingRoomIndex
-														].roomForGender = value;
-													} else {
-														updatedRoomCountDetails.push({
-															_id: selectedRoomId,
-															roomForGender: value,
-														});
-													}
-
-													return {
-														...prevDetails,
-														roomCountDetails: updatedRoomCountDetails,
-													};
-												});
-											}}
-										>
-											<Select.Option value='For Men'>
-												{chosenLanguage === "Arabic" ? "للرجال" : "For Men"}
-											</Select.Option>
-											<Select.Option value='For Women'>
-												{chosenLanguage === "Arabic" ? "للنساء" : "For Women"}
-											</Select.Option>
-										</Select>
-									</Form.Item>
-								</div>
-							) : null}
-						</div>
-
-						<div className='row'>
-							{/* Default Cost Input */}
-							<div className='col-md-6'>
+						{currentRoomTypeValue === "individualBed" && (
+							<FieldsGrid $columns={2}>
 								<Form.Item
-									name='defaultCost'
-									label={
-										chosenLanguage === "Arabic"
-											? "التكلفة الجذرية"
-											: "Root Cost"
-									}
-									rules={[
-										{
-											required: true,
-											message:
-												chosenLanguage === "Arabic"
-													? "يرجى إدخال التكلفة الجذرية"
-													: "Please input the root cost",
-										},
-									]}
+									name='bedsCount'
+									label={isArabic ? "عدد الأسرة لكل غرفة" : "Beds Per Room"}
 								>
 									<Input
 										type='number'
-										onChange={(e) => {
-											const selectedRoomId = form.getFieldValue("_id");
-
-											setHotelDetails((prevDetails) => {
-												const updatedRoomCountDetails = Array.isArray(
-													prevDetails.roomCountDetails
-												)
-													? prevDetails.roomCountDetails
-													: [];
-
-												const existingRoomIndex =
-													updatedRoomCountDetails.findIndex(
-														(room) => room._id === selectedRoomId
-													);
-
-												if (existingRoomIndex > -1) {
-													updatedRoomCountDetails[
-														existingRoomIndex
-													].defaultCost = parseFloat(e.target.value);
-												} else {
-													updatedRoomCountDetails.push({
-														_id: selectedRoomId,
-														defaultCost: parseFloat(e.target.value),
-													});
-												}
-
-												return {
-													...prevDetails,
-													roomCountDetails: updatedRoomCountDetails,
-												};
-											});
-										}}
-									/>
-								</Form.Item>
-							</div>
-
-							{/* Base Price Input */}
-							<div className='col-md-6'>
-								<Form.Item
-									name='basePrice'
-									label={
-										chosenLanguage === "Arabic"
-											? "سعر الغرفة الأساسي"
-											: "Base Room Price"
-									}
-									rules={[
-										{
-											required: true,
-											message:
-												chosenLanguage === "Arabic"
-													? "يرجى إدخال سعر الغرفة الأساسي"
-													: "Please input the base room price",
-										},
-									]}
-								>
-									<Input
-										type='number'
-										onChange={(e) => {
-											const selectedRoomId = form.getFieldValue("_id");
-
-											setHotelDetails((prevDetails) => {
-												const updatedRoomCountDetails = Array.isArray(
-													prevDetails.roomCountDetails
-												)
-													? prevDetails.roomCountDetails
-													: [];
-
-												const existingRoomIndex =
-													updatedRoomCountDetails.findIndex(
-														(room) => room._id === selectedRoomId
-													);
-
-												if (existingRoomIndex > -1) {
-													updatedRoomCountDetails[existingRoomIndex].price = {
-														basePrice: parseFloat(e.target.value),
-													};
-												} else {
-													updatedRoomCountDetails.push({
-														_id: selectedRoomId,
-														price: { basePrice: parseFloat(e.target.value) },
-													});
-												}
-
-												return {
-													...prevDetails,
-													roomCountDetails: updatedRoomCountDetails,
-												};
-											});
-										}}
-									/>
-								</Form.Item>
-							</div>
-						</div>
-
-						<Form.Item className='mb-4'>
-							{user && user.role === 1000 ? (
-								<div className='row'>
-									{/* Include commission checkbox */}
-									<div className='col-md-2 my-auto'>
-										<Checkbox
-											onChange={(e) => handleCheckboxChange(e.target.checked)}
-											checked={form.getFieldValue("commisionIncluded")}
-										>
-											{chosenLanguage === "Arabic"
-												? "العمولة"
-												: "Include Commission"}
-										</Checkbox>
-									</div>
-
-									{/* Commission rate input field */}
-									<div className='col-md-6'>
-										<Form.Item
-											name='roomCommission'
-											label={
-												chosenLanguage === "Arabic"
-													? "معدل العمولة (%)"
-													: "Commission Rate (%)"
-											}
-											rules={[
-												{
-													required: true,
-													message:
-														chosenLanguage === "Arabic"
-															? "يرجى إدخال معدل العمولة (يجب أن يكون رقمًا)"
-															: "Please input the commission rate (should be a number)",
-												},
-												{
-													validator: (_, value) => {
-														if (
-															value === undefined ||
-															value === "" ||
-															Number(value) >= 0
-														) {
-															return Promise.resolve();
-														}
-														return Promise.reject(
-															new Error(
-																isArabic
-																	? "يمكن إدخال 1% أو أي نسبة موجبة."
-																	: "You can enter 1% or any positive rate."
-															)
-														);
-													},
-												},
-											]}
-										>
-											<Input
-												type='number'
-												min={0}
-												step='any'
-												onChange={(e) => {
-													const selectedRoomId = form.getFieldValue("_id");
-													const nextCommission = parseNonNegativeDecimal(
-														e.target.value
-													);
-
-													setHotelDetails((prevDetails) => {
-														const updatedRoomCountDetails = Array.isArray(
-															prevDetails.roomCountDetails
-														)
-															? prevDetails.roomCountDetails
-															: [];
-
-														const existingRoomIndex =
-															updatedRoomCountDetails.findIndex(
-																(room) => room._id === selectedRoomId
-															);
-
-														if (existingRoomIndex > -1) {
-															updatedRoomCountDetails[
-																existingRoomIndex
-															].roomCommission = nextCommission;
-														} else {
-															updatedRoomCountDetails.push({
-																_id: selectedRoomId,
-																roomCommission: nextCommission,
-															});
-														}
-
-														return {
-															...prevDetails,
-															roomCountDetails: updatedRoomCountDetails,
-														};
-													});
-												}}
-											/>
-										</Form.Item>
-									</div>
-								</div>
-							) : null}
-						</Form.Item>
-
-						<Form.Item
-							name='description'
-							label={
-								chosenLanguage === "Arabic"
-									? "وصف الغرفة باللغة الإنجليزية"
-									: "Room Description (English)"
-							}
-							rules={[
-								{
-									required: true,
-									message: "Please input the room description",
-								},
-							]}
-						>
-							<Input.TextArea
-								onChange={(e) => {
-									const selectedRoomId = form.getFieldValue("_id");
-
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
-
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room._id === selectedRoomId
-										);
-
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].description =
-												e.target.value;
-										} else {
-											updatedRoomCountDetails.push({
-												_id: selectedRoomId,
-												description: e.target.value,
-											});
+										min={1}
+										onChange={(e) =>
+											updateCurrentRoom({
+												bedsCount: parseInt(e.target.value, 10) || 1,
+											})
 										}
+									/>
+								</Form.Item>
+								<Form.Item name='roomForGender' label={isArabic ? "غرفة لـ" : "Room For"}>
+									<Select
+										onChange={(value) => updateCurrentRoom({ roomForGender: value })}
+									>
+										<Option value='For Men'>{isArabic ? "للرجال" : "For Men"}</Option>
+										<Option value='For Women'>
+											{isArabic ? "للنساء" : "For Women"}
+										</Option>
+									</Select>
+								</Form.Item>
+							</FieldsGrid>
+						)}
 
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
-								}}
-							/>
-						</Form.Item>
-						<Button
-							className='mb-4'
-							style={{
-								marginLeft: "8px",
-								fontWeight: "bold",
-								fontSize: "small",
-								color: "white",
-								background: "black",
-								marginBottom: "5px",
-							}}
-							type='link'
-							onClick={() => handleArabicModalOpen("description")}
-						>
-							{isArabic ? "الوصف بالعربية" : "Arabic Description"}
-						</Button>
-						<MultiSelectWrapper>
+						<FieldsGrid $columns={4}>
 							<Form.Item
 								name='amenities'
-								label={
-									chosenLanguage === "Arabic"
-										? "وسائل الراحة"
-										: "Room Amenities"
-								}
-								rules={[
-									{ required: true, message: "Please select room amenities" },
-								]}
+								label={labels.amenities}
+								rules={[{ required: true, message: "Please select room amenities" }]}
 							>
 								<Select
 									mode='multiple'
 									allowClear
-									onChange={(value) => {
-										const selectedRoomId = form.getFieldValue("_id");
-
-										setHotelDetails((prevDetails) => {
-											const updatedRoomCountDetails = Array.isArray(
-												prevDetails.roomCountDetails
-											)
-												? prevDetails.roomCountDetails
-												: [];
-
-											const existingRoomIndex =
-												updatedRoomCountDetails.findIndex(
-													(room) => room._id === selectedRoomId
-												);
-
-											if (existingRoomIndex > -1) {
-												updatedRoomCountDetails[existingRoomIndex].amenities =
-													value;
-											} else {
-												updatedRoomCountDetails.push({
-													_id: selectedRoomId,
-													amenities: value,
-												});
-											}
-
-											return {
-												...prevDetails,
-												roomCountDetails: updatedRoomCountDetails,
-											};
-										});
-									}}
+									onChange={(value) => updateCurrentRoom({ amenities: value })}
 								>
-									{amenitiesList.map((amenity, index) => (
-										<Option
-											key={index}
-											value={amenity}
-											style={{
-												textAlign: chosenLanguage === "Arabic" ? "right" : "",
-											}}
-										>
+									{amenitiesList.map((amenity) => (
+										<Option key={amenity} value={amenity}>
 											{amenity}
 										</Option>
 									))}
 								</Select>
 							</Form.Item>
 
-							<Form.Item
-								name='views'
-								label={chosenLanguage === "Arabic" ? "إطلالات" : "Room Views"}
-								// rules={[
-								// 	{ required: true, message: "Please select room views" },
-								// ]}
-							>
+							<Form.Item name='views' label={labels.views}>
 								<Select
 									mode='multiple'
 									allowClear
-									onChange={(value) => {
-										const selectedRoomId = form.getFieldValue("_id");
-
-										setHotelDetails((prevDetails) => {
-											const updatedRoomCountDetails = Array.isArray(
-												prevDetails.roomCountDetails
-											)
-												? prevDetails.roomCountDetails
-												: [];
-
-											const existingRoomIndex =
-												updatedRoomCountDetails.findIndex(
-													(room) => room._id === selectedRoomId
-												);
-
-											if (existingRoomIndex > -1) {
-												updatedRoomCountDetails[existingRoomIndex].views =
-													value;
-											} else {
-												updatedRoomCountDetails.push({
-													_id: selectedRoomId,
-													views: value,
-												});
-											}
-
-											return {
-												...prevDetails,
-												roomCountDetails: updatedRoomCountDetails,
-											};
-										});
-									}}
+									onChange={(value) => updateCurrentRoom({ views: value })}
 								>
-									{viewsList.map((view, index) => (
-										<Option
-											key={index}
-											value={view}
-											style={{
-												textAlign: chosenLanguage === "Arabic" ? "right" : "",
-											}}
-										>
+									{viewsList.map((view) => (
+										<Option key={view} value={view}>
 											{view}
 										</Option>
 									))}
 								</Select>
 							</Form.Item>
 
-							<Form.Item
-								name='extraAmenities'
-								label={
-									chosenLanguage === "Arabic"
-										? "وسائل الراحة الإضافية"
-										: "Extra Amenities"
-								}
-								// rules={[
-								// 	{ required: true, message: "Please select extra amenities" },
-								// ]}
-							>
+							<Form.Item name='extraAmenities' label={labels.extraAmenities}>
 								<Select
 									mode='multiple'
 									allowClear
-									onChange={(value) => {
-										const selectedRoomId = form.getFieldValue("_id");
-
-										setHotelDetails((prevDetails) => {
-											const updatedRoomCountDetails = Array.isArray(
-												prevDetails.roomCountDetails
-											)
-												? prevDetails.roomCountDetails
-												: [];
-
-											const existingRoomIndex =
-												updatedRoomCountDetails.findIndex(
-													(room) => room._id === selectedRoomId
-												);
-
-											if (existingRoomIndex > -1) {
-												updatedRoomCountDetails[
-													existingRoomIndex
-												].extraAmenities = value;
-											} else {
-												updatedRoomCountDetails.push({
-													_id: selectedRoomId,
-													extraAmenities: value,
-												});
-											}
-
-											return {
-												...prevDetails,
-												roomCountDetails: updatedRoomCountDetails,
-											};
-										});
-									}}
+									onChange={(value) =>
+										updateCurrentRoom({ extraAmenities: value })
+									}
 								>
-									{extraAmenitiesList.map((amenity, index) => (
-										<Option
-											key={index}
-											value={amenity}
-											style={{
-												textAlign: chosenLanguage === "Arabic" ? "right" : "",
-											}}
-										>
+									{extraAmenitiesList.map((amenity) => (
+										<Option key={amenity} value={amenity}>
 											{amenity}
 										</Option>
 									))}
 								</Select>
 							</Form.Item>
-							<div className='mt-4 px-5'>
+
+							<ActionField>
 								<Button
 									type='primary'
-									onClick={handleOpenModal}
 									icon={<PlusOutlined />}
-									style={{ marginBottom: 16 }}
+									onClick={() => setIsModalVisible(true)}
 								>
-									Priced Extras
+									{labels.pricedExtras}
 								</Button>
-							</div>
+							</ActionField>
+						</FieldsGrid>
 
-							<Modal
-								title='Priced Extras'
-								open={isModalVisible}
-								onOk={handleModalOk}
-								onCancel={handleModalCancel}
-								width={700}
-							>
-								<Form form={formPricedExtras} component={false}>
-									<Table
-										components={{
-											body: {
-												cell: EditableCell,
-											},
-										}}
-										bordered
-										dataSource={pricedExtrasData}
-										columns={mergedColumns}
-										rowClassName='editable-row'
-										pagination={false}
-									/>
-								</Form>
-								<Button
-									onClick={handleAddRow}
-									type='dashed'
-									style={{ marginTop: 16, width: "100%" }}
-									icon={<PlusOutlined />}
+						<ActiveRow>
+							<ActiveStatusFrame>
+								<Form.Item
+									name='activeRoom'
+									label={labels.active}
+									valuePropName='checked'
 								>
-									Add a row
-								</Button>
-							</Modal>
-						</MultiSelectWrapper>
-
-						<Form.Item
-							name='activeRoom'
-							label={
-								chosenLanguage === "Arabic"
-									? "نشط / غير نشط"
-									: "Active / Inactive"
-							}
-							valuePropName='checked'
-						>
-							<Switch
-								onChange={(checked) => {
-									const selectedRoomId = form.getFieldValue("_id");
-
-									setHotelDetails((prevDetails) => {
-										const updatedRoomCountDetails = Array.isArray(
-											prevDetails.roomCountDetails
-										)
-											? prevDetails.roomCountDetails
-											: [];
-
-										const existingRoomIndex = updatedRoomCountDetails.findIndex(
-											(room) => room._id === selectedRoomId
-										);
-
-										if (existingRoomIndex > -1) {
-											updatedRoomCountDetails[existingRoomIndex].activeRoom =
-												checked;
-										} else {
-											updatedRoomCountDetails.push({
-												_id: selectedRoomId,
-												activeRoom: checked,
-											});
+									<Switch
+										onChange={(checked) =>
+											updateCurrentRoom({ activeRoom: checked })
 										}
-
-										return {
-											...prevDetails,
-											roomCountDetails: updatedRoomCountDetails,
-										};
-									});
-								}}
-							/>
-						</Form.Item>
+									/>
+								</Form.Item>
+								<span>{labels.activeHint}</span>
+							</ActiveStatusFrame>
+							<AgentActionFrame>
+								<ZAgentRoomOverridesButton
+									chosenLanguage={chosenLanguage}
+									hotelDetails={hotelDetails}
+									roomDetails={activeRoom}
+									onChange={(updates) => updateCurrentRoom(updates)}
+								/>
+							</AgentActionFrame>
+						</ActiveRow>
 					</>
 				)}
-			</>
+			</FormSection>
+
+			<Modal
+				title={labels.pricedExtras}
+				open={isModalVisible}
+				onOk={handlePricedExtrasSave}
+				onCancel={() => setIsModalVisible(false)}
+				okText={isArabic ? "حفظ" : "Save"}
+				cancelText={isArabic ? "إلغاء" : "Cancel"}
+				width={760}
+			>
+				<Form form={formPricedExtras} component={false}>
+					<Table
+						bordered
+						dataSource={pricedExtrasData}
+						columns={columns}
+						rowClassName='editable-row'
+						pagination={false}
+					/>
+				</Form>
+				<Button
+					type='dashed'
+					onClick={handleAddRow}
+					block
+					icon={<PlusOutlined />}
+					style={{ marginTop: 16 }}
+				>
+					{isArabic ? "إضافة جديد" : "Add New Extra"}
+				</Button>
+			</Modal>
 		</ZUpdateCase1Wrapper>
 	);
 };
 
 export default ZUpdateCase1;
 
-const ZUpdateCase1Wrapper = styled.div``;
-
-const ModalHelp = styled.p`
-	margin: 0 0 12px;
-	padding: 10px 12px;
-	border: 1px solid #d7e7f8;
-	border-radius: 10px;
-	background: #f8fbff;
-	color: #38506d;
-	font-weight: 700;
-	line-height: 1.5;
-`;
-
-const MultiSelectWrapper = styled.div`
-	display: flex;
-	justify-content: space-between;
-	gap: 16px;
-	flex-wrap: wrap;
-
+const ZUpdateCase1Wrapper = styled.div`
 	.ant-form-item {
-		flex: 1;
+		margin-bottom: 0;
+	}
+
+	.ant-form-item-label {
+		font-weight: 800;
 	}
 `;
 
-// Editable cell component for the table
-const EditableCell = ({ title, editable, children, ...restProps }) => {
-	return (
-		<td {...restProps}>
-			{editable ? (
-				<Form.Item
-					style={{ margin: 0 }}
-					name={restProps.dataIndex}
-					rules={[
-						{
-							required: true,
-							message: `Please Input ${title}!`,
-						},
-					]}
-				>
-					{restProps.children}
-				</Form.Item>
-			) : (
-				children
-			)}
-		</td>
-	);
-};
+const FormSection = styled.div`
+	display: grid;
+	gap: 16px;
+`;
+
+const FieldsGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(${({ $columns }) => $columns || 3}, minmax(0, 1fr));
+	gap: 14px 18px;
+	align-items: start;
+
+	@media (max-width: 1100px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 720px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const CommissionField = styled.div`
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 10px;
+	align-items: end;
+`;
+
+const ActionField = styled.div`
+	display: flex;
+	align-items: end;
+	min-height: 74px;
+
+	button {
+		width: 100%;
+		border-radius: 10px;
+		font-weight: 800;
+	}
+`;
+
+const ActiveRow = styled.div`
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 14px;
+	width: 100%;
+`;
+
+const ActiveStatusFrame = styled.div`
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	min-height: 74px;
+	padding: 12px 16px;
+	border: 1px solid #d7e7f8;
+	border-radius: 12px;
+	background: #f8fbff;
+	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+
+	.ant-form-item {
+		margin-bottom: 0;
+	}
+
+	span {
+		font-weight: 800;
+		color: #38506d;
+	}
+`;
+
+const AgentActionFrame = styled.div`
+	display: flex;
+	align-items: center;
+	min-height: 74px;
+	padding: 12px;
+	border: 1px solid #bfe6d2;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #f3fff8 0%, #ffffff 100%);
+	box-shadow: 0 8px 18px rgba(8, 112, 71, 0.08);
+`;

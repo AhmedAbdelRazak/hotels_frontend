@@ -87,7 +87,7 @@ export const buildCalendarRateTitle = ({
 	}
 
 	const priceLabel = isArabic ? "السعر" : "Price";
-	const rootLabel = isArabic ? "التكلفة" : "Root";
+	const rootLabel = isArabic ? "السعر الجذري" : "Root";
 	const price = rate.price ?? 0;
 	const rootPrice = rate.rootPrice;
 

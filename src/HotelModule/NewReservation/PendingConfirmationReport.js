@@ -551,6 +551,7 @@ const PendingConfirmationReport = ({
 				? getHotelInventoryAvailability(hotelDetails._id, {
 						start: checkin,
 						end: checkout,
+						agentId,
 				  }).catch(() => [])
 				: Promise.resolve([]),
 		]).then(([wallet, inventory]) => {

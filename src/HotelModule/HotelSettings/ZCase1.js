@@ -15,6 +15,7 @@ import {
 import styled from "styled-components";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { isAuthenticated } from "../../auth";
+import ZAgentRoomOverridesButton from "./ZAgentRoomOverridesButton";
 
 const { Option } = Select;
 const DRAFT_ROOM_KEY = "ThisIsNewKey";
@@ -585,17 +586,29 @@ const ZCase1 = ({
 						)}
 
 						<ActiveRow>
-							<Form.Item
-								name='activeRoom'
-								label={labels.active}
-								valuePropName='checked'
-							>
-								<Switch
-									defaultChecked
-									onChange={(checked) => updateDraftRoom({ activeRoom: checked })}
+							<ActiveStatusFrame>
+								<Form.Item
+									name='activeRoom'
+									label={labels.active}
+									valuePropName='checked'
+								>
+									<Switch
+										defaultChecked
+										onChange={(checked) =>
+											updateDraftRoom({ activeRoom: checked })
+										}
+									/>
+								</Form.Item>
+								<span>{labels.activeHint}</span>
+							</ActiveStatusFrame>
+							<AgentActionFrame>
+								<ZAgentRoomOverridesButton
+									chosenLanguage={chosenLanguage}
+									hotelDetails={hotelDetails}
+									roomDetails={draftRoom || {}}
+									onChange={(updates) => updateDraftRoom(updates)}
 								/>
-							</Form.Item>
-							<span>{labels.activeHint}</span>
+							</AgentActionFrame>
 						</ActiveRow>
 					</>
 				)}
@@ -687,15 +700,36 @@ const ActionField = styled.div`
 const ActiveRow = styled.div`
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
+	gap: 14px;
+	width: 100%;
+`;
+
+const ActiveStatusFrame = styled.div`
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
 	gap: 12px;
-	padding: 12px 14px;
+	min-height: 74px;
+	padding: 12px 16px;
 	border: 1px solid #d7e7f8;
 	border-radius: 12px;
 	background: #f8fbff;
-	width: fit-content;
+	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 
 	span {
 		font-weight: 800;
 		color: #38506d;
 	}
+`;
+
+const AgentActionFrame = styled.div`
+	display: flex;
+	align-items: center;
+	min-height: 74px;
+	padding: 12px;
+	border: 1px solid #bfe6d2;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #f3fff8 0%, #ffffff 100%);
+	box-shadow: 0 8px 18px rgba(8, 112, 71, 0.08);
 `;

@@ -8,7 +8,6 @@ import moment from "moment";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import ZCustomInput from "./ZCustomInput";
-import { isAuthenticated } from "../../auth";
 import {
 	buildCalendarRateTitle,
 	getCalendarRateClassNames,
@@ -37,7 +36,6 @@ const ZCase3 = ({
 	const pricingRatesRef = useRef([]);
 	const priceInputRef = useRef(null);
 	const [isBlocked, setIsBlocked] = useState(false);
-	const { user } = isAuthenticated();
 	const isArabic = chosenLanguage === "Arabic";
 	const calendarText = {
 		dateRangeRequired: isArabic
@@ -91,8 +89,8 @@ const ZCase3 = ({
 		calendarApi.addEvent({
 			id: selectedRangeEventId,
 			title: "Selected",
-			start: start.toISOString().split("T")[0],
-			end: adjustedEnd.toISOString().split("T")[0],
+			start: moment(start).format("YYYY-MM-DD"),
+			end: moment(adjustedEnd).format("YYYY-MM-DD"),
 			allDay: true,
 			display: "background",
 			backgroundColor: selectedRangeColor,
@@ -130,7 +128,7 @@ const ZCase3 = ({
 					title: buildCalendarRateTitle({
 						rate,
 						isArabic,
-						includeRoot: user?.role === 1000,
+						includeRoot: true,
 					}),
 					start: rate.calendarDate,
 					end: rate.calendarDate,
@@ -148,7 +146,7 @@ const ZCase3 = ({
 
 			successCallback(events);
 		},
-		[form, getColorForPrice, isArabic, selectedRoomType, user?.role]
+		[form, getColorForPrice, isArabic, selectedRoomType]
 	);
 
 	const generateDateRangeArray = (startDate, endDate) => {
@@ -231,8 +229,13 @@ const ZCase3 = ({
 			form.getFieldValue("defaultCost") ||
 			form.getFieldValue("basePrice") ||
 			pricingRate;
+		const hasValidRegularPrice = Number(pricingRate) > 0;
+		const hasValidRootPrice = Number(resolvedRootPrice) > 0;
 
-		if ((!pricingRate && !isBlocking) || (!resolvedRootPrice && !isBlocking)) {
+		if (
+			(!hasValidRegularPrice && !isBlocking) ||
+			(!hasValidRootPrice && !isBlocking)
+		) {
 			setPriceError(true);
 			message.error(
 				isArabic
@@ -255,10 +258,10 @@ const ZCase3 = ({
 			selectedDateRange[0],
 			selectedDateRange[1]
 		).map((date) => ({
-			calendarDate: date.toISOString().split("T")[0],
+			calendarDate: moment(date).format("YYYY-MM-DD"),
 			room_type: roomType,
-			price: isBlocking ? 0 : pricingRate,
-			rootPrice: isBlocking ? 0 : resolvedRootPrice,
+			price: isBlocking ? 0 : Number(pricingRate),
+			rootPrice: isBlocking ? 0 : Number(resolvedRootPrice),
 			color: isBlocking
 				? "black"
 				: getColorForPrice(pricingRate, selectedDateRange.join("-")),
@@ -371,7 +374,7 @@ const ZCase3 = ({
 				}}
 			>
 				{priceLabel && <div>{priceLabel}</div>}
-				{rootLabel && user?.role === 1000 && <div>{rootLabel}</div>}
+				{rootLabel && <div>{rootLabel}</div>}
 			</div>
 		);
 	};
@@ -501,8 +504,7 @@ const ZCase3 = ({
 									</div>
 								)}
 							</div>
-							{user && user.role === 1000 ? (
-								<div>
+							<div>
 									<label className='mt-3'>
 										{isArabic ? "السعر الجذري:" : "Root Price:"}
 									</label>
@@ -536,8 +538,7 @@ const ZCase3 = ({
 												: "Please enter the root price"}
 										</div>
 									)}
-								</div>
-							) : null}
+							</div>
 							<div className='text-center mt-3'>
 								<Button
 									onClick={() => handleDateRangeSubmit()}

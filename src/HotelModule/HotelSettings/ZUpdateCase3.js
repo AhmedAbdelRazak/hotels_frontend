@@ -8,7 +8,6 @@ import moment from "moment";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import ZCustomInput from "./ZCustomInput";
-import { isAuthenticated } from "../../auth";
 import {
 	buildCalendarRateTitle,
 	getCalendarRateClassNames,
@@ -40,7 +39,6 @@ const ZUpdateCase3 = ({
 	const pricingRatesRef = useRef(existingRoomDetails?.pricingRate || []);
 	const priceInputRef = useRef(null);
 	const [isBlocked, setIsBlocked] = useState(false);
-	const { user } = isAuthenticated();
 	const isArabic = chosenLanguage === "Arabic";
 	const calendarText = {
 		dateRangeRequired: isArabic
@@ -80,8 +78,8 @@ const ZUpdateCase3 = ({
 		calendarApi.addEvent({
 			id: selectedRangeEventId,
 			title: "Selected",
-			start: start.toISOString().split("T")[0],
-			end: adjustedEnd.toISOString().split("T")[0],
+			start: moment(start).format("YYYY-MM-DD"),
+			end: moment(adjustedEnd).format("YYYY-MM-DD"),
 			allDay: true,
 			display: "background",
 			backgroundColor: selectedRangeColor,
@@ -126,7 +124,7 @@ const ZUpdateCase3 = ({
 					title: buildCalendarRateTitle({
 						rate,
 						isArabic,
-						includeRoot: user?.role === 1000,
+						includeRoot: true,
 					}),
 					start: rate.calendarDate,
 					end: rate.calendarDate,
@@ -143,7 +141,7 @@ const ZUpdateCase3 = ({
 
 			successCallback(events);
 		},
-		[getColorForPrice, isArabic, user?.role]
+		[getColorForPrice, isArabic]
 	);
 
 	// Helper function to generate an array of dates between two dates
@@ -202,7 +200,19 @@ const ZUpdateCase3 = ({
 			return;
 		}
 
-		if ((!pricingRate && !isBlocking) || (!rootPrice && !isBlocking)) {
+		const resolvedRootPrice =
+			rootPrice ||
+			existingRoomDetails?.defaultCost ||
+			existingRoomDetails?.rootPrice ||
+			existingRoomDetails?.price?.basePrice ||
+			pricingRate;
+		const hasValidRegularPrice = Number(pricingRate) > 0;
+		const hasValidRootPrice = Number(resolvedRootPrice) > 0;
+
+		if (
+			(!hasValidRegularPrice && !isBlocking) ||
+			(!hasValidRootPrice && !isBlocking)
+		) {
 			setPriceError(true);
 			message.error(
 				isArabic
@@ -213,16 +223,20 @@ const ZUpdateCase3 = ({
 		}
 
 		const roomType =
-			selectedRoomType === "other" ? customRoomType : selectedRoomType;
+			selectedRoomType === "other"
+				? customRoomType
+				: existingRoomDetails?.roomType || selectedRoomType;
+		const fallbackBasePrice =
+			pricingRate || existingRoomDetails?.price?.basePrice || resolvedRootPrice || 0;
 
 		const newPricingRates = generateDateRangeArray(
 			selectedDateRange[0],
 			selectedDateRange[1]
 		).map((date) => ({
-			calendarDate: date.toISOString().split("T")[0],
+			calendarDate: moment(date).format("YYYY-MM-DD"),
 			room_type: roomType,
-			price: isBlocking ? 0 : pricingRate,
-			rootPrice: isBlocking ? 0 : rootPrice,
+			price: isBlocking ? 0 : Number(pricingRate),
+			rootPrice: isBlocking ? 0 : Number(resolvedRootPrice),
 			color: isBlocking
 				? "black"
 				: getColorForPrice(pricingRate, selectedDateRange.join("-")),
@@ -246,7 +260,7 @@ const ZUpdateCase3 = ({
 			const updatedRoomCountDetails = [...prevDetails.roomCountDetails];
 
 			const roomIndex = updatedRoomCountDetails.findIndex(
-				(room) => room._id === existingRoomDetails._id
+				(room) => String(room._id) === String(existingRoomDetails._id)
 			);
 
 			if (roomIndex > -1) {
@@ -254,8 +268,14 @@ const ZUpdateCase3 = ({
 			} else {
 				updatedRoomCountDetails.push({
 					_id: existingRoomDetails._id,
+					...existingRoomDetails,
 					roomType,
-					pricingRate: newPricingRates,
+					price: {
+						...(existingRoomDetails?.price || {}),
+						basePrice: Number(fallbackBasePrice) || 0,
+					},
+					defaultCost: Number(resolvedRootPrice) || 0,
+					pricingRate: mergedPricingRates,
 				});
 			}
 
@@ -281,8 +301,20 @@ const ZUpdateCase3 = ({
 
 	// Handle blocking checkbox change
 	const handleBlockChange = (e) => {
-		setIsBlocked(e.target.checked);
-		if (e.target.checked) {
+		const checked = e.target.checked;
+
+		if (checked && (!selectedDateRange?.[0] || !selectedDateRange?.[1])) {
+			setIsBlocked(false);
+			message.error(
+				isArabic
+					? "ÙŠØ±Ø¬Ù‰ ØªØ­Ø¯ÙŠØ¯ Ù†Ø·Ø§Ù‚ Ø§Ù„ØªØ§Ø±ÙŠØ® Ø£ÙˆÙ„Ø§Ù‹."
+					: "Please select a date range first."
+			);
+			return;
+		}
+
+		setIsBlocked(checked);
+		if (checked) {
 			const [start, end] = selectedDateRange;
 			const messageText =
 				chosenLanguage === "Arabic"
@@ -333,7 +365,7 @@ const ZUpdateCase3 = ({
 				}}
 			>
 				{priceLabel && <div>{priceLabel}</div>}
-				{rootLabel && user?.role === 1000 && <div>{rootLabel}</div>}
+				{rootLabel && <div>{rootLabel}</div>}
 			</div>
 		);
 	};
@@ -471,8 +503,7 @@ const ZUpdateCase3 = ({
 									</div>
 								)}
 							</div>
-							{user && user.role === 1000 ? (
-								<div>
+							<div>
 									<label className='mt-3'>
 										{chosenLanguage === "Arabic"
 											? "السعر الجذري:"
@@ -511,8 +542,7 @@ const ZUpdateCase3 = ({
 												: "Please enter the root price"}
 										</div>
 									)}
-								</div>
-							) : null}
+							</div>
 
 							<div className='text-center mt-3'>
 								<Button

@@ -56,6 +56,33 @@ export const getHotelStaffUsers = (userId, token, hotelId) => {
 		});
 };
 
+export const getHotelAgentOptions = (
+	userId,
+	token,
+	hotelId,
+	{ q = "", limit = 80 } = {}
+) => {
+	const params = new URLSearchParams();
+	if (q) params.set("q", q);
+	if (limit) params.set("limit", limit);
+	const query = params.toString() ? `?${params.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-agents/${hotelId}/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.log(err);
+			throw err;
+		});
+};
+
 export const updateHotelStaffUser = (userId, token, hotelId, staffId, userData) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/hotel-staff/${staffId}/${hotelId}/${userId}`,

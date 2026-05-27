@@ -1406,7 +1406,7 @@ const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") =>
 			return `/hotel-management/financials/${ownerId}/${hotelId}?focus=todos`;
 		}
 		if (action === "finance") {
-			return `/hotel-management/financials/${ownerId}/${hotelId}`;
+			return "/hotel-management/main-dashboard?overall=financial-report";
 		}
 		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
 			action === "list" ? "?list=&page=1" : "?newReservation"
@@ -1519,6 +1519,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		financials: "Financials",
 		agentAccounts: "Agent accounts",
 		walletBalance: "Wallet balance",
+		assignedStock: "Assigned stock",
 		outstandingReservations: "Outstanding reservations",
 		commissionOnly: "Commission only",
 		openHotel: "Open hotel",
@@ -1555,6 +1556,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		loading: "جاري تحميل الفنادق المخصصة...",
 		noHotels: "لا توجد فنادق مخصصة لهذا الحساب حتى الآن.",
 		assigned: "مخصص",
+		assignedStock: "\u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0645\u062e\u0635\u0635",
 		toggleHint: "التبديل بين الفنادق",
 	},
 };
@@ -1609,6 +1611,17 @@ const agentWalletDisplay = (wallet = {}, text = SCOPED_DASHBOARD_WORDS.en) => {
 				? text.outstandingReservations || "Outstanding reservations"
 				: text.walletBalance || "Wallet balance",
 	};
+};
+
+const totalAssignedAgentStock = (hotel = {}, agentId = "") => {
+	const targetAgentId = normalizeDashboardId(agentId);
+	if (!targetAgentId) return 0;
+	return (Array.isArray(hotel.roomCountDetails) ? hotel.roomCountDetails : [])
+		.flatMap((room) =>
+			Array.isArray(room?.agentInventory) ? room.agentInventory : []
+		)
+		.filter((row) => normalizeDashboardId(row.agentId) === targetAgentId)
+		.reduce((sum, row) => sum + Math.max(0, Number(row.stock || 0)), 0);
 };
 
 const ScopedUserMainDashboard = ({ user, token }) => {
@@ -1943,6 +1956,22 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		const ownerId = getScopedOwnerId(hotel, user);
 		if (!hotelId || !ownerId) return;
 		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
+		if (roleKey === "ordertaker" && action === "finance") {
+			const params = new URLSearchParams(location.search || "");
+			const agentId = normalizeDashboardId(user?._id);
+			params.set("overall", "financial-report");
+			if (agentId) params.set("agentId", agentId);
+			else params.delete("agentId");
+			params.delete("hotelId");
+			params.delete("modal");
+			params.delete("focus");
+			const nextSearch = params.toString();
+			history.push({
+				pathname: "/hotel-management/main-dashboard",
+				search: nextSearch ? `?${nextSearch}` : "",
+			});
+			return;
+		}
 		if (action === "reconciliation") {
 			openScopedReconciliation(hotel, 1);
 			return;
@@ -2139,6 +2168,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 								TXT
 							);
 							const todoCount = Number(todoSummaries[hotel._id]?.total || 0);
+							const assignedStock = totalAssignedAgentStock(hotel, user?._id);
 							const active = hotel._id === selectedHotelId;
 							return (
 								<AgentHotelCard key={hotel._id} $active={active}>
@@ -2190,6 +2220,10 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 												<AgentMiniStat>
 													<strong>{todoCount}</strong>
 													<span>{TXT.todos || "To Do's"}</span>
+												</AgentMiniStat>
+												<AgentMiniStat>
+													<strong>{assignedStock}</strong>
+													<span>{TXT.assignedStock || "Assigned stock"}</span>
 												</AgentMiniStat>
 												<AgentMiniStat>
 													<strong>{walletDisplay.value}</strong>

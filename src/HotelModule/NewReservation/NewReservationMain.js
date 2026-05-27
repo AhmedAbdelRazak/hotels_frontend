@@ -1030,6 +1030,7 @@ const NewReservationMain = ({
 		getHotelInventoryAvailability(hotelDetails._id, {
 			start: formattedStartDate,
 			end: formattedEndDate,
+			agentId: limitedOrderTakerAccount ? user?._id : "",
 		}).then((data) => {
 			if (data && data.error) {
 				console.log(data.error);
