@@ -614,6 +614,11 @@ Final Production Readiness Notes
   - Non-super-admin support users send messages using their actual account name/email fallback.
   - History client cases must be paginated and sorted newest first.
   - Customer-service tabs and tables should match the shared admin tab/table styling.
+  - Active client support case clicks must keep the URL query synchronized as tab=active-client-cases&caseId=<caseId>.
+  - Escalated client support case clicks must keep the URL query synchronized as tab=escalated-client-cases&caseId=<caseId>.
+  - Legacy ?id=<caseId> client-chat links should normalize to caseId without creating history or render loops.
+  - Chat sound/vibration depends on the customer-service NotificationProvider. The Enable Notification Sound button unlocks audio, stores the preference locally, and mobile browsers vibrate when supported.
+  - Active AI/human escalations live in the Escalated Client Cases tab until staff marks the escalation addressed.
 
 - Admin accounts management UI
   - Route:
@@ -839,3 +844,139 @@ Future TODO Backlog - Added 2026-05-26
 - User-facing expectation:
   - Users should not see repeated failed requests from stale preview sessions.
   - If the main login session itself expires, the app should treat the user as signed out instead of continuing to call APIs with the expired token.
+
+2026-05-26 Executive Summary UI Clarification Completion
+- User-facing issue:
+  - The hotel-management overall summary table showed occupied rooms as a fraction such as 7/56.
+  - Users could understandably read this as live current occupancy, while the backend value is range peak occupancy.
+- Frontend file changed:
+  - src/HotelModule/TheOverallStructure/OverallSummary/OverallSummaryMain.js
+- Labeling now clarifies:
+  - Total rooms:
+    - Sellable active rooms.
+    - Blocked/out-of-service rooms are excluded.
+  - Available rooms:
+    - "Min Available Rooms" / "Min Available" for the selected range.
+    - This is the lowest available sellable room count after each hotel's peak occupied day in the selected range.
+  - Occupied:
+    - "Peak Occupied" for the selected range.
+    - The Hotel Rooms Map remains the live current-state view.
+  - Housekeeping:
+    - "Clean / Dirty" instead of a vague housekeeping fraction.
+    - Occupied rooms are not counted as dirty in this summary fraction.
+- UX rule:
+  - Keep these explanations compact with title tooltips and concise labels.
+  - Do not add a large instructional block to the operational report.
+  - If a future current occupancy column is added, label it explicitly as "Current Occupied" and keep it separate from "Peak Occupied".
+- Verified behavior:
+  - Zad Al Safa 7/56 is expected for date range 2026-03-27 through 2026-05-26.
+  - The live room map can show around 4 current occupied rooms at the same time without contradicting the summary.
+- Related backend audit:
+  - hotels_backend/audits/executive-summary-data-quality-2026-05-26.md
+
+2026-05-26 PMS Chat UX And Boundary Update
+- PMS chat surfaces:
+  - Admin B2C support monitoring:
+    - src/AdminModule/CustomerService/*
+    - Route: /admin/customer-service
+  - Hotel/internal B2B chat:
+    - src/HotelModule/B2BChat/B2BChatMain.js
+    - Route: /hotel-management/b2b-chat
+- Product rule:
+  - B2B chats should never show or trigger bots.
+  - B2C AI support is only for public/client support cases, monitored from admin customer-service routes.
+  - Once an admin/staff member replies to a B2C support case, the backend pauses AI.
+- Current PMS frontend behavior:
+  - Admin ChatDetail sends authenticated staff messages through updateSupportCase.
+  - The backend now records human takeover and stops AI on those messages.
+  - Super-admin custom display names continue to work, and backend sender-name enforcement remains the authority for non-super-admin staff names.
+  - ChatDetail renders markdown hotel links such as [Hotel](https://...) as clickable new-tab links.
+  - Active client chat selection is query-param stable on desktop and mobile.
+  - Active hotel and active client support case lists use the same notification sound context after the user unlocks sound.
+- Hotel activation frontend behavior:
+  - Hotel owner/manager settings continue to write activateHotel.
+  - Platform admin Added Hotels dashboard writes xHotelProActive for the Jannat/XHotelPro gate.
+  - A hotel is public/CSR-active only when activateHotel is true and xHotelProActive is not false.
+  - Legacy hotel rows with missing xHotelProActive should display as platform-active until an admin explicitly disables the platform gate.
+- Current PMS frontend improvement:
+  - ChatDetail now has admin-only B2C AI controls for AI responding / AI paused state.
+  - ChatDetail has an admin-only escalation panel for active escalations and a Mark Escalation Addressed action.
+  - ActiveClientsSupportCases supports both active-client-cases and escalated-client-cases modes.
+  - Do not expose AI or escalation controls in B2B chat or hotel-management B2B views.
+
+2026-05-26 Public Frontend And SSR Reference Sync
+- Current public frontend:
+  - D:\JannatBooking\jannatbooking_frontend
+  - Separate from hotels_frontend.
+  - Owns public website routes, hotel browsing, checkout/payment flows, and public B2C chat widget.
+- New public-frontend documentation:
+  - D:\JannatBooking\jannatbooking_frontend\application_structure_public_frontend.txt
+- New SSR planning documentation:
+  - D:\JannatBooking\jannatbooking_ssr\application_structure_ssr.txt
+- Important migration rule:
+  - hotels_frontend remains the PMS/admin/hotel-management app.
+  - jannatbooking_frontend remains the current public production baseline.
+  - jannatbooking_ssr should be built as a sibling public SSR app and validated side by side before any traffic switch.
+- Validation run after this update:
+  - npm.cmd run build in hotels_frontend compiled successfully.
+  - npm.cmd run build in jannatbooking_frontend compiled successfully with existing warnings only:
+    - ReactPixel source-map warning.
+    - unused hasOffers in Navbar.js.
+  - git diff --check passed in each repo, with only normal CRLF warnings.
+
+2026-05-27 Admin Customer-Service AI Monitoring Update
+- Route:
+  - /admin/customer-service
+- Query behavior:
+  - Active client case selection uses tab=active-client-cases and caseId=<supportCaseId>.
+  - Escalated client case selection uses tab=escalated-client-cases and caseId=<supportCaseId>.
+  - Clicking another chat must update caseId without causing an effect loop.
+  - Legacy id query params may be read for compatibility, but caseId is the stable forward path.
+- Escalation tab:
+  - CustomerServiceDetails includes an Escalated Client Cases tab.
+  - It loads /support-cases-clients/escalated through getEscalatedClientSupportCases.
+  - Only open B2C cases with escalationStatus=active belong in this tab.
+  - Normal active-client-cases excludes active escalations so urgent handoffs are easier to see.
+  - supportCaseUpdated, supportCaseEscalated, supportCaseEscalationAddressed, and supportCaseEscalationUpdated refresh counts and lists without URL loops.
+- AI controls:
+  - ChatDetail shows AI controls only for client-opened B2C support cases.
+  - Admin/staff can pause/resume aiToRespond from the protected support-case endpoint.
+  - While AI is on, the manual composer is locked so a human does not accidentally answer over the bot.
+  - Once admin/staff replies manually, the backend pauses AI and the UI should reflect aiToRespond=false.
+  - For escalationStatus=active, ChatDetail shows Mark Escalation Addressed; clicking it sets escalationStatus=addressed and removes the case from the escalated tab.
+  - These controls must never appear in B2B chat or public/client chat.
+- Message rendering:
+  - Arabic and other RTL messages should render with proper alignment and separate sender/body lines so punctuation does not flip around the sender name.
+  - Corrupted text such as "?????" or mojibake should not be displayed as normal content; use fallback display text if legacy data contains unreadable encoding.
+  - ChatDetail deduplicates receiveMessage echoes so the controller, socket relay, and Mongo watcher cannot render the same message multiple times.
+- Typing behavior:
+  - AI typing events arrive as typing/stopTyping with isAi=true and name set to the case aiResponderName.
+  - Admin view should show "{name} يكتب الآن..." for RTL cases while the AI delay is active.
+  - Typing state is transient and must clear on receiveMessage or stopTyping.
+- Professional support tone:
+  - The backend writer is responsible for the actual wording, but admin QA should expect Arabic replies to address clients respectfully, e.g. "أستاذ ناصر".
+  - Keep visible labels professional and official. Avoid casual or vague terms in admin-facing controls.
+- Notification behavior:
+  - The chat badge and support notification summary should clear closed cases and resolved unseen counts.
+  - Top-navbar sound/vibration still depends on browser unlock rules: desktop sound after interaction; mobile vibration where supported while the browser is open.
+- 2026-05-27 validation:
+  - node --check src/AdminModule/CustomerService/ChatDetail.js passed.
+  - node --check src/AdminModule/CustomerService/ActiveClientsSupportCases.js passed.
+  - node --check src/AdminModule/CustomerService/CustomerServiceDetails.js passed.
+  - node --check src/AdminModule/apiAdmin.js passed.
+  - npm.cmd run build compiled successfully.
+  - Live QA showed typing events and AI replies for Arabic B2C cases after backend fixes.
+- 2026-05-27 QA cleanup:
+  - Backend cleanup removed six Arabic chatbot QA support cases that appeared in /admin/customer-service.
+  - No chatbot QA reservations were found or deleted.
+  - Future frontend QA should use unmistakable test display names such as names containing "اختبار" or "QA Pass", then remove the exact support-case IDs after testing.
+- 2026-05-27 final pre-production cleanup:
+  - The temporary rude escalation QA case 6a16417650a34b197ce4d2ee was removed after validating the escalated-client-cases tab.
+  - Final backend verification returned 0 QA support leftovers and 0 QA reservations.
+  - Before deployment, customer-service should be checked at:
+    - /admin/customer-service?tab=active-client-cases
+    - /admin/customer-service?tab=escalated-client-cases
+    - /admin/customer-service?tab=history-client-cases
+  - Tomorrow follow-up:
+    - Add regression tests around query-param tab switching, escalation addressed removal, and AI/manual composer locking.
+    - Run a supervised production B2C escalation test only after support staff are ready, then delete the exact case ID.

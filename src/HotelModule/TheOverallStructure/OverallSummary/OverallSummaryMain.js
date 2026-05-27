@@ -62,6 +62,18 @@ const SUMMARY_TEXT = {
 		status: "Status",
 		dateBy: "Date by",
 		grandTotal: "Grand Total",
+		minAvailableRooms: "Min Available Rooms",
+		minAvailable: "Min Available",
+		peakOccupied: "Peak Occupied",
+		cleanDirty: "Clean / Dirty",
+		totalRoomsHint:
+			"Sellable active rooms. Blocked/out-of-service rooms are excluded.",
+		availableHint:
+			"Lowest available sellable rooms after each hotel's peak occupied day in the selected range.",
+		occupiedHint:
+			"Highest occupied sellable rooms on any day in the selected date range. The Hotel Rooms Map shows the live current state.",
+		cleanDirtyHint:
+			"Clean/dirty active rooms from room-map and housekeeping state. Occupied rooms are not counted as dirty here.",
 	},
 	ar: {
 		title: "الملخص العام",
@@ -70,6 +82,18 @@ const SUMMARY_TEXT = {
 		yesterday: "أمس",
 		last7: "آخر 7 أيام",
 		grandTotal: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0639\u0627\u0645",
+		minAvailableRooms: "\u0623\u0642\u0644 \u063a\u0631\u0641 \u0645\u062a\u0627\u062d\u0629",
+		minAvailable: "\u0623\u0642\u0644 \u0645\u062a\u0627\u062d",
+		peakOccupied: "\u0623\u0639\u0644\u0649 \u0625\u0634\u063a\u0627\u0644",
+		cleanDirty: "\u0646\u0638\u064a\u0641 / \u0645\u062a\u0633\u062e",
+		totalRoomsHint:
+			"\u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0646\u0634\u0637\u0629 \u0627\u0644\u0642\u0627\u0628\u0644\u0629 \u0644\u0644\u0628\u064a\u0639. \u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0645\u0639\u0637\u0644\u0629 \u0623\u0648 \u062e\u0627\u0631\u062c \u0627\u0644\u062e\u062f\u0645\u0629 \u0645\u0633\u062a\u0628\u0639\u062f\u0629.",
+		availableHint:
+			"\u0623\u0642\u0644 \u0639\u062f\u062f \u0645\u062a\u0627\u062d \u0645\u0646 \u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0642\u0627\u0628\u0644\u0629 \u0644\u0644\u0628\u064a\u0639 \u0628\u0639\u062f \u064a\u0648\u0645 \u0623\u0639\u0644\u0649 \u0625\u0634\u063a\u0627\u0644 \u0644\u0643\u0644 \u0641\u0646\u062f\u0642 \u0641\u064a \u0627\u0644\u0645\u062f\u0649 \u0627\u0644\u0645\u062d\u062f\u062f.",
+		occupiedHint:
+			"\u0623\u0639\u0644\u0649 \u0639\u062f\u062f \u063a\u0631\u0641 \u0645\u0634\u063a\u0648\u0644\u0629 \u0641\u064a \u0623\u064a \u064a\u0648\u0645 \u062f\u0627\u062e\u0644 \u0627\u0644\u0645\u062f\u0649 \u0627\u0644\u0645\u062d\u062f\u062f. \u062e\u0631\u064a\u0637\u0629 \u063a\u0631\u0641 \u0627\u0644\u0641\u0646\u062f\u0642 \u062a\u0639\u0631\u0636 \u0627\u0644\u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u0627\u0644\u064a\u0629.",
+		cleanDirtyHint:
+			"\u063a\u0631\u0641 \u0646\u0638\u064a\u0641\u0629/\u0645\u062a\u0633\u062e\u0629 \u0645\u0646 \u062d\u0627\u0644\u0629 \u0627\u0644\u062e\u0631\u064a\u0637\u0629 \u0648\u0627\u0644\u0646\u0638\u0627\u0641\u0629. \u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0645\u0634\u063a\u0648\u0644\u0629 \u0644\u0627 \u062a\u062d\u0633\u0628 \u0645\u062a\u0633\u062e\u0629 \u0647\u0646\u0627.",
 	},
 };
 
@@ -811,11 +835,13 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					</OverallCard>
 					<OverallCard>
 						<strong>{loading ? "..." : Number(stats.totalRooms || 0)}</strong>
-						<span>{labels.totalRooms}</span>
+						<span title={labels.totalRoomsHint}>{labels.totalRooms}</span>
 					</OverallCard>
 					<OverallCard>
 						<strong>{loading ? "..." : Number(stats.availableRooms || 0)}</strong>
-						<span>{labels.availableRooms}</span>
+						<span title={labels.availableHint}>
+							{labels.minAvailableRooms || labels.availableRooms}
+						</span>
 					</OverallCard>
 					<OverallCard>
 						<strong>{loading ? "..." : Number(stats.totalReservations || 0)}</strong>
@@ -871,13 +897,19 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						<tr>
 							<th>#</th>
 							<th>{labels.hotel}</th>
-							<th>{labels.rooms}</th>
-							<th>{labels.available}</th>
-							<th>{labels.occupied}</th>
+							<th title={labels.totalRoomsHint}>{labels.rooms}</th>
+							<th title={labels.availableHint}>
+								{labels.minAvailable || labels.available}
+							</th>
+							<th title={labels.occupiedHint}>
+								{labels.peakOccupied || labels.occupied}
+							</th>
 							<th>{labels.reservations}</th>
 							<th>{labels.total}</th>
 							<th>{labels.pending}</th>
-							<th>{labels.housekeeping}</th>
+							<th title={labels.cleanDirtyHint}>
+								{labels.cleanDirty || labels.housekeeping}
+							</th>
 							<th>{labels.settings}</th>
 						</tr>
 					</thead>
@@ -899,9 +931,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 											{titleCase(hotel.hotelName)}
 										</button>
 									</td>
-									<td>{formatCount(hotel.totalRooms)}</td>
-									<td>{formatCount(hotel.availableRooms)}</td>
-									<td className='fraction-cell'>
+									<td title={labels.totalRoomsHint}>{formatCount(hotel.totalRooms)}</td>
+									<td title={labels.availableHint}>
+										{formatCount(hotel.availableRooms)}
+									</td>
+									<td className='fraction-cell' title={labels.occupiedHint}>
 										{formatRoomsFraction(hotel.occupiedRooms, hotel.totalRooms)}
 									</td>
 									<td>{formatCount(hotel.totalReservations)}</td>
@@ -909,7 +943,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 										{formatMoney(hotel.totalAmount)} {labels.sar}
 									</td>
 									<td>{formatCount(hotel.pendingReservations)}</td>
-									<td className='fraction-cell'>
+									<td className='fraction-cell' title={labels.cleanDirtyHint}>
 										{formatCleanlinessFraction(hotel)}
 									</td>
 									<td>
@@ -937,9 +971,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 							<tr className='summary-total-row'>
 								<td>-</td>
 								<td>{labels.grandTotal}</td>
-								<td>{formatCount(stats.totalRooms)}</td>
-								<td>{formatCount(stats.availableRooms)}</td>
-								<td className='fraction-cell'>
+								<td title={labels.totalRoomsHint}>{formatCount(stats.totalRooms)}</td>
+								<td title={labels.availableHint}>
+									{formatCount(stats.availableRooms)}
+								</td>
+								<td className='fraction-cell' title={labels.occupiedHint}>
 									{formatRoomsFraction(stats.occupiedRooms, stats.totalRooms)}
 								</td>
 								<td>{formatCount(stats.totalReservations)}</td>
@@ -947,7 +983,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 									{formatMoney(stats.totalAmount)} {labels.sar}
 								</td>
 								<td>{formatCount(stats.pendingReservations)}</td>
-								<td className='fraction-cell'>
+								<td className='fraction-cell' title={labels.cleanDirtyHint}>
 									{formatCleanlinessFraction(stats)}
 								</td>
 								<td>-</td>

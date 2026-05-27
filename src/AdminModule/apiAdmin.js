@@ -628,6 +628,23 @@ export const getFilteredSupportCasesClients = (token) => {
 		.catch((err) => console.log(err));
 };
 
+export const getEscalatedClientSupportCases = (token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/support-cases-clients/escalated`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getFilteredClosedSupportCases = (token) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/closed`, {
 		method: "GET",

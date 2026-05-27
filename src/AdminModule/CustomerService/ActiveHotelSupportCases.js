@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import styled from "styled-components";
 import {
 	Button,
@@ -21,7 +21,7 @@ import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
-import notificationSound from "./Notification.wav"; // Make sure the path is correct
+import { NotificationContext } from "./NotificationContext";
 import { useLocation, useHistory } from "react-router-dom"; // for mobile param
 
 const { Option } = Select;
@@ -47,7 +47,7 @@ const ActiveHotelSupportCases = () => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [unseenCount, setUnseenCount] = useState(0);
-	const [hasUserInteracted, setHasUserInteracted] = useState(false);
+	const { soundEnabled, playSound } = useContext(NotificationContext);
 
 	// For mobile
 	const location = useLocation();
@@ -75,22 +75,12 @@ const ActiveHotelSupportCases = () => {
 	}, [user._id]);
 
 	const playNotificationSound = () => {
-		if (!hasUserInteracted) return;
-		const audio = new Audio(notificationSound);
-		audio.play().catch((error) => {
-			console.error("Audio play error:", error);
-		});
+		if (!soundEnabled) return;
+		playSound();
+		if (typeof navigator !== "undefined" && navigator.vibrate) {
+			navigator.vibrate([80, 35, 80]);
+		}
 	};
-
-	useEffect(() => {
-		const handleUserInteraction = () => {
-			setHasUserInteracted(true);
-		};
-		window.addEventListener("click", handleUserInteraction);
-		return () => {
-			window.removeEventListener("click", handleUserInteraction);
-		};
-	}, []);
 
 	// Fetch hotel owners when the modal is opened
 	useEffect(() => {
@@ -142,12 +132,16 @@ const ActiveHotelSupportCases = () => {
 
 		// Handle case closed event
 		const handleCaseClosed = (closedCase) => {
+			const closedCaseId =
+				closedCase?.case?._id || closedCase?.caseId || closedCase?._id;
+			if (!closedCaseId) return;
 			setSupportCases((prevCases) =>
-				prevCases.filter((c) => c._id !== closedCase.case._id)
+				prevCases.filter((c) => c._id !== closedCaseId)
 			);
-			if (selectedCase && selectedCase._id === closedCase.case._id) {
+			if (selectedCase && selectedCase._id === closedCaseId) {
 				setSelectedCase(null);
 			}
+			fetchSupportCases();
 		};
 
 		// Handle new case event

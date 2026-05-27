@@ -3,6 +3,7 @@ import styled from "styled-components";
 import { useLocation, useHistory } from "react-router-dom";
 import { List, Badge } from "antd";
 import {
+	getEscalatedClientSupportCases,
 	getFilteredSupportCasesClients,
 	markAllMessagesAsSeenByAdmin,
 	getUnseenMessagesCountByAdmin,
@@ -15,11 +16,18 @@ import socket from "../../socket";
 // 1) Import NotificationContext
 import { NotificationContext } from "./NotificationContext";
 
-const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
+const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [unseenCount, setUnseenCount] = useState(0);
 	const { user, token } = isAuthenticated();
+	const isEscalatedMode = mode === "escalated";
+	const activeTabKey = isEscalatedMode
+		? "escalated-client-cases"
+		: "active-client-cases";
+	const listTitle = isEscalatedMode
+		? "Escalated Client Support Cases"
+		: "Open Client Support Cases";
 
 	// For smaller-screen routing
 	const location = useLocation();
@@ -34,6 +42,29 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 	//    - soundEnabled (if you want to conditionally do something)
 	//    - playSound (to actually play the notification audio)
 	const { soundEnabled, playSound } = useContext(NotificationContext);
+
+	const syncCaseIdToUrl = useCallback(
+		(caseId, { replace = false } = {}) => {
+			if (!caseId) return;
+			const params = new URLSearchParams(location.search);
+			params.set("tab", activeTabKey);
+			params.set("caseId", caseId);
+			params.delete("id");
+			const nextSearch = `?${params.toString()}`;
+			if (nextSearch === location.search) return;
+
+			const nextLocation = {
+				pathname: location.pathname,
+				search: nextSearch,
+			};
+			if (replace) {
+				history.replace(nextLocation);
+			} else {
+				history.push(nextLocation);
+			}
+		},
+		[activeTabKey, history, location.pathname, location.search]
+	);
 
 	/* ------------------- FETCH UNSEEN COUNT ------------------- */
 	useEffect(() => {
@@ -83,9 +114,22 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		[user._id]
 	);
 
+	const caseBelongsToMode = useCallback(
+		(supportCase = {}) =>
+			supportCase.openedBy === "client" &&
+			supportCase.caseStatus !== "closed" &&
+			(isEscalatedMode
+				? supportCase.escalationStatus === "active"
+				: supportCase.escalationStatus !== "active"),
+		[isEscalatedMode]
+	);
+
 	/* ------------------- FETCH SUPPORT CASES ------------------- */
 	const fetchSupportCases = useCallback(() => {
-		getFilteredSupportCasesClients(token)
+		const loadCases = isEscalatedMode
+			? getEscalatedClientSupportCases
+			: getFilteredSupportCasesClients;
+		loadCases(token)
 			.then((data) => {
 				if (data.error) {
 					toast.error("Failed to fetch support cases");
@@ -116,9 +160,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 					// ---------------------------------------------------------- //
 
 					// Filter out closed
-					const openCases = filteredCases.filter(
-						(chat) => chat.caseStatus !== "closed"
-					);
+					const openCases = filteredCases.filter(caseBelongsToMode);
 
 					setSupportCases(sortSupportCases(openCases));
 
@@ -135,7 +177,14 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			.catch(() => {
 				toast.error("Failed to fetch support cases");
 			});
-	}, [token, isSuperAdmin, getUser, sortSupportCases]);
+	}, [
+		token,
+		isEscalatedMode,
+		isSuperAdmin,
+		getUser,
+		sortSupportCases,
+		caseBelongsToMode,
+	]);
 
 	/* ------------------- SETUP / SOCKET LISTENERS ------------------- */
 	useEffect(() => {
@@ -165,7 +214,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		// On new chat
 		const handleNewChat = (newCase) => {
 			// If you want a beep for brand new cases, do it here
-			if (newCase.openedBy === "client") {
+			if (caseBelongsToMode(newCase)) {
 				if (soundEnabled) {
 					playSound();
 					// Optionally vibrate
@@ -177,26 +226,63 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			}
 		};
 
+		const handleSupportCaseUpdated = (updatedCase) => {
+			if (!updatedCase?._id) return;
+			const belongsHere = caseBelongsToMode(updatedCase);
+			setSupportCases((prevCases) => {
+				if (!belongsHere) {
+					return prevCases.filter((c) => c._id !== updatedCase._id);
+				}
+				const exists = prevCases.some((c) => c._id === updatedCase._id);
+				const nextCases = exists
+					? prevCases.map((c) => (c._id === updatedCase._id ? updatedCase : c))
+					: [...prevCases, updatedCase];
+				return sortSupportCases(nextCases);
+			});
+			if (selectedCase?._id === updatedCase._id) {
+				setSelectedCase(belongsHere ? updatedCase : null);
+			}
+		};
+
 		// On case closed
 		const handleCaseClosed = (closedCase) => {
+			const closedCaseId =
+				closedCase?.case?._id || closedCase?.caseId || closedCase?._id;
+			if (!closedCaseId) return;
 			setSupportCases((prevCases) =>
-				prevCases.filter((c) => c._id !== closedCase.case._id)
+				prevCases.filter((c) => c._id !== closedCaseId)
 			);
-			if (selectedCase && selectedCase._id === closedCase.case._id) {
+			if (selectedCase && selectedCase._id === closedCaseId) {
 				setSelectedCase(null);
 			}
+			fetchSupportCases();
 		};
 
 		socket.on("receiveMessage", handleReceiveMessage);
 		socket.on("newChat", handleNewChat);
+		socket.on("supportCaseUpdated", handleSupportCaseUpdated);
+		socket.on("supportCaseEscalated", fetchSupportCases);
+		socket.on("supportCaseEscalationAddressed", fetchSupportCases);
+		socket.on("supportCaseEscalationUpdated", fetchSupportCases);
 		socket.on("closeCase", handleCaseClosed);
 
 		return () => {
 			socket.off("receiveMessage", handleReceiveMessage);
 			socket.off("newChat", handleNewChat);
+			socket.off("supportCaseUpdated", handleSupportCaseUpdated);
+			socket.off("supportCaseEscalated", fetchSupportCases);
+			socket.off("supportCaseEscalationAddressed", fetchSupportCases);
+			socket.off("supportCaseEscalationUpdated", fetchSupportCases);
 			socket.off("closeCase", handleCaseClosed);
 		};
-	}, [fetchSupportCases, selectedCase, soundEnabled, playSound]);
+	}, [
+		caseBelongsToMode,
+		fetchSupportCases,
+		selectedCase,
+		sortSupportCases,
+		soundEnabled,
+		playSound,
+	]);
 
 	/* ------------------- MARK CASE AS SEEN ------------------- */
 	const markCaseAsSeen = useCallback(async (caseObj) => {
@@ -223,6 +309,9 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 
 	/* ------------------- HANDLE CASE SELECTION ------------------- */
 	const handleCaseSelection = async (item) => {
+		if (!item?._id) return;
+		syncCaseIdToUrl(item._id);
+
 		// On large screens => local selection, side by side
 		if (!isMobile) {
 			// Leave previous room if needed
@@ -232,8 +321,8 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			setSelectedCase(item);
 			await markCaseAsSeen(item);
 		} else {
-			// On small screens => add ?id=someCaseId, show chat in full screen
-			history.push(`?id=${item._id}`);
+			// On small screens the URL drives the full-screen chat view.
+			await markCaseAsSeen(item);
 		}
 	};
 
@@ -273,6 +362,21 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 		markCaseAsSeen(foundCase);
 	}, [caseIdParam, isMobile, markCaseAsSeen, selectedCase?._id, supportCases]);
 
+	useEffect(() => {
+		if (!isMobile || !caseIdParam || !supportCases.length) return;
+		const foundCase = supportCases.find((item) => item._id === caseIdParam);
+		if (foundCase) markCaseAsSeen(foundCase);
+	}, [caseIdParam, isMobile, markCaseAsSeen, supportCases]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const legacyId = params.get("id");
+		const canonicalId = params.get("caseId");
+		if (legacyId && !canonicalId) {
+			syncCaseIdToUrl(legacyId, { replace: true });
+		}
+	}, [location.search, syncCaseIdToUrl]);
+
 	/* ------------------- MOBILE LOGIC ------------------- */
 	if (isMobile) {
 		// If we have a caseId in the URL, show chat in full screen
@@ -281,8 +385,6 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 			if (!foundCase) {
 				return <div>Loading case...</div>; // or fetch single case if needed
 			}
-			// Mark as seen
-			markCaseAsSeen(foundCase);
 
 			return (
 				<ActiveClientsSupportCasesWrapperMobile>
@@ -304,7 +406,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						style={{ marginTop: "20px", padding: "2px" }}
 						header={
 							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
-								Open Client Support Cases
+								{listTitle}
 								<Badge
 									count={unseenCount}
 									style={{ backgroundColor: "#f5222d", marginLeft: "10px" }}
@@ -366,7 +468,7 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin }) => {
 						style={{ marginTop: "20px" }}
 						header={
 							<div style={{ fontWeight: "bold", textDecoration: "underline" }}>
-								Open Client Support Cases
+								{listTitle}
 								<Badge
 									count={unseenCount}
 									style={{ backgroundColor: "#f5222d", marginLeft: "10px" }}

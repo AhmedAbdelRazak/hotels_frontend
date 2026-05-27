@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useHistory, useLocation } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
@@ -14,9 +15,10 @@ import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 import ZPrivacyPolicy from "./ZPrivacyPolicy";
-import { Modal, Input, Button, message } from "antd";
+import { Modal, Input, Button, message, Switch } from "antd";
 import {
 	ContactsOutlined,
+	CustomerServiceOutlined,
 	FileProtectOutlined,
 	HomeOutlined,
 	InfoCircleOutlined,
@@ -46,6 +48,13 @@ const TEXT = {
 		guestTerms: "Guest Terms",
 		hotelTerms: "Hotel Terms",
 		privacy: "Privacy Policy",
+		aiChat: "AI Chat",
+		aiChatTitle: "Jannat Booking AI Chat",
+		aiChatEnabled: "AI responder is enabled for B2C website chats.",
+		aiChatDisabled: "AI responder is stopped for B2C website chats.",
+		aiChatSwitch: "Allow AI to respond to client chats",
+		aiChatSaved: "AI chat setting was updated.",
+		aiChatSaveFailed: "Unable to update AI chat setting.",
 	},
 	ar: {
 		title: "\u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
@@ -65,6 +74,19 @@ const TEXT = {
 		guestTerms: "\u0634\u0631\u0648\u0637 \u0627\u0644\u0636\u064a\u0648\u0641",
 		hotelTerms: "\u0634\u0631\u0648\u0637 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		privacy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
+		aiChat: "\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621",
+		aiChatTitle:
+			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621 \u0644\u062c\u0646\u0629 \u0628\u0648\u0643\u064a\u0646\u062c",
+		aiChatEnabled:
+			"\u0631\u062f\u0648\u062f \u0627\u0644\u0630\u0643\u0627\u0621 \u0645\u0641\u0639\u0644\u0629 \u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0645\u0648\u0642\u0639.",
+		aiChatDisabled:
+			"\u062a\u0645 \u0625\u064a\u0642\u0627\u0641 \u0631\u062f\u0648\u062f \u0627\u0644\u0630\u0643\u0627\u0621 \u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0645\u0648\u0642\u0639.",
+		aiChatSwitch:
+			"\u0627\u0644\u0633\u0645\u0627\u062d \u0644\u0644\u0630\u0643\u0627\u0621 \u0628\u0627\u0644\u0631\u062f \u0639\u0644\u0649 \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+		aiChatSaved:
+			"\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0625\u0639\u062f\u0627\u062f \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621.",
+		aiChatSaveFailed:
+			"\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u0625\u0639\u062f\u0627\u062f \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621.",
 	},
 };
 
@@ -83,9 +105,12 @@ const TAB_DEFS = [
 		icon: <SafetyCertificateOutlined />,
 	},
 	{ key: "privacyPolicy", labelKey: "privacy", icon: <LockOutlined /> },
+	{ key: "ai-chat", labelKey: "aiChat", icon: <CustomerServiceOutlined /> },
 ];
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
+	const history = useHistory();
+	const location = useLocation();
 	const isArabic = chosenLanguage === "Arabic";
 	const L = TEXT[isArabic ? "ar" : "en"];
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -109,12 +134,18 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 		useState("");
 	const [termsAndConditionEnglish_B2B, setTermsAndConditionEnglish_B2B] =
 		useState("");
+	const [aiToRespond, setAiToRespond] = useState(true);
+	const [aiSaving, setAiSaving] = useState(false);
 	const [password, setPassword] = useState("");
 	const [isPasswordVerified, setIsPasswordVerified] = useState(false);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [getUser, setGetUser] = useState(null);
 
 	const { user, token } = isAuthenticated() || {};
+	const validTabKeys = useMemo(
+		() => new Set(TAB_DEFS.map((tab) => tab.key)),
+		[]
+	);
 	const activeTabLabel =
 		L[TAB_DEFS.find((tab) => tab.key === activeTab)?.labelKey] || L.home;
 
@@ -168,10 +199,24 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 					setTermsAndConditionArabic_B2B(
 						data[0].termsAndConditionArabic_B2B || ""
 					);
+					setAiToRespond(data[0].aiToRespond !== false);
 
 					setDocumentId(data[0]._id);
 				}
 			}
+		});
+	};
+
+	const handleTabChange = (tabKey) => {
+		if (!validTabKeys.has(tabKey)) return;
+		setActiveTab(tabKey);
+		const params = new URLSearchParams(location.search);
+		params.set("tab", tabKey);
+		const nextSearch = `?${params.toString()}`;
+		if (nextSearch === location.search) return;
+		history.push({
+			pathname: location.pathname,
+			search: nextSearch,
 		});
 	};
 
@@ -183,6 +228,30 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 		gettingJanatWebsiteRecord();
 		// eslint-disable-next-line
 	}, [loadCurrentUser]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search);
+		const tabParam = params.get("tab");
+		const nextTab = validTabKeys.has(tabParam) ? tabParam : "home";
+
+		if (activeTab !== nextTab) {
+			setActiveTab(nextTab);
+		}
+
+		if (tabParam !== nextTab) {
+			params.set("tab", nextTab);
+			history.replace({
+				pathname: location.pathname,
+				search: `?${params.toString()}`,
+			});
+		}
+	}, [
+		activeTab,
+		history,
+		location.pathname,
+		location.search,
+		validTabKeys,
+	]);
 
 	useEffect(() => {
 		if (!getUser) return;
@@ -242,6 +311,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 			termsAndConditionEnglish_B2B: termsAndConditionEnglish_B2B,
 			privacyPolicy: privacyPolicy,
 			privacyPolicyArabic: privacyPolicyArabic,
+			aiToRespond: aiToRespond,
 		};
 
 		JanatWebsite(documentId, myDocument).then((data) => {
@@ -251,6 +321,25 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 				toast.success(L.saved);
 			}
 		});
+	};
+
+	const handleAiSwitchChange = async (checked) => {
+		setAiToRespond(checked);
+		if (!documentId) return;
+
+		setAiSaving(true);
+		try {
+			const response = await JanatWebsite(documentId, {
+				aiToRespond: checked,
+			});
+			if (response?.error) throw new Error(response.error);
+			message.success(L.aiChatSaved);
+		} catch (error) {
+			setAiToRespond(!checked);
+			message.error(error?.message || L.aiChatSaveFailed);
+		} finally {
+			setAiSaving(false);
+		}
 	};
 
 	return (
@@ -320,7 +409,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 										role='tab'
 										aria-selected={activeTab === tab.key}
 										className={activeTab === tab.key ? "active" : ""}
-										onClick={() => setActiveTab(tab.key)}
+										onClick={() => handleTabChange(tab.key)}
 									>
 										{tab.icon}
 										<span>{L[tab.labelKey]}</span>
@@ -423,6 +512,25 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 											setPrivacyPolicyArabic={setPrivacyPolicyArabic}
 										/>
 									</div>
+								)}
+
+								{activeTab === "ai-chat" && (
+									<AiSettingsPanel>
+										<div>
+											<h2>{L.aiChatTitle}</h2>
+											<p>
+												{aiToRespond ? L.aiChatEnabled : L.aiChatDisabled}
+											</p>
+										</div>
+										<AiSwitchRow>
+											<span>{L.aiChatSwitch}</span>
+											<Switch
+												checked={aiToRespond}
+												loading={aiSaving}
+												onChange={handleAiSwitchChange}
+											/>
+										</AiSwitchRow>
+									</AiSettingsPanel>
 								)}
 							</TabPanel>
 
@@ -642,6 +750,55 @@ const TabPanel = styled.section`
 	.ql-container,
 	.card {
 		max-width: 100%;
+	}
+`;
+
+const AiSettingsPanel = styled.section`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 18px;
+	padding: 18px;
+	border: 1px solid rgba(139, 190, 227, 0.42);
+	border-radius: 8px;
+	background: linear-gradient(180deg, rgba(248, 252, 255, 0.96), #ffffff);
+
+	h2 {
+		margin: 0 0 8px;
+		color: #0b3158;
+		font-size: 1.15rem;
+		font-weight: 950;
+		letter-spacing: 0;
+		line-height: 1.35;
+	}
+
+	p {
+		margin: 0;
+		color: #36546f;
+		font-weight: 750;
+		line-height: 1.55;
+	}
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+		flex-direction: column;
+	}
+`;
+
+const AiSwitchRow = styled.div`
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	min-width: 210px;
+	color: #0b3158;
+	font-weight: 950;
+	white-space: nowrap;
+
+	@media (max-width: 640px) {
+		justify-content: space-between;
+		min-width: 0;
+		width: 100%;
 	}
 `;
 

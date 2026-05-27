@@ -98,6 +98,8 @@ const WORDS = {
 		missingAny: "Missing Any",
 		activationReady: "Activation Ready",
 		fullyComplete: "Fully Complete",
+		ownerActivation: "Owner/Manager",
+		xHotelProActivation: "XHotelPro",
 		hotel: "Hotel",
 		owner: "Owner",
 		location: "Location",
@@ -531,7 +533,10 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 		Modal.confirm({
 			title: `${value ? L.activate : L.deactivate} “${hotel.hotelName}”?`,
 			onOk: () => {
-				const payload = { ...hotel, activateHotel: value };
+				const payload = {
+					xHotelProActive: value,
+					fromPage: "XHotelProActivation",
+				};
 				return updateHotelDetails(hotel._id, admin._id, token, payload)
 					.then((r) => {
 						if (r?.error) throw new Error(r.error);
@@ -736,20 +741,26 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 			dataIndex: "activateHotel",
 			key: "activateHotel",
 			width: W.status,
-			render: (val) =>
-				val ? (
-					<Tooltip title={L.active}>
-						<Tag className='status-tag' color='success'>
-							{L.active}
+			render: (_val, record) => {
+				const ownerActive = record.activateHotel === true;
+				const platformActive = record.xHotelProActive !== false;
+				const publicActive = ownerActive && platformActive;
+				const tooltip = `${L.ownerActivation || "Owner/Manager"}: ${
+					ownerActive ? L.active : L.inactive
+				} | ${L.xHotelProActivation || "XHotelPro"}: ${
+					platformActive ? L.active : L.inactive
+				}`;
+				return (
+					<Tooltip title={tooltip}>
+						<Tag
+							className='status-tag'
+							color={publicActive ? "success" : "warning"}
+						>
+							{publicActive ? L.active : L.ribbon_review}
 						</Tag>
 					</Tooltip>
-				) : (
-					<Tooltip title={L.ribbon_review}>
-						<Tag className='status-tag' color='warning'>
-							{L.ribbon_review}
-						</Tag>
-					</Tooltip>
-				),
+				);
+			},
 		},
 		{
 			title: "Rooms",
@@ -841,9 +852,9 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
-			title: L.activateCol,
-			dataIndex: "activateHotel",
-			key: "activationAction",
+			title: L.xHotelProActivation || L.activateCol,
+			dataIndex: "xHotelProActive",
+			key: "xHotelProActivationAction",
 			width: W.action,
 			fixed: "right",
 			render: (_v, r) => {
@@ -853,14 +864,15 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 					r.locationDone &&
 					r.dataDone
 				);
+				const platformActive = r.xHotelProActive !== false;
 				return (
 					<Tooltip title={canActivate ? "" : "Finish steps 1‑5 first"}>
-						<StatusSelect
-							$viewportFit={viewportFit}
-							value={r.activateHotel}
-							onChange={(v) => handleActivationChange(r, v)}
-							disabled={!canActivate}
-						>
+							<StatusSelect
+								$viewportFit={viewportFit}
+								value={platformActive}
+								onChange={(v) => handleActivationChange(r, v)}
+								disabled={!canActivate && !platformActive}
+							>
 							<Option value={true}>{L.activate}</Option>
 							<Option value={false}>{L.deactivate}</Option>
 						</StatusSelect>

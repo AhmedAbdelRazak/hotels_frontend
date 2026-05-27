@@ -11,6 +11,7 @@ import { Badge } from "antd";
 import {
 	BankOutlined,
 	CustomerServiceOutlined,
+	ExclamationCircleOutlined,
 	HistoryOutlined,
 	SoundOutlined,
 	TeamOutlined,
@@ -20,6 +21,7 @@ import ActiveClientsSupportCases from "./ActiveClientsSupportCases";
 import HistoryHotelSupportCases from "./HistoryHotelSupportCases";
 import HistoryClientsSupportCases from "./HistoryClientsSupportCases";
 import {
+	getEscalatedClientSupportCases,
 	getFilteredSupportCases,
 	getFilteredSupportCasesClients,
 } from "../apiAdmin"; // Assume you have these API functions
@@ -31,22 +33,28 @@ import { NotificationContext } from "./NotificationContext";
 const CUSTOMER_SERVICE_DETAILS_TEXT = {
 	en: {
 		enableSound: "Enable Notification Sound",
+		unlockSound: "Unlock Notification Sound",
 		activeHotelCases: "Active Hotel Cases",
 		activeClientCases: "Active Client Cases",
+		escalatedClientCases: "Escalated Client Cases",
 		hotelHistory: "Hotel Case History",
 		clientHistory: "Client Case History",
 	},
 	ar: {
 		enableSound:
 			"\u062a\u0641\u0639\u064a\u0644 \u0635\u0648\u062a \u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
+		unlockSound:
+			"\u0625\u0639\u0627\u062f\u0629 \u0641\u062a\u062d \u0635\u0648\u062a \u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
 		activeHotelCases:
-			"\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0646\u0634\u0637\u0629",
+			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0646\u0634\u0637\u0629",
 		activeClientCases:
-			"\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0646\u0634\u0637\u0629",
+			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0627\u0644\u0646\u0634\u0637\u0629",
+		escalatedClientCases:
+			"\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0645\u0635\u0639\u062f\u0629",
 		hotelHistory:
-			"\u0633\u062c\u0644 \u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+			"\u0633\u062c\u0644 \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		clientHistory:
-			"\u0633\u062c\u0644 \u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+			"\u0633\u062c\u0644 \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
 	},
 };
 
@@ -60,9 +68,11 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 	// State for case counts
 	const [activeHotelCasesCount, setActiveHotelCasesCount] = useState(0);
 	const [activeClientCasesCount, setActiveClientCasesCount] = useState(0);
+	const [escalatedClientCasesCount, setEscalatedClientCasesCount] = useState(0);
 
 	// 2) Destructure your notification context
-	const { soundEnabled, enableSound } = useContext(NotificationContext);
+	const { soundEnabled, soundNeedsUnlock, enableSound } =
+		useContext(NotificationContext);
 
 	const tabItems = useMemo(() => {
 		const baseTabs = [
@@ -79,6 +89,13 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 				icon: <TeamOutlined />,
 				badge: activeClientCasesCount,
 				badgeColor: "#18a058",
+			},
+			{
+				key: "escalated-client-cases",
+				label: L.escalatedClientCases,
+				icon: <ExclamationCircleOutlined />,
+				badge: escalatedClientCasesCount,
+				badgeColor: "#fa8c16",
 			},
 		];
 
@@ -101,9 +118,11 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 		L.activeClientCases,
 		L.activeHotelCases,
 		L.clientHistory,
+		L.escalatedClientCases,
 		L.hotelHistory,
 		activeClientCasesCount,
 		activeHotelCasesCount,
+		escalatedClientCasesCount,
 		isSuperAdmin,
 	]);
 
@@ -127,8 +146,18 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 		try {
 			const hotelCount = await getFilteredSupportCases(); // Fetch active hotel cases
 			const clientCount = await getFilteredSupportCasesClients(); // Fetch active client cases
-			setActiveHotelCasesCount(hotelCount.length); // API presumably returns an array
-			setActiveClientCasesCount(clientCount.length);
+			const escalatedClientCount = await getEscalatedClientSupportCases();
+			const hotelCases = Array.isArray(hotelCount) ? hotelCount : [];
+			const clientCases = Array.isArray(clientCount) ? clientCount : [];
+			const escalatedClientCases = Array.isArray(escalatedClientCount)
+				? escalatedClientCount
+				: [];
+			setActiveHotelCasesCount(hotelCases.length); // API presumably returns an array
+			setActiveClientCasesCount(
+				clientCases.filter((supportCase) => supportCase.escalationStatus !== "active")
+					.length
+			);
+			setEscalatedClientCasesCount(escalatedClientCases.length);
 		} catch (error) {
 			console.error("Error fetching case counts", error);
 		}
@@ -150,10 +179,18 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 
 		socket.on("newChat", handleNewChat);
 		socket.on("closeCase", handleCloseCase);
+		socket.on("supportCaseUpdated", handleNewChat);
+		socket.on("supportCaseEscalated", handleNewChat);
+		socket.on("supportCaseEscalationAddressed", handleNewChat);
+		socket.on("supportCaseEscalationUpdated", handleNewChat);
 
 		return () => {
 			socket.off("newChat", handleNewChat);
 			socket.off("closeCase", handleCloseCase);
+			socket.off("supportCaseUpdated", handleNewChat);
+			socket.off("supportCaseEscalated", handleNewChat);
+			socket.off("supportCaseEscalationAddressed", handleNewChat);
+			socket.off("supportCaseEscalationUpdated", handleNewChat);
 		};
 	}, [fetchCaseCounts]);
 
@@ -178,7 +215,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 	return (
 		<CustomerServiceDetailsWrapper dir={isArabic ? "rtl" : "ltr"}>
 			{/* 3) Minimal button to enable sound (and optional vibration) */}
-			{!soundEnabled && (
+			{(!soundEnabled || soundNeedsUnlock) && (
 				<EnableSoundButton
 					onClick={() => {
 						enableSound();
@@ -189,7 +226,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 					}}
 				>
 					<SoundOutlined />
-					{L.enableSound}
+					{soundNeedsUnlock ? L.unlockSound : L.enableSound}
 				</EnableSoundButton>
 			)}
 
@@ -234,6 +271,15 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 						<ActiveClientsSupportCases
 							getUser={getUser}
 							isSuperAdmin={isSuperAdmin}
+						/>
+					</div>
+				)}
+				{activeTab === "escalated-client-cases" && (
+					<div>
+						<ActiveClientsSupportCases
+							getUser={getUser}
+							isSuperAdmin={isSuperAdmin}
+							mode='escalated'
 						/>
 					</div>
 				)}
