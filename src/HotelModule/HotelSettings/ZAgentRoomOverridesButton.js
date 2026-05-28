@@ -599,22 +599,49 @@ const ZAgentRoomOverridesButton = ({
 				...selectedRangeEvent,
 				...selectedPricingRows.map((row) => {
 					const blocked = isBlockedRate(row);
+					const priceLabel = `${labels.price}: ${row.price}`;
+					const rootPriceLabel = `${labels.rootPrice}: ${row.rootPrice}`;
 					return {
 						title: blocked
 							? labels.blocked
-							: `${labels.price}: ${row.price} | ${labels.rootPrice}: ${row.rootPrice}`,
+							: `${priceLabel} ${rootPriceLabel}`,
 						start: dateKey(row.calendarDate),
 						end: dateKey(row.calendarDate),
 						allDay: true,
 						backgroundColor: blocked ? "#111827" : "#1677ff",
 						borderColor: blocked ? "#111827" : "#1677ff",
 						textColor: "#fff",
-						classNames: blocked ? ["agent-calendar-blocked"] : [],
+						classNames: blocked
+							? ["agent-calendar-blocked"]
+							: ["agent-calendar-price"],
+						extendedProps: {
+							blocked,
+							priceLabel,
+							rootPriceLabel,
+						},
 					};
 				}),
 			];
 		},
 		[dateRange, labels.blocked, labels.price, labels.rootPrice, selectedPricingRows]
+	);
+
+	const renderCalendarEventContent = useCallback(
+		(eventInfo) => {
+			const { title, extendedProps = {} } = eventInfo.event;
+			if (extendedProps.blocked) {
+				return <span className='agent-calendar-blocked-label'>{title}</span>;
+			}
+			if (!extendedProps.priceLabel && !extendedProps.rootPriceLabel) return null;
+
+			return (
+				<span className='agent-calendar-price-lines'>
+					<span>{extendedProps.priceLabel}</span>
+					<span>{extendedProps.rootPriceLabel}</span>
+				</span>
+			);
+		},
+		[]
 	);
 
 	useEffect(() => {
@@ -946,6 +973,7 @@ const ZAgentRoomOverridesButton = ({
 										unselectAuto={false}
 										selectLongPressDelay={140}
 										select={handleCalendarSelect}
+										eventContent={renderCalendarEventContent}
 										height='auto'
 										headerToolbar={{
 											left: "prev,next today",
@@ -1385,6 +1413,35 @@ const AgentCalendar = styled.div`
 	.fc .agent-calendar-blocked {
 		border-color: #111827 !important;
 		background: #111827 !important;
+	}
+
+	.fc .agent-calendar-price,
+	.fc .agent-calendar-blocked {
+		min-height: 34px;
+	}
+
+	.fc .agent-calendar-price .fc-event-main,
+	.fc .agent-calendar-blocked .fc-event-main {
+		display: grid;
+		align-items: center;
+		padding: 3px 4px;
+	}
+
+	.agent-calendar-price-lines {
+		display: grid;
+		gap: 2px;
+		width: 100%;
+		overflow: hidden;
+		line-height: 1.15;
+		text-align: center;
+	}
+
+	.agent-calendar-price-lines span,
+	.agent-calendar-blocked-label {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.fc-event {
