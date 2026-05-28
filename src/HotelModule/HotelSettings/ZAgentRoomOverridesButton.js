@@ -7,6 +7,7 @@ import {
 	Modal,
 	Popconfirm,
 	Select,
+	Switch,
 	Table,
 	Tag,
 } from "antd";
@@ -59,6 +60,21 @@ const dateRangeArray = (start, end) => {
 		current = current.add(1, "day");
 	}
 	return dates;
+};
+
+const isBlockedRate = (row = {}) => {
+	const color = String(row.color || "").toLowerCase();
+	const status = String(row.status || "").toLowerCase();
+	const price = Number(row.price);
+	const rootPrice = Number(row.rootPrice);
+	return (
+		row.blocked === true ||
+		row.isBlocked === true ||
+		status === "blocked" ||
+		color === "black" ||
+		(Number.isFinite(price) && price <= 0) ||
+		(Number.isFinite(rootPrice) && rootPrice <= 0 && color === "black")
+	);
 };
 
 const makeAgentSnapshot = (agent = {}) => ({
@@ -131,6 +147,16 @@ const ZAgentRoomOverridesButton = ({
 			savePricing: isArabic
 				? "\u062d\u0641\u0638 \u0627\u0644\u062a\u0633\u0639\u064a\u0631"
 				: "Save pricing",
+			saveBlock: isArabic
+				? "\u062d\u0641\u0638 \u0627\u0644\u062d\u0638\u0631"
+				: "Save block",
+			blockRange: isArabic
+				? "\u062d\u0638\u0631 \u0647\u0630\u0627 \u0627\u0644\u0646\u0637\u0627\u0642 \u0644\u0644\u0648\u0643\u064a\u0644"
+				: "Block this range for the agent",
+			blocked: isArabic ? "\u0645\u062d\u0638\u0648\u0631" : "Blocked",
+			blockedSaved: isArabic
+				? "\u062a\u0645 \u062d\u0641\u0638 \u0627\u0644\u062d\u0638\u0631"
+				: "Block saved",
 			remove: isArabic ? "\u062d\u0630\u0641" : "Remove",
 			noAgents: isArabic
 				? "\u0644\u0627 \u064a\u0648\u062c\u062f \u0648\u0643\u0644\u0627\u0621"
@@ -166,6 +192,9 @@ const ZAgentRoomOverridesButton = ({
 			saveFailed: isArabic
 				? "\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0647\u0630\u0627 \u0627\u0644\u062c\u0632\u0621"
 				: "Could not save this section",
+			completeDate: isArabic
+				? "\u0623\u0643\u0645\u0644 \u0646\u0637\u0627\u0642 \u0627\u0644\u062a\u0627\u0631\u064a\u062e"
+				: "Complete the date range",
 		}),
 		[isArabic]
 	);
@@ -179,6 +208,7 @@ const ZAgentRoomOverridesButton = ({
 	const [dateRange, setDateRange] = useState([]);
 	const [price, setPrice] = useState(null);
 	const [rootPrice, setRootPrice] = useState(null);
+	const [blockPricingRange, setBlockPricingRange] = useState(false);
 	const [activeTab, setActiveTab] = useState("stock");
 	const [stockSaving, setStockSaving] = useState(false);
 	const [pricingSaving, setPricingSaving] = useState(false);
@@ -421,12 +451,10 @@ const ZAgentRoomOverridesButton = ({
 
 	const savePricing = async () => {
 		if (!selectedAgent) return message.error(labels.required);
-		if (
-			!dateRange?.[0] ||
-			!dateRange?.[1] ||
-			!(Number(price) > 0) ||
-			!(Number(rootPrice) > 0)
-		) {
+		if (!dateRange?.[0] || !dateRange?.[1]) {
+			return message.error(labels.completeDate);
+		}
+		if (!blockPricingRange && (!(Number(price) > 0) || !(Number(rootPrice) > 0))) {
 			return message.error(
 				isArabic
 					? "\u0623\u0643\u0645\u0644 \u0627\u0644\u062a\u0627\u0631\u064a\u062e \u0648\u0627\u0644\u0633\u0639\u0631"
@@ -439,8 +467,11 @@ const ZAgentRoomOverridesButton = ({
 		const newPricingRows = dates.map((calendarDate) => ({
 			...snapshot,
 			calendarDate,
-			price: Number(price),
-			rootPrice: Number(rootPrice),
+			price: blockPricingRange ? 0 : Number(price),
+			rootPrice: blockPricingRange ? 0 : Number(rootPrice),
+			...(blockPricingRange
+				? { color: "black", status: "blocked", blocked: true }
+				: {}),
 		}));
 		const nextRows = [
 			...pricingRows.filter(
@@ -456,6 +487,7 @@ const ZAgentRoomOverridesButton = ({
 			setDateRange([]);
 			setPrice(null);
 			setRootPrice(null);
+			setBlockPricingRange(false);
 			message.info(labels.localOnly);
 			if (calendarRef.current) calendarRef.current.getApi().refetchEvents();
 			return null;
@@ -470,6 +502,9 @@ const ZAgentRoomOverridesButton = ({
 					calendarDate: row.calendarDate,
 					price: row.price,
 					rootPrice: row.rootPrice,
+					color: row.color,
+					status: row.status,
+					blocked: row.blocked,
 				})),
 			});
 			emitChange({
@@ -479,7 +514,8 @@ const ZAgentRoomOverridesButton = ({
 			setDateRange([]);
 			setPrice(null);
 			setRootPrice(null);
-			message.success(labels.saved);
+			setBlockPricingRange(false);
+			message.success(blockPricingRange ? labels.blockedSaved : labels.saved);
 			if (calendarRef.current) calendarRef.current.getApi().refetchEvents();
 		} catch (error) {
 			message.error(error?.message || labels.saveFailed);
@@ -561,18 +597,24 @@ const ZAgentRoomOverridesButton = ({
 
 			return [
 				...selectedRangeEvent,
-				...selectedPricingRows.map((row) => ({
-					title: `${labels.price}: ${row.price} | ${labels.rootPrice}: ${row.rootPrice}`,
-					start: dateKey(row.calendarDate),
-					end: dateKey(row.calendarDate),
-					allDay: true,
-					backgroundColor: "#1677ff",
-					borderColor: "#1677ff",
-					textColor: "#fff",
-				})),
+				...selectedPricingRows.map((row) => {
+					const blocked = isBlockedRate(row);
+					return {
+						title: blocked
+							? labels.blocked
+							: `${labels.price}: ${row.price} | ${labels.rootPrice}: ${row.rootPrice}`,
+						start: dateKey(row.calendarDate),
+						end: dateKey(row.calendarDate),
+						allDay: true,
+						backgroundColor: blocked ? "#111827" : "#1677ff",
+						borderColor: blocked ? "#111827" : "#1677ff",
+						textColor: "#fff",
+						classNames: blocked ? ["agent-calendar-blocked"] : [],
+					};
+				}),
 			];
 		},
-		[dateRange, labels.price, labels.rootPrice, selectedPricingRows]
+		[dateRange, labels.blocked, labels.price, labels.rootPrice, selectedPricingRows]
 	);
 
 	useEffect(() => {
@@ -625,8 +667,19 @@ const ZAgentRoomOverridesButton = ({
 	const pricingColumns = useMemo(
 		() => [
 			{ title: labels.dateRange, dataIndex: "calendarDate", width: 130 },
-			{ title: labels.price, dataIndex: "price", width: 100 },
-			{ title: labels.rootPrice, dataIndex: "rootPrice", width: 120 },
+			{
+				title: labels.price,
+				dataIndex: "price",
+				width: 110,
+				render: (_, row) =>
+					isBlockedRate(row) ? <Tag color='red'>{labels.blocked}</Tag> : row.price,
+			},
+			{
+				title: labels.rootPrice,
+				dataIndex: "rootPrice",
+				width: 120,
+				render: (_, row) => (isBlockedRate(row) ? "-" : row.rootPrice),
+			},
 			{
 				title: "",
 				width: 96,
@@ -652,6 +705,7 @@ const ZAgentRoomOverridesButton = ({
 		],
 		[
 			labels.dateRange,
+			labels.blocked,
 			labels.price,
 			labels.remove,
 			labels.removeQuestion,
@@ -824,7 +878,7 @@ const ZAgentRoomOverridesButton = ({
 										{selectedAgent ? agentLabel(selectedAgent) : labels.chooseAgent}
 									</Tag>
 								</PanelHeader>
-								<InlineFields $columns={4}>
+								<InlineFields $columns={5}>
 									<label>
 										<span>{labels.dateRange}</span>
 										<RangePicker
@@ -835,15 +889,34 @@ const ZAgentRoomOverridesButton = ({
 											}
 										/>
 									</label>
+									<BlockToggleField>
+										<span>{labels.blockRange}</span>
+										<Switch
+											checked={blockPricingRange}
+											onChange={(checked) => {
+												setBlockPricingRange(checked);
+												if (checked) {
+													setPrice(null);
+													setRootPrice(null);
+												}
+											}}
+										/>
+									</BlockToggleField>
 									<label>
 										<span>{labels.price}</span>
-										<InputNumber min={0} value={price} onChange={setPrice} />
+										<InputNumber
+											min={0}
+											value={price}
+											disabled={blockPricingRange}
+											onChange={setPrice}
+										/>
 									</label>
 									<label>
 										<span>{labels.rootPrice}</span>
 										<InputNumber
 											min={0}
 											value={rootPrice}
+											disabled={blockPricingRange}
 											onChange={setRootPrice}
 										/>
 									</label>
@@ -853,7 +926,7 @@ const ZAgentRoomOverridesButton = ({
 										loading={pricingSaving}
 										onClick={savePricing}
 									>
-										{labels.savePricing}
+										{blockPricingRange ? labels.saveBlock : labels.savePricing}
 									</Button>
 								</InlineFields>
 							</EditorPanel>
@@ -1239,6 +1312,26 @@ const InlineFields = styled.div`
 	}
 `;
 
+const BlockToggleField = styled.label`
+	display: grid;
+	gap: 6px;
+	align-content: end;
+	min-height: 38px;
+	padding: 8px 10px;
+	border: 1px solid #f1c5c5;
+	border-radius: 10px;
+	background: #fff7f7;
+
+	span {
+		color: #7f1d1d;
+		font-weight: 900;
+	}
+
+	.ant-switch {
+		width: 54px !important;
+	}
+`;
+
 const AgentCalendar = styled.div`
 	display: grid;
 	gap: 12px;
@@ -1287,6 +1380,11 @@ const AgentCalendar = styled.div`
 
 	.fc .agent-selected-pricing-range {
 		background: rgba(14, 165, 233, 0.2) !important;
+	}
+
+	.fc .agent-calendar-blocked {
+		border-color: #111827 !important;
+		background: #111827 !important;
 	}
 
 	.fc-event {
