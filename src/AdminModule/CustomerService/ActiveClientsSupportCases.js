@@ -8,12 +8,15 @@ import {
 	getAiTrainingChats,
 	getFilteredSupportCasesClients,
 	markAllMessagesAsSeenByAdmin,
-	getUnseenMessagesCountByAdmin,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { toast } from "react-toastify";
 import ChatDetail from "./ChatDetail";
 import socket from "../../socket";
+import {
+	isActiveEscalatedSupportCase,
+	supportCaseAdminUnreadMessages,
+} from "../utils/supportCaseChat";
 
 // 1) Import NotificationContext
 import { NotificationContext } from "./NotificationContext";
@@ -92,6 +95,7 @@ const ActiveClientsSupportCases = ({
 	const listTitle = isEscalatedMode
 		? "Escalated Client Support Cases"
 		: "Open Client Support Cases";
+	const escalatedLabel = isArabic ? "\u062a\u0635\u0639\u064a\u062f" : "Escalated";
 
 	// For smaller-screen routing
 	const location = useLocation();
@@ -194,36 +198,6 @@ const ActiveClientsSupportCases = ({
 		[activeTabKey, history, location.pathname, location.search]
 	);
 
-	/* ------------------- FETCH UNSEEN COUNT ------------------- */
-	useEffect(() => {
-		const fetchUnseenCount = async () => {
-			try {
-				const result = await getUnseenMessagesCountByAdmin(user._id);
-				if (result && result.count !== undefined) {
-					setUnseenCount(result.count);
-				} else {
-					setUnseenCount(0);
-				}
-			} catch (error) {
-				setUnseenCount(0);
-				console.error("Error fetching unseen messages count:", error);
-			}
-		};
-
-		fetchUnseenCount();
-
-		// Listen for messageSeen to update unseen count
-		socket.on("messageSeen", ({ caseId, userId }) => {
-			if (userId === user._id) {
-				fetchUnseenCount();
-			}
-		});
-
-		return () => {
-			socket.off("messageSeen");
-		};
-	}, [user._id]);
-
 	/* ------------------- SORT SUPPORT CASES ------------------- */
 	const sortSupportCases = useCallback(
 		(cases) => {
@@ -251,6 +225,16 @@ const ActiveClientsSupportCases = ({
 				: supportCase.escalationStatus !== "active"),
 		[isEscalatedMode]
 	);
+
+	useEffect(() => {
+		setUnseenCount(
+			supportCases.reduce(
+				(total, supportCase) =>
+					total + supportCaseAdminUnreadMessages(supportCase, user._id),
+				0
+			)
+		);
+	}, [supportCases, user._id]);
 
 	/* ------------------- FETCH SUPPORT CASES ------------------- */
 	const fetchSupportCases = useCallback(() => {
@@ -292,12 +276,9 @@ const ActiveClientsSupportCases = ({
 
 					setSupportCases(sortSupportCases(openCases));
 
-					// Calculate total unseen messages
+					// Calculate guest/client messages the admin has not opened yet.
 					const unseenMessages = openCases.reduce((acc, supportCase) => {
-						return (
-							acc +
-							supportCase.conversation.filter((msg) => !msg.seenByAdmin).length
-						);
+						return acc + supportCaseAdminUnreadMessages(supportCase, user._id);
 					}, 0);
 					setUnseenCount(unseenMessages);
 				}
@@ -310,6 +291,7 @@ const ActiveClientsSupportCases = ({
 		isEscalatedMode,
 		isSuperAdmin,
 		getUser,
+		user._id,
 		sortSupportCases,
 		caseBelongsToMode,
 	]);
@@ -329,13 +311,20 @@ const ActiveClientsSupportCases = ({
 						navigator.vibrate(200);
 					}
 				}
-				setSupportCases((prevCases) =>
-					prevCases.map((c) =>
+				setSupportCases((prevCases) => {
+					const nextCases = prevCases.map((c) =>
 						c._id === message.caseId
-							? { ...c, conversation: [...c.conversation, message] }
+							? {
+									...c,
+									conversation: [
+										...(Array.isArray(c.conversation) ? c.conversation : []),
+										message,
+									],
+							  }
 							: c
-					)
-				);
+					);
+					return nextCases;
+				});
 			}
 		};
 
@@ -350,7 +339,10 @@ const ActiveClientsSupportCases = ({
 						navigator.vibrate(200);
 					}
 				}
-				setSupportCases((prevCases) => [...prevCases, newCase]);
+				setSupportCases((prevCases) => {
+					const nextCases = sortSupportCases([...prevCases, newCase]);
+					return nextCases;
+				});
 			}
 		};
 
@@ -359,16 +351,18 @@ const ActiveClientsSupportCases = ({
 			const belongsHere = caseBelongsToMode(updatedCase);
 			setSupportCases((prevCases) => {
 				if (!belongsHere) {
-					return prevCases.filter((c) => c._id !== updatedCase._id);
+					const nextCases = prevCases.filter((c) => c._id !== updatedCase._id);
+					return nextCases;
 				}
 				const exists = prevCases.some((c) => c._id === updatedCase._id);
 				const nextCases = exists
 					? prevCases.map((c) => (c._id === updatedCase._id ? updatedCase : c))
 					: [...prevCases, updatedCase];
-				return sortSupportCases(nextCases);
+				const sortedCases = sortSupportCases(nextCases);
+				return sortedCases;
 			});
-			if (selectedCase?._id === updatedCase._id) {
-				setSelectedCase(belongsHere ? updatedCase : null);
+			if (selectedCase?._id === updatedCase._id && belongsHere) {
+				setSelectedCase(updatedCase);
 			}
 		};
 
@@ -410,6 +404,7 @@ const ActiveClientsSupportCases = ({
 		sortSupportCases,
 		soundEnabled,
 		playSound,
+		user._id,
 	]);
 
 	/* ------------------- MARK CASE AS SEEN ------------------- */
@@ -425,11 +420,24 @@ const ActiveClientsSupportCases = ({
 				caseId: caseObj._id,
 				userId: user._id,
 			});
-			// Re-fetch unseen
-			const result = await getUnseenMessagesCountByAdmin(user._id);
-			if (result && result.count !== undefined) {
-				setUnseenCount(result.count);
-			}
+			const markSeen = (supportCase) => ({
+				...supportCase,
+				conversation: Array.isArray(supportCase.conversation)
+					? supportCase.conversation.map((message) => ({
+							...message,
+							seenByAdmin: true,
+					  }))
+					: [],
+			});
+			setSupportCases((prevCases) => {
+				const nextCases = prevCases.map((supportCase) =>
+					supportCase._id === caseObj._id ? markSeen(supportCase) : supportCase
+				);
+				return nextCases;
+			});
+			setSelectedCase((previous) =>
+				previous?._id === caseObj._id ? markSeen(previous) : previous
+			);
 		} catch (error) {
 			console.error("Error marking messages as seen:", error);
 		}
@@ -630,9 +638,9 @@ const ActiveClientsSupportCases = ({
 						bordered
 						dataSource={supportCases}
 						renderItem={(item) => {
-							const hasUnseen = item.conversation.some(
-								(msg) => !msg.seenByAdmin
-							);
+							const unreadCount = supportCaseAdminUnreadMessages(item, user._id);
+							const hasUnseen = unreadCount > 0;
+							const isEscalatedItem = isActiveEscalatedSupportCase(item);
 							return (
 								<List.Item
 									key={item._id}
@@ -640,9 +648,14 @@ const ActiveClientsSupportCases = ({
 									style={{
 										cursor: "pointer",
 										textTransform: "capitalize",
-										backgroundColor: hasUnseen ? "#fff1f0" : "white",
+										backgroundColor: hasUnseen
+											? "#fff1f0"
+											: isEscalatedItem
+											  ? "#fff7e6"
+											  : "white",
 										position: "relative",
-										marginBottom: "4px", // optional spacing
+										marginBottom: "4px",
+										paddingRight: hasUnseen ? 48 : undefined,
 									}}
 								>
 									{item.hotelId &&
@@ -650,12 +663,12 @@ const ActiveClientsSupportCases = ({
 										? item.hotelId.hotelName
 										: "Jannat Booking"}{" "}
 									- <strong>{item.displayName1}</strong>
+									{isEscalatedItem && (
+										<EscalationPill>{escalatedLabel}</EscalationPill>
+									)}
 									{hasUnseen && (
 										<Badge
-											count={
-												item.conversation.filter((msg) => !msg.seenByAdmin)
-													.length
-											}
+											count={unreadCount}
 											style={{
 												backgroundColor: "#f5222d",
 												position: "absolute",
@@ -698,9 +711,9 @@ const ActiveClientsSupportCases = ({
 						bordered
 						dataSource={supportCases}
 						renderItem={(item) => {
-							const hasUnseenMessages = item.conversation.some(
-								(msg) => !msg.seenByAdmin
-							);
+							const unreadCount = supportCaseAdminUnreadMessages(item, user._id);
+							const hasUnseenMessages = unreadCount > 0;
+							const isEscalatedItem = isActiveEscalatedSupportCase(item);
 							return (
 								<List.Item
 									key={item._id}
@@ -713,8 +726,11 @@ const ActiveClientsSupportCases = ({
 												? "#e6f7ff"
 												: hasUnseenMessages
 												  ? "#fff1f0"
-												  : "white",
+												  : isEscalatedItem
+													? "#fff7e6"
+													: "white",
 										position: "relative",
+										paddingRight: hasUnseenMessages ? 48 : undefined,
 									}}
 								>
 									{item.hotelId &&
@@ -722,12 +738,12 @@ const ActiveClientsSupportCases = ({
 										? item.hotelId.hotelName
 										: "Jannat Booking"}{" "}
 									- <strong>{item.displayName1}</strong>
+									{isEscalatedItem && (
+										<EscalationPill>{escalatedLabel}</EscalationPill>
+									)}
 									{hasUnseenMessages && (
 										<Badge
-											count={
-												item.conversation.filter((msg) => !msg.seenByAdmin)
-													.length
-											}
+											count={unreadCount}
 											style={{
 												backgroundColor: "#f5222d",
 												position: "absolute",
@@ -806,6 +822,21 @@ const TrainingChatItem = styled.div`
 		color: #6a7f91;
 		font-size: 0.85rem;
 	}
+`;
+
+const EscalationPill = styled.span`
+	display: inline-flex;
+	align-items: center;
+	margin-inline-start: 8px;
+	padding: 2px 7px;
+	border: 1px solid rgba(217, 119, 6, 0.42);
+	border-radius: 999px;
+	background: #fff7e6;
+	color: #92400e;
+	font-size: 0.68rem;
+	font-weight: 900;
+	line-height: 1.25;
+	vertical-align: middle;
 `;
 
 const ActiveClientsSupportCasesWrapper = styled.div`

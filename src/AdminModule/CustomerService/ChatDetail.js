@@ -419,7 +419,8 @@ const ChatDetail = ({
 			}
 			const params = new URLSearchParams(location.search);
 			if (params.get("tab") === "escalated-client-cases") {
-				params.delete("caseId");
+				params.set("tab", "active-client-cases");
+				params.set("caseId", updatedCase?._id || chat._id);
 				params.delete("id");
 				const nextSearch = params.toString();
 				history.replace({

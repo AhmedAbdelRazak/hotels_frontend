@@ -27,6 +27,10 @@ import {
 	getAdminSupportNotificationSummary,
 	listAdminB2BChats,
 } from "../apiAdmin";
+import {
+	isActiveEscalatedSupportCase,
+	supportCaseAdminUnreadMessages,
+} from "../utils/supportCaseChat";
 import socket from "../../socket";
 import EgyptFlag from "../../GeneralImages/EG_FLAG.png";
 import SaudiFlag from "../../GeneralImages/KSA_FLAG.png";
@@ -63,6 +67,8 @@ const labels = {
 		noChats: "No active chats.",
 		hotelSupport: "Hotel support",
 		clientSupport: "Client support",
+		escalatedClientSupport: "Escalated",
+		escalatedChats: "Escalated chats",
 		b2bChat: "B2B chat",
 		openChat: "Open chat",
 	},
@@ -93,6 +99,8 @@ const labels = {
 		noChats: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0646\u0634\u0637\u0629.",
 		hotelSupport: "\u062f\u0639\u0645 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		clientSupport: "\u062f\u0639\u0645 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
+		escalatedClientSupport: "\u0645\u0635\u0639\u062f\u0629",
+		escalatedChats: "\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0645\u0635\u0639\u062f\u0629",
 		b2bChat: "\u0645\u062d\u0627\u062f\u062b\u0629 B2B",
 		openChat: "\u0641\u062a\u062d \u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629",
 	},
@@ -296,12 +304,7 @@ const latestSupportCaseDate = (supportCase = {}) => {
 };
 
 const supportCaseUnseenCount = (supportCase = {}, actorId = "") => {
-	const normalizedActorId = normalizeAdminId(actorId);
-	return (Array.isArray(supportCase.conversation) ? supportCase.conversation : [])
-		.filter((message) => {
-			const senderId = normalizeAdminId(message?.messageBy?.userId);
-			return !message?.seenByAdmin && senderId !== normalizedActorId;
-		}).length;
+	return supportCaseAdminUnreadMessages(supportCase, actorId);
 };
 
 const supportCaseTitle = (supportCase = {}, fallback = "Support case") =>
@@ -360,6 +363,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const [chatNotificationSummary, setChatNotificationSummary] = useState({
 		supportOpenCases: 0,
 		supportUnseenMessages: 0,
+		supportEscalatedCases: 0,
 		b2bActiveChats: 0,
 		b2bUnreadMessages: 0,
 	});
@@ -387,6 +391,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const chatNotificationCount =
 		Number(chatNotificationSummary.supportOpenCases || 0) +
 		Number(chatNotificationSummary.b2bActiveChats || 0);
+	const supportEscalatedChatCount = Number(
+		chatNotificationSummary.supportEscalatedCases || 0
+	);
 
 	useEffect(() => {
 		const timer = window.setInterval(() => setClockNow(new Date()), 1000 * 30);
@@ -422,18 +429,25 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 					}));
 				const clientRows = (Array.isArray(clientCases) ? clientCases : [])
 					.filter((supportCase) => supportCase.caseStatus !== "closed")
-					.map((supportCase) => ({
-						id: normalizeAdminId(supportCase._id),
-						kind: "client-support",
-						title: supportCaseTitle(supportCase, L.clientSupport),
-						subtitle: supportCaseSubtitle(supportCase),
-						meta: L.clientSupport,
-						unread: supportCaseUnseenCount(supportCase, user._id),
-						lastAt: latestSupportCaseDate(supportCase),
-						route: `/admin/customer-service?tab=active-client-cases&caseId=${normalizeAdminId(
-							supportCase._id
-						)}`,
-					}));
+					.map((supportCase) => {
+						const isEscalated = isActiveEscalatedSupportCase(supportCase);
+						const tab = isEscalated
+							? "escalated-client-cases"
+							: "active-client-cases";
+						return {
+							id: normalizeAdminId(supportCase._id),
+							kind: isEscalated ? "client-escalated" : "client-support",
+							title: supportCaseTitle(supportCase, L.clientSupport),
+							subtitle: supportCaseSubtitle(supportCase),
+							meta: isEscalated ? L.escalatedClientSupport : L.clientSupport,
+							escalated: isEscalated,
+							unread: supportCaseUnseenCount(supportCase, user._id),
+							lastAt: latestSupportCaseDate(supportCase),
+							route: `/admin/customer-service?tab=${tab}&caseId=${normalizeAdminId(
+								supportCase._id
+							)}`,
+						};
+					});
 				const b2bRows = (Array.isArray(b2bData?.chats) ? b2bData.chats : [])
 					.filter((chat) => chat.status !== "closed")
 					.map((chat) => ({
@@ -460,7 +474,15 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 				if (!silent) setChatFeedLoading(false);
 			}
 		},
-		[hasServiceLink, L.b2bChat, L.clientSupport, L.hotelSupport, token, user?._id]
+		[
+			hasServiceLink,
+			L.b2bChat,
+			L.clientSupport,
+			L.escalatedClientSupport,
+			L.hotelSupport,
+			token,
+			user?._id,
+		]
 	);
 
 	const refreshAdminNotifications = useCallback(
@@ -470,6 +492,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 				setChatNotificationSummary({
 					supportOpenCases: 0,
 					supportUnseenMessages: 0,
+					supportEscalatedCases: 0,
 					b2bActiveChats: 0,
 					b2bUnreadMessages: 0,
 				});
@@ -502,6 +525,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 						supportUnseenMessages: Number(
 							supportSummary?.unseenMessages || 0
 						),
+						supportEscalatedCases: Number(
+							supportSummary?.activeEscalatedClientCases || 0
+						),
 						b2bActiveChats: Number(b2bSummary?.activeChats || 0),
 						b2bUnreadMessages: Number(b2bSummary?.unreadMessages || 0),
 					});
@@ -509,6 +535,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 					setChatNotificationSummary({
 						supportOpenCases: 0,
 						supportUnseenMessages: 0,
+						supportEscalatedCases: 0,
 						b2bActiveChats: 0,
 						b2bUnreadMessages: 0,
 					});
@@ -558,6 +585,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 		socket.on("newChat", refreshSilently);
 		socket.on("receiveMessage", refreshSilently);
 		socket.on("closeCase", refreshSilently);
+		socket.on("supportCaseEscalated", refreshSilently);
+		socket.on("supportCaseEscalationAddressed", refreshSilently);
+		socket.on("supportCaseEscalationUpdated", refreshSilently);
 		socket.on("hotelNotificationsUpdated", refreshSilently);
 
 		return () => {
@@ -565,6 +595,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			socket.off("newChat", refreshSilently);
 			socket.off("receiveMessage", refreshSilently);
 			socket.off("closeCase", refreshSilently);
+			socket.off("supportCaseEscalated", refreshSilently);
+			socket.off("supportCaseEscalationAddressed", refreshSilently);
+			socket.off("supportCaseEscalationUpdated", refreshSilently);
 			socket.off("hotelNotificationsUpdated", refreshSilently);
 			if (hasServiceLink) {
 				socket.emit("leaveB2BUser", { userId: user._id });
@@ -810,7 +843,14 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 					<strong>{L.chatTitle}</strong>
 					<span>{L.chatSubtitle}</span>
 				</div>
-				<AdminNotificationCount>{chatNotificationCount}</AdminNotificationCount>
+				<AdminNotificationHeaderActions>
+					{supportEscalatedChatCount > 0 && (
+						<AdminEscalationCount>
+							{supportEscalatedChatCount} {L.escalatedClientSupport}
+						</AdminEscalationCount>
+					)}
+					<AdminNotificationCount>{chatNotificationCount}</AdminNotificationCount>
+				</AdminNotificationHeaderActions>
 			</AdminNotificationHeader>
 
 			{chatFeedLoading ? (
@@ -824,10 +864,19 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 							key={`${item.kind}-${item.id}`}
 							type='button'
 							onClick={() => openChatFeedItem(item)}
+							$priority={item.escalated}
 						>
 							<AdminNotificationItemTop>
 								<strong>{item.title}</strong>
-								<span>{item.unread > 0 ? item.unread : L.openChat}</span>
+								{item.escalated ? (
+									<AdminInlineEscalation>
+										{item.unread > 0
+											? `${item.unread} | ${L.escalatedClientSupport}`
+											: L.escalatedClientSupport}
+									</AdminInlineEscalation>
+								) : (
+									<span>{item.unread > 0 ? item.unread : L.openChat}</span>
+								)}
 							</AdminNotificationItemTop>
 							<AdminNotificationGuest>{item.subtitle || item.meta}</AdminNotificationGuest>
 							<AdminNotificationMeta>
@@ -861,6 +910,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			<NavIconButton
 				type='button'
 				$active={chatDropdownOpen || location.pathname === item.to}
+				$hasEscalated={supportEscalatedChatCount > 0}
 				title={L[item.key]}
 				aria-label={L[item.key]}
 			>
@@ -872,6 +922,14 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 				>
 					<MessageOutlined className='admin-chat-icon' />
 				</Badge>
+				{supportEscalatedChatCount > 0 && (
+					<EscalationIndicator
+						aria-label={`${supportEscalatedChatCount} ${L.escalatedChats}`}
+						title={`${supportEscalatedChatCount} ${L.escalatedChats}`}
+					>
+						{supportEscalatedChatCount}
+					</EscalationIndicator>
+				)}
 			</NavIconButton>
 		</Dropdown>
 	);
@@ -1407,12 +1465,17 @@ const NavLinkButton = styled(Link)`
 `;
 
 const NavIconButton = styled.button`
+	position: relative;
 	min-height: 42px;
 	min-width: 46px;
 	padding: 0 11px;
 	border: 1px solid
 		${(props) =>
-			props.$active ? "rgba(215, 243, 255, 0.82)" : "rgba(255, 255, 255, 0.16)"};
+			props.$hasEscalated
+				? "rgba(251, 146, 60, 0.9)"
+				: props.$active
+				? "rgba(215, 243, 255, 0.82)"
+				: "rgba(255, 255, 255, 0.16)"};
 	border-radius: 5px;
 	display: inline-flex;
 	align-items: center;
@@ -1451,8 +1514,11 @@ const NavIconButton = styled.button`
 	}
 
 	.admin-chat-icon {
-		color: #d7f3ff;
-		filter: drop-shadow(0 0 7px rgba(115, 205, 244, 0.36));
+		color: ${(props) => (props.$hasEscalated ? "#ffd08a" : "#d7f3ff")};
+		filter: ${(props) =>
+			props.$hasEscalated
+				? "drop-shadow(0 0 8px rgba(251, 146, 60, 0.52))"
+				: "drop-shadow(0 0 7px rgba(115, 205, 244, 0.36))"};
 	}
 
 	.ant-badge {
@@ -1471,6 +1537,27 @@ const NavIconButton = styled.button`
 		line-height: 17px;
 		box-shadow: 0 0 0 1px rgba(8, 26, 45, 0.8);
 	}
+`;
+
+const EscalationIndicator = styled.span`
+	position: absolute;
+	top: -7px;
+	right: -8px;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border: 1px solid rgba(255, 247, 237, 0.95);
+	border-radius: 999px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: #f97316;
+	color: #ffffff;
+	font-size: 10px;
+	font-weight: 950;
+	line-height: 1;
+	box-shadow: 0 5px 12px rgba(124, 45, 18, 0.36);
+	pointer-events: none;
 `;
 
 const ActionCluster = styled.div`
@@ -1706,7 +1793,7 @@ const AdminNotificationHeader = styled.div`
 	background: linear-gradient(135deg, #0b2743, #176899 58%, #0d335d);
 	color: #ffffff;
 
-	div {
+	> div:first-child {
 		min-width: 0;
 		display: grid;
 		gap: 3px;
@@ -1728,6 +1815,14 @@ const AdminNotificationHeader = styled.div`
 	}
 `;
 
+const AdminNotificationHeaderActions = styled.div`
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 7px;
+`;
+
 const AdminNotificationCount = styled.span`
 	min-width: 34px;
 	height: 30px;
@@ -1741,6 +1836,21 @@ const AdminNotificationCount = styled.span`
 	color: #fff1b8 !important;
 	font-size: 0.92rem !important;
 	font-weight: 950 !important;
+`;
+
+const AdminEscalationCount = styled.span`
+	min-height: 28px;
+	padding: 0 9px;
+	border: 1px solid rgba(253, 186, 116, 0.82);
+	border-radius: 999px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(154, 52, 18, 0.36);
+	color: #ffedd5 !important;
+	font-size: 0.72rem !important;
+	font-weight: 950 !important;
+	white-space: nowrap;
 `;
 
 const AdminNotificationLoading = styled.div`
@@ -1761,10 +1871,15 @@ const AdminNotificationList = styled.div`
 
 const AdminNotificationItem = styled.button`
 	width: 100%;
-	border: 1px solid rgba(169, 205, 229, 0.82);
+	border: 1px solid
+		${(props) =>
+			props.$priority ? "rgba(249, 115, 22, 0.58)" : "rgba(169, 205, 229, 0.82)"};
 	border-radius: 8px;
 	padding: 10px 11px;
-	background: linear-gradient(180deg, #ffffff, #f6fbff);
+	background: ${(props) =>
+		props.$priority
+			? "linear-gradient(180deg, #fff7ed, #fffaf4)"
+			: "linear-gradient(180deg, #ffffff, #f6fbff)"};
 	color: #10243a;
 	text-align: start;
 	display: grid;
@@ -1783,6 +1898,18 @@ const AdminNotificationItem = styled.button`
 		box-shadow: 0 12px 22px rgba(19, 54, 86, 0.14);
 		outline: none;
 	}
+`;
+
+const AdminInlineEscalation = styled.span`
+	border: 1px solid rgba(249, 115, 22, 0.4);
+	border-radius: 999px;
+	padding: 3px 8px;
+	background: rgba(255, 237, 213, 0.9);
+	color: #9a3412 !important;
+	font-size: 0.68rem !important;
+	font-weight: 950 !important;
+	line-height: 1.2;
+	white-space: nowrap;
 `;
 
 const AdminNotificationItemTop = styled.div`
@@ -1860,6 +1987,8 @@ const AdminChatKind = styled.span`
 		${(props) =>
 			props.$kind === "b2b"
 				? "rgba(124, 58, 237, 0.34)"
+				: props.$kind === "client-escalated"
+				? "rgba(249, 115, 22, 0.38)"
 				: props.$kind === "client-support"
 				? "rgba(22, 163, 74, 0.34)"
 				: "rgba(37, 99, 235, 0.34)"};
@@ -1868,12 +1997,16 @@ const AdminChatKind = styled.span`
 	background: ${(props) =>
 		props.$kind === "b2b"
 			? "rgba(237, 233, 254, 0.78)"
+			: props.$kind === "client-escalated"
+			? "rgba(255, 237, 213, 0.86)"
 			: props.$kind === "client-support"
 			? "rgba(220, 252, 231, 0.78)"
 			: "rgba(219, 234, 254, 0.78)"};
 	color: ${(props) =>
 		props.$kind === "b2b"
 			? "#5b21b6"
+			: props.$kind === "client-escalated"
+			? "#9a3412"
 			: props.$kind === "client-support"
 			? "#166534"
 			: "#1d4ed8"};

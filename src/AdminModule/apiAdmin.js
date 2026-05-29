@@ -456,6 +456,7 @@ export const getAdminSupportNotificationSummary = (userId, token) => {
 		.catch((err) => ({
 			error: err?.message || "Could not load support notifications",
 			openCases: 0,
+			activeEscalatedClientCases: 0,
 			unseenMessages: 0,
 		}));
 };

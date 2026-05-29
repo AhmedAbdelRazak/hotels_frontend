@@ -1017,3 +1017,28 @@ Future TODO Backlog - Added 2026-05-26
   - node --check src/AdminModule/CustomerService/CustomerServiceDetails.js.
   - node --check src/AdminModule/apiAdmin.js.
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Admin Customer-Service Unread Badges And Escalation UX
+- Shared helper:
+  - src/AdminModule/utils/supportCaseChat.js centralizes support-case id normalization, AI/system message detection, admin unread counting, and active escalation detection.
+  - Admin unread badges count only unseen client/guest messages, not AI/system/support messages.
+- Active client case list:
+  - src/AdminModule/CustomerService/ActiveClientsSupportCases.js uses the shared unread helper for each row badge and the list-header badge.
+  - Active escalated cases are visually marked with an Escalated pill when present.
+  - Selecting a case marks it seen locally and on the backend, so row/header badges clear without waiting for a full refresh.
+- Escalation addressed flow:
+  - src/AdminModule/CustomerService/ChatDetail.js now redirects from tab=escalated-client-cases to tab=active-client-cases while preserving caseId after Mark Escalation Addressed.
+  - CustomerServiceDetails already syncs the active tab from the URL, so the admin lands in the regular conversations tab with the same chat selected.
+- Admin top navbar:
+  - src/AdminModule/AdminNavbar/AdminTopNavbar.js marks active escalated client chats with an orange escalation indicator on the chat icon.
+  - The chat dropdown routes escalated cases to tab=escalated-client-cases and normal client cases to tab=active-client-cases.
+  - The dropdown item style and meta pill are distinct for escalated client support rows.
+  - supportCaseEscalated, supportCaseEscalationAddressed, and supportCaseEscalationUpdated socket events refresh the top-navbar notification state.
+- API helper:
+  - src/AdminModule/apiAdmin.js includes activeEscalatedClientCases in the support notification fallback shape.
+- Validation completed locally:
+  - node --check src/AdminModule/AdminNavbar/AdminTopNavbar.js.
+  - node --check src/AdminModule/CustomerService/ActiveClientsSupportCases.js.
+  - node --check src/AdminModule/CustomerService/ChatDetail.js.
+  - node --check src/AdminModule/utils/supportCaseChat.js.
+  - npm.cmd run build compiled successfully.
