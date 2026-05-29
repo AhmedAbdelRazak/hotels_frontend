@@ -909,6 +909,27 @@ const FinanceInfo = ({ text, isArabic }) => (
 	</Tooltip>
 );
 
+const RESERVATION_CHILD_MODAL_Z_INDEX = 18000;
+const RESERVATION_CHILD_MODAL_ROOT_CLASS = "reservation-detail-child-modal-root";
+const getReservationModalContainer = () => document.body;
+const childModalRootClassName = (className = "") =>
+	[RESERVATION_CHILD_MODAL_ROOT_CLASS, className].filter(Boolean).join(" ");
+const childModalProps = (rootClassName = "") => ({
+	zIndex: RESERVATION_CHILD_MODAL_Z_INDEX,
+	rootClassName: childModalRootClassName(rootClassName),
+	getContainer: getReservationModalContainer,
+});
+const RESERVATION_CONFIRM_MODAL_Z_INDEX = RESERVATION_CHILD_MODAL_Z_INDEX + 100;
+const confirmModalProps = (rootClassName = "") => ({
+	zIndex: RESERVATION_CONFIRM_MODAL_Z_INDEX,
+	rootClassName: childModalRootClassName(
+		["reservation-detail-confirm-modal", rootClassName]
+			.filter(Boolean)
+			.join(" ")
+	),
+	getContainer: getReservationModalContainer,
+});
+
 const ReservationDetailGlobalStyles = createGlobalStyle`
 	.reservation-finance-tooltip,
 	.reservation-finance-tooltip.ant-tooltip,
@@ -916,6 +937,36 @@ const ReservationDetailGlobalStyles = createGlobalStyle`
 	.reservation-finance-tooltip .ant-tooltip-content,
 	.reservation-finance-tooltip .ant-tooltip-inner {
 		z-index: 100000 !important;
+	}
+
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.66) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${RESERVATION_CHILD_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .ant-modal-wrap,
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .ant-modal {
+		z-index: ${RESERVATION_CHILD_MODAL_Z_INDEX} !important;
+	}
+
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .ant-modal-content {
+		position: relative;
+		z-index: ${RESERVATION_CHILD_MODAL_Z_INDEX + 1} !important;
+	}
+
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS}.reservation-detail-confirm-modal .ant-modal-mask,
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .reservation-detail-confirm-modal .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.66) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${RESERVATION_CONFIRM_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS}.reservation-detail-confirm-modal .ant-modal-wrap,
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS}.reservation-detail-confirm-modal .ant-modal,
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .reservation-detail-confirm-modal .ant-modal-wrap,
+	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .reservation-detail-confirm-modal .ant-modal {
+		z-index: ${RESERVATION_CONFIRM_MODAL_Z_INDEX} !important;
 	}
 
 	.reservation-update-modal-wrap {
@@ -2315,6 +2366,54 @@ const ContentSection = styled.div`
 
 	.guest-info-grid .detail-value {
 		font-size: 0.84rem;
+	}
+
+	&.guest-details-panel .detail-panel-heading span:last-child {
+		font-size: 0.96rem;
+	}
+
+	&.guest-details-panel .detail-icon {
+		font-size: 0.82rem;
+		height: 22px;
+		width: 22px;
+	}
+
+	&.guest-details-panel .detail-label {
+		font-size: 0.68rem;
+		line-height: 1.16;
+	}
+
+	&.guest-details-panel .detail-value {
+		font-size: 0.8rem;
+		font-weight: 900;
+		line-height: 1.18;
+	}
+
+	&.guest-details-panel .stay-overview-row .detail-item {
+		min-height: 68px;
+		padding: 5px;
+	}
+
+	&.guest-details-panel .guest-info-grid .detail-item {
+		min-height: 74px;
+		padding: 5px;
+	}
+
+	&.guest-details-panel .guest-info-grid .detail-value {
+		font-size: 0.78rem;
+	}
+
+	&.guest-details-panel .room-type-chip {
+		font-size: 0.77rem;
+		line-height: 1.18;
+	}
+
+	&.guest-details-panel .room-type-label {
+		font-size: 0.72rem;
+	}
+
+	&.guest-details-panel .room-quantity-pill {
+		font-size: 0.68rem;
 	}
 
 	.guest-comment-card {
@@ -4275,6 +4374,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const confirmDiscardChanges = useCallback(
 		(onDiscard) => {
 			Modal.confirm({
+			...confirmModalProps(),
 				title:
 					chosenLanguage === "Arabic"
 						? "تغييرات غير محفوظة"
@@ -5066,6 +5166,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const openConfirmDecisionModal = useCallback(() => {
 		let confirmationReason = "";
 		Modal.confirm({
+			...confirmModalProps(),
 			title:
 				chosenLanguage === "Arabic"
 					? "\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062d\u062c\u0632"
@@ -5093,7 +5194,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			okText: chosenLanguage === "Arabic" ? AR_LABELS.accept : "Confirm",
 			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
 			centered: true,
-			zIndex: 3000,
 			onOk: () =>
 				updatePendingDecision({
 					action: "confirm",
@@ -5110,6 +5210,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const openRejectDecisionModal = useCallback(() => {
 		let rejectionReason = "";
 		Modal.confirm({
+			...confirmModalProps(),
 			title:
 				chosenLanguage === "Arabic"
 					? "\u0631\u0641\u0636 \u0627\u0644\u062d\u062c\u0632"
@@ -5137,7 +5238,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			okText: chosenLanguage === "Arabic" ? AR_LABELS.reject : "Reject",
 			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
 			centered: true,
-			zIndex: 3000,
 			onOk: () => {
 				if (!String(rejectionReason || "").trim()) {
 					toast.error(
@@ -5157,6 +5257,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const openCancelDecisionModal = useCallback(() => {
 		let cancelReason = "";
 		Modal.confirm({
+			...confirmModalProps(),
 			title:
 				chosenLanguage === "Arabic"
 					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
@@ -5188,7 +5289,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			cancelText: chosenLanguage === "Arabic" ? "\u062a\u0631\u0627\u062c\u0639" : "Back",
 			okButtonProps: { danger: true },
 			centered: true,
-			zIndex: 3000,
 			onOk: () =>
 				updatePendingDecision({
 					action: "cancel",
@@ -5200,6 +5300,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		if (!reservation?._id || !user?._id) return;
 		let cancelReason = "";
 		Modal.confirm({
+			...confirmModalProps(),
 			title:
 				chosenLanguage === "Arabic"
 					? "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
@@ -5231,7 +5332,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			cancelText: chosenLanguage === "Arabic" ? "\u062a\u0631\u0627\u062c\u0639" : "Back",
 			okButtonProps: { danger: true },
 			centered: true,
-			zIndex: 3000,
 			onOk: async () => {
 				setPendingDecisionLoading(true);
 				try {
@@ -5258,6 +5358,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const openRevertDecisionModal = useCallback(() => {
 		let revertReason = "";
 		Modal.confirm({
+			...confirmModalProps(),
 			title:
 				chosenLanguage === "Arabic"
 					? AR_LABELS.revertToPending
@@ -5281,7 +5382,6 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					: "Revert",
 			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
 			centered: true,
-			zIndex: 3000,
 			onOk: () =>
 				updatePendingDecision({
 					action: "revert_to_pending",
@@ -6495,13 +6595,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						wrapClassName={`reservation-update-modal-wrap ${
 							chosenLanguage === "Arabic" ? "rtl" : "ltr"
 						}`}
-						rootClassName='reservation-update-modal-root'
+						rootClassName={childModalRootClassName(
+							"reservation-update-modal-root"
+						)}
 						width='min(94vw, 1580px)'
 						styles={{ body: { padding: 0 } }}
 						style={{
 							top: 10,
 							paddingBottom: 0,
 						}}
+						{...childModalProps("reservation-update-modal-root")}
 					>
 						{reservation && (
 							<EditReservationMain
@@ -6528,6 +6631,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
+						{...childModalProps()}
 					>
 						<Select
 							defaultValue={currentReservationStatusValue}
@@ -6564,6 +6668,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
+						{...childModalProps()}
 					>
 						<Select
 							defaultValue={
@@ -6594,6 +6699,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
 						width={"70%"}
+						{...childModalProps()}
 					>
 						<h3>Payment Link:</h3>
 						<div
@@ -6622,6 +6728,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						footer={null}
 						width={720}
 						centered
+						{...childModalProps()}
 						destroyOnClose
 					>
 						<div className='container-fluid'>
@@ -6730,6 +6837,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
 						confirmLoading={isSendingPaymentLinkEmail}
 						centered
+						{...childModalProps()}
 					>
 						<div className='mb-3'>
 							<label style={{ fontWeight: "bold" }}>
@@ -6770,6 +6878,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
 						confirmLoading={isSendingConfirmationEmail}
 						centered
+						{...childModalProps()}
 					>
 						<div className='mb-3'>
 							<label style={{ fontWeight: "bold" }}>
@@ -6803,6 +6912,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						okText={chosenLanguage === "Arabic" ? "إرسال" : "Send"}
 						confirmLoading={isSendingWhatsApp}
 						centered
+						{...childModalProps()}
 					>
 						<div className='mb-3'>
 							<label style={{ fontWeight: "bold" }}>
@@ -6911,6 +7021,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						footer={null}
 						width={720}
 						centered
+						{...childModalProps()}
 					>
 						<CycleTrackerList dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 							{reservationCycleRows.length ? (
@@ -6957,6 +7068,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						confirmLoading={isSavingFinanceCycle}
 						width={620}
 						centered
+						{...childModalProps()}
 					>
 						<FinanceCycleEditor dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 							<div className='cycle-pill-row'>
@@ -7088,6 +7200,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						footer={null}
 						width={920}
 						centered
+						{...childModalProps()}
 						destroyOnClose
 					>
 						<PricingBreakdownModalContent
@@ -7252,7 +7365,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						onOk={() => setRoomTypePricingModalOpen(false)}
 						centered
 						width='min(92vw, 720px)'
-						zIndex={2200}
+						{...childModalProps()}
 						styles={{ body: { paddingTop: 8 } }}
 					>
 						<PricingBreakdownModalContent
@@ -7340,7 +7453,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						onOk={() => setRoomListModalOpen(false)}
 						centered
 						width='min(92vw, 620px)'
-						zIndex={2200}
+						{...childModalProps()}
 						styles={{ body: { paddingTop: 8 } }}
 					>
 						{roomTableRows && roomTableRows.length > 0 ? (
@@ -7480,6 +7593,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}
+							{...childModalProps()}
 						>
 							<div className='text-center my-3 '>
 								<button
@@ -7518,6 +7632,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								right: chosenLanguage === "Arabic" ? "auto" : "5%",
 								top: "1%",
 							}}
+							{...childModalProps()}
 						>
 							<div className='text-center my-3 '>
 								<button

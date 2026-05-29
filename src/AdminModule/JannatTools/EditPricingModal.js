@@ -207,6 +207,8 @@ const distributeMoney = (total, count) => {
 	});
 };
 
+const EDIT_PRICING_MODAL_Z = 19020;
+
 const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	const { chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -482,15 +484,16 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			open={visible}
 			onCancel={onClose}
 			width='min(96vw, 1480px)'
-			zIndex={14000}
+			zIndex={EDIT_PRICING_MODAL_Z}
 			styles={{
-				mask: { zIndex: 13999 },
+				mask: { zIndex: EDIT_PRICING_MODAL_Z - 1 },
 				body: {
 					maxHeight: "78vh",
 					overflowX: "hidden",
 					overflowY: "auto",
 				},
 			}}
+			getContainer={() => document.body}
 			rootClassName='edit-pricing-modal'
 			footer={[
 				<Button key='cancel' onClick={onClose}>

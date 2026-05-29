@@ -148,7 +148,7 @@ const bookingSourceOptions = [
 	"airbnb",
 ];
 
-const NESTED_MODAL_Z = 14050;
+const NESTED_MODAL_Z = 19050;
 const NestedModalZFix = createGlobalStyle`
 	.edit-reservation-nested-modal .ant-modal,
 	.edit-reservation-nested-modal .ant-modal-wrap {

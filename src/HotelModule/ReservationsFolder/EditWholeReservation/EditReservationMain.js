@@ -969,7 +969,13 @@ export const EditReservationMain = ({
 		return Array.from(keys);
 	}, [reservation?.pickedRoomsType]);
 
-	const Z_TOP = 5000;
+	const Z_TOP = 19000;
+	const childModalProps = (layer) => ({
+		zIndex: Z_TOP + layer,
+		getContainer: () => document.body,
+		rootClassName: "hotel-edit-reservation-child-modal",
+		styles: { mask: { zIndex: Z_TOP + layer - 1 } },
+	});
 
 	const buildRoomLine = useCallback(
 		(roomType, displayName) => {
@@ -1706,7 +1712,7 @@ export const EditReservationMain = ({
 					}
 					open={isRoomCountModalOpen}
 					onCancel={closeRoomCountModal}
-					zIndex={Z_TOP + 10}
+					{...childModalProps(10)}
 					footer={[
 						<Button key='remove' danger onClick={removeRoom}>
 							{chosenLanguage === "Arabic" ? "حذف" : "Remove Room"}
@@ -1752,7 +1758,7 @@ export const EditReservationMain = ({
 					}
 					open={isPricingModalOpen}
 					onCancel={closePricingModal}
-					zIndex={Z_TOP + 20}
+					{...childModalProps(20)}
 					footer={[
 						<Button key='inherit' onClick={inheritFirstNight}>
 							{chosenLanguage === "Arabic"
@@ -1815,7 +1821,7 @@ export const EditReservationMain = ({
 					onCancel={handleCancelRoomChange}
 					okText={chosenLanguage === "Arabic" ? "نعم" : "Yes"}
 					cancelText={chosenLanguage === "Arabic" ? "إلغاء" : "Cancel"}
-					zIndex={Z_TOP + 30}
+					{...childModalProps(30)}
 				>
 					<p>
 						{chosenLanguage === "Arabic"

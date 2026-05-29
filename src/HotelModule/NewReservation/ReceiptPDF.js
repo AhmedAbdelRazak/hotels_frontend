@@ -3,6 +3,15 @@ import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
 import { updateSingleReservation } from "../apiAdmin";
 
+const PDF_CHILD_MODAL_Z = 60010;
+const pdfChildModalProps = {
+	getContainer: () => document.body,
+	rootClassName: "update-pdf-modal",
+	wrapClassName: "update-pdf-modal",
+	zIndex: PDF_CHILD_MODAL_Z,
+	styles: { mask: { zIndex: PDF_CHILD_MODAL_Z - 1 } },
+};
+
 const ReceiptPDF = forwardRef(
 	(
 		{
@@ -432,6 +441,7 @@ const ReceiptPDF = forwardRef(
 					onCancel={handleCancel}
 					okText='Save'
 					cancelText='Cancel'
+					{...pdfChildModalProps}
 				>
 					<Input
 						value={tempSupplierName}
@@ -448,6 +458,7 @@ const ReceiptPDF = forwardRef(
 					onCancel={handleBookingNoCancel}
 					okText='Save'
 					cancelText='Cancel'
+					{...pdfChildModalProps}
 				>
 					<Input
 						value={tempSupplierBookingNo}

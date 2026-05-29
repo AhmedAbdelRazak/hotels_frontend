@@ -1203,3 +1203,20 @@ Future TODO Backlog - Added 2026-05-26
   - The layer remains below global picker/dropdown/tooltip layers and below the special PDF update modal layer, preserving nested controls and receipt/PDF child modals.
 - Validation:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Reservation Detail Child Modal Layering And Compact General Details
+- Admin MoreDetails and hotel-management ReservationDetail:
+  - src/AdminModule/AllReservation/MoreDetails.js and src/HotelModule/ReservationsFolder/ReservationDetail.js now use the same compact typography for the General Details card grid.
+  - Labels, values, room chips, and small icons in the General Details panel were reduced slightly while keeping important numeric values bold.
+  - Both components now use a shared child-modal zIndex constant for modals opened from inside the details modal, including room details, room pricing, invoice/receipt PDFs, edit reservation, status updates, payment link, confirmation, WhatsApp, cycle tracker, finance cycle, and pricing breakdown.
+  - This prevents child modals from rendering behind the already-open reservation detail modal.
+  - All Ant Design Modal.confirm status prompts in both details components now use the same elevated body-mounted layer, including confirm, reject, cancel, discard-changes, and revert-to-pending-confirmation prompts.
+- Edit-reservation nested modals:
+  - src/AdminModule/AllReservation/EditReservationMain.js raises the admin edit-reservation nested MoreDetails, password verification, and paid-amount modals above the parent details/edit modal stack.
+  - src/AdminModule/JannatTools/EditPricingModal.js now renders the pricing modal on a higher body-mounted layer so it appears above reservation details/edit flows when launched from admin tools or edit reservation.
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js raises the room-count, pricing, and room-change confirmation modals above the hotel-management reservation detail modal and keeps date-picker popups above the parent stack.
+- Receipt/PDF nested edit modals:
+  - src/AdminModule/AllReservation/ReceiptPDFB2B.js, src/HotelModule/NewReservation/ReceiptPDF.js, src/HotelModule/NewReservation/ReceiptPDFB2B.js, and src/HotelModule/HotelReports/ReceiptPDFB2B.js now render their embedded supplier edit modals in the same high update-pdf-modal layer used by the admin receipt editor.
+  - This keeps nested receipt edit modals visible above reservation details, receipt previews, side menus, and their overlays.
+- Validation:
+  - npm.cmd run build compiled successfully.
