@@ -56,6 +56,40 @@ const safeParseFloat = (val, fallback = 0) => {
 	return Number.isFinite(n) ? n : fallback;
 };
 
+const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
+
+const resolveAdminPricingDay = (day = {}) => {
+	const clientPrice = roundMoney(
+		day.clientPrice ??
+			day.mainPrice ??
+			day.totalPriceWithCommission ??
+			day.price,
+	);
+	const rootPrice = roundMoney(day.rootPrice);
+	const netAfterExpenses = roundMoney(
+		day.netAfterExpenses ??
+			day.netAfterOtaExpenses ??
+			(clientPrice - safeParseFloat(day.otaExpenseAmount, 0)),
+	);
+	const otaExpenseAmount = roundMoney(clientPrice - netAfterExpenses);
+	const platformMargin = roundMoney(netAfterExpenses - rootPrice);
+
+	return {
+		date: day.date,
+		price: clientPrice,
+		clientPrice,
+		mainPrice: clientPrice,
+		rootPrice,
+		commissionRate: safeParseFloat(day.commissionRate, 0),
+		totalPriceWithCommission: clientPrice,
+		totalPriceWithoutCommission: clientPrice,
+		netAfterExpenses,
+		netAfterOtaExpenses: netAfterExpenses,
+		otaExpenseAmount,
+		platformMargin,
+	};
+};
+
 const normalizeRoomLabel = (value) => String(value || "").trim().toLowerCase();
 const availabilityKey = (roomType, displayName) =>
 	`${normalizeRoomLabel(displayName)}|${normalizeRoomLabel(roomType)}`;
@@ -946,17 +980,7 @@ const EditReservationMain = ({
 		// Flatten to pickedRoomsType
 		const pickedRoomsType = selectedRooms.flatMap((room) =>
 			Array.from({ length: room.count }, () => {
-				const pricingDetails = room.pricingByDay.map((day) => ({
-					date: day.date,
-					price: safeParseFloat(day.totalPriceWithCommission, 0),
-					rootPrice: safeParseFloat(day.rootPrice, 0),
-					commissionRate: safeParseFloat(day.commissionRate, 0),
-					totalPriceWithCommission: safeParseFloat(
-						day.totalPriceWithCommission,
-						0
-					),
-					totalPriceWithoutCommission: safeParseFloat(day.price, 0),
-				}));
+				const pricingDetails = room.pricingByDay.map(resolveAdminPricingDay);
 				const totalWithComm = pricingDetails.reduce(
 					(acc, d) => acc + d.totalPriceWithCommission,
 					0

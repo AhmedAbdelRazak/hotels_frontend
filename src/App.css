@@ -149,6 +149,50 @@ table tbody td.number-cell,
 	cursor: pointer;
 }
 
+/* PMS date inputs stay LTR in every language so ISO dates and calendars remain
+   predictable. Labels around them can still be Arabic/RTL. */
+.ant-picker,
+.ant-picker-input,
+.ant-picker-input > input,
+.ant-picker-range,
+.ant-picker-range .ant-picker-input,
+.ant-picker-dropdown,
+.ant-picker-dropdown .ant-picker-panel-container,
+.ant-picker-dropdown .ant-picker-panel,
+.ant-picker-dropdown .ant-picker-header,
+.ant-picker-dropdown .ant-picker-content,
+.ant-picker-dropdown table,
+.react-datepicker,
+.react-datepicker-wrapper input,
+.react-datepicker__month-container,
+.react-datepicker__header,
+.react-datepicker__day-names,
+.react-datepicker__week {
+	direction: ltr !important;
+}
+
+.ant-picker-input > input,
+.ant-picker-range .ant-picker-input > input,
+.react-datepicker-wrapper input {
+	text-align: left !important;
+	unicode-bidi: plaintext;
+}
+
+.ant-picker .ant-picker-suffix {
+	margin-inline-start: 4px !important;
+	margin-inline-end: 0 !important;
+}
+
+.ant-picker-dropdown .ant-picker-header-view,
+.ant-picker-dropdown .ant-picker-cell,
+.ant-picker-dropdown .ant-picker-cell-inner,
+.react-datepicker,
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker__day {
+	text-align: center !important;
+}
+
 .overall-filter-dropdown.rtl {
 	direction: rtl;
 	text-align: right;

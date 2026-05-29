@@ -1,11 +1,10 @@
 // client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
 import React, { useState, useMemo, useEffect } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
 import { CalendarOutlined } from "@ant-design/icons";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
-import ReservationDetail from "../../HotelModule/ReservationsFolder/ReservationDetail";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { useHistory, useLocation } from "react-router-dom";
@@ -404,6 +403,8 @@ const EnhancedContentTable = ({
 
 	return (
 		<ContentTableWrapper>
+			<AdminReservationDetailsModalGlobalStyle />
+
 			{/* ScoreCards */}
 			<ScoreCards
 				scorecardsObject={scorecardsObject}
@@ -864,16 +865,26 @@ const EnhancedContentTable = ({
 			<Modal
 				open={isModalVisible}
 				onCancel={handleModalClose}
-				className='float-right'
-				width='84%'
-				style={{ position: "absolute", left: "15.4%", top: "1%" }}
-				footer={[
-					<Button key='close' onClick={handleModalClose}>
-						Close
-					</Button>,
-				]}
+				width='min(98vw, 1720px)'
+				centered
+				className='admin-reservation-details-modal reservation-details-modal'
+				footer={null}
+				destroyOnClose
+				styles={{
+					header: {
+						display: "none",
+					},
+					content: {
+						padding: "6px 8px 8px",
+					},
+					body: {
+						maxHeight: "92vh",
+						overflowY: "auto",
+						padding: "0",
+					},
+				}}
 			>
-				{selectedReservation && selectedReservation.hotelId ? (
+				{selectedReservation ? (
 					<MoreDetails
 						key={getReservationKey(selectedReservation)}
 						selectedReservation={selectedReservation}
@@ -881,12 +892,6 @@ const EnhancedContentTable = ({
 						reservation={selectedReservation}
 						setReservation={updateSelectedReservation}
 						onReservationUpdated={handleReservationUpdated}
-					/>
-				) : selectedReservation ? (
-					<ReservationDetail
-						key={getReservationKey(selectedReservation)}
-						reservation={selectedReservation}
-						hotelDetails={selectedReservation.hotelId}
 					/>
 				) : null}
 			</Modal>
@@ -908,6 +913,59 @@ const EnhancedContentTable = ({
 export default EnhancedContentTable;
 
 /* ------------------ STYLES ------------------ */
+const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
+	.admin-reservation-details-modal {
+		max-width: min(98vw, 1720px);
+	}
+
+	.admin-reservation-details-modal .ant-modal-close {
+		align-items: center;
+		background: #7f1d1d;
+		border: 1px solid #991b1b;
+		border-radius: 999px;
+		color: #fff;
+		display: inline-flex;
+		height: 30px;
+		justify-content: center;
+		right: 8px;
+		top: 6px;
+		width: 30px;
+		z-index: 6;
+	}
+
+	.admin-reservation-details-modal .ant-modal-close:hover {
+		background: #991b1b;
+		border-color: #b91c1c;
+	}
+
+	.admin-reservation-details-modal .ant-modal-close-x,
+	.admin-reservation-details-modal .ant-modal-close-icon {
+		color: #fff;
+		font-size: 14px;
+		line-height: 1;
+	}
+
+	.admin-reservation-details-modal .ant-modal-body {
+		padding-top: 0 !important;
+	}
+
+	@media (max-width: 900px) {
+		.admin-reservation-details-modal {
+			max-width: calc(100vw - 12px);
+			width: calc(100vw - 12px) !important;
+		}
+
+		.admin-reservation-details-modal .ant-modal-content {
+			padding-left: 6px !important;
+			padding-right: 6px !important;
+		}
+
+		.admin-reservation-details-modal .ant-modal-body {
+			max-height: 90vh !important;
+		}
+	}
+`;
+
 const ContentTableWrapper = styled.div`
 	padding: 20px;
 `;

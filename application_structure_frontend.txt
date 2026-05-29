@@ -132,6 +132,7 @@ AdminModule Structure
   - Important files include MainHotelDashboard.js and AddHotelForm.js.
 - src/AdminModule/AllReservation/
   - Admin reservation management, VCC/payment-related flows, and reservation operation tools.
+  - EnhancedContentTable opens /admin/all-reservations reservationId details in the admin-owned MoreDetails component, which is based on the modern ReservationDetail layout while keeping platform-admin-only payment, OTA, PDF, and operations controls in one screen.
 - src/AdminModule/CustomerService/
   - Support-case lists, conversations, and admin support workflow.
 - src/AdminModule/Financials/
@@ -1071,3 +1072,43 @@ Future TODO Backlog - Added 2026-05-26
 - Validation completed locally:
   - node --check src/AdminModule/CustomerService/HistoryClientsSupportCases.js.
   - node --check src/AdminModule/CustomerService/ChatDetail.js.
+
+2026-05-29 Admin Reservation Three-Price Pricing Modal
+- Admin pricing modal:
+  - src/AdminModule/JannatTools/EditPricingModal.js now uses a wider modal, a scrollable table, and three total distribution controls.
+  - Admins can distribute Client/Main Total, Root Total, and Net After Expenses Total across all stay days.
+  - The three distribution controls now render as separate full-width rows instead of sharing one horizontal line, making the modal easier to use on desktop and phones.
+  - Each distribution control and key pricing column has a touch-friendly info icon explaining the client/main price, root price, net after expenses, OTA/other expense, and platform margin meaning.
+  - Mobile CSS stacks the distribute row label, input, and action button vertically and stacks footer actions so they remain easy to tap on narrow screens.
+  - The modal now reads chosenLanguage from cart_context and localizes the title, buttons, validation messages, placeholders, distribution labels, table headings, and info tooltips in Arabic when chosenLanguage is Arabic.
+  - Arabic mode applies RTL direction and Arabic-friendly font fallback inside the modal body while keeping the same pricing calculations and saved fields.
+  - Each day shows editable Client/Main Price, Root Price, and Net After Expenses, plus calculated OTA/Other Expense and Platform Margin.
+  - The modal still writes existing compatibility fields: price and totalPriceWithCommission remain the client/main price, and rootPrice remains the hotel-management-visible root price.
+- Admin create/update flows:
+  - src/AdminModule/JannatTools/OrderTaker.js now preserves admin pricing fields when creating reservations from the admin order-taker screen.
+  - src/AdminModule/AllReservation/EditReservationMain.js now preserves admin pricing fields when platform admins update reservation pricing.
+  - Both flows send per-day clientPrice, mainPrice, rootPrice, netAfterExpenses, netAfterOtaExpenses, otaExpenseAmount, and platformMargin values while keeping old fields populated for existing calendars/PMS screens.
+- Product behavior:
+  - Client-facing totals remain based on the client/main price.
+  - Hotel-management root-only visibility is decided by the backend, not by the frontend.
+  - Existing reservations are not retroactively changed; the root-only hotel-management behavior starts with future admin-created/admin-priced updates.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
+
+2026-05-29 PMS Date Picker LTR Rule
+- Global styling:
+  - src/App.css now forces Ant Design DatePicker/RangePicker inputs and dropdown calendar panels to direction:ltr even when the surrounding page is Arabic/RTL.
+  - react-datepicker inputs and calendar sections are also forced LTR for consistency in older hotel settings/financial screens that still use react-datepicker.
+  - Surrounding labels, form text, and page layout can remain Arabic/RTL; only the date control and calendar interaction stay LTR so ISO dates remain easy to read and select.
+
+2026-05-29 Admin All Reservations Detail Modal
+- Admin reservation details:
+  - src/AdminModule/AllReservation/MoreDetails.js was rebuilt as an admin-owned detail component based on the modern HotelModule ReservationDetail layout, not as a two-tab bridge.
+  - src/AdminModule/AllReservation/EnhancedContentTable.js now opens MoreDetails directly as one wide, centered, taller scrollable admin detail modal for /admin/all-reservations?reservationId=...
+  - The admin detail keeps the admin EditReservationMain update modal, so platform admins can update the full reservation through the existing admin form.
+  - Admin-only tools are integrated into the same page: VCC/payment breakdown, receipt PDF, ops receipt PDF, Al Dawleya PDF, payment trigger, payment-link email/show-link actions, manual email/SMS, relocation, status update, finance cycle, room assignment, room/pricing breakdowns, and OTA inbound email audit.
+  - The three top cards were tightened with lower min-height, smaller lifecycle controls, and reduced padding so the admin sees more useful detail above the fold.
+  - The Daily Prices modal shows the full admin pricing model for new and updated reservations: Client/Main, Root, Net After Expenses, OTA/Other Expense, Platform Margin, quantity, and client day totals, with summary totals at the top.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
+  - Backend pricing smoke test confirmed client/root/net/expense/margin totals from summarizeRooms.

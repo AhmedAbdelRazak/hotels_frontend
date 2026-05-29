@@ -45,6 +45,40 @@ const safeParseFloat = (value, fallback = 0) => {
 	return isNaN(parsed) ? fallback : parsed;
 };
 
+const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
+
+const resolveAdminPricingDay = (day = {}) => {
+	const clientPrice = roundMoney(
+		day.clientPrice ??
+			day.mainPrice ??
+			day.totalPriceWithCommission ??
+			day.price,
+	);
+	const rootPrice = roundMoney(day.rootPrice);
+	const netAfterExpenses = roundMoney(
+		day.netAfterExpenses ??
+			day.netAfterOtaExpenses ??
+			(clientPrice - safeParseFloat(day.otaExpenseAmount, 0)),
+	);
+	const otaExpenseAmount = roundMoney(clientPrice - netAfterExpenses);
+	const platformMargin = roundMoney(netAfterExpenses - rootPrice);
+
+	return {
+		date: day.date,
+		price: clientPrice,
+		clientPrice,
+		mainPrice: clientPrice,
+		rootPrice,
+		commissionRate: safeParseFloat(day.commissionRate, 0),
+		totalPriceWithCommission: clientPrice,
+		totalPriceWithoutCommission: clientPrice,
+		netAfterExpenses,
+		netAfterOtaExpenses: netAfterExpenses,
+		otaExpenseAmount,
+		platformMargin,
+	};
+};
+
 const normalizeRoomLabel = (value) => String(value || "").trim();
 
 /** Treat as "external" if NOT 'manual' and NOT 'Jannat Employee' */
@@ -1114,6 +1148,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						room.roomType || resolvedMeta?.roomType || finalDisplayName,
 					);
 
+					// eslint-disable-next-line no-unused-vars
 					const pricingDetails = room.pricingByDay.map((day) => ({
 						date: day.date,
 						price: safeParseFloat(day.totalPriceWithCommission), // nightly final
@@ -1128,13 +1163,16 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						),
 					}));
 
-					const totalWithComm = pricingDetails.reduce(
+					const adminPricingDetails =
+						room.pricingByDay.map(resolveAdminPricingDay);
+
+					const totalWithComm = adminPricingDetails.reduce(
 						(acc, d) => acc + d.totalPriceWithCommission,
 						0,
 					);
 					const avgNight =
-						pricingDetails.length > 0
-							? totalWithComm / pricingDetails.length
+						adminPricingDetails.length > 0
+							? totalWithComm / adminPricingDetails.length
 							: 0;
 
 					return {
@@ -1142,9 +1180,9 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						displayName: finalDisplayName,
 						chosenPrice: avgNight.toFixed(2),
 						count: 1, // flattened entries
-						pricingByDay: pricingDetails,
+						pricingByDay: adminPricingDetails,
 						totalPriceWithCommission: totalWithComm,
-						hotelShouldGet: pricingDetails.reduce(
+						hotelShouldGet: adminPricingDetails.reduce(
 							(acc, d) => acc + d.rootPrice,
 							0,
 						),
@@ -1207,6 +1245,10 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				? String(confirmationNumber || "").trim()
 				: "",
 			pickedRoomsType,
+			adminPricingVisibility: {
+				rootOnlyForHotelManagement: true,
+				source: "admin_reservation_create",
+			},
 			total_amount: Number(totalAmount.toFixed(2)), // Grand total
 			payment: paymentField, // now includes 'credit/ debit'
 			paid_amount, // online paid OR authorized amount if 'credit/ debit'
