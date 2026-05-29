@@ -157,6 +157,71 @@ table tbody td.number-cell,
 	z-index: 60011 !important;
 }
 
+.ant-modal-root.hotel-edit-reservation-child-modal .ant-modal-mask {
+	background: rgba(15, 23, 42, 0.66) !important;
+	backdrop-filter: blur(2px);
+	z-index: 19009 !important;
+}
+
+.ant-modal-root.hotel-edit-reservation-child-modal .ant-modal-wrap,
+.ant-modal-wrap.hotel-edit-reservation-child-modal,
+.ant-modal-root.hotel-edit-reservation-child-modal .ant-modal {
+	z-index: 19050 !important;
+}
+
+.ant-modal-root.hotel-edit-reservation-child-modal .ant-modal-content,
+.ant-modal-wrap.hotel-edit-reservation-child-modal .ant-modal-content {
+	position: relative;
+	z-index: 19051 !important;
+}
+
+.hotel-edit-reservation-child-modal .ant-modal {
+	max-width: calc(100vw - 24px);
+}
+
+.room-edit-option {
+	align-items: center;
+	display: grid;
+	gap: 4px;
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
+}
+
+.room-edit-option strong,
+.room-edit-option span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.room-edit-option span {
+	color: #64748b;
+	font-size: 12px;
+}
+
+.room-edit-option em {
+	background: #e4f3ff;
+	border: 1px solid #b8dcff;
+	border-radius: 999px;
+	color: #0f4c81;
+	font-size: 11px;
+	font-style: normal;
+	font-weight: 800;
+	padding: 2px 7px;
+	white-space: nowrap;
+}
+
+.room-edit-option em.blocked {
+	background: #fff7ed;
+	border-color: #fdba74;
+	color: #9a3412;
+}
+
+@media (max-width: 576px) {
+	.room-edit-option {
+		grid-template-columns: 1fr;
+	}
+}
+
 .ant-picker-dropdown,
 .ant-select-dropdown,
 .ant-dropdown,

@@ -1228,3 +1228,15 @@ Future TODO Backlog - Added 2026-05-26
   - Room removal remains available through the explicit Delete/Remove controls, and reservation changes still apply only after pressing Update Reservation.
 - Validation:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Hotel-Management Edit Reservation Room Type Updates
+- Hotel-management edit reservation:
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js adds a room type / display name selector inside the selected-room editor.
+  - Existing selected room lines can now be changed to another room display name/type, with the modal keeping the user's edit session open until Save and then Update Reservation are pressed.
+  - The selected-room editor also keeps count editing and the nightly pricing editor available from the same flow.
+  - The selected room key now resolves display names consistently, so selected chips, existing reservation lines, and the editor dropdown match even when older reservations are missing a displayName field.
+- Modal layering:
+  - src/App.css adds a dedicated hotel-edit-reservation-child-modal layer so room-count, pricing, and confirmation child modals stay above the reservation details/edit modal.
+  - The room editor dropdown renders on the body with the high PMS dropdown layer, keeping options clickable above nested modal overlays.
+- Validation:
+  - npm.cmd run build compiled successfully.

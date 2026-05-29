@@ -116,6 +116,7 @@ export const EditReservationMain = ({
 	const [sendEmail, setSendEmail] = useState(false);
 	const [selectedRoomIndex, setSelectedRoomIndex] = useState(null);
 	const [updatedRoomCount, setUpdatedRoomCount] = useState(0);
+	const [updatedRoomKey, setUpdatedRoomKey] = useState("");
 	const [totalDistribute, setTotalDistribute] = useState("");
 	const [roomInventory, setRoomInventory] = useState([]);
 	const [hotelRooms, setHotelRooms] = useState([]);
@@ -711,29 +712,84 @@ export const EditReservationMain = ({
 	]);
 
 	const openModal = (room, index) => {
+		const displayName = resolveDisplayNameForType(
+			room?.room_type,
+			room?.displayName || room?.display_name,
+		);
 		setSelectedRoomIndex(index);
 		setUpdatedRoomCount(Number(room?.count) || 1);
+		setUpdatedRoomKey(buildRoomKey(room?.room_type, displayName));
 		setIsRoomCountModalOpen(true);
 	};
 
 	const closeRoomCountModal = () => {
 		setIsRoomCountModalOpen(false);
+		setUpdatedRoomKey("");
 	};
 
 	const saveRoomCount = () => {
 		if (selectedRoomIndex == null) return;
+		const selectedKey = updatedRoomKey || "";
+		const { room_type: nextRoomType, displayName: nextDisplayNameRaw } =
+			splitRoomKey(selectedKey);
+		if (!nextRoomType) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "\u0627\u062e\u062a\u0631 \u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629 \u0623\u0648\u0644\u0627."
+					: "Please choose a room type first.",
+			);
+			return;
+		}
+
+		const currentLine =
+			Array.isArray(reservation.pickedRoomsType) &&
+			reservation.pickedRoomsType[selectedRoomIndex]
+				? reservation.pickedRoomsType[selectedRoomIndex]
+				: {};
+		const currentDisplayName = resolveDisplayNameForType(
+			currentLine.room_type,
+			currentLine.displayName || currentLine.display_name,
+		);
+		const currentKey = buildRoomKey(currentLine.room_type, currentDisplayName);
+		const nextDisplayName = resolveDisplayNameForType(
+			nextRoomType,
+			nextDisplayNameRaw,
+		);
+		const roomTypeChanged = selectedKey !== currentKey;
+		const rebuiltLine = roomTypeChanged
+			? buildRoomLine(nextRoomType, nextDisplayName)
+			: null;
+		if (roomTypeChanged && !rebuiltLine) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "\u0644\u0645 \u0646\u062a\u0645\u0643\u0646 \u0645\u0646 \u062a\u062d\u0636\u064a\u0631 \u062a\u0633\u0639\u064a\u0631 \u0647\u0630\u0627 \u0627\u0644\u0646\u0648\u0639. \u0631\u0627\u062c\u0639 \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0648\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u063a\u0631\u0641\u0629."
+					: "Could not prepare pricing for this room type. Please check the dates and room setup.",
+			);
+			return;
+		}
+
 		setReservation((currentReservation) => {
 			const updatedRooms = [...(currentReservation.pickedRoomsType || [])];
-			const currentLine = updatedRooms[selectedRoomIndex] || {};
-			const resolvedDisplayName = resolveDisplayNameForType(
-				currentLine.room_type,
-				currentLine.displayName || currentLine.display_name,
-			);
+			const latestLine = updatedRooms[selectedRoomIndex] || {};
+			const nextLine = roomTypeChanged
+				? {
+						...rebuiltLine,
+						count: Math.max(1, Number(updatedRoomCount || 1)),
+				  }
+				: {
+						...latestLine,
+						room_type: nextRoomType,
+						displayName: nextDisplayName,
+						display_name: nextDisplayName,
+						count: Math.max(1, Number(updatedRoomCount || 1)),
+				  };
+			const pricingByDay = roomTypeChanged
+				? nextLine.pricingByDay || []
+				: ensurePricingByDay(nextLine);
 			updatedRooms[selectedRoomIndex] = {
-				...currentLine,
-				count: Math.max(1, Number(updatedRoomCount || 1)),
-				displayName: resolvedDisplayName,
-				pricingByDay: ensurePricingByDay(currentLine),
+				...nextLine,
+				pricingByDay,
+				chosenPrice: recalcChosenPrice(pricingByDay),
 			};
 			return {
 				...currentReservation,
@@ -742,6 +798,7 @@ export const EditReservationMain = ({
 		});
 		setHasRoomLineEdits(true);
 		setIsRoomCountModalOpen(false);
+		setUpdatedRoomKey("");
 	};
 
 	const incCount = (index) => {
@@ -959,15 +1016,67 @@ export const EditReservationMain = ({
 			? reservation.pickedRoomsType
 			: []
 		).forEach((room) => {
+			const displayName = resolveDisplayNameForType(
+				room.room_type,
+				room.displayName || room.display_name,
+			);
 			keys.add(
 				buildRoomKey(
 					room.room_type,
-					room.displayName || room.display_name || "",
+					displayName,
 				),
 			);
 		});
 		return Array.from(keys);
-	}, [reservation?.pickedRoomsType]);
+	}, [reservation?.pickedRoomsType, resolveDisplayNameForType]);
+
+	const roomEditorOptions = useMemo(() => {
+		const options = new Map();
+		const addRoomOption = (room = {}) => {
+			const roomType = room.room_type || room.roomType || room.type || "";
+			if (!roomType) return;
+			const suppliedDisplayName = room.displayName || room.display_name || "";
+			const fallbackDetail = findRoomDetail(roomType, suppliedDisplayName);
+			const displayName =
+				suppliedDisplayName || fallbackDetail?.displayName || roomType;
+			const key = buildRoomKey(roomType, displayName);
+			if (options.has(key)) return;
+			const label =
+				resolveDisplayLabelForType(roomType, displayName) ||
+				displayName ||
+				roomType;
+			const availableCount = room.available ?? room.total_available ?? null;
+			const blockedDates = getBlockedDatesForRoom(roomType, displayName);
+			options.set(key, {
+				key,
+				roomType,
+				displayName,
+				label,
+				availableCount,
+				blockedDates,
+			});
+		};
+
+		(Array.isArray(roomDetails) ? roomDetails : []).forEach(addRoomOption);
+		(Array.isArray(roomInventory) ? roomInventory : []).forEach(addRoomOption);
+		(Array.isArray(reservation?.pickedRoomsType)
+			? reservation.pickedRoomsType
+			: []
+		).forEach(addRoomOption);
+
+		return Array.from(options.values()).sort((a, b) =>
+			String(a.label || "").localeCompare(String(b.label || ""), undefined, {
+				numeric: true,
+			}),
+		);
+	}, [
+		findRoomDetail,
+		getBlockedDatesForRoom,
+		reservation?.pickedRoomsType,
+		resolveDisplayLabelForType,
+		roomDetails,
+		roomInventory,
+	]);
 
 	const Z_TOP = 19000;
 	const childModalProps = (layer) => ({
@@ -1002,6 +1111,7 @@ export const EditReservationMain = ({
 			return {
 				room_type: roomType,
 				displayName: resolvedDisplayName,
+				display_name: resolvedDisplayName,
 				pricingByDay,
 				chosenPrice: Number(avgNight.toFixed(2)),
 				count: 1,
@@ -1055,9 +1165,13 @@ export const EditReservationMain = ({
 		}
 		if (exists) {
 			const existingIndex = (reservation.pickedRoomsType || []).findIndex(
-				(r) =>
-					buildRoomKey(r.room_type, r.displayName || r.display_name || "") ===
-					key,
+				(r) => {
+					const displayName = resolveDisplayNameForType(
+						r.room_type,
+						r.displayName || r.display_name,
+					);
+					return buildRoomKey(r.room_type, displayName) === key;
+				},
 			);
 			if (existingIndex >= 0) {
 				openModal(reservation.pickedRoomsType[existingIndex], existingIndex);
@@ -1726,9 +1840,66 @@ export const EditReservationMain = ({
 						</Button>,
 					]}
 				>
-					<p style={{ marginBottom: 8 }}>
+					<p style={{ display: "none" }}>
 						{chosenLanguage === "Arabic" ? "تعديل العدد:" : "Update the count:"}
 					</p>
+					<div className='room-edit-field'>
+						<p>
+							{chosenLanguage === "Arabic"
+								? "\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629 / \u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0645\u0639\u0631\u0648\u0636"
+								: "Room type / display name"}
+						</p>
+						<Select
+							showSearch
+							value={updatedRoomKey || undefined}
+							onChange={setUpdatedRoomKey}
+							optionFilterProp='label'
+							getPopupContainer={() => document.body}
+							dropdownStyle={{ zIndex: Z_TOP + 80 }}
+							style={{ width: "100%" }}
+							placeholder={
+								chosenLanguage === "Arabic"
+									? "\u0627\u062e\u062a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629"
+									: "Choose room type"
+							}
+						>
+							{roomEditorOptions.map((option) => (
+								<Select.Option
+									key={option.key}
+									value={option.key}
+									label={`${option.label} ${option.roomType}`}
+								>
+									<div className='room-edit-option'>
+										<strong>{option.label}</strong>
+										<span>{option.roomType}</span>
+										{option.availableCount !== null && (
+											<em>
+												{chosenLanguage === "Arabic"
+													? "\u0627\u0644\u0645\u062a\u0627\u062d"
+													: "Available"}
+												: {option.availableCount}
+											</em>
+										)}
+										{option.blockedDates.length > 0 && (
+											<em className='blocked'>
+												{chosenLanguage === "Arabic"
+													? "\u0645\u062d\u062c\u0648\u0628"
+													: "Blocked"}
+												: {summarizeDateList(option.blockedDates, 2)}
+											</em>
+										)}
+									</div>
+								</Select.Option>
+							))}
+						</Select>
+					</div>
+					<div className='room-edit-field compact'>
+						<p>
+							{chosenLanguage === "Arabic"
+								? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0639\u062f\u062f"
+								: "Update count"}
+						</p>
+					</div>
 					<InputNumber
 						min={1}
 						value={updatedRoomCount}
@@ -2806,6 +2977,19 @@ const Wrapper = styled.div`
 		align-items: center;
 		border-color: var(--update-border) !important;
 		min-height: 40px !important;
+	}
+
+	.room-edit-field {
+		display: grid;
+		gap: 6px;
+		margin-bottom: 12px;
+	}
+
+	.room-edit-field p {
+		color: var(--update-muted);
+		font-size: 0.85rem;
+		font-weight: 800;
+		margin: 0;
 	}
 
 	.selectlike {
