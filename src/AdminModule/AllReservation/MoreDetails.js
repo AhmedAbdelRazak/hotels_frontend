@@ -208,7 +208,10 @@ const hasReservationRoomAssignment = (reservation = {}) =>
 	(Array.isArray(reservation?.roomId) && reservation.roomId.length > 0) ||
 	(Array.isArray(reservation?.roomDetails) && reservation.roomDetails.length > 0);
 
-const buildReservationStatusOptions = (reservation = {}) => {
+const buildReservationStatusOptions = (
+	reservation = {},
+	{ forceAllCoreStatuses = false } = {},
+) => {
 	const currentStatus = normalizeReservationStatusValue(
 		reservation?.reservation_status || reservation?.state,
 	);
@@ -230,10 +233,10 @@ const buildReservationStatusOptions = (reservation = {}) => {
 		}
 	};
 
-	if (currentStatus === "inhouse") {
+	if (forceAllCoreStatuses || currentStatus === "inhouse") {
 		addOption({ value: "inhouse", label: "InHouse" });
 	}
-	if (showCheckoutStatuses) {
+	if (forceAllCoreStatuses || showCheckoutStatuses) {
 		addOption({ value: "checked_out", label: "Checked Out" });
 		addOption({ value: "early_checked_out", label: "Early Check Out" });
 	}
@@ -4319,6 +4322,7 @@ const ReservationDetail = ({
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
+	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const supplierData = reservation?.supplierData || {};
 	const configuredSuperAdminId = String(
 		process.env.REACT_APP_SUPER_ADMIN_ID || "",
@@ -5952,6 +5956,8 @@ const ReservationDetail = ({
 			const updateData = {
 				reservation_status: selectedStatus,
 				hotelName: hotelDetails.hotelName,
+				adminAllReservationsStatusUpdate: true,
+				adminAllReservationsSuperAdminForceStatus: isConfiguredSuperAdmin,
 				requestingUserId: user?._id,
 				sendEmail, // ✅ mirror MoreDetails
 			};
@@ -5997,6 +6003,8 @@ const ReservationDetail = ({
 		if (window.confirm(confirmationMessage)) {
 			const updateData = {
 				reservation_status: selectedStatus,
+				adminAllReservationsStatusUpdate: true,
+				adminAllReservationsSuperAdminForceStatus: isConfiguredSuperAdmin,
 				requestingUserId: user?._id,
 			};
 
@@ -6503,7 +6511,9 @@ const ReservationDetail = ({
 		}, 0);
 	};
 
-	const reservationStatusOptions = buildReservationStatusOptions(reservation);
+	const reservationStatusOptions = buildReservationStatusOptions(reservation, {
+		forceAllCoreStatuses: isConfiguredSuperAdmin,
+	});
 	const currentReservationStatusValue = normalizeReservationStatusValue(
 		reservation?.reservation_status || reservation?.state,
 	);

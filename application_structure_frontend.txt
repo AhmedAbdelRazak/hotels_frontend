@@ -1170,12 +1170,17 @@ Future TODO Backlog - Added 2026-05-26
   - src/AdminModule/AllReservation/ScoreCards.js was rebuilt into one compact PMS-themed scorecard strip instead of dark standalone blocks.
   - The strip uses the PMS blue/purple/teal/amber/green/red palette, subtle gradients, icons, compact typography, and a shared light container.
   - Cards shown: Overall Reservations, Today's Reservations, Weekly Reservations, Pending Confirmation, Not Captured, and Captured.
+  - Overall, Captured, Not Captured, and Pending Confirmation are historical/current-filter-scope totals, while Today's and Weekly Reservations are created-date metrics for today and the current week.
   - Every filter-capable card calls the existing EnhancedContentTable filter handler, so clicking a card refreshes the table through the same backend filtering path as the filter buttons.
   - Active filter cards switch to a darker gradient and heartbeat animation until clicked again.
   - Long labels remain single-row and the strip scrolls horizontally on smaller screens rather than creating a second scorecard row.
 - Enhanced table integration:
   - src/AdminModule/AllReservation/EnhancedContentTable.js passes activeFilter and onFilterSelect into ScoreCards.
   - Existing manual filter buttons remain in place and continue to work.
+- Admin reservation status control:
+  - src/AdminModule/AllReservation/MoreDetails.js now shows configured super admins the full core status set from the platform admin all-reservations details modal, including InHouse, Checked Out, and Early Check Out even when the reservation has not reached confirmation.
+  - The admin all-reservations status update payload includes route-specific override markers so the backend can keep the exceptional unconfirmed-to-check-in/check-out jump scoped to configured super admins using this admin workflow.
+  - Regular platform admins keep the existing guided status options; backend enforcement still controls final permission.
 
 2026-05-29 Time Zone Clock Accuracy
 - Shared time-zone helpers:
