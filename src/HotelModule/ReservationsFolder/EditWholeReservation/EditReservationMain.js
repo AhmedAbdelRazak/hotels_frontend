@@ -1053,24 +1053,25 @@ export const EditReservationMain = ({
 			);
 			return;
 		}
-		setHasRoomLineEdits(true);
 		if (exists) {
+			const existingIndex = (reservation.pickedRoomsType || []).findIndex(
+				(r) =>
+					buildRoomKey(r.room_type, r.displayName || r.display_name || "") ===
+					key,
+			);
+			if (existingIndex >= 0) {
+				openModal(reservation.pickedRoomsType[existingIndex], existingIndex);
+			}
+			return;
+		}
+
+		const built = buildRoomLine(room_type, displayName);
+		if (built) {
 			setReservation((prev) => ({
 				...prev,
-				pickedRoomsType: (prev.pickedRoomsType || []).filter(
-					(r) =>
-						buildRoomKey(r.room_type, r.displayName || r.display_name || "") !==
-						key,
-				),
+				pickedRoomsType: [...(prev.pickedRoomsType || []), built],
 			}));
-		} else {
-			const built = buildRoomLine(room_type, displayName);
-			if (built) {
-				setReservation((prev) => ({
-					...prev,
-					pickedRoomsType: [...(prev.pickedRoomsType || []), built],
-				}));
-			}
+			setHasRoomLineEdits(true);
 		}
 	};
 
@@ -2491,6 +2492,11 @@ export const EditReservationMain = ({
 													})
 												}
 												title={
+													active
+														? chosenLanguage === "Arabic"
+															? "تعديل عدد الغرف أو الأسعار"
+															: "Edit room count or pricing"
+														:
 													calendarBlocked
 														? formatBlockedRoomMessage(
 																resolvedDisplayName,

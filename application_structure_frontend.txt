@@ -1220,3 +1220,11 @@ Future TODO Backlog - Added 2026-05-26
   - This keeps nested receipt edit modals visible above reservation details, receipt previews, side menus, and their overlays.
 - Validation:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Hotel-Management Edit Reservation Room UX
+- Hotel-management edit reservation:
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js no longer removes an already-selected room type when the user clicks its room chip.
+  - Clicking an already-selected room chip now opens the room count editor so the edit modal remains stable and room changes are intentional.
+  - Room removal remains available through the explicit Delete/Remove controls, and reservation changes still apply only after pressing Update Reservation.
+- Validation:
+  - npm.cmd run build compiled successfully.
