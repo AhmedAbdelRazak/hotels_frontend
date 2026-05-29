@@ -1240,3 +1240,13 @@ Future TODO Backlog - Added 2026-05-26
   - The room editor dropdown renders on the body with the high PMS dropdown layer, keeping options clickable above nested modal overlays.
 - Validation:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Hotel-Management Edit Reservation Room Chip Toggle Fix
+- Hotel-management edit reservation:
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js restores the operational room-chip toggle behavior requested by hotel staff.
+  - Clicking an already-selected room type removes that room line from the pending reservation edit, while clicking an unselected room type adds it to the pending edit.
+  - Chip clicks now call preventDefault and stopPropagation, and RoomChip is explicitly rendered as type="button" so clicking a room can never submit/refresh the surrounding edit modal.
+  - Full hotel users can still select calendar-restricted or low-inventory room types with a warning; only limited order-taker accounts are blocked from restricted selections.
+  - Count/pricing edits remain available through the explicit room-line Count and Pricing buttons after a room has been selected.
+- Validation:
+  - npm.cmd run build compiled successfully.

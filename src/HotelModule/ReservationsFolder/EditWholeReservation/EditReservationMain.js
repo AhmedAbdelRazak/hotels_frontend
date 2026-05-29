@@ -1164,18 +1164,19 @@ export const EditReservationMain = ({
 			return;
 		}
 		if (exists) {
-			const existingIndex = (reservation.pickedRoomsType || []).findIndex(
-				(r) => {
-					const displayName = resolveDisplayNameForType(
-						r.room_type,
-						r.displayName || r.display_name,
-					);
-					return buildRoomKey(r.room_type, displayName) === key;
-				},
-			);
-			if (existingIndex >= 0) {
-				openModal(reservation.pickedRoomsType[existingIndex], existingIndex);
-			}
+			setReservation((currentReservation) => ({
+				...currentReservation,
+				pickedRoomsType: (currentReservation.pickedRoomsType || []).filter(
+					(r) => {
+						const resolvedDisplayName = resolveDisplayNameForType(
+							r.room_type,
+							r.displayName || r.display_name,
+						);
+						return buildRoomKey(r.room_type, resolvedDisplayName) !== key;
+					},
+				),
+			}));
+			setHasRoomLineEdits(true);
 			return;
 		}
 
@@ -2655,18 +2656,20 @@ export const EditReservationMain = ({
 												$disabled={disabledForAgent}
 												$calendarBlocked={calendarBlocked}
 												aria-disabled={disabledForAgent}
-												onClick={() =>
+												onClick={(event) => {
+													event.preventDefault();
+													event.stopPropagation();
 													toggleChip(key, {
 														inventoryBlocked: agentInventoryBlocked,
 														calendarBlockedDates,
 														roomLabel: resolvedDisplayName,
-													})
-												}
+													});
+												}}
 												title={
 													active
 														? chosenLanguage === "Arabic"
 															? "تعديل عدد الغرف أو الأسعار"
-															: "Edit room count or pricing"
+															: "Remove this room type from the reservation"
 														:
 													calendarBlocked
 														? formatBlockedRoomMessage(
@@ -3364,7 +3367,7 @@ const CalendarBlockNotice = styled.div`
 	}
 `;
 
-const RoomChip = styled.button`
+const RoomChip = styled.button.attrs({ type: "button" })`
 	appearance: none;
 	border: 1px solid
 		${(p) =>
