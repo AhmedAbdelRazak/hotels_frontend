@@ -24,6 +24,10 @@ const TEXT = {
 		open: "Open",
 		noHotel: "No hotel",
 		noSubject: "No subject",
+		noContact: "No contact saved yet",
+		client: "Client",
+		contact: "Contact",
+		relatedChats: "Chats with this contact",
 		noCases: "No closed client support cases found.",
 		totalCases: "Total",
 	},
@@ -40,6 +44,12 @@ const TEXT = {
 		open: "\u0645\u0641\u062a\u0648\u062d",
 		noHotel: "\u0644\u0627 \u064a\u0648\u062c\u062f \u0641\u0646\u062f\u0642",
 		noSubject: "\u0628\u062f\u0648\u0646 \u0645\u0648\u0636\u0648\u0639",
+		noContact:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u062a\u0648\u0627\u0635\u0644 \u0628\u0639\u062f",
+		client: "\u0627\u0644\u0639\u0645\u064a\u0644",
+		contact: "\u0627\u0644\u062a\u0648\u0627\u0635\u0644",
+		relatedChats:
+			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0628\u0646\u0641\u0633 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062a\u0648\u0627\u0635\u0644",
 		noCases:
 			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0639\u0645\u0644\u0627\u0621 \u0645\u063a\u0644\u0642\u0629.",
 		totalCases: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
@@ -82,16 +92,76 @@ const latestCaseTime = (item = {}) => {
 const sortCasesNewestFirst = (cases = []) =>
 	[...cases].sort((a, b) => latestCaseTime(b) - latestCaseTime(a));
 
+const normalizeCaseText = (value = "") => String(value || "").trim();
+
+const supportContacts = new Set([
+	"support@jannatbooking.com",
+	"management@xhotelpro.com",
+	"noreply@jannatbooking.com",
+	"guest@jannatbooking.com",
+]);
+
+const firstGuestMessage = (item = {}) =>
+	Array.isArray(item.conversation)
+		? item.conversation.find((entry) => {
+				const contact = normalizeCaseText(
+					entry?.messageBy?.customerEmail
+				).toLowerCase();
+				return (
+					entry &&
+					!entry.isSystem &&
+					!entry.isAi &&
+					contact &&
+					!supportContacts.has(contact) &&
+					entry.seenByCustomer === true &&
+					entry.seenByAdmin !== true
+				);
+		  })
+		: null;
+
+const caseTopic = (item = {}, labels) => {
+	const firstWithInquiry = Array.isArray(item.conversation)
+		? item.conversation.find((entry) => normalizeCaseText(entry?.inquiryAbout))
+		: null;
+	return (
+		normalizeCaseText(item.caseTopic) ||
+		normalizeCaseText(item.caseSubject) ||
+		normalizeCaseText(item.inquiryAbout) ||
+		normalizeCaseText(firstWithInquiry?.inquiryAbout) ||
+		labels.noSubject
+	);
+};
+
+const clientName = (item = {}, labels) => {
+	const guestMessage = firstGuestMessage(item);
+	return (
+		normalizeCaseText(item.clientProfile?.name) ||
+		normalizeCaseText(item.clientName) ||
+		normalizeCaseText(guestMessage?.messageBy?.customerName) ||
+		normalizeCaseText(item.displayName1) ||
+		labels.client
+	);
+};
+
+const clientContact = (item = {}, labels) => {
+	const guestMessage = firstGuestMessage(item);
+	return (
+		normalizeCaseText(item.clientProfile?.contact) ||
+		normalizeCaseText(item.clientContact) ||
+		normalizeCaseText(guestMessage?.messageBy?.customerEmail) ||
+		labels.noContact
+	);
+};
+
+const sameContactCount = (item = {}) =>
+	Number(item.clientProfile?.totalChatsWithSameContact || 1);
+
 const caseSubtitle = (item = {}, labels) => {
 	const hotelName =
 		item.hotelId?.hotelName ||
 		item.hotelId?.hotelName_OtherLanguage ||
 		labels.noHotel;
-	const firstInquiry =
-		item.conversation?.[0]?.inquiryAbout ||
-		item.inquiryAbout ||
-		labels.noSubject;
-	return `${hotelName} | ${firstInquiry}`;
+	return `${hotelName} | ${caseTopic(item, labels)}`;
 };
 
 const HistoryClientsSupportCases = ({ chosenLanguage }) => {
@@ -333,25 +403,45 @@ const CaseList = ({
 			bordered
 			locale={{ emptyText: labels.noCases }}
 			dataSource={cases}
-			renderItem={(item) => (
-				<CaseListItem
-					key={item._id}
-					onClick={() => onSelect(item)}
-					$isActive={selectedCase && selectedCase._id === item._id}
-				>
-					<div className='case-title'>{item.inquiryAbout || labels.noSubject}</div>
-					<div className='case-subtitle'>{caseSubtitle(item, labels)}</div>
-					<StarRatingWrapper>
-						<StarRatings
-							rating={item.rating || 0}
-							starRatedColor='gold'
-							numberOfStars={5}
-							starDimension='20px'
-							starSpacing='2px'
-						/>
-					</StarRatingWrapper>
-				</CaseListItem>
-			)}
+			renderItem={(item) => {
+				const topic = caseTopic(item, labels);
+				const name = clientName(item, labels);
+				const contact = clientContact(item, labels);
+				const relatedChats = sameContactCount(item);
+
+				return (
+					<CaseListItem
+						key={item._id}
+						onClick={() => onSelect(item)}
+						$isActive={selectedCase && selectedCase._id === item._id}
+					>
+						<div className='case-title'>
+							<span dir='auto'>{name}</span>
+							<span className='topic-chip' dir='auto'>
+								{topic}
+							</span>
+						</div>
+						<div className='case-subtitle'>{caseSubtitle(item, labels)}</div>
+						<div className='case-meta-row'>
+							<span dir='auto'>
+								{labels.contact}: {contact}
+							</span>
+							<span>
+								{labels.relatedChats}: {relatedChats}
+							</span>
+						</div>
+						<StarRatingWrapper>
+							<StarRatings
+								rating={item.rating || 0}
+								starRatedColor='gold'
+								numberOfStars={5}
+								starDimension='20px'
+								starSpacing='2px'
+							/>
+						</StarRatingWrapper>
+					</CaseListItem>
+				);
+			}}
 		/>
 		{pagination.total > pagination.pageSize && (
 			<PaginationBar
@@ -441,7 +531,6 @@ const ListHeader = styled.div`
 
 const CaseListItem = styled(List.Item)`
 	cursor: pointer;
-	text-transform: capitalize;
 	display: flex !important;
 	flex-direction: column;
 	align-items: flex-start !important;
@@ -461,12 +550,66 @@ const CaseListItem = styled(List.Item)`
 	.case-title {
 		color: #0b3158;
 		font-weight: 900;
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+		width: 100%;
+		line-height: 1.35;
+	}
+
+	.topic-chip {
+		display: inline-flex;
+		align-items: center;
+		max-width: 100%;
+		padding: 2px 7px;
+		border-radius: 999px;
+		border: 1px solid #b7d9f3;
+		background: #eff8ff;
+		color: #0b5c91;
+		font-size: 0.75rem;
+		font-weight: 800;
+		overflow-wrap: anywhere;
 	}
 
 	.case-subtitle {
 		color: #536b80;
 		font-size: 0.84rem;
 		line-height: 1.35;
+	}
+
+	.case-meta-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 10px;
+		color: #6f7f8e;
+		font-size: 0.78rem;
+		line-height: 1.35;
+		width: 100%;
+
+		span {
+			overflow-wrap: anywhere;
+		}
+	}
+
+	@media (max-width: 768px) {
+		padding: 10px 9px !important;
+
+		.case-title {
+			font-size: 0.92rem;
+		}
+
+		.topic-chip {
+			font-size: 0.7rem;
+		}
+
+		.case-meta-row {
+			display: block;
+
+			span {
+				display: block;
+			}
+		}
 	}
 `;
 

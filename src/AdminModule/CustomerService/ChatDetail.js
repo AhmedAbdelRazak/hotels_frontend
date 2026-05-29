@@ -56,6 +56,11 @@ const CHAT_DETAIL_LABELS = {
 		escalationAddressed: "Escalation marked as addressed.",
 		escalationUpdateError: "Unable to update escalation status.",
 		typing: "is typing...",
+		clientName: "Client Name",
+		clientContact: "Email / Phone",
+		sameClientChats: "Chats With Same Contact",
+		currentHotel: "Hotel",
+		noClientContact: "Not saved yet",
 	},
 	rtl: {
 		back: "رجوع",
@@ -83,6 +88,13 @@ const CHAT_DETAIL_LABELS = {
 		escalationAddressed: "\u062a\u0645 \u0625\u0646\u0647\u0627\u0621 \u0627\u0644\u062a\u0635\u0639\u064a\u062f.",
 		escalationUpdateError: "\u062a\u0639\u0630\u0631 \u062a\u062d\u062f\u064a\u062b \u062d\u0627\u0644\u0629 \u0627\u0644\u062a\u0635\u0639\u064a\u062f.",
 		typing: "\u064a\u0643\u062a\u0628 \u0627\u0644\u0622\u0646...",
+		clientName: "\u0627\u0633\u0645 \u0627\u0644\u0639\u0645\u064a\u0644",
+		clientContact: "\u0627\u0644\u0628\u0631\u064a\u062f / \u0627\u0644\u0647\u0627\u062a\u0641",
+		sameClientChats:
+			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0628\u0646\u0641\u0633 \u0627\u0644\u062a\u0648\u0627\u0635\u0644",
+		currentHotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
+		noClientContact:
+			"\u0644\u0645 \u064a\u062a\u0645 \u062d\u0641\u0638\u0647 \u0628\u0639\u062f",
 	},
 };
 
@@ -161,6 +173,32 @@ const getHotelName = (chat = {}) => {
 	);
 };
 
+const supportContacts = new Set([
+	"support@jannatbooking.com",
+	"management@xhotelpro.com",
+	"noreply@jannatbooking.com",
+	"guest@jannatbooking.com",
+]);
+
+const firstGuestMessage = (chat = {}) =>
+	Array.isArray(chat.conversation)
+		? chat.conversation.find((entry) => {
+				const contact = cleanDisplayText(
+					entry?.messageBy?.customerEmail,
+					""
+				).toLowerCase();
+				return (
+					entry &&
+					!entry.isSystem &&
+					!entry.isAi &&
+					contact &&
+					!supportContacts.has(contact) &&
+					entry.seenByCustomer === true &&
+					entry.seenByAdmin !== true
+				);
+		  })
+		: null;
+
 const isJannatBookingCase = (chat = {}) =>
 	String(chat?.hotelId?._id || chat?.hotelId || "") === "674cf8997e3780f1f838d458";
 
@@ -206,8 +244,29 @@ const ChatDetail = ({
 		"Client"
 	);
 	const hotelName = getHotelName(chat);
+	const guestMessage = firstGuestMessage(chat);
+	const clientProfile = chat.clientProfile || {};
+	const clientDisplayName = cleanDisplayText(
+		clientProfile.name ||
+			chat.clientName ||
+			guestMessage?.messageBy?.customerName ||
+			customerName,
+		customerName
+	);
+	const clientContact = cleanDisplayText(
+		clientProfile.contact ||
+			chat.clientContact ||
+			guestMessage?.messageBy?.customerEmail,
+		chatLabels.noClientContact
+	);
+	const sameClientChats = Number(
+		clientProfile.totalChatsWithSameContact || 1
+	);
 	const inquiryAbout = cleanDisplayText(
-		firstConversation.inquiryAbout || chat.inquiryAbout,
+		chat.caseTopic ||
+			chat.caseSubject ||
+			firstConversation.inquiryAbout ||
+			chat.inquiryAbout,
 		chatLabels.inquiryAbout
 	);
 	const inquiryDetails = cleanDisplayText(
@@ -611,14 +670,14 @@ const ChatDetail = ({
 						{isJannatBookingCase(chat) ? (
 							<>
 								{chatIsRtl
-									? `العميل (${customerName}) يحتاج إلى دعم من Jannat Booking`
-									: `Client (${customerName}) Needs Support From Jannat Booking`}
+									? `العميل (${clientDisplayName}) يحتاج إلى دعم من Jannat Booking`
+									: `Client (${clientDisplayName}) Needs Support From Jannat Booking`}
 							</>
 						) : (
 							<>
 								{chatIsRtl
-									? `العميل (${customerName}) يحتاج إلى دعم بخصوص ${inquiryAbout} في فندق `
-									: `Client (${customerName}) Needs Support Regarding ${inquiryAbout} In Hotel `}
+									? `العميل (${clientDisplayName}) يحتاج إلى دعم بخصوص ${inquiryAbout} في فندق `
+									: `Client (${clientDisplayName}) Needs Support Regarding ${inquiryAbout} In Hotel `}
 								<span style={{ fontWeight: "bold" }}>
 									{hotelName}
 								</span>
@@ -632,6 +691,27 @@ const ChatDetail = ({
 					</>
 				)}
 			</h3>
+
+			{isClientCase && (
+				<ClientDetailsCard $isRtl={chatIsRtl}>
+					<DetailItem>
+						<span>{chatLabels.clientName}</span>
+						<strong dir='auto'>{clientDisplayName}</strong>
+					</DetailItem>
+					<DetailItem>
+						<span>{chatLabels.clientContact}</span>
+						<strong dir='auto'>{clientContact}</strong>
+					</DetailItem>
+					<DetailItem>
+						<span>{chatLabels.sameClientChats}</span>
+						<strong>{sameClientChats}</strong>
+					</DetailItem>
+					<DetailItem>
+						<span>{chatLabels.currentHotel}</span>
+						<strong dir='auto'>{hotelName}</strong>
+					</DetailItem>
+				</ClientDetailsCard>
+			)}
 
 			<CaseMeta $isRtl={chatIsRtl}>
 				<strong>{chatLabels.inquiryAbout}:</strong>
@@ -876,6 +956,52 @@ const CaseMeta = styled.p`
 
 	span {
 		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+`;
+
+const ClientDetailsCard = styled.div`
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 8px;
+	margin: 4px 0 12px;
+	padding: 10px;
+	border: 1px solid #cfe1ef;
+	border-radius: 8px;
+	background: #f7fbff;
+	text-align: ${(props) => (props.$isRtl ? "right" : "left")};
+
+	@media (max-width: 1100px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 640px) {
+		grid-template-columns: 1fr;
+		padding: 8px;
+	}
+`;
+
+const DetailItem = styled.div`
+	min-width: 0;
+	padding: 7px 8px;
+	border: 1px solid #e4eef7;
+	border-radius: 6px;
+	background: #ffffff;
+
+	span {
+		display: block;
+		color: #627487;
+		font-size: 0.72rem;
+		font-weight: 800;
+		line-height: 1.2;
+		margin-bottom: 3px;
+	}
+
+	strong {
+		display: block;
+		color: #123b5d;
+		font-size: 0.88rem;
+		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
 `;

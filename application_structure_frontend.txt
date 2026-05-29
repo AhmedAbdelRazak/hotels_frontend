@@ -1056,3 +1056,18 @@ Future TODO Backlog - Added 2026-05-26
     - http://127.0.0.1:3080/admin/customer-service?tab=active-client-cases.
     - https://xhotelpro.com/admin/customer-service?tab=active-client-cases.
   - All three local repos and production repos were clean after deployment.
+
+2026-05-29 Admin Customer-Service History Identity Details
+- History client cases:
+  - src/AdminModule/CustomerService/HistoryClientsSupportCases.js now derives the row title from caseTopic/caseSubject or the first inquiry message, fixing "No subject" rows when the case has an inquiry such as reserve_room.
+  - Each history row shows the client name, topic chip, hotel/topic subtitle, contact, and same-contact chat count.
+  - The list avoids text capitalization so emails, phone numbers, and mixed-language names remain readable.
+- Chat detail:
+  - src/AdminModule/CustomerService/ChatDetail.js shows a responsive client details grid for B2C support cases.
+  - The grid includes client name, email/phone, same-contact chat count, and hotel.
+  - The grid collapses from four columns to two and then one column for admin mobile use.
+- Backend relationship:
+  - These fields come from support-case clientProfile/caseTopic enrichment when available, with frontend fallbacks for older records.
+- Validation completed locally:
+  - node --check src/AdminModule/CustomerService/HistoryClientsSupportCases.js.
+  - node --check src/AdminModule/CustomerService/ChatDetail.js.
