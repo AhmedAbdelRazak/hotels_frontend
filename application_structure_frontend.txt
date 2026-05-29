@@ -1003,11 +1003,15 @@ Future TODO Backlog - Added 2026-05-26
   - Arabic labels are included for the button, modal, tabs, field label, empty state, and submit status.
   - Upload tab contains a single textarea for pasted Messenger/WhatsApp-style chat text and a submit button.
   - History tab lists saved structured training chats with title, summary, turn count, and keyword tags.
+  - History must render API records only. Do not seed or hardcode demo learning chats in the modal.
+  - Pasted conversations may be Arabic, Hindi, English, Spanish, or mixed language. The frontend should submit the raw full conversation for backend cleaning instead of translating or summarizing it locally.
 - API helpers:
   - createAiTrainingChat posts to /api/aiagent-learning/chats.
   - getAiTrainingChats loads /api/aiagent-learning/chats.
 - Backend relationship:
-  - The backend cleans pasted text with OpenAI when available, infers support/client roles, saves chatTitle/chatKeywords/conversation, and makes the orchestrator consult relevant examples before AI-written replies.
+  - The backend cleans pasted text with OpenAI when available, infers support/client roles, saves chatTitle/chatKeywords/conversation in aiagentlearnings with sourceType=manual_chat, and makes the orchestrator consult relevant examples before AI-written replies.
+  - Newly uploaded teaching chats should be looked up in aiagentlearnings/sourceType=manual_chat. If old rows appear only in aiagenttrainingchats, they are legacy/backward-compatible learning context rather than the new upload target.
+  - Guest response language is not selected by the admin modal. The public guest frontend sends preferredLanguage/preferredLanguageCode with support messages, and the backend orchestrator must answer strictly in that language while learning from multilingual examples.
 - Validation completed locally:
   - node --check src/AdminModule/CustomerService/ActiveClientsSupportCases.js.
   - node --check src/AdminModule/CustomerService/CustomerServiceDetails.js.

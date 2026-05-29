@@ -28,7 +28,7 @@ const AI_LEARNING_TEXT = {
 		historyTab: "Learning Chat History",
 		pasteLabel: "Paste Chat Conversation",
 		pastePlaceholder:
-			"Client: I want to book a double room\nAgent: Of course, what dates?",
+			"Paste the full guest/support conversation here.",
 		submit: "Clean & Save Chat",
 		saved: "Training chat saved.",
 		loadError: "Could not load training chats.",
@@ -49,7 +49,7 @@ const AI_LEARNING_TEXT = {
 		pasteLabel:
 			"\u0646\u0635 \u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629",
 		pastePlaceholder:
-			"\u0627\u0644\u0639\u0645\u064a\u0644: \u0623\u0631\u064a\u062f \u062d\u062c\u0632 \u063a\u0631\u0641\u0629 \u0645\u0632\u062f\u0648\u062c\u0629\n\u0627\u0644\u0645\u0648\u0638\u0641: \u0628\u0643\u0644 \u062a\u0623\u0643\u064a\u062f\u060c \u0645\u0627 \u0647\u064a \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e\u061f",
+			"\u0627\u0644\u0635\u0642 \u0645\u062d\u0627\u062f\u062b\u0629 \u0627\u0644\u0639\u0645\u064a\u0644 \u0648\u0627\u0644\u062f\u0639\u0645 \u0643\u0627\u0645\u0644\u0629 \u0647\u0646\u0627.",
 		submit:
 			"\u062a\u0646\u0638\u064a\u0641 \u0648\u062d\u0641\u0638",
 		saved:
