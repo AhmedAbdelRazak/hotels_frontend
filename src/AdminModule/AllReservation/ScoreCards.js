@@ -1,445 +1,396 @@
 import React from "react";
 import styled from "styled-components";
 import {
-	ArrowUpOutlined,
 	ArrowDownOutlined,
+	ArrowUpOutlined,
+	CheckCircleOutlined,
+	ClockCircleOutlined,
+	CreditCardOutlined,
+	FieldTimeOutlined,
 	MinusOutlined,
+	WarningOutlined,
 } from "@ant-design/icons";
 import CountUp from "react-countup";
 
-const ScoreCards = ({ fromPage, scorecardsObject = {} }) => {
-	// Destructure the stats from the back-end object (with safe defaults).
-	const {
-		// Row 1
-		todayReservations = 0,
-		yesterdayReservations = 0,
-		todayRatio = 0, // difference in reservations vs. yesterday in %
-		weeklyReservations = 0,
-		lastWeekReservations = 0,
-		weeklyRatio = 0, // difference in reservations vs. last week in %
-		topHotels = [], // top 3 hotels by reservations
-		totalReservations = 0,
-
-		// Row 2
-		todayCommission = 0,
-		yesterdayCommission = 0,
-		todayCommissionRatio = 0, // difference in commission vs. yesterday in %
-		weeklyCommission = 0,
-		lastWeekCommission = 0,
-		weeklyCommissionRatio = 0, // difference in commission vs. last week in %
-		topHotelsByCommission = [], // top 3 hotels by commission
-		overallCommission = 0,
-	} = scorecardsObject;
+const Trend = ({ current = 0, previous = 0, ratio = 0, label = "Previous" }) => {
+	const direction =
+		current > previous ? "up" : current < previous ? "down" : "flat";
+	const Icon =
+		direction === "up"
+			? ArrowUpOutlined
+			: direction === "down"
+			  ? ArrowDownOutlined
+			  : MinusOutlined;
 
 	return (
-		<>
-			{/* ====== ROW 1: RESERVATION STATS ====== */}
-			<ScoreCardsWrapper>
-				{/* 1) Today's vs Yesterday's Reservations */}
-				<Card>
-					<CardTitle>Today's Reservations</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={todayReservations}
-								duration={2}
-								separator=','
-								delay={2}
-							/>
-						</span>
-						<p>
-							Yesterday:{" "}
-							<CountUp
-								end={yesterdayReservations}
-								duration={2.1}
-								separator=','
-								delay={2}
-							/>
-						</p>
-						<PercentageWrapper>
-							{todayReservations > yesterdayReservations ? (
-								<ArrowUpOutlined style={{ color: "green" }} />
-							) : todayReservations < yesterdayReservations ? (
-								<ArrowDownOutlined style={{ color: "red" }} />
-							) : (
-								<MinusOutlined style={{ color: "#b0b0b0" }} />
-							)}
-							<span
-								style={{
-									color:
-										todayReservations > yesterdayReservations
-											? "green"
-											: todayReservations < yesterdayReservations
-											  ? "red"
-											  : "#b0b0b0",
-								}}
-							>
-								{todayReservations === yesterdayReservations ? (
-									"No Change"
-								) : (
-									<CountUp
-										end={Math.abs(todayRatio)}
-										decimals={2}
-										duration={2.2}
-										suffix='%'
-										delay={2}
-									/>
-								)}
-							</span>
-						</PercentageWrapper>
-					</CardData>
-				</Card>
-
-				{/* 2) Weekly vs Last Week Reservations */}
-				<Card>
-					<CardTitle>Weekly Reservations</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={weeklyReservations}
-								duration={1.2}
-								separator=','
-								delay={2}
-							/>
-						</span>
-						<p>
-							Last Week:{" "}
-							<CountUp
-								end={lastWeekReservations}
-								duration={2.3}
-								separator=','
-								delay={2}
-							/>
-						</p>
-						<PercentageWrapper>
-							{weeklyReservations > lastWeekReservations ? (
-								<ArrowUpOutlined style={{ color: "green" }} />
-							) : weeklyReservations < lastWeekReservations ? (
-								<ArrowDownOutlined style={{ color: "red" }} />
-							) : (
-								<MinusOutlined style={{ color: "#b0b0b0" }} />
-							)}
-							<span
-								style={{
-									color:
-										weeklyReservations > lastWeekReservations
-											? "green"
-											: weeklyReservations < lastWeekReservations
-											  ? "red"
-											  : "#b0b0b0",
-								}}
-							>
-								{weeklyReservations === lastWeekReservations ? (
-									"No Change"
-								) : (
-									<CountUp
-										end={Math.abs(weeklyRatio)}
-										decimals={2}
-										duration={2.4}
-										delay={2}
-										suffix='%'
-									/>
-								)}
-							</span>
-						</PercentageWrapper>
-					</CardData>
-				</Card>
-
-				{/* 3) Top 3 Hotels by Reservation Count */}
-				<Card>
-					<CardTitle>Top 3 Hotels</CardTitle>
-					<CardData>
-						{topHotels.map((hotel, index) => (
-							<p
-								key={index}
-								style={{
-									textTransform: "capitalize",
-									fontSize: "0.78rem",
-									margin: "4px 0",
-								}}
-							>
-								{index + 1}. {hotel.name} -{" "}
-								<CountUp
-									end={hotel.reservations}
-									duration={2.5}
-									separator=','
-									delay={2}
-								/>{" "}
-								reservations
-							</p>
-						))}
-					</CardData>
-				</Card>
-
-				{/* 4) Overall Reservations */}
-				<Card>
-					<CardTitle>Overall Reservations</CardTitle>
-					<CardData>
-						<span>
-							<CountUp
-								end={totalReservations}
-								duration={2.6}
-								separator=','
-								delay={2}
-							/>
-						</span>
-					</CardData>
-				</Card>
-			</ScoreCardsWrapper>
-
-			{/* ====== ROW 2: COMMISSION STATS (Dark Cards, margin-top) ====== */}
-			{/* Only show row 2 if fromPage === "reports" (same logic as your original) */}
-			<CommissionCardsWrapper center={fromPage !== "reports"}>
-				{fromPage === "reports" && (
-					<>
-						{/* 1) Commission Today vs Yesterday */}
-						<CommissionCard>
-							<CardTitle>Today's Commission (SAR)</CardTitle>
-							<CardData>
-								<span>
-									<CountUp
-										end={todayCommission}
-										duration={2.3}
-										decimals={2}
-										separator=','
-										delay={2}
-									/>
-								</span>
-								<p>
-									Yesterday:{" "}
-									<CountUp
-										end={yesterdayCommission}
-										duration={2.4}
-										decimals={2}
-										separator=','
-										delay={2}
-									/>
-								</p>
-								<PercentageWrapper>
-									{todayCommission > yesterdayCommission ? (
-										<ArrowUpOutlined style={{ color: "green" }} />
-									) : todayCommission < yesterdayCommission ? (
-										<ArrowDownOutlined style={{ color: "red" }} />
-									) : (
-										<MinusOutlined style={{ color: "#b0b0b0" }} />
-									)}
-									<span
-										style={{
-											color:
-												todayCommission > yesterdayCommission
-													? "green"
-													: todayCommission < yesterdayCommission
-													  ? "red"
-													  : "#b0b0b0",
-										}}
-									>
-										{todayCommission === yesterdayCommission ? (
-											"No Change"
-										) : (
-											<CountUp
-												end={Math.abs(todayCommissionRatio)}
-												decimals={2}
-												duration={2.5}
-												suffix='%'
-												delay={2}
-											/>
-										)}
-									</span>
-								</PercentageWrapper>
-							</CardData>
-						</CommissionCard>
-
-						{/* 2) Weekly Commission vs Last Week */}
-						<CommissionCard>
-							<CardTitle>Weekly Commission (SAR)</CardTitle>
-							<CardData>
-								<span>
-									<CountUp
-										end={weeklyCommission}
-										duration={2.6}
-										decimals={2}
-										separator=','
-										delay={2}
-									/>
-								</span>
-								<p>
-									Last Week:{" "}
-									<CountUp
-										end={lastWeekCommission}
-										duration={2.7}
-										decimals={2}
-										separator=','
-										delay={2}
-									/>
-								</p>
-								<PercentageWrapper>
-									{weeklyCommission > lastWeekCommission ? (
-										<ArrowUpOutlined style={{ color: "green" }} />
-									) : weeklyCommission < lastWeekCommission ? (
-										<ArrowDownOutlined style={{ color: "red" }} />
-									) : (
-										<MinusOutlined style={{ color: "#b0b0b0" }} />
-									)}
-									<span
-										style={{
-											color:
-												weeklyCommission > lastWeekCommission
-													? "green"
-													: weeklyCommission < lastWeekCommission
-													  ? "red"
-													  : "#b0b0b0",
-										}}
-									>
-										{weeklyCommission === lastWeekCommission ? (
-											"No Change"
-										) : (
-											<CountUp
-												end={Math.abs(weeklyCommissionRatio)}
-												decimals={2}
-												duration={2.8}
-												suffix='%'
-												delay={2}
-											/>
-										)}
-									</span>
-								</PercentageWrapper>
-							</CardData>
-						</CommissionCard>
-
-						{/* 3) Top 3 Hotels by Commission */}
-						<CommissionCard className='mx-auto'>
-							<CardTitle>Top 3 Hotels (Commission)</CardTitle>
-							<CardData>
-								{topHotelsByCommission.map((hotel, index) => (
-									<p
-										key={index}
-										style={{
-											textTransform: "capitalize",
-											fontSize: "0.78rem",
-											margin: "4px 0",
-										}}
-									>
-										{index + 1}. {hotel.name} -{" "}
-										<CountUp
-											end={hotel.commission}
-											duration={2.9}
-											decimals={2}
-											separator=','
-											delay={2}
-										/>{" "}
-										SAR
-									</p>
-								))}
-							</CardData>
-						</CommissionCard>
-
-						{/* 4) Overall Commission */}
-						<CommissionCard className='mx-auto'>
-							<CardTitle>Overall Commission (SAR)</CardTitle>
-							<CardData>
-								<span>
-									<CountUp
-										end={overallCommission}
-										duration={3}
-										decimals={2}
-										separator=','
-										delay={2.3}
-									/>
-								</span>
-							</CardData>
-						</CommissionCard>
-					</>
+		<TrendLine $direction={direction}>
+			<Icon />
+			<span>
+				{label}: <CountUp end={previous} duration={0.9} separator=',' />
+			</span>
+			<small>
+				{current === previous ? (
+					"No change"
+				) : (
+					<CountUp
+						end={Math.abs(ratio)}
+						decimals={1}
+						duration={0.9}
+						suffix='%'
+					/>
 				)}
-			</CommissionCardsWrapper>
-		</>
+			</small>
+		</TrendLine>
+	);
+};
+
+const ScoreCards = ({
+	scorecardsObject = {},
+	activeFilter = "",
+	onFilterSelect = () => {},
+}) => {
+	const {
+		todayReservations = 0,
+		yesterdayReservations = 0,
+		todayRatio = 0,
+		weeklyReservations = 0,
+		lastWeekReservations = 0,
+		weeklyRatio = 0,
+		totalReservations = 0,
+		pendingConfirmationReservations = 0,
+		notCapturedReservations = 0,
+		capturedReservations = 0,
+	} = scorecardsObject;
+
+	const cards = [
+		{
+			key: "all",
+			filter: "",
+			title: "Overall Reservations",
+			value: totalReservations,
+			tone: "overall",
+			icon: CheckCircleOutlined,
+			meta: "All matching reservations",
+		},
+		{
+			key: "createdToday",
+			filter: "createdToday",
+			title: "Today's Reservations",
+			value: todayReservations,
+			tone: "today",
+			icon: FieldTimeOutlined,
+			trend: (
+				<Trend
+					current={todayReservations}
+					previous={yesterdayReservations}
+					ratio={todayRatio}
+					label='Yesterday'
+				/>
+			),
+		},
+		{
+			key: "createdThisWeek",
+			filter: "createdThisWeek",
+			title: "Weekly Reservations",
+			value: weeklyReservations,
+			tone: "week",
+			icon: ClockCircleOutlined,
+			trend: (
+				<Trend
+					current={weeklyReservations}
+					previous={lastWeekReservations}
+					ratio={weeklyRatio}
+					label='Last week'
+				/>
+			),
+		},
+		{
+			key: "pendingConfirmation",
+			filter: "pendingConfirmation",
+			title: "Pending Confirmation",
+			value: pendingConfirmationReservations,
+			tone: "pending",
+			icon: WarningOutlined,
+			meta: "Needs confirmation review",
+		},
+		{
+			key: "notCaptured",
+			filter: "notCaptured",
+			title: "Not Captured",
+			value: notCapturedReservations,
+			tone: "attention",
+			icon: CreditCardOutlined,
+			meta: "Payment capture pending",
+		},
+		{
+			key: "captured",
+			filter: "captured",
+			title: "Captured",
+			value: capturedReservations,
+			tone: "success",
+			icon: CheckCircleOutlined,
+			meta: "Captured or paid online",
+		},
+	];
+
+	const handleCardClick = (filter) => {
+		onFilterSelect(filter);
+	};
+
+	return (
+		<ScoreBand aria-label='Reservation scorecards'>
+			{cards.map((card) => {
+				const Icon = card.icon;
+				const isActive = Boolean(card.filter) && activeFilter === card.filter;
+				return (
+					<ScoreCard
+						key={card.key}
+						type='button'
+						$tone={card.tone}
+						$isActive={isActive}
+						onClick={() => handleCardClick(card.filter)}
+						aria-pressed={isActive}
+						title={
+							isActive
+								? "Click again to clear this filter"
+								: "Click to filter the reservations table"
+						}
+					>
+						<CardTop>
+							<IconWrap $tone={card.tone}>
+								<Icon />
+							</IconWrap>
+							<CardTitle>{card.title}</CardTitle>
+						</CardTop>
+						<CardValue>
+							<CountUp end={card.value} duration={1} separator=',' />
+						</CardValue>
+						{card.trend || <CardMeta>{card.meta}</CardMeta>}
+						{isActive ? <ActiveHint>Active filter</ActiveHint> : null}
+					</ScoreCard>
+				);
+			})}
+		</ScoreBand>
 	);
 };
 
 export default ScoreCards;
 
-/* -------------------- STYLES (unchanged) -------------------- */
-const ScoreCardsWrapper = styled.div`
-	display: flex;
-	flex-wrap: wrap;
-	gap: 20px;
-	justify-content: space-between;
+const tone = {
+	overall: {
+		accent: "#2d5d91",
+		bg: "linear-gradient(135deg, #f7fbff 0%, #e8f3ff 100%)",
+		text: "#102033",
+	},
+	today: {
+		accent: "#0891b2",
+		bg: "linear-gradient(135deg, #ecfeff 0%, #dcf3ff 100%)",
+		text: "#083344",
+	},
+	week: {
+		accent: "#7c3aed",
+		bg: "linear-gradient(135deg, #fffaff 0%, #efe3ff 100%)",
+		text: "#3b1248",
+	},
+	pending: {
+		accent: "#d97706",
+		bg: "linear-gradient(135deg, #fff8e7 0%, #ffe7b5 100%)",
+		text: "#4c3000",
+	},
+	attention: {
+		accent: "#b91c1c",
+		bg: "linear-gradient(135deg, #fff5f5 0%, #ffe1e6 100%)",
+		text: "#5f1212",
+	},
+	success: {
+		accent: "#0f8b5f",
+		bg: "linear-gradient(135deg, #ecfdf5 0%, #d8f7e4 100%)",
+		text: "#064e3b",
+	},
+};
 
-	/* On mobile, stack them vertically */
-	@media (max-width: 768px) {
-		flex-direction: column;
-		gap: 12px;
-	}
-`;
-
-const CommissionCardsWrapper = styled(ScoreCardsWrapper)`
-	margin-top: 30px; /* spacing for second row */
-	justify-content: ${({ center }) => (center ? "center" : "space-between")};
-`;
-
-const Card = styled.div`
-	background-color: #2b2b2b;
-	color: white;
-	padding: 20px;
+const ScoreBand = styled.div`
+	display: grid;
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+	gap: 12px;
+	margin: 8px 0 18px;
+	padding: 12px;
+	border: 1px solid #d7e9fb;
 	border-radius: 10px;
-	flex: 1;
-	min-width: 200px;
-	max-width: 300px;
-	text-align: center;
-	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.96)),
+		linear-gradient(135deg, rgba(45, 93, 145, 0.1), rgba(141, 76, 157, 0.09));
+	box-shadow: 0 10px 28px rgba(16, 32, 51, 0.08);
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
 
-	@media (max-width: 768px) {
-		max-width: 330px;
-		padding: 14px;
+	@media (max-width: 1180px) {
+		grid-template-columns: repeat(6, minmax(168px, 1fr));
 	}
 `;
 
-const CommissionCard = styled(Card)`
-	background-color: #1c1c1c; /* darker for commission row */
-`;
+const ScoreCard = styled.button`
+	position: relative;
+	min-height: 124px;
+	width: 100%;
+	border: 1px solid
+		${(props) =>
+			props.$isActive ? tone[props.$tone].accent : "rgba(191, 219, 254, 0.95)"};
+	border-radius: 8px;
+	background: ${(props) =>
+		props.$isActive
+			? `linear-gradient(135deg, ${tone[props.$tone].accent} 0%, #102033 100%)`
+			: tone[props.$tone].bg};
+	box-shadow: ${(props) =>
+		props.$isActive
+			? `0 14px 32px ${tone[props.$tone].accent}44`
+			: "0 8px 18px rgba(16, 32, 51, 0.08)"};
+	color: ${(props) => (props.$isActive ? "#ffffff" : tone[props.$tone].text)};
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	text-align: start;
+	padding: 12px;
+	overflow: hidden;
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		border-color 0.18s ease;
+	animation: ${(props) =>
+		props.$isActive ? "scorecard-heartbeat 1.35s ease-in-out infinite" : "none"};
 
-const CardTitle = styled.h3`
-	margin-bottom: 10px;
-	font-size: 18px;
-	color: #f0f0f0;
-
-	@media (max-width: 768px) {
-		font-size: 16px;
+	&::after {
+		content: "";
+		position: absolute;
+		inset-inline-end: -28px;
+		inset-block-start: -28px;
+		width: 82px;
+		height: 82px;
+		border-radius: 999px;
+		background: ${(props) =>
+			props.$isActive ? "rgba(255, 255, 255, 0.18)" : `${tone[props.$tone].accent}18`};
 	}
-`;
 
-const CardData = styled.div`
-	font-size: 24px;
-	font-weight: bold;
-
-	p {
-		font-size: 14px;
-		margin: 5px 0;
+	&:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 14px 28px rgba(16, 32, 51, 0.14);
 	}
 
-	@media (max-width: 768px) {
-		font-size: 20px;
-		p {
-			font-size: 13px;
+	@keyframes scorecard-heartbeat {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		45% {
+			transform: scale(1.018);
+		}
+		60% {
+			transform: scale(1.006);
 		}
 	}
 `;
 
-const PercentageWrapper = styled.div`
+const CardTop = styled.div`
+	position: relative;
+	z-index: 1;
 	display: flex;
 	align-items: center;
+	gap: 8px;
+	min-width: 0;
+`;
+
+const IconWrap = styled.span`
+	display: inline-flex;
+	align-items: center;
 	justify-content: center;
-	margin-top: 10px;
+	width: 30px;
+	height: 30px;
+	flex: 0 0 30px;
+	border-radius: 8px;
+	background: ${(props) => tone[props.$tone].accent};
+	color: #fff;
+	box-shadow: inset 0 1px rgba(255, 255, 255, 0.24);
+`;
 
-	span {
-		margin-left: 5px;
-		font-size: 14px;
-		font-weight: bold;
+const CardTitle = styled.span`
+	min-width: 0;
+	color: inherit;
+	font-size: 0.82rem;
+	font-weight: 950;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+`;
+
+const CardValue = styled.strong`
+	position: relative;
+	z-index: 1;
+	margin-top: 12px;
+	color: inherit;
+	font-size: clamp(1.45rem, 2vw, 2rem);
+	font-weight: 950;
+	line-height: 1;
+	letter-spacing: 0;
+`;
+
+const CardMeta = styled.span`
+	position: relative;
+	z-index: 1;
+	margin-top: auto;
+	color: inherit;
+	font-size: 0.72rem;
+	font-weight: 850;
+	line-height: 1.25;
+	opacity: 0.82;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+`;
+
+const TrendLine = styled.div`
+	position: relative;
+	z-index: 1;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 6px;
+	row-gap: 2px;
+	align-items: center;
+	margin-top: auto;
+	color: inherit;
+	font-size: 0.72rem;
+	font-weight: 850;
+	line-height: 1.2;
+	opacity: 0.9;
+
+	.anticon {
+		color: ${(props) =>
+			props.$direction === "up"
+				? "#10b981"
+				: props.$direction === "down"
+				  ? "#ef4444"
+				  : "#64748b"};
 	}
 
-	@media (max-width: 768px) {
-		margin-top: 6px;
-		span {
-			font-size: 12px;
-		}
+	small {
+		grid-column: 2;
+		font-size: 0.68rem;
+		font-weight: 900;
+		opacity: 0.78;
 	}
+`;
+
+const ActiveHint = styled.span`
+	position: absolute;
+	inset-inline-end: 8px;
+	inset-block-end: 8px;
+	z-index: 2;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.18);
+	color: #ffffff;
+	font-size: 0.64rem;
+	font-weight: 950;
+	line-height: 1;
+	padding: 5px 7px;
 `;

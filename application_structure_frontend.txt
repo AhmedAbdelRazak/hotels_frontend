@@ -1164,3 +1164,15 @@ Future TODO Backlog - Added 2026-05-26
   - Reservation status now uses the same pill/tone approach as the hotel-management route instead of full-cell background colors.
   - Long hotel, guest, source, confirmation, payment, and date values use tooltip-backed ellipsis behavior so the table can fit the desktop page cleanly while staying horizontally scrollable on smaller screens.
   - The admin table has copied local helpers/styles rather than reusing the hotel-management component, preserving separation between platform-admin and hotel-management UI.
+
+2026-05-29 Admin Reservation Scorecard Redesign
+- Admin all-reservations scorecards:
+  - src/AdminModule/AllReservation/ScoreCards.js was rebuilt into one compact PMS-themed scorecard strip instead of dark standalone blocks.
+  - The strip uses the PMS blue/purple/teal/amber/green/red palette, subtle gradients, icons, compact typography, and a shared light container.
+  - Cards shown: Overall Reservations, Today's Reservations, Weekly Reservations, Pending Confirmation, Not Captured, and Captured.
+  - Every filter-capable card calls the existing EnhancedContentTable filter handler, so clicking a card refreshes the table through the same backend filtering path as the filter buttons.
+  - Active filter cards switch to a darker gradient and heartbeat animation until clicked again.
+  - Long labels remain single-row and the strip scrolls horizontally on smaller screens rather than creating a second scorecard row.
+- Enhanced table integration:
+  - src/AdminModule/AllReservation/EnhancedContentTable.js passes activeFilter and onFilterSelect into ScoreCards.
+  - Existing manual filter buttons remain in place and continue to work.

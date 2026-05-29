@@ -142,9 +142,9 @@ const EnhancedContentTable = ({
 	fromPage,
 	scorecardsObject,
 	// Filter props from parent
-	filterType,
-	setFilterType,
-	handleFilterClickFromParent,
+	filterType = "",
+	setFilterType = () => {},
+	handleFilterClickFromParent = () => {},
 	allHotelDetailsAdmin,
 
 	// Reserved By (existing)
@@ -568,6 +568,8 @@ const EnhancedContentTable = ({
 				scorecardsObject={scorecardsObject}
 				totalReservations={sortedData.length}
 				fromPage={fromPage}
+				activeFilter={filterType}
+				onFilterSelect={onFilterClick}
 			/>
 
 			{/* Reserved By Filter Row */}
