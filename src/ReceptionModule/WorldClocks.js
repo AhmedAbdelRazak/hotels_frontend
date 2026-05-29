@@ -2,6 +2,31 @@ import React, { useState, useEffect } from "react";
 import Clock from "react-clock";
 import "react-clock/dist/Clock.css";
 import styled from "styled-components";
+import {
+	EGYPT_TIME_ZONE,
+	SAUDI_TIME_ZONE,
+	USA_PACIFIC_TIME_ZONE,
+	formatZoneOffset,
+	getTimeZoneWallDate,
+} from "../utils/worldTimeZones";
+
+const clockZones = [
+	{
+		label: "Mecca, Saudi Arabia",
+		timeZone: SAUDI_TIME_ZONE,
+		className: "clock-border-saudi",
+	},
+	{
+		label: "California, USA",
+		timeZone: USA_PACIFIC_TIME_ZONE,
+		className: "clock-border-usa",
+	},
+	{
+		label: "Egypt",
+		timeZone: EGYPT_TIME_ZONE,
+		className: "clock-border-egypt",
+	},
+];
 
 const WorldClocks = () => {
 	const [date, setDate] = useState(new Date());
@@ -17,50 +42,20 @@ const WorldClocks = () => {
 	return (
 		<WorldClocksWrapper>
 			<div style={{ display: "flex", justifyContent: "space-around" }}>
-				<div>
-					<h5>Mecca, Saudi Arabia (GMT+3)</h5>
-					<div className='clock-border-saudi'>
-						<Clock
-							value={
-								new Date(
-									date.toLocaleString("en-US", { timeZone: "Asia/Riyadh" })
-								)
-							}
-							renderNumbers={true}
-							size={100}
-						/>
+				{clockZones.map((zone) => (
+					<div key={zone.timeZone}>
+						<h5>
+							{zone.label} ({formatZoneOffset(date, zone.timeZone)})
+						</h5>
+						<div className={zone.className}>
+							<Clock
+								value={getTimeZoneWallDate(date, zone.timeZone)}
+								renderNumbers={true}
+								size={100}
+							/>
+						</div>
 					</div>
-				</div>
-				<div>
-					<h5>California, USA (PST)</h5>
-					<div className='clock-border-usa'>
-						<Clock
-							value={
-								new Date(
-									date.toLocaleString("en-US", {
-										timeZone: "America/Los_Angeles",
-									})
-								)
-							}
-							renderNumbers={true}
-							size={100}
-						/>
-					</div>
-				</div>
-				<div>
-					<h5>Egypt (GMT+2)</h5>
-					<div className='clock-border-egypt'>
-						<Clock
-							value={
-								new Date(
-									date.toLocaleString("en-US", { timeZone: "Africa/Cairo" })
-								)
-							}
-							renderNumbers={true}
-							size={100}
-						/>
-					</div>
-				</div>
+				))}
 			</div>
 		</WorldClocksWrapper>
 	);

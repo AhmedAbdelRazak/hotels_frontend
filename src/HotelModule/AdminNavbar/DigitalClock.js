@@ -7,6 +7,7 @@ import {
 	parseDateValue,
 	SAUDI_TIME_ZONE,
 } from "../../utils/saudiDates";
+import { formatZoneOffset } from "../../utils/worldTimeZones";
 
 const DigitalClock = ({ isArabic = false }) => {
 	const [time, setTime] = useState(new window.Date());
@@ -35,6 +36,7 @@ const DigitalClock = ({ isArabic = false }) => {
 		month: "long",
 	});
 	const clockTime = formatSaudiTime(time, { language, fallback: "00:00" });
+	const zoneOffset = formatZoneOffset(time, SAUDI_TIME_ZONE, isArabic, "");
 
 	return (
 		<ClockWrapper dir={isArabic ? "rtl" : "ltr"} $isArabic={isArabic}>
@@ -44,6 +46,7 @@ const DigitalClock = ({ isArabic = false }) => {
 					{isArabic
 						? "\u062a\u0648\u0642\u064a\u062a \u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629"
 						: "Saudi Time"}
+					{zoneOffset ? <small dir='ltr'>{zoneOffset}</small> : null}
 				</ClockZone>
 				<ClockTime dir='ltr'>
 					<strong>{clockTime}</strong>
@@ -133,10 +136,19 @@ const ClockBody = styled.div`
 `;
 
 const ClockZone = styled.span`
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
 	color: #23d354;
 	font-size: 0.68rem;
 	font-weight: 950;
 	line-height: 1.1;
+
+	small {
+		color: #f4c84f;
+		font-size: 0.64rem;
+		font-weight: 950;
+	}
 `;
 
 const ClockTime = styled.div`

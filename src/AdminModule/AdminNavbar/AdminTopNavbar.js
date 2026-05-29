@@ -35,6 +35,13 @@ import socket from "../../socket";
 import EgyptFlag from "../../GeneralImages/EG_FLAG.png";
 import SaudiFlag from "../../GeneralImages/KSA_FLAG.png";
 import UsaFlag from "../../GeneralImages/USA_FLAG.png";
+import {
+	EGYPT_TIME_ZONE,
+	SAUDI_TIME_ZONE,
+	USA_PACIFIC_TIME_ZONE,
+	formatZoneDateTime,
+	formatZoneHijriDate,
+} from "../../utils/worldTimeZones";
 
 const ADMIN_BRAND_LOGO =
 	"https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png";
@@ -141,29 +148,6 @@ const adminLinks = [
 		iconOnly: true,
 	},
 ];
-
-const formatZoneDateTime = (date, timeZone, isArabic) =>
-	new Intl.DateTimeFormat(isArabic ? "ar-EG" : "en-US", {
-		timeZone,
-		weekday: "short",
-		month: "short",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: true,
-	}).format(date);
-
-const formatZoneHijriDate = (date, timeZone, isArabic) =>
-	new Intl.DateTimeFormat(
-		isArabic ? "ar-SA-u-ca-islamic-umalqura" : "en-US-u-ca-islamic-umalqura",
-		{
-			timeZone,
-			weekday: "short",
-			day: "2-digit",
-			month: "short",
-			year: "numeric",
-		}
-	).format(date);
 
 const normalizeAdminId = (value) => {
 	if (!value) return "";
@@ -998,11 +982,11 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 							<span className='zone-copy'>
 								<span className='date-line hijri-line'>
 									<CalendarOutlined />
-									<time>{formatZoneHijriDate(clockNow, "Africa/Cairo", isArabic)}</time>
+									<time>{formatZoneHijriDate(clockNow, EGYPT_TIME_ZONE, isArabic)}</time>
 								</span>
 								<span className='date-line'>
 									<ClockCircleOutlined />
-									<time>{formatZoneDateTime(clockNow, "Africa/Cairo", isArabic)}</time>
+									<time>{formatZoneDateTime(clockNow, EGYPT_TIME_ZONE, isArabic)}</time>
 								</span>
 							</span>
 						</TimeZoneItem>
@@ -1020,11 +1004,11 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 							<span className='zone-copy'>
 								<span className='date-line hijri-line'>
 									<CalendarOutlined />
-									<time>{formatZoneHijriDate(clockNow, "Asia/Riyadh", isArabic)}</time>
+									<time>{formatZoneHijriDate(clockNow, SAUDI_TIME_ZONE, isArabic)}</time>
 								</span>
 								<span className='date-line'>
 									<ClockCircleOutlined />
-									<time>{formatZoneDateTime(clockNow, "Asia/Riyadh", isArabic)}</time>
+									<time>{formatZoneDateTime(clockNow, SAUDI_TIME_ZONE, isArabic)}</time>
 								</span>
 							</span>
 						</TimeZoneItem>
@@ -1043,13 +1027,13 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 								<span className='date-line hijri-line'>
 									<CalendarOutlined />
 									<time>
-										{formatZoneHijriDate(clockNow, "America/Los_Angeles", isArabic)}
+										{formatZoneHijriDate(clockNow, USA_PACIFIC_TIME_ZONE, isArabic)}
 									</time>
 								</span>
 								<span className='date-line'>
 									<ClockCircleOutlined />
 									<time>
-										{formatZoneDateTime(clockNow, "America/Los_Angeles", isArabic)}
+										{formatZoneDateTime(clockNow, USA_PACIFIC_TIME_ZONE, isArabic)}
 									</time>
 								</span>
 							</span>
