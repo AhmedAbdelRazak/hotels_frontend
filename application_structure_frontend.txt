@@ -1194,3 +1194,12 @@ Future TODO Backlog - Added 2026-05-26
 - Reception world clocks:
   - src/ReceptionModule/WorldClocks.js no longer hard-codes Egypt as GMT+2 or California as PST.
   - Analog clock wall times now come from Intl format parts instead of parsing locale strings.
+
+2026-05-29 Hotel-Management Reservation Detail Modal Layering
+- Hotel-management reservation details:
+  - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallReservationDetailsModal.js now gives the overall reservation details modal an explicit zIndex of 12000 and a scoped root class.
+  - src/HotelModule/ReservationsFolder/PreReservationTable.js applies the same layer to the older reservation-list detail modal.
+  - The modal mask now reliably sits above the fixed hotel-management side menu, so an open side menu cannot cover the reservation detail modal.
+  - The layer remains below global picker/dropdown/tooltip layers and below the special PDF update modal layer, preserving nested controls and receipt/PDF child modals.
+- Validation:
+  - npm.cmd run build compiled successfully.

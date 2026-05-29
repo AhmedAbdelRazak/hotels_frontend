@@ -6,6 +6,8 @@ import { getHotelById, singlePreReservationById } from "../../apiAdmin";
 import ReservationDetail from "../../ReservationsFolder/ReservationDetail";
 import { getOverallText, normalizeId } from "../overallShared";
 
+const RESERVATION_DETAILS_MODAL_Z_INDEX = 12000;
+
 const getReservationKey = (reservation = {}) =>
 	normalizeId(reservation._id || reservation.id || reservation.confirmation_number);
 
@@ -224,6 +226,8 @@ const OverallReservationDetailsModal = ({
 				footer={null}
 				width='min(94vw, calc(100vw - 220px))'
 				centered
+				zIndex={RESERVATION_DETAILS_MODAL_Z_INDEX}
+				rootClassName='reservation-details-modal-root'
 				className={`reservation-details-modal${isRTL ? " is-rtl" : ""}`}
 				destroyOnClose
 				styles={{
@@ -256,6 +260,17 @@ export const setReservationIdInQuery = (history, location, reservation = {}) => 
 };
 
 const ReservationDetailsModalGlobalStyle = createGlobalStyle`
+	.reservation-details-modal-root .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.62) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${RESERVATION_DETAILS_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.reservation-details-modal-root .ant-modal-wrap,
+	.reservation-details-modal-root .ant-modal {
+		z-index: ${RESERVATION_DETAILS_MODAL_Z_INDEX} !important;
+	}
+
 	.reservation-details-modal {
 		max-width: min(94vw, calc(100vw - 220px));
 	}

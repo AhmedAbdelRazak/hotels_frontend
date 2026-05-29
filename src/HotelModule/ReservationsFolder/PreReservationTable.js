@@ -11,6 +11,8 @@ import DownloadExcel from "./DownloadExcel";
 import { useHistory, useLocation } from "react-router-dom";
 import { formatSaudiHijriDate } from "../../utils/saudiDates";
 
+const RESERVATION_DETAILS_MODAL_Z_INDEX = 12000;
+
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
 	if (reservation._id) return String(reservation._id);
@@ -956,6 +958,8 @@ const PreReservationTable = ({
 					onCancel={handleCancel}
 					width='min(94vw, calc(100vw - 220px))'
 					centered
+					zIndex={RESERVATION_DETAILS_MODAL_Z_INDEX}
+					rootClassName='reservation-details-modal-root'
 					className='reservation-details-modal'
 					styles={{
 						header: {
@@ -989,6 +993,17 @@ export default PreReservationTable;
 /* ------------------ STYLES ------------------ */
 
 const ReservationDetailsModalGlobalStyle = createGlobalStyle`
+	.reservation-details-modal-root .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.62) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${RESERVATION_DETAILS_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.reservation-details-modal-root .ant-modal-wrap,
+	.reservation-details-modal-root .ant-modal {
+		z-index: ${RESERVATION_DETAILS_MODAL_Z_INDEX} !important;
+	}
+
 	.reservation-details-modal {
 		max-width: min(94vw, calc(100vw - 220px));
 	}
