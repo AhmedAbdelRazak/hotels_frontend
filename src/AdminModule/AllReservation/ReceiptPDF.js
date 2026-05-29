@@ -553,8 +553,10 @@ const ReceiptPDFWrapper = styled.div`
 		font-size: 11.5px;
 	}
 	th {
-		background-color: rgb(243, 195, 146);
-		color: #fff;
+		background: rgb(243, 195, 146) !important;
+		background-color: rgb(243, 195, 146) !important;
+		border-color: #000 !important;
+		color: #fff !important;
 	}
 
 	.summary {
