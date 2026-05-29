@@ -139,6 +139,24 @@ table tbody td.number-cell,
 	z-index: 3010;
 }
 
+.ant-modal-root.update-pdf-modal .ant-modal-mask {
+	background: rgba(15, 23, 42, 0.66) !important;
+	backdrop-filter: blur(2px);
+	z-index: 60009 !important;
+}
+
+.ant-modal-root.update-pdf-modal .ant-modal-wrap,
+.ant-modal-wrap.update-pdf-modal,
+.ant-modal-root.update-pdf-modal .ant-modal {
+	z-index: 60010 !important;
+}
+
+.ant-modal-root.update-pdf-modal .ant-modal-content,
+.ant-modal-wrap.update-pdf-modal .ant-modal-content {
+	position: relative;
+	z-index: 60011 !important;
+}
+
 .ant-picker-dropdown,
 .ant-select-dropdown,
 .ant-dropdown,

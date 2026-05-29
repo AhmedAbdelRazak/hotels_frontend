@@ -6,6 +6,8 @@ import { Input, Modal } from "antd";
 import { updateSingleReservation } from "../apiAdmin";
 import websiteLogo from "../../GeneralImages/websiteLogo.png";
 
+const PDF_CHILD_MODAL_Z = 60010;
+
 const safeNumber = (value) => {
 	const parsed = Number(value);
 	return Number.isFinite(parsed) ? parsed : 0;
@@ -586,8 +588,8 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 				getContainer={() => document.body}
 				wrapClassName='update-pdf-modal'
 				rootClassName='update-pdf-modal'
-				zIndex={13020}
-				styles={{ mask: { zIndex: 13019 } }}
+				zIndex={PDF_CHILD_MODAL_Z}
+				styles={{ mask: { zIndex: PDF_CHILD_MODAL_Z - 1 } }}
 			>
 				<Input
 					value={licenseDraft}
@@ -605,8 +607,8 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 				getContainer={() => document.body}
 				wrapClassName='update-pdf-modal'
 				rootClassName='update-pdf-modal'
-				zIndex={13020}
-				styles={{ mask: { zIndex: 13019 } }}
+				zIndex={PDF_CHILD_MODAL_Z}
+				styles={{ mask: { zIndex: PDF_CHILD_MODAL_Z - 1 } }}
 			>
 				<div className='amounts-modal-field'>
 					<div className='amounts-modal-label'>Total Price (SAR)</div>

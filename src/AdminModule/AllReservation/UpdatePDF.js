@@ -24,6 +24,8 @@ const resolvePopupContainer = (triggerNode) => {
 	);
 };
 
+const PDF_CHILD_MODAL_Z = 60010;
+
 /**
  * UpdatePDF (modal)
  * - Adds robust "Not Captured" (credit/ debit) handling.
@@ -198,8 +200,8 @@ const UpdatePDF = ({
 			open={open}
 			rootClassName='update-pdf-modal'
 			wrapClassName='update-pdf-modal'
-			zIndex={13020}
-			styles={{ mask: { zIndex: 13019 } }}
+			zIndex={PDF_CHILD_MODAL_Z}
+			styles={{ mask: { zIndex: PDF_CHILD_MODAL_Z - 1 } }}
 			getContainer={() => document.body}
 			onOk={handleOk}
 			okText={loading ? "Saving..." : "Save"}

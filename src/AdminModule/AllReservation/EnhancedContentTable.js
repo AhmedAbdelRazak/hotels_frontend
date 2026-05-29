@@ -39,6 +39,96 @@ const isSameReservation = (a, b) => {
 	return false;
 };
 
+const AdminTableTooltipText = ({ value, max = 20, className = "" }) => {
+	const text =
+		value === null || value === undefined || value === "" ? "-" : String(value);
+	const display = text.length > max ? `${text.slice(0, max)}...` : text;
+	const content = (
+		<span className={className} dir='auto'>
+			{display}
+		</span>
+	);
+	if (text.length <= max) return content;
+	return (
+		<Tooltip title={<span dir='auto'>{text}</span>} placement='top'>
+			{content}
+		</Tooltip>
+	);
+};
+
+const adminStatusTone = (status = "") => {
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ");
+	if (/cancel|reject|inactive|no\s?show/.test(normalized)) return "red";
+	if (/early checked out|checked out|closed/.test(normalized)) return "green";
+	if (/inhouse|in house|checked in/.test(normalized)) return "softGreen";
+	if (/agent|commission/.test(normalized)) return "purple";
+	if (/pending|review|unfinished|cleaning/.test(normalized)) return "orange";
+	if (/confirm|approved/.test(normalized)) return "blue";
+	if (/active|finish|done|clean/.test(normalized)) return "green";
+	return "slate";
+};
+
+const adminLocalizeStatus = (status = "", chosenLanguage = "English") => {
+	const raw = status || "-";
+	if (chosenLanguage !== "Arabic") return raw;
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ")
+		.trim();
+	const map = {
+		confirmed: "مؤكد",
+		"pending confirmation": "بانتظار التأكيد",
+		"pending finance review": "بانتظار المراجعة المالية",
+		inhouse: "داخل الفندق",
+		"in house": "داخل الفندق",
+		"checked out": "تم تسجيل المغادرة",
+		"early checked out": "مغادرة مبكرة",
+		cancelled: "ملغي",
+		"no show": "لم يحضر",
+	};
+	return map[normalized] || raw;
+};
+
+const formatAdminMoney = (value) => {
+	const number = Number(value || 0);
+	return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+};
+
+const formatAdminDate = (value) => {
+	if (!value) return "-";
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return "-";
+	return parsed.toLocaleDateString("en-US");
+};
+
+const getAdminReservationNights = (reservation = {}) => {
+	const explicit = Number(reservation.days_of_residence || 0);
+	if (Number.isFinite(explicit) && explicit > 0) return explicit;
+	const start = reservation.checkin_date ? new Date(reservation.checkin_date) : null;
+	const end = reservation.checkout_date ? new Date(reservation.checkout_date) : null;
+	if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+		return 0;
+	}
+	const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+	return diff > 0 ? diff : 0;
+};
+
+const getAdminPaidAmount = (reservation = {}) => {
+	const direct = Number(reservation.paid_amount || 0);
+	if (Number.isFinite(direct) && direct > 0) return direct;
+	const breakdown = reservation.paid_amount_breakdown || {};
+	const breakdownTotal = Object.entries(breakdown).reduce((sum, [key, value]) => {
+		if (key === "payment_comments") return sum;
+		const number = Number(value || 0);
+		return Number.isFinite(number) ? sum + number : sum;
+	}, 0);
+	if (breakdownTotal > 0) return breakdownTotal;
+	const onsite = Number(reservation.payment_details?.onsite_paid_amount || 0);
+	return Number.isFinite(onsite) ? onsite : 0;
+};
+
 const EnhancedContentTable = ({
 	data,
 	totalDocuments,
@@ -75,6 +165,7 @@ const EnhancedContentTable = ({
 	selfReservedBy = "", // lowercase current employee name
 	currentUserId, // not used here but passed through for future hooks
 	onReservationUpdated = () => {},
+	chosenLanguage = "English",
 }) => {
 	const history = useHistory();
 	const location = useLocation();
@@ -145,6 +236,10 @@ const EnhancedContentTable = ({
 	const formattedReservations = useMemo(() => {
 		return data.map((reservation) => {
 			const { customer_details = {}, hotelId = {} } = reservation;
+			const nights = getAdminReservationNights(reservation);
+			const totalAmount = Number(reservation.total_amount || 0);
+			const pricePerDay = nights > 0 ? totalAmount / nights : totalAmount;
+			const paidAmount = getAdminPaidAmount(reservation);
 
 			const manualOverrideCaptured = capturedConfirmationNumbers.includes(
 				reservation.confirmation_number
@@ -173,6 +268,9 @@ const EnhancedContentTable = ({
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
 				payment_status_hint: paypalAware.hint || "",
+				reservation_nights: nights,
+				price_per_day: pricePerDay,
+				paid_amount_display: paidAmount,
 			};
 		});
 	}, [data, capturedConfirmationNumbers]);
@@ -205,7 +303,12 @@ const EnhancedContentTable = ({
 				return direction === "asc" ? valA - valB : valB - valA;
 			}
 
-			if (sortField === "total_amount") {
+			if (
+				sortField === "total_amount" ||
+				sortField === "reservation_nights" ||
+				sortField === "price_per_day" ||
+				sortField === "paid_amount_display"
+			) {
 				valA = Number(valA) || 0;
 				valB = Number(valB) || 0;
 				return direction === "asc" ? valA - valB : valB - valA;
@@ -400,6 +503,61 @@ const EnhancedContentTable = ({
 	const reservedByActive = (val) => (activeReservedBy || "") === (val || "");
 	const bookingSourceActive = (val) =>
 		(activeBookingSource || "") === (val || "");
+	const isArabicTable = chosenLanguage === "Arabic";
+	const tableLabels = isArabicTable
+		? {
+				hotel: "الفندق",
+				confirmation: "رقم التأكيد",
+				guest: "الضيف",
+				source: "مصدر الحجز",
+				status: "الحالة",
+				payment: "الدفع",
+				booked: "تاريخ الحجز",
+				checkIn: "الوصول",
+				checkOut: "المغادرة",
+				nights: "الليالي",
+				pricePerDay: "سعر الليلة",
+				total: "الإجمالي",
+				paidAmount: "المدفوع",
+				moreDetails: "التفاصيل",
+				sar: "ريال",
+				noReservationsFound: "لا توجد حجوزات",
+		  }
+		: {
+				hotel: "Hotel",
+				confirmation: "Confirmation",
+				guest: "Guest",
+				source: "Source",
+				status: "Status",
+				payment: "Payment",
+				booked: "Booked",
+				checkIn: "Check In",
+				checkOut: "Check Out",
+				nights: "Nights",
+				pricePerDay: "Price/Day",
+				total: "Total",
+				paidAmount: "Paid Amount",
+				moreDetails: "More Details",
+				sar: "SAR",
+				noReservationsFound: "No reservations found",
+		  };
+	const sortArrow = (field) => {
+		if (sortConfig.sortField !== field) return "";
+		return sortConfig.direction === "asc" ? "^" : "v";
+	};
+	const sortableHeader = (label, field) => (
+		<button
+			type='button'
+			className='sortable-heading'
+			onClick={() => handleSortLabelClick(field)}
+			aria-pressed={sortConfig.sortField === field}
+		>
+			<span>{label}</span>
+			{sortArrow(field) ? (
+				<span className='sort-arrow'>{sortArrow(field)}</span>
+			) : null}
+		</button>
+	);
 
 	return (
 		<ContentTableWrapper>
@@ -593,253 +751,148 @@ const EnhancedContentTable = ({
 
 			{/* Table */}
 			<TableWrapper>
-				<StyledTable>
+				<StyledTable className='admin-reservation-list-table'>
 					<thead>
 						<tr>
-							<th>
-								<HeaderLabel onClick={() => handleSortLabelClick("index")}>
-									#
-									{sortConfig.sortField === "index"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("confirmation_number")}
-								>
-									Confirmation Number
-									{sortConfig.sortField === "confirmation_number"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("customer_name")}
-								>
-									Customer Name
-									{sortConfig.sortField === "customer_name"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("customer_phone")}
-								>
-									Phone
-									{sortConfig.sortField === "customer_phone"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel onClick={() => handleSortLabelClick("hotel_name")}>
-									Hotel Name
-									{sortConfig.sortField === "hotel_name"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("reservation_status")}
-								>
-									Reservation Status
-									{sortConfig.sortField === "reservation_status"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("checkin_date")}
-								>
-									Check-in Date
-									{sortConfig.sortField === "checkin_date"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("checkout_date")}
-								>
-									Check-out Date
-									{sortConfig.sortField === "checkout_date"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-
-							{/* NEW: Booking Source column */}
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("booking_source")}
-								>
-									Booking Source
-									{sortConfig.sortField === "booking_source"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("payment_status")}
-								>
-									Payment Status
-									{sortConfig.sortField === "payment_status"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel
-									onClick={() => handleSortLabelClick("total_amount")}
-								>
-									Total Amount
-									{sortConfig.sortField === "total_amount"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>
-								<HeaderLabel onClick={() => handleSortLabelClick("createdAt")}>
-									Created At
-									{sortConfig.sortField === "createdAt"
-										? sortConfig.direction === "asc"
-											? " ▲"
-											: " ▼"
-										: ""}
-								</HeaderLabel>
-							</th>
-							<th>Details</th>
+							<th>#</th>
+							<th>{sortableHeader(tableLabels.hotel, "hotel_name")}</th>
+							<th>{sortableHeader(tableLabels.confirmation, "confirmation_number")}</th>
+							<th>{sortableHeader(tableLabels.guest, "customer_name")}</th>
+							<th>{sortableHeader(tableLabels.source, "booking_source")}</th>
+							<th>{sortableHeader(tableLabels.status, "reservation_status")}</th>
+							<th>{sortableHeader(tableLabels.payment, "payment_status")}</th>
+							<th>{sortableHeader(tableLabels.booked, "createdAt")}</th>
+							<th>{sortableHeader(tableLabels.checkIn, "checkin_date")}</th>
+							<th>{sortableHeader(tableLabels.checkOut, "checkout_date")}</th>
+							<th>{sortableHeader(tableLabels.nights, "reservation_nights")}</th>
+							<th>{sortableHeader(tableLabels.pricePerDay, "price_per_day")}</th>
+							<th>{sortableHeader(tableLabels.total, "total_amount")}</th>
+							<th>{sortableHeader(tableLabels.paidAmount, "paid_amount_display")}</th>
+							<th>{tableLabels.moreDetails}</th>
 						</tr>
 					</thead>
 					<tbody>
-						{sortedData.map((reservation, i) => {
-							const resStatusStyles = getReservationStatusStyles(
-								reservation.reservation_status
-							);
-							const payStatusStyles = getPaymentStatusStyles(
-								reservation.payment_status
-							);
+						{sortedData.length ? (
+							sortedData.map((reservation, i) => {
+								const statusText = adminLocalizeStatus(
+									reservation.reservation_status,
+									chosenLanguage
+								);
+								const paymentText =
+									reservation.payment_status || reservation.payment || "-";
 
-							return (
-								<tr
-									key={
-										reservation._id || `${reservation.confirmation_number}-${i}`
-									}
-								>
-									<td>{baseIndex + i + 1}</td>
-									<td>
-										<Tooltip title={reservation.confirmation_number}>
-											<span>{reservation.confirmation_number}</span>
-										</Tooltip>
-									</td>
-									<td>
-										<Tooltip title={reservation.customer_name}>
-											<span>{reservation.customer_name}</span>
-										</Tooltip>
-									</td>
-									<td>
-										<Tooltip title={reservation.customer_phone}>
-											<span>{reservation.customer_phone}</span>
-										</Tooltip>
-									</td>
-									<td>
-										<Tooltip title={reservation.hotel_name}>
-											<span
-												style={{
-													color: "blue",
-													textDecoration: "underline",
-													cursor: "pointer",
-												}}
+								return (
+									<tr
+										key={
+											reservation._id || `${reservation.confirmation_number}-${i}`
+										}
+									>
+										<td>{baseIndex + i + 1}</td>
+										<td className='hotel-cell'>
+											<button
+												type='button'
+												className='link-btn'
 												onClick={() => handleHotelClick(reservation)}
 											>
-												{reservation.hotel_name}
-											</span>
-										</Tooltip>
-									</td>
-
-									{/* Reservation Status with background and text color */}
-									<td style={resStatusStyles}>
-										{reservation.reservation_status}
-									</td>
-
-									<td>
-										{new Date(reservation.checkin_date).toLocaleDateString(
-											"en-US"
-										)}
-									</td>
-									<td>
-										{new Date(reservation.checkout_date).toLocaleDateString(
-											"en-US"
-										)}
-									</td>
-
-									{/* NEW: Booking Source value */}
-									<td style={{ textTransform: "capitalize" }}>
-										{reservation.booking_source || ""}
-									</td>
-
-									{/* Payment Status */}
-									<td style={payStatusStyles}>
-										{reservation.payment_status_hint ? (
-											<Tooltip title={reservation.payment_status_hint}>
-												<span>{reservation.payment_status}</span>
-											</Tooltip>
-										) : (
-											reservation.payment_status
-										)}
-									</td>
-
-									<td>
-										{Number(reservation.total_amount || 0).toFixed(2)} SAR
-									</td>
-									<td>
-										{reservation.createdAt
-											? new Date(reservation.createdAt).toLocaleDateString(
-													"en-US"
-											  )
-											: "N/A"}
-									</td>
-									<td>
-										<Button onClick={() => showDetailsModal(reservation)}>
-											View Details
-										</Button>
-									</td>
-								</tr>
-							);
-						})}
+												<AdminTableTooltipText
+													value={reservation.hotel_name}
+													className='table-truncate'
+												/>
+											</button>
+										</td>
+										<td>
+											<button
+												type='button'
+												className='link-btn'
+												onClick={() => showDetailsModal(reservation)}
+											>
+												<AdminTableTooltipText
+													value={reservation.confirmation_number}
+													max={16}
+												/>
+											</button>
+										</td>
+										<td className='guest-cell'>
+											<AdminTableTooltipText
+												value={reservation.customer_name}
+												className='table-truncate'
+											/>
+										</td>
+										<td className='source-cell'>
+											<AdminTableTooltipText
+												value={reservation.booking_source || "-"}
+												className='table-truncate'
+											/>
+										</td>
+										<td>
+											<AdminStatusPill
+												$tone={adminStatusTone(reservation.reservation_status)}
+											>
+												<AdminTableTooltipText value={statusText} max={18} />
+											</AdminStatusPill>
+										</td>
+										<td>
+											{reservation.payment_status_hint ? (
+												<Tooltip title={reservation.payment_status_hint}>
+													<span>
+														<AdminTableTooltipText value={paymentText} max={18} />
+													</span>
+												</Tooltip>
+											) : (
+												<AdminTableTooltipText value={paymentText} max={18} />
+											)}
+										</td>
+										<td className='date-cell'>
+											<AdminTableTooltipText
+												value={formatAdminDate(reservation.booked_at || reservation.createdAt)}
+												max={16}
+												className='date-truncate'
+											/>
+										</td>
+										<td className='date-cell'>
+											<AdminTableTooltipText
+												value={formatAdminDate(reservation.checkin_date)}
+												max={16}
+												className='date-truncate'
+											/>
+										</td>
+										<td className='date-cell'>
+											<AdminTableTooltipText
+												value={formatAdminDate(reservation.checkout_date)}
+												max={16}
+												className='date-truncate'
+											/>
+										</td>
+										<td className='amount-cell'>{reservation.reservation_nights}</td>
+										<td className='amount-cell'>
+											{formatAdminMoney(reservation.price_per_day)} {tableLabels.sar}
+										</td>
+										<td className='amount-cell'>
+											{formatAdminMoney(reservation.total_amount)} {tableLabels.sar}
+										</td>
+										<td className='amount-cell'>
+											{formatAdminMoney(reservation.paid_amount_display)} {tableLabels.sar}
+										</td>
+										<td>
+											<button
+												type='button'
+												className='link-btn'
+												onClick={() => showDetailsModal(reservation)}
+											>
+												{tableLabels.moreDetails}
+											</button>
+										</td>
+									</tr>
+								);
+							})
+						) : (
+							<tr>
+								<td colSpan='15'>{tableLabels.noReservationsFound}</td>
+							</tr>
+						)}
 					</tbody>
 				</StyledTable>
 			</TableWrapper>
-
 			{/* Server Pagination Controls */}
 			<PaginationWrapper>
 				<Button
@@ -1009,52 +1062,348 @@ const UserFilterButton = styled(FilterButton)`
 `;
 
 const TableWrapper = styled.div`
-	max-height: 700px;
-	overflow-y: auto;
+	width: 100%;
+	max-width: 100%;
 	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	border: 1px solid #e6d3eb;
+	border-radius: 8px;
+	background: #fff;
+	box-shadow: 0 8px 22px rgba(40, 16, 52, 0.06);
 	margin-bottom: 16px;
 `;
 
 const StyledTable = styled.table`
 	width: 100%;
-	border-collapse: collapse;
+	min-width: 1180px;
+	border-collapse: separate;
+	border-spacing: 0;
+	table-layout: fixed;
 
 	th,
 	td {
-		padding: 4px 8px;
-		text-align: left;
+		padding: 8px 7px;
+		border-right: 1px solid #edf2f7;
+		border-bottom: 1px solid #edf2f7;
+		color: #101828;
+		font-size: 0.74rem;
+		font-weight: 800;
+		text-align: start;
+		vertical-align: middle;
 		white-space: nowrap;
-		border: 1px solid #f0f0f0;
-		font-size: 12px;
-		text-transform: capitalize;
-		line-height: 1.2;
+		line-height: 1.32;
 	}
 
 	th {
-		background-color: #fafafa;
 		position: sticky;
 		top: 0;
-		z-index: 1;
+		z-index: 2;
+		overflow: visible;
+		background: var(
+			--pms-table-header-bg,
+			linear-gradient(180deg, #244e7d 0%, #102033 100%)
+		);
+		border-bottom: 1px solid var(--pms-table-header-border, #2d5d91);
+		color: var(--pms-table-header-color, #ffffff);
+		font-size: 0.8rem;
+		font-weight: 950;
+		text-align: start;
+		text-overflow: clip;
+		text-transform: capitalize;
+		white-space: nowrap;
 	}
 
-	@media (max-width: 768px) {
+	td {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-transform: none;
+	}
+
+	tbody tr:nth-child(even) td {
+		background: #fcfdff;
+	}
+
+	tbody tr:hover td {
+		background: #fbf6ff;
+	}
+
+	th:first-child,
+	td:first-child {
+		text-align: center;
+		width: 2.6%;
+	}
+
+	.hotel-cell,
+	.guest-cell {
+		color: #111827;
+		font-weight: 950;
+	}
+
+	.source-cell {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.table-truncate,
+	button.link-btn,
+	a.link-btn {
+		display: inline-block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	.sortable-heading {
+		display: inline-flex;
+		align-items: center;
+		justify-content: inherit;
+		gap: 0.22rem;
+		max-width: 100%;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		font-weight: 950;
+		padding: 0;
+		white-space: nowrap;
+	}
+
+	.sortable-heading:hover {
+		color: #f3dcff;
+	}
+
+	.sort-arrow {
+		color: #f4c84f;
+		font-size: 0.72rem;
+		line-height: 1;
+	}
+
+	.status-pill {
+		max-width: 100%;
+		min-width: 0;
+		padding-inline: 0.42rem;
+	}
+
+	.date-cell,
+	.amount-cell {
+		font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+		text-align: center;
+	}
+
+	.date-cell {
+		direction: inherit;
+		line-height: 1.45;
+		unicode-bidi: plaintext;
+	}
+
+	.date-cell .date-truncate {
+		display: inline-block;
+		max-width: 16ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	.amount-cell {
+		direction: ltr;
+		font-weight: 950;
+		min-width: 82px;
+		overflow: visible !important;
+		text-overflow: clip !important;
+		white-space: nowrap;
+	}
+
+	button.link-btn,
+	a.link-btn {
+		border: 0;
+		background: transparent;
+		color: #0050b3;
+		font-weight: 900;
+		padding: 2px 0;
+		text-align: start;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	button.link-btn:hover,
+	a.link-btn:hover {
+		color: var(--pms-metal-purple, #64166e);
+	}
+
+	@media (min-width: 992px) {
+		min-width: 0;
+
+		th:nth-child(1),
+		td:nth-child(1) {
+			width: 2.6%;
+		}
+
+		th:nth-child(2),
+		td:nth-child(2) {
+			width: 6.7%;
+		}
+
+		th:nth-child(3),
+		td:nth-child(3) {
+			width: 6.2%;
+		}
+
+		th:nth-child(4),
+		td:nth-child(4) {
+			width: 12%;
+		}
+
+		th:nth-child(5),
+		td:nth-child(5) {
+			width: 9.7%;
+		}
+
+		th:nth-child(6),
+		td:nth-child(6) {
+			width: 7.4%;
+		}
+
+		th:nth-child(7),
+		td:nth-child(7) {
+			width: 5.8%;
+		}
+
+		th:nth-child(8),
+		td:nth-child(8),
+		th:nth-child(9),
+		td:nth-child(9),
+		th:nth-child(10),
+		td:nth-child(10) {
+			width: 5.7%;
+		}
+
+		th:nth-child(11),
+		td:nth-child(11) {
+			width: 3.7%;
+		}
+
+		th:nth-child(12),
+		td:nth-child(12),
+		th:nth-child(13),
+		td:nth-child(13) {
+			width: 6.8%;
+		}
+
+		th:nth-child(14),
+		td:nth-child(14) {
+			width: 6.5%;
+		}
+
+		th:nth-child(15),
+		td:nth-child(15) {
+			width: 4.3%;
+		}
+	}
+
+	@media (max-width: 720px) {
+		min-width: 980px;
+
 		th,
 		td {
-			padding: 2px 4px;
-			font-size: 10px;
+			padding: 8px 9px;
+			font-size: 0.7rem;
 		}
+
+		th {
+			font-size: 0.7rem;
+		}
+	}
+
+	@media (max-width: 420px) {
+		min-width: 920px;
 	}
 `;
 
-const HeaderLabel = styled.div`
-	cursor: pointer;
-	font-weight: 600;
-	user-select: none;
-	display: inline-block;
-	margin-bottom: 4px;
+const AdminStatusPill = styled.span.attrs((props) => ({
+	className: ["status-pill", props.className].filter(Boolean).join(" "),
+}))`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.34rem;
+	min-height: 26px;
+	min-width: 78px;
+	padding: 0.2rem 0.66rem;
+	border: 1px solid
+		${(props) =>
+			props.$tone === "red"
+				? "#d45b68"
+				: props.$tone === "orange"
+				  ? "#d89b2e"
+				  : props.$tone === "green"
+				    ? "#14a064"
+				    : props.$tone === "softGreen"
+				      ? "#87d6a0"
+				      : props.$tone === "blue"
+				        ? "#5b8bdc"
+				        : props.$tone === "purple"
+				          ? "#b47dc2"
+				          : "#aab2c0"};
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$tone === "red"
+			? "linear-gradient(135deg, #7f1d1d 0%, #c33546 100%)"
+			: props.$tone === "orange"
+			  ? "linear-gradient(135deg, #fff3d8 0%, #f7bf4b 100%)"
+			  : props.$tone === "green"
+			    ? "linear-gradient(135deg, #064e3b 0%, #0fa66b 100%)"
+			    : props.$tone === "softGreen"
+			      ? "linear-gradient(135deg, #eefbf3 0%, #d8f7e4 100%)"
+			      : props.$tone === "blue"
+			        ? "linear-gradient(135deg, #eef4ff 0%, #dfeaff 100%)"
+			        : props.$tone === "purple"
+			          ? "linear-gradient(135deg, #fffaff 0%, #ecd9f3 100%)"
+			          : "linear-gradient(135deg, #f7f8fb 0%, #e9edf7 100%)"};
+	color: ${(props) =>
+		props.$tone === "red" || props.$tone === "green"
+			? "#ffffff"
+			: props.$tone === "orange"
+			  ? "#4c3000"
+			  : props.$tone === "softGreen"
+			    ? "#08722c"
+			    : props.$tone === "blue"
+			      ? "#1d4f9d"
+			      : props.$tone === "purple"
+			        ? "#5d1d6e"
+			        : "#263452"};
+	font-size: 0.72rem;
+	font-weight: 950;
+	line-height: 1.25;
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.28),
+		0 4px 10px rgba(40, 16, 52, 0.08);
 
-	@media (max-width: 768px) {
-		font-size: 11px;
+	&::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		flex: 0 0 7px;
+		border-radius: 999px;
+		background: ${(props) =>
+			props.$tone === "red"
+				? "#ffd1d6"
+				: props.$tone === "orange"
+				  ? "#7a4c00"
+				  : props.$tone === "green"
+				    ? "#c9ffe1"
+				    : props.$tone === "softGreen"
+				      ? "#14a064"
+				      : props.$tone === "blue"
+				        ? "#356ed1"
+				        : props.$tone === "purple"
+				          ? "#8d4c9d"
+				          : "#6d7a99"};
+		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28);
 	}
 `;
 
@@ -1066,47 +1415,3 @@ const PaginationWrapper = styled.div`
 		margin-right: 8px;
 	}
 `;
-
-// Background styles
-const getPaymentStatusStyles = (status = "") => {
-	const s = status.toLowerCase();
-	if (s === "captured") {
-		return { backgroundColor: "var(--badge-bg-green)" };
-	}
-	if (s === "paid offline") {
-		return {
-			backgroundColor: "var(--accent-color-dark-green)",
-			color: "#fff",
-		};
-	}
-	if (s === "not captured") {
-		return { backgroundColor: "var(--background-accent-yellow)" };
-	}
-	return { backgroundColor: "var(--background-light)" };
-};
-
-const getReservationStatusStyles = (status = "") => {
-	const s = (status || "").toLowerCase();
-	if (s === "confirmed") {
-		return { backgroundColor: "var(--background-light)", color: "inherit" };
-	}
-	if (s === "inhouse") {
-		return {
-			backgroundColor: "var(--background-accent-yellow)",
-			color: "inherit",
-		};
-	}
-	if (s === "checked_out" || s === "early_checked_out") {
-		return { backgroundColor: "var(--badge-bg-green)", color: "inherit" };
-	}
-	if (s === "no_show") {
-		return { backgroundColor: "var(--accent-color-orange)", color: "inherit" };
-	}
-	if (s === "cancelled") {
-		return {
-			backgroundColor: "var(--badge-bg-red)",
-			color: "var(--button-font-color)",
-		};
-	}
-	return {};
-};

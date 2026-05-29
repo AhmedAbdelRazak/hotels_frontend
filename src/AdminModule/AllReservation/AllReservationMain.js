@@ -611,6 +611,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 								selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
 								currentUserId={getUser?._id}
 								onReservationUpdated={fetchReservations}
+								chosenLanguage={chosenLanguage}
 							/>
 						</div>
 					</div>

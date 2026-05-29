@@ -1150,8 +1150,17 @@ Future TODO Backlog - Added 2026-05-26
   - Modal, drawer, image-preview, and Bootstrap-style backdrops now use a darker shared overlay treatment with a subtle blur.
   - src/AdminModule/AllReservation/EnhancedContentTable.js gives the main admin reservation detail modal an explicit zIndex of 12000 and mask zIndex of 11999.
   - Existing nested modals with higher zIndex props, such as receipt/PDF modals and the AlDawleya license editor, can now appear above the already-open reservation detail modal.
+  - src/AdminModule/AllReservation/AlDawleya.js and src/AdminModule/AllReservation/UpdatePDF.js now use the shared update-pdf-modal child layer at zIndex 60010, with App.css forcing that child panel/content above receipt/PDF masks.
   - Existing explicit safety choices such as maskClosable={false} are preserved; normal modals keep Ant Design's outside-click close behavior.
 - Specific bug fixed:
   - The AlDawleya PDF license-number edit modal now opens above the already-open AlDawleya/reservation PDF modal instead of appearing behind it.
 - Validation:
   - npm.cmd run build must remain the release check for this shared modal behavior.
+
+2026-05-29 Admin Reservation List Table Alignment
+- Admin all-reservations table:
+  - src/AdminModule/AllReservation/EnhancedContentTable.js keeps its own admin-owned table component while matching the hotel-management reservation list column order and compact visual rhythm.
+  - Columns now render as: #, Hotel, Confirmation, Guest, Source, Status, Payment, Booked, Check In, Check Out, Nights, Price/Day, Total, Paid Amount, and More Details.
+  - Reservation status now uses the same pill/tone approach as the hotel-management route instead of full-cell background colors.
+  - Long hotel, guest, source, confirmation, payment, and date values use tooltip-backed ellipsis behavior so the table can fit the desktop page cleanly while staying horizontally scrollable on smaller screens.
+  - The admin table has copied local helpers/styles rather than reusing the hotel-management component, preserving separation between platform-admin and hotel-management UI.
