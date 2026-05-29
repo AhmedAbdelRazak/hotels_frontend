@@ -91,6 +91,27 @@ const isLimitedOrderTakerAccount = (account = {}) => {
 	return hasOrderTakingScope && !hasFullReservationScope;
 };
 
+const isPlatformAdminViewer = (account = {}) => {
+	const roleNumbers = getAccountRoleNumbers(account);
+	const roleKeys = getAccountRoleDescriptions(account).map((role) =>
+		String(role || "").replace(/[\s_-]+/g, "").trim(),
+	);
+	return (
+		isSuperAdminUser(account) ||
+		roleNumbers.some((role) => [1000, 10000].includes(role)) ||
+		roleKeys.some((role) =>
+			[
+				"admin",
+				"administrator",
+				"platformadmin",
+				"superadmin",
+				"systemadmin",
+				"systemadministrator",
+			].includes(role),
+		)
+	);
+};
+
 const normalizeAuditRoleKey = (value = "") =>
 	String(value || "")
 		.toLowerCase()
@@ -112,12 +133,14 @@ const isPrivilegedAuditActor = (actor) => {
 		.filter((role) => Number.isFinite(role));
 	const roleKeys = roleValues.map(normalizeAuditRoleKey).filter(Boolean);
 	return (
-		roleNumbers.some((role) => role === 1000 || role === 10000) ||
+		roleNumbers.some((role) => [1000, 7000, 8000, 10000].includes(role)) ||
 		roleKeys.some((role) =>
 			[
 				"admin",
 				"administrator",
+				"ordertaker",
 				"platformadmin",
+				"reservationemployee",
 				"superadmin",
 				"systemadmin",
 				"systemadministrator",
@@ -309,6 +332,91 @@ const AUDIT_OBJECT_PATHS = {
 const AUDIT_MONEY_PATH_PATTERN =
 	/(amount|commission|payout|paid|price|total|balance|collected|due)/i;
 
+const AUDIT_HIDDEN_PATH_PARTS = new Set([
+	"__v",
+	"_id",
+	"id",
+	"belongsTo",
+	"belongsToId",
+	"createdByUserId",
+	"hotelId",
+	"hotelIdsOwner",
+	"hotelIdsWork",
+	"hotelsToSupport",
+	"orderTakeId",
+	"roomId",
+	"userId",
+]);
+
+const AUDIT_ALLOWED_HOTEL_PATHS = new Set([
+	"hotelId.hotelName",
+	"hotel.hotelName",
+]);
+
+const AUDIT_PATH_LABELS = {
+	"agentDecisionSnapshot.decidedAt": "Decision date",
+	"agentDecisionSnapshot.decidedBy.name": "Decision by",
+	"agentWalletSnapshot.balanceAfterReservation": "Wallet balance after reservation",
+	"agentWalletSnapshot.balanceBeforeReservation": "Wallet balance before reservation",
+	"agentWalletSnapshot.capturedAt": "Wallet capture date",
+	"agentWalletSnapshot.capturedBy.name": "Wallet captured by",
+	"agentWalletSnapshot.commissionAmount": "Agent commission",
+	"agentWalletSnapshot.reservationAmount": "Reservation amount",
+	"commissionAgentApproval.approvedAt": "Approval date",
+	"commissionAgentApproval.approvedBy.name": "Approved by",
+	"commissionAgentApproval.rejectedAt": "Rejection date",
+	"commissionAgentApproval.rejectedBy.name": "Rejected by",
+	"commissionData.assignedAt": "Commission assigned date",
+	"commissionData.assignedBy.name": "Commission assigned by",
+	"commissionData.amount": "Commission amount",
+	"customer_details.email": "Guest email",
+	"customer_details.name": "Guest name",
+	"customer_details.nationality": "Nationality",
+	"customer_details.passport": "Passport",
+	"customer_details.passportExpiry": "Passport expiry",
+	"customer_details.phone": "Guest phone",
+	"financial_cycle.commissionAmount": "Commission amount",
+	"financial_cycle.commissionAssigned": "Commission reviewed",
+	"financial_cycle.commissionDueToPms": "Commission due to PMS",
+	"financial_cycle.commissionType": "Commission type",
+	"financial_cycle.commissionValue": "Commission value",
+	"financial_cycle.hotelCollectedAmount": "Hotel collected",
+	"financial_cycle.hotelPayoutDue": "Hotel payout due",
+	"financial_cycle.lastUpdatedAt": "Finance update date",
+	"financial_cycle.lastUpdatedBy.name": "Finance updated by",
+	"financial_cycle.pmsCollectedAmount": "PMS collected",
+	"financial_cycle.status": "Finance status",
+	"hotelId.hotelName": "Hotel",
+	"paid_amount_breakdown.paid_at_hotel_card": "Paid at hotel by card",
+	"paid_amount_breakdown.paid_at_hotel_cash": "Paid at hotel cash",
+	"paid_amount_breakdown.paid_no_show": "No-show amount",
+	"paid_amount_breakdown.paid_online_jannatbooking": "Paid online to Jannat Booking",
+	"paid_amount_breakdown.paid_online_other_platforms": "Paid via other platform",
+	"paid_amount_breakdown.paid_online_via_instapay": "Paid via Instapay",
+	"paid_amount_breakdown.paid_online_via_link": "Paid by payment link",
+	"paid_amount_breakdown.paid_to_hotel": "Paid to hotel",
+	"paid_amount_breakdown.payment_comments": "Payment note",
+	"pendingConfirmation.confirmationReason": "Confirmation note",
+	"pendingConfirmation.confirmedAt": "Confirmation date",
+	"pendingConfirmation.lastUpdatedAt": "Last review date",
+	"pendingConfirmation.lastUpdatedBy.name": "Reviewed by",
+	"pendingConfirmation.rejectedAt": "Rejection date",
+	"pendingConfirmation.rejectionReason": "Rejection reason",
+	"pendingConfirmation.revertedAt": "Returned to pending date",
+	booking_source: "Booking source",
+	checkin_date: "Check-in date",
+	checkout_date: "Checkout date",
+	confirmation_number: "Confirmation number",
+	days_of_residence: "Nights",
+	payment: "Payment status",
+	reservation_status: "Reservation status",
+	total_amount: "Total amount",
+	total_guests: "Total guests",
+	total_rooms: "Total rooms",
+};
+
+const AUDIT_OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
+
 const titleizeAuditKey = (value = "") =>
 	String(value || "")
 		.replace(/_/g, " ")
@@ -322,6 +430,24 @@ const formatAuditFieldLabel = (field = "") =>
 
 const formatAuditActionLabel = (action = "") =>
 	AUDIT_ACTION_LABELS[action] || titleizeAuditKey(action || "Reservation update");
+
+const isAuditInternalPath = (path = "") => {
+	const normalized = String(path || "");
+	if (AUDIT_ALLOWED_HOTEL_PATHS.has(normalized)) return false;
+	return normalized
+		.split(".")
+		.some((part) => AUDIT_HIDDEN_PATH_PARTS.has(part));
+};
+
+const formatAuditPathLabel = (field = "", path = "") => {
+	const fullPath = path ? `${field}.${path}` : field;
+	return (
+		AUDIT_PATH_LABELS[fullPath] ||
+		AUDIT_PATH_LABELS[path] ||
+		AUDIT_PATH_LABELS[field] ||
+		titleizeAuditKey(String(path || field || "Change").split(".").pop())
+	);
+};
 
 const getAuditPathValue = (value, path = "") =>
 	String(path)
@@ -342,6 +468,7 @@ const isAuditObject = (value) =>
 
 const formatAuditScalar = (value, path = "") => {
 	if (value === undefined || value === null || value === "") return "-";
+	if (isAuditInternalPath(path)) return "-";
 	if (value instanceof Date) {
 		return Number.isNaN(value.getTime())
 			? "-"
@@ -357,6 +484,7 @@ const formatAuditScalar = (value, path = "") => {
 	if (typeof value === "string") {
 		const text = value.trim();
 		if (!text) return "-";
+		if (AUDIT_OBJECT_ID_PATTERN.test(text)) return "-";
 		if (/(date|at|time|expiry)$/i.test(path) && moment(text).isValid()) {
 			return moment(text).format("YYYY-MM-DD HH:mm");
 		}
@@ -364,12 +492,16 @@ const formatAuditScalar = (value, path = "") => {
 	}
 	if (isAuditObject(value)) {
 		return (
+			value.hotelName ||
+			value.displayName ||
+			value.display_name ||
+			value.room_number ||
+			value.roomType ||
+			value.room_type ||
 			value.name ||
 			value.email ||
 			value.roleDescription ||
 			value.role ||
-			value._id ||
-			value.id ||
 			"-"
 		);
 	}
@@ -379,8 +511,8 @@ const formatAuditScalar = (value, path = "") => {
 const collectAuditPaths = (value, prefix = "", depth = 0) => {
 	if (!isAuditObject(value) || Array.isArray(value) || depth > 2) return [];
 	return Object.keys(value).flatMap((key) => {
-		if (["__v", "_id", "id"].includes(key)) return [];
 		const path = prefix ? `${prefix}.${key}` : key;
+		if (isAuditInternalPath(path)) return [];
 		const nextValue = value[key];
 		if (Array.isArray(nextValue)) return [path];
 		if (isAuditObject(nextValue)) {
@@ -433,9 +565,9 @@ function formatAuditObjectSummary(field, value = {}) {
 		AUDIT_OBJECT_PATHS[field] ||
 		collectAuditPaths(value).filter((path) => path.split(".").length <= 2);
 	const parts = paths
-		.filter((path) => auditPathExists(value, path))
+		.filter((path) => !isAuditInternalPath(path) && auditPathExists(value, path))
 		.map((path) => {
-			const label = titleizeAuditKey(path.split(".").pop());
+			const label = formatAuditPathLabel(field, path);
 			return `${label}: ${formatAuditScalar(getAuditPathValue(value, path), path)}`;
 		})
 		.filter((part) => !part.endsWith(": -"));
@@ -453,13 +585,19 @@ const buildAuditObjectChangeParts = (field, fromValue = {}, toValue = {}) => {
 	];
 	return paths
 		.filter(
-			(path) => auditPathExists(fromValue, path) || auditPathExists(toValue, path),
+			(path) =>
+				!isAuditInternalPath(path) &&
+				(auditPathExists(fromValue, path) || auditPathExists(toValue, path)),
 		)
 		.map((path) => {
 			const fromText = formatAuditScalar(getAuditPathValue(fromValue, path), path);
 			const toText = formatAuditScalar(getAuditPathValue(toValue, path), path);
+			if (fromText === "-" && toText === "-") return null;
 			if (fromText === toText) return null;
-			return `${titleizeAuditKey(path.split(".").pop())}: ${fromText} -> ${toText}`;
+			const label = formatAuditPathLabel(field, path);
+			if (fromText === "-") return `${label}: ${toText}`;
+			if (toText === "-") return `${label}: removed`;
+			return `${label}: ${fromText} -> ${toText}`;
 		})
 		.filter(Boolean);
 };
@@ -484,10 +622,12 @@ const formatAuditEntryDetail = (entry = {}) => {
 		}
 	}
 
-	return `${label}: ${formatAuditValue(field, fromValue)} -> ${formatAuditValue(
-		field,
-		toValue,
-	)}`;
+	const fromText = formatAuditValue(field, fromValue);
+	const toText = formatAuditValue(field, toValue);
+	if (fromText === "-" && toText === "-") return "";
+	if (fromText === "-") return `${label}: ${toText}`;
+	if (toText === "-") return `${label}: removed`;
+	return `${label}: ${fromText} -> ${toText}`;
 };
 
 const AR_LABELS = {
@@ -4230,7 +4370,7 @@ const ReservationDetail = ({
 					"reservationemployee",
 				].includes(role),
 			));
-	const canSeePrivilegedTrackerEntries = isSuperAdminUser(user);
+	const canSeePrivilegedTrackerEntries = isPlatformAdminViewer(user);
 	const canManagePendingDecision =
 		user?.activeUser !== false &&
 		canFullManageReservation &&
@@ -5304,11 +5444,15 @@ const ReservationDetail = ({
 
 		(reservation?.reservationAuditLog || reservation?.adminChangeLog || []).forEach(
 			(entry) => {
+				const detail = entry.field
+					? formatAuditEntryDetail(entry)
+					: entry.note || "";
+				if (entry.field && !detail) return;
 				pushRow({
 					at: entry.at || entry.createdAt || entry.updatedAt,
 					title: formatAuditActionLabel(entry.action || entry.field),
 					by: entry.by,
-					detail: entry.field ? formatAuditEntryDetail(entry) : entry.note || "",
+					detail,
 				});
 			},
 		);

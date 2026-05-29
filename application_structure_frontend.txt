@@ -1112,3 +1112,34 @@ Future TODO Backlog - Added 2026-05-26
 - Validation completed locally:
   - npm.cmd run build compiled successfully.
   - Backend pricing smoke test confirmed client/root/net/expense/margin totals from summarizeRooms.
+
+2026-05-29 Reservation Admin Workflow Visibility
+- Admin detail component:
+  - src/AdminModule/AllReservation/MoreDetails.js now treats platform admins as configured super admins, role 1000, role 10000, and admin/platform/system admin role descriptions when deciding whether privileged workflow entries can be shown.
+  - Order taker and reservation employee actors are now considered privileged audit actors in the admin detail timeline.
+  - Platform admins can still see the full reservation cycle and admin update trail when the backend returns it.
+- Hotel-management reservation detail:
+  - src/HotelModule/ReservationsFolder/ReservationDetail.js uses the same platform-admin viewer logic for preview/admin access.
+  - Hotel-management/non-platform users do not render privileged admin/order-taker/reservation-employee workflow rows when the backend sanitizer strips or hides them.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
+
+2026-05-29 Reservation Cycle Audit Text Cleanup
+- Shared reservation detail behavior:
+  - src/AdminModule/AllReservation/MoreDetails.js and src/HotelModule/ReservationsFolder/ReservationDetail.js now format Reservation Cycle audit rows with user-facing labels instead of raw technical keys.
+  - Internal ids and plumbing fields such as hotelId, roomId, orderTakeId, belongsTo, userId, _id, id, and 24-character ObjectIds are hidden from the modal details.
+  - Known audit paths are labeled with readable business text such as Guest phone, Check-in date, Checkout date, Wallet balance after reservation, Hotel payout due, Commission amount, Payment status, and Confirmation number.
+  - Audit rows that only contain hidden/internal changes are skipped so regular users do not see confusing empty or id-only updates.
+  - The same formatter rules apply to both platform admin reservation details and hotel-management reservation details.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
+
+2026-05-29 Hotel-Management Reservation Detail Compact Header
+- Hotel-management reservation details:
+  - src/HotelModule/ReservationsFolder/ReservationDetail.js now uses the same compact top header rhythm as the admin reservation detail.
+  - The top guest/request/confirmation cards use lower min-height and tighter padding.
+  - The reservation lifecycle card uses smaller step icons, tighter connector spacing, smaller step labels, and a slimmer active-stage summary.
+  - The hotel name pill and secondary action row use less vertical padding so the useful detail below appears sooner.
+  - Mobile behavior remains stacked and touch-friendly; the compact values apply without changing reservation actions or update logic.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
