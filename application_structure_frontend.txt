@@ -988,3 +988,28 @@ Future TODO Backlog - Added 2026-05-26
   - Tomorrow follow-up:
     - Add regression tests around query-param tab switching, escalation addressed removal, and AI/manual composer locking.
     - Run a supervised production B2C escalation test only after support staff are ready, then delete the exact case ID.
+
+2026-05-28 Customer-Service Teach Your AI Chat Modal
+- Route:
+  - /admin/customer-service?tab=active-client-cases.
+- UI change:
+  - ActiveClientsSupportCases now shows a top primary button labeled "Teach Your AI Chat" in the same position/style pattern as the "Open a New Case" button on active-hotel-cases.
+  - The button is hidden in escalated-client-cases mode.
+- Modal:
+  - Title: Teach Your AI Chat.
+  - Tabs:
+    - Upload New Chat.
+    - Learning Chat History.
+  - Arabic labels are included for the button, modal, tabs, field label, empty state, and submit status.
+  - Upload tab contains a single textarea for pasted Messenger/WhatsApp-style chat text and a submit button.
+  - History tab lists saved structured training chats with title, summary, turn count, and keyword tags.
+- API helpers:
+  - createAiTrainingChat posts to /api/aiagent-learning/chats.
+  - getAiTrainingChats loads /api/aiagent-learning/chats.
+- Backend relationship:
+  - The backend cleans pasted text with OpenAI when available, infers support/client roles, saves chatTitle/chatKeywords/conversation, and makes the orchestrator consult relevant examples before AI-written replies.
+- Validation completed locally:
+  - node --check src/AdminModule/CustomerService/ActiveClientsSupportCases.js.
+  - node --check src/AdminModule/CustomerService/CustomerServiceDetails.js.
+  - node --check src/AdminModule/apiAdmin.js.
+  - npm.cmd run build compiled successfully.

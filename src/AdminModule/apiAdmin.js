@@ -645,6 +645,49 @@ export const getEscalatedClientSupportCases = (token) => {
 		.catch((err) => console.log(err));
 };
 
+export const createAiTrainingChat = (payload = {}, token) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/aiagent-learning/chats`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+			...getStoredActiveAuthHeaders(),
+			...authHeaders(token),
+		},
+		body: JSON.stringify(payload),
+	})
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not save AI training chat",
+		}));
+};
+
+export const getAiTrainingChats = (token, params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		query.set(key, value);
+	});
+	const suffix = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/aiagent-learning/chats${suffix}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load AI training chats",
+			chats: [],
+		}));
+};
+
 export const getFilteredClosedSupportCases = (token) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/closed`, {
 		method: "GET",

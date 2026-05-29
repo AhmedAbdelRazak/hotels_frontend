@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useContext } from "react";
 import styled from "styled-components";
 import { useLocation, useHistory } from "react-router-dom";
-import { List, Badge } from "antd";
+import { List, Badge, Button, Modal, Tabs, Input, Tag, Empty, Spin } from "antd";
 import {
+	createAiTrainingChat,
 	getEscalatedClientSupportCases,
+	getAiTrainingChats,
 	getFilteredSupportCasesClients,
 	markAllMessagesAsSeenByAdmin,
 	getUnseenMessagesCountByAdmin,
@@ -16,12 +18,74 @@ import socket from "../../socket";
 // 1) Import NotificationContext
 import { NotificationContext } from "./NotificationContext";
 
-const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) => {
+const { TextArea } = Input;
+
+const AI_LEARNING_TEXT = {
+	en: {
+		button: "Teach Your AI Chat",
+		modalTitle: "Teach Your AI Chat",
+		uploadTab: "Upload New Chat",
+		historyTab: "Learning Chat History",
+		pasteLabel: "Paste Chat Conversation",
+		pastePlaceholder:
+			"Client: I want to book a double room\nAgent: Of course, what dates?",
+		submit: "Clean & Save Chat",
+		saved: "Training chat saved.",
+		loadError: "Could not load training chats.",
+		saveError: "Could not save training chat.",
+		emptyText: "No learning chats saved yet.",
+		turns: "turns",
+		keywords: "Keywords",
+		noSummary: "No summary available.",
+	},
+	ar: {
+		button: "\u062a\u0639\u0644\u064a\u0645 \u0645\u062d\u0627\u062f\u062b\u0629 \u0627\u0644\u0630\u0643\u0627\u0621",
+		modalTitle:
+			"\u062a\u0639\u0644\u064a\u0645 \u0645\u062d\u0627\u062f\u062b\u0629 \u0627\u0644\u0630\u0643\u0627\u0621",
+		uploadTab:
+			"\u0631\u0641\u0639 \u0645\u062d\u0627\u062f\u062b\u0629 \u062c\u062f\u064a\u062f\u0629",
+		historyTab:
+			"\u0633\u062c\u0644 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0630\u0643\u0627\u0621",
+		pasteLabel:
+			"\u0646\u0635 \u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629",
+		pastePlaceholder:
+			"\u0627\u0644\u0639\u0645\u064a\u0644: \u0623\u0631\u064a\u062f \u062d\u062c\u0632 \u063a\u0631\u0641\u0629 \u0645\u0632\u062f\u0648\u062c\u0629\n\u0627\u0644\u0645\u0648\u0638\u0641: \u0628\u0643\u0644 \u062a\u0623\u0643\u064a\u062f\u060c \u0645\u0627 \u0647\u064a \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e\u061f",
+		submit:
+			"\u062a\u0646\u0638\u064a\u0641 \u0648\u062d\u0641\u0638",
+		saved:
+			"\u062a\u0645 \u062d\u0641\u0638 \u0645\u062d\u0627\u062f\u062b\u0629 \u0627\u0644\u062a\u0639\u0644\u064a\u0645.",
+		loadError:
+			"\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u062a\u0639\u0644\u064a\u0645.",
+		saveError:
+			"\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0645\u062d\u0627\u062f\u062b\u0629 \u0627\u0644\u062a\u0639\u0644\u064a\u0645.",
+		emptyText:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u062d\u0627\u062f\u062b\u0627\u062a \u062a\u0639\u0644\u064a\u0645 \u0628\u0639\u062f.",
+		turns: "\u0631\u0633\u0627\u0626\u0644",
+		keywords: "\u0643\u0644\u0645\u0627\u062a",
+		noSummary:
+			"\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0644\u062e\u0635.",
+	},
+};
+
+const ActiveClientsSupportCases = ({
+	getUser,
+	isSuperAdmin,
+	mode = "active",
+	chosenLanguage,
+}) => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [unseenCount, setUnseenCount] = useState(0);
+	const [learningModalOpen, setLearningModalOpen] = useState(false);
+	const [learningTab, setLearningTab] = useState("upload");
+	const [trainingChatText, setTrainingChatText] = useState("");
+	const [trainingChats, setTrainingChats] = useState([]);
+	const [learningLoading, setLearningLoading] = useState(false);
+	const [learningSubmitting, setLearningSubmitting] = useState(false);
 	const { user, token } = isAuthenticated();
 	const isEscalatedMode = mode === "escalated";
+	const isArabic = chosenLanguage === "Arabic";
+	const learningText = AI_LEARNING_TEXT[isArabic ? "ar" : "en"];
 	const activeTabKey = isEscalatedMode
 		? "escalated-client-cases"
 		: "active-client-cases";
@@ -42,6 +106,70 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) =
 	//    - soundEnabled (if you want to conditionally do something)
 	//    - playSound (to actually play the notification audio)
 	const { soundEnabled, playSound } = useContext(NotificationContext);
+
+	const fetchTrainingChats = useCallback(async () => {
+		setLearningLoading(true);
+		try {
+			const data = await getAiTrainingChats(token, { limit: 30 });
+			if (data?.error) {
+				toast.error(data.error || learningText.loadError);
+				setTrainingChats([]);
+			} else {
+				setTrainingChats(Array.isArray(data?.chats) ? data.chats : []);
+			}
+		} catch (error) {
+			toast.error(learningText.loadError);
+			setTrainingChats([]);
+		} finally {
+			setLearningLoading(false);
+		}
+	}, [learningText.loadError, token]);
+
+	const openLearningModal = () => {
+		setLearningModalOpen(true);
+		setLearningTab("upload");
+		fetchTrainingChats();
+	};
+
+	const closeLearningModal = () => {
+		setLearningModalOpen(false);
+		setTrainingChatText("");
+	};
+
+	const handleSubmitTrainingChat = async () => {
+		if (!trainingChatText.trim()) {
+			toast.error(learningText.saveError);
+			return;
+		}
+		setLearningSubmitting(true);
+		try {
+			const payload = {
+				rawText: trainingChatText,
+				source: "manual_paste",
+				hotelId:
+					selectedCase?.hotelId && typeof selectedCase.hotelId === "object"
+						? selectedCase.hotelId._id
+						: selectedCase?.hotelId || undefined,
+				hotelName:
+					selectedCase?.hotelId && typeof selectedCase.hotelId === "object"
+						? selectedCase.hotelId.hotelName
+						: "",
+			};
+			const data = await createAiTrainingChat(payload, token);
+			if (data?.error) {
+				toast.error(data.error || learningText.saveError);
+				return;
+			}
+			toast.success(learningText.saved);
+			setTrainingChatText("");
+			setLearningTab("history");
+			await fetchTrainingChats();
+		} catch (error) {
+			toast.error(learningText.saveError);
+		} finally {
+			setLearningSubmitting(false);
+		}
+	};
 
 	const syncCaseIdToUrl = useCallback(
 		(caseId, { replace = false } = {}) => {
@@ -377,6 +505,86 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) =
 		}
 	}, [location.search, syncCaseIdToUrl]);
 
+	const learningModal = (
+		<Modal
+			title={learningText.modalTitle}
+			open={learningModalOpen}
+			onCancel={closeLearningModal}
+			footer={null}
+			width={820}
+			destroyOnClose
+			dir={isArabic ? "rtl" : "ltr"}
+		>
+			<Tabs
+				activeKey={learningTab}
+				onChange={setLearningTab}
+				items={[
+					{
+						key: "upload",
+						label: learningText.uploadTab,
+						children: (
+							<LearningPane>
+								<label>{learningText.pasteLabel}</label>
+								<TextArea
+									value={trainingChatText}
+									onChange={(e) => setTrainingChatText(e.target.value)}
+									placeholder={learningText.pastePlaceholder}
+									autoSize={{ minRows: 10, maxRows: 18 }}
+								/>
+								<Button
+									type='primary'
+									onClick={handleSubmitTrainingChat}
+									loading={learningSubmitting}
+									disabled={!trainingChatText.trim()}
+								>
+									{learningText.submit}
+								</Button>
+							</LearningPane>
+						),
+					},
+					{
+						key: "history",
+						label: learningText.historyTab,
+						children: (
+							<HistoryPane>
+								{learningLoading ? (
+									<Spin />
+								) : trainingChats.length ? (
+									<List
+										dataSource={trainingChats}
+										renderItem={(item) => (
+											<List.Item key={item._id}>
+												<TrainingChatItem>
+													<div className='training-title'>{item.chatTitle}</div>
+													<div className='training-summary'>
+														{item.summary || learningText.noSummary}
+													</div>
+													<div className='training-meta'>
+														<span>
+															{item.conversation?.length || 0} {learningText.turns}
+														</span>
+														{Array.isArray(item.chatKeywords) &&
+															item.chatKeywords.slice(0, 8).map((keyword) => (
+																<Tag key={`${item._id}-${keyword}`} color='blue'>
+																	{keyword}
+																</Tag>
+															))}
+													</div>
+												</TrainingChatItem>
+											</List.Item>
+										)}
+									/>
+								) : (
+									<Empty description={learningText.emptyText} />
+								)}
+							</HistoryPane>
+						),
+					},
+				]}
+			/>
+		</Modal>
+	);
+
 	/* ------------------- MOBILE LOGIC ------------------- */
 	if (isMobile) {
 		// If we have a caseId in the URL, show chat in full screen
@@ -401,6 +609,12 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) =
 			// Show only the list, 100% width, 2px padding, no chat detail
 			return (
 				<ActiveClientsSupportCasesWrapperMobile>
+					{!isEscalatedMode && (
+						<Button type='primary' onClick={openLearningModal}>
+							{learningText.button}
+						</Button>
+					)}
+					{learningModal}
 					<List
 						key={JSON.stringify(supportCases)}
 						style={{ marginTop: "20px", padding: "2px" }}
@@ -461,6 +675,12 @@ const ActiveClientsSupportCases = ({ getUser, isSuperAdmin, mode = "active" }) =
 	/* ------------------- DESKTOP / LARGE SCREEN LAYOUT ------------------- */
 	return (
 		<ActiveClientsSupportCasesWrapper>
+			{!isEscalatedMode && (
+				<Button type='primary' onClick={openLearningModal}>
+					{learningText.button}
+				</Button>
+			)}
+			{learningModal}
 			<MainContentWrapper>
 				<SupportCasesList>
 					<List
@@ -542,6 +762,51 @@ export default ActiveClientsSupportCases;
 /* ------------------------------------------------------- */
 /*                     STYLED COMPONENTS                   */
 /* ------------------------------------------------------- */
+
+const LearningPane = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+
+	label {
+		font-weight: 700;
+		color: #18334f;
+	}
+`;
+
+const HistoryPane = styled.div`
+	min-height: 220px;
+
+	.ant-spin {
+		display: block;
+		margin: 45px auto;
+	}
+`;
+
+const TrainingChatItem = styled.div`
+	width: 100%;
+
+	.training-title {
+		font-weight: 800;
+		color: #18334f;
+		margin-bottom: 4px;
+	}
+
+	.training-summary {
+		color: #4f6477;
+		line-height: 1.45;
+		margin-bottom: 8px;
+	}
+
+	.training-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		color: #6a7f91;
+		font-size: 0.85rem;
+	}
+`;
 
 const ActiveClientsSupportCasesWrapper = styled.div`
 	padding: 20px;

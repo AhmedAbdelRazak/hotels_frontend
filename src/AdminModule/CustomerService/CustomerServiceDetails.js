@@ -271,6 +271,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 						<ActiveClientsSupportCases
 							getUser={getUser}
 							isSuperAdmin={isSuperAdmin}
+							chosenLanguage={chosenLanguage}
 						/>
 					</div>
 				)}
@@ -280,6 +281,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 							getUser={getUser}
 							isSuperAdmin={isSuperAdmin}
 							mode='escalated'
+							chosenLanguage={chosenLanguage}
 						/>
 					</div>
 				)}
