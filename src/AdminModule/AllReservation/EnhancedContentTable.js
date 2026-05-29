@@ -868,9 +868,15 @@ const EnhancedContentTable = ({
 				width='min(98vw, 1720px)'
 				centered
 				className='admin-reservation-details-modal reservation-details-modal'
+				rootClassName='admin-reservation-details-layer'
+				wrapClassName='admin-reservation-details-wrap'
 				footer={null}
 				destroyOnClose
+				zIndex={12000}
 				styles={{
+					mask: {
+						zIndex: 11999,
+					},
 					header: {
 						display: "none",
 					},

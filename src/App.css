@@ -89,47 +89,54 @@ table tbody td.number-cell,
 	white-space: nowrap !important;
 }
 
-/* Keep every dialog layer above fixed hotel side menus/nav, and below
-   transient app feedback such as messages, notifications, and pickers. */
+/* Keep every dialog layer above fixed hotel side menus/nav. Do not force this
+   with !important, because Ant Design zIndex props must lift nested modals. */
 .ant-modal-mask,
 .ant-modal-wrap,
 .ant-modal {
-	z-index: 3010 !important;
+	z-index: 3010;
 }
 
 .ant-modal-mask {
-	z-index: 3000 !important;
+	background: rgba(15, 23, 42, 0.58) !important;
+	backdrop-filter: blur(1.5px);
+	z-index: 3000;
 }
 
 .ant-modal-content {
 	position: relative;
-	z-index: 3011 !important;
 }
 
 .ant-drawer-mask {
-	z-index: 3000 !important;
+	background: rgba(15, 23, 42, 0.58) !important;
+	backdrop-filter: blur(1.5px);
+	z-index: 3000;
 }
 
 .ant-drawer-content-wrapper,
 .ant-drawer {
-	z-index: 3010 !important;
+	z-index: 3010;
 }
 
 .ant-image-preview-mask {
-	z-index: 3000 !important;
+	background: rgba(15, 23, 42, 0.58) !important;
+	backdrop-filter: blur(1.5px);
+	z-index: 3000;
 }
 
 .ant-image-preview-root,
 .ant-image-preview-wrap {
-	z-index: 3010 !important;
+	z-index: 3010;
 }
 
 .modal-backdrop {
-	z-index: 3000 !important;
+	background: rgba(15, 23, 42, 0.58) !important;
+	backdrop-filter: blur(1.5px);
+	z-index: 3000;
 }
 
 .modal {
-	z-index: 3010 !important;
+	z-index: 3010;
 }
 
 .ant-picker-dropdown,

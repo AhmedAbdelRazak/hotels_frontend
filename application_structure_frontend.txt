@@ -1143,3 +1143,15 @@ Future TODO Backlog - Added 2026-05-26
   - Mobile behavior remains stacked and touch-friendly; the compact values apply without changing reservation actions or update logic.
 - Validation completed locally:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Global PMS Modal Layering
+- Global modal behavior:
+  - src/App.css no longer forces one hard-coded important z-index onto every Ant Design modal/drawer layer, so component zIndex props and nested modal ordering can work correctly.
+  - Modal, drawer, image-preview, and Bootstrap-style backdrops now use a darker shared overlay treatment with a subtle blur.
+  - src/AdminModule/AllReservation/EnhancedContentTable.js gives the main admin reservation detail modal an explicit zIndex of 12000 and mask zIndex of 11999.
+  - Existing nested modals with higher zIndex props, such as receipt/PDF modals and the AlDawleya license editor, can now appear above the already-open reservation detail modal.
+  - Existing explicit safety choices such as maskClosable={false} are preserved; normal modals keep Ant Design's outside-click close behavior.
+- Specific bug fixed:
+  - The AlDawleya PDF license-number edit modal now opens above the already-open AlDawleya/reservation PDF modal instead of appearing behind it.
+- Validation:
+  - npm.cmd run build must remain the release check for this shared modal behavior.
