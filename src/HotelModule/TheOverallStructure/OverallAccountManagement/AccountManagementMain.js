@@ -13,7 +13,6 @@ import {
 	buildOwnerParams,
 	formatDate,
 	getOverallText,
-	InlineNote,
 	localizeStatus,
 	normalizeId,
 	OVERALL_PAGE_SIZE,
@@ -31,8 +30,8 @@ import MultiSelectFilter from "./MultiSelectFilter";
 
 const ACCOUNT_MAIN_TEXT = {
 	en: {
-		scopeNote:
-			"Accounts can be linked to one hotel or multiple hotels. External agents only see reservations they created.",
+		hotelEmployeesTab: "Hotel Employees",
+		externalAgentsTab: "External Agents",
 		company: "Company",
 		permissions: "Permissions",
 		updateAccount: "Update",
@@ -42,8 +41,6 @@ const ACCOUNT_MAIN_TEXT = {
 		missingHotelScope: "Hotel scope was not found for this account.",
 	},
 	ar: {
-		scopeNote:
-			"يمكن ربط الحساب بفندق واحد أو عدة فنادق. الوكيل الخارجي يرى فقط الحجوزات التي أنشأها.",
 		company: "اسم الشركة",
 		permissions: "الصلاحيات",
 		updateAccount: "تعديل",
@@ -63,6 +60,24 @@ const ACCOUNT_PREVIEW_TEXT = {
 		previewFailed: "تعذر بدء معاينة الحساب.",
 		missingHotelScope: "لم يتم العثور على نطاق فندقي لهذا الحساب.",
 	},
+};
+
+const ACCOUNT_VIEW_EMPLOYEES = "employees";
+const ACCOUNT_VIEW_AGENTS = "agents";
+const EMPLOYEE_ROLE_VALUES = [
+	"systemadmin",
+	"hotelmanager",
+	"reception",
+	"finance",
+	"reservationemployee",
+	"housekeepingmanager",
+	"housekeeping",
+];
+const AGENT_ROLE_VALUES = ["ordertaker"];
+
+const accountViewFromSearch = (search = "") => {
+	const value = new URLSearchParams(search || "").get("accountView");
+	return value === ACCOUNT_VIEW_AGENTS ? ACCOUNT_VIEW_AGENTS : ACCOUNT_VIEW_EMPLOYEES;
 };
 
 const ACCESS_TEXT = {
@@ -276,6 +291,9 @@ const AccountManagementMain = ({
 	};
 	const history = useHistory();
 	const location = useLocation();
+	const [activeAccountView, setActiveAccountView] = useState(() =>
+		accountViewFromSearch(location.search)
+	);
 	const [filters, setFilters] = useState({
 		search: "",
 		role: [],
@@ -286,15 +304,22 @@ const AccountManagementMain = ({
 	const [loading, setLoading] = useState(false);
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
 	const [result, setResult] = useState({ accounts: [], hotels: [], total: 0 });
+	const effectiveRoleFilter = useMemo(() => {
+		if (Array.isArray(filters.role) && filters.role.length) return filters.role;
+		return activeAccountView === ACCOUNT_VIEW_AGENTS
+			? AGENT_ROLE_VALUES
+			: EMPLOYEE_ROLE_VALUES;
+	}, [activeAccountView, filters.role]);
 
 	const params = useMemo(
 		() => ({
 			...buildOwnerParams(ownerId),
 			...filters,
+			role: effectiveRoleFilter,
 			page,
 			limit: OVERALL_PAGE_SIZE,
 		}),
-		[filters, ownerId, page]
+		[effectiveRoleFilter, filters, ownerId, page]
 	);
 
 	useEffect(() => {
@@ -306,6 +331,16 @@ const AccountManagementMain = ({
 			})
 			.finally(() => setLoading(false));
 	}, [params, token, userId]);
+
+	useEffect(() => {
+		const nextView = accountViewFromSearch(location.search);
+		setActiveAccountView((previousView) => {
+			if (previousView === nextView) return previousView;
+			setFilters((previous) => ({ ...previous, role: [] }));
+			setPage(1);
+			return nextView;
+		});
+	}, [location.search]);
 
 	const accounts = useMemo(
 		() => (Array.isArray(result.accounts) ? result.accounts : []),
@@ -323,7 +358,7 @@ const AccountManagementMain = ({
 		}
 	}, [hotels, setAccountsModalHotels]);
 
-	const roleOptions = [
+	const allRoleOptions = [
 		{ value: "systemadmin", label: labels.systemAdmin },
 		{ value: "hotelmanager", label: labels.hotelManager },
 		{ value: "reception", label: labels.reception },
@@ -332,6 +367,27 @@ const AccountManagementMain = ({
 		{ value: "housekeepingmanager", label: labels.housekeepingManager },
 		{ value: "housekeeping", label: labels.housekeepingRole },
 		{ value: "ordertaker", label: labels.externalAgent },
+	];
+	const allowedRoleValues =
+		activeAccountView === ACCOUNT_VIEW_AGENTS
+			? AGENT_ROLE_VALUES
+			: EMPLOYEE_ROLE_VALUES;
+	const roleOptions = allRoleOptions.filter((option) =>
+		allowedRoleValues.includes(option.value)
+	);
+	const accountViewOptions = [
+		{
+			value: ACCOUNT_VIEW_EMPLOYEES,
+			label: isRTL
+				? "\u0645\u0648\u0638\u0641\u0648 \u0627\u0644\u0641\u0646\u0627\u062f\u0642"
+				: labels.hotelEmployeesTab,
+		},
+		{
+			value: ACCOUNT_VIEW_AGENTS,
+			label: isRTL
+				? "\u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0627\u0644\u062e\u0627\u0631\u062c\u064a\u0648\u0646"
+				: labels.externalAgentsTab,
+		},
 	];
 	const statusOptions = [
 		{ value: "active", label: labels.active },
@@ -346,6 +402,22 @@ const AccountManagementMain = ({
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value }));
 		setPage(1);
+	};
+
+	const handleAccountViewChange = (nextView) => {
+		const view =
+			nextView === ACCOUNT_VIEW_AGENTS ? ACCOUNT_VIEW_AGENTS : ACCOUNT_VIEW_EMPLOYEES;
+		setActiveAccountView(view);
+		setFilters((previous) => ({ ...previous, role: [] }));
+		setPage(1);
+		const query = new URLSearchParams(location.search || "");
+		if (view === ACCOUNT_VIEW_EMPLOYEES) query.delete("accountView");
+		else query.set("accountView", view);
+		query.set("page", "1");
+		history.replace({
+			pathname: location.pathname,
+			search: `?${query.toString()}`,
+		});
 	};
 
 	const openAccountEditor = (account = {}) => {
@@ -448,7 +520,18 @@ const AccountManagementMain = ({
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
-			<InlineNote>{labels.scopeNote}</InlineNote>
+			<AccountTabs>
+				{accountViewOptions.map((tab) => (
+					<button
+						key={tab.value}
+						type='button'
+						className={activeAccountView === tab.value ? "active" : ""}
+						onClick={() => handleAccountViewChange(tab.value)}
+					>
+						{tab.label}
+					</button>
+				))}
+			</AccountTabs>
 
 			<OverallToolbar
 				onSubmit={(event) => {
@@ -649,6 +732,85 @@ const AccountManagementMain = ({
 };
 
 export default AccountManagementMain;
+
+const AccountTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid rgba(45, 93, 145, 0.22);
+	border-radius: 8px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.98) 100%),
+		linear-gradient(180deg, rgba(141, 76, 157, 0.12), rgba(16, 32, 51, 0.08));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		0 8px 22px rgba(16, 32, 51, 0.06);
+
+	button {
+		position: relative;
+		overflow: hidden;
+		min-width: 0;
+		min-height: 46px;
+		padding: 9px 12px;
+		border: 1px solid rgba(45, 93, 145, 0.18);
+		border-radius: 8px;
+		background: linear-gradient(180deg, #ffffff 0%, #f4f8fe 100%);
+		color: #102033;
+		cursor: pointer;
+		font-size: 0.84rem;
+		font-weight: 950;
+		line-height: 1.2;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			color 0.18s ease,
+			transform 0.18s ease;
+	}
+
+	button.active {
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+			linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
+		border-color: rgba(183, 123, 198, 0.72);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+			0 10px 22px rgba(80, 23, 96, 0.24);
+		color: #ffffff;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.24);
+		transform: translateY(-1px);
+	}
+
+	button.active::after {
+		content: "";
+		position: absolute;
+		inset-inline: 18px;
+		bottom: 6px;
+		height: 3px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #d7b5df, #ffffff, #67a7df);
+		box-shadow: 0 0 12px rgba(215, 181, 223, 0.72);
+	}
+
+	button:hover:not(.active),
+	button:focus-visible:not(.active) {
+		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		border-color: rgba(45, 93, 145, 0.35);
+		color: #ffffff;
+		outline: none;
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
+
+		button {
+			min-height: 42px;
+		}
+	}
+`;
 
 const AccountTableWrap = styled(OverallTableWrap)`
 	border-color: #d7e9fb;

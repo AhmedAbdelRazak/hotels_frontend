@@ -160,12 +160,15 @@ const canViewOverallKey = (user = {}, key = "") => {
 	if (isOwnerLike(user)) return true;
 
 	if (["overall-summary"].includes(key)) {
-		return [
-			"hotelmanager",
-			"finance",
-			"reservationemployee",
-			"housekeepingmanager",
-		].some((role) => hasDescription(user, role));
+		return (
+			[
+				"hotelmanager",
+				"finance",
+				"reservationemployee",
+				"housekeepingmanager",
+			].some((role) => hasDescription(user, role)) ||
+			isOrderTakingScope(user)
+		);
 	}
 
 	if (["overall-new-reservation"].includes(key)) {
@@ -276,6 +279,7 @@ const AdminOverallSideMenu = ({
 	const location = useLocation();
 	const auth = isAuthenticated() || {};
 	const user = auth.user || {};
+	const summaryOwnerId = user?._id || "";
 	const isArabic = chosenLanguage === "Arabic";
 	const text = isArabic ? SIDE_MENU_AR_TEXT : SIDE_MENU_TEXT.en;
 	const reservationsListLabel = isArabic
@@ -325,7 +329,7 @@ const AdminOverallSideMenu = ({
 			const params = new URLSearchParams(location.search || "");
 			if (overallValue === "summary") {
 				const summaryParams = new URLSearchParams();
-				const ownerId = params.get("ownerId") || user?._id || "";
+				const ownerId = params.get("ownerId") || summaryOwnerId;
 				if (ownerId) summaryParams.set("ownerId", ownerId);
 				summaryParams.set("overall", "summary");
 				summaryParams.set("page", "1");
@@ -374,7 +378,7 @@ const AdminOverallSideMenu = ({
 			const search = params.toString();
 			return `/hotel-management/main-dashboard${search ? `?${search}` : ""}`;
 		},
-		[location.search, user?._id]
+		[location.search, summaryOwnerId]
 	);
 
 	const menuLink = useCallback((overallValue, label, extraParams) => (

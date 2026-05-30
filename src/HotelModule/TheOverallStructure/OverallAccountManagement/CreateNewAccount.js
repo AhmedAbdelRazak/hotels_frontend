@@ -48,6 +48,11 @@ const jobRoleOptions = [
 	"hotelmanager",
 ];
 
+const ACCOUNT_MODE_STAFF = "staff";
+const ACCOUNT_MODE_AGENT = "agent";
+
+const staffRoleOptions = roleOptions.filter((option) => option.value !== "ordertaker");
+
 const accessOptions = [
 	{ value: "overall", en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	{ value: "dashboard", en: "Dashboard", ar: "لوحة التحكم" },
@@ -118,6 +123,12 @@ const textByLang = {
 		openingWalletHint:
 			"Leave as zero when this agent has no starting wallet credit.",
 		generateCustomLink: "Generate custom link for an agent",
+		agentCreationTab: "External Agents",
+		staffCreationTab: "Internal Staff",
+		generateAgentLink: "Generate agent link",
+		generateStaffLink: "Generate staff link",
+		createAgentAccount: "Create agent account",
+		createStaffAccount: "Create staff account",
 		invitationTitle: "Signup invitation link",
 		invitationType: "Application type",
 		agentInvite: "Agent",
@@ -167,6 +178,12 @@ const textByLang = {
 		openingWalletHint:
 			"اتركه صفرا إذا لم يكن للوكيل رصيد افتتاحي.",
 		generateCustomLink: "إنشاء رابط مخصص لوكيل",
+		agentCreationTab: "الوكلاء الخارجيون",
+		staffCreationTab: "موظفو الفندق",
+		generateAgentLink: "إنشاء رابط وكيل",
+		generateStaffLink: "إنشاء رابط موظف",
+		createAgentAccount: "إنشاء حساب وكيل",
+		createStaffAccount: "إنشاء حساب موظف",
 		invitationTitle: "رابط دعوة التسجيل",
 		invitationType: "نوع الطلب",
 		agentInvite: "وكيل",
@@ -230,6 +247,29 @@ const defaultAccessForRole = (role) => {
 const defaultAccessForRoles = (roles = []) => [
 	...new Set((Array.isArray(roles) ? roles : []).flatMap(defaultAccessForRole)),
 ];
+
+const initialFormForMode = (mode) => {
+	if (mode === ACCOUNT_MODE_AGENT) {
+		return {
+			...initialForm,
+			roleDescriptions: ["ordertaker"],
+			accessTo: defaultAccessForRoles(["ordertaker"]),
+			agentCommercialModel: "wallet_inventory",
+		};
+	}
+	return initialForm;
+};
+
+const invitationFormForMode = (mode, hotelIds = []) => {
+	const scopedHotelIds = Array.isArray(hotelIds) ? hotelIds.filter(Boolean) : [];
+	const accountType = mode === ACCOUNT_MODE_AGENT ? "agent" : "job";
+	return {
+		...initialInvitationForm,
+		accountType,
+		hotelIds: accountType === "job" ? scopedHotelIds.slice(0, 1) : scopedHotelIds,
+		agentCommercialModel: accountType === "agent" ? "wallet_inventory" : "",
+	};
+};
 
 const parseMoney = (value) => {
 	const parsed = Number(String(value ?? 0).replace(/,/g, "").trim());
@@ -324,6 +364,7 @@ const CreateNewAccount = ({
 	const common = getOverallText(chosenLanguage);
 	const labels = { ...common, ...textByLang[isRTL ? "ar" : "en"] };
 	const [form, setForm] = useState(initialForm);
+	const [activeAccountMode, setActiveAccountMode] = useState(ACCOUNT_MODE_STAFF);
 	const [hotels, setHotels] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
@@ -454,17 +495,41 @@ const CreateNewAccount = ({
 		setInvitationForm((previous) => ({ ...previous, [field]: value }));
 	};
 
-	const changeInvitationType = (type) => {
-		setInvitationForm((previous) => ({
-			...previous,
-			accountType: type,
-			hotelIds:
-				type === "job" && previous.hotelIds.length
-					? [previous.hotelIds[0]]
-					: previous.hotelIds,
-			requestedRoleDescription:
-				type === "job" ? previous.requestedRoleDescription : "",
-		}));
+	const switchAccountMode = (mode) => {
+		if (mode === activeAccountMode) return;
+		setActiveAccountMode(mode);
+		setInvitationOpen(false);
+		setInvitationCode("");
+		setInvitationToken("");
+		setInvitationForm(invitationFormForMode(mode, form.hotelIds));
+		setForm((previous) => {
+			if (mode === ACCOUNT_MODE_AGENT) {
+				return {
+					...previous,
+					roleDescriptions: ["ordertaker"],
+					accessTo: defaultAccessForRoles(["ordertaker"]),
+					agentCommercialModel:
+						previous.agentCommercialModel || "wallet_inventory",
+				};
+			}
+			const staffRoles = previous.roleDescriptions.filter(
+				(role) => role !== "ordertaker"
+			);
+			return {
+				...previous,
+				roleDescriptions: staffRoles,
+				accessTo: staffRoles.length ? defaultAccessForRoles(staffRoles) : [],
+				agentCommercialModel: "",
+				agentOpeningWalletCredit: "",
+			};
+		});
+	};
+
+	const openInvitationModal = () => {
+		setInvitationForm(invitationFormForMode(activeAccountMode, form.hotelIds));
+		setInvitationCode("");
+		setInvitationToken("");
+		setInvitationOpen(true);
 	};
 
 	const toggleInvitationHotel = (hotelId) => {
@@ -649,14 +714,18 @@ const CreateNewAccount = ({
 	};
 
 	const resetForm = () => {
-		setForm(initialForm);
+		setForm(initialFormForMode(activeAccountMode));
 	};
 
 	const submit = (event) => {
 		event.preventDefault();
+		const roleDescriptionsForSubmit =
+			activeAccountMode === ACCOUNT_MODE_AGENT
+				? ["ordertaker"]
+				: form.roleDescriptions.filter((role) => role !== "ordertaker");
 		if (
 			!form.hotelIds.length ||
-			!form.roleDescriptions.length ||
+			!roleDescriptionsForSubmit.length ||
 			!form.name ||
 			!form.email ||
 			!form.phone ||
@@ -670,19 +739,22 @@ const CreateNewAccount = ({
 			return;
 		}
 
-		const selectedRoles = form.roleDescriptions.map((role) =>
-			roleOptions.find((option) => option.value === role)
-		);
+		const selectedRoles = roleDescriptionsForSubmit
+			.map((role) => roleOptions.find((option) => option.value === role))
+			.filter(Boolean);
 		const primaryRole =
 			selectedRoles.find((role) => role.value === "systemadmin") ||
 			selectedRoles.find((role) => role.value === "hotelmanager") ||
 			selectedRoles[0];
-		const isAgentAccount = form.roleDescriptions.includes("ordertaker");
+		const isAgentAccount = activeAccountMode === ACCOUNT_MODE_AGENT;
 		const openingWalletCredit = isAgentAccount
 			? form.agentCommercialModel === "commission_only"
 				? 0
 				: parseMoney(form.agentOpeningWalletCredit)
 			: 0;
+		const accessToForPayload = form.accessTo.length
+			? form.accessTo
+			: defaultAccessForRoles(roleDescriptionsForSubmit);
 
 		setCreating(true);
 		signupHotelStaff(userId, token, {
@@ -710,7 +782,7 @@ const CreateNewAccount = ({
 			hotelIdWork: form.hotelIds[0],
 			hotelIdsWork: form.hotelIds,
 			hotelsToSupport: form.hotelIds,
-			accessTo: form.accessTo,
+			accessTo: accessToForPayload,
 		})
 			.then((data) => {
 				if (data?.error) {
@@ -723,26 +795,41 @@ const CreateNewAccount = ({
 			.finally(() => setCreating(false));
 	};
 
-	const isSystemAdminSelected = form.roleDescriptions.includes("systemadmin");
-	const isAgentSelected = form.roleDescriptions.includes("ordertaker");
+	const isAgentMode = activeAccountMode === ACCOUNT_MODE_AGENT;
+	const isSystemAdminSelected =
+		!isAgentMode && form.roleDescriptions.includes("systemadmin");
+	const isAgentSelected = isAgentMode;
+	const accountModeTabs = [
+		{ value: ACCOUNT_MODE_STAFF, label: labels.staffCreationTab },
+		{ value: ACCOUNT_MODE_AGENT, label: labels.agentCreationTab },
+	];
+	const invitationButtonLabel = isAgentMode
+		? labels.generateAgentLink
+		: labels.generateStaffLink;
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
 			<InlineAccountShell $isRTL={isRTL}>
-				<InviteToolbar>
-					<InviteButton
-						type='button'
-						onClick={() => {
-							setInvitationForm(initialInvitationForm);
-							setInvitationCode("");
-							setInvitationToken("");
-							setInvitationOpen(true);
-						}}
-					>
-						<LinkOutlined />
-						<span>{labels.generateCustomLink}</span>
-					</InviteButton>
-				</InviteToolbar>
+				<WorkflowHeader>
+					<AccountModeTabs>
+						{accountModeTabs.map((tab) => (
+							<button
+								type='button'
+								key={tab.value}
+								className={activeAccountMode === tab.value ? "active" : ""}
+								onClick={() => switchAccountMode(tab.value)}
+							>
+								{tab.label}
+							</button>
+						))}
+					</AccountModeTabs>
+					<InviteToolbar>
+						<InviteButton type='button' onClick={openInvitationModal}>
+							<LinkOutlined />
+							<span>{invitationButtonLabel}</span>
+						</InviteButton>
+					</InviteToolbar>
+				</WorkflowHeader>
 
 				<Modal
 					open={invitationOpen}
@@ -753,35 +840,18 @@ const CreateNewAccount = ({
 					destroyOnClose={false}
 				>
 					<InvitationModalBody $isRTL={isRTL}>
-						<SelectionBlock>
+						<SelectionBlock $compact>
 							<SelectionHeader>
 								<span>{labels.invitationType}</span>
 								<Requirement $required>{labels.required}</Requirement>
 							</SelectionHeader>
-							<ChoiceRow>
-								<SelectionPill
-									type='button'
-									$active={invitationForm.accountType === "agent"}
-									onClick={() => changeInvitationType("agent")}
-								>
-									<strong>{labels.agentInvite}</strong>
-									<input
-										type='radio'
-										readOnly
-										checked={invitationForm.accountType === "agent"}
-									/>
-								</SelectionPill>
-								<SelectionPill
-									type='button'
-									$active={invitationForm.accountType === "job"}
-									onClick={() => changeInvitationType("job")}
-								>
-									<strong>{labels.employeeInvite}</strong>
-									<input
-										type='radio'
-										readOnly
-										checked={invitationForm.accountType === "job"}
-									/>
+							<ChoiceRow $single>
+								<SelectionPill type='button' $active $passive tabIndex={-1}>
+									<strong>
+										{invitationForm.accountType === "agent"
+											? labels.agentInvite
+											: labels.employeeInvite}
+									</strong>
 								</SelectionPill>
 							</ChoiceRow>
 						</SelectionBlock>
@@ -977,7 +1047,7 @@ const CreateNewAccount = ({
 				</Modal>
 
 				<AccountForm onSubmit={submit}>
-					<SelectionBlock>
+					<SelectionBlock $halfOnDesktop={!isAgentMode}>
 						<SelectionHeader>
 							<span>{labels.chooseHotels}</span>
 							<Requirement $required>{labels.required}</Requirement>
@@ -1007,35 +1077,37 @@ const CreateNewAccount = ({
 						</SelectionGrid>
 					</SelectionBlock>
 
-					<SelectionBlock>
-						<SelectionHeader>
-							<span>{labels.roles}</span>
-							<Requirement $required>{labels.required}</Requirement>
-						</SelectionHeader>
-						<SelectionGrid>
-							{roleOptions.map((option) => (
-								<SelectionPill
-									type='button'
-									key={option.value}
-									disabled={
-										isSystemAdminSelected && option.value !== "systemadmin"
-									}
-									$disabled={
-										isSystemAdminSelected && option.value !== "systemadmin"
-									}
-									$active={form.roleDescriptions.includes(option.value)}
-									onClick={() => toggleRole(option.value)}
-								>
-									<strong>{isRTL ? option.ar : option.en}</strong>
-									<input
-										type='checkbox'
-										readOnly
-										checked={form.roleDescriptions.includes(option.value)}
-									/>
-								</SelectionPill>
-							))}
-						</SelectionGrid>
-					</SelectionBlock>
+					{!isAgentMode && (
+						<SelectionBlock $halfOnDesktop>
+							<SelectionHeader>
+								<span>{labels.roles}</span>
+								<Requirement $required>{labels.required}</Requirement>
+							</SelectionHeader>
+							<SelectionGrid>
+								{staffRoleOptions.map((option) => (
+									<SelectionPill
+										type='button'
+										key={option.value}
+										disabled={
+											isSystemAdminSelected && option.value !== "systemadmin"
+										}
+										$disabled={
+											isSystemAdminSelected && option.value !== "systemadmin"
+										}
+										$active={form.roleDescriptions.includes(option.value)}
+										onClick={() => toggleRole(option.value)}
+									>
+										<strong>{isRTL ? option.ar : option.en}</strong>
+										<input
+											type='checkbox'
+											readOnly
+											checked={form.roleDescriptions.includes(option.value)}
+										/>
+									</SelectionPill>
+								))}
+							</SelectionGrid>
+						</SelectionBlock>
+					)}
 
 					{isAgentSelected && (
 						<AgentBlock>
@@ -1212,7 +1284,11 @@ const CreateNewAccount = ({
 					</AccessBlock>
 
 					<CreateButton type='submit' disabled={creating || loading}>
-						{creating ? labels.creating : labels.createAccount}
+						{creating
+							? labels.creating
+							: isAgentMode
+							? labels.createAgentAccount
+							: labels.createStaffAccount}
 					</CreateButton>
 				</AccountForm>
 			</InlineAccountShell>
@@ -1225,17 +1301,101 @@ export default CreateNewAccount;
 const InlineAccountShell = styled.section`
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 	display: grid;
-	gap: 0.6rem;
+	gap: 0.45rem;
 	min-width: 0;
-	padding: 0.75rem;
+	padding: 0.55rem;
 	border: 1px solid #dce8f6;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #f8fbff;
 	box-shadow: 0 8px 18px rgba(15, 79, 134, 0.08);
 `;
 
+const WorkflowHeader = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: stretch;
+	gap: 0.5rem;
+	min-width: 0;
+
+	@media (max-width: 760px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const AccountModeTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	min-width: 0;
+	padding: 6px;
+	border: 1px solid rgba(45, 93, 145, 0.22);
+	border-radius: 8px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.98) 100%),
+		linear-gradient(180deg, rgba(141, 76, 157, 0.12), rgba(16, 32, 51, 0.08));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		0 8px 18px rgba(16, 32, 51, 0.05);
+
+	button {
+		position: relative;
+		overflow: hidden;
+		min-width: 0;
+		min-height: 34px;
+		padding: 6px 10px;
+		border: 1px solid rgba(45, 93, 145, 0.18);
+		border-radius: 7px;
+		background: linear-gradient(180deg, #ffffff 0%, #f4f8fe 100%);
+		color: #102033;
+		cursor: pointer;
+		font-size: 0.78rem;
+		font-weight: 950;
+		line-height: 1.15;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			color 0.18s ease,
+			transform 0.18s ease;
+	}
+
+	button.active {
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+			linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
+		border-color: rgba(183, 123, 198, 0.72);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+			0 8px 18px rgba(80, 23, 96, 0.2);
+		color: #ffffff;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+		transform: translateY(-1px);
+	}
+
+	button.active::after {
+		content: "";
+		position: absolute;
+		inset-inline: 18px;
+		bottom: 5px;
+		height: 2px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #d7b5df, #ffffff, #67a7df);
+		box-shadow: 0 0 10px rgba(215, 181, 223, 0.62);
+	}
+
+	button:hover:not(.active),
+	button:focus-visible:not(.active) {
+		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		border-color: rgba(45, 93, 145, 0.35);
+		color: #ffffff;
+		outline: none;
+	}
+`;
+
 const InviteToolbar = styled.div`
 	display: flex;
+	align-items: stretch;
 	justify-content: flex-end;
 	min-width: 0;
 
@@ -1248,13 +1408,14 @@ const InviteButton = styled.button`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.45rem;
-	min-height: 40px;
-	padding: 0 0.95rem;
+	gap: 0.35rem;
+	min-height: 34px;
+	padding: 0 0.72rem;
 	border: 1px solid #1677ff;
-	border-radius: 10px;
+	border-radius: 8px;
 	background: #1677ff;
 	color: #fff;
+	font-size: 0.78rem;
 	font-weight: 900;
 	box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
 
@@ -1292,7 +1453,9 @@ const InvitationModalBody = styled.div`
 
 const ChoiceRow = styled.div`
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: ${(props) =>
+		props.$single ? "minmax(0, 220px)" : "repeat(2, minmax(0, 1fr))"};
+	justify-content: ${(props) => (props.$single ? "start" : "stretch")};
 	gap: 0.55rem;
 
 	@media (max-width: 520px) {
@@ -1360,24 +1523,25 @@ const InviteActionButton = styled.button`
 
 const AccountForm = styled.form`
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 0.85rem;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.52rem;
 	min-width: 0;
-	padding: 0.35rem 0 0;
+	padding: 0.18rem 0 0;
 
 	input,
 	select {
 		width: 100%;
-		min-height: 40px;
+		min-height: 34px;
 		border: 1px solid #c8daee;
-		border-radius: 9px;
+		border-radius: 8px;
 		background: #fff;
 		color: #1f2937;
+		font-size: 0.78rem;
 		font-weight: 700;
-		padding: 0 0.75rem;
+		padding: 0 0.55rem;
 	}
 
-	@media (max-width: 1100px) {
+	@media (max-width: 1280px) {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
@@ -1388,23 +1552,25 @@ const AccountForm = styled.form`
 
 const Field = styled.label`
 	display: grid;
-	gap: 0.35rem;
+	gap: 0.22rem;
 	margin: 0;
 	min-width: 0;
 	color: #25364b;
+	font-size: 0.78rem;
 	font-weight: 800;
 `;
 
 const StyledPasswordInput = styled(Input.Password)`
-	min-height: 40px;
+	min-height: 34px;
 	border: 1px solid #c8daee;
-	border-radius: 9px;
+	border-radius: 8px;
 	background: #fff;
 	color: #1f2937;
+	font-size: 0.78rem;
 	font-weight: 700;
 
 	input {
-		min-height: 38px !important;
+		min-height: 32px !important;
 		border: 0 !important;
 		box-shadow: none !important;
 		padding: 0 !important;
@@ -1415,53 +1581,64 @@ const FieldLabel = styled.span`
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 0.5rem;
+	gap: 0.35rem;
+	min-width: 0;
+	font-size: 0.74rem;
+	line-height: 1.25;
 `;
 
 const FieldHint = styled.small`
 	color: #62748f;
+	font-size: 0.68rem;
 	font-weight: 700;
-	line-height: 1.35;
+	line-height: 1.25;
 `;
 
 const Requirement = styled.span`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 20px;
-	padding: 0.1rem 0.45rem;
+	flex: 0 0 auto;
+	min-height: 17px;
+	padding: 0.06rem 0.34rem;
 	border: 1px solid ${(props) => (props.$required ? "#ff7875" : "#91caff")};
 	border-radius: 999px;
 	background: ${(props) => (props.$required ? "#fff1f0" : "#eef7ff")};
 	color: ${(props) => (props.$required ? "#cf1322" : "#0b63b6")};
-	font-size: 0.68rem;
+	font-size: 0.6rem;
 	font-weight: 900;
 `;
 
 const SelectionBlock = styled.div`
-	grid-column: 1 / -1;
+	grid-column: ${(props) => (props.$halfOnDesktop ? "span 2" : "1 / -1")};
 	display: grid;
-	gap: 0.55rem;
+	gap: 0.38rem;
 	min-width: 0;
-	padding: 0.75rem;
+	padding: ${(props) => (props.$compact ? "0.42rem" : "0.52rem")};
 	border: 1px solid #dce8f6;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #fff;
+
+	@media (max-width: 1280px) {
+		grid-column: 1 / -1;
+	}
 `;
 
 const SelectionHeader = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 0.5rem;
+	gap: 0.4rem;
 	color: #17324d;
+	font-size: 0.8rem;
+	line-height: 1.2;
 	font-weight: 900;
 `;
 
 const SelectionGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-	gap: 0.5rem;
+	grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+	gap: 0.35rem;
 	min-width: 0;
 `;
 
@@ -1469,20 +1646,23 @@ const SelectionPill = styled.button`
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 0.55rem;
-	min-height: 44px;
+	gap: 0.42rem;
+	min-height: 34px;
 	min-width: 0;
-	padding: 0.45rem 0.65rem;
+	padding: 0.28rem 0.48rem;
 	border: 1px solid ${(props) =>
 		props.$active ? "#1677ff" : props.$disabled ? "#e4e7ec" : "#cfe1f4"};
-	border-radius: 10px;
+	border-radius: 8px;
 	background: ${(props) =>
 		props.$active ? "#eef6ff" : props.$disabled ? "#f3f6fa" : "#fff"};
 	color: ${(props) => (props.$disabled ? "#8a95a3" : "#102033")};
+	font-size: 0.76rem;
+	font-weight: 800;
 	box-shadow: ${(props) =>
 		props.$active ? "0 8px 18px rgba(22, 119, 255, 0.12)" : "none"};
 	text-align: start;
-	cursor: ${(props) => (props.$disabled ? "not-allowed" : "pointer")};
+	cursor: ${(props) =>
+		props.$disabled ? "not-allowed" : props.$passive ? "default" : "pointer"};
 
 	strong {
 		min-width: 0;
@@ -1493,53 +1673,58 @@ const SelectionPill = styled.button`
 
 	input {
 		flex: 0 0 auto;
-		width: 16px;
-		min-height: 16px;
+		width: 14px;
+		min-height: 14px;
 	}
 `;
 
 const AgentBlock = styled.div`
 	grid-column: 1 / -1;
 	display: grid;
-	gap: 0.65rem;
-	padding: 0.75rem;
+	gap: 0.45rem;
+	padding: 0.55rem;
 	border: 1px solid #cfe8ff;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #f4f9ff;
 `;
 
 const CommercialGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-	gap: 0.5rem;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 0.38rem;
 `;
 
 const CommercialOption = styled.button`
 	display: grid;
-	gap: 0.25rem;
-	min-height: 82px;
-	padding: 0.65rem;
+	gap: 0.18rem;
+	min-height: 62px;
+	padding: 0.46rem;
 	border: 1px solid ${(props) => (props.$active ? "#1677ff" : "#cfe1f4")};
-	border-radius: 10px;
+	border-radius: 8px;
 	background: ${(props) => (props.$active ? "#eef6ff" : "#fff")};
 	color: #102033;
 	text-align: start;
 
 	span {
 		color: #62748f;
-		font-size: 0.78rem;
+		font-size: 0.68rem;
 		font-weight: 700;
 	}
 `;
 
 const DocumentBlock = styled.div`
-	grid-column: 1 / -1;
+	grid-column: span 2;
 	display: grid;
-	gap: 0.55rem;
-	padding: 0.75rem;
+	align-content: start;
+	gap: 0.34rem;
+	padding: 0.52rem;
 	border: 1px dashed #b8dcff;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #fff;
+
+	@media (max-width: 1280px) {
+		grid-column: 1 / -1;
+	}
 `;
 
 const UploadButton = styled.button`
@@ -1547,14 +1732,15 @@ const UploadButton = styled.button`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.45rem;
+	gap: 0.35rem;
 	justify-self: start;
-	min-height: 38px;
-	padding: 0 0.9rem;
+	min-height: 32px;
+	padding: 0 0.72rem;
 	border: 1px solid #8ec5ff;
 	border-radius: 999px;
 	background: #eef7ff;
 	color: #0b63b6;
+	font-size: 0.74rem;
 	font-weight: 900;
 	overflow: hidden;
 
@@ -1569,18 +1755,19 @@ const UploadButton = styled.button`
 const DocumentList = styled.div`
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.4rem;
+	gap: 0.3rem;
 `;
 
 const DocumentChip = styled.span`
 	display: inline-flex;
 	align-items: center;
-	gap: 0.4rem;
+	gap: 0.3rem;
 	max-width: 100%;
-	padding: 0.28rem 0.5rem;
+	padding: 0.2rem 0.42rem;
 	border: 1px solid #b8dcff;
 	border-radius: 999px;
 	background: #f7fbff;
+	font-size: 0.68rem;
 	font-weight: 800;
 
 	span {
@@ -1601,44 +1788,47 @@ const DocumentChip = styled.span`
 const AccessBlock = styled.div`
 	grid-column: 1 / -1;
 	display: grid;
-	gap: 0.55rem;
-	padding: 0.75rem;
+	gap: 0.36rem;
+	padding: 0.52rem;
 	border: 1px solid #dce8f6;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #fff;
 
 	> div:last-child {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.45rem;
+		gap: 0.32rem;
 	}
 
 	label {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
-		padding: 0.32rem 0.55rem;
+		gap: 0.28rem;
+		padding: 0.22rem 0.44rem;
 		border: 1px solid #b8dcff;
 		border-radius: 999px;
 		background: #f7fbff;
+		font-size: 0.72rem;
 		font-weight: 800;
 	}
 
 	input {
-		width: 15px;
-		min-height: 15px;
+		width: 13px;
+		min-height: 13px;
 	}
 `;
 
 const CreateButton = styled.button`
 	grid-column: 1 / -1;
 	justify-self: end;
-	min-width: 180px;
-	min-height: 42px;
+	min-width: 150px;
+	min-height: 36px;
+	padding: 0 0.85rem;
 	border: 0;
-	border-radius: 10px;
+	border-radius: 8px;
 	background: #1677ff;
 	color: #fff;
+	font-size: 0.82rem;
 	font-weight: 900;
 	box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
 

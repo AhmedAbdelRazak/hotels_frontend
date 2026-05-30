@@ -2099,6 +2099,108 @@ const Section = styled.div`
 	}
 `;
 
+const AvailabilitySnapshotPanel = styled.div`
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border: 1px solid rgba(168, 196, 229, 0.9);
+	border-radius: 10px;
+	background: linear-gradient(135deg, #f8fbff 0%, #ffffff 62%);
+	box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+
+	.availability-title {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		text-align: center;
+		color: #10233f;
+		font-size: 0.9rem;
+		font-weight: 900;
+	}
+
+	.availability-title small {
+		color: #64748b;
+		font-size: 0.74rem;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+
+	.availability-metrics {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(120px, 1fr));
+		gap: 8px;
+		margin-top: 8px;
+	}
+
+	.availability-metric {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		padding: 7px 9px;
+		border: 1px solid #d9e7f7;
+		border-radius: 8px;
+		background: #f6f9fd;
+		text-align: center;
+	}
+
+	.availability-metric span {
+		color: #5b6b82;
+		font-size: 0.72rem;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+
+	.availability-metric strong {
+		color: #06152b;
+		font-size: 1.2rem;
+		font-weight: 950;
+		line-height: 1.05;
+	}
+
+	.availability-rooms {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+		gap: 6px;
+		margin-top: 8px;
+	}
+
+	.availability-room-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-width: 0;
+		padding: 6px 8px;
+		border-radius: 8px;
+		background: #eef6ff;
+		color: #10233f;
+		font-size: 0.76rem;
+		font-weight: 800;
+	}
+
+	.availability-room-row span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.availability-room-row strong {
+		white-space: nowrap;
+	}
+
+	@media (max-width: 720px) {
+		.availability-title {
+			flex-direction: column;
+			gap: 4px;
+		}
+
+		.availability-metrics {
+			grid-template-columns: 1fr;
+		}
+	}
+`;
+
 const HorizontalLine = styled.hr`
 	border: none;
 	border-bottom: 1px solid #d9e9fb;
@@ -6598,6 +6700,28 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		reservation?.reservation_status,
 		reservation?.state,
 	]);
+	const availabilitySnapshot = useMemo(() => {
+		const snapshot = reservation?.availabilitySnapshot;
+		if (!snapshot || typeof snapshot !== "object" || !snapshot.captured) {
+			return null;
+		}
+		const rooms = Array.isArray(snapshot.rooms) ? snapshot.rooms : [];
+		const formatCount = (value) =>
+			value === null || value === undefined || value === ""
+				? "N/A"
+				: normalizeNumber(value, 0).toLocaleString();
+		return {
+			...snapshot,
+			rooms,
+			requestedRoomsLabel: formatCount(snapshot.requestedRooms),
+			availableBeforeLabel: formatCount(
+				snapshot.availableRoomsAtCreation ?? snapshot.minAvailableBefore,
+			),
+			availableAfterLabel: formatCount(
+				snapshot.availableRoomsAfterReservation ?? snapshot.minAvailableAfter,
+			),
+		};
+	}, [normalizeNumber, reservation?.availabilitySnapshot]);
 
 	return (
 		<Wrapper
@@ -8288,6 +8412,77 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								</div>
 							</Section>
 						</Header>
+
+						{availabilitySnapshot ? (
+							<AvailabilitySnapshotPanel
+								$isArabic={chosenLanguage === "Arabic"}
+								dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
+							>
+								<div className='availability-title'>
+									<span>
+										<HomeOutlined />{" "}
+										{chosenLanguage === "Arabic"
+											? "توفر الغرف وقت إنشاء الحجز"
+											: "Room availability at booking"}
+									</span>
+									<small>
+										<CalendarOutlined />{" "}
+										{chosenLanguage === "Arabic" ? "تم الالتقاط" : "Captured"}:{" "}
+										{reservationDisplayDateTime(availabilitySnapshot.capturedAt)}
+									</small>
+								</div>
+								<div className='availability-metrics'>
+									<div className='availability-metric'>
+										<span>
+											{chosenLanguage === "Arabic"
+												? "الغرف المطلوبة"
+												: "Requested rooms"}
+										</span>
+										<strong>{availabilitySnapshot.requestedRoomsLabel}</strong>
+									</div>
+									<div className='availability-metric'>
+										<span>
+											{chosenLanguage === "Arabic"
+												? "أقل توفر خلال الإقامة"
+												: "Lowest available during stay"}
+										</span>
+										<strong>{availabilitySnapshot.availableBeforeLabel}</strong>
+									</div>
+									<div className='availability-metric'>
+										<span>
+											{chosenLanguage === "Arabic"
+												? "المتبقي بعد الحجز"
+												: "Remaining after booking"}
+										</span>
+										<strong>{availabilitySnapshot.availableAfterLabel}</strong>
+									</div>
+								</div>
+								{availabilitySnapshot.rooms.length ? (
+									<div className='availability-rooms'>
+										{availabilitySnapshot.rooms.slice(0, 4).map((room, index) => (
+											<div
+												className='availability-room-row'
+												key={`${room.room_type || room.displayName || "room"}-${index}`}
+											>
+												<span>
+													{room.displayName || room.room_type || "Room"}
+													{room.agentScoped
+														? chosenLanguage === "Arabic"
+															? " - مخزون الوكيل"
+															: " - agent stock"
+														: ""}
+												</span>
+												<strong>
+													{normalizeNumber(room.minAvailableBefore, 0).toLocaleString()}{" "}
+													&rarr;{" "}
+													{normalizeNumber(room.minAvailableAfter, 0).toLocaleString()}
+												</strong>
+											</div>
+										))}
+									</div>
+								) : null}
+							</AvailabilitySnapshotPanel>
+						) : null}
 
 						<HorizontalLine />
 

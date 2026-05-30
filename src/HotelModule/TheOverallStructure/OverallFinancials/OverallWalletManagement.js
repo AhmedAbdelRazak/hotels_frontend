@@ -5,6 +5,7 @@ import {
 	PaperClipOutlined,
 	PlusOutlined,
 	ReloadOutlined,
+	WalletOutlined,
 } from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
@@ -25,9 +26,10 @@ import {
 
 const TEXT = {
 	en: {
-		title: "Adding / Updating Wallets",
+		title: "Agent Wallet Management",
 		subtitle:
 			"Add or update each agent's general wallet across your assigned overall reservation scope.",
+		entryTitle: "Wallet movement details",
 		hotel: "Hotel",
 		chooseHotel: "Choose hotel",
 		chooseHotelFirst: "Choose a hotel first to load agents and wallet movements.",
@@ -69,7 +71,7 @@ const TEXT = {
 		from: "From",
 		to: "To",
 		refresh: "Refresh",
-		newEntry: "New entry",
+		newEntry: "Clear form",
 		save: "Save wallet movement",
 		update: "Update wallet movement",
 		claimWalletCredit: "Submit wallet claim",
@@ -102,9 +104,10 @@ const TEXT = {
 		requiredMark: "Required",
 	},
 	ar: {
-		title: "\u0625\u0636\u0627\u0641\u0629 / \u062a\u062d\u062f\u064a\u062b \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
+		title: "\u0625\u062f\u0627\u0631\u0629 \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
 		subtitle:
 			"\u0623\u0636\u0641 \u0623\u0648 \u0639\u062f\u0644 \u062d\u0631\u0643\u0627\u062a \u0645\u062d\u0641\u0638\u0629 \u0643\u0644 \u0648\u0643\u064a\u0644 \u0628\u0634\u0643\u0644 \u0639\u0627\u0645 \u0636\u0645\u0646 \u0646\u0637\u0627\u0642 \u062d\u062c\u0648\u0632\u0627\u062a\u0643 \u0627\u0644\u0645\u0635\u0631\u062d.",
+		entryTitle: "\u062a\u0641\u0627\u0635\u064a\u0644 \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
 		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotel: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotelFirst:
@@ -153,7 +156,7 @@ const TEXT = {
 		from: "\u0645\u0646",
 		to: "\u0625\u0644\u0649",
 		refresh: "\u062a\u062d\u062f\u064a\u062b",
-		newEntry: "\u062d\u0631\u0643\u0629 \u062c\u062f\u064a\u062f\u0629",
+		newEntry: "\u0645\u0633\u062d \u0627\u0644\u0646\u0645\u0648\u0630\u062c",
 		save: "\u062d\u0641\u0638 \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
 		update: "\u062a\u062d\u062f\u064a\u062b \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
 		claimWalletCredit:
@@ -770,6 +773,15 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		<OverallPageShell $isRTL={isRTL}>
 			<WalletShell $isRTL={isRTL}>
 				<>
+						<WalletPageHeader>
+							<span className='wallet-title-icon'>
+								<WalletOutlined />
+							</span>
+							<div>
+								<h1>{txt.title}</h1>
+								<p>{txt.subtitle}</p>
+							</div>
+						</WalletPageHeader>
 						<EntryPanel>
 							<PanelTitle>
 								<span>
@@ -777,7 +789,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 										? txt.update
 										: agentOnly
 										? txt.claimWalletCredit
-										: txt.newEntry}
+										: txt.entryTitle}
 								</span>
 								<div className='panel-title-actions'>
 									<Button
@@ -993,6 +1005,70 @@ const WalletShell = styled.div`
 	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	display: grid;
 	gap: 12px;
+`;
+
+const WalletPageHeader = styled.header`
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	padding: 12px 14px;
+	border: 1px solid rgba(216, 232, 247, 0.95);
+	border-radius: 12px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.98)),
+		linear-gradient(135deg, rgba(100, 22, 110, 0.08), rgba(14, 116, 144, 0.06));
+	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045);
+
+	.wallet-title-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 38px;
+		width: 38px;
+		height: 38px;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #24102d, #64166e);
+		color: #ffffff;
+		font-size: 1.1rem;
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.2),
+			0 8px 16px rgba(80, 23, 96, 0.2);
+	}
+
+	div {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
+	}
+
+	h1 {
+		margin: 0;
+		color: #111827;
+		font-size: clamp(1rem, 1.3vw, 1.18rem);
+		font-weight: 950;
+		line-height: 1.2;
+		letter-spacing: 0;
+	}
+
+	p {
+		margin: 0;
+		color: #5d6678;
+		font-size: 0.78rem;
+		font-weight: 800;
+		line-height: 1.45;
+	}
+
+	@media (max-width: 560px) {
+		align-items: flex-start;
+		padding: 10px 11px;
+
+		.wallet-title-icon {
+			flex-basis: 34px;
+			width: 34px;
+			height: 34px;
+		}
+	}
 `;
 
 const EntryPanel = styled.section`

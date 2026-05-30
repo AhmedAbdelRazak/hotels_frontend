@@ -30,65 +30,13 @@ const normaliseCredential = (value) => {
 	return v;
 };
 
-const getRoleDescriptions = (user = {}) => [
-	String(user.roleDescription || "").toLowerCase(),
-	...(Array.isArray(user.roleDescriptions)
-		? user.roleDescriptions.map((item) => String(item || "").toLowerCase())
-		: []),
-];
-
-const hasRoleDescription = (user, description) =>
-	getRoleDescriptions(user).includes(String(description || "").toLowerCase());
-
-const HOTEL_MAIN_DASHBOARD_PATH = "/hotel-management/main-dashboard";
 const HOTEL_EXECUTIVE_SUMMARY_PATH =
 	"/hotel-management/main-dashboard?overall=summary&page=1";
-
-const hasAnyRoleDescription = (user, descriptions = []) =>
-	descriptions.some((description) => hasRoleDescription(user, description));
-
-const shouldLandOnExecutiveSummary = (user = {}) => {
-	const role = Number(user.role);
-	if (role === 1000) return false;
-	if (role === 10000) return true;
-	if (role === 2000 && !user.belongsToId) return true;
-
-	return (
-		[4000, 6000, 8000].includes(role) ||
-		hasAnyRoleDescription(user, [
-			"systemadmin",
-			"system admin",
-			"hotel system admin",
-			"hotelmanager",
-			"hotel manager",
-			"finance",
-			"reservationemployee",
-			"reservation employee",
-			"housekeepingmanager",
-			"housekeeping manager",
-		])
-	);
-};
 
 const getSigninRedirectPath = (user = {}) => {
 	const role = Number(user.role);
 	if (role === 1000) return "/admin/dashboard";
-	if (shouldLandOnExecutiveSummary(user)) return HOTEL_EXECUTIVE_SUMMARY_PATH;
-
-	const isScopedHotelRole =
-		[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role) ||
-		[
-			"hotelmanager",
-			"reception",
-			"housekeepingmanager",
-			"housekeeping",
-			"finance",
-			"ordertaker",
-			"reservationemployee",
-		].some((description) => hasRoleDescription(user, description));
-
-	if (isScopedHotelRole) return HOTEL_MAIN_DASHBOARD_PATH;
-	return HOTEL_MAIN_DASHBOARD_PATH;
+	return HOTEL_EXECUTIVE_SUMMARY_PATH;
 };
 
 /* ───────────── localised strings ───────────── */

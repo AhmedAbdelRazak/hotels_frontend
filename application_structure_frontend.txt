@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-05-23
+Audited: 2026-05-30
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -163,6 +163,7 @@ HotelModule Structure
 - src/HotelModule/AdminOverallSideMenu/AdminOverallSideMenu.js
   - Overall-dashboard side menu. Menu visibility is role-filtered.
   - Reservations and Financials are expanded by default. Account Management is intentionally not expanded by default.
+  - Pure order-taker/agent users may use the Summary menu entry to reach the combined Hotels Summary landing page; backend scoping keeps the embedded reservation-summary report limited to their own authorized reservations.
   - Pure order-taker/agent accounts should see the Reservations parent with New Reservation, Reservations List, and Pending Reservations. The pending link routes to overall=pending-reservations; backend scoping keeps it to the agent's own pending confirmation, finance pending, rejected, and commission-review reservations for assigned hotels only.
   - Mobile behavior: the menu starts collapsed on phone/tablet widths, opens as an off-canvas drawer from the language side, and closes from the backdrop or after choosing a link. Do not add effects that depend on collapsed and immediately force it closed, or the mobile toggle will appear broken.
 - src/HotelModule/TheOverallStructure/page.js
@@ -180,10 +181,18 @@ HotelModule Structure
 - src/HotelModule/TheOverallStructure/OverallAccountManagement/ActivateAccounts.js
   - Overall activation view for pending/inactive scoped accounts. It must not be limited to Hotel System Admin accounts; signed-up agents and employees appear here for authorized managers/admins.
   - Hotel System Admin rows use the overall system-admin update endpoint. Agent/staff rows use the hotel-staff update endpoint with the account's assigned hotel scope so agent approval status, approved hotel ids, realtime notifications, and audit tracking stay in sync.
+- src/HotelModule/TheOverallStructure/OverallAccountManagement/AccountManagementMain.js
+  - The account list is split into Hotel Employees and External Agents tabs. The employee tab excludes order-taker/agent rows; the agent tab shows only external agents. Keep table filters and backend role params aligned with the selected tab.
+- src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js
+  - The create-account route is split into Internal Staff and External Agents tabs for HR clarity. Staff mode shows hotel staff roles only and excludes external agents; agent mode locks the payload to roleDescription ordertaker and shows the agent business model/wallet-opening controls.
+  - The generate-link action follows the active tab: staff mode opens a staff invitation that requires an employee role, while agent mode opens an agent invitation with agent commercial settings. Both modes still require explicit hotel selection.
+  - The screen is intentionally compact on desktop with smaller fonts, lower input/button heights, and dense two/four-column grids; phone layouts collapse to single-column controls.
 - src/HotelModule/TheOverallStructure/OverallReservationsList/
   - Multi-hotel reservation overall views, pending reservations, and the embedded overall new-reservation flow.
   - Overall reservation tables use the shared OverallTableWrap/ReservationTableControls styling, 25-character tooltip truncation, Gregorian/Hijri date toggle with Gregorian as the default, and sort buttons for source, hotel, arrival, and departure.
   - Reservation table rows should keep nights and price-per-day columns visible in both the regular reservation list and pending-reservations list, and Excel export should preserve those metrics.
+  - OverallReservationMain uses a compact search/filter row, then a clickable scorecard strip between filters and sorting. Scorecard filters must stay query/backend aligned and should not inflate button height or whitespace.
+  - The reservation-main table column order follows the operational screenshot: reservation date, hotel, confirmation, guest, highlighted financial metrics, status, source, arrival, departure, availability, payment, paid amount, and row actions/details. The nights, price-per-night, and total columns are visually highlighted while staying readable.
   - Overall reservation detail modals reuse ReservationDetail and should keep the hotel name visible in the center action card above the update button so users know which hotel owns the selected reservation.
   - ReservationDetail's top header uses three primary cards plus a secondary action strip. Keep edit-reservation centered in the strip, not inside the lifecycle card, so the lifecycle card stays focused on status progress.
   - OverallPendingReservations is read-only for approved order-taker/agent accounts. Agents can see their own pending, rejected, finance-review, and commission-review reservations across assigned hotels, but confirmation-number clicks stay inside the overall detail modal instead of navigating into hotel-staff pending workflows.
@@ -207,6 +216,7 @@ HotelModule Structure
   - In the overall financial report/wallet screens, pure order-taker/agent accounts are pinned to their own agent id even if query params are manually changed. They may see assigned-hotel financial data only for their own wallet, reservations, commissions, and claims.
   - Overall financial report, financial actions, and wallet-management menu entries are visible to order-taker/agent users, but the backend and frontend must keep those users scoped to their own agent records only.
   - Agent wallets are global per agent, not per hotel. OverallWalletManagement must not ask for a hotel when adding wallet money or submitting an agent wallet claim; the backend derives authorized hotel scope from the logged-in actor and the selected/global agent.
+  - OverallWalletManagement uses a compact page title instead of the old "new movement" heading. Arabic labels may remain Arabic, but numeric figures in scorecards should render with Latin/English digits for PMS consistency.
   - Overall financial report and manager financial modal should fetch the agent wallet summary once from the global wallet endpoint, not once per hotel, so wallet movements are not duplicated across assigned hotels.
   - Single-hotel agent wallet ledgers must show rejected wallet-claim reasons clearly in the transactions table and exports, because the notification may be acknowledged before the agent reviews the financial page.
 - Agent overall regression scenario
@@ -221,6 +231,7 @@ HotelModule Structure
   - Reservation history/list/details workflows.
   - ReservationDetail's cycle tracker depends on backend-sanitized adminChangeLog/reservationAuditLog data. It also hides derived tracker rows whose actor is superadmin/admin/systemadmin unless the current user is a true super admin.
   - ReservationDetail's workflow summary must not expose or misattribute privileged admin actors. If a privileged last-updated actor is hidden for an agent/staff viewer, show the status/date without falling back to the agent/order-taker name.
+  - ReservationDetail displays the backend-stamped availabilitySnapshot when present. The card shows requested rooms, lowest available selected-room inventory during the stay at creation time, remaining selected-room availability after booking, and compact per-room before/after counts. This data is read-only and should never be recalculated or overwritten by the frontend.
   - Payment Summary separates selected payment method from actual collected money. "Paid offline" or hotel collection is only successful when an onsite/hotel paid amount exists; otherwise it displays a pending hotel-collection state while the amount due remains visible.
   - singlePreReservationById should send the stored Authorization header when available. The backend treats missing auth as a public/non-super-admin viewer and removes privileged tracker rows.
 - src/HotelModule/CustomerService/
@@ -231,7 +242,8 @@ HotelModule Structure
 Overall Dashboard Menu Rules
 - Owner-like users see the complete overall dashboard:
   - super admin, role 1000, root owner role 2000, and Hotel System Admin role 10000/systemadmin within assigned hotel scope.
-- Summary is visible to hotelmanager, finance, reservationemployee, housekeepingmanager, and owner-like users.
+- Summary is visible to hotelmanager, finance, reservationemployee, housekeepingmanager, order-taker/agent users, and owner-like users.
+- The Hotels Summary tab is the default landing page for hotel-side users after sign-in. It embeds the former My Summary reservation-department report above the existing hotels summary table. The embedded report reuses the actor's overall hotel scope, so agents see only their own/assigned-hotel reservation data while finance, reservation employees, managers, owners, Hotel System Admins, and super admins see their authorized scope.
 - New reservation is visible to reception, ordertaker, reservationemployee, hotelmanager, and users with accessTo newReservation.
 - Reservation lists are visible to reception, finance, ordertaker, reservationemployee, hotelmanager, and owner-like users.
 - Pending reservations are visible to finance, reservationemployee, hotelmanager, and owner-like users.
@@ -262,10 +274,11 @@ Frontend Critical Workflows To Protect
   - The pending applicant dashboard should show a clear Arabic pending message, refresh approval status immediately, poll periodically, and move the user into the dashboard after approval.
   - Attachments are optional and are sent as companyDocuments for reviewer visibility.
 - Overall create-account invitations
-  - /hotel-management/main-dashboard?overall=create-account includes a "Generate custom link for an agent" modal.
-  - The main create-account form intentionally starts with no preselected hotels and no preselected roles. Account creation must be blocked until both sections are selected plus the required identity/password fields.
-  - The invitation modal intentionally starts with no selected application type, no selected hotels, and no selected employee role. Link generation is an explicit button action and must show a toast if required selections are missing.
-  - The modal sends hotels assigned to the manager/owner, the application type, employee role or agent commercial model, and optional prefilled contact/company data to the backend.
+  - /hotel-management/main-dashboard?overall=create-account is a two-tab HR workflow: Internal Staff and External Agents.
+  - Staff mode intentionally starts with no preselected hotels and no preselected staff roles. It excludes the external-agent/order-taker role from the role grid, and account creation is blocked until hotel, role, identity, and password requirements are met.
+  - Agent mode intentionally starts with no preselected hotels but locks the account role to ordertaker. It shows the agent business model and opening-wallet fields, then submits the correct agent role/access payload without asking HR to choose an agent role manually.
+  - The generate-link button follows the selected tab. Staff mode creates a job/employee invitation and still requires an employee role; agent mode creates an agent invitation and may include agent commercial model/opening wallet data. The modal should not allow users to switch the invitation type away from the active tab.
+  - The modal sends hotels assigned to the manager/owner, the locked application type, employee role or agent commercial model, and optional prefilled contact/company data to the backend.
   - New invitation links use a short /signup?invite=<code> URL. The backend stores the invitation payload securely and returns the code; frontend copy/email/WhatsApp actions should only enable after the link is generated.
   - Backend public signup validation and pending approval still control final access.
 - Overall new reservation
@@ -283,9 +296,10 @@ Frontend Critical Workflows To Protect
   - UI should reflect backend restrictions instead of hiding backend failures.
 - Account management
   - Account creation/update screens must only show hotels the acting user can manage.
+  - /hotel-management/main-dashboard?overall=account-management is split into Hotel Employees and External Agents tabs. The employee tab must not show order-taker/agent accounts, and the agent tab must not show internal hotel staff.
   - For platform super admins, "can manage" means all relevant hotels and accounts. Do not apply scoped staff limitations to role 1000 or superadmin/super admin users.
   - Hotel System Admin saves use the legacy /api/overall-dashboard/system-admin/:accountId/:userId endpoint. Super admins can assign any existing hotel; scoped users can only assign hotels returned by their allowed overall account context.
-  - Role selection treats Hotel System Admin as mutually exclusive. Selecting Hotel System Admin must immediately clear all other roles and disable them; unchecking Hotel System Admin must reopen the rest of the role options so the account can be changed to hotel manager, reception, finance, reservation employee, housekeeping, or agent.
+  - Role selection treats Hotel System Admin as mutually exclusive. Selecting Hotel System Admin must immediately clear all other roles and disable them; unchecking Hotel System Admin must reopen the rest of the internal staff role options. Agent creation is handled by the External Agents tab, not by mixing ordertaker into staff role selection.
   - In update-account, endpoint selection follows the currently selected roles, not the original account role. If Hotel System Admin is selected, use the system-admin endpoint; if it is removed, use the hotel-staff update endpoint to convert the account back into a scoped hotel role.
   - Successful account create/update responses are backed by backend ActivityTracker records. Frontend should keep sending the complete role, hotel scope, accessTo, active state, and relevant agent/company fields so backend audit entries are meaningful.
   - /hotel-management/main-dashboard?overall=update-account must not preselect an account from accountId query params or auto-select the first table row. The editor panel should show a language-aware prompt asking the user to click an account from the table or search for one, then populate only after explicit selection.
@@ -305,16 +319,21 @@ Frontend Critical Workflows To Protect
 - Overall navigation and landing behavior
   - In the hotel-management overall side menu, Executive Summary is first and Main Dashboard follows it. The rest of the menu order remains unchanged.
   - Clicking the Executive Summary side-menu item always opens /hotel-management/main-dashboard?overall=summary&page=1 and does not remember the user's previous summary tab.
-  - After sign-in, authorized hotel users land on the Executive General Summary instead of the blank/default overall dashboard.
-  - Authorized summary landing users include owners, Hotel System Admins, hotel managers, finance users, reservation employees, and housekeeping managers.
-  - Reception, housekeeping, order taker, and other scoped roles that are not executive-summary users keep the normal hotel-management dashboard landing.
+  - After sign-in, hotel-side users land on the combined Hotels Summary page instead of the blank/default overall dashboard.
+  - The combined Hotels Summary page embeds the former My Summary reservation-department report and then keeps the existing Hotels Summary table as the final page section.
+  - The Hotels Summary default filter period uses the Hijri calendar by default: current Hijri month-to-date plus the previous three full Hijri months. The month selector should be pre-filled and the disabled computed-range field (المدى المحتسب / Computed range) must show the resulting Gregorian dateFrom/dateTo sent to the backend.
+  - Authorized summary landing users include owners, Hotel System Admins, hotel managers, finance users, reservation employees, reception, housekeeping, order takers/agents, and other scoped hotel-side users.
   - Super admins continue to land in the admin dashboard, not the hotel-management owner summary.
 - Hotel System Admin naming
   - User-facing labels now say Hotel System Admin instead of generic System Admin.
   - Keep internal roleDescription as systemadmin and role 10000 for compatibility with existing auth, routes, and stored accounts.
   - UI wording should explain this role as hotel-side administration for one hotel or a group of hotels, not platform-wide administration.
 - Overall Executive Summary tabs
-  - The summary page contains four tabs: hotel/general summary, reservations overview, inventory/occupancy, and paid reservations overview.
+  - The summary page contains four tabs: Hotels Summary, reservations overview, inventory/occupancy, and paid reservations overview.
+  - The Hotels Summary tab embeds the former My Summary reservation-department report modeled after the legacy Arabic report screenshot: top pending/new-reservation score cards, today's operation cards, future arrival/departure bar chart, and top hotel/source ranking blocks.
+  - The embedded reservation-department report keeps the logged-in user's own backend scope. Pure order-taker/agent users see the Hotels Summary tab as their only summary tab.
+  - The Hotels Summary tab uses the shared desktop filter panel and mobile drawer filter entry; the embedded report should visually match the white dashboard-style screenshot while the existing Hotels Summary table stays last.
+  - The Hotels Summary filter panel should stay one compact row on desktop. If space is tight, the mobile/tablet drawer button is preferred over adding vertical filter rows.
   - The tabs sit directly under the top navbar and replace redundant page headers to reduce clutter.
   - Tab hover and active states use the newer metallic purple and dark-blue identity with clearer text contrast.
   - All executive summary surfaces should be phone responsive, RTL friendly, and horizontal-scroll safe where tables are wide.
@@ -327,10 +346,11 @@ Frontend Critical Workflows To Protect
   - Manual refresh actions use the same latest-request guard as automatic fetches.
   - Inventory remains the exception: it requires exactly one hotel and uses computed read-only month dates from calendar/month/year selectors.
 - Reservation list improvements
-  - Overall reservation-main and pending-reservation lists use AntD date pickers and a centered search field above the table.
-  - Desktop search width is about half the page; mobile search width is nearly full width.
-  - Filter order is hotels, status, dateBy, from date, to date, then action buttons.
+  - Overall reservation-main and pending-reservation lists use AntD date pickers and compact filter/search controls with reduced input height, padding, and font size.
+  - The reservation-main search field is intentionally shorter and less dominant than the table; filters and action buttons should stay clean and low-height on desktop while stacking sensibly on phones.
+  - Filter order is hotels, status, dateBy, from date, to date, then action buttons, followed by the clickable scorecard strip and then the sort controls/table.
   - dateBy supports Creation Date, Checkin/Arrival Date, and Checkout/Departure Date, with Creation Date as default.
+  - Reservation-main scorecards are clickable filters. They use the same backend scorecard payload as the table filter state so counts and rows stay aligned.
   - Sorting/filtering must remain query-synced and backend-supported.
   - Hijri date display is available across reservation lists; long date strings are truncated carefully with tooltips where needed.
   - The old crowded page headers were removed across the relevant reservation and report surfaces.
@@ -341,8 +361,27 @@ Frontend Critical Workflows To Protect
   - Booking source, status, and room-type summaries are sorted descending by total amount.
   - Summary export creates a multi-sheet Excel report in the finance-report style and is tracked through backend activity logging.
 - Reservation executive analytics
-  - Overview, reservations overview, and paid reservations overview default to Gregorian/Melady calendar controls. Inventory is the only executive tab that defaults to Hijri.
-  - Default reservation executive date range is past 60 days plus today, so 61 days total, based on Creation Date.
+  - Overview, reservations overview, paid reservations overview, and inventory default to Hijri calendar controls unless a shared URL explicitly provides a different invCal value.
+  - Default reservation executive date range is this month plus the previous three months, based on Creation Date, with Hijri selected by default unless a shared URL explicitly provides another calendar.
+  - The embedded reservation-department report in Hotels Summary follows the active Hotels Summary filters and does not require a separate summaryTab=my-summary URL.
+  - Exception: the "New Reservations Today" / "حجوزات جديدة اليوم" scorecard group is always createdAt-today using the Asia/Riyadh day window. It should ignore the selected report date range/dateBy but still inherit the user's backend scope and selected hotel filter.
+  - Exception: "Today's Operation" / "تشغيل اليوم" is also fixed to the Asia/Riyadh today window. Arrivals use checkin_date today, departures use checkout_date today, checked-in/no-show use checkin_date today plus status matching, and the only filter that should change those numbers is the selected hotel/authorized hotel scope.
+  - Exception: the embedded future-operation chart is always a 29-day operational window: previous 14 Riyadh days, today, and next 14 Riyadh days. It switches date field by the visible toggle (دخول/checkin_date or خروج/checkout_date), zero-fills dates with no reservations, ignores the main date/status/search filters, and only changes by authorization scope plus selected hotel filter.
+  - The embedded future-operation bar chart x-axis should show every date in the 29-day window with compact rotated labels, and the tooltip should clearly show the selected date plus reservation count for the active mode (arrival/departure), without adding unrelated amount rows.
+  - Section titles in the embedded Hotels Summary report must be anchored inside their own grouped panels, not floating title chips. Each title should visually describe the content directly below it, including ranking period controls and ranking panels.
+  - Summary page section/report titles should be center-aligned inside their panels in both RTL and LTR, while compact filter labels may keep their control-aligned layout.
+  - The top-source and top-hotel breakdown controls share one aligned control row: source date-basis buttons on one side, the Today/Yesterday/month/all period buttons centered as the common range control, and hotel date-basis buttons on the other side. Horizontal ranking bars should keep enough row height and bar thickness to read cleanly.
+  - The embedded Hotels Summary scorecards and controls use compact Ant Design icons to clarify meaning: money, nights, hotels, sources, pending/new reservations, arrivals/departures, check-in/no-show status, ranking period filters, ranking rows, and drill-down/export actions.
+  - The first overall/pending scorecard strip title should read "All Reservation Requests" / "كل طلبات الحجز", and the strip starts with an all-reservation-count metric before total amount, then nights, hotel count, and pending requests. The count card opens the same scoped underlying-reservations drill-down as the rest of the strip.
+  - Scorecard labels should stay compact and slightly smaller than the surrounding titles/values so dense Arabic and English labels fit without wrapping.
+  - Overall Summary filter Select popups render on document.body with the overall-summary-filter-dropdown class and explicit popupMatchSelectWidth values per control, so compact-row dropdowns do not collapse to tiny option-width menus and remain polished in RTL/LTR layouts.
+  - For Arabic layout, the top summary area should keep the overall/pending scorecard group on the left side, then place "حجوزات جديدة اليوم" on the next row's left side beside "تشغيل اليوم". On narrower screens these sections may stack vertically.
+  - Its scorecards and compact metric chips use metallic grey styling close to the screenshot. Clicking any scorecard, operation card, chart bar, top-source row, or top-hotel row must open a reservation drill-down modal that lists the underlying reservations using the same column order as OverallReservationMain: hotel, confirmation, guest, source, status, payment, booked, check-in, checkout, nights, price/day, total, paid amount, and Details.
+  - The underlying-reservations drill-down modal must include compact pagination and an Excel export button for the currently loaded matching rows. Keep the toolbar short, polished, RTL/LTR safe, and phone responsive; desktop width should be broad enough to minimize horizontal scrolling and pagination should be centered under the table.
+  - Clicking Details inside any executive-summary drill-down modal must open OverallReservationDetailsModal in place on the same summary page. Do not redirect users to overall=reservation-main just to inspect a reservation.
+  - The embedded summary drill-down and expanded chart modals must render on document.body with a z-index above the fixed overall side menu, so the mask/content never appears behind the menu.
+  - Its chart drill-downs must preserve the main report dateBy/dateFrom/dateTo filters and add bucketDateBy/bucketDateFrom/bucketDateTo for the clicked Asia/Riyadh day so the modal row count equals the bar value.
+  - Creation-date, arrival/check-in, departure/checkout, and status chart data points should open the same drill-down modal for the selected point/slice. The modal must remain RTL/LTR safe and horizontally scrollable on small screens.
   - Arrival and Departure charts are line charts and occupy their own first row.
   - Status donut and Creation Date chart sit on the second chart row.
   - Charts include enlarge controls that open a modal for larger PowerBI-style viewing.
@@ -398,12 +437,12 @@ Frontend Critical Workflows To Protect
   - Reservation status chips and chart colors should be descriptive, not just decorative.
   - PMS table text is title-cased by default; use pms-preserve-case only for values that must keep exact casing.
 - 2026-05-25 frontend file and route map
-  - src/pages/Signin.js owns post-login routing. Authorized hotel executive users should land on /hotel-management/main-dashboard?overall=summary&page=1.
+  - src/pages/Signin.js owns post-login routing. Hotel-side users should land on /hotel-management/main-dashboard?overall=summary&page=1, which is the combined Hotels Summary page.
   - src/HotelModule/AdminOverallSideMenu/AdminOverallSideMenu.js owns the overall side-menu order, active styling, and summary link behavior.
   - src/HotelModule/MainHotelDashboard.js wraps the overall dashboard, top navbar, side menu, dashboard body, and owner/super-admin ownerId context.
   - src/HotelModule/TheOverallStructure/page.js maps overall query values to overall components.
-  - src/HotelModule/TheOverallStructure/OverallSummary/OverallSummaryMain.js owns the executive-summary tabs, top-level summary filters, default reservation date range, and overview table.
-  - src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js owns reservation analytics charts, inventory/occupancy report UI, paid overview UI, chart expansion modals, date controls, and report query synchronization.
+  - src/HotelModule/TheOverallStructure/OverallSummary/OverallSummaryMain.js owns the executive-summary tabs, top-level summary filters, combined Hotels Summary composition, and the final overview table.
+  - src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js owns the embedded reservation-department report, reservation analytics charts, inventory/occupancy report UI, paid overview UI, chart expansion modals, scorecard/chart reservation drill-down modals, date controls, and report query synchronization.
   - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallReservationMain.js owns the overall reservation list and its table/filter/search behavior.
   - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations.js owns the pending-reservations table and should stay aligned with reservation-main list controls where applicable.
   - src/HotelModule/TheOverallStructure/OverallReservationsList/ReservationSummaryModal.js owns the Show Summary modal and Excel report export UI.
@@ -462,8 +501,11 @@ Final Production Readiness Notes
     - src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js
     - src/HotelModule/TheOverallStructure/overallShared.js
     - src/HotelModule/apiAdmin.js
-  - The score cards sit directly under the summary tabs.
-  - The summary table is centered as a table element. Centering the table must not mean center-aligning every unrelated page section.
+  - The combined Hotels Summary page is the first summary tab and the sign-in landing surface for hotel-side users.
+  - The former My Summary UI is no longer a separate tab or summaryTab=my-summary URL. It is embedded at the top of Hotels Summary and must not bypass backend hotel/agent scoping.
+  - The embedded reservation-department report is implemented in src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js as ExecutiveMySummaryReport. It fetches the executive reservation aggregate plus the scoped overall reservation rows for the current filters, then renders the screenshot-style layout and drill-down interactions.
+  - Score cards use metallic treatment; reservation scorecards, operation cards, ranking rows, and chart points open an underlying-reservations modal whose columns match the overall reservation list.
+  - The Hotels Summary table is centered as a table element and must remain the last section on the combined Hotels Summary page. Centering the table must not mean center-aligning every unrelated page section.
   - The table removed the old hotel path column.
   - Occupancy displays as occupied/totalRooms, for example 30/100.
   - Cleaning displays as a fraction based on room-map/housekeeping cleanliness state, not reservation count shortcuts.
@@ -486,11 +528,13 @@ Final Production Readiness Notes
 - Reservations overview report route
   - Route discussed:
     - /hotel-management/main-dashboard?overall=summary&page=1&summaryTab=reservations
+    - /hotel-management/main-dashboard?overall=summary&page=1
   - Chart behavior:
     - Arrival and departure charts should show date, reservation count, and total amount in hover tooltip.
     - Creation-date chart should use the same tooltip quality.
     - Tooltips must use the real category date, not Apex numeric point indexes.
     - Donut/status chart should use clear lifecycle colors and readable center/legend labels.
+    - Clicking a chart point/slice should fetch the matching overall reservations with the same filters, date field, and cancelled/no-show scope, then show those rows in the drill-down modal. Date chart clicks must send the exact UTC range for the selected Asia/Riyadh report day so modal rows add up to the chart number.
   - Export to Excel:
     - A UX-friendly Export to Excel action belongs near the top of the reservations overview.
     - The workbook should separate each desktop chart/table row into its own worksheet where feasible.

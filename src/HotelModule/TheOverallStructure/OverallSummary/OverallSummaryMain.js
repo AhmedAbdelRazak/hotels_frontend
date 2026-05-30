@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { DatePicker, Drawer, Input, Select, Switch } from "antd";
 import {
@@ -11,6 +11,7 @@ import moment from "moment-hijri";
 import styled from "styled-components";
 import { getOverallSummary } from "../../apiAdmin";
 import {
+	ExecutiveMySummaryReport,
 	ExecutiveInventoryReport,
 	ExecutivePaidReport,
 	ExecutiveReservationsReport,
@@ -20,8 +21,6 @@ import {
 	formatMoney,
 	getOverallText,
 	localizeStatus,
-	OverallCard,
-	OverallCards,
 	OverallPageShell,
 	OverallTableWrap,
 	singleHotelRoute,
@@ -39,7 +38,7 @@ const SUMMARY_TEXT = {
 		today: "Today",
 		yesterday: "Yesterday",
 		last7: "Last 7 Days",
-		overviewTab: "Hotel Summary",
+		overviewTab: "Hotels Summary",
 		reservationsTab: "Reservations Overview",
 		inventoryTab: "Hotels' Inventory",
 		paidTab: "Paid Reservations Overview",
@@ -267,14 +266,64 @@ const monthRangeFromSelection = (calendarType, months = [], year) => {
 
 const defaultSummaryCalendarType = () => "hijri";
 
+const defaultOverviewReportPeriod = () => {
+	const end = dayjs();
+	if (supportsHijriCalendar()) {
+		const currentHijri = moment();
+		const startHijri = currentHijri.clone().subtract(3, "iMonth").startOf("iMonth");
+		const months = [];
+		for (let index = 3; index >= 0; index -= 1) {
+			const month = currentHijri.clone().subtract(index, "iMonth");
+			if (month.iYear() === currentHijri.iYear()) months.push(month.iMonth());
+		}
+		return {
+			calendarType: "hijri",
+			reportYear: currentHijri.iYear(),
+			reportMonths: normalizeMonthIndexes(months),
+			dateFrom: dayjs(startHijri.toDate()).format("YYYY-MM-DD"),
+			dateTo: end.format("YYYY-MM-DD"),
+		};
+	}
+	const start = end.subtract(3, "month").startOf("month");
+	const months = [];
+	for (let index = 0; index < 4; index += 1) {
+		const month = start.add(index, "month");
+		if (month.year() === end.year()) months.push(month.month());
+	}
+	return {
+		calendarType: "gregorian",
+		reportYear: end.year(),
+		reportMonths: normalizeMonthIndexes(months),
+		dateFrom: start.format("YYYY-MM-DD"),
+		dateTo: end.format("YYYY-MM-DD"),
+	};
+};
+
+const hasExplicitSummaryPeriod = (query) =>
+	[
+		"dateFrom",
+		"dateTo",
+		"invStart",
+		"invEnd",
+		"invMonths",
+		"reportMonths",
+		"invHMonth",
+		"range",
+	].some((key) => query.has(key));
+
 const summaryReportFilterFromQuery = (query, tab) => {
 	const defaultHijri = currentHijriSelection();
+	const overviewDefaults =
+		tab === "overview" && !hasExplicitSummaryPeriod(query)
+			? defaultOverviewReportPeriod()
+			: {};
 	const calendarType =
 		["gregorian", "hijri"].includes(String(query.get("invCal") || "").toLowerCase())
 			? String(query.get("invCal")).toLowerCase()
-			: defaultSummaryCalendarType(tab);
+			: overviewDefaults.calendarType || defaultSummaryCalendarType(tab);
 	const year =
 		Number(query.get("invHYear")) ||
+		overviewDefaults.reportYear ||
 		(calendarType === "hijri" ? defaultHijri.year : dayjs().year());
 	const monthValues = parseSummaryList(
 		query.get("invMonths") || query.get("reportMonths") || query.get("invHMonth")
@@ -283,9 +332,17 @@ const summaryReportFilterFromQuery = (query, tab) => {
 		? defaultReservationDateRange()
 		: {};
 	const queryDateFrom =
-		query.get("dateFrom") || query.get("invStart") || reservationDefaults.dateFrom || "";
+		query.get("dateFrom") ||
+		query.get("invStart") ||
+		reservationDefaults.dateFrom ||
+		overviewDefaults.dateFrom ||
+		"";
 	const queryDateTo =
-		query.get("dateTo") || query.get("invEnd") || reservationDefaults.dateTo || "";
+		query.get("dateTo") ||
+		query.get("invEnd") ||
+		reservationDefaults.dateTo ||
+		overviewDefaults.dateTo ||
+		"";
 	return {
 		hotelId: parseSummaryList(query.get("hotelId") || query.get("invHotel")),
 		status: parseSummaryList(query.get("status")),
@@ -294,7 +351,9 @@ const summaryReportFilterFromQuery = (query, tab) => {
 		dateTo: queryDateTo,
 		includeCancelled: normalizeSummaryBool(query.get("includeCancelled")),
 		calendarType,
-		reportMonths: normalizeMonthIndexes(monthValues),
+		reportMonths: monthValues.length
+			? normalizeMonthIndexes(monthValues)
+			: overviewDefaults.reportMonths || [],
 		reportYear: year,
 	};
 };
@@ -305,7 +364,9 @@ const defaultReservationDateRange = () => ({
 });
 
 const shouldApplyReservationDateDefaults = (tab, query) =>
-	tab === "reservations" && !query.has("dateFrom") && !query.has("dateTo");
+	tab === "reservations" &&
+	!query.has("dateFrom") &&
+	!query.has("dateTo");
 
 const initialSummaryRange = (query, filters) => {
 	if (filters.dateFrom || filters.dateTo) return "custom";
@@ -323,20 +384,77 @@ const formatCleanlinessFraction = (row = {}) =>
 		? formatRoomsFraction(row.cleanRooms, row.dirtyRooms)
 		: "-";
 
+const summaryRoleNumbers = (user = {}) =>
+	[
+		user.role,
+		...(Array.isArray(user.roles) ? user.roles : []),
+	]
+		.map((role) => Number(role))
+		.filter((role) => Number.isFinite(role));
+
+const normalizeSummaryRoleKey = (value = "") =>
+	String(value || "")
+		.toLowerCase()
+		.replace(/[\s_-]+/g, "");
+
+const summaryRoleKeys = (user = {}) =>
+	[
+		user.roleDescription,
+		...(Array.isArray(user.roleDescriptions) ? user.roleDescriptions : []),
+	]
+		.map(normalizeSummaryRoleKey)
+		.filter(Boolean);
+
+const summaryAccessKeys = (user = {}) =>
+	(Array.isArray(user.accessTo) ? user.accessTo : [])
+		.map(normalizeSummaryRoleKey)
+		.filter(Boolean);
+
+const hasAnySummaryRoleKey = (keys = [], allowed = []) =>
+	allowed.some((role) => keys.includes(role));
+
+const isPureOrderTakingSummaryUser = (user = {}) => {
+	const roles = summaryRoleNumbers(user);
+	const roleKeys = summaryRoleKeys(user);
+	const accessKeys = summaryAccessKeys(user);
+	const orderTaking =
+		roles.includes(7000) ||
+		roleKeys.includes("ordertaker") ||
+		accessKeys.includes("ownreservations");
+	const broaderSummaryRole =
+		[1000, 2000, 6000, 8000, 10000].some((role) => roles.includes(role)) ||
+		hasAnySummaryRoleKey(roleKeys, [
+			"finance",
+			"hotelmanager",
+			"owner",
+			"reservationemployee",
+			"superadmin",
+			"systemadmin",
+		]);
+	return orderTaking && !broaderSummaryRole;
+};
+
 const getSummaryDrawerContainer = () =>
 	typeof document !== "undefined" ? document.body : false;
 
-const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
+const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
 	const labels = { ...common, ...SUMMARY_TEXT[isRTL ? "ar" : "en"] };
 	const filterLabels = SUMMARY_FILTER_TEXT[isRTL ? "ar" : "en"];
+	const agentSummaryOnly = isPureOrderTakingSummaryUser(user);
+	const resolveAllowedTab = useCallback((tab) => {
+		const normalized = normalizeSummaryTab(tab);
+		if (agentSummaryOnly) return "overview";
+		return normalized;
+	}, [agentSummaryOnly]);
 	const history = useHistory();
 	const location = useLocation();
 	const initialQuery = new URLSearchParams(location.search || "");
-	const initialTab = normalizeSummaryTab(
+	const normalizedInitialTab = normalizeSummaryTab(
 		initialQuery.get("summaryTab") || "overview"
 	);
+	const initialTab = resolveAllowedTab(normalizedInitialTab);
 	const initialReportFilters = summaryReportFilterFromQuery(
 		initialQuery,
 		initialTab
@@ -364,6 +482,8 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		() => queryParamsObject(location.search),
 		[location.search]
 	);
+	const compactFilterRow = activeTab === "overview" || activeTab === "reservations";
+	const showFilterSearch = activeTab !== "overview" && !compactFilterRow;
 
 	const params = useMemo(
 		() => ({
@@ -372,14 +492,16 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			range,
 			dateBy,
 			...filters,
-			search: activeTab === "overview" ? "" : filters.search,
+			search: showFilterSearch ? filters.search : "",
 		}),
-		[activeTab, dateBy, filters, ownerId, range, urlParams]
+		[dateBy, filters, ownerId, range, showFilterSearch, urlParams]
 	);
 
 	useEffect(() => {
 		const query = new URLSearchParams(location.search || "");
-		const nextTab = normalizeSummaryTab(query.get("summaryTab") || "overview");
+		const rawSummaryTab = query.get("summaryTab") || "";
+		const normalizedNextTab = normalizeSummaryTab(query.get("summaryTab") || "overview");
+		const nextTab = resolveAllowedTab(normalizedNextTab);
 		const nextReportFilters = summaryReportFilterFromQuery(query, nextTab);
 		setActiveTab(nextTab);
 		if (nextReportFilters.dateFrom || nextReportFilters.dateTo) {
@@ -399,7 +521,18 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				? previous
 				: nextReportFilters
 		);
-	}, [location.search]);
+		if (rawSummaryTab && nextTab === "overview") {
+			query.delete("summaryTab");
+			const cleanedSearch = query.toString();
+			const currentSearch = new URLSearchParams(location.search || "").toString();
+			if (cleanedSearch !== currentSearch) {
+				history.replace({
+					pathname: location.pathname,
+					search: cleanedSearch ? `?${cleanedSearch}` : "",
+				});
+			}
+		}
+	}, [history, location.pathname, location.search, resolveAllowedTab]);
 
 	useEffect(() => {
 		if (activeTab === "inventory") setFilterDrawerOpen(false);
@@ -445,9 +578,13 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const tabLabels = isRTL ? ARABIC_TAB_LABELS : labels;
 	const tabOptions = [
 		{ value: "overview", label: tabLabels.overviewTab },
-		{ value: "reservations", label: tabLabels.reservationsTab },
-		{ value: "inventory", label: tabLabels.inventoryTab },
-		{ value: "paid-overview", label: tabLabels.paidTab },
+		...(agentSummaryOnly
+			? []
+			: [
+					{ value: "reservations", label: tabLabels.reservationsTab },
+					{ value: "inventory", label: tabLabels.inventoryTab },
+					{ value: "paid-overview", label: tabLabels.paidTab },
+			  ]),
 	];
 	const monthOptions =
 		filters.calendarType === "hijri"
@@ -478,17 +615,28 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		filters.dateFrom && filters.dateTo
 			? [dayjs(filters.dateFrom), dayjs(filters.dateTo)]
 			: null;
+	const summarySelectPopupClassName = `overall-summary-filter-dropdown overall-filter-dropdown ${
+		isRTL ? "rtl" : "ltr"
+	}`;
+	const summarySelectPopupProps = (width = 220) => ({
+		popupClassName: summarySelectPopupClassName,
+		popupMatchSelectWidth: width,
+		placement: isRTL ? "bottomRight" : "bottomLeft",
+		getPopupContainer: () =>
+			typeof document !== "undefined" ? document.body : undefined,
+		listHeight: 280,
+	});
 	const activeFilterCount = useMemo(() => {
 		let count = 0;
 		if (parseSummaryList(filters.hotelId).length) count += 1;
 		if (filters.reportMonths?.length) count += 1;
 		else if (filters.dateFrom || filters.dateTo) count += 1;
 		if (parseSummaryList(filters.status).length) count += 1;
-		if (activeTab !== "overview" && filters.search) count += 1;
+		if (showFilterSearch && filters.search) count += 1;
 		if (filters.includeCancelled) count += 1;
 		if (dateBy !== "createdAt") count += 1;
 		return count;
-	}, [activeTab, dateBy, filters]);
+	}, [dateBy, filters, showFilterSearch]);
 	const filterButtonText = activeFilterCount
 		? `${filterLabels.reportFilters} (${activeFilterCount})`
 		: filterLabels.reportFilters;
@@ -498,7 +646,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	};
 	const syncReportQuery = (nextFilters = filters, nextDateBy = dateBy, nextTab = activeTab) => {
 		const query = new URLSearchParams(location.search || "");
-		const tab = normalizeSummaryTab(nextTab);
+		const tab = resolveAllowedTab(nextTab);
 		if (tab === "overview") query.delete("summaryTab");
 		else query.set("summaryTab", tab);
 
@@ -551,7 +699,9 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			query.set("invHMonth", nextFilters.reportMonths[0]);
 		}
 		if (nextFilters.status?.length) query.set("status", nextFilters.status.join(","));
-		if (nextFilters.search) query.set("search", nextFilters.search);
+		if (tab !== "overview" && tab !== "reservations" && nextFilters.search) {
+			query.set("search", nextFilters.search);
+		}
 		if (nextDateBy) query.set("dateBy", nextDateBy);
 		if (nextFilters.includeCancelled) {
 			query.set("includeCancelled", "true");
@@ -637,23 +787,25 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		syncReportQuery(nextFilters);
 	};
 	const resetFilters = () => {
+		const overviewDefaults =
+			activeTab === "overview" ? defaultOverviewReportPeriod() : {};
 		const defaultCalendar = defaultSummaryCalendarType(activeTab);
 		const defaults =
-			defaultCalendar === "hijri"
+			(overviewDefaults.calendarType || defaultCalendar) === "hijri"
 				? currentHijriSelection()
 				: { month: dayjs().month(), year: dayjs().year() };
 		const nextFilters = {
 			hotelId: [],
 			status: [],
 			search: "",
-			dateFrom: "",
-			dateTo: "",
+			dateFrom: overviewDefaults.dateFrom || "",
+			dateTo: overviewDefaults.dateTo || "",
 			includeCancelled: false,
-			calendarType: defaultCalendar,
-			reportMonths: [],
-			reportYear: defaults.year,
+			calendarType: overviewDefaults.calendarType || defaultCalendar,
+			reportMonths: overviewDefaults.reportMonths || [],
+			reportYear: overviewDefaults.reportYear || defaults.year,
 		};
-		setRange("all");
+		setRange(nextFilters.dateFrom || nextFilters.dateTo ? "custom" : "all");
 		setDateBy("createdAt");
 		setFilters(nextFilters);
 		syncReportQuery(nextFilters, "createdAt");
@@ -663,6 +815,34 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		setActiveTab(nextTab);
 		syncReportQuery(filters, dateBy, nextTab);
 	};
+	const refreshSummary = () => {
+		const requestId = summaryRequestRef.current + 1;
+		summaryRequestRef.current = requestId;
+		setLoading(true);
+		getOverallSummary(userId, token, params)
+			.then((data) => {
+				if (summaryRequestRef.current !== requestId) return;
+				setSummary(data && !data.error ? data : null);
+			})
+			.catch(() => {
+				if (summaryRequestRef.current === requestId) setSummary(null);
+			})
+			.finally(() => {
+				if (summaryRequestRef.current === requestId) {
+					setLoading(false);
+				}
+			});
+	};
+	const renderFilterActions = (className = "filter-actions") => (
+		<div className={className}>
+			<button type='button' onClick={refreshSummary}>
+				{labels.refresh}
+			</button>
+			<button type='button' className='secondary' onClick={resetFilters}>
+				{labels.reset}
+			</button>
+		</div>
+	);
 	const renderFilterPanelContent = () => (
 		<>
 			<div className='filter-title'>
@@ -679,6 +859,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						<HomeOutlined /> {filterLabels.selectedHotels}
 					</span>
 					<Select
+						{...summarySelectPopupProps(320)}
 						mode='multiple'
 						allowClear
 						maxTagCount='responsive'
@@ -698,6 +879,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						<CalendarOutlined /> {filterLabels.calendar}
 					</span>
 					<Select
+						{...summarySelectPopupProps(180)}
 						value={filters.calendarType}
 						onChange={updateCalendarType}
 						options={[
@@ -711,6 +893,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						<FilterOutlined /> {filterLabels.months}
 					</span>
 					<Select
+						{...summarySelectPopupProps(240)}
 						mode='multiple'
 						allowClear
 						maxTagCount='responsive'
@@ -723,6 +906,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				<label className='filter-control'>
 					<span>{filterLabels.year}</span>
 					<Select
+						{...summarySelectPopupProps(180)}
 						value={filters.reportYear}
 						onChange={updateReportYear}
 						options={yearOptions}
@@ -743,6 +927,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				<label className='filter-control'>
 					<span>{filterLabels.dateBy}</span>
 					<Select
+						{...summarySelectPopupProps(210)}
 						value={dateBy}
 						onChange={updateDateBy}
 						options={dateByOptions}
@@ -751,6 +936,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				<label className='filter-control status-control'>
 					<span>{filterLabels.status}</span>
 					<Select
+						{...summarySelectPopupProps(260)}
 						mode='multiple'
 						allowClear
 						maxTagCount='responsive'
@@ -760,7 +946,7 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						placeholder={filterLabels.operationalReservations}
 					/>
 				</label>
-				{activeTab !== "overview" && (
+				{showFilterSearch && (
 					<label className='filter-control search-control'>
 						<span>{labels.search}</span>
 						<Input
@@ -778,37 +964,13 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						onChange={(checked) => updateFilter("includeCancelled", checked)}
 					/>
 				</div>
+				{activeTab !== "overview" &&
+					compactFilterRow &&
+					renderFilterActions("filter-actions compact-filter-actions")}
 			</div>
-			{activeTab !== "overview" && (
-				<div className='filter-actions'>
-					<button
-						type='button'
-						onClick={() => {
-							const requestId = summaryRequestRef.current + 1;
-							summaryRequestRef.current = requestId;
-							setLoading(true);
-							getOverallSummary(userId, token, params)
-								.then((data) => {
-									if (summaryRequestRef.current !== requestId) return;
-									setSummary(data && !data.error ? data : null);
-								})
-								.catch(() => {
-									if (summaryRequestRef.current === requestId) setSummary(null);
-								})
-								.finally(() => {
-									if (summaryRequestRef.current === requestId) {
-										setLoading(false);
-									}
-								});
-						}}
-					>
-						{labels.refresh}
-					</button>
-					<button type='button' className='secondary' onClick={resetFilters}>
-						{labels.reset}
-					</button>
-				</div>
-			)}
+			{activeTab !== "overview" &&
+				!compactFilterRow &&
+				renderFilterActions()}
 		</>
 	);
 
@@ -827,40 +989,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				))}
 			</ExecutiveTabs>
 
-			{activeTab === "overview" && (
-				<SummaryScoreCards>
-					<OverallCard>
-						<strong>{loading ? "..." : Number(stats.totalHotels || 0)}</strong>
-						<span>{labels.hotels}</span>
-					</OverallCard>
-					<OverallCard>
-						<strong>{loading ? "..." : Number(stats.totalRooms || 0)}</strong>
-						<span title={labels.totalRoomsHint}>{labels.totalRooms}</span>
-					</OverallCard>
-					<OverallCard>
-						<strong>{loading ? "..." : Number(stats.availableRooms || 0)}</strong>
-						<span title={labels.availableHint}>
-							{labels.minAvailableRooms || labels.availableRooms}
-						</span>
-					</OverallCard>
-					<OverallCard>
-						<strong>{loading ? "..." : Number(stats.totalReservations || 0)}</strong>
-						<span>{labels.reservations}</span>
-					</OverallCard>
-					<OverallCard>
-						<strong>{loading ? "..." : formatMoney(stats.totalAmount)}</strong>
-						<span>{labels.totalAmount}</span>
-					</OverallCard>
-					<OverallCard>
-						<strong>{loading ? "..." : Number(stats.pendingReservations || 0)}</strong>
-						<span>{labels.pending}</span>
-					</OverallCard>
-				</SummaryScoreCards>
-			)}
-
 			{activeTab !== "inventory" && (
 				<>
-					<MobileFilterBar $active={activeFilterCount > 0}>
+					<MobileFilterBar
+						$active={activeFilterCount > 0}
+					>
 						<button
 							type='button'
 							aria-pressed={activeFilterCount > 0}
@@ -870,7 +1003,11 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 							<span>{filterButtonText}</span>
 						</button>
 					</MobileFilterBar>
-					<ExecutiveFilterPanel $isRTL={isRTL} className='desktop-filter-panel'>
+					<ExecutiveFilterPanel
+						$isRTL={isRTL}
+						$compactRow={compactFilterRow}
+						className='desktop-filter-panel'
+					>
 						{renderFilterPanelContent()}
 					</ExecutiveFilterPanel>
 					<Drawer
@@ -888,6 +1025,16 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						</DrawerFilterPanel>
 					</Drawer>
 				</>
+			)}
+
+			{activeTab === "overview" && (
+				<ExecutiveMySummaryReport
+					active
+					userId={userId}
+					token={token}
+					params={params}
+					chosenLanguage={chosenLanguage}
+				/>
 			)}
 
 			{activeTab === "overview" && (
@@ -993,7 +1140,6 @@ const OverallSummaryMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				</table>
 			</SummaryTableWrap>
 			)}
-
 			{activeTab === "reservations" && (
 				<ExecutiveReservationsReport
 					active
@@ -1213,35 +1359,8 @@ const SummaryTableWrap = styled(OverallTableWrap)`
 	}
 `;
 
-const SummaryScoreCards = styled(OverallCards)`
-	grid-template-columns: repeat(6, minmax(112px, 1fr));
-	gap: 0.55rem;
-
-	${OverallCard} {
-		min-height: 72px;
-		padding: 0.62rem 0.68rem;
-	}
-
-	${OverallCard} strong {
-		font-size: 1.18rem;
-	}
-
-	${OverallCard} span {
-		font-size: 0.7rem;
-		line-height: 1.25;
-	}
-
-	@media (max-width: 1280px) {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-	}
-
-	@media (max-width: 560px) {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-`;
-
 const MobileFilterBar = styled.div`
-	display: none;
+	display: ${(props) => (props.$alwaysVisible ? "flex" : "none")};
 
 	button {
 		width: 100%;
@@ -1265,7 +1384,7 @@ const MobileFilterBar = styled.div`
 				: "0 8px 18px rgba(16, 32, 51, 0.08)"};
 	}
 
-	@media (max-width: 640px) {
+	@media (max-width: 980px) {
 		display: flex;
 	}
 `;
@@ -1408,6 +1527,107 @@ const ExecutiveFilterPanel = styled.section`
 		box-shadow: none;
 	}
 
+	${(props) =>
+		props.$compactRow
+			? `
+		gap: 0;
+		padding: 9px 10px;
+		overflow: hidden;
+
+		.filter-title {
+			display: none;
+		}
+
+		.filter-grid {
+			display: flex;
+			align-items: end;
+			gap: 8px;
+			min-width: 0;
+			overflow-x: auto;
+			padding-bottom: 2px;
+			scrollbar-width: thin;
+		}
+
+		.filter-control {
+			flex: 0 0 auto;
+			gap: 4px;
+		}
+
+		.hotel-control,
+		.wide-control,
+		.search-control {
+			grid-column: auto;
+		}
+
+		.hotel-control {
+			width: 198px;
+		}
+
+		.months-control {
+			width: 204px;
+		}
+
+		.wide-control {
+			width: 276px;
+		}
+
+		.status-control {
+			width: 152px;
+		}
+
+		.filter-control:not(.hotel-control):not(.months-control):not(.wide-control):not(.status-control):not(.switch-control) {
+			width: 112px;
+		}
+
+		.filter-control > span {
+			font-size: 0.68rem;
+			white-space: nowrap;
+		}
+
+		.filter-control .ant-select,
+		.filter-control .ant-picker,
+		.filter-control .ant-input-affix-wrapper,
+		.filter-control .ant-input {
+			min-height: 32px;
+		}
+
+		.filter-control .ant-select-selector,
+		.filter-control .ant-picker {
+			min-height: 32px !important;
+			border-radius: 7px !important;
+		}
+
+		.wide-control .ant-picker {
+			min-width: 0;
+		}
+
+		.switch-control {
+			width: 154px;
+			min-height: 32px;
+			padding: 4px 8px;
+			border-radius: 7px;
+		}
+
+		.compact-filter-actions {
+			flex: 0 0 auto;
+			display: flex;
+			align-items: end;
+			justify-content: flex-start;
+			gap: 6px;
+			align-self: end;
+		}
+
+		.compact-filter-actions button {
+			min-width: 72px;
+			min-height: 32px;
+			padding: 0 10px;
+			border-radius: 7px;
+			font-size: 0.75rem;
+			box-shadow: 0 7px 14px rgba(80, 23, 96, 0.16);
+		}
+	`
+			: ""}
+
 	@media (max-width: 1180px) {
 		.filter-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1419,7 +1639,7 @@ const ExecutiveFilterPanel = styled.section`
 		}
 	}
 
-	@media (max-width: 640px) {
+	@media (max-width: 980px) {
 		padding: 10px;
 
 		&.desktop-filter-panel {

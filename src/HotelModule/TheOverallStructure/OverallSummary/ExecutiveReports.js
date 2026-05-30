@@ -1,9 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "react-apexcharts";
-import { Alert, Button, message, Modal, Select, Spin } from "antd";
-import { DownloadOutlined, FullscreenOutlined } from "@ant-design/icons";
+import { Alert, Button, message, Modal, Pagination, Select, Spin } from "antd";
+import {
+	BankOutlined,
+	BarChartOutlined,
+	CalendarOutlined,
+	CarryOutOutlined,
+	CheckCircleOutlined,
+	ClockCircleOutlined,
+	DollarCircleOutlined,
+	DownloadOutlined,
+	FieldTimeOutlined,
+	FilterOutlined,
+	FullscreenOutlined,
+	HistoryOutlined,
+	LoginOutlined,
+	LogoutOutlined,
+	PlusCircleOutlined,
+	ShareAltOutlined,
+	TableOutlined,
+	WarningOutlined,
+} from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import dayjs from "dayjs";
 import moment from "moment-hijri";
 import {
@@ -11,19 +30,28 @@ import {
 	getOverallExecutiveInventoryReport,
 	getOverallExecutivePaidReport,
 	getOverallExecutiveReservationsReport,
+	getOverallReservations,
 	trackOverallReservationSummaryExport,
 } from "../../apiAdmin";
 import HotelInventory from "../../HotelReports/HotelInventory";
+import OverallReservationDetailsModal from "../OverallReservationsList/OverallReservationDetailsModal";
 import {
 	formatDate,
 	formatMoney,
+	getReservationNights,
+	getReservationPricePerDay,
 	localizeStatus,
+	normalizeId,
 	OverallCard,
 	OverallCards,
 	OverallTableWrap,
 	statusTone,
+	StatusPill,
+	TableTooltipText,
 	titleCase,
 } from "../overallShared";
+
+const SUMMARY_MODAL_Z_INDEX = 11000;
 
 const paidBreakdownLabels = {
 	paid_online_via_link: "Online Link",
@@ -84,8 +112,14 @@ const reportText = {
 		guest: "Guest",
 		checkIn: "Check-in",
 		checkOut: "Checkout",
+		pricePerDay: "Price / Day",
 		breakdown: "Paid Breakdown",
 		paymentMethods: "Payment Methods",
+		payment: "Payment",
+		booked: "Booked",
+		nights: "Nights",
+		total: "Total",
+		moreDetails: "Details",
 		prev: "Prev",
 		next: "Next",
 		page: "Page",
@@ -111,6 +145,12 @@ const reportText = {
 		statusCreation: "Status / Creation",
 		hotelsSources: "Hotels / Sources",
 		capturedPayments: "Captured Payments",
+		underlyingReservations: "Underlying Reservations",
+		rowsShown: "Rows shown",
+		openInReservationList: "Open in reservation list",
+		scorecardHint: "Click to view the reservations behind this number.",
+		chartHint: "Click a chart point to view its reservations.",
+		noRowsForSelection: "No reservations found for this selection.",
 	},
 	ar: {
 		refresh: "تحديث",
@@ -151,6 +191,12 @@ const reportText = {
 		guest: "الضيف",
 		checkIn: "الوصول",
 		checkOut: "المغادرة",
+		pricePerDay: "\u0633\u0639\u0631 \u0627\u0644\u0644\u064a\u0644\u0629",
+		payment: "\u0627\u0644\u062f\u0641\u0639",
+		booked: "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u062d\u062c\u0632",
+		nights: "\u0644\u064a\u0627\u0644\u064a",
+		total: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+		moreDetails: "\u062a\u0641\u0627\u0635\u064a\u0644",
 		breakdown: "تفاصيل المدفوعات",
 		paymentMethods: "طرق الدفع",
 		prev: "السابق",
@@ -186,6 +232,18 @@ const reportText = {
 			"\u0627\u0644\u0641\u0646\u0627\u062f\u0642 / \u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u062d\u062c\u0632",
 		capturedPayments:
 			"\u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a \u0627\u0644\u0645\u062d\u0635\u0644\u0629",
+		underlyingReservations:
+			"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0643\u0648\u0646\u0629 \u0644\u0644\u0631\u0642\u0645",
+		rowsShown:
+			"\u0627\u0644\u0635\u0641\u0648\u0641 \u0627\u0644\u0645\u0639\u0631\u0648\u0636\u0629",
+		openInReservationList:
+			"\u0641\u062a\u062d \u0641\u064a \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		scorecardHint:
+			"\u0627\u0636\u063a\u0637 \u0644\u0639\u0631\u0636 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u062e\u0644\u0641 \u0647\u0630\u0627 \u0627\u0644\u0631\u0642\u0645.",
+		chartHint:
+			"\u0627\u0636\u063a\u0637 \u0639\u0644\u0649 \u0646\u0642\u0637\u0629 \u0641\u064a \u0627\u0644\u0631\u0633\u0645 \u0644\u0639\u0631\u0636 \u062d\u062c\u0648\u0632\u0627\u062a\u0647\u0627.",
+		noRowsForSelection:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u062c\u0648\u0632\u0627\u062a \u0644\u0647\u0630\u0627 \u0627\u0644\u0627\u062e\u062a\u064a\u0627\u0631.",
 	},
 };
 
@@ -338,6 +396,26 @@ const resolveChartCategory = (value = "", options = {}) => {
 	return value;
 };
 
+const resolveTooltipCategory = ({ row = {}, w, seriesIndex, dataPointIndex }) => {
+	const directRowDate = row.groupKey || row.date || row.day || row._id;
+	if (directRowDate) return directRowDate;
+	const categories = chartCategoriesFromOptions({ w });
+	if (categories[dataPointIndex]) return categories[dataPointIndex];
+	const globalCandidates = [
+		w?.globals?.categoryLabels?.[dataPointIndex],
+		w?.globals?.labels?.[dataPointIndex],
+		w?.globals?.timescaleLabels?.[dataPointIndex],
+		w?.globals?.seriesX?.[seriesIndex]?.[dataPointIndex],
+	];
+	const resolvedGlobal = globalCandidates.find(
+		(value) => value !== undefined && value !== null && value !== ""
+	);
+	if (resolvedGlobal) {
+		return resolveChartCategory(resolvedGlobal, { w, dataPointIndex });
+	}
+	return resolveChartCategory(dataPointIndex, { w, dataPointIndex });
+};
+
 const formatChartDateLabel = (value = "", options = {}) => {
 	const raw = String(value || "");
 	const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -348,34 +426,63 @@ const formatChartDateLabel = (value = "", options = {}) => {
 		: raw;
 };
 
+const riyadhDayUtcRange = (value = "") => {
+	const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (!match) return {};
+	const [, year, month, day] = match.map(Number);
+	const startMs = Date.UTC(year, month - 1, day) - 3 * 60 * 60 * 1000;
+	return {
+		dateFrom: new Date(startMs).toISOString(),
+		dateTo: new Date(startMs + 24 * 60 * 60 * 1000 - 1).toISOString(),
+	};
+};
+
 const chartLabelFormatter = () => (value, _timestamp, options) =>
 	formatChartDateLabel(resolveChartCategory(value, options));
 
-const chartTooltip = ({ labels, isRTL, rows = [], countLabel = "" }) => ({
+const chartTooltip = ({
+	labels,
+	isRTL,
+	rows = [],
+	countLabel = "",
+	showAmount = true,
+}) => ({
 	custom: ({ series, seriesIndex, dataPointIndex, w }) => {
-		const categories = w?.config?.xaxis?.categories || [];
-		const rawDate = categories[dataPointIndex] || "";
-		const title = formatChartDateLabel(rawDate, { full: true });
 		const seriesName = w?.config?.series?.[seriesIndex]?.name || labels.count;
 		const row = Array.isArray(rows) ? rows[dataPointIndex] || {} : {};
+		const rawDate = resolveTooltipCategory({
+			row,
+			w,
+			seriesIndex,
+			dataPointIndex,
+		});
+		const title = formatChartDateLabel(rawDate, { full: true }) || "-";
 		const value = toNumber(
 			row.reservationsCount ?? series?.[seriesIndex]?.[dataPointIndex] ?? 0
 		);
 		const amount = currencyNumber(row.total_amount);
 		const color = w?.globals?.colors?.[seriesIndex] || "#24547d";
 		const valueLabel = countLabel || seriesName || labels.reservations;
-		return `
-			<div class="executive-chart-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
-				<div class="tooltip-date">${escapeHtml(title)}</div>
-				<div class="tooltip-row">
-					<span class="tooltip-dot" style="background:${color}"></span>
-					<span>${escapeHtml(valueLabel)}</span>
-					<strong>${escapeHtml(formatMoney(value))}</strong>
-				</div>
+		const amountRow = showAmount
+			? `
 				<div class="tooltip-row tooltip-amount">
 					<span>${escapeHtml(labels.totalAmount)}</span>
 					<strong>${escapeHtml(money(amount, labels))}</strong>
 				</div>
+			`
+			: "";
+		return `
+			<div class="executive-chart-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
+				<div class="tooltip-date">
+					<span>${escapeHtml(labels.date || "Date")}</span>
+					<strong>${escapeHtml(title)}</strong>
+				</div>
+				<div class="tooltip-row tooltip-count">
+					<span class="tooltip-dot" style="background:${color}"></span>
+					<span>${escapeHtml(valueLabel)}</span>
+					<strong>${escapeHtml(formatMoney(value))}</strong>
+				</div>
+				${amountRow}
 			</div>
 		`;
 	},
@@ -452,10 +559,25 @@ const barOptions = ({
 	expanded = false,
 	rows = [],
 	countLabel = "",
+	showAmount = true,
+	showAllXLabels = false,
+	onPointClick,
 }) => ({
 	chart: {
 		toolbar: { show: false },
 		fontFamily: chartFont(isRTL),
+		events: {
+			dataPointSelection: (_event, _chartContext, config) => {
+				const index = Number(config?.dataPointIndex);
+				if (
+					typeof onPointClick === "function" &&
+					Number.isInteger(index) &&
+					index >= 0
+				) {
+					onPointClick(rows[index] || {}, index, config);
+				}
+			},
+		},
 	},
 	colors,
 	dataLabels: { enabled: false },
@@ -463,24 +585,26 @@ const barOptions = ({
 	xaxis: {
 		type: "category",
 		categories,
-		tickAmount: chartTickAmount(categories, expanded),
+		tickAmount: showAllXLabels
+			? Math.max((categories || []).length - 1, 1)
+			: chartTickAmount(categories, expanded),
 		tickPlacement: "on",
 		axisBorder: { color: "#dbe6f3" },
 		axisTicks: { color: "#dbe6f3" },
 		labels: {
 			show: true,
-			rotate: expanded ? -35 : -25,
+			rotate: showAllXLabels ? -42 : expanded ? -35 : -25,
 			rotateAlways: true,
 			trim: false,
-			hideOverlappingLabels: true,
-			showDuplicates: false,
-			minHeight: expanded ? 76 : 58,
-			maxHeight: expanded ? 96 : 72,
+			hideOverlappingLabels: !showAllXLabels,
+			showDuplicates: showAllXLabels,
+			minHeight: showAllXLabels ? 76 : expanded ? 76 : 58,
+			maxHeight: showAllXLabels ? 104 : expanded ? 96 : 72,
 			formatter: chartLabelFormatter(),
 			style: {
 				fontWeight: 850,
 				colors: "#334155",
-				fontSize: expanded ? "12px" : "11px",
+				fontSize: showAllXLabels ? "9.5px" : expanded ? "12px" : "11px",
 			},
 		},
 		tooltip: {
@@ -498,7 +622,7 @@ const barOptions = ({
 		},
 	},
 	tooltip: {
-		...chartTooltip({ labels, isRTL, rows, countLabel }),
+		...chartTooltip({ labels, isRTL, rows, countLabel, showAmount }),
 		x: {
 			formatter: (value, options) =>
 				formatChartDateLabel(resolveChartCategory(value, options), {
@@ -540,10 +664,29 @@ const lineOptions = (config) => {
 	};
 };
 
-const donutOptions = ({ labels: sliceLabels, colors, text, isRTL, rows = [] }) => ({
+const donutOptions = ({
+	labels: sliceLabels,
+	colors,
+	text,
+	isRTL,
+	rows = [],
+	onPointClick,
+}) => ({
 	chart: {
 		toolbar: { show: false },
 		fontFamily: chartFont(isRTL),
+		events: {
+			dataPointSelection: (_event, _chartContext, config) => {
+				const index = Number(config?.dataPointIndex);
+				if (
+					typeof onPointClick === "function" &&
+					Number.isInteger(index) &&
+					index >= 0
+				) {
+					onPointClick(rows[index] || {}, index, config);
+				}
+			},
+		},
 	},
 	labels: sliceLabels,
 	colors,
@@ -631,7 +774,10 @@ const donutOptions = ({ labels: sliceLabels, colors, text, isRTL, rows = [] }) =
 			const color = colors?.[seriesIndex] || "#24547d";
 			return `
 				<div class="executive-chart-tooltip donut-tooltip" dir="${isRTL ? "rtl" : "ltr"}">
-					<div class="tooltip-date">${escapeHtml(label)}</div>
+					<div class="tooltip-date">
+						<span>${escapeHtml(text.status || "Status")}</span>
+						<strong>${escapeHtml(label)}</strong>
+					</div>
 					<div class="tooltip-row">
 						<span class="tooltip-dot" style="background:${color}"></span>
 						<span>${escapeHtml(text.reservations)}</span>
@@ -783,8 +929,17 @@ const ExpandableChartPanel = ({ title, labels, renderChart }) => {
 				footer={null}
 				centered
 				destroyOnClose
+				getContainer={() => document.body}
+				zIndex={SUMMARY_MODAL_Z_INDEX}
+				rootClassName='overall-summary-modal-root'
+				wrapClassName='overall-summary-chart-modal-wrap'
+				className='overall-summary-chart-modal'
 				width='min(1180px, calc(100vw - 24px))'
 				title={title}
+				maskStyle={{ zIndex: SUMMARY_MODAL_Z_INDEX - 1 }}
+				styles={{
+					mask: { zIndex: SUMMARY_MODAL_Z_INDEX - 1 },
+				}}
 			>
 				<ExpandedChartWrap>{renderChart(560, { expanded: true })}</ExpandedChartWrap>
 			</Modal>
@@ -833,6 +988,293 @@ const ReportTable = ({ columns, rows, emptyText, className = "" }) => (
 	</OverallTableWrap>
 );
 
+const buildDrilldownExportRows = ({
+	rows = [],
+	labels = {},
+	chosenLanguage,
+}) =>
+	(Array.isArray(rows) ? rows : []).map((reservation, index) => ({
+		[labels.index || "#"]: index + 1,
+		[labels.hotel]: titleCase(reservation.hotelName || "-"),
+		[labels.confirmation]: reservation.confirmation_number || "",
+		[labels.guest]: reservation.customer_details?.name || "",
+		[labels.source]: reservation.booking_source || "",
+		[labels.status]: localizeStatus(
+			reservation.reservation_status || reservation.state,
+			chosenLanguage
+		),
+		[labels.payment]: reservation.payment || "",
+		[labels.booked]: formatDate(
+			reservation.booked_at || reservation.createdAt,
+			chosenLanguage
+		),
+		[labels.checkIn]: formatDate(reservation.checkin_date, chosenLanguage),
+		[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
+		[labels.nights]: Number(getReservationNights(reservation) || 0),
+		[labels.pricePerDay]: currencyNumber(
+			getReservationPricePerDay(reservation)
+		),
+		[labels.total]: currencyNumber(reservation.total_amount),
+		[labels.paidAmount]: currencyNumber(reservation.paid_amount),
+	}));
+
+const ReservationDrilldownModal = ({
+	open,
+	title,
+	rows = [],
+	loading,
+	error,
+	labels,
+	isRTL,
+	chosenLanguage,
+	onClose,
+	onOpenReservation,
+}) => {
+	const dateCell = (value) => formatDate(value, chosenLanguage, { max: 16 }) || "-";
+	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(15);
+	const [exporting, setExporting] = useState(false);
+	const safeRowsForModal = useMemo(
+		() => (Array.isArray(rows) ? rows : []),
+		[rows]
+	);
+	const totalRows = safeRowsForModal.length;
+	const pagedRows = useMemo(() => {
+		const start = (page - 1) * pageSize;
+		return safeRowsForModal.slice(start, start + pageSize);
+	}, [page, pageSize, safeRowsForModal]);
+	const pageStartNumber = totalRows ? (page - 1) * pageSize + 1 : 0;
+
+	useEffect(() => {
+		if (open) setPage(1);
+	}, [open, title]);
+
+	useEffect(() => {
+		const maxPage = Math.max(1, Math.ceil(totalRows / pageSize));
+		if (page > maxPage) setPage(maxPage);
+	}, [page, pageSize, totalRows]);
+
+	const handleExportRows = useCallback(async () => {
+		if (!safeRowsForModal.length) {
+			message.info(labels.exportNoData);
+			return;
+		}
+		setExporting(true);
+		try {
+			const XLSX = await loadStyledXlsx();
+			const workbook = XLSX.utils.book_new();
+			appendJsonSheet(
+				XLSX,
+				workbook,
+				buildDrilldownExportRows({
+					rows: safeRowsForModal,
+					labels,
+					chosenLanguage,
+				}),
+				labels.underlyingReservations,
+				labels.noRowsForSelection || labels.noData
+			);
+			XLSX.writeFile(
+				workbook,
+				`${safeFileSegment(title || labels.underlyingReservations)}-${dayjs().format(
+					"YYYY-MM-DD-HHmm"
+				)}.xlsx`,
+				{ compression: true }
+			);
+			message.success(labels.exportSuccess);
+		} catch (error) {
+			message.error(labels.exportError);
+		} finally {
+			setExporting(false);
+		}
+	}, [chosenLanguage, labels, safeRowsForModal, title]);
+
+	return (
+		<>
+			<SummaryModalLayerStyle />
+			<Modal
+				open={open}
+				onCancel={onClose}
+				footer={null}
+				centered
+				destroyOnClose
+				getContainer={() => document.body}
+				zIndex={SUMMARY_MODAL_Z_INDEX}
+				rootClassName='overall-summary-modal-root'
+				wrapClassName='overall-summary-drilldown-modal-wrap'
+				className='overall-summary-drilldown-modal'
+				width='min(1560px, calc(100vw - 16px))'
+				title={
+					<DrilldownTitle dir={isRTL ? "rtl" : "ltr"}>
+						<strong>
+							<TableOutlined aria-hidden='true' />
+							<span>{title || labels.underlyingReservations}</span>
+						</strong>
+						<span className='drilldown-title-count'>
+							{labels.rowsShown}: {totalRows.toLocaleString("en-US")}
+						</span>
+					</DrilldownTitle>
+				}
+				maskStyle={{ zIndex: SUMMARY_MODAL_Z_INDEX - 1 }}
+				styles={{
+					mask: { zIndex: SUMMARY_MODAL_Z_INDEX - 1 },
+				}}
+			>
+				<DrilldownModalBody $isRTL={isRTL}>
+					{loading ? (
+						<div className='drilldown-loading'>
+							<Spin />
+							<span>{labels.loading}</span>
+						</div>
+					) : error ? (
+						<Alert type='error' showIcon message={error} />
+					) : (
+						<>
+							<div className='drilldown-toolbar'>
+								<div className='drilldown-count'>
+									<strong>{totalRows.toLocaleString("en-US")}</strong>
+									<span>{labels.underlyingReservations}</span>
+								</div>
+								<Button
+									type='primary'
+									icon={<DownloadOutlined />}
+									loading={exporting}
+									disabled={!totalRows}
+									onClick={handleExportRows}
+									className='drilldown-export-btn'
+								>
+									{exporting ? labels.exportingExcel : labels.exportExcel}
+								</Button>
+							</div>
+							<OverallTableWrap>
+								<table className='reservation-list-table reservation-main-table'>
+								<thead>
+									<tr>
+										<th>#</th>
+										<th>{labels.hotel}</th>
+										<th>{labels.confirmation}</th>
+										<th>{labels.guest}</th>
+										<th>{labels.source}</th>
+										<th>{labels.status}</th>
+										<th>{labels.payment}</th>
+										<th>{labels.booked}</th>
+										<th>{labels.checkIn}</th>
+										<th>{labels.checkOut}</th>
+										<th>{labels.nights}</th>
+										<th>{labels.pricePerDay}</th>
+										<th>{labels.total}</th>
+										<th>{labels.paidAmount}</th>
+										<th>{labels.moreDetails}</th>
+									</tr>
+								</thead>
+								<tbody>
+									{pagedRows.length ? (
+										pagedRows.map((reservation, index) => (
+											<tr key={normalizeId(reservation._id) || index}>
+												<td>{pageStartNumber + index}</td>
+												<td className='hotel-cell'>
+													<TableTooltipText
+														value={titleCase(reservation.hotelName || "-")}
+														className='table-truncate'
+													/>
+												</td>
+												<td>{reservation.confirmation_number || "-"}</td>
+												<td className='guest-cell'>
+													<TableTooltipText
+														value={reservation.customer_details?.name || "-"}
+														className='table-truncate'
+													/>
+												</td>
+												<td className='source-cell'>
+													<TableTooltipText
+														value={reservation.booking_source || "-"}
+														className='table-truncate'
+													/>
+												</td>
+												<td>
+													<StatusPill
+														$tone={statusTone(reservation.reservation_status)}
+													>
+														<TableTooltipText
+															value={localizeStatus(
+																reservation.reservation_status,
+																chosenLanguage
+															)}
+														/>
+													</StatusPill>
+												</td>
+												<td>
+													<TableTooltipText value={reservation.payment || "-"} />
+												</td>
+												<td className='date-cell'>
+													{dateCell(reservation.booked_at || reservation.createdAt)}
+												</td>
+												<td className='date-cell'>
+													{dateCell(reservation.checkin_date)}
+												</td>
+												<td className='date-cell'>
+													{dateCell(reservation.checkout_date)}
+												</td>
+												<td className='amount-cell'>
+													{getReservationNights(reservation)}
+												</td>
+												<td className='amount-cell'>
+													{money(getReservationPricePerDay(reservation), labels)}
+												</td>
+												<td className='amount-cell'>
+													{money(reservation.total_amount, labels)}
+												</td>
+												<td className='amount-cell'>
+													{money(reservation.paid_amount, labels)}
+												</td>
+												<td>
+													<button
+														type='button'
+														className='link-btn'
+														onClick={() => onOpenReservation(reservation)}
+													>
+														{labels.moreDetails}
+													</button>
+												</td>
+											</tr>
+										))
+									) : (
+										<tr>
+											<td colSpan='15'>{labels.noRowsForSelection}</td>
+										</tr>
+									)}
+								</tbody>
+							</table>
+						</OverallTableWrap>
+						{totalRows > 0 && (
+							<div className='drilldown-pagination'>
+								<Pagination
+									current={page}
+									pageSize={pageSize}
+									total={totalRows}
+									showSizeChanger
+									pageSizeOptions={["10", "15", "25", "50", "100"]}
+									size='small'
+									showLessItems
+									onChange={(nextPage, nextSize) => {
+										setPage(nextPage);
+										setPageSize(nextSize);
+									}}
+									onShowSizeChange={(_current, nextSize) => {
+										setPage(1);
+										setPageSize(nextSize);
+									}}
+								/>
+							</div>
+						)}
+					</>
+				)}
+				</DrilldownModalBody>
+			</Modal>
+		</>
+	);
+};
+
 const LoadingBlock = ({ loading, error, labels, children }) => {
 	if (loading) {
 		return (
@@ -844,6 +1286,1250 @@ const LoadingBlock = ({ loading, error, labels, children }) => {
 	}
 	if (error) return <Alert type='error' showIcon message={error} />;
 	return children;
+};
+
+const SummaryModalLayerStyle = createGlobalStyle`
+	.overall-summary-modal-root .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.62) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${SUMMARY_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.overall-summary-modal-root .ant-modal-wrap,
+	.overall-summary-modal-root .ant-modal,
+	.overall-summary-drilldown-modal-wrap,
+	.overall-summary-chart-modal-wrap {
+		z-index: ${SUMMARY_MODAL_Z_INDEX} !important;
+	}
+
+	.overall-summary-drilldown-modal,
+	.overall-summary-chart-modal {
+		z-index: ${SUMMARY_MODAL_Z_INDEX} !important;
+	}
+`;
+
+const mySummaryText = {
+	en: {
+		title: "Reservation Department Report",
+		subtitle: "Main report",
+		filterHint: "Use the filters button above to change hotels, dates, status, and search.",
+		allPendingTitle: "All Reservation Requests",
+		pendingRequests: "Pending Reservation Requests",
+		show: "View",
+		allReservationCount: "All Reservation Count",
+		totalAmount: "Total Amount",
+		nights: "Nights",
+		hotels: "Hotels",
+		sources: "Sources",
+		newToday: "New Reservations Today",
+		newReservations: "New Reservations",
+		todayOperation: "Today's Operation",
+		arrivals: "Arrivals",
+		departures: "Departures",
+		checkedIn: "Checked In",
+		noShow: "No Show",
+		futureOperation: "Group Future Operation",
+		arrivalsByDay: "Arrivals by day",
+		departuresByDay: "Departures by day",
+		checkInReservations: "Arrival reservations",
+		checkOutReservations: "Departure reservations",
+		checkIn: "Arrival",
+		checkOut: "Departure",
+		occupancyToday: "Occupancy Today",
+		booked: "Booked",
+		available: "Available",
+		blocked: "Blocked",
+		today: "Today",
+		yesterday: "Yesterday",
+		thisMonth: "This Month",
+		all: "All",
+		topHotel: "Top Hotel",
+		topSource: "Top Booking Source",
+		rankingPeriod: "Ranking Period",
+		new: "New",
+		arrival: "Arrival",
+		departure: "Departure",
+		reservationUnit: "reservations",
+		noRankingData: "No ranking data for this selection.",
+	},
+	ar: {
+		title: "\u062a\u0642\u0631\u064a\u0631 \u0642\u0633\u0645 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		subtitle: "\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0631\u0626\u064a\u0633\u064a",
+		filterHint:
+			"\u0627\u0633\u062a\u062e\u062f\u0645 \u0632\u0631 \u0627\u0644\u0641\u0644\u0627\u062a\u0631 \u0623\u0639\u0644\u0627\u0647 \u0644\u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0648\u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0648\u0627\u0644\u062d\u0627\u0644\u0629 \u0648\u0627\u0644\u0628\u062d\u062b.",
+		allPendingTitle: "\u0643\u0644 \u0637\u0644\u0628\u0627\u062a \u0627\u0644\u062d\u062c\u0632",
+		pendingRequests:
+			"\u0637\u0644\u0628\u0627\u062a \u062d\u062c\u0632 \u0645\u0639\u0644\u0642\u0629",
+		show: "\u0639\u0631\u0636",
+		allReservationCount:
+			"\u0639\u062f\u062f \u0643\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		totalAmount: "\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\u0629",
+		nights: "\u0644\u064a\u0627\u0644\u064a",
+		hotels: "\u0639\u062f\u062f \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+		sources: "\u0627\u0644\u0645\u0635\u0627\u062f\u0631",
+		newToday: "\u062d\u062c\u0648\u0632\u0627\u062a \u062c\u062f\u064a\u062f\u0629 \u0627\u0644\u064a\u0648\u0645",
+		newReservations: "\u062d\u062c\u0632 \u062c\u062f\u064a\u062f",
+		todayOperation: "\u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u064a\u0648\u0645",
+		arrivals: "\u0627\u0644\u0648\u0635\u0648\u0644",
+		departures: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		checkedIn: "\u062a\u0645 \u0627\u0644\u062a\u0633\u0643\u064a\u0646",
+		noShow: "\u0639\u062f\u0645 \u062d\u0636\u0648\u0631",
+		futureOperation:
+			"\u0627\u0644\u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u0645\u0633\u062a\u0642\u0628\u0644\u064a \u0644\u0644\u0645\u062c\u0645\u0648\u0639\u0629",
+		arrivalsByDay:
+			"\u062a\u0633\u062c\u064a\u0644\u0627\u062a \u0627\u0644\u0648\u0635\u0648\u0644 \u062d\u0633\u0628 \u0627\u0644\u064a\u0648\u0645",
+		departuresByDay:
+			"\u062a\u0633\u062c\u064a\u0644\u0627\u062a \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u062d\u0633\u0628 \u0627\u0644\u064a\u0648\u0645",
+		checkInReservations:
+			"\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u062f\u062e\u0648\u0644",
+		checkOutReservations:
+			"\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u062e\u0631\u0648\u062c",
+		checkIn: "\u062f\u062e\u0648\u0644",
+		checkOut: "\u062e\u0631\u0648\u062c",
+		occupancyToday: "\u0625\u0634\u063a\u0627\u0644 \u0627\u0644\u064a\u0648\u0645",
+		booked: "\u0645\u062d\u062c\u0648\u0632",
+		available: "\u0645\u062a\u0627\u062d",
+		blocked: "\u0645\u062d\u062c\u0648\u0628",
+		today: "\u0627\u0644\u064a\u0648\u0645",
+		yesterday: "\u0623\u0645\u0633",
+		thisMonth: "\u0647\u0630\u0627 \u0627\u0644\u0634\u0647\u0631",
+		all: "\u0627\u0644\u0643\u0644",
+		topHotel: "\u0627\u0644\u0641\u0646\u062f\u0642 \u0627\u0644\u0623\u0639\u0644\u0649",
+		topSource: "\u0627\u0644\u0645\u0635\u062f\u0631 \u0627\u0644\u0623\u0639\u0644\u0649",
+		rankingPeriod: "\u0641\u062a\u0631\u0629 \u0627\u0644\u062a\u0635\u0646\u064a\u0641",
+		new: "\u062c\u062f\u064a\u062f",
+		arrival: "\u062f\u062e\u0648\u0644",
+		departure: "\u062e\u0631\u0648\u062c",
+		reservationUnit: "\u062d\u062c\u0632",
+		noRankingData:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u0644\u0647\u0630\u0627 \u0627\u0644\u0627\u062e\u062a\u064a\u0627\u0631.",
+	},
+};
+
+const getMySummaryText = (chosenLanguage) =>
+	mySummaryText[chosenLanguage === "Arabic" ? "ar" : "en"];
+
+const pendingSummaryStatusRegex =
+	/pending[-_\s]?confirmation|pending[-_\s]?finance[-_\s]?review|pending[-_\s]?agent[-_\s]?commission[-_\s]?approval|finance[-_\s]?rejected|rejected/i;
+const inHouseSummaryStatusRegex = /house|in[-_\s]?house|checked[-_\s]?in/i;
+const noShowSummaryStatusRegex = /no[-_\s]?show/i;
+
+const statusTextFromReservation = (reservation = {}) =>
+	`${reservation.reservation_status || ""} ${reservation.state || ""}`;
+
+const matchesReservationStatus = (reservation = {}, regex) =>
+	regex.test(statusTextFromReservation(reservation));
+
+const riyadhYmd = (value) => {
+	if (!value) return "";
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return "";
+	try {
+		const parts = new Intl.DateTimeFormat("en-US", {
+			timeZone: "Asia/Riyadh",
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		}).formatToParts(parsed);
+		const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+		return map.year && map.month && map.day
+			? `${map.year}-${map.month}-${map.day}`
+			: "";
+	} catch (error) {
+		return dayjs(parsed).format("YYYY-MM-DD");
+	}
+};
+
+const summarizeReservationRows = (rows = []) => {
+	const hotels = new Set();
+	const sources = new Set();
+	return safeRows(rows).reduce(
+		(summary, reservation) => {
+			summary.count += 1;
+			summary.totalAmount += toNumber(reservation.total_amount);
+			summary.nights += toNumber(getReservationNights(reservation));
+			const hotelId = normalizeId(reservation.hotelId);
+			if (hotelId) hotels.add(hotelId);
+			const source = String(reservation.booking_source || "").trim();
+			if (source) sources.add(source.toLowerCase());
+			return summary;
+		},
+		{
+			count: 0,
+			totalAmount: 0,
+			nights: 0,
+			get hotelCount() {
+				return hotels.size;
+			},
+			get sourceCount() {
+				return sources.size;
+			},
+		}
+	);
+};
+
+const createdTodayReportParams = (params = {}, range = {}) => {
+	const next = { ...(params || {}) };
+	[
+		"dateFrom",
+		"dateTo",
+		"invStart",
+		"invEnd",
+		"invCal",
+		"invHMonth",
+		"invHYear",
+		"invMonths",
+		"reportMonths",
+		"bucketDateBy",
+		"bucketDateField",
+		"bucketDateFrom",
+		"bucketDateTo",
+		"bucketFrom",
+		"bucketTo",
+	].forEach((key) => delete next[key]);
+	return {
+		...next,
+		range: "custom",
+		dateBy: "createdAt",
+		sortBy: "createdAt",
+		sortOrder: "desc",
+		dateFrom: range.dateFrom,
+		dateTo: range.dateTo,
+	};
+};
+
+const operationsWindowForToday = (todayKey = currentRiyadhDate()) => {
+	const center = dayjs(todayKey);
+	const start = center.subtract(14, "day");
+	const days = Array.from({ length: 29 }).map((_, index) =>
+		start.add(index, "day").format("YYYY-MM-DD")
+	);
+	const startRange = riyadhDayUtcRange(days[0]);
+	const endRange = riyadhDayUtcRange(days[days.length - 1]);
+	return {
+		days,
+		dateFrom: startRange.dateFrom,
+		dateTo: endRange.dateTo,
+	};
+};
+
+const hotelScopedOperationsParams = (params = {}, dateField, range = {}) => {
+	const selectedHotels = params.hotelId || params.invHotel || "";
+	return {
+		ownerId: params.ownerId || "",
+		hotelId: selectedHotels,
+		invHotel: selectedHotels,
+		range: "custom",
+		dateBy: dateField,
+		sortBy: dateField,
+		sortOrder: "asc",
+		dateFrom: range.dateFrom,
+		dateTo: range.dateTo,
+		status: "",
+		search: "",
+		bookingSource: "",
+		payment: "",
+		includeCancelled: false,
+		excludeCancelled: true,
+	};
+};
+
+const timelineRowsForWindow = (rows = [], days = []) => {
+	const byDay = new Map(
+		safeRows(rows).map((row) => [row.groupKey, row])
+	);
+	return days.map((groupKey) => {
+		const existing = byDay.get(groupKey) || {};
+		return {
+			...existing,
+			groupKey,
+			reservationsCount: toNumber(existing.reservationsCount),
+			total_amount: toNumber(existing.total_amount),
+		};
+	});
+};
+
+const timelineChartValue = (row = {}) =>
+	toNumber(row.reservationsCount) > 0 ? toNumber(row.reservationsCount) : 0.08;
+
+const sameRiyadhDate = (field, groupKey) => (reservation = {}) =>
+	riyadhYmd(reservation?.[field]) === groupKey;
+
+const currentRiyadhDate = () => riyadhYmd(new Date());
+
+const previousRiyadhDate = () => riyadhYmd(dayjs().subtract(1, "day").toDate());
+
+const rankingFieldForMode = (mode) => {
+	if (mode === "arrival") return "checkin_date";
+	if (mode === "departure") return "checkout_date";
+	return "createdAt";
+};
+
+const rankingRowsForPeriod = (rows = [], mode = "new", period = "all") => {
+	const field = rankingFieldForMode(mode);
+	const today = currentRiyadhDate();
+	const yesterday = previousRiyadhDate();
+	const monthPrefix = today.slice(0, 7);
+	return safeRows(rows).filter((reservation) => {
+		const key = riyadhYmd(reservation?.[field]);
+		if (!key) return false;
+		if (period === "today") return key === today;
+		if (period === "yesterday") return key === yesterday;
+		if (period === "month") return key.startsWith(monthPrefix);
+		return true;
+	});
+};
+
+const buildRankingRows = (rows = [], type = "hotel") => {
+	const map = new Map();
+	safeRows(rows).forEach((reservation) => {
+		const id =
+			type === "hotel"
+				? normalizeId(reservation.hotelId)
+				: String(reservation.booking_source || "").trim().toLowerCase();
+		if (!id) return;
+		const label =
+			type === "hotel"
+				? titleCase(reservation.hotelName || reservation.hotel?.hotelName || "Hotel")
+				: titleCase(reservation.booking_source || "Unknown");
+		if (!map.has(id)) {
+			map.set(id, {
+				id,
+				label,
+				value: 0,
+				totalAmount: 0,
+				nights: 0,
+				hotelId: type === "hotel" ? id : "",
+				source: type === "source" ? reservation.booking_source || "" : "",
+			});
+		}
+		const row = map.get(id);
+		row.value += 1;
+		row.totalAmount += toNumber(reservation.total_amount);
+		row.nights += toNumber(getReservationNights(reservation));
+	});
+	return [...map.values()]
+		.sort((a, b) => b.value - a.value || b.totalAmount - a.totalAmount)
+		.slice(0, 6);
+};
+
+const modeIcon = (value) => {
+	if (value === "arrival" || value === "checkin") return <LoginOutlined />;
+	if (value === "departure" || value === "checkout") return <LogoutOutlined />;
+	return <PlusCircleOutlined />;
+};
+
+const periodIcon = (value) => {
+	if (value === "today") return <CalendarOutlined />;
+	if (value === "yesterday") return <HistoryOutlined />;
+	if (value === "month") return <CarryOutOutlined />;
+	return <FilterOutlined />;
+};
+
+const IconText = ({ icon, children }) => (
+	<>
+		{icon ? (
+			<span className='button-icon' aria-hidden='true'>
+				{icon}
+			</span>
+		) : null}
+		<span>{children}</span>
+	</>
+);
+
+const SectionHeading = ({ icon, children }) => (
+	<h3>
+		{icon ? (
+			<span className='section-title-icon' aria-hidden='true'>
+				{icon}
+			</span>
+		) : null}
+		<span>{children}</span>
+	</h3>
+);
+
+const MySummaryMetric = ({ label, value, onClick, large = false, icon }) => (
+	<button
+		type='button'
+		className={large ? "metric-chip large" : "metric-chip"}
+		onClick={onClick}
+	>
+		{icon ? (
+			<span className='metric-icon' aria-hidden='true'>
+				{icon}
+			</span>
+		) : null}
+		<span className='metric-label'>{label}</span>
+		<strong>{value}</strong>
+	</button>
+);
+
+const MySummaryRankingPanel = ({
+	title,
+	type,
+	rows,
+	labels,
+	onOpenRow,
+}) => {
+	const maxValue = Math.max(...rows.map((row) => row.value), 1);
+	return (
+		<section className='ranking-panel'>
+			<SectionHeading icon={type === "hotel" ? <BankOutlined /> : <ShareAltOutlined />}>
+				{title}
+			</SectionHeading>
+			<div className='ranking-list'>
+				{rows.length ? (
+					rows.map((row) => {
+						const percent = row.value ? Math.max((row.value / maxValue) * 100, 7) : 0;
+						return (
+							<button
+								key={row.id}
+								type='button'
+								className='ranking-row'
+								onClick={() => onOpenRow(row)}
+								title={`${row.label}: ${row.value}`}
+							>
+								<span className='ranking-value'>
+									{formatMoney(row.value)} {labels.reservationUnit}
+								</span>
+								<span className='ranking-name'>
+									<span className='ranking-row-icon' aria-hidden='true'>
+										{type === "hotel" ? <BankOutlined /> : <ShareAltOutlined />}
+									</span>
+									<span className='ranking-name-text'>{row.label}</span>
+								</span>
+								<span className='ranking-track'>
+									<span style={{ width: `${percent}%` }} />
+								</span>
+							</button>
+						);
+					})
+				) : (
+					<div className='ranking-empty'>{labels.noRankingData}</div>
+				)}
+			</div>
+		</section>
+	);
+};
+
+export const ExecutiveMySummaryReport = ({
+	active,
+	userId,
+	token,
+	params,
+	chosenLanguage,
+}) => {
+	const modalLabels = getLabels(chosenLanguage);
+	const labels = { ...modalLabels, ...getMySummaryText(chosenLanguage) };
+	const isRTL = chosenLanguage === "Arabic";
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState("");
+	const [report, setReport] = useState(null);
+	const [createdTodayReport, setCreatedTodayReport] = useState(null);
+	const [operationsReports, setOperationsReports] = useState({
+		checkin: null,
+		checkout: null,
+	});
+	const [todayOperationRows, setTodayOperationRows] = useState([]);
+	const [reservationRows, setReservationRows] = useState([]);
+	const [chartMode, setChartMode] = useState("checkin");
+	const [hotelRankMode, setHotelRankMode] = useState("new");
+	const [sourceRankMode, setSourceRankMode] = useState("new");
+	const [rankPeriod, setRankPeriod] = useState("all");
+	const [drilldown, setDrilldown] = useState({
+		open: false,
+		title: "",
+		rows: [],
+		loading: false,
+		error: "",
+	});
+	const [selectedReservation, setSelectedReservation] = useState(null);
+	const requestRef = useRef(0);
+	const drilldownRequestRef = useRef(0);
+	const statusRequiresCancelledScope = statusNeedsCancelledScope(params?.status);
+	const includeCancelledFromFilters =
+		String(params?.includeCancelled || "").toLowerCase() === "true";
+	const effectiveExcludeCancelled =
+		!includeCancelledFromFilters && !statusRequiresCancelledScope;
+
+	const reportParams = useMemo(
+		() => ({
+			...(params || {}),
+			includeCancelled: !effectiveExcludeCancelled,
+			excludeCancelled: effectiveExcludeCancelled,
+		}),
+		[effectiveExcludeCancelled, params]
+	);
+
+	const drilldownBaseParams = useMemo(
+		() => ({
+			...reportParams,
+			page: 1,
+			exportAll: "true",
+			limit: 5000,
+		}),
+		[reportParams]
+	);
+	const createdTodayKey = currentRiyadhDate();
+	const createdTodayRange = useMemo(
+		() => riyadhDayUtcRange(createdTodayKey),
+		[createdTodayKey]
+	);
+	const createdTodayParams = useMemo(
+		() => createdTodayReportParams(reportParams, createdTodayRange),
+		[createdTodayRange, reportParams]
+	);
+	const operationsWindow = useMemo(
+		() => operationsWindowForToday(createdTodayKey),
+		[createdTodayKey]
+	);
+	const checkinOperationsParams = useMemo(
+		() =>
+			hotelScopedOperationsParams(
+				reportParams,
+				"checkin_date",
+				operationsWindow
+			),
+		[operationsWindow, reportParams]
+	);
+	const checkoutOperationsParams = useMemo(
+		() =>
+			hotelScopedOperationsParams(
+				reportParams,
+				"checkout_date",
+				operationsWindow
+			),
+		[operationsWindow, reportParams]
+	);
+	const todayCheckinParams = useMemo(
+		() => ({
+			...hotelScopedOperationsParams(
+				reportParams,
+				"checkin_date",
+				createdTodayRange
+			),
+			page: 1,
+			exportAll: "true",
+			limit: 5000,
+		}),
+		[createdTodayRange, reportParams]
+	);
+	const todayCheckoutParams = useMemo(
+		() => ({
+			...hotelScopedOperationsParams(
+				reportParams,
+				"checkout_date",
+				createdTodayRange
+			),
+			page: 1,
+			exportAll: "true",
+			limit: 5000,
+		}),
+		[createdTodayRange, reportParams]
+	);
+	const todayCheckinStatusParams = useMemo(
+		() => ({
+			...todayCheckinParams,
+			includeCancelled: true,
+			excludeCancelled: false,
+		}),
+		[todayCheckinParams]
+	);
+
+	useEffect(() => {
+		if (!active || !userId || !token) return;
+		const requestId = requestRef.current + 1;
+		requestRef.current = requestId;
+		setLoading(true);
+		setError("");
+		Promise.all([
+			getOverallExecutiveReservationsReport(userId, token, reportParams),
+			getOverallExecutiveReservationsReport(userId, token, createdTodayParams),
+			getOverallExecutiveReservationsReport(userId, token, checkinOperationsParams),
+			getOverallExecutiveReservationsReport(userId, token, checkoutOperationsParams),
+			getOverallReservations(userId, token, todayCheckinStatusParams),
+			getOverallReservations(userId, token, drilldownBaseParams),
+		])
+			.then(([
+				reportData,
+				createdTodayData,
+				checkinOperationsData,
+				checkoutOperationsData,
+				todayOperationRowsData,
+				rowsData,
+			]) => {
+				if (requestRef.current !== requestId) return;
+				if (
+					reportData?.error ||
+					createdTodayData?.error ||
+					checkinOperationsData?.error ||
+					checkoutOperationsData?.error ||
+					todayOperationRowsData?.error ||
+					rowsData?.error
+				) {
+					setError(
+						reportData?.error ||
+							createdTodayData?.error ||
+							checkinOperationsData?.error ||
+							checkoutOperationsData?.error ||
+							todayOperationRowsData?.error ||
+							rowsData?.error ||
+							modalLabels.exportError
+					);
+					setReport(null);
+					setCreatedTodayReport(null);
+					setOperationsReports({ checkin: null, checkout: null });
+					setTodayOperationRows([]);
+					setReservationRows([]);
+					return;
+				}
+				setReport(reportData || null);
+				setCreatedTodayReport(createdTodayData || null);
+				setOperationsReports({
+					checkin: checkinOperationsData || null,
+					checkout: checkoutOperationsData || null,
+				});
+				setTodayOperationRows(
+					Array.isArray(todayOperationRowsData?.reservations)
+						? todayOperationRowsData.reservations
+						: []
+				);
+				setReservationRows(
+					Array.isArray(rowsData?.reservations) ? rowsData.reservations : []
+				);
+			})
+			.catch(() => {
+				if (requestRef.current !== requestId) return;
+				setError(modalLabels.exportError);
+				setReport(null);
+				setCreatedTodayReport(null);
+				setOperationsReports({ checkin: null, checkout: null });
+				setTodayOperationRows([]);
+				setReservationRows([]);
+			})
+			.finally(() => {
+				if (requestRef.current === requestId) setLoading(false);
+			});
+	}, [
+		active,
+		checkinOperationsParams,
+		checkoutOperationsParams,
+		createdTodayParams,
+		drilldownBaseParams,
+		modalLabels.exportError,
+		reportParams,
+		todayCheckinStatusParams,
+		token,
+		userId,
+	]);
+
+	const statsFromRows = useMemo(
+		() => summarizeReservationRows(reservationRows),
+		[reservationRows]
+	);
+	const stats = report?.stats || {};
+	const baseStats = {
+		count: toNumber(stats.reservationsCount || statsFromRows.count),
+		totalAmount: toNumber(stats.total_amount || statsFromRows.totalAmount),
+		nights: toNumber(stats.roomNights || statsFromRows.nights),
+		hotelCount: toNumber(
+			stats.hotelsWithReservations || statsFromRows.hotelCount
+		),
+		sourceCount: toNumber(
+			stats.sourcesWithReservations || statsFromRows.sourceCount
+		),
+	};
+	const createdTodayStats = createdTodayReport?.stats || {};
+	const newTodayStats = {
+		count: toNumber(createdTodayStats.reservationsCount),
+		totalAmount: toNumber(createdTodayStats.total_amount),
+		nights: toNumber(createdTodayStats.roomNights),
+		hotelCount: toNumber(createdTodayStats.hotelsWithReservations),
+		sourceCount: toNumber(createdTodayStats.sourcesWithReservations),
+	};
+	const statusRows = safeRows(report?.reservationsByBookingStatus);
+	const pendingCount = statusRows.length
+		? statusRows
+				.filter((row) => pendingSummaryStatusRegex.test(row.reservation_status || ""))
+				.reduce((total, row) => total + toNumber(row.reservationsCount), 0)
+		: reservationRows.filter((row) =>
+				matchesReservationStatus(row, pendingSummaryStatusRegex)
+		  ).length;
+	const noShowCount = todayOperationRows.filter((row) =>
+		matchesReservationStatus(row, noShowSummaryStatusRegex)
+	).length;
+	const checkedInCount = todayOperationRows.filter((row) =>
+		matchesReservationStatus(row, inHouseSummaryStatusRegex)
+	).length;
+	const checkinRows = timelineRowsForWindow(
+		operationsReports.checkin?.checkinsByDay,
+		operationsWindow.days
+	);
+	const checkoutRows = timelineRowsForWindow(
+		operationsReports.checkout?.checkoutsByDay,
+		operationsWindow.days
+	);
+	const todayCheckinCount = toNumber(
+		checkinRows.find((row) => row.groupKey === createdTodayKey)?.reservationsCount
+	);
+	const todayCheckoutCount = toNumber(
+		checkoutRows.find((row) => row.groupKey === createdTodayKey)?.reservationsCount
+	);
+	const activeTimelineRows = chartMode === "checkin" ? checkinRows : checkoutRows;
+	const chartField = chartMode === "checkin" ? "checkin_date" : "checkout_date";
+	const rankingTabs = [
+		{ value: "new", label: labels.new },
+		{ value: "arrival", label: labels.arrival },
+		{ value: "departure", label: labels.departure },
+	];
+	const periodTabs = [
+		{ value: "today", label: labels.today },
+		{ value: "yesterday", label: labels.yesterday },
+		{ value: "month", label: labels.thisMonth },
+		{ value: "all", label: labels.all },
+	];
+	const hotelRankingRows = useMemo(
+		() =>
+			buildRankingRows(
+				rankingRowsForPeriod(reservationRows, hotelRankMode, rankPeriod),
+				"hotel"
+			),
+		[hotelRankMode, rankPeriod, reservationRows]
+	);
+	const sourceRankingRows = useMemo(
+		() =>
+			buildRankingRows(
+				rankingRowsForPeriod(reservationRows, sourceRankMode, rankPeriod),
+				"source"
+			),
+		[rankPeriod, reservationRows, sourceRankMode]
+	);
+
+	const closeDrilldown = useCallback(() => {
+		setDrilldown((current) => ({ ...current, open: false }));
+	}, []);
+
+	const openDrilldown = useCallback(
+		({ title, extraParams = {}, clientFilter = null } = {}) => {
+			if (!userId || !token) return;
+			const requestId = drilldownRequestRef.current + 1;
+			drilldownRequestRef.current = requestId;
+			setDrilldown({
+				open: true,
+				title: title || labels.underlyingReservations,
+				rows: [],
+				loading: true,
+				error: "",
+			});
+			getOverallReservations(userId, token, {
+				...drilldownBaseParams,
+				...extraParams,
+			})
+				.then((data) => {
+					if (drilldownRequestRef.current !== requestId) return;
+					if (data?.error) {
+						setDrilldown((current) => ({
+							...current,
+							loading: false,
+							error: data.error,
+							rows: [],
+						}));
+						return;
+					}
+					const rows = Array.isArray(data?.reservations) ? data.reservations : [];
+					setDrilldown((current) => ({
+						...current,
+						loading: false,
+						error: "",
+						rows:
+							typeof clientFilter === "function"
+								? rows.filter(clientFilter)
+								: rows,
+					}));
+				})
+				.catch(() => {
+					if (drilldownRequestRef.current !== requestId) return;
+					setDrilldown((current) => ({
+						...current,
+						loading: false,
+						error: modalLabels.exportError,
+						rows: [],
+					}));
+				});
+		},
+		[
+			drilldownBaseParams,
+			labels.underlyingReservations,
+			modalLabels.exportError,
+			token,
+			userId,
+		]
+	);
+
+	const openReservationDetails = useCallback((reservation = {}) => {
+		setSelectedReservation(reservation);
+	}, []);
+
+	const handleReservationUpdated = useCallback((nextReservation = {}) => {
+		if (!nextReservation) return;
+		const nextId = normalizeId(nextReservation._id || nextReservation.id);
+		setSelectedReservation(nextReservation);
+		if (!nextId) return;
+		setDrilldown((current) => ({
+			...current,
+			rows: current.rows.map((row) =>
+				normalizeId(row._id || row.id) === nextId
+					? { ...row, ...nextReservation }
+					: row
+			),
+		}));
+		setReservationRows((rows) =>
+			rows.map((row) =>
+				normalizeId(row._id || row.id) === nextId
+					? { ...row, ...nextReservation }
+					: row
+			)
+		);
+	}, []);
+
+	const openDateBucket = (row = {}) => {
+		if (!row.groupKey) return;
+		const range = riyadhDayUtcRange(row.groupKey);
+		const dayParams = hotelScopedOperationsParams(reportParams, chartField, range);
+		openDrilldown({
+			title: `${chartMode === "checkin" ? labels.arrivals : labels.departures}: ${formatChartDateLabel(
+				row.groupKey,
+				{ full: true }
+			)}`,
+			extraParams: {
+				...dayParams,
+				bucketDateBy: chartField,
+				bucketDateFrom: range.dateFrom,
+				bucketDateTo: range.dateTo,
+			},
+			clientFilter: sameRiyadhDate(chartField, row.groupKey),
+		});
+	};
+
+	const openRankingRow = (row, type, mode) => {
+		openDrilldown({
+			title: row.label,
+			extraParams:
+				type === "hotel"
+					? { hotelId: row.hotelId }
+					: { bookingSource: row.source },
+			clientFilter: (reservation) => {
+				const matchesTarget =
+					type === "hotel"
+						? normalizeId(reservation.hotelId) === row.hotelId
+						: String(reservation.booking_source || "").trim().toLowerCase() ===
+						  String(row.source || "").trim().toLowerCase();
+				if (!matchesTarget) return false;
+				return rankingRowsForPeriod([reservation], mode, rankPeriod).some(
+					(item) => item === reservation
+				);
+			},
+		});
+	};
+
+	const chartOptions = {
+		...barOptions({
+			categories: activeTimelineRows.map((row) => row.groupKey),
+			labels,
+			isRTL,
+			colors: ["#18b879"],
+			rows: activeTimelineRows,
+			countLabel:
+				chartMode === "checkin"
+					? labels.checkInReservations
+					: labels.checkOutReservations,
+			showAmount: false,
+			showAllXLabels: true,
+			onPointClick: openDateBucket,
+		}),
+		plotOptions: {
+			bar: {
+				borderRadius: 8,
+				columnWidth: "38%",
+				dataLabels: { position: "center" },
+			},
+		},
+		dataLabels: {
+			enabled: true,
+			formatter: (_value, options) =>
+				formatMoney(
+					activeTimelineRows?.[options?.dataPointIndex]?.reservationsCount || 0
+				),
+			style: {
+				colors: ["#ffffff"],
+				fontWeight: 950,
+			},
+		},
+		yaxis: {
+			labels: {
+				formatter: (value) => formatMoney(Math.floor(toNumber(value))),
+				style: { fontWeight: 800 },
+			},
+		},
+		grid: {
+			borderColor: "#edf0f5",
+			strokeDashArray: 4,
+		},
+	};
+
+	return (
+		<MySummaryShell $isRTL={isRTL}>
+			<LoadingBlock loading={loading} error={error} labels={modalLabels}>
+				<section className='summary-top-layout'>
+					<div className='overview-stack'>
+						<div className='pending-summary-block'>
+							<SectionHeading icon={<ClockCircleOutlined />}>
+								{labels.allPendingTitle}
+							</SectionHeading>
+							<div className='compact-metrics'>
+								<MySummaryMetric
+									icon={<TableOutlined />}
+									label={labels.allReservationCount}
+									value={formatMoney(baseStats.count)}
+									onClick={() =>
+										openDrilldown({ title: labels.allReservationCount })
+									}
+								/>
+								<MySummaryMetric
+									icon={<DollarCircleOutlined />}
+									label={labels.totalAmount}
+									value={formatMoney(baseStats.totalAmount)}
+									onClick={() => openDrilldown({ title: labels.totalAmount })}
+								/>
+								<MySummaryMetric
+									icon={<FieldTimeOutlined />}
+									label={labels.nights}
+									value={formatMoney(baseStats.nights)}
+									onClick={() => openDrilldown({ title: labels.nights })}
+								/>
+								<MySummaryMetric
+									icon={<BankOutlined />}
+									label={labels.hotels}
+									value={formatMoney(baseStats.hotelCount)}
+									onClick={() => openDrilldown({ title: labels.hotels })}
+								/>
+								<MySummaryMetric
+									large
+									icon={<ClockCircleOutlined />}
+									label={labels.pendingRequests}
+									value={formatMoney(pendingCount)}
+									onClick={() =>
+										openDrilldown({
+											title: labels.pendingRequests,
+											extraParams: { status: "pending" },
+											clientFilter: (row) =>
+												matchesReservationStatus(
+													row,
+													pendingSummaryStatusRegex
+												),
+										})
+									}
+								/>
+							</div>
+						</div>
+					</div>
+
+					<div className='new-reservations-block'>
+						<SectionHeading icon={<PlusCircleOutlined />}>
+							{labels.newToday}
+						</SectionHeading>
+						<div className='new-metrics-box'>
+							<MySummaryMetric
+								icon={<PlusCircleOutlined />}
+								label={labels.newReservations}
+								value={formatMoney(newTodayStats.count)}
+								onClick={() =>
+									openDrilldown({
+										title: labels.newReservations,
+										extraParams: createdTodayParams,
+									})
+								}
+							/>
+							<MySummaryMetric
+								icon={<DollarCircleOutlined />}
+								label={labels.totalAmount}
+								value={formatMoney(newTodayStats.totalAmount)}
+								onClick={() =>
+									openDrilldown({
+										title: labels.totalAmount,
+										extraParams: createdTodayParams,
+									})
+								}
+							/>
+							<MySummaryMetric
+								icon={<FieldTimeOutlined />}
+								label={labels.nights}
+								value={formatMoney(newTodayStats.nights)}
+								onClick={() =>
+									openDrilldown({
+										title: labels.nights,
+										extraParams: createdTodayParams,
+									})
+								}
+							/>
+							<MySummaryMetric
+								icon={<BankOutlined />}
+								label={labels.hotels}
+								value={formatMoney(newTodayStats.hotelCount)}
+								onClick={() =>
+									openDrilldown({
+										title: labels.hotels,
+										extraParams: createdTodayParams,
+									})
+								}
+							/>
+							<MySummaryMetric
+								icon={<ShareAltOutlined />}
+								label={labels.sources}
+								value={formatMoney(newTodayStats.sourceCount)}
+								onClick={() =>
+									openDrilldown({
+										title: labels.sources,
+										extraParams: createdTodayParams,
+									})
+								}
+							/>
+						</div>
+					</div>
+
+					<section className='operation-section'>
+						<SectionHeading icon={<CarryOutOutlined />}>
+							{labels.todayOperation}
+						</SectionHeading>
+						<div className='operation-cards'>
+							<button
+								type='button'
+								className='operation-card arrival'
+								onClick={() =>
+									openDrilldown({
+										title: labels.arrivals,
+										extraParams: todayCheckinParams,
+										clientFilter: sameRiyadhDate(
+											"checkin_date",
+											createdTodayKey
+										),
+									})
+								}
+							>
+								<span className='operation-icon' aria-hidden='true'>
+									<LoginOutlined />
+								</span>
+								<strong>{formatMoney(todayCheckinCount)}</strong>
+								<span className='operation-label'>{labels.arrivals}</span>
+							</button>
+							<button
+								type='button'
+								className='operation-card departure'
+								onClick={() =>
+									openDrilldown({
+										title: labels.departures,
+										extraParams: todayCheckoutParams,
+										clientFilter: sameRiyadhDate(
+											"checkout_date",
+											createdTodayKey
+										),
+									})
+								}
+							>
+								<span className='operation-icon' aria-hidden='true'>
+									<LogoutOutlined />
+								</span>
+								<strong>{formatMoney(todayCheckoutCount)}</strong>
+								<span className='operation-label'>{labels.departures}</span>
+							</button>
+							<button
+								type='button'
+								className='operation-card checked'
+								onClick={() =>
+									openDrilldown({
+										title: labels.checkedIn,
+										extraParams: {
+											...todayCheckinStatusParams,
+											status: "InHouse",
+										},
+										clientFilter: (row) =>
+											matchesReservationStatus(
+												row,
+												inHouseSummaryStatusRegex
+											),
+									})
+								}
+							>
+								<span className='operation-icon' aria-hidden='true'>
+									<CheckCircleOutlined />
+								</span>
+								<strong>{formatMoney(checkedInCount)}</strong>
+								<span className='operation-label'>{labels.checkedIn}</span>
+							</button>
+							<button
+								type='button'
+								className='operation-card noshow'
+								onClick={() =>
+									openDrilldown({
+										title: labels.noShow,
+										extraParams: {
+											...todayCheckinStatusParams,
+											status: "no_show",
+										},
+										clientFilter: (row) =>
+											matchesReservationStatus(
+												row,
+												noShowSummaryStatusRegex
+											),
+									})
+								}
+							>
+								<span className='operation-icon' aria-hidden='true'>
+									<WarningOutlined />
+								</span>
+								<strong>{formatMoney(noShowCount)}</strong>
+								<span className='operation-label'>{labels.noShow}</span>
+							</button>
+						</div>
+					</section>
+				</section>
+
+				<section className='future-section'>
+					<SectionHeading icon={<BarChartOutlined />}>
+						{labels.futureOperation}
+					</SectionHeading>
+					<div className='chart-mode-tabs'>
+						<button
+							type='button'
+							className={chartMode === "checkin" ? "active" : ""}
+							onClick={() => setChartMode("checkin")}
+						>
+							<IconText icon={<LoginOutlined />}>{labels.checkIn}</IconText>
+						</button>
+						<button
+							type='button'
+							className={chartMode === "checkout" ? "active" : ""}
+							onClick={() => setChartMode("checkout")}
+						>
+							<IconText icon={<LogoutOutlined />}>{labels.checkOut}</IconText>
+						</button>
+					</div>
+					<div className='future-grid'>
+						<section className='chart-panel summary-chart-panel'>
+							<header>
+								{chartMode === "checkin"
+									? labels.arrivalsByDay
+									: labels.departuresByDay}
+							</header>
+							<Chart
+								type='bar'
+								height={220}
+								options={chartOptions}
+								series={[
+									{
+										name:
+											chartMode === "checkin"
+												? labels.arrivals
+												: labels.departures,
+										data: activeTimelineRows.map((row) =>
+											timelineChartValue(row)
+										),
+									},
+								]}
+							/>
+						</section>
+					</div>
+				</section>
+
+				<section className='ranking-section'>
+					<div className='ranking-controls-row'>
+						<div className='ranking-mode-group' aria-label={labels.topSource}>
+							<div className='ranking-tabs'>
+								{rankingTabs.map((tab) => (
+									<button
+										key={tab.value}
+										type='button'
+										className={sourceRankMode === tab.value ? "active" : ""}
+										onClick={() => setSourceRankMode(tab.value)}
+									>
+										<IconText icon={modeIcon(tab.value)}>{tab.label}</IconText>
+									</button>
+								))}
+							</div>
+						</div>
+						<div className='ranking-period-controls'>
+							<span>{labels.rankingPeriod}</span>
+							<div className='period-tabs'>
+								{periodTabs.map((tab) => (
+									<button
+										key={tab.value}
+										type='button'
+										className={rankPeriod === tab.value ? "active" : ""}
+										onClick={() => setRankPeriod(tab.value)}
+									>
+										<IconText icon={periodIcon(tab.value)}>{tab.label}</IconText>
+									</button>
+								))}
+							</div>
+						</div>
+						<div className='ranking-mode-group' aria-label={labels.topHotel}>
+							<div className='ranking-tabs'>
+								{rankingTabs.map((tab) => (
+									<button
+										key={tab.value}
+										type='button'
+										className={hotelRankMode === tab.value ? "active" : ""}
+										onClick={() => setHotelRankMode(tab.value)}
+									>
+										<IconText icon={modeIcon(tab.value)}>{tab.label}</IconText>
+									</button>
+								))}
+							</div>
+						</div>
+					</div>
+
+					<section className='ranking-grid'>
+						<MySummaryRankingPanel
+							title={labels.topSource}
+							type='source'
+							rows={sourceRankingRows}
+							labels={labels}
+							onOpenRow={(row) =>
+								openRankingRow(row, "source", sourceRankMode)
+							}
+						/>
+						<MySummaryRankingPanel
+							title={labels.topHotel}
+							type='hotel'
+							rows={hotelRankingRows}
+							labels={labels}
+							onOpenRow={(row) => openRankingRow(row, "hotel", hotelRankMode)}
+						/>
+					</section>
+				</section>
+			</LoadingBlock>
+			<ReservationDrilldownModal
+				open={drilldown.open}
+				title={drilldown.title}
+				rows={drilldown.rows}
+				loading={drilldown.loading}
+				error={drilldown.error}
+				labels={modalLabels}
+				isRTL={isRTL}
+				chosenLanguage={chosenLanguage}
+				onClose={closeDrilldown}
+				onOpenReservation={openReservationDetails}
+			/>
+			<OverallReservationDetailsModal
+				reservations={drilldown.rows}
+				selectedReservation={selectedReservation}
+				setSelectedReservation={setSelectedReservation}
+				ownerId={params?.ownerId}
+				onReservationUpdated={handleReservationUpdated}
+				chosenLanguage={chosenLanguage}
+			/>
+		</MySummaryShell>
+	);
 };
 
 export const ExecutiveReservationsReport = ({
@@ -860,12 +2546,32 @@ export const ExecutiveReservationsReport = ({
 	const [exporting, setExporting] = useState(false);
 	const [error, setError] = useState("");
 	const [report, setReport] = useState(null);
+	const [drilldown, setDrilldown] = useState({
+		open: false,
+		title: "",
+		rows: [],
+		loading: false,
+		error: "",
+	});
+	const [selectedReservation, setSelectedReservation] = useState(null);
 	const reservationsRequestRef = useRef(0);
+	const drilldownRequestRef = useRef(0);
 	const statusRequiresCancelledScope = statusNeedsCancelledScope(params?.status);
 	const includeCancelledFromFilters =
 		String(params?.includeCancelled || "").toLowerCase() === "true";
 	const effectiveExcludeCancelled =
 		!includeCancelledFromFilters && !statusRequiresCancelledScope;
+	const drilldownBaseParams = useMemo(
+		() => ({
+			...(params || {}),
+			includeCancelled: !effectiveExcludeCancelled,
+			excludeCancelled: effectiveExcludeCancelled,
+			page: 1,
+			exportAll: "true",
+			limit: 5000,
+		}),
+		[effectiveExcludeCancelled, params]
+	);
 
 	useEffect(() => {
 		if (!active || !userId || !token) return;
@@ -904,6 +2610,99 @@ export const ExecutiveReservationsReport = ({
 	const topHotels = safeRows(report?.topHotels);
 	const bookingSources = safeRows(report?.bookingSources);
 	const stats = useMemo(() => report?.stats || {}, [report]);
+	const closeDrilldown = useCallback(() => {
+		setDrilldown((current) => ({ ...current, open: false }));
+	}, []);
+	const openDrilldown = useCallback(
+		({ title, extraParams = {}, clientFilter = null } = {}) => {
+			if (!userId || !token) return;
+			const requestId = drilldownRequestRef.current + 1;
+			drilldownRequestRef.current = requestId;
+			setDrilldown({
+				open: true,
+				title: title || labels.underlyingReservations,
+				rows: [],
+				loading: true,
+				error: "",
+			});
+			getOverallReservations(userId, token, {
+				...drilldownBaseParams,
+				...extraParams,
+			})
+				.then((data) => {
+					if (drilldownRequestRef.current !== requestId) return;
+					if (data?.error) {
+						setDrilldown((current) => ({
+							...current,
+							loading: false,
+							error: data.error,
+							rows: [],
+						}));
+						return;
+					}
+					const rows = Array.isArray(data?.reservations)
+						? data.reservations
+						: [];
+					setDrilldown((current) => ({
+						...current,
+						loading: false,
+						error: "",
+						rows:
+							typeof clientFilter === "function"
+								? rows.filter(clientFilter)
+								: rows,
+					}));
+				})
+				.catch(() => {
+					if (drilldownRequestRef.current !== requestId) return;
+					setDrilldown((current) => ({
+						...current,
+						loading: false,
+						error: labels.exportError,
+						rows: [],
+					}));
+				});
+		},
+		[drilldownBaseParams, labels.exportError, labels.underlyingReservations, token, userId]
+	);
+	const openReservationDetails = useCallback((reservation = {}) => {
+		setSelectedReservation(reservation);
+	}, []);
+	const handleReservationUpdated = useCallback((nextReservation = {}) => {
+		if (!nextReservation) return;
+		const nextId = normalizeId(nextReservation._id || nextReservation.id);
+		setSelectedReservation(nextReservation);
+		if (!nextId) return;
+		setDrilldown((current) => ({
+			...current,
+			rows: current.rows.map((row) =>
+				normalizeId(row._id || row.id) === nextId
+					? { ...row, ...nextReservation }
+					: row
+			),
+		}));
+	}, []);
+	const keyboardOpen =
+		(callback) =>
+		(event) => {
+			if (event.key === "Enter" || event.key === " ") {
+				event.preventDefault();
+				callback();
+			}
+		};
+	const scorecardProps = (title, extraParams = {}, clientFilter = null) => {
+		const onOpen = () => openDrilldown({ title, extraParams, clientFilter });
+		return {
+			$clickable: true,
+			role: "button",
+			tabIndex: 0,
+			title: labels.scorecardHint,
+			onClick: onOpen,
+			onKeyDown: keyboardOpen(onOpen),
+		};
+	};
+	const dateDrilldownTitle = (label, groupKey) =>
+		`${label}: ${formatChartDateLabel(groupKey, { full: true })}`;
 
 	const commonColumns = [
 		{ key: "name", label: labels.source },
@@ -1125,6 +2924,16 @@ export const ExecutiveReservationsReport = ({
 				expanded: !!options.expanded,
 				rows: creationRows,
 				countLabel: labels.reservations,
+				onPointClick: (row) =>
+					openDrilldown({
+						title: dateDrilldownTitle(labels.creationDate, row.groupKey),
+						extraParams: {
+							dateBy: "createdAt",
+							...riyadhDayUtcRange(row.groupKey),
+							sortBy: "createdAt",
+							sortOrder: "desc",
+						},
+					}),
 			})}
 			series={[
 				{
@@ -1147,6 +2956,16 @@ export const ExecutiveReservationsReport = ({
 				expanded: !!options.expanded,
 				rows: checkinRows,
 				countLabel: labels.checkins,
+				onPointClick: (row) =>
+					openDrilldown({
+						title: dateDrilldownTitle(labels.checkins, row.groupKey),
+						extraParams: {
+							dateBy: "checkin_date",
+							...riyadhDayUtcRange(row.groupKey),
+							sortBy: "checkin_date",
+							sortOrder: "asc",
+						},
+					}),
 			})}
 			series={[
 				{
@@ -1169,6 +2988,16 @@ export const ExecutiveReservationsReport = ({
 				expanded: !!options.expanded,
 				rows: checkoutRows,
 				countLabel: labels.checkouts,
+				onPointClick: (row) =>
+					openDrilldown({
+						title: dateDrilldownTitle(labels.checkouts, row.groupKey),
+						extraParams: {
+							dateBy: "checkout_date",
+							...riyadhDayUtcRange(row.groupKey),
+							sortBy: "checkout_date",
+							sortOrder: "asc",
+						},
+					}),
 			})}
 			series={[
 				{
@@ -1191,6 +3020,18 @@ export const ExecutiveReservationsReport = ({
 				text: labels,
 				isRTL,
 				rows: statusRows,
+				onPointClick: (row) =>
+					openDrilldown({
+						title: `${labels.status}: ${readableStatusLabel(
+							row.reservation_status,
+							chosenLanguage
+						)}`,
+						extraParams: {
+							status: row.reservation_status,
+							sortBy: "updatedAt",
+							sortOrder: "desc",
+						},
+					}),
 			})}
 			series={statusRows.map((row) => toNumber(row.reservationsCount))}
 		/>
@@ -1231,19 +3072,44 @@ export const ExecutiveReservationsReport = ({
 
 			<LoadingBlock loading={loading} error={error} labels={labels}>
 				<OverallCards>
-					<OverallCard>
+					<OverallCard
+						{...scorecardProps(labels.reservations, {
+							sortBy: "createdAt",
+							sortOrder: "desc",
+						})}
+					>
 						<strong>{formatMoney(stats.reservationsCount)}</strong>
 						<span>{labels.reservations}</span>
 					</OverallCard>
-					<OverallCard>
+					<OverallCard
+						{...scorecardProps(labels.totalAmount, {
+							sortBy: "total_amount",
+							sortOrder: "desc",
+						})}
+					>
 						<strong>{money(stats.total_amount, labels)}</strong>
 						<span>{labels.totalAmount}</span>
 					</OverallCard>
-					<OverallCard>
+					<OverallCard
+						{...scorecardProps(labels.paidAmount, {
+							sortBy: "total_amount",
+							sortOrder: "desc",
+						})}
+					>
 						<strong>{money(stats.paidAmount, labels)}</strong>
 						<span>{labels.paidAmount}</span>
 					</OverallCard>
-					<OverallCard>
+					<OverallCard
+						{...scorecardProps(
+							labels.commission,
+							{ sortBy: "total_amount", sortOrder: "desc" },
+							(reservation) =>
+								toNumber(
+									reservation.commission ||
+										reservation?.financial_cycle?.commissionAmount
+								) > 0
+						)}
+					>
 						<strong>{money(stats.commission, labels)}</strong>
 						<span>{labels.commission}</span>
 					</OverallCard>
@@ -1274,6 +3140,8 @@ export const ExecutiveReservationsReport = ({
 						renderChart={renderCreationChart}
 					/>
 				</div>
+
+				<div className='chart-click-hint'>{labels.chartHint}</div>
 
 				<div className='report-grid two'>
 					<section className='report-panel table-panel'>
@@ -1310,6 +3178,26 @@ export const ExecutiveReservationsReport = ({
 					</section>
 				</div>
 			</LoadingBlock>
+			<ReservationDrilldownModal
+				open={drilldown.open}
+				title={drilldown.title}
+				rows={drilldown.rows}
+				loading={drilldown.loading}
+				error={drilldown.error}
+				labels={labels}
+				isRTL={isRTL}
+				chosenLanguage={chosenLanguage}
+				onClose={closeDrilldown}
+				onOpenReservation={openReservationDetails}
+			/>
+			<OverallReservationDetailsModal
+				reservations={drilldown.rows}
+				selectedReservation={selectedReservation}
+				setSelectedReservation={setSelectedReservation}
+				ownerId={params?.ownerId}
+				onReservationUpdated={handleReservationUpdated}
+				chosenLanguage={chosenLanguage}
+			/>
 		</ExecutiveReportShell>
 	);
 };
@@ -1978,6 +3866,986 @@ export const ExecutivePaidReport = ({
 	);
 };
 
+const MySummaryShell = styled.div`
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	display: grid;
+	gap: 7px;
+	min-width: 0;
+	padding: 6px 10px 8px;
+	background: #ffffff;
+	color: #111827;
+	font-family: "Droid Arabic Kufi", "Tajawal", "Cairo", "Segoe UI", sans-serif;
+
+	button {
+		font-family: inherit;
+	}
+
+	.summary-top-layout {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-areas:
+			"overall spacer"
+			"new operation";
+		gap: 8px;
+		align-items: start;
+		min-width: 0;
+		direction: ltr;
+	}
+
+	.overview-stack {
+		grid-area: overall;
+		display: grid;
+		gap: 0;
+		min-width: 0;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.pending-summary-block,
+	.new-reservations-block,
+	.operation-section,
+	.future-section,
+	.ranking-section,
+	.ranking-panel {
+		display: grid;
+		gap: 6px;
+		min-width: 0;
+		padding: 7px;
+		border: 1px solid #e8edf5;
+		border-radius: 10px;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 251, 255, 0.98)),
+			linear-gradient(135deg, rgba(36, 84, 125, 0.04), rgba(111, 31, 120, 0.04));
+		box-shadow: 0 8px 18px rgba(17, 24, 39, 0.035);
+	}
+
+	.compact-metrics {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 6px;
+		align-items: stretch;
+		justify-content: ${(props) => (props.$isRTL ? "flex-start" : "flex-start")};
+		width: fit-content;
+		max-width: 100%;
+		padding: 7px;
+		border: 1px solid #e5e7eb;
+		border-radius: 10px;
+		background: #fafbfe;
+		overflow-x: auto;
+		scrollbar-width: thin;
+	}
+
+	.new-reservations-block {
+		grid-area: new;
+		align-self: start;
+		margin-top: 0;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.operation-section {
+		grid-area: operation;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.overview-stack h3,
+	.new-reservations-block h3,
+	.operation-section h3,
+	.future-section > h3,
+	.ranking-panel h3 {
+		position: relative;
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		justify-content: center;
+		width: 100%;
+		max-width: 100%;
+		min-height: 28px;
+		padding: 6px 36px;
+		border: 1px solid #e3e9f2;
+		border-inline-start: 4px solid #6f1f78;
+		border-radius: 8px;
+		background:
+			linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%),
+			linear-gradient(90deg, rgba(111, 31, 120, 0.08), rgba(36, 84, 125, 0.04));
+		color: #111827;
+		font-size: clamp(0.72rem, 0.88vw, 0.84rem);
+		font-weight: 950;
+		line-height: 1.15;
+		text-align: center;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+	}
+
+	.section-title-icon {
+		position: absolute;
+		inset-inline-start: 9px;
+		top: 50%;
+		transform: translateY(-50%);
+		display: inline-grid;
+		place-items: center;
+		flex: 0 0 22px;
+		width: 22px;
+		height: 22px;
+		border-radius: 7px;
+		background:
+			linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(224, 228, 236, 0.76)),
+			#eef2f8;
+		color: #6f1f78;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.9),
+			0 5px 12px rgba(111, 31, 120, 0.12);
+		font-size: 0.78rem;
+	}
+
+	.overview-stack h3 > span:last-child,
+	.new-reservations-block h3 > span:last-child,
+	.operation-section h3 > span:last-child,
+	.future-section > h3 > span:last-child,
+	.ranking-panel h3 > span:last-child {
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-align: center;
+	}
+
+	.new-metrics-box {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 6px;
+		align-items: stretch;
+		width: fit-content;
+		max-width: 100%;
+		padding: 7px;
+		border: 1px solid #e5e7eb;
+		border-radius: 10px;
+		background: #fafbfe;
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: thin;
+	}
+
+	.metric-chip {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-content: center;
+		align-items: center;
+		justify-items: start;
+		gap: 2px 7px;
+		width: auto;
+		min-width: 112px;
+		min-height: 50px;
+		padding: 6px 12px;
+		border: 0;
+		border-radius: 8px;
+		background:
+			linear-gradient(145deg, rgba(255, 255, 255, 0.75), rgba(208, 211, 216, 0.72)),
+			#d9d9d9;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.78),
+			inset 0 -1px 0 rgba(95, 100, 110, 0.18),
+			0 8px 18px rgba(17, 24, 39, 0.08);
+		color: #050505;
+		cursor: pointer;
+		transition: transform 0.16s ease, box-shadow 0.16s ease;
+	}
+
+	.metric-icon {
+		grid-row: 1 / span 2;
+		display: inline-grid;
+		place-items: center;
+		width: 25px;
+		height: 25px;
+		border-radius: 8px;
+		background:
+			linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(223, 227, 234, 0.75)),
+			#eef1f6;
+		color: #64166e;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.9),
+			0 5px 12px rgba(17, 24, 39, 0.09);
+		font-size: 0.88rem;
+	}
+
+	.metric-chip.large {
+		min-width: 154px;
+		min-height: 50px;
+	}
+
+	.metric-chip:hover,
+	.metric-chip:focus-visible {
+		outline: none;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.9),
+			0 12px 24px rgba(17, 24, 39, 0.14);
+		transform: translateY(-2px);
+	}
+
+	.metric-chip .metric-label {
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		min-height: 16px;
+		font-size: 0.54rem;
+		font-weight: 950;
+		line-height: 1.15;
+		white-space: nowrap;
+		text-align: inherit;
+	}
+
+	.metric-chip strong {
+		justify-self: start;
+		width: max-content;
+		color: #000000;
+		font-size: clamp(0.98rem, 1.08vw, 1.22rem);
+		font-weight: 950;
+		line-height: 1;
+		white-space: nowrap;
+		direction: ltr;
+		unicode-bidi: isolate;
+	}
+
+	.operation-cards {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 8px;
+		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: thin;
+	}
+
+	.operation-card {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: center;
+		justify-items: start;
+		align-content: center;
+		gap: 2px 8px;
+		flex: 1 0 118px;
+		width: auto;
+		min-width: 118px;
+		min-height: 52px;
+		padding: 7px 12px;
+		border: 0;
+		border-radius: 6px;
+		color: #050505;
+		cursor: pointer;
+		text-align: center;
+		transition: transform 0.16s ease, box-shadow 0.16s ease;
+	}
+
+	.operation-icon {
+		grid-row: 1 / span 2;
+		display: inline-grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.58);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.82),
+			0 6px 14px rgba(17, 24, 39, 0.09);
+		font-size: 0.96rem;
+	}
+
+	.operation-card:hover,
+	.operation-card:focus-visible {
+		outline: none;
+		box-shadow: 0 12px 22px rgba(17, 24, 39, 0.12);
+		transform: translateY(-2px);
+	}
+
+	.operation-card.arrival {
+		background: linear-gradient(135deg, #e8f5ff 0%, #d4ecfb 100%);
+	}
+
+	.operation-card.departure {
+		background: linear-gradient(135deg, #faedfd 0%, #efd9f3 100%);
+	}
+
+	.operation-card.checked {
+		background: linear-gradient(135deg, #fff7e7 0%, #ffedc8 100%);
+	}
+
+	.operation-card.noshow {
+		background: linear-gradient(135deg, #ff7a82 0%, #ff646f 100%);
+	}
+
+	.operation-card strong {
+		justify-self: start;
+		font-size: clamp(1.04rem, 1.28vw, 1.34rem);
+		font-weight: 950;
+		line-height: 1;
+		white-space: nowrap;
+		direction: ltr;
+		unicode-bidi: isolate;
+	}
+
+	.operation-card .operation-label {
+		justify-self: start;
+		font-size: clamp(0.6rem, 0.74vw, 0.74rem);
+		font-weight: 950;
+		line-height: 1.12;
+		white-space: nowrap;
+	}
+
+	.operation-card .operation-icon {
+		justify-self: start;
+	}
+
+	.future-section {
+		gap: 6px;
+	}
+
+	.chart-mode-tabs,
+	.period-tabs,
+	.ranking-tabs {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.chart-mode-tabs button,
+	.period-tabs button,
+	.ranking-tabs button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 5px;
+		min-width: 66px;
+		min-height: 30px;
+		padding: 5px 10px;
+		border: 0;
+		border-radius: 6px;
+		background: #e6f3fe;
+		color: #050505;
+		font-size: 0.7rem;
+		font-weight: 950;
+		cursor: pointer;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.82),
+			0 5px 12px rgba(17, 24, 39, 0.05);
+		transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+	}
+
+	.button-icon {
+		display: inline-grid;
+		place-items: center;
+		font-size: 0.78rem;
+		line-height: 1;
+	}
+
+	.chart-mode-tabs button:not(.active):nth-child(even),
+	.period-tabs button:not(.active):nth-child(even),
+	.ranking-tabs button:not(.active):nth-child(even) {
+		background: #f6e8f8;
+	}
+
+	.chart-mode-tabs button.active,
+	.period-tabs button.active,
+	.ranking-tabs button.active {
+		background:
+			linear-gradient(145deg, rgba(255, 255, 255, 0.55), rgba(207, 211, 218, 0.66)),
+			#dfe2e7;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.75),
+			0 7px 14px rgba(100, 22, 110, 0.12);
+	}
+
+	.chart-mode-tabs button:hover,
+	.period-tabs button:hover,
+	.ranking-tabs button:hover,
+	.chart-mode-tabs button:focus-visible,
+	.period-tabs button:focus-visible,
+	.ranking-tabs button:focus-visible {
+		outline: none;
+		transform: translateY(-1px);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.9),
+			0 8px 16px rgba(17, 24, 39, 0.1);
+	}
+
+	.future-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.summary-chart-panel {
+		min-width: 0;
+		padding: 4px 8px 0;
+		background: #ffffff;
+		border: 1px solid #eef1f5;
+		border-radius: 10px;
+		box-shadow: 0 8px 20px rgba(17, 24, 39, 0.04);
+	}
+
+	.summary-chart-panel header {
+		margin-bottom: 2px;
+		color: #1f2937;
+		font-size: 0.72rem;
+		font-weight: 900;
+		text-align: center;
+	}
+
+	.executive-chart-tooltip {
+		display: grid;
+		gap: 7px;
+		min-width: 190px;
+		padding: 10px 12px;
+		border: 1px solid #d4e4f7;
+		border-radius: 10px;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.98)),
+			linear-gradient(135deg, rgba(36, 84, 125, 0.08), rgba(111, 31, 120, 0.05));
+		box-shadow: 0 14px 30px rgba(15, 40, 66, 0.18);
+		color: #102033;
+		font-family: inherit;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	.executive-chart-tooltip .tooltip-date {
+		display: grid;
+		gap: 2px;
+		padding-bottom: 7px;
+		border-bottom: 1px solid #e4edf8;
+	}
+
+	.executive-chart-tooltip .tooltip-date span {
+		color: #64748b;
+		font-size: 0.64rem;
+		font-weight: 900;
+		line-height: 1.2;
+	}
+
+	.executive-chart-tooltip .tooltip-date strong {
+		color: #102033;
+		font-size: 0.86rem;
+		font-weight: 950;
+		line-height: 1.25;
+		white-space: nowrap;
+	}
+
+	.executive-chart-tooltip .tooltip-row {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 7px;
+		min-height: 32px;
+		padding: 6px 8px;
+		border-radius: 8px;
+		background: #f4f8ff;
+		color: #1e293b;
+		font-size: 0.75rem;
+		font-weight: 850;
+	}
+
+	.executive-chart-tooltip .tooltip-row strong {
+		color: #102033;
+		font-size: 0.9rem;
+		font-weight: 950;
+		line-height: 1;
+		white-space: nowrap;
+	}
+
+	.executive-chart-tooltip .tooltip-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 999px;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+	}
+
+	.occupancy-panel {
+		display: grid;
+		justify-items: center;
+		gap: 0;
+		min-width: 0;
+		padding: 8px 10px;
+		background: #f6f7fb;
+	}
+
+	.occupancy-panel h4 {
+		margin: 0;
+		color: #111827;
+		font-size: 0.72rem;
+		font-weight: 950;
+	}
+
+	.occupancy-panel ul {
+		display: grid;
+		gap: 2px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		color: #4b5563;
+		font-size: 0.6rem;
+		font-weight: 900;
+	}
+
+	.occupancy-panel li {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		justify-content: center;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		display: inline-block;
+	}
+
+	.dot.booked {
+		background: #1687d9;
+	}
+
+	.dot.available {
+		background: #08a75a;
+	}
+
+	.dot.blocked {
+		background: #646b73;
+	}
+
+	.period-tabs {
+		justify-content: center;
+		margin-top: 0;
+	}
+
+	.ranking-section {
+		gap: 8px;
+	}
+
+	.ranking-controls-row {
+		display: grid;
+		grid-template-columns: minmax(210px, 1fr) minmax(340px, auto) minmax(210px, 1fr);
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		padding: 6px 8px;
+		border: 1px solid #e3e9f2;
+		border-radius: 8px;
+		background: #ffffff;
+	}
+
+	.ranking-mode-group,
+	.ranking-period-controls {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 0;
+	}
+
+	.ranking-period-controls {
+		gap: 6px;
+	}
+
+	.ranking-period-controls > span {
+		color: #25364d;
+		font-size: 0.7rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	.ranking-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(320px, 1fr));
+		gap: 8px;
+		align-items: start;
+		min-width: 0;
+	}
+
+	.ranking-panel {
+		gap: 6px;
+		padding: 7px;
+		background: #ffffff;
+	}
+
+	.ranking-list {
+		display: grid;
+		align-content: start;
+		gap: 8px;
+		padding: 10px 12px;
+		background: #f5f7fb;
+		min-height: 124px;
+	}
+
+	.ranking-row {
+		display: grid;
+		grid-template-columns: minmax(82px, 0.25fr) minmax(140px, 1fr);
+		gap: 6px 10px;
+		align-items: center;
+		min-height: 36px;
+		min-width: 0;
+		border: 0;
+		background: transparent;
+		color: #111827;
+		cursor: pointer;
+		text-align: inherit;
+	}
+
+	.ranking-row:hover .ranking-name,
+	.ranking-row:focus-visible .ranking-name {
+		color: #24547d;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.ranking-value {
+		color: #1f2937;
+		font-size: 0.66rem;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+
+	.ranking-name {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		color: #111827;
+		font-size: 0.72rem;
+		font-weight: 950;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ranking-row-icon {
+		display: inline-grid;
+		place-items: center;
+		flex: 0 0 19px;
+		width: 19px;
+		height: 19px;
+		border-radius: 6px;
+		background: #ffffff;
+		color: #64166e;
+		box-shadow: inset 0 0 0 1px rgba(100, 22, 110, 0.1);
+		font-size: 0.68rem;
+	}
+
+	.ranking-name-text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ranking-track {
+		grid-column: 2;
+		display: block;
+		height: 11px;
+		background: #dbeafe;
+		border-radius: 999px;
+		overflow: hidden;
+	}
+
+	.ranking-track span {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: #3f8df5;
+	}
+
+	.ranking-empty {
+		display: grid;
+		place-items: center;
+		min-height: 72px;
+		color: #6b7280;
+		font-size: 0.68rem;
+		font-weight: 850;
+		text-align: center;
+	}
+
+	.report-loading {
+		display: grid;
+		place-items: center;
+		gap: 10px;
+		min-height: 320px;
+		color: #6b7280;
+		font-weight: 900;
+	}
+
+	@media (max-width: 1180px) {
+		.summary-top-layout,
+		.future-grid,
+		.ranking-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.summary-top-layout {
+			grid-template-areas:
+				"overall"
+				"new"
+				"operation";
+		}
+
+		.new-reservations-block {
+			margin-top: 0;
+		}
+	}
+
+	@media (max-width: 900px) {
+		.ranking-controls-row {
+			grid-template-columns: 1fr;
+			justify-items: stretch;
+		}
+
+		.ranking-mode-group,
+		.ranking-period-controls {
+			justify-content: center;
+		}
+
+		.ranking-period-controls {
+			flex-wrap: wrap;
+		}
+	}
+
+	@media (max-width: 760px) {
+		padding: 8px;
+
+		.new-metrics-box {
+			padding: 8px;
+			border-radius: 10px;
+		}
+
+		.ranking-row {
+			grid-template-columns: 1fr;
+		}
+
+		.ranking-track {
+			grid-column: 1;
+		}
+
+	}
+
+	@media (max-width: 460px) {
+		.metric-chip,
+		.operation-card {
+			min-height: 48px;
+		}
+
+		.period-tabs,
+		.chart-mode-tabs,
+		.ranking-tabs {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.period-tabs button,
+		.chart-mode-tabs button,
+		.ranking-tabs button {
+			min-width: 0;
+		}
+	}
+`;
+
+const DrilldownTitle = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-width: 0;
+
+	strong {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		color: #172033;
+		font-size: 1rem;
+		font-weight: 950;
+		overflow-wrap: anywhere;
+	}
+
+	strong > .anticon {
+		flex: 0 0 auto;
+		color: #64166e;
+		font-size: 1rem;
+	}
+
+	strong > span {
+		min-width: 0;
+		color: inherit;
+		font-size: inherit;
+		font-weight: inherit;
+	}
+
+	.drilldown-title-count {
+		flex: 0 0 auto;
+		color: #667085;
+		font-size: 0.78rem;
+		font-weight: 850;
+	}
+
+	@media (max-width: 640px) {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 4px;
+	}
+`;
+
+const DrilldownModalBody = styled.div`
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	display: grid;
+	gap: 8px;
+
+	.drilldown-loading {
+		min-height: 220px;
+		display: grid;
+		place-items: center;
+		gap: 10px;
+		color: #667085;
+		font-weight: 850;
+	}
+
+	.drilldown-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 8px 10px;
+		border: 1px solid rgba(45, 93, 145, 0.16);
+		border-radius: 8px;
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.98)),
+			linear-gradient(135deg, rgba(36, 84, 125, 0.08), rgba(111, 31, 120, 0.06));
+		box-shadow: 0 6px 16px rgba(16, 32, 51, 0.05);
+	}
+
+	.drilldown-count {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 7px;
+		min-width: 0;
+		color: #172033;
+	}
+
+	.drilldown-count strong {
+		color: #64166e;
+		font-size: 1rem;
+		font-weight: 950;
+		line-height: 1;
+	}
+
+	.drilldown-count span {
+		min-width: 0;
+		color: #53627a;
+		font-size: 0.76rem;
+		font-weight: 900;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.drilldown-export-btn.ant-btn {
+		min-height: 32px;
+		height: 32px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 7px;
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)),
+			linear-gradient(135deg, #24102d 0%, #64166e 58%, #8d4c9d 100%);
+		color: #ffffff;
+		font-size: 0.78rem;
+		font-weight: 950;
+		box-shadow: 0 8px 18px rgba(80, 23, 96, 0.2);
+	}
+
+	.drilldown-export-btn.ant-btn:hover,
+	.drilldown-export-btn.ant-btn:focus {
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+			linear-gradient(135deg, #2d1238 0%, #731f82 58%, #9c5cac 100%);
+		color: #ffffff;
+	}
+
+	table.reservation-main-table {
+		min-width: 1280px;
+	}
+
+	table.reservation-main-table th,
+	table.reservation-main-table td {
+		padding-top: 6px;
+		padding-bottom: 6px;
+	}
+
+	.link-btn {
+		border: 0;
+		background: transparent;
+		color: #24547d;
+		font-weight: 950;
+		padding: 0;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+	}
+
+	.drilldown-pagination {
+		display: flex;
+		justify-content: center;
+		padding: 2px 0 0;
+	}
+
+	.drilldown-pagination .ant-pagination {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 2px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.drilldown-pagination .ant-pagination-item,
+	.drilldown-pagination .ant-pagination-prev,
+	.drilldown-pagination .ant-pagination-next,
+	.drilldown-pagination .ant-pagination-options {
+		margin-inline-end: 4px;
+	}
+
+	.drilldown-pagination .ant-pagination-item-active {
+		border-color: #64166e;
+	}
+
+	.drilldown-pagination .ant-pagination-item-active a {
+		color: #64166e;
+		font-weight: 950;
+	}
+
+	@media (max-width: 700px) {
+		gap: 7px;
+
+		.drilldown-toolbar {
+			align-items: stretch;
+			display: grid;
+			grid-template-columns: 1fr;
+			padding: 8px;
+		}
+
+		.drilldown-count {
+			justify-content: center;
+		}
+
+		.drilldown-export-btn.ant-btn {
+			width: 100%;
+		}
+
+		.drilldown-pagination {
+			justify-content: center;
+		}
+
+		.drilldown-pagination .ant-pagination {
+			justify-content: center;
+		}
+	}
+`;
+
 const ExecutiveReportShell = styled.div`
 	display: grid;
 	gap: 1rem;
@@ -2121,27 +4989,48 @@ const ExecutiveReportShell = styled.div`
 	}
 
 	.report-panel > header {
-		display: flex;
+		position: relative;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		align-items: center;
-		justify-content: space-between;
+		justify-items: center;
 		gap: 10px;
+		min-height: 30px;
 		margin-bottom: 10px;
 		color: #162033;
 		font-size: 0.96rem;
 		font-weight: 950;
 		line-height: 1.35;
+		text-align: center;
 		overflow-wrap: anywhere;
 	}
 
 	.report-panel > header > span {
 		min-width: 0;
+		max-width: calc(100% - 72px);
+		text-align: center;
 		overflow-wrap: anywhere;
+	}
+
+	.report-panel > header .ant-btn {
+		position: absolute;
+		inset-inline-end: 0;
+		top: 50%;
+		transform: translateY(-50%);
 	}
 
 	.chart-panel {
 		background:
 			linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.98)),
 			linear-gradient(135deg, rgba(45, 93, 145, 0.08), rgba(111, 31, 120, 0.06));
+	}
+
+	.chart-click-hint {
+		margin-top: -0.35rem;
+		color: #667085;
+		font-size: 0.8rem;
+		font-weight: 800;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	}
 
 	.chart-panel .ant-btn {
@@ -2159,46 +5048,65 @@ const ExecutiveReportShell = styled.div`
 
 	.executive-chart-tooltip {
 		display: grid;
-		gap: 8px;
-		min-width: 178px;
+		gap: 7px;
+		min-width: 190px;
 		padding: 10px 12px;
-		border: 1px solid #d7e7f8;
-		border-radius: 8px;
-		background: rgba(255, 255, 255, 0.98);
-		box-shadow: 0 12px 28px rgba(15, 40, 66, 0.16);
+		border: 1px solid #d4e4f7;
+		border-radius: 10px;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.98)),
+			linear-gradient(135deg, rgba(36, 84, 125, 0.08), rgba(111, 31, 120, 0.05));
+		box-shadow: 0 14px 30px rgba(15, 40, 66, 0.18);
 		color: #102033;
 		font-family: inherit;
 		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	}
 
 	.executive-chart-tooltip .tooltip-date {
-		padding-bottom: 5px;
-		border-bottom: 1px solid #e7eef8;
-		color: #17395f;
-		font-size: 0.8rem;
+		display: grid;
+		gap: 2px;
+		padding-bottom: 7px;
+		border-bottom: 1px solid #e4edf8;
+	}
+
+	.executive-chart-tooltip .tooltip-date span {
+		color: #64748b;
+		font-size: 0.64rem;
+		font-weight: 900;
+		line-height: 1.2;
+	}
+
+	.executive-chart-tooltip .tooltip-date strong {
+		color: #102033;
+		font-size: 0.86rem;
 		font-weight: 950;
+		line-height: 1.25;
 		white-space: nowrap;
 	}
 
 	.executive-chart-tooltip .tooltip-row {
-		display: flex;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
-		justify-content: space-between;
 		gap: 7px;
+		min-height: 32px;
+		padding: 6px 8px;
+		border-radius: 8px;
+		background: #f4f8ff;
 		color: #1e293b;
-		font-size: 0.78rem;
+		font-size: 0.75rem;
 		font-weight: 850;
-		white-space: nowrap;
 	}
 
 	.executive-chart-tooltip .tooltip-row strong {
 		color: #102033;
-		font-size: 0.82rem;
+		font-size: 0.9rem;
 		font-weight: 950;
+		line-height: 1;
+		white-space: nowrap;
 	}
 
 	.executive-chart-tooltip .tooltip-amount {
-		padding-top: 2px;
 		color: #334155;
 	}
 

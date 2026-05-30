@@ -862,19 +862,60 @@ export const OverallCard = styled.article`
 	align-content: center;
 	gap: 0.25rem;
 	padding: 0.9rem;
-	border: 1px solid rgba(141, 76, 157, 0.16);
+	border: 1px solid rgba(134, 92, 146, 0.34);
 	border-radius: 8px;
-	background: linear-gradient(135deg, #ffffff 0%, #fbf6ff 100%);
-	box-shadow: 0 8px 18px rgba(40, 16, 52, 0.07);
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 249, 252, 0.98) 42%, rgba(234, 239, 246, 0.96) 100%),
+		linear-gradient(155deg, rgba(255, 255, 255, 0.9), rgba(120, 141, 166, 0.16));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.98),
+		inset 0 -1px 0 rgba(88, 101, 121, 0.08),
+		0 12px 26px rgba(32, 43, 58, 0.1);
+	position: relative;
+	overflow: hidden;
+	transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+
+	&::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background:
+			linear-gradient(118deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.08) 32%, transparent 54%),
+			radial-gradient(circle at 18% 0%, rgba(141, 76, 157, 0.14), transparent 42%);
+	}
+
+	> * {
+		position: relative;
+		z-index: 1;
+	}
+
+	${(props) =>
+		props.$clickable
+			? `
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			border-color: rgba(141, 76, 157, 0.68);
+			box-shadow:
+				inset 0 1px 0 rgba(255, 255, 255, 1),
+				0 16px 32px rgba(55, 36, 72, 0.16);
+			transform: translateY(-2px);
+			outline: none;
+		}
+	`
+			: ""}
 
 	strong {
-		color: #5d1d6e;
+		color: #3d2448;
 		font-size: 1.5rem;
 		line-height: 1;
+		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.78);
 	}
 
 	span {
-		color: #6d5875;
+		color: #475467;
 		font-size: 0.78rem;
 		font-weight: 900;
 	}
