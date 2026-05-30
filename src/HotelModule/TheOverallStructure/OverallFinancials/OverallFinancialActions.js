@@ -561,12 +561,11 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	};
 
 	const reviewWalletClaim = (transaction = {}, action = "approve", reason = "") => {
-		const hotelId = normalizeId(transaction.hotelId);
 		const transactionId = normalizeId(transaction._id);
 		const actorId = currentUser?._id || userId;
-		if (!hotelId || !transactionId || !actorId) return;
+		if (!transactionId || !actorId) return;
 		setActionLoading(true);
-		reviewAgentWalletClaim(hotelId, actorId, token, transactionId, {
+		reviewAgentWalletClaim("", actorId, token, transactionId, {
 			action,
 			rejectionReason: reason,
 		})

@@ -206,6 +206,8 @@ HotelModule Structure
   - Hotel financial dashboards, manager financial modal, wallet/agent financial operations.
   - In the overall financial report/wallet screens, pure order-taker/agent accounts are pinned to their own agent id even if query params are manually changed. They may see assigned-hotel financial data only for their own wallet, reservations, commissions, and claims.
   - Overall financial report, financial actions, and wallet-management menu entries are visible to order-taker/agent users, but the backend and frontend must keep those users scoped to their own agent records only.
+  - Agent wallets are global per agent, not per hotel. OverallWalletManagement must not ask for a hotel when adding wallet money or submitting an agent wallet claim; the backend derives authorized hotel scope from the logged-in actor and the selected/global agent.
+  - Overall financial report and manager financial modal should fetch the agent wallet summary once from the global wallet endpoint, not once per hotel, so wallet movements are not duplicated across assigned hotels.
   - Single-hotel agent wallet ledgers must show rejected wallet-claim reasons clearly in the transactions table and exports, because the notification may be acknowledged before the agent reviews the financial page.
 - Agent overall regression scenario
   - Sign in as an approved order-taker/agent with multiple assigned hotels and at least one active notification.
@@ -289,6 +291,8 @@ Frontend Critical Workflows To Protect
   - /hotel-management/main-dashboard?overall=update-account must not preselect an account from accountId query params or auto-select the first table row. The editor panel should show a language-aware prompt asking the user to click an account from the table or search for one, then populate only after explicit selection.
 - Financials and wallets
   - Finance actions should stay behind finance/owner-like role checks and must use backend validation.
+  - Wallet API callers should use the global agent-wallet endpoints in apiAdmin.js. The old hotelId parameter may remain in function signatures for compatibility, but the request path should not include it for wallet summaries, todos, claims, reviews, transaction create/update, or void.
+  - OverallWalletManagement should delete stale hotelId query params and only synchronize agentId/transactionId for wallet management. Hotel names may still appear on reservation rows or legacy wallet rows as context, but they are not the wallet scope.
   - Overall financial-report wallet movement rows show financial status. Rejected wallet claims remain visible with a light red row, display Rejected, show the finance rejection reason when available, and show that they are audit-only/not added to reconciliation. Excel exports include the rejection reason column as well.
   - Overall pending financial actions includes a second paginated table for pending wallet approvals from finance, separate from reservation financial-action pagination. Approval/rejection actions call the agent-wallet review endpoint so backend notifications and ActivityTracker records stay in sync.
   - Agent/manager financial dashboards and the overall financial report must show both commission paid and unpaid/due amounts. Finance can mark commission due/paid/no-due in the finance-action modal; reports and exports should preserve that split so agents know what has already been paid out versus what is still outstanding.

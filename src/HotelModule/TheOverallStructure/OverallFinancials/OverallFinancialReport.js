@@ -422,14 +422,16 @@ const decorateAgentRow = (item = {}, hotel = {}) => ({
 	hotelName: titleCase(hotel.hotelName || hotel.name || "Hotel"),
 	transactions: (Array.isArray(item.transactions) ? item.transactions : []).map((tx) => ({
 		...tx,
-		hotelId: normalizeId(hotel._id || hotel.id),
-		hotelName: titleCase(hotel.hotelName || hotel.name || "Hotel"),
+		hotelId: normalizeId(tx.hotelId || tx.legacyHotelId || hotel._id || hotel.id),
+		hotelName: titleCase(tx.hotelName || hotel.hotelName || hotel.name || "Hotel"),
 	})),
 	reservations: (Array.isArray(item.reservations) ? item.reservations : []).map(
 		(reservation) => ({
 			...reservation,
-			hotelId: normalizeId(hotel._id || hotel.id),
-			hotelName: titleCase(hotel.hotelName || hotel.name || "Hotel"),
+			hotelId: normalizeId(reservation.hotelId || hotel._id || hotel.id),
+			hotelName: titleCase(
+				reservation.hotelName || hotel.hotelName || hotel.name || "Hotel"
+			),
 		})
 	),
 });
@@ -564,25 +566,22 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 
 	const loadFinancials = useCallback(async () => {
 		if (!userId || !token || !hotels.length) return;
-		const selectedHotels = filters.hotelId
-			? hotels.filter((hotel) => normalizeId(hotel._id) === filters.hotelId)
-			: hotels;
 		setLoading(true);
 		try {
-			const results = await Promise.all(
-				selectedHotels.map(async (hotel) => {
-					const data = await getAgentWalletSummary(hotel._id, userId, token, {
-						startDate: filters.startDate,
-						endDate: filters.endDate,
-					});
-					return { data, hotel };
-				})
-			);
-			const rows = results.flatMap(({ data, hotel }) =>
-				data && !data.error && Array.isArray(data.agents)
-					? data.agents.map((item) => decorateAgentRow(item, hotel))
-					: []
-			);
+			const data = await getAgentWalletSummary("", userId, token, {
+				startDate: filters.startDate,
+				endDate: filters.endDate,
+			});
+			if (data?.error) {
+				message.error(data.error || txt.error);
+				setAllRows([]);
+				return;
+			}
+			const rows = Array.isArray(data?.agents)
+				? data.agents.map((item) =>
+						decorateAgentRow(item, { id: "global", name: txt.allHotels })
+				  )
+				: [];
 			setAllRows(rows);
 		} catch (error) {
 			console.error(error);
@@ -593,10 +592,10 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		}
 	}, [
 		filters.endDate,
-		filters.hotelId,
 		filters.startDate,
 		hotels,
 		token,
+		txt.allHotels,
 		txt.error,
 		userId,
 	]);

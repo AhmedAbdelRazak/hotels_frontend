@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Empty, Input, InputNumber, Modal, Select, Spin, Table, Tag, message } from "antd";
+import { Button, Input, InputNumber, Modal, Select, Spin, Table, Tag, message } from "antd";
 import {
 	EditOutlined,
 	PaperClipOutlined,
@@ -12,12 +12,10 @@ import {
 	createAgentWalletClaim,
 	createAgentWalletTransaction,
 	getAgentWalletSummary,
-	getOverallSummary,
 	reviewAgentWalletClaim,
 	updateAgentWalletTransaction,
 } from "../../apiAdmin";
 import {
-	buildOwnerParams,
 	formatDate,
 	getOverallText,
 	normalizeId,
@@ -29,7 +27,7 @@ const TEXT = {
 	en: {
 		title: "Adding / Updating Wallets",
 		subtitle:
-			"Add or update agent wallet movements across your assigned hotels. Choose the hotel first so every entry is scoped correctly.",
+			"Add or update each agent's general wallet across your assigned overall reservation scope.",
 		hotel: "Hotel",
 		chooseHotel: "Choose hotel",
 		chooseHotelFirst: "Choose a hotel first to load agents and wallet movements.",
@@ -93,7 +91,7 @@ const TEXT = {
 		commissionOnly: "Commission only",
 		walletInventory: "Inventory wallet",
 		mixedModel: "Wallet + commission",
-		required: "Please choose a hotel, an agent, and enter an amount.",
+		required: "Please choose an agent and enter an amount.",
 		saved: "Wallet movement saved.",
 		updated: "Wallet movement updated.",
 		error: "Unable to load wallet data.",
@@ -106,7 +104,7 @@ const TEXT = {
 	ar: {
 		title: "\u0625\u0636\u0627\u0641\u0629 / \u062a\u062d\u062f\u064a\u062b \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
 		subtitle:
-			"\u0623\u0636\u0641 \u0623\u0648 \u0639\u062f\u0644 \u062d\u0631\u0643\u0627\u062a \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0639\u0628\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0645\u062e\u0635\u0635\u0629. \u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u0623\u0648\u0644\u0627 \u0644\u0631\u0628\u0637 \u0643\u0644 \u062d\u0631\u0643\u0629 \u0628\u0634\u0643\u0644 \u0635\u062d\u064a\u062d.",
+			"\u0623\u0636\u0641 \u0623\u0648 \u0639\u062f\u0644 \u062d\u0631\u0643\u0627\u062a \u0645\u062d\u0641\u0638\u0629 \u0643\u0644 \u0648\u0643\u064a\u0644 \u0628\u0634\u0643\u0644 \u0639\u0627\u0645 \u0636\u0645\u0646 \u0646\u0637\u0627\u0642 \u062d\u062c\u0648\u0632\u0627\u062a\u0643 \u0627\u0644\u0645\u0635\u0631\u062d.",
 		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotel: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotelFirst:
@@ -181,7 +179,7 @@ const TEXT = {
 		walletInventory: "\u0645\u062d\u0641\u0638\u0629 \u0645\u062e\u0632\u0648\u0646",
 		mixedModel: "\u0645\u062d\u0641\u0638\u0629 \u0648\u0639\u0645\u0648\u0644\u0629",
 		required:
-			"\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u0648\u0627\u0644\u0648\u0643\u064a\u0644 \u0648\u0625\u062f\u062e\u0627\u0644 \u0627\u0644\u0645\u0628\u0644\u063a.",
+			"\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0648\u0643\u064a\u0644 \u0648\u0625\u062f\u062e\u0627\u0644 \u0627\u0644\u0645\u0628\u0644\u063a.",
 		saved: "\u062a\u0645 \u062d\u0641\u0638 \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		updated: "\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		error: "\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
@@ -275,8 +273,7 @@ const transactionStatusColor = (row = {}) => {
 	return "green";
 };
 
-const buildEmptyEntry = (hotelId = "", agentId = "") => ({
-	hotelId,
+const buildEmptyEntry = (agentId = "") => ({
 	agentId,
 	transactionType: "deposit",
 	amount: 0,
@@ -319,44 +316,28 @@ const isOrderTakerOnly = (user = {}) => {
 	return isAgent && !hasFullAccess;
 };
 
-const decorateAgent = (item = {}, hotel = {}) => ({
-	...item,
-	hotelId: normalizeId(hotel._id),
-	hotelName: hotel.hotelName || "",
-});
-
-const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage }) => {
+const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const txt = { ...getOverallText(chosenLanguage), ...TEXT[isRTL ? "ar" : "en"] };
 	const history = useHistory();
 	const location = useLocation();
 	const agentOnly = isOrderTakerOnly(user);
-	const [hotels, setHotels] = useState([]);
 	const [summary, setSummary] = useState(null);
-	const [loadingHotels, setLoadingHotels] = useState(false);
 	const [loadingWallets, setLoadingWallets] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [editingTransactionId, setEditingTransactionId] = useState("");
 	const [agentPage, setAgentPage] = useState(1);
 	const [txPage, setTxPage] = useState(1);
 	const [filters, setFilters] = useState({
-		hotelId: queryValue(location.search, "hotelId"),
 		agentId: queryValue(location.search, "agentId"),
 	});
 	const [entry, setEntry] = useState(() =>
-		buildEmptyEntry(queryValue(location.search, "hotelId"), queryValue(location.search, "agentId"))
+		buildEmptyEntry(queryValue(location.search, "agentId"))
 	);
 
-	const selectedHotel = useMemo(
-		() => hotels.find((hotel) => normalizeId(hotel._id) === filters.hotelId) || null,
-		[filters.hotelId, hotels]
-	);
 	const agentRows = useMemo(
-		() =>
-			(Array.isArray(summary?.agents) ? summary.agents : []).map((item) =>
-				decorateAgent(item, selectedHotel || {})
-			),
-		[summary?.agents, selectedHotel]
+		() => (Array.isArray(summary?.agents) ? summary.agents : []),
+		[summary?.agents]
 	);
 	const visibleAgentRows = useMemo(
 		() =>
@@ -378,8 +359,8 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 			visibleAgentRows.flatMap((item) =>
 				(Array.isArray(item.transactions) ? item.transactions : []).map((tx) => ({
 					...tx,
-					hotelId: item.hotelId,
-					hotelName: item.hotelName,
+					hotelId: normalizeId(tx.hotelId || tx.legacyHotelId),
+					hotelName: tx.hotelName || "",
 					agentId: normalizeId(item.agent),
 					agentName: item.agent?.name || item.agent?.email || "",
 					companyName: item.agent?.companyName || "",
@@ -402,7 +383,8 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 		(nextFilters = filters, transactionId = editingTransactionId) => {
 			const params = new URLSearchParams(location.search || "");
 			params.set("overall", "wallet-management");
-			["hotelId", "agentId"].forEach((key) => {
+			params.delete("hotelId");
+			["agentId"].forEach((key) => {
 				if (nextFilters[key]) params.set(key, nextFilters[key]);
 				else params.delete(key);
 			});
@@ -415,44 +397,14 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 		[editingTransactionId, filters, history, location.pathname, location.search]
 	);
 
-	useEffect(() => {
-		if (!userId || !token) return;
-		setLoadingHotels(true);
-		getOverallSummary(userId, token, {
-			...buildOwnerParams(ownerId),
-			range: "all",
-		})
-			.then((data) => {
-				if (data?.error) {
-					message.error(data.error || txt.error);
-					setHotels([]);
-					return;
-				}
-				const list = Array.isArray(data?.hotels) ? data.hotels : [];
-				setHotels(list);
-				setFilters((current) => {
-					if (current.hotelId && list.some((hotel) => normalizeId(hotel._id) === current.hotelId)) {
-						return current;
-					}
-					if (list.length === 1) {
-						const onlyHotelId = normalizeId(list[0]._id);
-						setEntry((previous) => ({ ...previous, hotelId: onlyHotelId }));
-						return { ...current, hotelId: onlyHotelId };
-					}
-					return { ...current, hotelId: "" };
-				});
-			})
-			.finally(() => setLoadingHotels(false));
-	}, [ownerId, token, txt.error, userId]);
-
 	const loadWallets = useCallback(async () => {
-		if (!userId || !token || !filters.hotelId) {
+		if (!userId || !token) {
 			setSummary(null);
 			return;
 		}
 		setLoadingWallets(true);
 		try {
-			const data = await getAgentWalletSummary(filters.hotelId, userId, token);
+			const data = await getAgentWalletSummary("", userId, token);
 			if (data?.error) {
 				message.error(data.error || txt.error);
 				setSummary(null);
@@ -466,7 +418,6 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 			setLoadingWallets(false);
 		}
 	}, [
-		filters.hotelId,
 		token,
 		txt.error,
 		userId,
@@ -485,12 +436,6 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 		setTxPage(1);
 		setFilters((current) => {
 			const next = { ...current, [key]: value || "" };
-			if (key === "hotelId") {
-				next.agentId = "";
-				setSummary(null);
-				setEditingTransactionId("");
-				setEntry(buildEmptyEntry(value || "", ""));
-			}
 			if (key === "agentId") {
 				setEntry((previous) => ({ ...previous, agentId: value || "" }));
 			}
@@ -515,18 +460,16 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 
 	const resetEntry = () => {
 		setEditingTransactionId("");
-		setEntry(buildEmptyEntry(filters.hotelId, filters.agentId));
+		setEntry(buildEmptyEntry(filters.agentId));
 	};
 
 	const editTransaction = (transaction = {}) => {
 		setEditingTransactionId(normalizeId(transaction._id));
 		setFilters((current) => ({
 			...current,
-			hotelId: transaction.hotelId || current.hotelId,
 			agentId: transaction.agentId || current.agentId,
 		}));
 		setEntry({
-			hotelId: transaction.hotelId || filters.hotelId,
 			agentId: transaction.agentId || "",
 			transactionType: transaction.transactionType || "deposit",
 			amount: Number(transaction.amount || 0),
@@ -591,7 +534,7 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 	};
 
 	const saveEntry = async () => {
-		if (!entry.hotelId || !entry.agentId || Number(entry.amount || 0) <= 0) {
+		if (!entry.agentId || Number(entry.amount || 0) <= 0) {
 			message.error(txt.required);
 			return;
 		}
@@ -611,16 +554,16 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 		};
 		try {
 			const response = agentOnly && !editingTransactionId
-				? await createAgentWalletClaim(entry.hotelId, userId, token, payload)
+				? await createAgentWalletClaim("", userId, token, payload)
 				: editingTransactionId
 				? await updateAgentWalletTransaction(
-						entry.hotelId,
+						"",
 						userId,
 						token,
 						editingTransactionId,
 						payload
 				  )
-				: await createAgentWalletTransaction(entry.hotelId, userId, token, payload);
+				: await createAgentWalletTransaction("", userId, token, payload);
 			if (response?.error) {
 				message.error(isRTL && response.errorArabic ? response.errorArabic : response.error || txt.saveError);
 				return;
@@ -643,12 +586,11 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 
 	const reviewWalletClaim = async (transaction = {}, action, reason = "") => {
 		const transactionId = normalizeId(transaction._id);
-		const transactionHotelId = normalizeId(transaction.hotelId || filters.hotelId);
-		if (!transactionId || !transactionHotelId) return;
+		if (!transactionId) return;
 		setSaving(true);
 		try {
 			const response = await reviewAgentWalletClaim(
-				transactionHotelId,
+				"",
 				userId,
 				token,
 				transactionId,
@@ -827,8 +769,7 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
 			<WalletShell $isRTL={isRTL}>
-				{hotels.length ? (
-					<>
+				<>
 						<EntryPanel>
 							<PanelTitle>
 								<span>
@@ -842,7 +783,6 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 									<Button
 										icon={<ReloadOutlined />}
 										onClick={loadWallets}
-										disabled={!filters.hotelId}
 									>
 										{txt.refresh}
 									</Button>
@@ -855,23 +795,11 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 							</PanelTitle>
 							<EntryGrid>
 								<label>
-									<span>{txt.hotel}<em>{txt.requiredMark}</em></span>
-									<Select
-										value={entry.hotelId || undefined}
-										placeholder={txt.chooseHotel}
-										options={hotels.map((hotel) => ({
-											value: normalizeId(hotel._id),
-											label: titleCase(hotel.hotelName || "Hotel"),
-										}))}
-										onChange={(value) => updateFilter("hotelId", value)}
-									/>
-								</label>
-								<label>
 									<span>{txt.agent}<em>{txt.requiredMark}</em></span>
 									<Select
 										value={entry.agentId || undefined}
 										placeholder={txt.chooseAgent}
-										disabled={!entry.hotelId || agentOnly}
+										disabled={agentOnly}
 										showSearch
 										optionFilterProp='label'
 										options={agentOptions}
@@ -1017,7 +945,7 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 							<Panel>
 								<PanelTitle>{txt.agents}</PanelTitle>
 								<Table
-									rowKey={(row) => `${row.hotelId}-${normalizeId(row.agent)}`}
+									rowKey={(row) => normalizeId(row.agent)}
 									dataSource={visibleAgentRows}
 									columns={agentColumns}
 									size='small'
@@ -1052,13 +980,7 @@ const OverallWalletManagement = ({ userId, user, token, ownerId, chosenLanguage 
 								/>
 							</Panel>
 						</Spin>
-					</>
-				) : (
-					<Empty description={loadingHotels ? txt.loading : txt.noHotels} />
-				)}
-				{hotels.length > 0 && !filters.hotelId && (
-					<Empty description={txt.chooseHotelFirst} />
-				)}
+				</>
 			</WalletShell>
 		</OverallPageShell>
 	);

@@ -253,7 +253,7 @@ export const getAgentWalletSummary = (hotelId, userId, token, params = {}) => {
 	});
 	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/summary/${hotelId}/${userId}${queryString}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/summary/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
@@ -277,7 +277,7 @@ export const getAgentTodoList = (hotelId, userId, token, params = {}) => {
 	});
 	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/todos/${hotelId}/${userId}${queryString}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/todos/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {
@@ -299,7 +299,7 @@ export const createAgentWalletClaim = (
 	payload = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${hotelId}/${userId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}`,
 		{
 			method: "POST",
 			headers: {
@@ -323,7 +323,7 @@ export const reviewAgentWalletClaim = (
 	payload = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${hotelId}/${userId}/${transactionId}/review`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}/${transactionId}/review`,
 		{
 			method: "PUT",
 			headers: {
@@ -369,7 +369,7 @@ export const createAgentWalletTransaction = (
 	payload = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}`,
 		{
 			method: "POST",
 			headers: {
@@ -393,7 +393,7 @@ export const updateAgentWalletTransaction = (
 	payload = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}/${transactionId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}`,
 		{
 			method: "PUT",
 			headers: {
@@ -416,7 +416,7 @@ export const deleteAgentWalletTransaction = (
 	transactionId,
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${hotelId}/${userId}/${transactionId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}`,
 		{
 			method: "DELETE",
 			headers: {

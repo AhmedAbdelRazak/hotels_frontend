@@ -402,8 +402,8 @@ const decorateAgentRow = (item = {}, hotel = {}, responseHotel = {}) => {
 		transactions: (Array.isArray(item.transactions) ? item.transactions : []).map(
 			(tx) => ({
 				...tx,
-				hotelId,
-				hotelName,
+				hotelId: normalizeId(tx.hotelId || tx.legacyHotelId || hotelId),
+				hotelName: toTitleCase(tx.hotelName || hotelName),
 			})
 		),
 		reservations: (Array.isArray(item.reservations)
@@ -411,8 +411,8 @@ const decorateAgentRow = (item = {}, hotel = {}, responseHotel = {}) => {
 			: []
 		).map((reservation) => ({
 			...reservation,
-			hotelId,
-			hotelName,
+			hotelId: normalizeId(reservation.hotelId || hotelId),
+			hotelName: toTitleCase(reservation.hotelName || hotelName),
 		})),
 	};
 };
@@ -531,26 +531,14 @@ const ManagerFinancialsModal = ({
 		if (!open || !normalizedHotels.length || !userId || !token) return;
 		setLoading(true);
 		try {
-			const results = await Promise.all(
-				normalizedHotels.map(async (hotel) => {
-					const data = await getAgentWalletSummary(hotel.id, userId, token, {});
-					return { data, hotel };
-				})
-			);
-			const successful = results.filter((item) => item.data && !item.data.error);
-			const failed = results.filter((item) => item.data?.error || !item.data);
-			if (!successful.length) {
-				message.error(failed[0]?.data?.error || txt.error);
+			const data = await getAgentWalletSummary("", userId, token, {});
+			if (!data || data.error) {
+				message.error(data?.error || txt.error);
 				setSummary(null);
 				return;
 			}
-			if (failed.length) {
-				message.warning(txt.error);
-			}
-			const nextAgents = successful.flatMap(({ data, hotel }) =>
-				(Array.isArray(data?.agents) ? data.agents : []).map((item) =>
-					decorateAgentRow(item, hotel, data?.hotel)
-				)
+			const nextAgents = (Array.isArray(data?.agents) ? data.agents : []).map((item) =>
+				decorateAgentRow(item, { id: "global", name: txt.hotelList })
 			);
 			setSummary({
 				agents: nextAgents,
@@ -573,7 +561,7 @@ const ManagerFinancialsModal = ({
 		} finally {
 			setLoading(false);
 		}
-	}, [normalizedHotels, open, token, txt.error, userId]);
+	}, [normalizedHotels, open, token, txt.error, txt.hotelList, userId]);
 
 	useEffect(() => {
 		loadFinancials();
