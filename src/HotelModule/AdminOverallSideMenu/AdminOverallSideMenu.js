@@ -353,6 +353,7 @@ const AdminOverallSideMenu = ({
 				"reservationTab",
 				"agentId",
 				"transactionId",
+				"walletTab",
 				"startDate",
 				"endDate",
 				"actionType",

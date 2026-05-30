@@ -29,7 +29,12 @@ const TEXT = {
 		title: "Agent Wallet Management",
 		subtitle:
 			"Add or update each agent's general wallet across your assigned overall reservation scope.",
+		addTab: "Add new",
+		updateTab: "Update",
 		entryTitle: "Wallet movement details",
+		updatePromptTitle: "Choose a wallet movement to update",
+		updatePrompt:
+			"Use the wallet movements table below, then click Update on the movement you want to edit.",
 		hotel: "Hotel",
 		chooseHotel: "Choose hotel",
 		chooseHotelFirst: "Choose a hotel first to load agents and wallet movements.",
@@ -107,7 +112,13 @@ const TEXT = {
 		title: "\u0625\u062f\u0627\u0631\u0629 \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
 		subtitle:
 			"\u0623\u0636\u0641 \u0623\u0648 \u0639\u062f\u0644 \u062d\u0631\u0643\u0627\u062a \u0645\u062d\u0641\u0638\u0629 \u0643\u0644 \u0648\u0643\u064a\u0644 \u0628\u0634\u0643\u0644 \u0639\u0627\u0645 \u0636\u0645\u0646 \u0646\u0637\u0627\u0642 \u062d\u062c\u0648\u0632\u0627\u062a\u0643 \u0627\u0644\u0645\u0635\u0631\u062d.",
+		addTab: "\u0625\u0636\u0627\u0641\u0629 \u062c\u062f\u064a\u062f\u0629",
+		updateTab: "\u062a\u062d\u062f\u064a\u062b",
 		entryTitle: "\u062a\u0641\u0627\u0635\u064a\u0644 \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
+		updatePromptTitle:
+			"\u0627\u062e\u062a\u0631 \u062d\u0631\u0643\u0629 \u0645\u062d\u0641\u0638\u0629 \u0644\u062a\u062d\u062f\u064a\u062b\u0647\u0627",
+		updatePrompt:
+			"\u0627\u0633\u062a\u062e\u062f\u0645 \u062c\u062f\u0648\u0644 \u062d\u0631\u0643\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0623\u062f\u0646\u0627\u0647\u060c \u062b\u0645 \u0627\u0636\u063a\u0637 \u062a\u062d\u062f\u064a\u062b \u0639\u0644\u0649 \u0627\u0644\u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629.",
 		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotel: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0646\u062f\u0642",
 		chooseHotelFirst:
@@ -289,6 +300,17 @@ const buildEmptyEntry = (agentId = "") => ({
 const queryValue = (search = "", key = "") =>
 	new URLSearchParams(search || "").get(key) || "";
 
+const WALLET_TAB_ADD = "add";
+const WALLET_TAB_UPDATE = "update";
+
+const walletTabFromSearch = (search = "") => {
+	const params = new URLSearchParams(search || "");
+	if (params.get("transactionId")) return WALLET_TAB_UPDATE;
+	return params.get("walletTab") === WALLET_TAB_UPDATE
+		? WALLET_TAB_UPDATE
+		: WALLET_TAB_ADD;
+};
+
 const roleNumbers = (user = {}) => [
 	...new Set([user.role, ...(Array.isArray(user.roles) ? user.roles : [])]
 		.map(Number)
@@ -325,10 +347,16 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	const history = useHistory();
 	const location = useLocation();
 	const agentOnly = isOrderTakerOnly(user);
+	const queryTransactionId = normalizeId(queryValue(location.search, "transactionId"));
 	const [summary, setSummary] = useState(null);
 	const [loadingWallets, setLoadingWallets] = useState(false);
 	const [saving, setSaving] = useState(false);
-	const [editingTransactionId, setEditingTransactionId] = useState("");
+	const [activeWalletTab, setActiveWalletTab] = useState(() =>
+		walletTabFromSearch(location.search)
+	);
+	const [editingTransactionId, setEditingTransactionId] =
+		useState(queryTransactionId);
+	const [entryTransactionId, setEntryTransactionId] = useState("");
 	const [agentPage, setAgentPage] = useState(1);
 	const [txPage, setTxPage] = useState(1);
 	const [filters, setFilters] = useState({
@@ -381,12 +409,20 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		entryAgentRow?.walletRequired === false;
 	const canSubmitEntry =
 		canManage || (agentOnly && !editingTransactionId && !entryAgentIsCommissionOnly);
+	const isUpdateTab = activeWalletTab === WALLET_TAB_UPDATE;
+	const shouldShowUpdatePrompt =
+		isUpdateTab && (!editingTransactionId || entryTransactionId !== editingTransactionId);
 
 	const syncQuery = useCallback(
-		(nextFilters = filters, transactionId = editingTransactionId) => {
+		(
+			nextFilters = filters,
+			transactionId = editingTransactionId,
+			walletTab = activeWalletTab
+		) => {
 			const params = new URLSearchParams(location.search || "");
 			params.set("overall", "wallet-management");
 			params.delete("hotelId");
+			params.set("walletTab", walletTab === WALLET_TAB_UPDATE ? "update" : "add");
 			["agentId"].forEach((key) => {
 				if (nextFilters[key]) params.set(key, nextFilters[key]);
 				else params.delete(key);
@@ -397,7 +433,14 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 			else params.delete("transactionId");
 			history.replace({ pathname: location.pathname, search: `?${params}` });
 		},
-		[editingTransactionId, filters, history, location.pathname, location.search]
+		[
+			activeWalletTab,
+			editingTransactionId,
+			filters,
+			history,
+			location.pathname,
+			location.search,
+		]
 	);
 
 	const loadWallets = useCallback(async () => {
@@ -431,8 +474,24 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	}, [loadWallets]);
 
 	useEffect(() => {
-		syncQuery(filters, editingTransactionId);
-	}, [filters, editingTransactionId, syncQuery]);
+		syncQuery(
+			filters,
+			activeWalletTab === WALLET_TAB_UPDATE ? editingTransactionId : "",
+			activeWalletTab
+		);
+	}, [activeWalletTab, filters, editingTransactionId, syncQuery]);
+
+	useEffect(() => {
+		const nextTab = walletTabFromSearch(location.search);
+		setActiveWalletTab(nextTab);
+		const nextTransactionId = normalizeId(queryValue(location.search, "transactionId"));
+		if (nextTransactionId) {
+			setEditingTransactionId(nextTransactionId);
+		} else if (nextTab === WALLET_TAB_ADD) {
+			setEditingTransactionId("");
+			setEntryTransactionId("");
+		}
+	}, [location.search]);
 
 	const updateFilter = (key, value) => {
 		setAgentPage(1);
@@ -461,13 +520,19 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}));
 	}, [agentOnly, agentRows, filters.agentId, user?._id]);
 
-	const resetEntry = () => {
+	const resetEntry = (nextTab = WALLET_TAB_ADD) => {
+		setActiveWalletTab(nextTab);
 		setEditingTransactionId("");
+		setEntryTransactionId("");
 		setEntry(buildEmptyEntry(filters.agentId));
 	};
 
-	const editTransaction = (transaction = {}) => {
-		setEditingTransactionId(normalizeId(transaction._id));
+	const editTransaction = useCallback((transaction = {}) => {
+		const transactionId = normalizeId(transaction._id);
+		if (!transactionId) return;
+		setActiveWalletTab(WALLET_TAB_UPDATE);
+		setEditingTransactionId(transactionId);
+		setEntryTransactionId(transactionId);
 		setFilters((current) => ({
 			...current,
 			agentId: transaction.agentId || current.agentId,
@@ -485,7 +550,16 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 				? transaction.attachments
 				: [],
 		});
-	};
+	}, []);
+
+	useEffect(() => {
+		if (!queryTransactionId || !transactionRows.length) return;
+		const transaction = transactionRows.find(
+			(row) => normalizeId(row._id) === queryTransactionId
+		);
+		if (!transaction || entryTransactionId === queryTransactionId) return;
+		editTransaction(transaction);
+	}, [editTransaction, entryTransactionId, queryTransactionId, transactionRows]);
 
 	const handleAttachmentFiles = async (event) => {
 		const files = Array.from(event.target.files || []);
@@ -578,7 +652,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 					? txt.updated
 					: txt.saved
 			);
-			resetEntry();
+			resetEntry(editingTransactionId ? WALLET_TAB_UPDATE : WALLET_TAB_ADD);
 			loadWallets();
 		} catch (error) {
 			message.error(txt.saveError);
@@ -657,6 +731,18 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 				)}
 			</AttachmentLinks>
 		);
+	};
+
+	const switchWalletTab = (tab) => {
+		if (tab === WALLET_TAB_ADD) {
+			resetEntry(WALLET_TAB_ADD);
+			return;
+		}
+		setActiveWalletTab(WALLET_TAB_UPDATE);
+		if (!editingTransactionId) {
+			setEntryTransactionId("");
+			setEntry(buildEmptyEntry(filters.agentId));
+		}
 	};
 
 	const agentColumns = [
@@ -738,6 +824,13 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 						<WalletActionButtons>
 							<Button
 								size='small'
+								icon={<EditOutlined />}
+								onClick={() => editTransaction(row)}
+							>
+								{txt.edit}
+							</Button>
+							<Button
+								size='small'
 								type='primary'
 								loading={saving}
 								onClick={() => reviewWalletClaim(row, "approve")}
@@ -755,7 +848,6 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 						</WalletActionButtons>
 					);
 				}
-				if (row.source === "agent_claim") return "-";
 				return (
 					<Button
 						size='small'
@@ -782,10 +874,28 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 								<p>{txt.subtitle}</p>
 							</div>
 						</WalletPageHeader>
+						<WalletTabs>
+							<button
+								type='button'
+								className={activeWalletTab === WALLET_TAB_ADD ? "active" : ""}
+								onClick={() => switchWalletTab(WALLET_TAB_ADD)}
+							>
+								<PlusOutlined />
+								<span>{txt.addTab}</span>
+							</button>
+							<button
+								type='button'
+								className={activeWalletTab === WALLET_TAB_UPDATE ? "active" : ""}
+								onClick={() => switchWalletTab(WALLET_TAB_UPDATE)}
+							>
+								<EditOutlined />
+								<span>{txt.updateTab}</span>
+							</button>
+						</WalletTabs>
 						<EntryPanel>
 							<PanelTitle>
 								<span>
-									{editingTransactionId
+									{isUpdateTab
 										? txt.update
 										: agentOnly
 										? txt.claimWalletCredit
@@ -799,12 +909,22 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 										{txt.refresh}
 									</Button>
 									{editingTransactionId && (
-										<Button type='link' onClick={resetEntry}>
+										<Button
+											type='link'
+											onClick={() => resetEntry(WALLET_TAB_UPDATE)}
+										>
 											{txt.cancelEdit}
 										</Button>
 									)}
 								</div>
 							</PanelTitle>
+							{shouldShowUpdatePrompt ? (
+								<UpdatePrompt>
+									<EditOutlined />
+									<strong>{txt.updatePromptTitle}</strong>
+									<span>{txt.updatePrompt}</span>
+								</UpdatePrompt>
+							) : (
 							<EntryGrid>
 								<label>
 									<span>{txt.agent}<em>{txt.requiredMark}</em></span>
@@ -935,9 +1055,12 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 									)}
 								</AttachmentPicker>
 								<FormActions className='wide'>
-									<Button onClick={resetEntry}>{txt.newEntry}</Button>
+									<Button onClick={() => resetEntry(WALLET_TAB_ADD)}>
+										{txt.newEntry}
+									</Button>
 									<Button
 										type='primary'
+										className='wallet-save-action'
 										icon={editingTransactionId ? <EditOutlined /> : <PlusOutlined />}
 										loading={saving}
 										onClick={saveEntry}
@@ -951,6 +1074,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 									</Button>
 								</FormActions>
 							</EntryGrid>
+							)}
 						</EntryPanel>
 
 						<Spin spinning={loadingWallets}>
@@ -979,7 +1103,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 									size='small'
 									scroll={{ x: 1380 }}
 									rowClassName={(row) =>
-										normalizeId(row._id) === queryValue(location.search, "transactionId")
+										normalizeId(row._id) === editingTransactionId
 											? "overall-wallet-row-selected"
 											: ""
 									}
@@ -1071,12 +1195,127 @@ const WalletPageHeader = styled.header`
 	}
 `;
 
+const WalletTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid rgba(45, 93, 145, 0.22);
+	border-radius: 10px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.98)),
+		linear-gradient(180deg, rgba(141, 76, 157, 0.12), rgba(16, 32, 51, 0.08));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		0 8px 18px rgba(16, 32, 51, 0.05);
+
+	button {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		min-width: 0;
+		min-height: 38px;
+		padding: 8px 12px;
+		border: 1px solid rgba(45, 93, 145, 0.18);
+		border-radius: 8px;
+		background: linear-gradient(180deg, #ffffff 0%, #f4f8fe 100%);
+		color: #102033;
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-weight: 950;
+		line-height: 1.2;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			color 0.18s ease,
+			transform 0.18s ease;
+	}
+
+	button.active {
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+			linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
+		border-color: rgba(183, 123, 198, 0.72);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+			0 8px 18px rgba(80, 23, 96, 0.2);
+		color: #ffffff;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+		transform: translateY(-1px);
+	}
+
+	button.active::after {
+		content: "";
+		position: absolute;
+		inset-inline: 18px;
+		bottom: 5px;
+		height: 2px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #d7b5df, #ffffff, #67a7df);
+		box-shadow: 0 0 10px rgba(215, 181, 223, 0.62);
+	}
+
+	button:hover:not(.active),
+	button:focus-visible:not(.active) {
+		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		border-color: rgba(45, 93, 145, 0.35);
+		color: #ffffff;
+		outline: none;
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
 const EntryPanel = styled.section`
 	border: 1px solid #d8e8f7;
 	border-radius: 12px;
 	background: #ffffff;
 	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 	padding: 12px;
+`;
+
+const UpdatePrompt = styled.div`
+	display: grid;
+	justify-items: center;
+	gap: 8px;
+	min-height: 142px;
+	padding: 24px 16px;
+	border: 1px dashed #b9d7f5;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #f8fbff 0%, #edf7ff 100%);
+	color: #17324d;
+	text-align: center;
+
+	svg {
+		display: inline-flex;
+		width: 36px;
+		height: 36px;
+		padding: 8px;
+		border-radius: 999px;
+		background: #ffffff;
+		color: #64166e;
+		box-shadow: 0 8px 16px rgba(80, 23, 96, 0.12);
+	}
+
+	strong {
+		font-size: 0.95rem;
+		font-weight: 950;
+	}
+
+	span {
+		max-width: 560px;
+		color: #52677a;
+		font-size: 0.8rem;
+		font-weight: 850;
+		line-height: 1.55;
+	}
 `;
 
 const Panel = styled.section`
@@ -1217,14 +1456,51 @@ const EntryGrid = styled.div`
 
 const FormActions = styled.div`
 	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
 	flex-wrap: wrap;
+	padding-top: 4px;
 
 	.ant-btn {
 		min-height: 38px;
 		border-radius: 8px;
 		font-weight: 900;
+	}
+
+	.wallet-save-action {
+		min-width: min(280px, 100%);
+		min-height: 46px;
+		padding-inline: 28px;
+		border: 0;
+		border-radius: 11px;
+		background: linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
+		color: #ffffff;
+		font-size: 0.92rem;
+		font-weight: 950;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			0 12px 22px rgba(80, 23, 96, 0.24);
+	}
+
+	.wallet-save-action:hover,
+	.wallet-save-action:focus-visible {
+		background: linear-gradient(135deg, #17324d 0%, #4a245c 48%, #7d2788 100%) !important;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.22),
+			0 14px 26px rgba(80, 23, 96, 0.3);
+	}
+
+	.wallet-save-action:disabled {
+		opacity: 0.58;
+		box-shadow: none;
+	}
+
+	@media (max-width: 520px) {
+		.ant-btn,
+		.wallet-save-action {
+			width: 100%;
+		}
 	}
 `;
 

@@ -43,6 +43,19 @@ const roleOptions = [
 	{ value: "housekeeping", role: 5000, en: "Housekeeping", ar: "النظافة" },
 ];
 
+const ACCOUNT_VIEW_EMPLOYEES = "employees";
+const ACCOUNT_VIEW_AGENTS = "agents";
+const EMPLOYEE_ROLE_VALUES = [
+	"systemadmin",
+	"hotelmanager",
+	"reception",
+	"finance",
+	"reservationemployee",
+	"housekeepingmanager",
+	"housekeeping",
+];
+const AGENT_ROLE_VALUES = ["ordertaker"];
+
 const accessOptions = [
 	{ value: "overall", en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	{ value: "dashboard", en: "Dashboard", ar: "لوحة التحكم" },
@@ -84,6 +97,8 @@ const TEXT = {
 		currentAccounts: "Current accounts",
 		addAccount: "Add new account",
 		updateAccount: "Update account",
+		hotelEmployeesTab: "Hotel Employees",
+		externalAgentsTab: "External Agents",
 		selectAccount: "Select an account",
 		selectedAccount: "Selected account",
 		noSelection:
@@ -346,6 +361,11 @@ const queryValues = (query, key) =>
 		.map((item) => item.trim())
 		.filter(Boolean);
 
+const accountViewFromSearch = (search = "") => {
+	const value = new URLSearchParams(search || "").get("accountView");
+	return value === ACCOUNT_VIEW_AGENTS ? ACCOUNT_VIEW_AGENTS : ACCOUNT_VIEW_EMPLOYEES;
+};
+
 const UpdateExistingAccount = ({
 	userId,
 	token,
@@ -362,7 +382,14 @@ const UpdateExistingAccount = ({
 		() => new URLSearchParams(location.search || ""),
 		[location.search]
 	);
-	const queryPage = Math.max(parseInt(query.get("accountPage"), 10) || 1, 1);
+	const queryPage = Math.max(
+		parseInt(query.get("accountPage") || query.get("page"), 10) || 1,
+		1
+	);
+	const queryAccountId = normalizeId(query.get("accountId"));
+	const [activeAccountView, setActiveAccountView] = useState(() =>
+		accountViewFromSearch(location.search)
+	);
 	const [filters, setFilters] = useState({
 		search: query.get("accountSearch") || "",
 		role: queryValues(query, "accountRole"),
@@ -374,9 +401,22 @@ const UpdateExistingAccount = ({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
 	const [result, setResult] = useState({ accounts: [], hotels: [], total: 0 });
-	const [selectedAccountId, setSelectedAccountId] = useState("");
+	const [selectedAccountId, setSelectedAccountId] = useState(queryAccountId);
 	const [form, setForm] = useState(emptyForm);
 	const [previewDocument, setPreviewDocument] = useState(null);
+	const allowedRoleValues =
+		activeAccountView === ACCOUNT_VIEW_AGENTS
+			? AGENT_ROLE_VALUES
+			: EMPLOYEE_ROLE_VALUES;
+	const visibleRoleFilter = useMemo(() => {
+		const selectedRoles = Array.isArray(filters.role) ? filters.role : [];
+		return selectedRoles.filter((role) =>
+			allowedRoleValues.includes(role)
+		);
+	}, [allowedRoleValues, filters.role]);
+	const effectiveRoleFilter = visibleRoleFilter.length
+		? visibleRoleFilter
+		: allowedRoleValues;
 
 	const accounts = useMemo(
 		() => (Array.isArray(result.accounts) ? result.accounts : []),
@@ -436,10 +476,11 @@ const UpdateExistingAccount = ({
 		() => ({
 			...buildOwnerParams(ownerId),
 			...filters,
+			role: effectiveRoleFilter,
 			page,
 			limit: OVERALL_PAGE_SIZE,
 		}),
-		[filters, ownerId, page]
+		[effectiveRoleFilter, filters, ownerId, page]
 	);
 
 	const loadAccounts = useCallback(() => {
@@ -476,6 +517,21 @@ const UpdateExistingAccount = ({
 			setAccountsModalHotels(hotels);
 		}
 	}, [hotels, setAccountsModalHotels]);
+
+	useEffect(() => {
+		const nextView = accountViewFromSearch(location.search);
+		setActiveAccountView((previousView) => {
+			if (previousView === nextView) return previousView;
+			setFilters((previous) => ({ ...previous, role: [] }));
+			setPage(1);
+			setSelectedAccountId("");
+			return nextView;
+		});
+	}, [location.search]);
+
+	useEffect(() => {
+		setSelectedAccountId(queryAccountId);
+	}, [queryAccountId]);
 
 	useEffect(() => {
 		if (!selectedAccount) {
@@ -534,6 +590,25 @@ const UpdateExistingAccount = ({
 		setPage(safePage);
 		setSelectedAccountId("");
 		syncQuery({ accountPage: safePage, accountId: "" }, true);
+	};
+
+	const handleAccountViewChange = (nextView) => {
+		const view =
+			nextView === ACCOUNT_VIEW_AGENTS ? ACCOUNT_VIEW_AGENTS : ACCOUNT_VIEW_EMPLOYEES;
+		if (view === activeAccountView) return;
+		setActiveAccountView(view);
+		setFilters((previous) => ({ ...previous, role: [] }));
+		setPage(1);
+		setSelectedAccountId("");
+		syncQuery(
+			{
+				accountView: view === ACCOUNT_VIEW_AGENTS ? view : "",
+				accountRole: "",
+				accountPage: 1,
+				accountId: "",
+			},
+			true
+		);
 	};
 
 	const selectAccount = (accountId) => {
@@ -722,8 +797,25 @@ const UpdateExistingAccount = ({
 			.finally(() => setSaving(false));
 	};
 
+	const accountViewOptions = [
+		{
+			value: ACCOUNT_VIEW_EMPLOYEES,
+			label: isRTL
+				? "\u0645\u0648\u0638\u0641\u0648 \u0627\u0644\u0641\u0646\u0627\u062f\u0642"
+				: labels.hotelEmployeesTab,
+		},
+		{
+			value: ACCOUNT_VIEW_AGENTS,
+			label: isRTL
+				? "\u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0627\u0644\u062e\u0627\u0631\u062c\u064a\u0648\u0646"
+				: labels.externalAgentsTab,
+		},
+	];
+	const accountRoleOptions = roleOptions.filter((option) =>
+		allowedRoleValues.includes(option.value)
+	);
 	const roleSelectOptions = [
-		...roleOptions.map((option) => ({
+		...accountRoleOptions.map((option) => ({
 			value: option.value,
 			label: isRTL ? option.ar : option.en,
 		})),
@@ -752,6 +844,19 @@ const UpdateExistingAccount = ({
 	return (
 		<OverallPageShell $isRTL={isRTL}>
 			<InlineAccountShell $isRTL={isRTL}>
+				<AccountTabs>
+					{accountViewOptions.map((tab) => (
+						<button
+							type='button'
+							key={tab.value}
+							className={activeAccountView === tab.value ? "active" : ""}
+							onClick={() => handleAccountViewChange(tab.value)}
+						>
+							{tab.label}
+						</button>
+					))}
+				</AccountTabs>
+
 				<OverallToolbar
 					onSubmit={(event) => {
 						event.preventDefault();
@@ -773,7 +878,7 @@ const UpdateExistingAccount = ({
 						isRTL={isRTL}
 					/>
 					<MultiSelectFilter
-						value={filters.role}
+						value={visibleRoleFilter}
 						options={roleSelectOptions}
 						onChange={(value) => updateFilter("role", value)}
 						allLabel={labels.allRoles}
@@ -962,7 +1067,7 @@ const UpdateExistingAccount = ({
 										<Requirement $required>{labels.required}</Requirement>
 									</SelectionHeader>
 									<SelectionGrid>
-										{roleOptions.map((option) => {
+										{accountRoleOptions.map((option) => {
 											const disabled =
 												isSystemAdminSelected &&
 												option.value !== "systemadmin";
@@ -1243,6 +1348,81 @@ const UpdateExistingAccount = ({
 };
 
 export default UpdateExistingAccount;
+
+const AccountTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid rgba(45, 93, 145, 0.22);
+	border-radius: 8px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.98) 100%),
+		linear-gradient(180deg, rgba(141, 76, 157, 0.12), rgba(16, 32, 51, 0.08));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		0 8px 22px rgba(16, 32, 51, 0.06);
+
+	button {
+		position: relative;
+		overflow: hidden;
+		min-width: 0;
+		min-height: 40px;
+		padding: 8px 12px;
+		border: 1px solid rgba(45, 93, 145, 0.18);
+		border-radius: 8px;
+		background: linear-gradient(180deg, #ffffff 0%, #f4f8fe 100%);
+		color: #102033;
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-weight: 950;
+		line-height: 1.2;
+		transition:
+			background 0.18s ease,
+			border-color 0.18s ease,
+			box-shadow 0.18s ease,
+			color 0.18s ease,
+			transform 0.18s ease;
+	}
+
+	button.active {
+		background:
+			linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
+			linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
+		border-color: rgba(183, 123, 198, 0.72);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+			0 10px 22px rgba(80, 23, 96, 0.24);
+		color: #ffffff;
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.24);
+		transform: translateY(-1px);
+	}
+
+	button.active::after {
+		content: "";
+		position: absolute;
+		inset-inline: 18px;
+		bottom: 6px;
+		height: 3px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #d7b5df, #ffffff, #67a7df);
+		box-shadow: 0 0 12px rgba(215, 181, 223, 0.72);
+	}
+
+	button:hover:not(.active),
+	button:focus-visible:not(.active) {
+		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		border-color: rgba(45, 93, 145, 0.35);
+		color: #ffffff;
+		outline: none;
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
+	}
+`;
 
 const InlineAccountShell = styled.section`
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};

@@ -80,6 +80,18 @@ const accountViewFromSearch = (search = "") => {
 	return value === ACCOUNT_VIEW_AGENTS ? ACCOUNT_VIEW_AGENTS : ACCOUNT_VIEW_EMPLOYEES;
 };
 
+const isExternalAgentAccount = (account = {}) => {
+	const roles = [
+		Number(account.role),
+		...(Array.isArray(account.roles) ? account.roles.map(Number) : []),
+	];
+	const descriptions = [
+		account.roleDescription,
+		...(Array.isArray(account.roleDescriptions) ? account.roleDescriptions : []),
+	].map((item) => String(item || "").toLowerCase());
+	return roles.includes(7000) || descriptions.includes("ordertaker");
+};
+
 const ACCESS_TEXT = {
 	overall: { en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	dashboard: { en: "Dashboard", ar: "لوحة التحكم" },
@@ -425,6 +437,11 @@ const AccountManagementMain = ({
 		searchParams.set("overall", "update-account");
 		searchParams.delete("modal");
 		searchParams.delete("accountTab");
+		if (isExternalAgentAccount(account)) {
+			searchParams.set("accountView", ACCOUNT_VIEW_AGENTS);
+		} else {
+			searchParams.delete("accountView");
+		}
 		if (account._id) searchParams.set("accountId", account._id);
 		history.push({
 			pathname: location.pathname,

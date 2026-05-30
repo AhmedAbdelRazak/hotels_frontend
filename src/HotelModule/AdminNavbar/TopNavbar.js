@@ -1595,6 +1595,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 		if (isAgentWalletClaimNotification(item)) {
 			params.set("overall", "wallet-management");
+			params.set("walletTab", "update");
 			if (item.agentId) params.set("agentId", item.agentId);
 			if (item.walletTransactionId) {
 				params.set("transactionId", item.walletTransactionId);
@@ -1672,6 +1673,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				const params = new URLSearchParams();
 				if (targetOwnerId) params.set("ownerId", targetOwnerId);
 				params.set("overall", "wallet-management");
+				params.set("walletTab", "update");
 				params.set("hotelId", targetHotelId);
 				if (item.agentId) params.set("agentId", item.agentId);
 				if (item.walletTransactionId) {
