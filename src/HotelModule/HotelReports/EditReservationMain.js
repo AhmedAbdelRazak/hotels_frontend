@@ -30,6 +30,11 @@ const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
 	return isNaN(parsed) ? fallback : parsed;
 };
+const normalizeId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
 
 // Load the “manual paid amount” password from env (or set a fallback)
 const PASSWORD_FOR_PAID_AMOUNT =
@@ -202,8 +207,7 @@ const EditReservationMain = ({
 			const data = await gettingHotelDetailsForAdmin(user._id, token);
 			if (data && !data.error) {
 				const hotels = Array.isArray(data) ? data : [];
-				const activeHotels = hotels.filter((h) => h.activateHotel === true);
-				const sortedHotels = activeHotels.sort((a, b) =>
+				const sortedHotels = hotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
 				setAllHotels(sortedHotels);
@@ -260,13 +264,14 @@ const EditReservationMain = ({
 	// 3) Once hotels are fetched, set selectedHotel & Rooms
 	useEffect(() => {
 		if (reservation && allHotels.length > 0) {
-			const hotel = allHotels.find((h) => h._id === reservation.hotelId._id);
+			const reservationHotelId = normalizeId(reservation.hotelId);
+			const hotel = allHotels.find((h) => normalizeId(h) === reservationHotelId);
 			if (hotel) {
 				setSelectedHotel(hotel);
 
 				const mappedRooms = reservation.pickedRoomsType.map((room) => ({
 					roomType: room.room_type || "",
-					displayName: room.displayName || "",
+					displayName: room.displayName || room.display_name || "",
 					count: room.count || 1,
 					chosenPrice: safeParseFloat(room.chosenPrice, 0),
 					pricingByDay: room.pricingByDay || [],
@@ -802,7 +807,7 @@ const EditReservationMain = ({
 
 		// If hotel changed, append or increment "_relocate" suffix
 		let updatedConfirmationNumber = reservation.confirmation_number;
-		if (selectedHotel._id !== reservation.hotelId._id) {
+		if (normalizeId(selectedHotel) !== normalizeId(reservation.hotelId)) {
 			const relocatePattern = /_relocate(\d*)$/;
 			const match = updatedConfirmationNumber.match(relocatePattern);
 			if (match) {
@@ -950,6 +955,7 @@ const EditReservationMain = ({
 								{allHotels.map((ht) => (
 									<Option key={ht._id} value={ht._id}>
 										{ht.hotelName}
+										{ht.activateHotel === false ? " (Inactive)" : ""}
 									</Option>
 								))}
 							</Select>

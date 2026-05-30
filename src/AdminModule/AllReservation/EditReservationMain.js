@@ -93,6 +93,11 @@ const resolveAdminPricingDay = (day = {}) => {
 const normalizeRoomLabel = (value) => String(value || "").trim().toLowerCase();
 const availabilityKey = (roomType, displayName) =>
 	`${normalizeRoomLabel(displayName)}|${normalizeRoomLabel(roomType)}`;
+const normalizeId = (value) => {
+	if (!value) return "";
+	if (typeof value === "object") return String(value._id || value.id || "");
+	return String(value);
+};
 
 /** Commission to percent:
  * - If <= 0 → fallback 10
@@ -335,10 +340,8 @@ const EditReservationMain = ({
 		try {
 			const data = await gettingHotelDetailsForAdminAll(user._id, token);
 			if (data && !data.error) {
-				const activeHotels = data.hotels.filter(
-					(h) => h.activateHotel === true
-				);
-				const sorted = activeHotels.sort((a, b) =>
+				const hotels = Array.isArray(data.hotels) ? data.hotels : [];
+				const sorted = hotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)
 				);
 				setAllHotels(sorted);
@@ -398,12 +401,13 @@ const EditReservationMain = ({
 	// 3) Pick current hotel + map existing rooms
 	useEffect(() => {
 		if (!reservation || allHotels.length === 0) return;
-		const hotel = allHotels.find((h) => h._id === reservation.hotelId?._id);
+		const reservationHotelId = normalizeId(reservation.hotelId);
+		const hotel = allHotels.find((h) => normalizeId(h) === reservationHotelId);
 		if (hotel) {
 			setSelectedHotel(hotel);
 			const mappedRooms = (reservation.pickedRoomsType || []).map((room) => ({
 				roomType: room.room_type || "",
-				displayName: room.displayName || "",
+				displayName: room.displayName || room.display_name || "",
 				count: room.count || 1,
 				chosenPrice: safeParseFloat(room.chosenPrice, 0),
 				pricingByDay: room.pricingByDay || [],
@@ -1005,7 +1009,7 @@ const EditReservationMain = ({
 
 		// Client-side relocate suffix (server also handles/overrides)
 		let updatedConfirmationNumber = reservation.confirmation_number;
-		if (selectedHotel._id !== reservation.hotelId._id) {
+		if (normalizeId(selectedHotel) !== normalizeId(reservation.hotelId)) {
 			const relocatePattern = /_relocate(\d*)$/;
 			const m = updatedConfirmationNumber.match(relocatePattern);
 			if (m) {
@@ -1120,9 +1124,9 @@ const EditReservationMain = ({
 	const isRelocation = useMemo(
 		() =>
 			selectedHotel &&
-			reservation?.hotelId?._id &&
-			selectedHotel._id !== reservation.hotelId._id,
-		[selectedHotel, reservation?.hotelId?._id]
+			normalizeId(reservation?.hotelId) &&
+			normalizeId(selectedHotel) !== normalizeId(reservation.hotelId),
+		[selectedHotel, reservation?.hotelId]
 	);
 
 	const paidAmountDisplay = useMemo(() => {
@@ -1235,6 +1239,7 @@ const EditReservationMain = ({
 								{allHotels.map((ht) => (
 									<Option key={ht._id} value={ht._id}>
 										{ht.hotelName}
+										{ht.activateHotel === false ? " (Inactive)" : ""}
 									</Option>
 								))}
 							</Select>

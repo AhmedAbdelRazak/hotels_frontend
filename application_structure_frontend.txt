@@ -1250,3 +1250,20 @@ Future TODO Backlog - Added 2026-05-26
   - Count/pricing edits remain available through the explicit room-line Count and Pricing buttons after a room has been selected.
 - Validation:
   - npm.cmd run build compiled successfully.
+
+2026-05-29 Edit Reservation Inactive Hotel Room Access
+- Admin and hotel-management legacy edit reservation modals:
+  - src/AdminModule/AllReservation/EditReservationMain.js no longer filters inactive hotels out of the edit-reservation hotel list.
+  - src/HotelModule/HotelReports/EditReservationMain.js applies the same edit-mode behavior for older hotel-report edit flows.
+  - Existing reservations now resolve their current hotel by normalized id whether hotelId is populated or stored as a string.
+  - Inactive hotels are labeled "(Inactive)" in the selector, but their roomCountDetails remain available so super admins and hotel staff can update room type, count, pricing, and reservation details.
+  - Existing picked room display names also support both displayName and display_name, preventing older reservation records from showing blank room selections.
+- Operational note:
+  - Confirmation 1085726178 has pickedRoomsType data, but no physical roomId assignment; room types should show once the inactive current hotel is retained in the edit modal.
+- Hotel-management full reservation detail edit modal:
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js now uses a controlled multi-select for Room Types instead of click-only room chips, preventing the edit modal from closing or appearing to refresh while changing room types.
+  - Room Types are shown before Room Assignment, and the room-number assignment selector sits on the same responsive row for full hotel employees/admins.
+  - Super admins and hotel employees can add/remove room types even when the hotel is inactive or inventory is restricted; limited/basic order-taker accounts remain blocked from unavailable calendar/inventory selections.
+  - Room type options merge live inventory, hotel roomCountDetails, and the reservation's existing pickedRoomsType so legacy reservations keep their current room line visible and editable.
+  - ReservationDetail now opens EditWholeReservation with a local reservation draft. In-modal edits no longer update the outer details modal until the API save succeeds, preventing the details modal from refetching/remounting and closing the edit modal while changing or removing room lines.
+  - The EditWholeReservation component was checked for mojibake markers after the room-edit cleanup so Arabic labels render as Arabic again.

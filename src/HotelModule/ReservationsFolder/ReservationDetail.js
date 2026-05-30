@@ -912,6 +912,13 @@ const FinanceInfo = ({ text, isArabic }) => (
 const RESERVATION_CHILD_MODAL_Z_INDEX = 18000;
 const RESERVATION_CHILD_MODAL_ROOT_CLASS = "reservation-detail-child-modal-root";
 const getReservationModalContainer = () => document.body;
+const cloneReservationDraft = (reservationData = {}) => {
+	try {
+		return JSON.parse(JSON.stringify(reservationData || {}));
+	} catch (error) {
+		return { ...(reservationData || {}) };
+	}
+};
 const childModalRootClassName = (className = "") =>
 	[RESERVATION_CHILD_MODAL_ROOT_CLASS, className].filter(Boolean).join(" ");
 const childModalProps = (rootClassName = "") => ({
@@ -4283,6 +4290,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		useState(false);
 	const [isSavingFinanceCycle, setIsSavingFinanceCycle] = useState(false);
 	const [editModalDirty, setEditModalDirty] = useState(false);
+	const [editReservationDraft, setEditReservationDraft] = useState(() =>
+		cloneReservationDraft(reservation),
+	);
 	const editModalSnapshotRef = useRef("");
 	const paymentBreakdownRef = useRef(reservation?.paid_amount_breakdown);
 	const reservationRef = useRef(reservation);
@@ -4321,6 +4331,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			);
 			return;
 		}
+		const draft = cloneReservationDraft(reservationRef.current || reservation);
+		setEditReservationDraft(draft);
+		editModalSnapshotRef.current = JSON.stringify(draft || {});
+		setEditModalDirty(false);
 		setIsModalVisible2(true);
 	};
 	const activeRoleNumbers = getAccountRoleNumbers(user);
@@ -4468,6 +4482,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [reservation]);
 
 	useEffect(() => {
+		if (isModalVisible2) return;
+		setEditReservationDraft(cloneReservationDraft(reservation));
+	}, [reservation, isModalVisible2]);
+
+	useEffect(() => {
 		if (!reservation?._id || !user?._id || !canSeeReservationTracker) {
 			setAgentSnapshotState({
 				loading: false,
@@ -4520,17 +4539,19 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	useEffect(() => {
 		if (!isModalVisible2) return;
-		editModalSnapshotRef.current = JSON.stringify(reservationRef.current || {});
+		const draft = cloneReservationDraft(reservationRef.current || reservation);
+		setEditReservationDraft(draft);
+		editModalSnapshotRef.current = JSON.stringify(draft || {});
 		setEditModalDirty(false);
-	}, [isModalVisible2]);
+	}, [isModalVisible2, reservation]);
 
 	useEffect(() => {
 		if (!isModalVisible2) return;
-		const snapshot = JSON.stringify(reservation || {});
+		const snapshot = JSON.stringify(editReservationDraft || {});
 		if (snapshot !== editModalSnapshotRef.current) {
 			setEditModalDirty(true);
 		}
-	}, [reservation, isModalVisible2]);
+	}, [editReservationDraft, isModalVisible2]);
 
 	const summarizePayment = useCallback(
 		(reservationData, paymentOverride = "") => {
@@ -5771,18 +5792,27 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		if (editModalDirty) {
 			confirmDiscardChanges(() => {
 				setIsModalVisible2(false);
+				setEditReservationDraft(cloneReservationDraft(reservationRef.current));
 				setEditModalDirty(false);
 			});
 			return;
 		}
 		setIsModalVisible2(false);
+		setEditReservationDraft(cloneReservationDraft(reservationRef.current));
 	};
 
 	const handleEditReservationSaved = (updatedReservation) => {
+		const nextReservation = updatedReservation || reservationRef.current || {};
+		if (updatedReservation?._id) {
+			setReservation(updatedReservation);
+			reservationRef.current = updatedReservation;
+		}
+		setEditReservationDraft(cloneReservationDraft(nextReservation));
 		editModalSnapshotRef.current = JSON.stringify(
-			updatedReservation || reservation || {},
+			nextReservation,
 		);
 		setEditModalDirty(false);
+		setIsModalVisible2(false);
 	};
 
 	const handleStatusModalOpen = () => {
@@ -6606,10 +6636,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						}}
 						{...childModalProps("reservation-update-modal-root")}
 					>
-						{reservation && (
+						{editReservationDraft && (
 							<EditReservationMain
-								reservation={reservation}
-								setReservation={setReservation}
+								reservation={editReservationDraft}
+								setReservation={setEditReservationDraft}
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
 								onReservationSaved={handleEditReservationSaved}

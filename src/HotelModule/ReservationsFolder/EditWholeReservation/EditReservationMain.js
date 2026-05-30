@@ -1040,25 +1040,30 @@ export const EditReservationMain = ({
 			const displayName =
 				suppliedDisplayName || fallbackDetail?.displayName || roomType;
 			const key = buildRoomKey(roomType, displayName);
-			if (options.has(key)) return;
 			const label =
 				resolveDisplayLabelForType(roomType, displayName) ||
 				displayName ||
 				roomType;
 			const availableCount = room.available ?? room.total_available ?? null;
 			const blockedDates = getBlockedDatesForRoom(roomType, displayName);
+			const existing = options.get(key) || {};
 			options.set(key, {
+				...existing,
 				key,
-				roomType,
-				displayName,
-				label,
-				availableCount,
-				blockedDates,
+				roomType: existing.roomType || roomType,
+				displayName: existing.displayName || displayName,
+				label: existing.label || label,
+				availableCount:
+					availableCount !== null && availableCount !== undefined
+						? availableCount
+						: existing.availableCount ?? null,
+				blockedDates:
+					blockedDates.length > 0 ? blockedDates : existing.blockedDates || [],
 			});
 		};
 
-		(Array.isArray(roomDetails) ? roomDetails : []).forEach(addRoomOption);
 		(Array.isArray(roomInventory) ? roomInventory : []).forEach(addRoomOption);
+		(Array.isArray(roomDetails) ? roomDetails : []).forEach(addRoomOption);
 		(Array.isArray(reservation?.pickedRoomsType)
 			? reservation.pickedRoomsType
 			: []
@@ -1077,6 +1082,10 @@ export const EditReservationMain = ({
 		roomDetails,
 		roomInventory,
 	]);
+	const roomEditorOptionMap = useMemo(
+		() => new Map(roomEditorOptions.map((option) => [option.key, option])),
+		[roomEditorOptions],
+	);
 
 	const Z_TOP = 19000;
 	const childModalProps = (layer) => ({
@@ -1127,67 +1136,102 @@ export const EditReservationMain = ({
 		],
 	);
 
-	const toggleChip = (key, options = {}) => {
-		if (!reservation?.checkin_date || !reservation?.checkout_date) {
+	const normalizeRoomTypeSelection = useCallback((values) => {
+		if (!Array.isArray(values)) return [];
+		return values
+			.map((value) =>
+				value && typeof value === "object" ? value.value : value,
+			)
+			.filter(Boolean)
+			.map((value) => String(value));
+	}, []);
+
+	const handleRoomTypeSelectionChange = (values) => {
+		const nextKeys = normalizeRoomTypeSelection(values);
+		const currentKeySet = new Set(selectedKeys);
+		const nextKeySet = new Set(nextKeys);
+		const removedKeys = selectedKeys.filter((key) => !nextKeySet.has(key));
+		const addedKeys = nextKeys.filter((key) => !currentKeySet.has(key));
+
+		if (removedKeys.length === 0 && addedKeys.length === 0) return;
+		if (
+			addedKeys.length > 0 &&
+			(!reservation?.checkin_date || !reservation?.checkout_date)
+		) {
 			toast.info(
 				chosenLanguage === "Arabic"
-					? "من فضلك اختر تاريخ الوصول والمغادرة أولا"
+					? "\u0645\u0646 \u0641\u0636\u0644\u0643 \u0627\u062e\u062a\u0631 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644 \u0648\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0623\u0648\u0644\u0627"
 					: "Please pick check-in and check-out first.",
 			);
 			return;
 		}
-		const { room_type, displayName } = splitRoomKey(key);
-		const exists = selectedKeys.includes(key);
-		const calendarBlockedDates = Array.isArray(options.calendarBlockedDates)
-			? options.calendarBlockedDates
-			: [];
-		const inventoryBlocked = !!options.inventoryBlocked;
-		const roomLabel =
-			options.roomLabel || resolveDisplayLabelForType(room_type, displayName);
-		if (calendarBlockedDates.length > 0 && !exists) {
-			if (basicEditOnly) {
+
+		const additions = [];
+		addedKeys.forEach((key) => {
+			const option = roomEditorOptionMap.get(key);
+			const split = splitRoomKey(key);
+			const roomType = option?.roomType || split.room_type;
+			const displayName = option?.displayName || split.displayName;
+			const roomLabel =
+				option?.label || resolveDisplayLabelForType(roomType, displayName);
+			const blockedDates = Array.isArray(option?.blockedDates)
+				? option.blockedDates
+				: [];
+			const availableCount =
+				option?.availableCount === null || option?.availableCount === undefined
+					? null
+					: Number(option.availableCount);
+			const inventoryBlocked =
+				availableCount !== null && Number.isFinite(availableCount) && availableCount <= 0;
+
+			if (blockedDates.length > 0) {
+				if (basicEditOnly) {
+					toast.error(formatBlockedRoomMessage(roomLabel, blockedDates, true));
+					return;
+				}
+				toast.warn(formatBlockedRoomMessage(roomLabel, blockedDates, false));
+			}
+
+			if (inventoryBlocked && basicEditOnly) {
 				toast.error(
-					formatBlockedRoomMessage(roomLabel, calendarBlockedDates, true),
+					chosenLanguage === "Arabic"
+						? "\u0644\u0627 \u062a\u0648\u062c\u062f \u063a\u0631\u0641 \u0645\u062a\u0627\u062d\u0629 \u0645\u0646 \u0647\u0630\u0627 \u0627\u0644\u0646\u0648\u0639 \u0641\u064a \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u062d\u062f\u062f\u0629."
+						: "No inventory is available for this room type on the selected dates.",
 				);
 				return;
 			}
-			toast.warn(
-				formatBlockedRoomMessage(roomLabel, calendarBlockedDates, false),
-			);
-		}
-		if (inventoryBlocked && !exists) {
-			toast.error(
-				chosenLanguage === "Arabic"
-					? "لا توجد غرف متاحة من هذا النوع في التواريخ المحددة."
-					: "No inventory is available for this room type on the selected dates.",
-			);
-			return;
-		}
-		if (exists) {
-			setReservation((currentReservation) => ({
-				...currentReservation,
-				pickedRoomsType: (currentReservation.pickedRoomsType || []).filter(
-					(r) => {
-						const resolvedDisplayName = resolveDisplayNameForType(
-							r.room_type,
-							r.displayName || r.display_name,
-						);
-						return buildRoomKey(r.room_type, resolvedDisplayName) !== key;
-					},
-				),
-			}));
-			setHasRoomLineEdits(true);
-			return;
-		}
 
-		const built = buildRoomLine(room_type, displayName);
-		if (built) {
-			setReservation((prev) => ({
-				...prev,
-				pickedRoomsType: [...(prev.pickedRoomsType || []), built],
-			}));
-			setHasRoomLineEdits(true);
-		}
+			const built = buildRoomLine(roomType, displayName);
+			if (!built) {
+				toast.error(
+					chosenLanguage === "Arabic"
+						? "\u0644\u0645 \u0646\u062a\u0645\u0643\u0646 \u0645\u0646 \u062a\u062d\u0636\u064a\u0631 \u062a\u0633\u0639\u064a\u0631 \u0647\u0630\u0627 \u0627\u0644\u0646\u0648\u0639. \u0631\u0627\u062c\u0639 \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0648\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u063a\u0631\u0641\u0629."
+						: "Could not prepare pricing for this room type. Please check the dates and room setup.",
+				);
+				return;
+			}
+			additions.push(built);
+		});
+
+		if (removedKeys.length === 0 && additions.length === 0) return;
+
+		const removedKeySet = new Set(removedKeys);
+		setReservation((currentReservation) => {
+			const remainingRooms = (currentReservation.pickedRoomsType || []).filter(
+				(room) => {
+					const displayName = resolveDisplayNameForType(
+						room.room_type,
+						room.displayName || room.display_name,
+					);
+					return !removedKeySet.has(buildRoomKey(room.room_type, displayName));
+				},
+			);
+			return {
+				...currentReservation,
+				pickedRoomsType: [...remainingRooms, ...additions],
+			};
+		});
+		setHasRoomLineEdits(true);
 	};
 
 	const normalizeRoomSelection = useCallback((values) => {
@@ -2434,92 +2478,182 @@ export const EditReservationMain = ({
 							</div>
 						</Block>
 
-						{!basicEditOnly ? (
 						<Block>
-							<div className='row'>
-								<div className='col col-span-2'>
+							<RoomManagementRow $single={basicEditOnly}>
+								<div>
 									<Label>
 										{chosenLanguage === "Arabic"
-											? "تخصيص الغرف"
-											: "Room Assignment"}
+											? "\u0623\u0646\u0648\u0627\u0639 \u0627\u0644\u063a\u0631\u0641"
+											: "Room Types"}
 									</Label>
 									<Select
 										mode='multiple'
-										labelInValue
 										className='ant-field'
 										style={{ width: "100%" }}
+										showSearch
 										placeholder={
 											chosenLanguage === "Arabic"
-												? "اختر أرقام الغرف"
-												: "Select room numbers"
+												? "\u0627\u062e\u062a\u0631 \u0623\u0646\u0648\u0627\u0639 \u0627\u0644\u063a\u0631\u0641"
+												: "Select room types"
 										}
-										value={selectedRoomValues}
-										onChange={handleRoomSelectionChange}
+										value={selectedKeys}
+										onChange={handleRoomTypeSelectionChange}
 										optionLabelProp='label'
+										optionFilterProp='label'
+										getPopupContainer={() => document.body}
+										dropdownStyle={{ zIndex: Z_TOP + 80 }}
 									>
-										{roomsForSelect.map((room) => {
-											const roomId = String(resolveRoomId(room));
-											const isBooked = bookedRoomIdSet.has(roomId);
-											const isSelected = selectedRoomIds.includes(roomId);
-											const isInactive = room?.active === false;
-											const baseLabel = getRoomLabel(room);
-											const floorLabel = room.floor
-												? ` | ${
-														chosenLanguage === "Arabic" ? "الدور" : "Floor"
-												  } ${room.floor}`
-												: "";
-											const occupiedLabel =
-												isBooked && !isSelected
-													? ` (${
-															chosenLanguage === "Arabic"
-																? "محجوزة"
-																: "Occupied"
-													  })`
-													: "";
-											const displayLabel = `${baseLabel}${floorLabel}${occupiedLabel}`;
-											const isDisabled =
-												(isBooked && !isSelected) ||
-												(isInactive && !isSelected);
+										{roomEditorOptions.map((option) => {
+											const active = selectedKeys.includes(option.key);
+											const availableCount =
+												option.availableCount === null ||
+												option.availableCount === undefined
+													? null
+													: Number(option.availableCount);
+											const inventoryBlocked =
+												availableCount !== null &&
+												Number.isFinite(availableCount) &&
+												availableCount <= 0;
+											const calendarBlocked =
+												Array.isArray(option.blockedDates) &&
+												option.blockedDates.length > 0;
+											const disabledForAgent =
+												basicEditOnly &&
+												!active &&
+												(inventoryBlocked || calendarBlocked);
+											const label = `${option.label} (${option.roomType})`;
 											return (
 												<Select.Option
-													key={roomId}
-													value={roomId}
-													label={baseLabel}
-													disabled={isDisabled}
+													key={option.key}
+													value={option.key}
+													label={label}
+													disabled={disabledForAgent}
 												>
-													<span
-														style={{
-															textTransform: "capitalize",
-															color: isDisabled ? "#8b8b8b" : "inherit",
-														}}
-													>
-														{displayLabel}
-													</span>
+													<RoomTypeOption $disabled={disabledForAgent}>
+														<strong>{option.label}</strong>
+														<span>{option.roomType}</span>
+														{availableCount !== null ? (
+															<em>
+																{chosenLanguage === "Arabic"
+																	? "\u0627\u0644\u0645\u062a\u0627\u062d"
+																	: "Available"}
+																: {availableCount}
+															</em>
+														) : null}
+														{calendarBlocked ? (
+															<em className='blocked'>
+																{chosenLanguage === "Arabic"
+																	? "\u0645\u062d\u062c\u0648\u0628"
+																	: "Blocked"}
+																: {summarizeDateList(option.blockedDates, 2)}
+															</em>
+														) : null}
+														{active ? (
+															<CheckCircleTwoTone
+																twoToneColor='#52c41a'
+																style={{ fontSize: 15 }}
+															/>
+														) : null}
+													</RoomTypeOption>
 												</Select.Option>
 											);
 										})}
 									</Select>
-									{requestedRoomsCount > 0 ? (
-										<div
-											style={{
-												marginTop: "8px",
-												fontWeight: "bold",
-												color:
-													selectedRoomIds.length === requestedRoomsCount
-														? "#1f7a1f"
-														: "#b45f06",
-											}}
-										>
-											{chosenLanguage === "Arabic"
-												? "الغرف المختارة"
-												: "Selected Rooms"}{" "}
-											{selectedRoomIds.length} / {requestedRoomsCount}
-										</div>
-									) : null}
+									<RoomManagementHint>
+										{chosenLanguage === "Arabic"
+											? `${selectedKeys.length} \u0646\u0648\u0639 \u063a\u0631\u0641\u0629 \u0645\u062d\u062f\u062f`
+											: `${selectedKeys.length} room type${
+													selectedKeys.length === 1 ? "" : "s"
+											  } selected`}
+									</RoomManagementHint>
 								</div>
-							</div>
+								{!basicEditOnly ? (
+									<div>
+										<Label>
+											{chosenLanguage === "Arabic"
+												? "\u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u063a\u0631\u0641"
+												: "Room Assignment"}
+										</Label>
+										<Select
+											mode='multiple'
+											labelInValue
+											className='ant-field'
+											style={{ width: "100%" }}
+											placeholder={
+												chosenLanguage === "Arabic"
+													? "\u0627\u062e\u062a\u0631 \u0623\u0631\u0642\u0627\u0645 \u0627\u0644\u063a\u0631\u0641"
+													: "Select room numbers"
+											}
+											value={selectedRoomValues}
+											onChange={handleRoomSelectionChange}
+											optionLabelProp='label'
+											getPopupContainer={() => document.body}
+											dropdownStyle={{ zIndex: Z_TOP + 80 }}
+										>
+											{roomsForSelect.map((room) => {
+												const roomId = String(resolveRoomId(room));
+												const isBooked = bookedRoomIdSet.has(roomId);
+												const isSelected = selectedRoomIds.includes(roomId);
+												const isInactive = room?.active === false;
+												const baseLabel = getRoomLabel(room);
+												const floorLabel = room.floor
+													? ` | ${
+															chosenLanguage === "Arabic"
+																? "\u0627\u0644\u062f\u0648\u0631"
+																: "Floor"
+													  } ${room.floor}`
+													: "";
+												const occupiedLabel =
+													isBooked && !isSelected
+														? ` (${
+																chosenLanguage === "Arabic"
+																	? "\u0645\u062d\u062c\u0648\u0632\u0629"
+																	: "Occupied"
+														  })`
+														: "";
+												const displayLabel = `${baseLabel}${floorLabel}${occupiedLabel}`;
+												const isDisabled =
+													(isBooked && !isSelected) ||
+													(isInactive && !isSelected);
+												return (
+													<Select.Option
+														key={roomId}
+														value={roomId}
+														label={baseLabel}
+														disabled={isDisabled}
+													>
+														<span
+															style={{
+																textTransform: "capitalize",
+																color: isDisabled ? "#8b8b8b" : "inherit",
+															}}
+														>
+															{displayLabel}
+														</span>
+													</Select.Option>
+												);
+											})}
+										</Select>
+										{requestedRoomsCount > 0 ? (
+											<RoomManagementHint
+												style={{
+													color:
+														selectedRoomIds.length === requestedRoomsCount
+															? "#1f7a1f"
+															: "#b45f06",
+												}}
+											>
+												{chosenLanguage === "Arabic"
+													? "\u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0645\u062e\u062a\u0627\u0631\u0629"
+													: "Selected Rooms"}{" "}
+												{selectedRoomIds.length} / {requestedRoomsCount}
+											</RoomManagementHint>
+										) : null}
+									</div>
+								) : null}
+							</RoomManagementRow>
 						</Block>
-						) : null}
+
 					</Left>
 
 					{!basicEditOnly ? (
@@ -2601,121 +2735,6 @@ export const EditReservationMain = ({
 					</Right>
 					) : null}
 				</Grid>
-
-				<div className='container'>
-					<div className='row'>
-						{Array.isArray(roomInventory) && roomInventory.length > 0 && (
-							<div className='col-12' style={{ margin: "20px 0" }}>
-								<Label>
-									{chosenLanguage === "Arabic" ? "نوع الغرفة" : "Room Type"}
-								</Label>
-								<RoomGrid>
-									{roomInventory.map((room) => {
-										const fallbackDetail = findRoomDetail(
-											room.room_type,
-											room.displayName || room.display_name,
-										);
-										const resolvedDisplayName =
-											room.displayName ||
-											room.display_name ||
-											fallbackDetail?.displayName ||
-											room.room_type;
-										const key = buildRoomKey(
-											room.room_type,
-											resolvedDisplayName,
-										);
-										const active = selectedKeys.includes(key);
-										const availableCount =
-											room.available ?? room.total_available ?? 0;
-										const localBlockedDates = getBlockedDatesForRoom(
-											room.room_type,
-											resolvedDisplayName,
-										);
-										const endpointBlockedDates = Array.isArray(room.blockedDates)
-											? room.blockedDates
-											: Array.isArray(room.pricingByDay)
-											  ? room.pricingByDay
-														.filter((day) => day?.calendarBlocked)
-														.map((day) => day.date)
-											  : [];
-										const calendarBlockedDates = localBlockedDates.length
-											? localBlockedDates
-											: endpointBlockedDates;
-										const calendarBlocked =
-											calendarBlockedDates.length > 0;
-										const agentInventoryBlocked =
-											basicEditOnly && !active && Number(availableCount || 0) <= 0;
-										const agentCalendarBlocked =
-											basicEditOnly && !active && calendarBlocked;
-										const disabledForAgent =
-											agentInventoryBlocked || agentCalendarBlocked;
-										return (
-											<RoomChip
-												key={key}
-												$active={active}
-												$disabled={disabledForAgent}
-												$calendarBlocked={calendarBlocked}
-												aria-disabled={disabledForAgent}
-												onClick={(event) => {
-													event.preventDefault();
-													event.stopPropagation();
-													toggleChip(key, {
-														inventoryBlocked: agentInventoryBlocked,
-														calendarBlockedDates,
-														roomLabel: resolvedDisplayName,
-													});
-												}}
-												title={
-													active
-														? chosenLanguage === "Arabic"
-															? "تعديل عدد الغرف أو الأسعار"
-															: "Remove this room type from the reservation"
-														:
-													calendarBlocked
-														? formatBlockedRoomMessage(
-																resolvedDisplayName,
-																calendarBlockedDates,
-																basicEditOnly,
-														  )
-														: `${resolvedDisplayName} (${room.room_type})`
-												}
-											>
-												<span className='icon'>
-													<HomeOutlined />
-												</span>
-												<span className='text'>
-													{resolvedDisplayName} <em>({room.room_type})</em>
-												</span>
-												<span
-													className='badge'
-													style={{ background: room.roomColor || "#ddd" }}
-												/>
-												<span className='avail'>
-													{chosenLanguage === "Arabic" ? "المتاح" : "Available"}
-													: {availableCount}
-												</span>
-												{calendarBlocked && (
-													<span className='calendar-block'>
-														{chosenLanguage === "Arabic"
-															? "\u0645\u062d\u062c\u0648\u0628"
-															: "Blocked"}
-														: {summarizeDateList(calendarBlockedDates, 3)}
-													</span>
-												)}
-												{active && (
-													<CheckCircleTwoTone
-														twoToneColor='#52c41a'
-														style={{ fontSize: 16, marginInlineStart: 6 }}
-													/>
-												)}
-											</RoomChip>
-										);
-									})}
-								</RoomGrid>
-							</div>
-						)}
-					</div>
-				</div>
 
 				<div className='container mt-3'>
 					{customerDetails.name &&
@@ -2883,7 +2902,7 @@ export const EditReservationMain = ({
 									<div className='cta-subtitle'>
 										{chosenLanguage === "Arabic"
 											? "لن يتم تطبيق أي تغيير إلا بعد الضغط على زر التحديث"
-											: "Changes won’t apply until you press Update"}
+											: "Changes wonâ€™t apply until you press Update"}
 									</div>
 								</div>
 							</div>
@@ -3341,11 +3360,59 @@ const Right = styled.div`
 	}
 `;
 
-const RoomGrid = styled.div`
+const RoomManagementRow = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-	gap: 10px;
-	margin-top: 8px;
+	grid-template-columns: ${(p) =>
+		p.$single ? "1fr" : "minmax(0, 1.1fr) minmax(0, 0.9fr)"};
+	gap: 14px;
+	align-items: start;
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const RoomManagementHint = styled.div`
+	color: #53657d;
+	font-size: 0.82rem;
+	font-weight: 700;
+	margin-top: 7px;
+`;
+
+const RoomTypeOption = styled.div`
+	align-items: center;
+	color: ${(p) => (p.$disabled ? "#8b8b8b" : "#111827")};
+	display: grid;
+	gap: 6px;
+	grid-template-columns: minmax(0, 1fr) auto auto auto;
+
+	strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	span,
+	em {
+		font-size: 0.78rem;
+		font-style: normal;
+		opacity: 0.82;
+		white-space: nowrap;
+	}
+
+	.blocked {
+		background: #ffedd5;
+		border: 1px solid #fdba74;
+		border-radius: 999px;
+		color: #9a3412;
+		font-weight: 800;
+		padding: 1px 7px;
+	}
+
+	@media (max-width: 640px) {
+		grid-template-columns: 1fr;
+		align-items: start;
+	}
 `;
 
 const CalendarBlockNotice = styled.div`
@@ -3364,82 +3431,5 @@ const CalendarBlockNotice = styled.div`
 	strong {
 		color: #9a3412;
 		font-size: 0.95rem;
-	}
-`;
-
-const RoomChip = styled.button.attrs({ type: "button" })`
-	appearance: none;
-	border: 1px solid
-		${(p) =>
-			p.$calendarBlocked ? "#fb923c" : p.$active ? "#1a9f42" : "#d7e6f5"};
-	background: ${(p) =>
-		p.$calendarBlocked ? "#fff7ed" : p.$active ? "#e7f7ed" : "#ffffff"};
-	color: #111827;
-	padding: 9px 10px;
-	border-radius: 10px;
-	display: grid;
-	grid-template-columns: auto 1fr auto auto auto auto;
-	align-items: center;
-	gap: 8px;
-	cursor: ${(p) => (p.$disabled ? "not-allowed" : "pointer")};
-	transition:
-		box-shadow 0.2s ease,
-		transform 0.05s ease;
-	text-align: start;
-	opacity: ${(p) => (p.$disabled ? 0.55 : 1)};
-
-	&:hover {
-		box-shadow: ${(p) =>
-			p.$disabled ? "none" : "0 2px 8px rgba(0, 0, 0, 0.08)"};
-		transform: ${(p) => (p.$disabled ? "none" : "translateY(-1px)")};
-	}
-
-	.icon {
-		color: var(--update-blue);
-		font-size: 17px;
-	}
-	.text {
-		font-size: 0.9rem;
-		font-weight: 700;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.text em {
-		font-style: normal;
-		opacity: 0.7;
-		font-weight: 600;
-	}
-	.badge {
-		width: 12px;
-		height: 12px;
-		border-radius: 3px;
-	}
-	.avail {
-		font-size: 12px;
-		opacity: 0.8;
-	}
-	.calendar-block {
-		background: #ffedd5;
-		border: 1px solid #fdba74;
-		border-radius: 999px;
-		color: #9a3412;
-		font-size: 11px;
-		font-weight: 800;
-		max-width: 150px;
-		overflow: hidden;
-		padding: 2px 7px;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	@media (max-width: 520px) {
-		grid-template-columns: auto 1fr auto;
-		gap: 6px;
-
-		.avail,
-		.calendar-block {
-			grid-column: 2 / -1;
-		}
 	}
 `;
