@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 
 const TEXT = {
 	en: {
 		title: "Room inventory check",
+		hotel: "Hotel",
 		stay: "Stay",
 		requested: "Requested",
 		whenBooked: "When booked",
@@ -19,6 +20,7 @@ const TEXT = {
 	},
 	ar: {
 		title: "\u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u063a\u0631\u0641",
+		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 		stay: "\u0627\u0644\u0625\u0642\u0627\u0645\u0629",
 		requested: "\u0627\u0644\u0645\u0637\u0644\u0648\u0628",
 		whenBooked: "\u0648\u0642\u062a \u0627\u0644\u062d\u062c\u0632",
@@ -37,6 +39,8 @@ const TEXT = {
 		moreRooms: "\u063a\u0631\u0641 \u0623\u062e\u0631\u0649",
 	},
 };
+
+export const PENDING_REVIEW_MODAL_CLASS = "pending-review-modal-position";
 
 const normalizeId = (value) => {
 	if (!value) return "";
@@ -62,6 +66,26 @@ const normalizeKey = (value) =>
 		.replace(/\s+/g, " ")
 		.trim()
 		.toLowerCase();
+
+const toTitleCase = (value = "") =>
+	String(value || "")
+		.replace(/\s+/g, " ")
+		.trim()
+		.toLowerCase()
+		.replace(/\b([a-z])/g, (match) => match.toUpperCase());
+
+const getReservationHotelName = (reservation = {}, snapshot = {}) =>
+	String(
+		reservation.hotelName ||
+			reservation.hotel_name ||
+			reservation.hotel?.hotelName ||
+			reservation.hotelDetails?.hotelName ||
+			reservation.hotelId?.hotelName ||
+			snapshot.hotelName ||
+			""
+	)
+		.replace(/\s+/g, " ")
+		.trim();
 
 const roomKey = (room = {}) => {
 	const display = normalizeKey(
@@ -266,11 +290,15 @@ const PendingReservationInventoryBrief = ({
 	const hasCurrent = inventoryRows.length > 0;
 	const stayStart = dateOnly(reservation?.checkin_date || snapshot?.checkin_date);
 	const stayEnd = dateOnly(reservation?.checkout_date || snapshot?.checkout_date);
+	const hotelName = getReservationHotelName(reservation, snapshot);
+	const displayHotelName = isArabic ? hotelName : toTitleCase(hotelName);
 
 	const visibleRooms = rooms.slice(0, limit);
 
 	return (
-		<InventoryBriefShell dir={isArabic ? "rtl" : "ltr"} $isRTL={isArabic}>
+		<>
+			<PendingReviewModalGlobalStyle />
+			<InventoryBriefShell dir={isArabic ? "rtl" : "ltr"} $isRTL={isArabic}>
 			<InventoryBriefHeader>
 				<div>
 					<strong>{labels.title}</strong>
@@ -280,6 +308,13 @@ const PendingReservationInventoryBrief = ({
 				</div>
 				{loading ? <LoadingPill>{labels.checking}</LoadingPill> : null}
 			</InventoryBriefHeader>
+
+			{displayHotelName ? (
+				<HotelIdentityBar>
+					<span>{labels.hotel}</span>
+					<strong>{displayHotelName}</strong>
+				</HotelIdentityBar>
+			) : null}
 
 			{visibleRooms.length ? (
 				<RoomLineList>
@@ -372,11 +407,62 @@ const PendingReservationInventoryBrief = ({
 			{!loading && !hasCurrent ? (
 				<InventoryNotice>{labels.noCurrent}</InventoryNotice>
 			) : null}
-		</InventoryBriefShell>
+			</InventoryBriefShell>
+		</>
 	);
 };
 
 export default PendingReservationInventoryBrief;
+
+const PendingReviewModalGlobalStyle = createGlobalStyle`
+	.${PENDING_REVIEW_MODAL_CLASS} {
+		top: 20vh !important;
+		max-width: calc(100vw - 32px);
+		padding-bottom: 24px;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-content {
+		max-height: calc(100vh - 22vh);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-body {
+		overflow-y: auto;
+		max-height: calc(100vh - 32vh);
+	}
+
+	@media (max-width: 640px) {
+		.${PENDING_REVIEW_MODAL_CLASS} {
+			top: 8vh !important;
+			max-width: calc(100vw - 18px);
+			padding-bottom: 14px;
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-content {
+			max-height: calc(100vh - 10vh);
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-body {
+			max-height: calc(100vh - 20vh);
+			padding: 16px;
+		}
+	}
+
+	@media (max-height: 700px) and (min-width: 641px) {
+		.${PENDING_REVIEW_MODAL_CLASS} {
+			top: 12vh !important;
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-content {
+			max-height: calc(100vh - 14vh);
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS} .ant-modal-body {
+			max-height: calc(100vh - 24vh);
+		}
+	}
+`;
 
 const InventoryBriefShell = styled.section`
 	display: grid;
@@ -411,6 +497,46 @@ const InventoryBriefHeader = styled.div`
 		color: #526b84;
 		font-size: 0.76rem;
 		font-weight: 800;
+	}
+`;
+
+const HotelIdentityBar = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 8px 10px;
+	border-radius: 7px;
+	background: #102a43;
+	color: #fff;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+
+	span {
+		color: #cce2f5;
+		font-size: 0.7rem;
+		font-weight: 900;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	strong {
+		min-width: 0;
+		color: #fff;
+		font-size: 0.9rem;
+		font-weight: 950;
+		line-height: 1.3;
+		text-align: end;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 460px) {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 3px;
+
+		strong {
+			text-align: inherit;
+		}
 	}
 `;
 

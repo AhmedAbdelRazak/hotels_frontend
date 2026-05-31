@@ -38,6 +38,7 @@ import OverallReservationDetailsModal, {
 import PendingReservationInventoryBrief, {
 	extractPendingInventoryRows,
 	getPendingReservationInventoryRequest,
+	PENDING_REVIEW_MODAL_CLASS,
 } from "../../NewReservation/PendingReservationInventoryBrief";
 
 const TEXT = {
@@ -1162,9 +1163,9 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				onCancel={closeFinanceModal}
 				title={labels.adjustFinance}
 				footer={null}
-				centered
 				destroyOnClose
 				width={620}
+				className={PENDING_REVIEW_MODAL_CLASS}
 			>
 				<div dir={isRTL ? "rtl" : "ltr"}>
 					<div style={{ display: "grid", gap: "14px" }}>

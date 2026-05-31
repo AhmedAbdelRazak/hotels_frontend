@@ -39,6 +39,7 @@ import { downloadReservationWorkbook } from "./reservationExcelExport";
 import PendingReservationInventoryBrief, {
 	extractPendingInventoryRows,
 	getPendingReservationInventoryRequest,
+	PENDING_REVIEW_MODAL_CLASS,
 } from "../../NewReservation/PendingReservationInventoryBrief";
 
 const PENDING_RESERVATIONS_TEXT = {
@@ -870,9 +871,9 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 				onCancel={closeConfirmModal}
 				title={labels.confirmTitle}
 				footer={null}
-				centered
 				destroyOnClose
 				width={680}
+				className={PENDING_REVIEW_MODAL_CLASS}
 			>
 				<ConfirmModalBody dir={isRTL ? "rtl" : "ltr"} $isRTL={isRTL}>
 					<ConfirmQuestion>

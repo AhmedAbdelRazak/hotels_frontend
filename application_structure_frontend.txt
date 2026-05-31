@@ -1322,7 +1322,8 @@ Future TODO Backlog - Added 2026-05-26
 2026-05-31 Pending Confirmation Inventory Brief
 - Shared component:
   - src/HotelModule/NewReservation/PendingReservationInventoryBrief.js renders a compact PMS-style inventory card for pending reservation review surfaces.
-  - The card shows room displayName, roomType, requested count, booking-time inventory before/after from availabilitySnapshot when available, and current available inventory for the same stay range.
+  - The card shows the hotel name in title case, room displayName, roomType, requested count, booking-time inventory before/after from availabilitySnapshot when available, and current available inventory for the same stay range.
+  - Review modals using this card use the shared pending-review modal positioning class: roughly 20vh from the top on desktop, with a smaller mobile top offset and scroll-constrained modal body for reachability on phones.
   - Agent-scoped reservations show an agent stock badge when the saved snapshot or current availability indicates private agent inventory.
   - Older reservations without availabilitySnapshot show a clear no-snapshot note while still showing current inventory when the live endpoint returns it.
 - Reservation employee confirmation:

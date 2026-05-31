@@ -27,6 +27,7 @@ import { formatSaudiHijriDate } from "../../utils/saudiDates";
 import PendingReservationInventoryBrief, {
 	extractPendingInventoryRows,
 	getPendingReservationInventoryRequest,
+	PENDING_REVIEW_MODAL_CLASS,
 } from "./PendingReservationInventoryBrief";
 
 const labels = {
@@ -1019,6 +1020,11 @@ const PendingConfirmationReport = ({
 				title={<ModalTitleText $isRTL={isArabic}>{txt.confirmTitle}</ModalTitleText>}
 				footer={null}
 				destroyOnClose
+				className={
+					isArabic
+						? `${PENDING_REVIEW_MODAL_CLASS} rtl`
+						: PENDING_REVIEW_MODAL_CLASS
+				}
 			>
 				{statusModal.reservation ? (
 					<DecisionModalBody $isRTL={isArabic}>
@@ -1113,7 +1119,11 @@ const PendingConfirmationReport = ({
 				title={<ModalTitleText $isRTL={isArabic}>{txt.adjustCommission}</ModalTitleText>}
 				footer={null}
 				destroyOnClose
-				className={isArabic ? "pending-choice-modal rtl" : "pending-choice-modal"}
+				className={
+					isArabic
+						? `${PENDING_REVIEW_MODAL_CLASS} pending-choice-modal rtl`
+						: `${PENDING_REVIEW_MODAL_CLASS} pending-choice-modal`
+				}
 			>
 				<DecisionModalBody $isRTL={isArabic}>
 					{financeModal.reservation ? (
