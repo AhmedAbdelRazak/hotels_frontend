@@ -43,6 +43,8 @@ import {
 	getManagerExecutiveSummary,
 	getReservationSummary,
 	hotelAccount,
+	updateOwnerProfile,
+	updateUser,
 	updateHotelDetails,
 } from "./apiAdmin";
 
@@ -1499,7 +1501,7 @@ const SCOPED_DASHBOARD_WORDS = {
 		eyebrow: "Assigned hotel workspace",
 		title: "My Assigned Hotels",
 		subtitle:
-			"Choose a property and continue to the tools available for your role.",
+			"Create reservations and review only the reservations, wallet, and tasks tied to your account.",
 		assignedHotels: "Assigned hotels",
 		totalReservations: "Reservations",
 		newToday: "New today",
@@ -1522,6 +1524,27 @@ const SCOPED_DASHBOARD_WORDS = {
 		assignedStock: "Assigned stock",
 		outstandingReservations: "Outstanding reservations",
 		commissionOnly: "Commission only",
+		payoutDetails: "Payout details",
+		savePayoutDetails: "Save payout details",
+		savingPayoutDetails: "Saving...",
+		payoutDetailsSaved: "Payout details saved.",
+		payoutSaveError: "Could not save payout details.",
+		payoutCountry: "Country",
+		payoutCurrency: "Currency",
+		payoutMethod: "Preferred method",
+		payoutAccountHolder: "Account holder",
+		payoutBankName: "Bank name",
+		payoutBankCountry: "Bank country",
+		payoutIban: "IBAN",
+		payoutAccountNumber: "Account number",
+		payoutSwift: "SWIFT / BIC",
+		payoutInstapayAddress: "InstaPay address",
+		payoutInstapayPhone: "InstaPay phone",
+		payoutMobileProvider: "Mobile wallet provider",
+		payoutMobileNumber: "Mobile wallet number",
+		payoutStcPay: "STC Pay number",
+		payoutPaypal: "PayPal email",
+		payoutNotes: "Finance notes",
 		openHotel: "Open hotel",
 		loading: "Loading assigned hotels...",
 		noHotels: "No hotels are assigned to this account yet.",
@@ -1594,6 +1617,30 @@ SCOPED_DASHBOARD_WORDS.ar.reconciliationQueue = "المطابقة";
 SCOPED_DASHBOARD_WORDS.ar.reconciliationTitle = "قائمة المطابقة";
 SCOPED_DASHBOARD_WORDS.ar.noReconciliationRows = "لا توجد عناصر مطابقة.";
 
+Object.assign(SCOPED_DASHBOARD_WORDS.ar, {
+	payoutDetails: "\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	savePayoutDetails: "\u062d\u0641\u0638 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062f\u0641\u0639",
+	savingPayoutDetails: "\u062c\u0627\u0631\u064a \u0627\u0644\u062d\u0641\u0638...",
+	payoutDetailsSaved: "\u062a\u0645 \u062d\u0641\u0638 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062f\u0641\u0639.",
+	payoutSaveError: "\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062f\u0641\u0639.",
+	payoutCountry: "\u0627\u0644\u062f\u0648\u0644\u0629",
+	payoutCurrency: "\u0627\u0644\u0639\u0645\u0644\u0629",
+	payoutMethod: "\u0637\u0631\u064a\u0642\u0629 \u0627\u0644\u062f\u0641\u0639",
+	payoutAccountHolder: "\u0627\u0633\u0645 \u0635\u0627\u062d\u0628 \u0627\u0644\u062d\u0633\u0627\u0628",
+	payoutBankName: "\u0627\u0633\u0645 \u0627\u0644\u0628\u0646\u0643",
+	payoutBankCountry: "\u062f\u0648\u0644\u0629 \u0627\u0644\u0628\u0646\u0643",
+	payoutIban: "IBAN",
+	payoutAccountNumber: "\u0631\u0642\u0645 \u0627\u0644\u062d\u0633\u0627\u0628",
+	payoutSwift: "SWIFT / BIC",
+	payoutInstapayAddress: "InstaPay",
+	payoutInstapayPhone: "\u0631\u0642\u0645 InstaPay",
+	payoutMobileProvider: "\u0645\u0632\u0648\u062f \u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u0645\u0648\u0628\u0627\u064a\u0644",
+	payoutMobileNumber: "\u0631\u0642\u0645 \u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u0645\u0648\u0628\u0627\u064a\u0644",
+	payoutStcPay: "\u0631\u0642\u0645 STC Pay",
+	payoutPaypal: "\u0628\u0631\u064a\u062f PayPal",
+	payoutNotes: "\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0644\u0644\u0645\u0627\u0644\u064a\u0629",
+});
+
 const agentWalletDisplay = (wallet = {}, text = SCOPED_DASHBOARD_WORDS.en) => {
 	const commercialModel =
 		wallet.commercialModel || wallet.agent?.agentCommercialModel || "";
@@ -1624,6 +1671,86 @@ const totalAssignedAgentStock = (hotel = {}, agentId = "") => {
 		.reduce((sum, row) => sum + Math.max(0, Number(row.stock || 0)), 0);
 };
 
+const emptyAgentPayoutDetails = {
+	country: "",
+	preferredCurrency: "SAR",
+	preferredMethod: "",
+	accountHolderName: "",
+	bankName: "",
+	bankCountry: "",
+	iban: "",
+	accountNumber: "",
+	swiftCode: "",
+	instapayAddress: "",
+	instapayPhone: "",
+	mobileWalletProvider: "",
+	mobileWalletNumber: "",
+	stcPayNumber: "",
+	paypalEmail: "",
+	notes: "",
+};
+
+const normalizeAgentPayoutDetails = (details = {}) => ({
+	...emptyAgentPayoutDetails,
+	...(details && typeof details === "object" ? details : {}),
+});
+
+const hasAgentPayoutDetails = (details = {}) => {
+	const normalized = normalizeAgentPayoutDetails(details);
+	return [
+		"accountHolderName",
+		"bankName",
+		"iban",
+		"accountNumber",
+		"instapayAddress",
+		"instapayPhone",
+		"mobileWalletNumber",
+		"stcPayNumber",
+		"paypalEmail",
+	].some((key) => String(normalized[key] || "").trim());
+};
+
+const payoutMethodOptions = [
+	{ value: "", en: "Choose method", ar: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0637\u0631\u064a\u0642\u0629" },
+	{ value: "bank_account", en: "Bank account / IBAN", ar: "\u062d\u0633\u0627\u0628 \u0628\u0646\u0643\u064a / IBAN" },
+	{ value: "instapay", en: "InstaPay", ar: "InstaPay" },
+	{ value: "mobile_wallet", en: "Mobile wallet", ar: "\u0645\u062d\u0641\u0638\u0629 \u0645\u0648\u0628\u0627\u064a\u0644" },
+	{ value: "stc_pay", en: "STC Pay", ar: "STC Pay" },
+	{ value: "paypal", en: "PayPal", ar: "PayPal" },
+	{ value: "other", en: "Other", ar: "\u0623\u062e\u0631\u0649" },
+];
+
+const payoutMethodLabel = (value = "", isRTL = false) => {
+	const option = payoutMethodOptions.find((item) => item.value === value);
+	return option ? (isRTL ? option.ar : option.en) : value || "-";
+};
+
+const payoutDetailsSummary = (details = {}, isRTL = false) => {
+	const normalized = normalizeAgentPayoutDetails(details);
+	if (!hasAgentPayoutDetails(normalized)) {
+		return { primary: isRTL ? "\u0644\u0645 \u064a\u0636\u0641 \u0628\u064a\u0627\u0646\u0627\u062a" : "Not added", secondary: "" };
+	}
+	const method = payoutMethodLabel(normalized.preferredMethod, isRTL);
+	const primary =
+		normalized.instapayAddress ||
+		normalized.instapayPhone ||
+		normalized.iban ||
+		normalized.accountNumber ||
+		normalized.mobileWalletNumber ||
+		normalized.stcPayNumber ||
+		normalized.paypalEmail ||
+		method;
+	const secondary = [
+		method,
+		normalized.bankName,
+		normalized.country,
+		normalized.preferredCurrency,
+	]
+		.filter(Boolean)
+		.join(" | ");
+	return { primary, secondary };
+};
+
 const ScopedUserMainDashboard = ({ user, token }) => {
 	const history = useHistory();
 	const location = useLocation();
@@ -1652,6 +1779,10 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	const [reconciliationTotal, setReconciliationTotal] = useState(0);
 	const [reconciliationPage, setReconciliationPage] = useState(1);
 	const [reconciliationLoading, setReconciliationLoading] = useState(false);
+	const [payoutDetails, setPayoutDetails] = useState(() =>
+		normalizeAgentPayoutDetails(user?.agentPayoutDetails)
+	);
+	const [payoutSaving, setPayoutSaving] = useState(false);
 	const reconciliationLimit = 10;
 
 	const assignedHotelIds = useMemo(
@@ -1693,6 +1824,33 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 			hotelId: "",
 		});
 	}, [updateScopedDashboardQuery]);
+
+	useEffect(() => {
+		setPayoutDetails(normalizeAgentPayoutDetails(user?.agentPayoutDetails));
+	}, [user?._id, user?.agentPayoutDetails]);
+
+	const updatePayoutDetail = (field, value) => {
+		setPayoutDetails((previous) => ({ ...previous, [field]: value }));
+	};
+
+	const savePayoutDetails = (event) => {
+		event.preventDefault();
+		if (!user?._id || !token || payoutSaving) return;
+		setPayoutSaving(true);
+		updateOwnerProfile(user._id, token, { agentPayoutDetails: payoutDetails })
+			.then((data) => {
+				if (!data || data.error) {
+					message.error(data?.error || TXT.payoutSaveError);
+					return;
+				}
+				const nextDetails = normalizeAgentPayoutDetails(data.agentPayoutDetails);
+				setPayoutDetails(nextDetails);
+				updateUser({ ...user, agentPayoutDetails: nextDetails }, () => {});
+				message.success(TXT.payoutDetailsSaved);
+			})
+			.catch(() => message.error(TXT.payoutSaveError))
+			.finally(() => setPayoutSaving(false));
+	};
 
 	useEffect(() => {
 		if (!assignedHotelIds.length) {
@@ -2157,6 +2315,192 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					</AgentTotals>
 				</AgentHero>
 
+				{roleKey === "ordertaker" && (
+					<AgentPayoutPanel as='form' onSubmit={savePayoutDetails} $isRTL={isRTL}>
+						<PayoutPanelHeader>
+							<strong>{TXT.payoutDetails}</strong>
+							<Button type='primary' htmlType='submit' loading={payoutSaving}>
+								{payoutSaving ? TXT.savingPayoutDetails : TXT.savePayoutDetails}
+							</Button>
+						</PayoutPanelHeader>
+						<PayoutFieldsGrid $isRTL={isRTL}>
+							<label>
+								<span>{TXT.payoutCountry}</span>
+								<input
+									value={payoutDetails.country}
+									onChange={(event) =>
+										updatePayoutDetail("country", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutCurrency}</span>
+								<input
+									dir='ltr'
+									value={payoutDetails.preferredCurrency}
+									onChange={(event) =>
+										updatePayoutDetail(
+											"preferredCurrency",
+											event.target.value.toUpperCase()
+										)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutMethod}</span>
+								<select
+									value={payoutDetails.preferredMethod}
+									onChange={(event) =>
+										updatePayoutDetail("preferredMethod", event.target.value)
+									}
+								>
+									{payoutMethodOptions.map((option) => (
+										<option key={option.value || "empty"} value={option.value}>
+											{isRTL ? option.ar : option.en}
+										</option>
+									))}
+								</select>
+							</label>
+							<label>
+								<span>{TXT.payoutAccountHolder}</span>
+								<input
+									value={payoutDetails.accountHolderName}
+									onChange={(event) =>
+										updatePayoutDetail("accountHolderName", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutBankName}</span>
+								<input
+									value={payoutDetails.bankName}
+									onChange={(event) =>
+										updatePayoutDetail("bankName", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutBankCountry}</span>
+								<input
+									value={payoutDetails.bankCountry}
+									onChange={(event) =>
+										updatePayoutDetail("bankCountry", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutIban}</span>
+								<input
+									dir='ltr'
+									value={payoutDetails.iban}
+									onChange={(event) =>
+										updatePayoutDetail("iban", event.target.value.toUpperCase())
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutAccountNumber}</span>
+								<input
+									dir='ltr'
+									inputMode='numeric'
+									value={payoutDetails.accountNumber}
+									onChange={(event) =>
+										updatePayoutDetail("accountNumber", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutSwift}</span>
+								<input
+									dir='ltr'
+									value={payoutDetails.swiftCode}
+									onChange={(event) =>
+										updatePayoutDetail(
+											"swiftCode",
+											event.target.value.toUpperCase()
+										)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutInstapayAddress}</span>
+								<input
+									dir='ltr'
+									value={payoutDetails.instapayAddress}
+									onChange={(event) =>
+										updatePayoutDetail("instapayAddress", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutInstapayPhone}</span>
+								<input
+									dir='ltr'
+									inputMode='tel'
+									value={payoutDetails.instapayPhone}
+									onChange={(event) =>
+										updatePayoutDetail("instapayPhone", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutMobileProvider}</span>
+								<input
+									value={payoutDetails.mobileWalletProvider}
+									onChange={(event) =>
+										updatePayoutDetail(
+											"mobileWalletProvider",
+											event.target.value
+										)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutMobileNumber}</span>
+								<input
+									dir='ltr'
+									inputMode='tel'
+									value={payoutDetails.mobileWalletNumber}
+									onChange={(event) =>
+										updatePayoutDetail("mobileWalletNumber", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutStcPay}</span>
+								<input
+									dir='ltr'
+									inputMode='tel'
+									value={payoutDetails.stcPayNumber}
+									onChange={(event) =>
+										updatePayoutDetail("stcPayNumber", event.target.value)
+									}
+								/>
+							</label>
+							<label>
+								<span>{TXT.payoutPaypal}</span>
+								<input
+									type='email'
+									dir='ltr'
+									value={payoutDetails.paypalEmail}
+									onChange={(event) =>
+										updatePayoutDetail("paypalEmail", event.target.value)
+									}
+								/>
+							</label>
+							<label className='wide'>
+								<span>{TXT.payoutNotes}</span>
+								<textarea
+									value={payoutDetails.notes}
+									onChange={(event) =>
+										updatePayoutDetail("notes", event.target.value)
+									}
+								/>
+							</label>
+						</PayoutFieldsGrid>
+					</AgentPayoutPanel>
+				)}
+
 				{loading ? (
 					<AgentEmpty>{TXT.loading}</AgentEmpty>
 				) : orderedHotels.length ? (
@@ -2600,6 +2944,7 @@ const OwnerAccountsModal = ({
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
+	const canPreviewAccounts = isSuperAdminUser(userId);
 	const [accounts, setAccounts] = useState([]);
 	const [activeAccountTab, setActiveAccountTab] = useState("new");
 	const [documentPreview, setDocumentPreview] = useState(null);
@@ -2680,6 +3025,7 @@ const OwnerAccountsModal = ({
 							"This attachment has no saved preview file. Remove it and upload it again if it is an older record.",
 						confirmDeactivate: "Deactivate this account?",
 						confirmActivate: "Activate this account?",
+						payoutDetails: "Payout details",
 						approveAgent: "Approve agent",
 						pendingApproval: "Pending director approval",
 						approvedApproval: "Approved",
@@ -3437,6 +3783,14 @@ const OwnerAccountsModal = ({
 	};
 
 	const startAccountPreview = (account) => {
+		if (!canPreviewAccounts) {
+			message.error(
+				isRTL
+					? "\u064a\u0645\u0643\u0646 \u0644\u0644\u0645\u0634\u0631\u0641\u064a\u0646 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u064a\u0646 \u0641\u0642\u0637 \u0641\u062a\u062d \u0644\u0648\u062d\u0629 \u062d\u0633\u0627\u0628 \u0622\u062e\u0631."
+					: "Only super admins can open another account dashboard."
+			);
+			return;
+		}
 		const hotelId = getPreviewHotelId(account);
 		if (!hotelId) {
 			message.error("Hotel scope was not found for this account.");
@@ -3480,6 +3834,7 @@ const OwnerAccountsModal = ({
 			width: 210,
 			render: (name, row) => (
 				<AccountNameCell>
+					{canPreviewAccounts ? (
 					<AccountPreviewButton
 						type='button'
 						onClick={() => startAccountPreview(row)}
@@ -3489,6 +3844,9 @@ const OwnerAccountsModal = ({
 						<EyeOutlined />
 						<strong>{name}</strong>
 					</AccountPreviewButton>
+					) : (
+						<strong>{name}</strong>
+					)}
 					<span dir='ltr'>{row.email}</span>
 				</AccountNameCell>
 			),
@@ -3523,6 +3881,23 @@ const OwnerAccountsModal = ({
 			key: "companyName",
 			width: 125,
 			render: (companyName) => companyName || "-",
+		},
+		{
+			title:
+				accountText.payoutDetails ||
+				(isRTL ? "\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062f\u0641\u0639" : "Payout details"),
+			key: "payoutDetails",
+			width: 175,
+			render: (_, row) => {
+				if (!accountIsAgentAccount(row)) return "-";
+				const summary = payoutDetailsSummary(row.agentPayoutDetails, isRTL);
+				return (
+					<PayoutMiniSummary $empty={!hasAgentPayoutDetails(row.agentPayoutDetails)}>
+						<strong dir='auto'>{summary.primary}</strong>
+						{summary.secondary ? <span dir='auto'>{summary.secondary}</span> : null}
+					</PayoutMiniSummary>
+				);
+			},
 		},
 		{
 			title: WORDS.accountAccess,
@@ -3627,6 +4002,28 @@ const OwnerAccountsModal = ({
 	const documentPreviewIsImage = documentPreview
 		? isCompanyDocumentImage(documentPreview)
 		: false;
+	const scopedAccountText = SCOPED_DASHBOARD_WORDS[isRTL ? "ar" : "en"];
+	const editingPayoutDetails = normalizeAgentPayoutDetails(
+		editingAccount?.agentPayoutDetails
+	);
+	const editingPayoutRows = [
+		[scopedAccountText.payoutMethod || "Method", payoutMethodLabel(editingPayoutDetails.preferredMethod, isRTL)],
+		[scopedAccountText.payoutAccountHolder || "Account holder", editingPayoutDetails.accountHolderName],
+		[scopedAccountText.payoutBankName || "Bank name", editingPayoutDetails.bankName],
+		[scopedAccountText.payoutBankCountry || "Bank country", editingPayoutDetails.bankCountry],
+		[scopedAccountText.payoutIban || "IBAN", editingPayoutDetails.iban],
+		[scopedAccountText.payoutAccountNumber || "Account number", editingPayoutDetails.accountNumber],
+		[scopedAccountText.payoutSwift || "SWIFT / BIC", editingPayoutDetails.swiftCode],
+		[scopedAccountText.payoutInstapayAddress || "InstaPay", editingPayoutDetails.instapayAddress],
+		[scopedAccountText.payoutInstapayPhone || "InstaPay phone", editingPayoutDetails.instapayPhone],
+		[scopedAccountText.payoutMobileProvider || "Mobile wallet provider", editingPayoutDetails.mobileWalletProvider],
+		[scopedAccountText.payoutMobileNumber || "Mobile wallet number", editingPayoutDetails.mobileWalletNumber],
+		[scopedAccountText.payoutStcPay || "STC Pay", editingPayoutDetails.stcPayNumber],
+		[scopedAccountText.payoutPaypal || "PayPal email", editingPayoutDetails.paypalEmail],
+		[scopedAccountText.payoutCountry || "Country", editingPayoutDetails.country],
+		[scopedAccountText.payoutCurrency || "Currency", editingPayoutDetails.preferredCurrency],
+		[scopedAccountText.payoutNotes || "Notes", editingPayoutDetails.notes],
+	].filter(([, value]) => String(value || "").trim());
 
 	return (
 		<Modal
@@ -3929,7 +4326,7 @@ const OwnerAccountsModal = ({
 										dataSource={accounts}
 										loading={loading}
 										pagination={{ pageSize: 8, size: "small" }}
-										scroll={{ x: 1205 }}
+										scroll={{ x: 1380 }}
 										size='small'
 										tableLayout='fixed'
 									/>
@@ -4158,6 +4555,29 @@ const OwnerAccountsModal = ({
 									<FieldHint>{agentAccountText.openingWalletHint}</FieldHint>
 								</label>
 							</AgentCommercialBlock>
+						)}
+						{isAgentRoleSelected(editForm.roleDescriptions) && (
+							<PayoutReadOnlyBlock>
+								<SelectionHeader>
+									<span>{accountText.payoutDetails || scopedAccountText.payoutDetails}</span>
+								</SelectionHeader>
+								{editingPayoutRows.length ? (
+									<PayoutReadOnlyGrid>
+										{editingPayoutRows.map(([label, value]) => (
+											<div key={label}>
+												<span>{label}</span>
+												<strong dir='auto'>{value}</strong>
+											</div>
+										))}
+									</PayoutReadOnlyGrid>
+								) : (
+									<FieldHint>
+										{isRTL
+											? "\u0644\u0645 \u064a\u0636\u0641 \u0627\u0644\u0648\u0643\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u062f\u0641\u0639 \u0628\u0639\u062f."
+											: "This agent has not added payout details yet."}
+									</FieldHint>
+								)}
+							</PayoutReadOnlyBlock>
 						)}
 						{!agentOnly && (
 						<AccessPicker>
@@ -5369,6 +5789,89 @@ const AgentHero = styled.section`
 	}
 `;
 
+const AgentPayoutPanel = styled.section`
+	display: grid;
+	gap: 0.85rem;
+	padding: 1rem;
+	border: 1px solid #cfe8ff;
+	border-radius: 14px;
+	background: #ffffff;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+	direction: ${(p) => (p.$isRTL ? "rtl" : "ltr")};
+`;
+
+const PayoutPanelHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+
+	strong {
+		color: #102033;
+		font-size: 0.98rem;
+		font-weight: 950;
+	}
+
+	.ant-btn {
+		min-height: 34px;
+		font-weight: 900;
+	}
+`;
+
+const PayoutFieldsGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.65rem;
+
+	label {
+		display: grid;
+		gap: 0.28rem;
+		min-width: 0;
+		color: #344054;
+		font-size: 0.74rem;
+		font-weight: 900;
+	}
+
+	label.wide {
+		grid-column: 1 / -1;
+	}
+
+	input,
+	select,
+	textarea {
+		width: 100%;
+		min-height: 36px;
+		border: 1px solid #c8daee;
+		border-radius: 8px;
+		background: #fff;
+		color: #102033;
+		font-size: 0.82rem;
+		font-weight: 800;
+		padding: 0 0.65rem;
+		text-align: start;
+	}
+
+	input[dir="ltr"] {
+		text-align: ${(p) => (p.$isRTL ? "right" : "left")};
+		font-variant-numeric: tabular-nums;
+	}
+
+	textarea {
+		min-height: 74px;
+		padding: 0.55rem 0.65rem;
+		resize: vertical;
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
 const AgentTotals = styled.div`
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5840,6 +6343,32 @@ const AccountActions = styled.div`
 	}
 `;
 
+const PayoutMiniSummary = styled.div`
+	display: grid;
+	gap: 0.16rem;
+	min-width: 0;
+	color: ${(p) => (p.$empty ? "#8a95a3" : "#102033")};
+
+	strong,
+	span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	strong {
+		font-size: 0.76rem;
+		font-weight: 950;
+	}
+
+	span {
+		color: #667085;
+		font-size: 0.68rem;
+		font-weight: 800;
+	}
+`;
+
 const AccountForm = styled.form`
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6176,6 +6705,45 @@ const AgentCommercialOption = styled.button`
 		font-size: 0.72rem;
 		font-weight: 800;
 		line-height: 1.25;
+	}
+`;
+
+const PayoutReadOnlyBlock = styled.div`
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.5rem;
+	padding: 0.75rem;
+	border: 1px solid #d7e7f8;
+	border-radius: 12px;
+	background: #ffffff;
+`;
+
+const PayoutReadOnlyGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 0.45rem;
+
+	div {
+		display: grid;
+		gap: 0.16rem;
+		min-width: 0;
+		padding: 0.48rem 0.55rem;
+		border: 1px solid #e3eef9;
+		border-radius: 9px;
+		background: #f8fbff;
+	}
+
+	span {
+		color: #667085;
+		font-size: 0.68rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.8rem;
+		font-weight: 950;
+		overflow-wrap: anywhere;
 	}
 `;
 

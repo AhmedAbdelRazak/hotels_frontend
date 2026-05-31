@@ -557,43 +557,39 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 		const hotelId = normalizeDashboardId(hotel?._id);
 		const ownerId = normalizeDashboardId(hotel?.belongsTo);
 
-		if (isSuperAdminUser(admin)) {
-			if (!hotelId || !ownerId) {
-				message.error("Hotel owner scope was not found.");
-				return;
-			}
-			previewHotelStaffDashboard(admin._id, token, hotelId, ownerId).then(
-				(data) => {
-					if (data?.error || !data?.token || !data?.user) {
-						message.error(data?.error || "Unable to open owner dashboard.");
-						return;
-					}
-					const selectedHotel = {
-						...hotel,
-						_id: hotelId,
-						belongsTo:
-							hotel.belongsTo && typeof hotel.belongsTo === "object"
-								? hotel.belongsTo
-								: { _id: ownerId },
-					};
-					startDashboardPreview({
-						auth: { token: data.token, user: data.user },
-						preview: data.preview,
-						selectedHotel,
-					});
-					window.open(overallHotelManagementRouteForOwner(ownerId), "_blank");
-				}
-			).catch((error) => {
-				message.error(error?.message || "Unable to open owner dashboard.");
-			});
+		if (!isSuperAdminUser(admin)) {
+			message.error("Only super admins can open another account dashboard.");
 			return;
 		}
 
-		localStorage.setItem("selectedHotel", JSON.stringify(hotel));
-		window.open(
-			`/hotel-management/dashboard/${hotel.belongsTo._id}/${hotel._id}`,
-			"_blank"
-		);
+		if (!hotelId || !ownerId) {
+			message.error("Hotel owner scope was not found.");
+			return;
+		}
+		previewHotelStaffDashboard(admin._id, token, hotelId, ownerId).then(
+			(data) => {
+				if (data?.error || !data?.token || !data?.user) {
+					message.error(data?.error || "Unable to open owner dashboard.");
+					return;
+				}
+				const selectedHotel = {
+					...hotel,
+					_id: hotelId,
+					belongsTo:
+						hotel.belongsTo && typeof hotel.belongsTo === "object"
+							? hotel.belongsTo
+							: { _id: ownerId },
+				};
+				startDashboardPreview({
+					auth: { token: data.token, user: data.user },
+					preview: data.preview,
+					selectedHotel,
+				});
+				window.open(overallHotelManagementRouteForOwner(ownerId), "_blank");
+			}
+		).catch((error) => {
+			message.error(error?.message || "Unable to open owner dashboard.");
+		});
 	};
 
 	/* table columns */

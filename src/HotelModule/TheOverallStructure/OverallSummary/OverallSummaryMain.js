@@ -39,6 +39,8 @@ const SUMMARY_TEXT = {
 		yesterday: "Yesterday",
 		last7: "Last 7 Days",
 		overviewTab: "Hotels Summary",
+		agentOverviewTab: "My Agent Summary",
+		agentFilterHint: "These numbers show only reservations tied to your agent account.",
 		reservationsTab: "Reservations Overview",
 		inventoryTab: "Hotels' Inventory",
 		paidTab: "Paid Reservations Overview",
@@ -81,6 +83,9 @@ const SUMMARY_TEXT = {
 		yesterday: "أمس",
 		last7: "آخر 7 أيام",
 		grandTotal: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0639\u0627\u0645",
+		agentOverviewTab: "\u0645\u0644\u062e\u0635 \u062d\u062c\u0648\u0632\u0627\u062a\u064a",
+		agentFilterHint:
+			"\u0647\u0630\u0647 \u0627\u0644\u0623\u0631\u0642\u0627\u0645 \u062a\u0639\u0631\u0636 \u0641\u0642\u0637 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u0633\u0627\u0628\u0643 \u0643\u0648\u0643\u064a\u0644.",
 		minAvailableRooms: "\u0623\u0642\u0644 \u063a\u0631\u0641 \u0645\u062a\u0627\u062d\u0629",
 		minAvailable: "\u0623\u0642\u0644 \u0645\u062a\u0627\u062d",
 		peakOccupied: "\u0623\u0639\u0644\u0649 \u0625\u0634\u063a\u0627\u0644",
@@ -577,7 +582,12 @@ const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) =>
 	];
 	const tabLabels = isRTL ? ARABIC_TAB_LABELS : labels;
 	const tabOptions = [
-		{ value: "overview", label: tabLabels.overviewTab },
+		{
+			value: "overview",
+			label: agentSummaryOnly
+				? labels.agentOverviewTab
+				: tabLabels.overviewTab,
+		},
 		...(agentSummaryOnly
 			? []
 			: [
@@ -1027,6 +1037,12 @@ const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) =>
 				</>
 			)}
 
+			{activeTab === "overview" && agentSummaryOnly && (
+				<AgentSummaryScopeNote>
+					{labels.agentFilterHint}
+				</AgentSummaryScopeNote>
+			)}
+
 			{activeTab === "overview" && (
 				<ExecutiveMySummaryReport
 					active
@@ -1034,10 +1050,11 @@ const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) =>
 					token={token}
 					params={params}
 					chosenLanguage={chosenLanguage}
+					agentOnly={agentSummaryOnly}
 				/>
 			)}
 
-			{activeTab === "overview" && (
+			{activeTab === "overview" && !agentSummaryOnly && (
 				<SummaryTableWrap>
 				<table className='summary-table'>
 					<thead>
@@ -1295,6 +1312,21 @@ const ExecutiveTabs = styled.div`
 			bottom: 5px;
 		}
 	}
+`;
+
+const AgentSummaryScopeNote = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 38px;
+	padding: 8px 12px;
+	border: 1px solid rgba(45, 93, 145, 0.18);
+	border-radius: 8px;
+	background: #f8fbff;
+	color: #24547d;
+	font-size: 0.84rem;
+	font-weight: 850;
+	text-align: center;
 `;
 
 const SummaryTableWrap = styled(OverallTableWrap)`

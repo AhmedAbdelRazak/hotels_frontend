@@ -1279,6 +1279,7 @@ const HotelOverviewReservation = ({
 																	$color={roomInfo.color}
 																	$picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
 																	$reserved={isBooked}
+																	$closed={isClosed}
 																	style={{
 																		cursor: isBooked
 																			? "not-allowed"
@@ -1423,6 +1424,7 @@ const HotelOverviewReservation = ({
 																		$color={roomInfo.color}
 																		$picked={pickedHotelRooms.some((id) => String(id) === String(room._id))}
 																		$reserved={isBooked}
+																		$closed={isClosed}
 																		style={{
 																			cursor: isBooked
 																				? "not-allowed"
@@ -1779,11 +1781,18 @@ const RoomSquare = styled.div`
 	position: relative;
 	width: ${({ $picked }) => ($picked ? "40px" : "35px")};
 	height: ${({ $picked }) => ($picked ? "40px" : "35px")};
-	background-color: ${({ $color, $picked }) => ($picked ? "#000" : $color)};
-	border: 1px solid ${({ $picked }) => ($picked ? "#22c55e" : "#0f172a")};
+	background: ${({ $color, $picked, $closed }) =>
+		$picked
+			? "#000"
+			: $closed
+			? "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 58%, #fff7f8 100%)"
+			: $color};
+	border: 1px solid
+		${({ $picked, $closed }) =>
+			$picked ? "#22c55e" : $closed ? "#fda4af" : "#0f172a"};
 	border-radius: 4px;
-	color: ${({ $picked, $reserved }) =>
-		$picked ? "lightgrey" : $reserved ? "black" : "white"};
+	color: ${({ $picked, $reserved, $closed }) =>
+		$picked ? "lightgrey" : $closed ? "#9f1239" : $reserved ? "black" : "white"};
 	margin: 0;
 	display: flex;
 	align-items: center;
@@ -1798,6 +1807,7 @@ const RoomSquare = styled.div`
 		width 1s,
 		height 1s,
 		background-color 1s,
+		background 0.2s ease,
 		color 1s,
 		box-shadow 0.2s ease,
 		transform 0.2s ease;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { DatePicker, Input, message, Select } from "antd";
+import { DatePicker, Drawer, Input, message, Select } from "antd";
 import {
 	BarChartOutlined,
 	BankOutlined,
@@ -7,12 +7,20 @@ import {
 	CheckCircleOutlined,
 	ClockCircleOutlined,
 	CloseCircleOutlined,
+	CreditCardOutlined,
 	DollarCircleOutlined,
+	ExclamationCircleOutlined,
+	EyeOutlined,
 	FileExcelOutlined,
-	ProfileOutlined,
+	FilterOutlined,
+	GlobalOutlined,
+	LoginOutlined,
+	LogoutOutlined,
 	ReloadOutlined,
 	SearchOutlined,
-	StopOutlined,
+	SortAscendingOutlined,
+	SortDescendingOutlined,
+	UserAddOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import styled from "styled-components";
@@ -83,6 +91,32 @@ const RESERVATION_SCORECARD_TEXT = {
 	},
 };
 
+Object.assign(RESERVATION_SCORECARD_TEXT.en, {
+	pendingReservationsTitle: "All pending reservations",
+	pendingReservationsLabel: "Pending reservations",
+	newReservationsToday: "New reservations",
+	scoreTotalValue: "Total value",
+	scoreHotelsCount: "Hotel count",
+	scoreNights: "Nights",
+	acceptedScore: "Accepted",
+	rejectedScore: "Rejected",
+	waitingScore: "Waiting / pending",
+	viewScorecard: "View",
+});
+
+Object.assign(RESERVATION_SCORECARD_TEXT.ar, {
+	pendingReservationsTitle: "\u0643\u0644 \u0637\u0644\u0628\u0627\u062a \u0627\u0644\u062d\u062c\u0632 \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
+	pendingReservationsLabel: "\u0637\u0644\u0628\u0627\u062a \u062d\u062c\u0632 \u0645\u0639\u0644\u0642\u0629",
+	newReservationsToday: "\u0637\u0644\u0628\u0627\u062a \u062d\u062c\u0632 \u062c\u062f\u064a\u062f\u0629",
+	scoreTotalValue: "\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\u0629",
+	scoreHotelsCount: "\u0639\u062f\u062f \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	scoreNights: "\u0644\u064a\u0627\u0644",
+	acceptedScore: "\u0645\u0642\u0628\u0648\u0644",
+	rejectedScore: "\u0645\u0631\u0641\u0648\u0636",
+	waitingScore: "\u0645\u0646\u062a\u0638\u0631 / \u0645\u0639\u0644\u0642",
+	viewScorecard: "\u0639\u0631\u0636",
+});
+
 const RESERVATION_FILTER_TEXT = {
 	en: {
 		dateByLabel: "Date By",
@@ -91,6 +125,10 @@ const RESERVATION_FILTER_TEXT = {
 		checkoutDate: "Checkout Date",
 		fromDate: "From date",
 		toDate: "To date",
+		filtersButton: "Filters",
+		filtersDrawerTitle: "Reservation filters",
+		applyFilters: "Apply filters",
+		sortOrderLabel: "Sort order",
 	},
 	ar: {
 		dateByLabel: "حسب التاريخ",
@@ -101,6 +139,13 @@ const RESERVATION_FILTER_TEXT = {
 		toDate: "إلى تاريخ",
 	},
 };
+
+Object.assign(RESERVATION_FILTER_TEXT.ar, {
+	filtersButton: "\u0641\u0644\u0627\u062a\u0631",
+	filtersDrawerTitle: "\u0641\u0644\u0627\u062a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+	applyFilters: "\u062a\u0637\u0628\u064a\u0642 \u0627\u0644\u0641\u0644\u0627\u062a\u0631",
+	sortOrderLabel: "\u0627\u062a\u062c\u0627\u0647 \u0627\u0644\u062a\u0631\u062a\u064a\u0628",
+});
 
 const statusOptions = (labels) => [
 	{ value: "", label: labels.allStatuses },
@@ -115,11 +160,12 @@ const statusOptions = (labels) => [
 ];
 
 const sortOptions = (labels) => [
-	{ value: "createdAt", label: labels.createdAt },
-	{ value: "booking_source", label: labels.source },
-	{ value: "hotelName", label: labels.hotel },
-	{ value: "checkin_date", label: labels.checkIn },
-	{ value: "checkout_date", label: labels.checkOut },
+	{ value: "createdAt", label: labels.createdAt, icon: <CalendarOutlined /> },
+	{ value: "booking_source", label: labels.source, icon: <GlobalOutlined /> },
+	{ value: "hotelName", label: labels.hotel, icon: <BankOutlined /> },
+	{ value: "checkin_date", label: labels.checkIn, icon: <LoginOutlined /> },
+	{ value: "checkout_date", label: labels.checkOut, icon: <LogoutOutlined /> },
+	{ value: "payment", label: labels.payment, icon: <CreditCardOutlined /> },
 ];
 
 const dateByOptions = (labels) => [
@@ -138,6 +184,9 @@ const toDatePickerValue = (value = "") => {
 };
 
 const ReservationSearchWrap = styled(OverallCenteredSearch)`
+	align-items: center;
+	gap: 0.55rem;
+	direction: ltr;
 	padding: 0 0.2rem;
 
 	.overall-centered-search-input {
@@ -171,190 +220,604 @@ const ReservationSearchWrap = styled(OverallCenteredSearch)`
 	}
 
 	@media (max-width: 720px) {
+		justify-content: stretch;
+		flex-wrap: wrap;
+
 		.overall-centered-search-input {
-			width: 100%;
+			flex: 1 1 auto;
+			width: auto;
 			min-width: 0;
+		}
+	}
+
+	@media (max-width: 520px) {
+		.overall-centered-search-input {
+			flex: 1 1 100%;
+			width: 100%;
 		}
 	}
 `;
 
-const ReservationFilterToolbar = styled(OverallToolbar)`
-	grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-	gap: 8px;
-	padding: 8px 10px;
+const FilterDrawerButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.38rem;
+	flex: 0 0 auto;
+	min-height: 34px;
+	min-width: 106px;
+	padding: 0 0.78rem;
+	border: 1px solid rgba(141, 76, 157, 0.82);
 	border-radius: 7px;
+	background: var(--pms-metal-purple-bg, linear-gradient(135deg, #24102d, #64166e));
+	color: #ffffff;
+	font-size: 0.78rem;
+	font-weight: 950;
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.18),
+		0 8px 18px rgba(80, 23, 96, 0.18);
+	transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+
+	&:hover {
+		filter: brightness(1.06) saturate(1.05);
+		transform: translateY(-1px);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.22),
+			0 12px 22px rgba(80, 23, 96, 0.24);
+	}
+
+	@media (max-width: 420px) {
+		min-width: 92px;
+		padding: 0 0.62rem;
+	}
+`;
+
+const SearchRowActionButton = styled(FilterDrawerButton)`
+	border-color: rgba(23, 148, 86, 0.85);
+	background: linear-gradient(135deg, #0f8f4f 0%, #18b86f 52%, #6ee7b7 100%);
+	color: #ffffff;
+	box-shadow:
+		inset 0 1px rgba(255, 255, 255, 0.22),
+		0 8px 18px rgba(15, 143, 79, 0.22);
+
+	&:hover {
+		border-color: rgba(110, 231, 183, 0.95);
+		color: #ffffff;
+		filter: brightness(1.05) saturate(1.06);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.26),
+			0 12px 24px rgba(15, 143, 79, 0.28);
+	}
+
+	&:disabled {
+		opacity: 0.58;
+		cursor: not-allowed;
+		transform: none;
+		filter: none;
+	}
+`;
+
+const FilterCount = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 0.25rem;
+	border-radius: 999px;
+	background: #ffffff;
+	color: #64166e;
+	font-size: 0.68rem;
+	font-weight: 950;
+	line-height: 1;
+`;
+
+const ReservationFilterToolbar = styled(OverallToolbar)`
+	grid-template-columns: 1fr;
+	gap: 10px;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
 
 	> input,
 	> select,
+	.overall-centered-search-input.ant-input,
+	.overall-centered-search-input.ant-input-affix-wrapper,
 	.overall-date-picker.ant-picker,
 	.overall-filter-select .ant-select-selector {
-		min-height: 34px !important;
-		font-size: 0.76rem !important;
+		width: 100%;
+		min-height: 38px !important;
+		font-size: 0.8rem !important;
+		border-radius: 7px !important;
 	}
 
 	> input,
-	> select {
-		padding: 0 9px;
+	> select,
+	.overall-centered-search-input.ant-input,
+	.overall-centered-search-input.ant-input-affix-wrapper {
+		padding: 0 10px;
+		text-align: inherit;
 	}
 
 	.overall-date-picker.ant-picker {
-		padding: 0 9px;
+		padding: 0 10px;
 	}
 
+	.overall-centered-search-input.ant-input-affix-wrapper .ant-input,
 	.overall-date-picker .ant-picker-input > input,
 	.overall-filter-select .ant-select-selection-placeholder,
 	.overall-filter-select .ant-select-selection-item {
-		font-size: 0.76rem;
+		font-size: 0.8rem;
+		font-weight: 850;
 	}
 
 	.overall-filter-select .ant-select-selector {
-		padding: 0 9px !important;
+		padding: 0 10px !important;
 	}
 
 	.overall-filter-select .ant-select-selection-overflow {
 		align-items: center;
-		min-height: 32px;
+		min-height: 36px;
 	}
 
 	.overall-filter-select .ant-select-selection-search-input {
-		height: 32px !important;
+		height: 36px !important;
 	}
 
 	button {
-		min-height: 34px;
-		border-radius: 5px;
-		font-size: 0.76rem;
-		padding: 0 11px;
+		width: 100%;
+		min-height: 38px;
+		border-radius: 7px;
+		font-size: 0.8rem;
+		padding: 0 12px;
 		gap: 0.34rem;
 		box-shadow:
 			inset 0 1px rgba(255, 255, 255, 0.16),
 			0 6px 14px rgba(80, 23, 96, 0.15);
 	}
-
-	@media (max-width: 480px) {
-		> input,
-		> select,
-		.overall-filter-select,
-		.overall-date-picker,
-		button {
-			min-height: 36px;
-			font-size: 0.76rem;
-		}
-	}
 `;
 
 const ReservationScorecardStrip = styled.section`
-	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	direction: ltr;
 	display: grid;
-	grid-template-columns: repeat(8, minmax(108px, 1fr));
-	gap: 8px;
-	padding: 8px;
-	border: 1px solid #e3d1e9;
-	border-radius: 8px;
-	background:
-		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(249, 246, 252, 0.98)),
-		linear-gradient(140deg, rgba(255, 255, 255, 0.72), rgba(116, 133, 158, 0.12));
-	box-shadow: 0 8px 22px rgba(31, 39, 57, 0.06);
+	grid-template-columns: minmax(430px, 0.92fr) minmax(470px, 1.08fr);
+	grid-template-areas: "side main";
+	align-items: center;
+	gap: 50px;
+	margin-top: -0.45rem;
+	min-height: 170px;
+	padding: 8px 18px;
+	background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+	border-top: 1px solid #eef2f7;
+	border-bottom: 1px solid #e9edf5;
+
+	.score-main {
+		grid-area: main;
+		display: grid;
+		gap: 9px;
+		justify-self: stretch;
+		align-self: center;
+		min-width: 0;
+		width: 100%;
+	}
+
+	.score-summary-row {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(100px, 1fr));
+		gap: 10px;
+		justify-content: stretch;
+		direction: ltr;
+		width: 100%;
+	}
+
+	.score-status-row {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(132px, 1fr));
+		gap: 10px;
+		justify-content: stretch;
+		direction: ltr;
+		width: 100%;
+	}
+
+	.score-side {
+		grid-area: side;
+		display: grid;
+		gap: 6px;
+		justify-self: stretch;
+		align-self: center;
+		margin-bottom: 0;
+		min-width: 0;
+		width: 100%;
+		transform: translateY(-5px);
+	}
+
+	.score-side-note {
+		color: #000000;
+		font-size: 0.78rem;
+		font-weight: 950;
+		line-height: 1.25;
+		text-align: center;
+		justify-self: end;
+		width: min(100%, 194px);
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.score-side-grid {
+		display: grid;
+		grid-template-columns: minmax(252px, 1fr) minmax(158px, 0.62fr);
+		align-items: end;
+		gap: 12px;
+		min-width: 0;
+		width: 100%;
+		direction: ltr;
+	}
+
+	.score-mini-row {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(78px, 1fr));
+		gap: 6px;
+		width: 100%;
+	}
 
 	.score-card {
-		position: relative;
+		appearance: none;
+		border: 1px solid #c4c4c4;
+		border-radius: 0;
+		background: linear-gradient(180deg, #d4d4d4 0%, #c9c9c9 100%);
+		color: #000000;
 		display: grid;
-		grid-template-columns: auto 1fr;
-		align-items: center;
-		gap: 8px;
+		align-content: center;
+		justify-items: center;
+		gap: 2px;
 		min-width: 0;
-		min-height: 66px;
-		border: 1px solid rgba(136, 146, 164, 0.28);
-		border-radius: 7px;
-		background:
-			linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(235, 239, 245, 0.98)),
-			linear-gradient(154deg, rgba(255, 255, 255, 0.8), rgba(120, 141, 166, 0.18));
-		color: #111827;
-		padding: 8px 10px;
-		text-align: start;
+		min-height: 72px;
+		padding: 6px 8px;
+		text-align: center;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 		cursor: pointer;
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.95),
-			0 6px 14px rgba(31, 39, 57, 0.08);
-		transition: transform 0.16s ease, border-color 0.16s ease,
-			box-shadow 0.16s ease, background 0.16s ease;
+		box-shadow: none;
+		transition: filter 0.14s ease, transform 0.14s ease;
 	}
 
 	.score-card:hover,
 	.score-card:focus-visible {
-		border-color: rgba(141, 76, 157, 0.72);
+		filter: brightness(0.98);
 		transform: translateY(-1px);
 		outline: none;
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 1),
-			0 10px 20px rgba(64, 38, 80, 0.14);
 	}
 
 	.score-card.active {
-		border-color: rgba(100, 22, 110, 0.92);
-		background:
-			linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(245, 238, 249, 0.98)),
-			linear-gradient(135deg, rgba(100, 22, 110, 0.2), rgba(12, 103, 51, 0.12));
-		box-shadow:
-			inset 4px 0 0 rgba(100, 22, 110, 0.95),
-			0 10px 22px rgba(80, 23, 96, 0.14);
+		box-shadow: inset 0 -4px 0 rgba(0, 80, 179, 0.55);
 	}
 
-	.score-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 999px;
+	.score-card.mini {
+		width: 100%;
+		min-height: 74px;
+		padding-inline: 6px;
+	}
+
+	.score-card.feature {
+		width: 100%;
+		min-height: 88px;
+	}
+
+	.score-card.status {
+		min-height: 62px;
+		border: 1px solid #0f2842;
+		border-radius: 19px;
 		background: #ffffff;
-		color: var(--pms-metal-purple, #64166e);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.95),
-			0 4px 10px rgba(31, 39, 57, 0.1);
+	}
+
+	.score-card.summary {
+		width: 100%;
+		min-height: 86px;
+		padding-inline: 7px;
 	}
 
 	.score-copy {
 		display: grid;
-		gap: 2px;
+		justify-items: center;
+		gap: 1px;
 		min-width: 0;
+		width: 100%;
+	}
+
+	.score-label-line {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		max-width: 100%;
+		min-width: 0;
+		direction: inherit;
+	}
+
+	.score-label-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 auto;
+		color: #26384f;
+		font-size: 0.68rem;
+		line-height: 1;
+	}
+
+	.score-card.status .score-label-icon {
+		color: #123453;
+	}
+
+	.score-card.active .score-label-icon {
+		color: #0050b3;
 	}
 
 	.score-label {
-		color: #344054;
-		font-size: 0.72rem;
+		color: #000000;
+		font-size: 0.7rem;
 		font-weight: 950;
 		line-height: 1.15;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		min-width: 0;
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+		overflow-wrap: anywhere;
 	}
 
 	.score-value {
-		color: #080b14;
-		font-size: 1.18rem;
+		color: #000000;
+		font-size: 1.42rem;
 		font-weight: 950;
 		line-height: 1.05;
+		max-width: 100%;
+		direction: ltr;
+		unicode-bidi: plaintext;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		font-variant-numeric: tabular-nums;
 	}
 
-	@media (max-width: 1400px) {
-		grid-template-columns: repeat(4, minmax(120px, 1fr));
+	.score-card.long-value .score-value {
+		font-size: 1.08rem;
+	}
+
+	.score-card.feature .score-value {
+		font-size: 2.02rem;
+	}
+
+	.score-card.status .score-value {
+		font-size: 1.42rem;
+	}
+
+	.score-view {
+		color: #004fc5;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		font-size: 0.64rem;
+		font-weight: 950;
+		line-height: 1.05;
+		text-decoration: none;
+		margin-top: 1px;
+		letter-spacing: 0;
+		direction: inherit;
+	}
+
+	.score-view svg {
+		font-size: 0.58rem;
+	}
+
+	@media (max-width: 1320px) {
+		grid-template-columns: 1fr;
+		grid-template-areas:
+			"main"
+			"side";
+		gap: 12px;
+		justify-items: center;
+		min-height: auto;
+
+		.score-main,
+		.score-side {
+			justify-self: center;
+		}
+
+		.score-side-note {
+			justify-self: center;
+		}
+
+		.score-side {
+			margin-bottom: 0;
+			transform: none;
+		}
 	}
 
 	@media (max-width: 760px) {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		padding: 7px;
+		margin-top: 0;
+		gap: 10px;
+		padding: 10px 8px;
 
-		.score-card {
-			min-height: 62px;
+		.score-summary-row {
+			grid-template-columns: repeat(2, minmax(104px, 1fr));
+			width: 100%;
+		}
+
+		.score-status-row {
+			grid-template-columns: 1fr;
+			width: 100%;
+		}
+
+		.score-side-grid {
+			display: grid;
+			grid-template-columns: 1fr;
+			justify-items: center;
+		}
+
+		.score-side-note {
+			width: 100%;
+		}
+
+		.score-mini-row {
+			grid-template-columns: repeat(3, minmax(78px, 1fr));
+			width: 100%;
+		}
+
+		.score-card.summary,
+		.score-card.status,
+		.score-card.mini,
+		.score-card.feature {
+			width: 100%;
 		}
 	}
 
 	@media (max-width: 420px) {
+		.score-summary-row,
+		.score-mini-row {
+			grid-template-columns: 1fr;
+		}
+	}
+`;
+
+const ReservationControlsBar = styled(ReservationTableControls)`
+	display: grid;
+	grid-template-columns: minmax(240px, 0.82fr) auto minmax(560px, 1.45fr);
+	grid-template-areas: "calendar action sort";
+	align-items: center;
+	column-gap: 0.85rem;
+	row-gap: 0;
+	direction: ltr;
+	min-height: 64px;
+	margin-top: -1rem;
+	padding: 9px 22px;
+	border: 1px solid #1f2937;
+	border-radius: 0;
+	background: #ffffff;
+	box-shadow: none;
+
+	.control-group {
+		width: auto;
+		min-width: 0;
+	}
+
+	.calendar-control {
+		grid-area: calendar;
+		justify-self: start;
+		align-self: center;
+		justify-content: start;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.sort-control {
+		grid-area: sort;
+		display: flex;
+		flex-wrap: wrap;
+		justify-self: end;
+		align-self: center;
+		align-content: center;
+		justify-content: end;
+		row-gap: 0.32rem;
+		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	}
+
+	.sort-control .control-label {
+		flex: 0 0 100%;
+		height: 18px;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+		line-height: 1.1;
+	}
+
+	.summary-control {
+		grid-area: action;
+		position: static;
+		justify-self: center;
+		align-self: center;
+		width: auto;
+		transform: none;
+		pointer-events: auto;
+	}
+
+	button.summary-trigger {
+		min-width: 152px;
+	}
+
+	button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.42rem;
+		direction: inherit;
+	}
+
+	.button-icon,
+	.sort-option-icon,
+	.sort-arrow-icon,
+	.control-label-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 auto;
+		line-height: 1;
+	}
+
+	.button-icon,
+	.sort-option-icon {
+		font-size: 0.86rem;
+	}
+
+	.sort-button-content,
+	.control-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.34rem;
+		min-width: 0;
+		direction: inherit;
+	}
+
+	.sort-option-label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.sort-arrow-icon {
+		font-size: 0.72rem;
+		opacity: 0.95;
+	}
+
+	@media (max-width: 1120px) {
 		grid-template-columns: 1fr;
+		grid-template-areas:
+			"action"
+			"sort"
+			"calendar";
+		grid-template-rows: auto;
+
+		.calendar-control,
+		.sort-control,
+		.summary-control {
+			justify-content: center;
+			justify-self: center;
+			width: 100%;
+		}
+
+		.sort-control .control-label {
+			text-align: center;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.control-group {
+			width: 100%;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.sort-control {
+			grid-template-columns: 1fr;
+		}
 	}
 `;
 
@@ -411,6 +874,34 @@ const ReservationMainTableWrap = styled(OverallTableWrap)`
 	table.reservation-main-table .availability-cell {
 		color: #14532d;
 		font-weight: 950;
+	}
+
+	table.reservation-main-table tbody td.status-cell,
+	table.reservation-main-table tbody td.source-cell {
+		font-size: 0.64rem;
+		line-height: 1.2;
+	}
+
+	table.reservation-main-table tbody td.status-cell .status-pill {
+		min-height: 20px;
+		min-width: 0;
+		padding: 0.08rem 0.32rem;
+		gap: 0.22rem;
+		font-size: 0.6rem;
+		line-height: 1.1;
+		letter-spacing: 0;
+	}
+
+	table.reservation-main-table tbody td.status-cell .status-pill::before {
+		width: 5px;
+		height: 5px;
+		flex-basis: 5px;
+	}
+
+	table.reservation-main-table tbody td.source-cell .table-truncate {
+		font-size: 0.62rem;
+		line-height: 1.18;
+		font-weight: 800;
 	}
 
 	@media (min-width: 992px) {
@@ -529,6 +1020,8 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		dateBy: "createdAt",
 		dateFrom: "",
 		dateTo: "",
+		scorecardScope: "",
+		actionRequiredOnly: "",
 		sortBy: "createdAt",
 		sortOrder: "desc",
 	});
@@ -543,6 +1036,7 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const [summaryLoading, setSummaryLoading] = useState(false);
 	const [summaryExporting, setSummaryExporting] = useState(false);
 	const [summaryDateBy, setSummaryDateBy] = useState("createdAt");
+	const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
 	const params = useMemo(
 		() => ({
@@ -602,89 +1096,264 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		: [];
 	const pages = Math.max(Number(result.pages || 1), 1);
 	const scorecardTotals = result.scorecards?.totals || {};
-	const scorecardStatusCounts = result.scorecards?.statusCounts || {};
+	const scorecardToday = result.scorecards?.today || {};
+	const scorecardActionRequired = result.scorecards?.actionRequired || {};
+	const scorecardStatusCounts =
+		result.scorecards?.todayStatusCounts || result.scorecards?.statusCounts || {};
 	const selectedStatusKey = (Array.isArray(filters.status) ? filters.status : [])
 		.map((value) => String(value || "").toLowerCase())
 		.sort()
 		.join("|");
-	const scoreNumber = (value) =>
-		Number(value || 0).toLocaleString("en-US");
-	const statusCardActive = (values = []) =>
-		selectedStatusKey ===
-		values
+	const scorecardStatusKey = (values = []) =>
+		(Array.isArray(values) ? values : [])
 			.map((value) => String(value || "").toLowerCase())
 			.sort()
 			.join("|");
-	const applyScorecardFilter = (values = []) => {
-		setFilters((previous) => ({ ...previous, status: values }));
+	const scoreNumber = (value) =>
+		Number(value || 0).toLocaleString("en-US");
+	const scorecardFilterActive = ({
+		statusValues = [],
+		scorecardScope = "",
+		actionRequiredOnly = "",
+	} = {}) =>
+		selectedStatusKey === scorecardStatusKey(statusValues) &&
+		String(filters.scorecardScope || "") === String(scorecardScope || "") &&
+		String(filters.actionRequiredOnly || "") ===
+			String(actionRequiredOnly || "");
+	const applyScorecardFilter = ({
+		statusValues = [],
+		scorecardScope = "",
+		actionRequiredOnly = "",
+	} = {}) => {
+		setFilters((previous) => {
+			const nextStatusKey = scorecardStatusKey(statusValues);
+			const nextScope = String(scorecardScope || "");
+			const nextActionRequired = actionRequiredOnly ? "true" : "";
+			const isSameScorecard =
+				scorecardStatusKey(previous.status) === nextStatusKey &&
+				String(previous.scorecardScope || "") === nextScope &&
+				String(previous.actionRequiredOnly || "") === nextActionRequired &&
+				!previous.search &&
+				!previous.dateFrom &&
+				!previous.dateTo &&
+				String(previous.dateBy || "createdAt") === "createdAt";
+
+			return {
+				...previous,
+				search: "",
+				status: isSameScorecard ? [] : statusValues,
+				dateBy: "createdAt",
+				dateFrom: "",
+				dateTo: "",
+				scorecardScope: isSameScorecard ? "" : nextScope,
+				actionRequiredOnly: isSameScorecard ? "" : nextActionRequired,
+			};
+		});
 		setPage(1);
 	};
-	const scorecardItems = [
+	const activeFilterCount = [
+		Array.isArray(filters.hotelId) && filters.hotelId.length,
+		Array.isArray(filters.status) && filters.status.length,
+		filters.dateBy !== "createdAt",
+		filters.dateFrom,
+		filters.dateTo,
+		filters.scorecardScope,
+		filters.actionRequiredOnly,
+		filters.sortBy !== "createdAt",
+		filters.sortOrder !== "desc",
+	].filter(Boolean).length;
+	const resetReservationFilters = () => {
+		setFilters({
+			search: "",
+			hotelId: [],
+			status: [],
+			dateBy: "createdAt",
+			dateFrom: "",
+			dateTo: "",
+			scorecardScope: "",
+			actionRequiredOnly: "",
+			sortBy: "createdAt",
+			sortOrder: "desc",
+		});
+		setPage(1);
+	};
+	const summaryScorecardsBase = [
 		{
 			key: "all",
-			label: labels.allReservationCount,
-			value: scoreNumber(scorecardTotals.reservationsCount),
-			icon: <ProfileOutlined />,
+			label: labels.newReservationsToday,
+			value: scoreNumber(
+				scorecardToday.reservationsCount ?? scorecardTotals.todayCreated
+			),
 			statusValues: [],
-			active: !selectedStatusKey,
+			scorecardScope: "today",
+			active: scorecardFilterActive({ scorecardScope: "today" }),
+			icon: <UserAddOutlined />,
+			showView: true,
 		},
 		{
 			key: "totalAmount",
-			label: labels.totalAmount,
-			value: `${formatMoney(scorecardTotals.totalAmount)} ${labels.sar}`,
+			label: labels.scoreTotalValue,
+			value: formatMoney(scorecardToday.totalAmount),
+			statusValues: [],
+			scorecardScope: "today",
+			active: false,
 			icon: <DollarCircleOutlined />,
-			statusValues: [],
-			active: false,
-		},
-		{
-			key: "hotels",
-			label: labels.hotels,
-			value: scoreNumber(scorecardTotals.hotelsCount),
-			icon: <BankOutlined />,
-			statusValues: [],
-			active: false,
+			showView: false,
 		},
 		{
 			key: "nights",
-			label: labels.nights,
-			value: scoreNumber(scorecardTotals.nights),
-			icon: <CalendarOutlined />,
+			label: labels.scoreNights,
+			value: scoreNumber(scorecardToday.nights),
 			statusValues: [],
+			scorecardScope: "today",
 			active: false,
+			icon: <CalendarOutlined />,
+			showView: false,
 		},
 		{
-			key: "confirmed",
-			label: labels.confirmed,
-			value: scoreNumber(scorecardStatusCounts.confirmed),
-			icon: <CheckCircleOutlined />,
-			statusValues: ["confirmed"],
-			active: statusCardActive(["confirmed"]),
-		},
-		{
-			key: "pending",
-			label: labels.pending,
-			value: scoreNumber(scorecardStatusCounts.pending),
-			icon: <ClockCircleOutlined />,
-			statusValues: ["pending"],
-			active: statusCardActive(["pending"]),
-		},
-		{
-			key: "cancelled",
-			label: labels.cancelled,
-			value: scoreNumber(scorecardStatusCounts.cancelled),
-			icon: <CloseCircleOutlined />,
-			statusValues: ["cancelled"],
-			active: statusCardActive(["cancelled"]),
-		},
-		{
-			key: "noShow",
-			label: labels.noShowCard,
-			value: scoreNumber(scorecardStatusCounts.noShow),
-			icon: <StopOutlined />,
-			statusValues: ["no_show"],
-			active: statusCardActive(["no_show"]),
+			key: "hotels",
+			label: labels.scoreHotelsCount,
+			value: scoreNumber(scorecardToday.hotelsCount),
+			statusValues: [],
+			scorecardScope: "today",
+			active: false,
+			icon: <BankOutlined />,
+			showView: false,
 		},
 	];
+	const summaryScorecards = isRTL
+		? [
+				summaryScorecardsBase[3],
+				summaryScorecardsBase[2],
+				summaryScorecardsBase[1],
+				summaryScorecardsBase[0],
+		  ]
+		: summaryScorecardsBase;
+	const primaryStatusScorecardsBase = [
+		{
+			key: "confirmed",
+			label: labels.acceptedScore,
+			value: scoreNumber(scorecardStatusCounts.confirmed),
+			statusValues: ["confirmed"],
+			scorecardScope: "today",
+			active: scorecardFilterActive({
+				statusValues: ["confirmed"],
+				scorecardScope: "today",
+			}),
+			icon: <CheckCircleOutlined />,
+			showView: true,
+		},
+		{
+			key: "rejected",
+			label: labels.rejectedScore,
+			value: scoreNumber(
+				Number(scorecardStatusCounts.cancelled || 0) +
+					Number(scorecardStatusCounts.noShow || 0)
+			),
+			statusValues: ["cancelled", "no_show"],
+			scorecardScope: "today",
+			active: scorecardFilterActive({
+				statusValues: ["cancelled", "no_show"],
+				scorecardScope: "today",
+			}),
+			icon: <CloseCircleOutlined />,
+			showView: true,
+		},
+		{
+			key: "pendingStatus",
+			label: labels.waitingScore,
+			value: scoreNumber(scorecardStatusCounts.pending),
+			statusValues: ["pending"],
+			scorecardScope: "today",
+			active: scorecardFilterActive({
+				statusValues: ["pending"],
+				scorecardScope: "today",
+			}),
+			icon: <ClockCircleOutlined />,
+			showView: true,
+		},
+	];
+	const primaryStatusScorecards = isRTL
+		? [
+				primaryStatusScorecardsBase[2],
+				primaryStatusScorecardsBase[1],
+				primaryStatusScorecardsBase[0],
+		  ]
+		: primaryStatusScorecardsBase;
+	const secondaryStatusScorecards = [
+		{
+			key: "sideTotalAmount",
+			label: labels.scoreTotalValue,
+			value: formatMoney(scorecardActionRequired.totalAmount),
+			statusValues: [],
+			actionRequiredOnly: true,
+			active: false,
+			icon: <DollarCircleOutlined />,
+			showView: false,
+		},
+		{
+			key: "sideNights",
+			label: labels.scoreNights,
+			value: scoreNumber(scorecardActionRequired.nights),
+			statusValues: [],
+			actionRequiredOnly: true,
+			active: false,
+			icon: <CalendarOutlined />,
+			showView: false,
+		},
+		{
+			key: "sideHotels",
+			label: labels.scoreHotelsCount,
+			value: scoreNumber(scorecardActionRequired.hotelsCount),
+			statusValues: [],
+			actionRequiredOnly: true,
+			active: false,
+			icon: <BankOutlined />,
+			showView: false,
+		},
+	];
+	const pendingScorecard = {
+		key: "pending",
+		label: labels.pendingReservationsLabel,
+		value: scoreNumber(scorecardActionRequired.reservationsCount),
+		statusValues: [],
+		actionRequiredOnly: true,
+		active: scorecardFilterActive({ actionRequiredOnly: "true" }),
+		icon: <ExclamationCircleOutlined />,
+		showView: true,
+	};
+	const renderScorecard = (item, className = "") => {
+		const valueText = String(item.value ?? "");
+		return (
+			<button
+				type='button'
+				key={item.key}
+				className={`score-card ${className} ${
+					valueText.length > 6 ? "long-value" : ""
+				} ${item.active ? "active" : ""}`}
+				aria-pressed={item.active}
+				onClick={() => applyScorecardFilter(item)}
+			>
+				<span className='score-copy'>
+					<span className='score-label-line'>
+						{item.icon ? (
+							<span className='score-label-icon' aria-hidden='true'>
+								{item.icon}
+							</span>
+						) : null}
+						<span className='score-label'>{item.label}</span>
+					</span>
+					<strong className='score-value'>{item.value}</strong>
+					{item.showView ? (
+						<span className='score-view'>
+							<EyeOutlined aria-hidden='true' />
+							<span>{labels.viewScorecard}</span>
+						</span>
+					) : null}
+				</span>
+			</button>
+		);
+	};
 
 	useEffect(() => {
 		const nextPage = pageFromSearch(location.search);
@@ -941,14 +1610,43 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					aria-label={labels.searchReservationPlaceholder}
 					dir={isRTL ? "rtl" : "ltr"}
 				/>
+				<FilterDrawerButton
+					type='button'
+					$isRTL={isRTL}
+					onClick={() => setFilterDrawerOpen(true)}
+					aria-label={labels.filtersButton}
+				>
+					<FilterOutlined />
+					<span>{labels.filtersButton}</span>
+					{activeFilterCount ? <FilterCount>{activeFilterCount}</FilterCount> : null}
+				</FilterDrawerButton>
+				<SearchRowActionButton
+					type='button'
+					$isRTL={isRTL}
+					onClick={openSummary}
+				>
+					<BarChartOutlined />
+					<span>{summaryLabels.showSummary}</span>
+				</SearchRowActionButton>
 			</ReservationSearchWrap>
 
-			<ReservationFilterToolbar
-				onSubmit={(event) => {
-					event.preventDefault();
-					setPage(1);
-				}}
+			<Drawer
+				open={filterDrawerOpen}
+				onClose={() => setFilterDrawerOpen(false)}
+				placement='right'
+				width='min(92vw, 430px)'
+				title={labels.filtersDrawerTitle}
+				destroyOnClose={false}
+				bodyStyle={{ padding: 14 }}
+				className={isRTL ? "reservation-filter-drawer rtl" : "reservation-filter-drawer"}
 			>
+				<ReservationFilterToolbar
+					onSubmit={(event) => {
+						event.preventDefault();
+						setPage(1);
+						setFilterDrawerOpen(false);
+					}}
+				>
 				<Select
 					mode='multiple'
 					allowClear
@@ -1023,71 +1721,84 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					getPopupContainer={() => document.body}
 					popupStyle={{ zIndex: 2100 }}
 				/>
+				<Select
+					showSearch
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
+					value={filters.sortBy}
+					onChange={(value) => updateFilter("sortBy", value || "createdAt")}
+					placeholder={labels.sortBy}
+					optionFilterProp='label'
+					options={sortOptions(labels)}
+					aria-label={labels.sortBy}
+				/>
+				<Select
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
+					value={filters.sortOrder}
+					onChange={(value) => updateFilter("sortOrder", value || "desc")}
+					placeholder={labels.sortOrderLabel}
+					optionFilterProp='label'
+					options={[
+						{ value: "desc", label: labels.sortDescending },
+						{ value: "asc", label: labels.sortAscending },
+					]}
+					aria-label={labels.sortOrderLabel}
+				/>
 				<button type='submit'>
 					<SearchOutlined />
-					<span>{labels.search}</span>
+					<span>{labels.applyFilters}</span>
 				</button>
 				<button
 					type='button'
 					className='secondary'
-					disabled={exporting}
-					onClick={handleExportExcel}
-				>
-					<FileExcelOutlined />
-					<span>{exporting ? labels.exportingExcel : labels.exportExcel}</span>
-				</button>
-				<button
-					type='button'
-					className='secondary'
-					onClick={() => {
-						setFilters({
-							search: "",
-							hotelId: [],
-							status: [],
-							dateBy: "createdAt",
-							dateFrom: "",
-							dateTo: "",
-							sortBy: "createdAt",
-							sortOrder: "desc",
-						});
-						setPage(1);
-					}}
+					onClick={resetReservationFilters}
 				>
 					<ReloadOutlined />
 					<span>{labels.reset}</span>
 				</button>
-			</ReservationFilterToolbar>
+				</ReservationFilterToolbar>
+			</Drawer>
 
 			<ReservationScorecardStrip
 				$isRTL={isRTL}
 				aria-label={labels.scorecardLabel}
 			>
-				{scorecardItems.map((item) => (
-					<button
-						type='button'
-						key={item.key}
-						className={`score-card ${item.active ? "active" : ""}`}
-						aria-pressed={item.active}
-						onClick={() => applyScorecardFilter(item.statusValues)}
-					>
-						<span className='score-icon'>{item.icon}</span>
-						<span className='score-copy'>
-							<span className='score-label'>{item.label}</span>
-							<strong className='score-value'>{item.value}</strong>
-						</span>
-					</button>
-				))}
+				<div className='score-side'>
+					<div className='score-side-note'>{labels.pendingReservationsTitle}</div>
+					<div className='score-side-grid'>
+						<div className='score-mini-row'>
+							{secondaryStatusScorecards.map((item) =>
+								renderScorecard(item, "mini")
+							)}
+						</div>
+						{renderScorecard(pendingScorecard, "feature")}
+					</div>
+				</div>
+				<div className='score-main'>
+					<div className='score-summary-row'>
+						{summaryScorecards.map((item) => renderScorecard(item, "summary"))}
+					</div>
+					<div className='score-status-row'>
+						{primaryStatusScorecards.map((item) =>
+							renderScorecard(item, "status")
+						)}
+					</div>
+				</div>
 			</ReservationScorecardStrip>
 
-			<ReservationTableControls>
-				<div className='control-group'>
+			<ReservationControlsBar $isRTL={isRTL}>
+				<div className='control-group calendar-control'>
 					<button
 						type='button'
 						className={dateMode === "gregorian" ? "active" : ""}
 						aria-pressed={dateMode === "gregorian"}
 						onClick={() => setDateMode("gregorian")}
 					>
-						{labels.gregorianDates}
+						<CalendarOutlined className='button-icon' aria-hidden='true' />
+						<span>{labels.gregorianDates}</span>
 					</button>
 					<button
 						type='button'
@@ -1097,21 +1808,29 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 						aria-pressed={dateMode === "hijri"}
 						onClick={() => setDateMode("hijri")}
 					>
-						{labels.hijriDates}
+						<CalendarOutlined className='button-icon' aria-hidden='true' />
+						<span>{labels.hijriDates}</span>
 					</button>
 				</div>
 				<div className='summary-control'>
 					<button
 						type='button'
 						className='summary-trigger'
-						onClick={openSummary}
+						disabled={exporting}
+						onClick={handleExportExcel}
 					>
-						<BarChartOutlined />
-						<span>{summaryLabels.showSummary}</span>
+						<FileExcelOutlined className='button-icon' aria-hidden='true' />
+						<span>{exporting ? labels.exportingExcel : labels.exportExcel}</span>
 					</button>
 				</div>
-				<div className='control-group'>
-					<span className='control-label'>{labels.sortBy}</span>
+				<div className='control-group sort-control'>
+					<span className='control-label'>
+						<SortDescendingOutlined
+							className='control-label-icon'
+							aria-hidden='true'
+						/>
+						<span>{labels.sortBy}</span>
+					</span>
 					{sortOptions(labels).map((option) => {
 						const active = filters.sortBy === option.value;
 						return (
@@ -1122,13 +1841,30 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 								aria-pressed={active}
 								onClick={() => updateSort(option.value)}
 							>
-								{option.label}
-								{active ? (filters.sortOrder === "asc" ? " ^" : " v") : ""}
+								<span className='sort-button-content'>
+									<span className='sort-option-icon' aria-hidden='true'>
+										{option.icon}
+									</span>
+									<span className='sort-option-label'>{option.label}</span>
+									{active ? (
+										filters.sortOrder === "asc" ? (
+											<SortAscendingOutlined
+												className='sort-arrow-icon'
+												aria-hidden='true'
+											/>
+										) : (
+											<SortDescendingOutlined
+												className='sort-arrow-icon'
+												aria-hidden='true'
+											/>
+										)
+									) : null}
+								</span>
 							</button>
 						);
 					})}
 				</div>
-			</ReservationTableControls>
+			</ReservationControlsBar>
 
 			<ReservationMainTableWrap>
 				<table className='reservation-list-table reservation-main-table'>
@@ -1190,7 +1926,7 @@ const OverallReservationMain = ({ userId, token, ownerId, chosenLanguage }) => {
 									<td className='amount-cell highlight-column highlight-end'>
 										{formatMoney(reservation.total_amount)} {labels.sar}
 									</td>
-									<td>
+									<td className='status-cell'>
 										<StatusPill $tone={statusTone(reservation.reservation_status)}>
 											<TableTooltipText
 												value={localizeStatus(

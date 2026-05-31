@@ -1,5 +1,7 @@
 /** @format */
 
+import { isSuperAdminUser } from "../AdminModule/utils/superUsers";
+
 export const signup = (userData) => {
 	console.log(userData, "userData");
 	return fetch(`${process.env.REACT_APP_API_URL}/property-listing`, {
@@ -238,6 +240,14 @@ const clearExpiredDashboardPreview = (preview) => {
 export const getDashboardPreview = () => {
 	const preview = safeParseLocalJson(DASHBOARD_PREVIEW_STORAGE_KEY);
 	if (!preview?.auth?.token || !preview?.auth?.user) return null;
+	const actorId =
+		preview.actor?._id ||
+		preview.actor?.id ||
+		preview.preview?.actorId;
+	if (!isSuperAdminUser(actorId)) {
+		clearExpiredDashboardPreview(preview);
+		return null;
+	}
 	if (isJwtExpired(preview.auth.token)) {
 		clearExpiredDashboardPreview(preview);
 		return null;

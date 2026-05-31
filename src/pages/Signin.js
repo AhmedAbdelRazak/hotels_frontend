@@ -32,10 +32,57 @@ const normaliseCredential = (value) => {
 
 const HOTEL_EXECUTIVE_SUMMARY_PATH =
 	"/hotel-management/main-dashboard?overall=summary&page=1";
+const HOTEL_AGENT_WORKSPACE_PATH = "/hotel-management/main-dashboard";
+
+const signinRoleNumbers = (user = {}) =>
+	[
+		user.role,
+		...(Array.isArray(user.roles) ? user.roles : []),
+	]
+		.map(Number)
+		.filter((role) => Number.isFinite(role));
+
+const signinRoleDescriptions = (user = {}) =>
+	[
+		user.roleDescription,
+		...(Array.isArray(user.roleDescriptions) ? user.roleDescriptions : []),
+	]
+		.map((description) =>
+			String(description || "")
+				.toLowerCase()
+				.replace(/[\s_-]+/g, "")
+		)
+		.filter(Boolean);
+
+const isPureAgentSigninUser = (user = {}) => {
+	const roles = signinRoleNumbers(user);
+	const descriptions = signinRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	const hasAgentAccess =
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownReservations");
+	const hasBroaderHotelAccess =
+		[1000, 2000, 3000, 6000, 8000, 10000].some((role) =>
+			roles.includes(role)
+		) ||
+		descriptions.some((description) =>
+			[
+				"superadmin",
+				"hotelmanager",
+				"reception",
+				"finance",
+				"reservationemployee",
+				"systemadmin",
+			].includes(description)
+		);
+	return hasAgentAccess && !hasBroaderHotelAccess;
+};
 
 const getSigninRedirectPath = (user = {}) => {
 	const role = Number(user.role);
 	if (role === 1000) return "/admin/dashboard";
+	if (isPureAgentSigninUser(user)) return HOTEL_AGENT_WORKSPACE_PATH;
 	return HOTEL_EXECUTIVE_SUMMARY_PATH;
 };
 

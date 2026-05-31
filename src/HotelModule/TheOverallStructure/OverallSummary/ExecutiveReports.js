@@ -1312,11 +1312,16 @@ const mySummaryText = {
 	en: {
 		title: "Reservation Department Report",
 		subtitle: "Main report",
+		agentTitle: "My Agent Reservation Report",
+		agentSubtitle: "Only reservations tied to my agent account",
 		filterHint: "Use the filters button above to change hotels, dates, status, and search.",
 		allPendingTitle: "All Reservation Requests",
+		agentAllPendingTitle: "My Reservation Requests",
 		pendingRequests: "Pending Reservation Requests",
+		agentPendingRequests: "My Pending Requests",
 		show: "View",
 		allReservationCount: "All Reservation Count",
+		agentReservationCount: "My Reservation Count",
 		totalAmount: "Total Amount",
 		nights: "Nights",
 		hotels: "Hotels",
@@ -1329,6 +1334,7 @@ const mySummaryText = {
 		checkedIn: "Checked In",
 		noShow: "No Show",
 		futureOperation: "Group Future Operation",
+		agentFutureOperation: "My Future Operation",
 		arrivalsByDay: "Arrivals by day",
 		departuresByDay: "Departures by day",
 		checkInReservations: "Arrival reservations",
@@ -1345,6 +1351,8 @@ const mySummaryText = {
 		all: "All",
 		topHotel: "Top Hotel",
 		topSource: "Top Booking Source",
+		agentTopHotel: "My Top Assigned Hotel",
+		agentTopSource: "My Top Booking Source",
 		rankingPeriod: "Ranking Period",
 		new: "New",
 		arrival: "Arrival",
@@ -1355,14 +1363,22 @@ const mySummaryText = {
 	ar: {
 		title: "\u062a\u0642\u0631\u064a\u0631 \u0642\u0633\u0645 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		subtitle: "\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0631\u0626\u064a\u0633\u064a",
+		agentTitle: "\u062a\u0642\u0631\u064a\u0631 \u062d\u062c\u0648\u0632\u0627\u062a\u064a \u0643\u0648\u0643\u064a\u0644",
+		agentSubtitle:
+			"\u0641\u0642\u0637 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u0633\u0627\u0628\u064a \u0643\u0648\u0643\u064a\u0644",
 		filterHint:
 			"\u0627\u0633\u062a\u062e\u062f\u0645 \u0632\u0631 \u0627\u0644\u0641\u0644\u0627\u062a\u0631 \u0623\u0639\u0644\u0627\u0647 \u0644\u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0648\u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0648\u0627\u0644\u062d\u0627\u0644\u0629 \u0648\u0627\u0644\u0628\u062d\u062b.",
 		allPendingTitle: "\u0643\u0644 \u0637\u0644\u0628\u0627\u062a \u0627\u0644\u062d\u062c\u0632",
+		agentAllPendingTitle: "\u0637\u0644\u0628\u0627\u062a \u062d\u062c\u0632\u064a",
 		pendingRequests:
 			"\u0637\u0644\u0628\u0627\u062a \u062d\u062c\u0632 \u0645\u0639\u0644\u0642\u0629",
+		agentPendingRequests:
+			"\u0637\u0644\u0628\u0627\u062a\u064a \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
 		show: "\u0639\u0631\u0636",
 		allReservationCount:
 			"\u0639\u062f\u062f \u0643\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		agentReservationCount:
+			"\u0639\u062f\u062f \u062d\u062c\u0648\u0632\u0627\u062a\u064a",
 		totalAmount: "\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\u0629",
 		nights: "\u0644\u064a\u0627\u0644\u064a",
 		hotels: "\u0639\u062f\u062f \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
@@ -1376,6 +1392,8 @@ const mySummaryText = {
 		noShow: "\u0639\u062f\u0645 \u062d\u0636\u0648\u0631",
 		futureOperation:
 			"\u0627\u0644\u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u0645\u0633\u062a\u0642\u0628\u0644\u064a \u0644\u0644\u0645\u062c\u0645\u0648\u0639\u0629",
+		agentFutureOperation:
+			"\u062a\u0634\u063a\u064a\u0644 \u062d\u062c\u0648\u0632\u0627\u062a\u064a \u0627\u0644\u0642\u0627\u062f\u0645\u0629",
 		arrivalsByDay:
 			"\u062a\u0633\u062c\u064a\u0644\u0627\u062a \u0627\u0644\u0648\u0635\u0648\u0644 \u062d\u0633\u0628 \u0627\u0644\u064a\u0648\u0645",
 		departuresByDay:
@@ -1396,6 +1414,10 @@ const mySummaryText = {
 		all: "\u0627\u0644\u0643\u0644",
 		topHotel: "\u0627\u0644\u0641\u0646\u062f\u0642 \u0627\u0644\u0623\u0639\u0644\u0649",
 		topSource: "\u0627\u0644\u0645\u0635\u062f\u0631 \u0627\u0644\u0623\u0639\u0644\u0649",
+		agentTopHotel:
+			"\u0623\u0639\u0644\u0649 \u0641\u0646\u062f\u0642 \u0645\u062e\u0635\u0635 \u0644\u064a",
+		agentTopSource:
+			"\u0623\u0639\u0644\u0649 \u0645\u0635\u062f\u0631 \u0644\u062d\u062c\u0648\u0632\u0627\u062a\u064a",
 		rankingPeriod: "\u0641\u062a\u0631\u0629 \u0627\u0644\u062a\u0635\u0646\u064a\u0641",
 		new: "\u062c\u062f\u064a\u062f",
 		arrival: "\u062f\u062e\u0648\u0644",
@@ -1718,9 +1740,21 @@ export const ExecutiveMySummaryReport = ({
 	token,
 	params,
 	chosenLanguage,
+	agentOnly = false,
 }) => {
 	const modalLabels = getLabels(chosenLanguage);
 	const labels = { ...modalLabels, ...getMySummaryText(chosenLanguage) };
+	if (agentOnly) {
+		labels.title = labels.agentTitle || labels.title;
+		labels.subtitle = labels.agentSubtitle || labels.subtitle;
+		labels.allPendingTitle = labels.agentAllPendingTitle || labels.allPendingTitle;
+		labels.pendingRequests = labels.agentPendingRequests || labels.pendingRequests;
+		labels.allReservationCount =
+			labels.agentReservationCount || labels.allReservationCount;
+		labels.futureOperation = labels.agentFutureOperation || labels.futureOperation;
+		labels.topHotel = labels.agentTopHotel || labels.topHotel;
+		labels.topSource = labels.agentTopSource || labels.topSource;
+	}
 	const isRTL = chosenLanguage === "Arabic";
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");

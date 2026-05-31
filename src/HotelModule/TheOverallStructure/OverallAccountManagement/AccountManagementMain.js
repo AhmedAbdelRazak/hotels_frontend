@@ -8,6 +8,7 @@ import {
 	previewHotelStaffDashboard,
 	startDashboardPreview,
 } from "../../../auth";
+import { isSuperAdminUser } from "../../../AdminModule/utils/superUsers";
 import {
 	ActionButton,
 	buildOwnerParams,
@@ -38,6 +39,7 @@ const ACCOUNT_MAIN_TEXT = {
 		previewAccount: "Preview account dashboard",
 		previewOpened: "Account preview opened.",
 		previewFailed: "Unable to start account preview.",
+		previewDenied: "Only super admins can open another account dashboard.",
 		missingHotelScope: "Hotel scope was not found for this account.",
 	},
 	ar: {
@@ -52,6 +54,7 @@ const ACCOUNT_PREVIEW_TEXT = {
 		previewAccount: "Preview account dashboard",
 		previewOpened: "Account preview opened.",
 		previewFailed: "Unable to start account preview.",
+		previewDenied: "Only super admins can open another account dashboard.",
 		missingHotelScope: "Hotel scope was not found for this account.",
 	},
 	ar: {
@@ -316,6 +319,7 @@ const AccountManagementMain = ({
 	const [loading, setLoading] = useState(false);
 	const [previewingAccountId, setPreviewingAccountId] = useState("");
 	const [result, setResult] = useState({ accounts: [], hotels: [], total: 0 });
+	const canPreviewAccounts = isSuperAdminUser(userId);
 	const effectiveRoleFilter = useMemo(() => {
 		if (Array.isArray(filters.role) && filters.role.length) return filters.role;
 		return activeAccountView === ACCOUNT_VIEW_AGENTS
@@ -492,6 +496,15 @@ const AccountManagementMain = ({
 	};
 
 	const startAccountPreview = (account = {}) => {
+		if (!canPreviewAccounts) {
+			message.error(
+				isRTL
+					? "\u064a\u0645\u0643\u0646 \u0644\u0644\u0645\u0634\u0631\u0641\u064a\u0646 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u064a\u0646 \u0641\u0642\u0637 \u0641\u062a\u062d \u0644\u0648\u062d\u0629 \u062d\u0633\u0627\u0628 \u0622\u062e\u0631."
+					: labels.previewDenied ||
+					"Only super admins can open another account dashboard."
+			);
+			return;
+		}
 		const hotelId = getPreviewHotelId(account);
 		if (!hotelId) {
 			message.error(labels.missingHotelScope);
@@ -640,20 +653,31 @@ const AccountManagementMain = ({
 										</td>
 										<td className='account-identity-cell' data-label={labels.name}>
 											<AccountIdentity>
-												<AccountPreviewButton
-													type='button'
-													onClick={() => startAccountPreview(account)}
-													disabled={previewingAccountId === account._id}
-													title={labels.previewAccount}
-												>
-													<span className='account-name-line'>
-														<EyeOutlined />
-														<strong>{account.name || "-"}</strong>
-													</span>
-													<span className='account-contact' dir='auto'>
-														{account.email || account.phone || "-"}
-													</span>
-												</AccountPreviewButton>
+												{canPreviewAccounts ? (
+													<AccountPreviewButton
+														type='button'
+														onClick={() => startAccountPreview(account)}
+														disabled={previewingAccountId === account._id}
+														title={labels.previewAccount}
+													>
+														<span className='account-name-line'>
+															<EyeOutlined />
+															<strong>{account.name || "-"}</strong>
+														</span>
+														<span className='account-contact' dir='auto'>
+															{account.email || account.phone || "-"}
+														</span>
+													</AccountPreviewButton>
+												) : (
+													<AccountIdentityText>
+														<span className='account-name-line'>
+															<strong>{account.name || "-"}</strong>
+														</span>
+														<span className='account-contact' dir='auto'>
+															{account.email || account.phone || "-"}
+														</span>
+													</AccountIdentityText>
+												)}
 											</AccountIdentity>
 										</td>
 										<td className='account-hotels-cell' data-label={labels.hotels}>
@@ -1103,6 +1127,25 @@ const AccountPreviewButton = styled.button`
 	&:disabled {
 		cursor: wait;
 		opacity: 0.65;
+	}
+`;
+
+const AccountIdentityText = styled.div`
+	display: grid;
+	gap: 0.22rem;
+	min-width: 0;
+	width: 100%;
+
+	.account-name-line {
+		display: inline-flex;
+		align-items: center;
+		min-width: 0;
+		color: #17324d;
+	}
+
+	.account-contact {
+		color: #475467;
+		line-height: 1.35;
 	}
 `;
 

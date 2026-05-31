@@ -12,6 +12,7 @@ import {
 	SettingOutlined,
 	GlobalOutlined,
 	CalendarOutlined,
+	IdcardOutlined,
 } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import DigitalClock from "./DigitalClock";
@@ -61,6 +62,82 @@ const isSystemAdminTopNavUser = (user = {}) => {
 		descriptions.includes("systemadmin") ||
 		descriptions.includes("system admin")
 	);
+};
+
+const getRespectfulSelfRoleLabel = (user = {}, isArabic = false) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo)
+		? user.accessTo.map((item) => String(item || "").toLowerCase())
+		: [];
+	const hasRole = (...allowed) => allowed.some((role) => roles.includes(role));
+	const hasDescription = (...allowed) =>
+		allowed.some((description) => descriptions.includes(description));
+	const hasAccess = (...allowed) =>
+		allowed.some((key) => accessTo.includes(String(key || "").toLowerCase()));
+	const isHotelOwner =
+		hasRole(2000) && !normalizeTopNavId(user.belongsToId);
+
+	if (
+		isSuperAdminUser(user) ||
+		hasRole(1000, 10000) ||
+		isHotelOwner ||
+		hasDescription("systemadmin", "system admin")
+	) {
+		return "";
+	}
+
+	if (hasRole(7000) || hasDescription("ordertaker")) {
+		return isArabic
+			? "\u0634\u0631\u064a\u0643 \u062d\u062c\u0648\u0632\u0627\u062a \u062e\u0627\u0631\u062c\u064a"
+			: "External Booking Partner";
+	}
+
+	if (hasRole(8000) || hasDescription("reservationemployee")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a"
+			: "Responsible for Reservations";
+	}
+
+	if (hasRole(3000) || hasDescription("reception")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0627\u0633\u062a\u0642\u0628\u0627\u0644 \u0648\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a"
+			: "Responsible for Reception & Reservations";
+	}
+
+	if (hasRole(6000) || hasDescription("finance")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0634\u0624\u0648\u0646 \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
+			: "Responsible for Finance";
+	}
+
+	if (hasRole(4000) || hasDescription("housekeepingmanager")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u062c\u0627\u0647\u0632\u064a\u0629 \u0627\u0644\u063a\u0631\u0641"
+			: "Responsible for Room Readiness";
+	}
+
+	if (hasRole(5000) || hasDescription("housekeeping")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u062a\u062c\u0647\u064a\u0632 \u0627\u0644\u063a\u0631\u0641"
+			: "Responsible for Room Preparation";
+	}
+
+	if (hasRole(2000) || hasDescription("hotelmanager")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u0641\u0646\u062f\u0642"
+			: "Responsible for Hotel Operations";
+	}
+
+	if (hasAccess("ownReservations", "reservations", "newReservation")) {
+		return isArabic
+			? "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a"
+			: "Responsible for Reservations";
+	}
+
+	return isArabic
+		? "\u0639\u0636\u0648 \u0641\u0631\u064a\u0642 \u0627\u0644\u0641\u0646\u062f\u0642"
+		: "Hotel Team Member";
 };
 
 const canSeePendingConfirmationNotifications = (user = {}) => {
@@ -202,6 +279,62 @@ const getAssignedHotelIds = (user = {}) => {
 
 const assignedHotelScopeKey = (user = {}) => getAssignedHotelIds(user).join("|");
 
+const HOTEL_EMPLOYEE_LANDING_PATH =
+	"/hotel-management/main-dashboard?overall=summary&page=1";
+
+const HOTEL_AGENT_LANDING_PATH = "/hotel-management/main-dashboard";
+
+const isPureExternalAgentTopNavUser = (user = {}) => {
+	const roles = getUserRoles(user);
+	const descriptions = getUserRoleDescriptions(user);
+	const accessTo = Array.isArray(user.accessTo)
+		? user.accessTo.map((item) => String(item || "").toLowerCase())
+		: [];
+	const hasAgentAccess =
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownreservations");
+	const hasBroaderHotelAccess =
+		[1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000].some((role) =>
+			roles.includes(role)
+		) ||
+		descriptions.some((description) =>
+			[
+				"superadmin",
+				"super admin",
+				"hotelmanager",
+				"reception",
+				"housekeepingmanager",
+				"housekeeping",
+				"finance",
+				"reservationemployee",
+				"systemadmin",
+				"system admin",
+			].includes(description)
+		);
+	return hasAgentAccess && !hasBroaderHotelAccess;
+};
+
+const mainDashboardPath = (ownerId = "", { summary = false } = {}) => {
+	const params = new URLSearchParams();
+	if (ownerId) params.set("ownerId", ownerId);
+	if (summary) {
+		params.set("overall", "summary");
+		params.set("page", "1");
+	}
+	const search = params.toString();
+	return `/hotel-management/main-dashboard${search ? `?${search}` : ""}`;
+};
+
+const readSelectedHotelFromStorage = () => {
+	if (typeof window === "undefined") return {};
+	try {
+		return JSON.parse(localStorage.getItem("selectedHotel") || "{}") || {};
+	} catch (error) {
+		return {};
+	}
+};
+
 const isBrowserTabHidden = () =>
 	typeof document !== "undefined" && document.hidden;
 
@@ -272,6 +405,16 @@ const isAgentWalletClaimNotification = (item = {}) =>
 
 const isStaffApplicationNotification = (item = {}) =>
 	String(item.notificationType || "") === "staff_application_pending";
+
+const buildActivationAccountsRoute = (ownerId = "") => {
+	const params = new URLSearchParams();
+	const targetOwnerId = normalizeTopNavId(ownerId);
+	if (targetOwnerId) params.set("ownerId", targetOwnerId);
+	params.set("overall", "activate-accounts");
+	params.set("page", "1");
+	params.set("range", "custom");
+	return `/hotel-management/main-dashboard?${params.toString()}`;
+};
 
 const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 	if (reason === "wallet_claim_pending") {
@@ -515,7 +658,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const dashboardPreview = auth.dashboardPreview;
 
 	// Selected hotel context
-	const selectedHotel = JSON.parse(localStorage.getItem("selectedHotel")) || {};
+	const [selectedHotel, setSelectedHotel] = useState(() =>
+		readSelectedHotelFromStorage()
+	);
 	const hotelId = selectedHotel._id;
 	const routeHotelContext = useMemo(() => {
 		const match = (location.pathname || "").match(
@@ -529,6 +674,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const queryOwnerId = useMemo(() => {
 		return new URLSearchParams(location.search || "").get("ownerId") || "";
 	}, [location.search]);
+	useEffect(() => {
+		setSelectedHotel(readSelectedHotelFromStorage());
+	}, [location.pathname, location.search]);
 
 	const isOwnerManager =
 		(user.role === 2000 || isSystemAdminTopNavUser(user)) &&
@@ -1589,8 +1737,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		}
 
 		if (isAgentAccountNotification(item) || isStaffApplicationNotification(item)) {
-			params.set("overall", "account-management");
-			return `/hotel-management/main-dashboard?${params.toString()}`;
+			return buildActivationAccountsRoute(targetOwnerId);
 		}
 
 		if (isAgentWalletClaimNotification(item)) {
@@ -1653,9 +1800,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			return;
 		}
 		if (isAgentAccountNotification(item) || isStaffApplicationNotification(item)) {
-			history.push(
-				`/hotel-management/main-dashboard?modal=accounts&ownerId=${targetOwnerId}`
-			);
+			history.push(buildActivationAccountsRoute(targetOwnerId));
 			setNotificationsOpen(false);
 			return;
 		}
@@ -1710,6 +1855,49 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 		  : user.role === 2000
 		    ? "Owner"
 		    : "User";
+	const selfRoleLabel = getRespectfulSelfRoleLabel(user, isArabic);
+	const displayedRoleLabel = selfRoleLabel || roleLabel;
+	const hasSelfPositionLabel = Boolean(selfRoleLabel);
+	const previewWorkspaceLabel =
+		dashboardPreview && (selfRoleLabel || roleLabel !== "User")
+			? displayedRoleLabel
+			: "";
+	const previewLandingPath = useMemo(() => {
+		if (!dashboardPreview) return "";
+		if (isPureExternalAgentTopNavUser(user)) return HOTEL_AGENT_LANDING_PATH;
+
+		const isScopedStaffAccount =
+			normalizeTopNavId(user?.belongsToId) || getAssignedHotelIds(user).length;
+		if (isScopedStaffAccount) return HOTEL_EMPLOYEE_LANDING_PATH;
+
+		const ownerContextId =
+			normalizeTopNavId(dashboardPreview.ownerId) ||
+			queryOwnerId ||
+			selectedHotelOwnerId ||
+			normalizeTopNavId(
+				selectedHotel.belongsTo?._id ||
+					selectedHotel.belongsTo ||
+					selectedHotel.ownerId
+			) ||
+			normalizeTopNavId(user?._id);
+
+		return mainDashboardPath(ownerContextId, { summary: true });
+	}, [
+		dashboardPreview,
+		queryOwnerId,
+		selectedHotel,
+		selectedHotelOwnerId,
+		user,
+	]);
+	const openPreviewLanding = useCallback(() => {
+		if (!dashboardPreview || !previewLandingPath) return;
+		setProfileMenuOpen(false);
+		setSettingsDropdownOpen(false);
+		history.push(previewLandingPath);
+	}, [dashboardPreview, history, previewLandingPath]);
+	const previewLandingTitle = isArabic
+		? "\u0641\u062a\u062d \u0635\u0641\u062d\u0629 \u0627\u0644\u0628\u062f\u0621 \u0644\u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628"
+		: "Open this account's landing page";
 	const notificationCount = Number(notificationFeed.total || 0);
 	const chatNotificationCount = Number(
 		chatUnreadSummary.unreadMessages || chatUnreadSummary.unreadChats || 0
@@ -1941,7 +2129,31 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			</LeftSection>
 
 			<MiddleSection>
-				{hotelName && <HotelName>{hotelName}</HotelName>}
+				{dashboardPreview ? (
+					<PreviewWorkspaceBanner
+						$isArabic={isArabic}
+						title={[
+							user?.name || "",
+							previewWorkspaceLabel,
+							hotelName,
+						]
+							.filter(Boolean)
+							.join(" - ")}
+					>
+						<span>{isArabic ? "\u0645\u0639\u0627\u064a\u0646\u0629 \u0643\u0640" : "Previewing as"}</span>
+						{previewWorkspaceLabel && <em>{previewWorkspaceLabel}</em>}
+						<PreviewNameButton
+							type='button'
+							onClick={openPreviewLanding}
+							title={previewLandingTitle}
+						>
+							{user?.name || ""}
+						</PreviewNameButton>
+						{hotelName && <small>{hotelName}</small>}
+					</PreviewWorkspaceBanner>
+				) : (
+					hotelName && <HotelName>{hotelName}</HotelName>
+				)}
 			</MiddleSection>
 
 			<RightSection>
@@ -2100,12 +2312,19 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 								style={{
 									fontSize: "30px",
 									color: "#fff",
-									marginRight: "10px",
+									marginInlineEnd: "10px",
 								}}
 							/>
 							<div>
 								<span>Hi {user.name?.split(" ")[0]}</span>
-								<small>{roleLabel}</small>
+								<ProfileRole
+									$isArabic={isArabic}
+									$isPosition={hasSelfPositionLabel}
+									title={displayedRoleLabel}
+								>
+									{hasSelfPositionLabel && <IdcardOutlined />}
+									{displayedRoleLabel}
+								</ProfileRole>
 							</div>
 						</Profile>
 					</Dropdown>
@@ -2534,6 +2753,126 @@ const HotelName = styled.span`
 	@media (max-width: 760px) {
 		font-size: 16px;
 		line-height: 1.2;
+	}
+`;
+
+const PreviewWorkspaceBanner = styled.div`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	max-width: min(100%, 520px);
+	padding: 5px 12px;
+	border: 1px solid rgba(246, 211, 120, 0.28);
+	border-radius: 999px;
+	background:
+		linear-gradient(135deg, rgba(246, 211, 120, 0.16), rgba(255, 255, 255, 0.04)),
+		rgba(16, 16, 26, 0.52);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		0 8px 22px rgba(0, 0, 0, 0.18);
+	color: #ffffff;
+	font-weight: 900;
+	line-height: 1.2;
+	white-space: nowrap;
+	overflow: hidden;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	letter-spacing: 0;
+
+	span {
+		flex: 0 0 auto;
+		color: #f7d77a;
+		font-size: 0.68rem;
+		font-weight: 950;
+		text-transform: uppercase;
+	}
+
+	strong,
+	em,
+	small {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-style: normal;
+	}
+
+	strong {
+		max-width: 160px;
+		color: #ffffff;
+		font-size: 0.88rem;
+	}
+
+	em {
+		max-width: 220px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: rgba(217, 146, 37, 0.16);
+		color: #ffe7a3;
+		font-size: ${(props) => (props.$isArabic ? "0.66rem" : "0.7rem")};
+	}
+
+	small {
+		max-width: 170px;
+		color: #c7c4d2;
+		font-size: 0.68rem;
+		font-weight: 800;
+	}
+
+	@media (max-width: 1120px) {
+		max-width: 360px;
+
+		small {
+			display: none;
+		}
+	}
+
+	@media (max-width: 760px) {
+		max-width: 100%;
+		padding: 4px 8px;
+
+		strong {
+			max-width: 120px;
+		}
+
+		em {
+			max-width: 145px;
+		}
+	}
+`;
+
+const PreviewNameButton = styled.button`
+	min-width: 0;
+	max-width: 160px;
+	border: 0;
+	background: transparent;
+	color: #ffffff;
+	padding: 0;
+	font: inherit;
+	font-size: 0.88rem;
+	font-weight: 950;
+	line-height: 1.2;
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: inherit;
+	letter-spacing: 0;
+
+	&:hover {
+		color: #f7d77a;
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 3px;
+	}
+
+	&:focus-visible {
+		outline: 2px solid rgba(247, 215, 122, 0.82);
+		outline-offset: 3px;
+		border-radius: 999px;
+	}
+
+	@media (max-width: 760px) {
+		max-width: 120px;
 	}
 `;
 
@@ -2998,5 +3337,36 @@ const Profile = styled.div`
 		display: block;
 		color: #b9b6c8;
 		font-size: 12px;
+	}
+`;
+
+const ProfileRole = styled.small`
+	&& {
+		display: ${(props) => (props.$isPosition ? "inline-flex" : "block")};
+		align-items: center;
+		gap: 5px;
+		width: fit-content;
+		max-width: 190px;
+		margin-top: ${(props) => (props.$isPosition ? "2px" : "0")};
+		padding: ${(props) => (props.$isPosition ? "2px 8px" : "0")};
+		border: ${(props) =>
+			props.$isPosition ? "1px solid rgba(246, 211, 120, 0.34)" : "0"};
+		border-radius: 999px;
+		background: ${(props) =>
+			props.$isPosition ? "rgba(217, 146, 37, 0.13)" : "transparent"};
+		color: ${(props) => (props.$isPosition ? "#f7d77a" : "#b9b6c8")};
+		font-size: ${(props) => (props.$isArabic ? "11px" : "12px")};
+		font-weight: ${(props) => (props.$isPosition ? 900 : 500)};
+		line-height: 1.2;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+		letter-spacing: 0;
+	}
+
+	.anticon {
+		flex: 0 0 auto;
+		font-size: 0.72rem;
 	}
 `;

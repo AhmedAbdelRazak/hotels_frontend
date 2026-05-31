@@ -82,6 +82,8 @@ const TEXT = {
 		claimWalletCredit: "Submit wallet claim",
 		claimSubmitted: "Wallet claim submitted for finance approval.",
 		attachmentRequired: "Please attach a receipt before submitting a wallet claim.",
+		selfAgent: "Your agent account",
+		selfAgentHint: "Wallet claims are submitted under your signed-in agent account.",
 		cancelEdit: "Cancel edit",
 		edit: "Update",
 		actions: "Actions",
@@ -99,6 +101,7 @@ const TEXT = {
 		walletInventory: "Inventory wallet",
 		mixedModel: "Wallet + commission",
 		required: "Please choose an agent and enter an amount.",
+		agentClaimRequired: "Please enter an amount for your wallet claim.",
 		saved: "Wallet movement saved.",
 		updated: "Wallet movement updated.",
 		error: "Unable to load wallet data.",
@@ -176,6 +179,9 @@ const TEXT = {
 			"\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629.",
 		attachmentRequired:
 			"\u064a\u0631\u062c\u0649 \u0625\u0631\u0641\u0627\u0642 \u0625\u064a\u0635\u0627\u0644 \u0642\u0628\u0644 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
+		selfAgent: "\u062d\u0633\u0627\u0628\u0643 \u0643\u0648\u0643\u064a\u0644",
+		selfAgentHint:
+			"\u064a\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0628\u0627\u0633\u0645 \u062d\u0633\u0627\u0628\u0643 \u0627\u0644\u0645\u0633\u062c\u0644.",
 		cancelEdit: "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062a\u0639\u062f\u064a\u0644",
 		edit: "\u062a\u0639\u062f\u064a\u0644",
 		actions: "\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a",
@@ -194,6 +200,8 @@ const TEXT = {
 		mixedModel: "\u0645\u062d\u0641\u0638\u0629 \u0648\u0639\u0645\u0648\u0644\u0629",
 		required:
 			"\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0648\u0643\u064a\u0644 \u0648\u0625\u062f\u062e\u0627\u0644 \u0627\u0644\u0645\u0628\u0644\u063a.",
+		agentClaimRequired:
+			"\u064a\u0631\u062c\u0649 \u0625\u062f\u062e\u0627\u0644 \u0645\u0628\u0644\u063a \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		saved: "\u062a\u0645 \u062d\u0641\u0638 \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		updated: "\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		error: "\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
@@ -347,6 +355,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	const history = useHistory();
 	const location = useLocation();
 	const agentOnly = isOrderTakerOnly(user);
+	const ownAgentId = normalizeId(user?._id);
 	const queryTransactionId = normalizeId(queryValue(location.search, "transactionId"));
 	const [summary, setSummary] = useState(null);
 	const [loadingWallets, setLoadingWallets] = useState(false);
@@ -360,10 +369,10 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	const [agentPage, setAgentPage] = useState(1);
 	const [txPage, setTxPage] = useState(1);
 	const [filters, setFilters] = useState({
-		agentId: queryValue(location.search, "agentId"),
+		agentId: agentOnly ? ownAgentId : queryValue(location.search, "agentId"),
 	});
 	const [entry, setEntry] = useState(() =>
-		buildEmptyEntry(queryValue(location.search, "agentId"))
+		buildEmptyEntry(agentOnly ? ownAgentId : queryValue(location.search, "agentId"))
 	);
 
 	const agentRows = useMemo(
@@ -506,19 +515,16 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	};
 
 	useEffect(() => {
-		if (!agentOnly || !agentRows.length) return;
-		const ownAgent =
-			agentRows.find((item) => normalizeId(item.agent) === normalizeId(user?._id)) ||
-			agentRows[0];
-		const ownAgentId = normalizeId(ownAgent?.agent);
-		if (!ownAgentId || filters.agentId === ownAgentId) return;
+		if (!agentOnly || !ownAgentId || filters.agentId === ownAgentId) return;
 		setFilters((current) => ({ ...current, agentId: ownAgentId }));
 		setEntry((current) => ({
 			...current,
 			agentId: ownAgentId,
-			transactionType: "deposit",
+			transactionType: editingTransactionId
+				? current.transactionType || "deposit"
+				: "deposit",
 		}));
-	}, [agentOnly, agentRows, filters.agentId, user?._id]);
+	}, [agentOnly, editingTransactionId, filters.agentId, ownAgentId]);
 
 	const resetEntry = (nextTab = WALLET_TAB_ADD) => {
 		setActiveWalletTab(nextTab);
@@ -611,8 +617,9 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	};
 
 	const saveEntry = async () => {
-		if (!entry.agentId || Number(entry.amount || 0) <= 0) {
-			message.error(txt.required);
+		const effectiveAgentId = agentOnly ? ownAgentId : entry.agentId;
+		if (!effectiveAgentId || Number(entry.amount || 0) <= 0) {
+			message.error(agentOnly ? txt.agentClaimRequired : txt.required);
 			return;
 		}
 		if (agentOnly && !editingTransactionId && !entryAttachments.length) {
@@ -621,8 +628,9 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}
 		setSaving(true);
 		const payload = {
-			agentId: entry.agentId,
-			transactionType: entry.transactionType,
+			agentId: effectiveAgentId,
+			transactionType:
+				agentOnly && !editingTransactionId ? "deposit" : entry.transactionType,
 			amount: Number(entry.amount || 0),
 			transactionDate: entry.transactionDate,
 			reference: entry.reference,
@@ -926,21 +934,33 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 								</UpdatePrompt>
 							) : (
 							<EntryGrid>
-								<label>
-									<span>{txt.agent}<em>{txt.requiredMark}</em></span>
-									<Select
-										value={entry.agentId || undefined}
-										placeholder={txt.chooseAgent}
-										disabled={agentOnly}
-										showSearch
-										optionFilterProp='label'
-										options={agentOptions}
-										onChange={(value) => {
-											setEntry((current) => ({ ...current, agentId: value || "" }));
-											updateFilter("agentId", value || "");
-										}}
-									/>
-								</label>
+								{agentOnly ? (
+									<SelfAgentField>
+										<span>
+											{txt.selfAgent}
+											<em>{txt.requiredMark}</em>
+										</span>
+										<strong>
+											{agentLabel(entryAgentRow?.agent || user || {})}
+										</strong>
+										<small>{txt.selfAgentHint}</small>
+									</SelfAgentField>
+								) : (
+									<label>
+										<span>{txt.agent}<em>{txt.requiredMark}</em></span>
+										<Select
+											value={entry.agentId || undefined}
+											placeholder={txt.chooseAgent}
+											showSearch
+											optionFilterProp='label'
+											options={agentOptions}
+											onChange={(value) => {
+												setEntry((current) => ({ ...current, agentId: value || "" }));
+												updateFilter("agentId", value || "");
+											}}
+										/>
+									</label>
+								)}
 								<label>
 									<span>{txt.type}<em>{txt.requiredMark}</em></span>
 									<Select
@@ -1451,6 +1471,46 @@ const EntryGrid = styled.div`
 
 	@media (max-width: 760px) {
 		grid-template-columns: 1fr;
+	}
+`;
+
+const SelfAgentField = styled.div`
+	display: grid;
+	gap: 7px;
+	min-width: 0;
+	color: #0f172a;
+	font-weight: 900;
+
+	> span {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		font-size: 0.82rem;
+	}
+
+	strong {
+		min-height: 40px;
+		display: flex;
+		align-items: center;
+		padding: 8px 10px;
+		border: 1px solid #d8e8f7;
+		border-radius: 8px;
+		background: #f8fbff;
+		color: #102033;
+		font-size: 0.92rem;
+		overflow-wrap: anywhere;
+	}
+
+	small {
+		display: block;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: #667085;
+		font-size: 0.76rem;
+		line-height: 1.45;
+		white-space: normal;
 	}
 `;
 

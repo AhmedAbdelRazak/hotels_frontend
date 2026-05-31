@@ -1,18 +1,13 @@
 import axios from "axios";
 import { isJwtExpired, stopDashboardPreview } from "../auth";
 
-const getStoredAuthHeaders = () => {
+const isAdminRoutePath = () =>
+	typeof window !== "undefined" &&
+	String(window.location?.pathname || "").startsWith("/admin");
+
+const getStoredBaseAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
-		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
-		const preview = previewRaw ? JSON.parse(previewRaw) : null;
-		if (preview?.auth?.token) {
-			if (isJwtExpired(preview.auth.token)) {
-				stopDashboardPreview();
-			} else {
-				return { Authorization: `Bearer ${preview.auth.token}` };
-			}
-		}
 		const raw = localStorage.getItem("jwt");
 		const parsed = raw ? JSON.parse(raw) : null;
 		if (parsed?.token && isJwtExpired(parsed.token)) {
@@ -26,9 +21,29 @@ const getStoredAuthHeaders = () => {
 	}
 };
 
+const getStoredAuthHeaders = () => {
+	try {
+		if (typeof window === "undefined") return {};
+		if (isAdminRoutePath()) return getStoredBaseAuthHeaders();
+		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
+		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		if (preview?.auth?.token) {
+			if (isJwtExpired(preview.auth.token)) {
+				stopDashboardPreview();
+			} else {
+				return { Authorization: `Bearer ${preview.auth.token}` };
+			}
+		}
+		return getStoredBaseAuthHeaders();
+	} catch (err) {
+		return {};
+	}
+};
+
 const getStoredPreviewAuth = () => {
 	try {
 		if (typeof window === "undefined") return null;
+		if (isAdminRoutePath()) return null;
 		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
 		const preview = previewRaw ? JSON.parse(previewRaw) : null;
 		if (preview?.auth?.token && isJwtExpired(preview.auth.token)) {
@@ -86,6 +101,44 @@ export const hotelAccount = (userId, token, accountId) => {
 		.catch((err) => console.log(err));
 };
 
+const attachReservationActor = (
+	reservation = {},
+	{ includePreviewAudit = true } = {}
+) => {
+	try {
+		const previewAuth = getStoredPreviewAuth();
+		const previewUserId = previewAuth?.auth?.user?._id;
+		if (previewUserId) {
+			const nextReservation = {
+				...reservation,
+				requestingUserId: previewUserId,
+			};
+			if (includePreviewAudit) {
+				nextReservation.__previewAudit = true;
+				nextReservation.__previewAuditActorId =
+					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "";
+			}
+			return nextReservation;
+		}
+	} catch (error) {
+		// Keep the request usable even if preview storage is unavailable.
+	}
+
+	if (reservation.requestingUserId) return reservation;
+
+	try {
+		const storedAuth = JSON.parse(localStorage.getItem("jwt") || "{}");
+		const actorId = storedAuth?.user?._id;
+		if (actorId) {
+			return { ...reservation, requestingUserId: actorId };
+		}
+	} catch (error) {
+		// Keep the request usable even if local storage is unavailable.
+	}
+
+	return reservation;
+};
+
 export const createNewReservation = (
 	userId,
 	hotelId,
@@ -100,8 +153,11 @@ export const createNewReservation = (
 				Accept: "application/json",
 				"Content-Type": "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
-			body: JSON.stringify(new_reservation),
+			body: JSON.stringify(
+				attachReservationActor(new_reservation, { includePreviewAudit: false })
+			),
 		},
 	)
 		.then((response) => {
@@ -1033,38 +1089,6 @@ export const singlePreReservationById = (reservationId) => {
 		.catch((err) => console.log(err));
 };
 
-const attachReservationActor = (reservation = {}) => {
-	try {
-		const previewAuth = getStoredPreviewAuth();
-		const previewUserId = previewAuth?.auth?.user?._id;
-		if (previewUserId) {
-			return {
-				...reservation,
-				requestingUserId: previewUserId,
-				__previewAudit: true,
-				__previewAuditActorId:
-					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
-			};
-		}
-	} catch (error) {
-		// Keep the update usable even if preview storage is unavailable.
-	}
-
-	if (reservation.requestingUserId) return reservation;
-
-	try {
-		const storedAuth = JSON.parse(localStorage.getItem("jwt") || "{}");
-		const actorId = storedAuth?.user?._id;
-		if (actorId) {
-			return { ...reservation, requestingUserId: actorId };
-		}
-	} catch (error) {
-		// Keep the update usable even if local storage is unavailable.
-	}
-
-	return reservation;
-};
-
 export const updateSingleReservation = (reservationId, reservation) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservation-update/${reservationId}`,
@@ -1774,6 +1798,38 @@ export const updatePendingConfirmationReservation = ({
 		})
 		.catch((err) => ({
 			error: err?.message || "Network error while updating reservation status.",
+		}));
+};
+
+export const markReservationCommissionPaid = ({
+	reservationId,
+	userId,
+	payload = {},
+}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/commission-paid/${reservationId}/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return localizeApiError(
+					{ ...data, status: response.status },
+					`Commission update failed (${response.status})`
+				);
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Network error while updating commission status.",
 		}));
 };
 

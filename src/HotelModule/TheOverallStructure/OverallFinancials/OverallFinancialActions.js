@@ -46,8 +46,12 @@ const TEXT = {
 		title: "Pending Financial Actions",
 		subtitle:
 			"Reservations waiting for finance review, commission assignment, or agent commission approval.",
+		agentTitle: "My Pending Financial Actions",
+		agentSubtitle:
+			"Reservations and wallet claims tied to my agent account that are still waiting on financial review.",
 		actionType: "Action type",
 		allActions: "Finance pending queue",
+		agentAllActions: "My pending queue",
 		commissionMissing: "Commission missing",
 		financeReview: "Total amount review",
 		agentCommission: "Agent commission approval",
@@ -73,10 +77,15 @@ const TEXT = {
 		updateError: "Could not update the reservation.",
 		totalRejectionRequired: "Rejection reason is required.",
 		noRows: "No pending financial actions found.",
+		agentNoRows: "No pending financial actions are waiting on your account.",
 		walletClaimsTitle: "Pending wallet approvals",
 		walletClaimsSubtitle:
 			"Agent wallet credit claims waiting for finance approval.",
+		agentWalletClaimsTitle: "My pending wallet claims",
+		agentWalletClaimsSubtitle:
+			"Wallet credit claims I submitted that are waiting for finance review.",
 		walletClaimNoRows: "No pending wallet approvals found.",
+		agentWalletClaimNoRows: "No pending wallet claims found for your account.",
 		walletStatus: "Finance status",
 		walletSource: "Source",
 		walletReference: "Reference",
@@ -93,6 +102,9 @@ const TEXT = {
 		reservationActionsTitle: "Reservation finance queue",
 		reservationActionsSubtitle:
 			"Reservations that need finance review, commission setup, or agent commission approval.",
+		agentReservationActionsTitle: "My reservation finance queue",
+		agentReservationActionsSubtitle:
+			"Reservations tied to my agent account that still need a financial action.",
 		exportExcel: "Export Excel",
 		exportingExcel: "Exporting...",
 		exportNoData: "No financial action rows are available to export.",
@@ -109,8 +121,14 @@ const TEXT = {
 		title: "الإجراءات المالية المعلقة",
 		subtitle:
 			"حجوزات بانتظار مراجعة المالية أو تحديد العمولة أو موافقة الوكيل على العمولة.",
+		agentTitle:
+			"\u0625\u062c\u0631\u0627\u0621\u0627\u062a\u064a \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
+		agentSubtitle:
+			"\u062d\u062c\u0648\u0632\u0627\u062a \u0648\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0645\u062d\u0641\u0638\u0629 \u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u0633\u0627\u0628\u064a \u0643\u0648\u0643\u064a\u0644 \u0648\u062a\u0646\u062a\u0638\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629.",
 		actionType: "نوع الإجراء",
 		allActions: "إجراءات المالية المطلوبة",
+		agentAllActions:
+			"\u0625\u062c\u0631\u0627\u0621\u0627\u062a\u064a \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
 		commissionMissing: "العمولة غير محددة",
 		financeReview: "مراجعة المبلغ الإجمالي",
 		agentCommission: "موافقة الوكيل على العمولة",
@@ -136,10 +154,18 @@ const TEXT = {
 		updateError: "تعذر تحديث الحجز.",
 		totalRejectionRequired: "سبب الرفض مطلوب.",
 		noRows: "لا توجد إجراءات مالية معلقة.",
+		agentNoRows:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0645\u0627\u0644\u064a\u0629 \u0645\u0639\u0644\u0642\u0629 \u0639\u0644\u0649 \u062d\u0633\u0627\u0628\u0643.",
 		walletClaimsTitle: "موافقات المحفظة المعلقة",
 		walletClaimsSubtitle:
 			"مطالبات رصيد محفظة الوكلاء التي تنتظر موافقة المالية.",
+		agentWalletClaimsTitle:
+			"\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0645\u062d\u0641\u0638\u062a\u064a \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
+		agentWalletClaimsSubtitle:
+			"\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u062a\u064a \u0623\u0631\u0633\u0644\u062a\u0647\u0627 \u0648\u062a\u0646\u062a\u0638\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629.",
 		walletClaimNoRows: "لا توجد مطالبات محفظة معلقة.",
+		agentWalletClaimNoRows:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0645\u062d\u0641\u0638\u0629 \u0645\u0639\u0644\u0642\u0629 \u0644\u062d\u0633\u0627\u0628\u0643.",
 		walletStatus: "حالة المالية",
 		walletSource: "المصدر",
 		walletReference: "مرجع",
@@ -161,6 +187,10 @@ Object.assign(TEXT.ar, {
 		"\u0637\u0627\u0628\u0648\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 	reservationActionsSubtitle:
 		"\u062d\u062c\u0648\u0632\u0627\u062a \u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 \u0623\u0648 \u062a\u062d\u062f\u064a\u062f \u0639\u0645\u0648\u0644\u0629 \u0623\u0648 \u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0648\u0643\u064a\u0644.",
+	agentReservationActionsTitle:
+		"\u0642\u0627\u0626\u0645\u0629 \u0625\u062c\u0631\u0627\u0621\u0627\u062a \u062d\u062c\u0648\u0632\u0627\u062a\u064a \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	agentReservationActionsSubtitle:
+		"\u062d\u062c\u0648\u0632\u0627\u062a \u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u0633\u0627\u0628\u064a \u0643\u0648\u0643\u064a\u0644 \u0648\u062a\u062d\u062a\u0627\u062c \u0625\u062c\u0631\u0627\u0621\u0627 \u0645\u0627\u0644\u064a\u0627.",
 	exportExcel: "\u062a\u0635\u062f\u064a\u0631 Excel",
 	exportingExcel: "\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u0635\u062f\u064a\u0631...",
 	exportNoData:
@@ -208,6 +238,11 @@ const getAccountRoleDescriptions = (account = {}) => [
 		: []),
 ];
 
+const normalizeRoleKey = (value = "") =>
+	String(value || "")
+		.toLowerCase()
+		.replace(/[\s_-]+/g, "");
+
 const canManageFinancialActions = (account = {}) => {
 	const roles = getAccountRoleNumbers(account);
 	const descriptions = getAccountRoleDescriptions(account);
@@ -217,6 +252,29 @@ const canManageFinancialActions = (account = {}) => {
 			["hotelmanager", "systemadmin", "system admin", "finance"].includes(role)
 		)
 	);
+};
+
+const isOrderTakerOnly = (account = {}) => {
+	const roles = getAccountRoleNumbers(account);
+	const descriptions = getAccountRoleDescriptions(account).map(normalizeRoleKey);
+	const accessTo = Array.isArray(account?.accessTo) ? account.accessTo : [];
+	const isAgent =
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownReservations");
+	const hasFullAccess =
+		roles.some((role) => [1000, 2000, 3000, 6000, 8000, 10000].includes(role)) ||
+		descriptions.some((description) =>
+			[
+				"hotelmanager",
+				"systemadmin",
+				"superadmin",
+				"reception",
+				"finance",
+				"reservationemployee",
+			].includes(description)
+		);
+	return isAgent && !hasFullAccess;
 };
 
 const getCommissionValue = (reservation = {}) =>
@@ -363,15 +421,38 @@ const toDatePickerValue = (value = "") => {
 const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
-	const labels = { ...common, ...TEXT[isRTL ? "ar" : "en"] };
+	const baseLabels = { ...common, ...TEXT[isRTL ? "ar" : "en"] };
 	const history = useHistory();
 	const location = useLocation();
 	const auth = useMemo(() => isAuthenticated() || {}, []);
 	const currentUser = useMemo(() => auth?.user || {}, [auth]);
+	const agentOnly = useMemo(() => isOrderTakerOnly(currentUser), [currentUser]);
 	const canUpdateFinance = useMemo(
 		() => canManageFinancialActions(currentUser),
 		[currentUser]
 	);
+	const labels = agentOnly
+		? {
+				...baseLabels,
+				title: baseLabels.agentTitle || baseLabels.title,
+				subtitle: baseLabels.agentSubtitle || baseLabels.subtitle,
+				allActions: baseLabels.agentAllActions || baseLabels.allActions,
+				noRows: baseLabels.agentNoRows || baseLabels.noRows,
+				walletClaimsTitle:
+					baseLabels.agentWalletClaimsTitle || baseLabels.walletClaimsTitle,
+				walletClaimsSubtitle:
+					baseLabels.agentWalletClaimsSubtitle ||
+					baseLabels.walletClaimsSubtitle,
+				walletClaimNoRows:
+					baseLabels.agentWalletClaimNoRows || baseLabels.walletClaimNoRows,
+				reservationActionsTitle:
+					baseLabels.agentReservationActionsTitle ||
+					baseLabels.reservationActionsTitle,
+				reservationActionsSubtitle:
+					baseLabels.agentReservationActionsSubtitle ||
+					baseLabels.reservationActionsSubtitle,
+		  }
+		: baseLabels;
 	const [filters, setFilters] = useState({
 		hotelId: "",
 		bookingSource: "",
@@ -807,6 +888,13 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
+			<FinancialSectionHeader>
+				<div>
+					<strong>{labels.title}</strong>
+					<span>{labels.subtitle}</span>
+				</div>
+			</FinancialSectionHeader>
+
 			<OverallToolbar
 				onSubmit={(event) => {
 					event.preventDefault();

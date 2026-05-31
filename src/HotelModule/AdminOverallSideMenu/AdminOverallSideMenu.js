@@ -155,6 +155,22 @@ const isOwnerLike = (user = {}) =>
 	(hasRole(user, 2000) && !user.belongsToId) ||
 	isSystemAdmin(user);
 
+const isPureOrderTakingScope = (user = {}) => {
+	const descriptions = roleDescriptions(user).map(normalizeRoleKey);
+	const broaderRoles = [1000, 2000, 3000, 6000, 8000, 10000].some((role) =>
+		hasRole(user, role)
+	);
+	const broaderDescriptions = [
+		"superadmin",
+		"hotelmanager",
+		"reception",
+		"finance",
+		"reservationemployee",
+		"systemadmin",
+	].some((description) => descriptions.includes(description));
+	return isOrderTakingScope(user) && !broaderRoles && !broaderDescriptions;
+};
+
 const canViewOverallKey = (user = {}, key = "") => {
 	if (["overall-dashboard", "signout"].includes(key)) return true;
 	if (isOwnerLike(user)) return true;
@@ -281,7 +297,29 @@ const AdminOverallSideMenu = ({
 	const user = auth.user || {};
 	const summaryOwnerId = user?._id || "";
 	const isArabic = chosenLanguage === "Arabic";
-	const text = isArabic ? SIDE_MENU_AR_TEXT : SIDE_MENU_TEXT.en;
+	const baseText = isArabic ? SIDE_MENU_AR_TEXT : SIDE_MENU_TEXT.en;
+	const pureAgentMenu = isPureOrderTakingScope(user);
+	const text = useMemo(() => {
+		if (!pureAgentMenu) return baseText;
+		return {
+			...baseText,
+			mainDashboard: isArabic
+				? "\u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0648\u0643\u064a\u0644"
+				: "My Agent Workspace",
+			overallSummary: isArabic
+				? "\u0645\u0644\u062e\u0635 \u062d\u062c\u0648\u0632\u0627\u062a\u064a"
+				: "My Reservation Summary",
+			generalFinancialReport: isArabic
+				? "\u062a\u0642\u0631\u064a\u0631\u064a \u0627\u0644\u0645\u0627\u0644\u064a"
+				: "My Financial Report",
+			pendingFinancialActions: isArabic
+				? "\u0625\u062c\u0631\u0627\u0621\u0627\u062a\u064a \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
+				: "My Pending Financial Actions",
+			addingUpdatingWallets: isArabic
+				? "\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0645\u062d\u0641\u0638\u062a\u064a"
+				: "My Wallet Claims",
+		};
+	}, [baseText, isArabic, pureAgentMenu]);
 	const reservationsListLabel = isArabic
 		? "قائمة الحجوزات"
 		: text.reservationsList;

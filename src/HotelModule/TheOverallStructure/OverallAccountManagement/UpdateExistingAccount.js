@@ -135,6 +135,8 @@ const TEXT = {
 		openingWalletCredit: "Opening wallet credit",
 		openingWalletHint:
 			"Leave as zero when this agent has no starting wallet credit.",
+		payoutDetails: "Payout details",
+		noPayoutDetails: "This agent has not added payout details yet.",
 		systemAdminRoleLocked:
 			"Hotel System Admin must be the only selected role. Remove it to choose another role.",
 	},
@@ -182,6 +184,12 @@ const TEXT = {
 	},
 };
 
+Object.assign(TEXT.ar, {
+	payoutDetails: "\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062f\u0641\u0639",
+	noPayoutDetails:
+		"\u0644\u0645 \u064a\u0636\u0641 \u0627\u0644\u0648\u0643\u064a\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u062f\u0641\u0639 \u0628\u0639\u062f.",
+});
+
 const emptyForm = {
 	accountId: "",
 	hotelIds: [],
@@ -228,6 +236,43 @@ const parseMoney = (value) => {
 
 const buildAgentOpeningBalances = (hotelIds = [], amount = 0) =>
 	hotelIds.filter(Boolean).map((hotelId) => ({ hotelId, amount: parseMoney(amount) }));
+
+const emptyPayoutDetails = {
+	country: "",
+	preferredCurrency: "SAR",
+	preferredMethod: "",
+	accountHolderName: "",
+	bankName: "",
+	bankCountry: "",
+	iban: "",
+	accountNumber: "",
+	swiftCode: "",
+	instapayAddress: "",
+	instapayPhone: "",
+	mobileWalletProvider: "",
+	mobileWalletNumber: "",
+	stcPayNumber: "",
+	paypalEmail: "",
+	notes: "",
+};
+
+const normalizePayoutDetails = (details = {}) => ({
+	...emptyPayoutDetails,
+	...(details && typeof details === "object" ? details : {}),
+});
+
+const payoutMethodText = (value = "", isRTL = false) => {
+	const normalized = String(value || "").toLowerCase();
+	const labels = {
+		bank_account: isRTL ? "\u062d\u0633\u0627\u0628 \u0628\u0646\u0643\u064a / IBAN" : "Bank account / IBAN",
+		instapay: "InstaPay",
+		mobile_wallet: isRTL ? "\u0645\u062d\u0641\u0638\u0629 \u0645\u0648\u0628\u0627\u064a\u0644" : "Mobile wallet",
+		stc_pay: "STC Pay",
+		paypal: "PayPal",
+		other: isRTL ? "\u0623\u062e\u0631\u0649" : "Other",
+	};
+	return labels[normalized] || value || "-";
+};
 
 const normalizeCompanyDocuments = (documents = []) =>
 	(Array.isArray(documents) ? documents : [])
@@ -436,6 +481,25 @@ const UpdateExistingAccount = ({
 	);
 	const isSystemAdminSelected = form.roleDescriptions.includes("systemadmin");
 	const isAgentSelected = isAgentRoleSelected(form.roleDescriptions);
+	const payoutDetails = normalizePayoutDetails(selectedAccount?.agentPayoutDetails);
+	const payoutRows = [
+		[labels.payoutMethod || "Method", payoutMethodText(payoutDetails.preferredMethod, isRTL)],
+		[labels.payoutCountry || "Country", payoutDetails.country],
+		[labels.payoutCurrency || "Currency", payoutDetails.preferredCurrency],
+		[labels.name || "Name", payoutDetails.accountHolderName],
+		[labels.payoutBankName || "Bank name", payoutDetails.bankName],
+		[labels.payoutBankCountry || "Bank country", payoutDetails.bankCountry],
+		["IBAN", payoutDetails.iban],
+		[labels.payoutAccountNumber || "Account number", payoutDetails.accountNumber],
+		["SWIFT / BIC", payoutDetails.swiftCode],
+		["InstaPay", payoutDetails.instapayAddress],
+		[labels.phone || "Phone", payoutDetails.instapayPhone],
+		[labels.payoutMobileProvider || "Mobile wallet provider", payoutDetails.mobileWalletProvider],
+		[labels.payoutMobileNumber || "Mobile wallet number", payoutDetails.mobileWalletNumber],
+		["STC Pay", payoutDetails.stcPayNumber],
+		["PayPal", payoutDetails.paypalEmail],
+		[labels.payoutNotes || "Notes", payoutDetails.notes],
+	].filter(([, value]) => String(value || "").trim());
 
 	const buildSearch = useCallback(
 		(updates = {}) => {
@@ -1036,7 +1100,7 @@ const UpdateExistingAccount = ({
 							<span>{selectedAccount ? selectedAccount.name : "-"}</span>
 						</PanelTitle>
 						{selectedAccount ? (
-							<AccountForm onSubmit={submit}>
+							<AccountForm onSubmit={submit} $isRTL={isRTL}>
 								<SelectionBlock>
 									<SelectionHeader>
 										<span>{labels.chooseHotels}</span>
@@ -1138,6 +1202,26 @@ const UpdateExistingAccount = ({
 											<FieldHint>{labels.openingWalletHint}</FieldHint>
 										</Field>
 									</AgentBlock>
+								)}
+
+								{isAgentSelected && (
+									<PayoutReadOnlyBlock>
+										<SelectionHeader>
+											<span>{labels.payoutDetails}</span>
+										</SelectionHeader>
+										{payoutRows.length ? (
+											<PayoutReadOnlyGrid>
+												{payoutRows.map(([label, value]) => (
+													<div key={label}>
+														<span>{label}</span>
+														<strong dir='auto'>{value}</strong>
+													</div>
+												))}
+											</PayoutReadOnlyGrid>
+										) : (
+											<FieldHint>{labels.noPayoutDetails}</FieldHint>
+										)}
+									</PayoutReadOnlyBlock>
 								)}
 
 								<Field>
@@ -1590,6 +1674,7 @@ const AccountForm = styled.form`
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 0.72rem;
 	min-width: 0;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 
 	input,
 	select {
@@ -1603,6 +1688,21 @@ const AccountForm = styled.form`
 		font-weight: 700;
 		line-height: 1.35;
 		padding: 0 0.75rem;
+		text-align: start;
+	}
+
+	input[type="number"] {
+		direction: ltr;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+		font-variant-numeric: tabular-nums;
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+
+	input[type="number"]::-webkit-outer-spin-button,
+	input[type="number"]::-webkit-inner-spin-button {
+		margin: 0;
+		-webkit-appearance: none;
 	}
 
 	input:disabled {
@@ -1629,10 +1729,14 @@ const Field = styled.label`
 const FieldLabel = styled.span`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.5rem;
 	font-size: 0.82rem;
 	line-height: 1.35;
+
+	> span:first-child {
+		min-width: 0;
+	}
 `;
 
 const FieldHint = styled.small`
@@ -1640,6 +1744,7 @@ const FieldHint = styled.small`
 	font-size: 0.73rem;
 	font-weight: 800;
 	line-height: 1.35;
+	text-align: start;
 `;
 
 const Requirement = styled.span`
@@ -1654,6 +1759,7 @@ const Requirement = styled.span`
 	color: ${(props) => (props.$required ? "#cf1322" : "#0b63b6")};
 	font-size: 0.62rem;
 	font-weight: 900;
+	white-space: nowrap;
 `;
 
 const SelectionBlock = styled.div`
@@ -1670,11 +1776,15 @@ const SelectionBlock = styled.div`
 const SelectionHeader = styled.div`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.5rem;
 	color: #17324d;
 	font-size: 0.83rem;
 	font-weight: 900;
+
+	> span:first-child {
+		min-width: 0;
+	}
 `;
 
 const SelectionGrid = styled.div`
@@ -1729,6 +1839,45 @@ const AgentBlock = styled.div`
 	border: 1px solid #cfe8ff;
 	border-radius: 12px;
 	background: #f4f9ff;
+`;
+
+const PayoutReadOnlyBlock = styled.div`
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.5rem;
+	padding: 0.65rem;
+	border: 1px solid #d7e7f8;
+	border-radius: 12px;
+	background: #ffffff;
+`;
+
+const PayoutReadOnlyGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 0.45rem;
+
+	div {
+		display: grid;
+		gap: 0.16rem;
+		min-width: 0;
+		padding: 0.48rem 0.55rem;
+		border: 1px solid #e3eef9;
+		border-radius: 9px;
+		background: #f8fbff;
+	}
+
+	span {
+		color: #667085;
+		font-size: 0.68rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.8rem;
+		font-weight: 950;
+		overflow-wrap: anywhere;
+	}
 `;
 
 const CommercialGrid = styled.div`

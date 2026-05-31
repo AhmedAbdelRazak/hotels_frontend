@@ -168,6 +168,16 @@ const isAdminAccountNotification = (item = {}) => {
 const isAdminWalletNotification = (item = {}) =>
 	String(item.notificationType || "").startsWith("agent_wallet_claim");
 
+const buildActivationAccountsRoute = (ownerId = "") => {
+	const params = new URLSearchParams();
+	const targetOwnerId = normalizeAdminId(ownerId);
+	if (targetOwnerId) params.set("ownerId", targetOwnerId);
+	params.set("overall", "activate-accounts");
+	params.set("page", "1");
+	params.set("range", "custom");
+	return `/hotel-management/main-dashboard?${params.toString()}`;
+};
+
 const isAdminFinancialNotification = (item = {}) => {
 	const type = String(item.notificationType || "").toLowerCase();
 	const reasons = notificationReasonList(item);
@@ -641,8 +651,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 		}
 
 		if (isAdminAccountNotification(item)) {
-			params.set("overall", "account-management");
-			return `/hotel-management/main-dashboard?${params.toString()}`;
+			return buildActivationAccountsRoute(targetOwnerId);
 		}
 
 		if (isAdminWalletNotification(item)) {

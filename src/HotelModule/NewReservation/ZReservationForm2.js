@@ -2236,10 +2236,14 @@ const RoomChip = styled.button.withConfig({
 })`
 	appearance: none;
 	border: 1px solid
-		${(p) => (p.$blocked ? "#f59e0b" : p.$active ? "#1a9f42" : "#d9e9fb")};
+		${(p) => (p.$blocked ? "#fda4af" : p.$active ? "#1a9f42" : "#d9e9fb")};
 	background: ${(p) =>
-		p.$blocked ? "#fff7ed" : p.$active ? "#e7f7ed" : "#ffffff"};
-	color: ${(p) => (p.$blocked ? "#92400e" : "#111827")};
+		p.$blocked
+			? "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 58%, #fff7f8 100%)"
+			: p.$active
+			? "#e7f7ed"
+			: "#ffffff"};
+	color: ${(p) => (p.$blocked ? "#9f1239" : "#111827")};
 	min-height: 48px;
 	padding: 8px 10px;
 	border-radius: 10px;
@@ -2269,8 +2273,8 @@ const RoomChip = styled.button.withConfig({
 			justify-self: end;
 			padding: 4px 9px;
 			border-radius: 999px;
-			background: #fed7aa;
-			color: #9a3412;
+			background: linear-gradient(135deg, #fecdd3, #ffe4e6);
+			color: #9f1239;
 			font-size: 0.72rem;
 			font-weight: 900;
 			white-space: nowrap;

@@ -4,6 +4,10 @@ import { isJwtExpired, stopDashboardPreview } from "../auth";
 const authHeaders = (token) =>
 	token ? { Authorization: `Bearer ${token}` } : {};
 
+const isAdminRoutePath = () =>
+	typeof window !== "undefined" &&
+	String(window.location?.pathname || "").startsWith("/admin");
+
 const getStoredBaseAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
@@ -23,10 +27,7 @@ const getStoredBaseAuthHeaders = () => {
 const getStoredActiveAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
-		const isAdminRoute = String(window.location?.pathname || "").startsWith(
-			"/admin",
-		);
-		if (isAdminRoute) {
+		if (isAdminRoutePath()) {
 			return getStoredBaseAuthHeaders();
 		}
 		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
@@ -1669,21 +1670,23 @@ export const readUserId = (userId, token) => {
 
 const attachReservationActor = (reservation = {}) => {
 	try {
-		const previewAuth = JSON.parse(
-			localStorage.getItem("dashboardPreviewAuth") || "null"
-		);
-		const previewUserId = previewAuth?.auth?.user?._id;
-		if (previewUserId && !isJwtExpired(previewAuth?.auth?.token)) {
-			return {
-				...reservation,
-				requestingUserId: previewUserId,
-				__previewAudit: true,
-				__previewAuditActorId:
-					previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
-			};
-		}
-		if (previewAuth?.auth?.token && isJwtExpired(previewAuth.auth.token)) {
-			stopDashboardPreview();
+		if (!isAdminRoutePath()) {
+			const previewAuth = JSON.parse(
+				localStorage.getItem("dashboardPreviewAuth") || "null"
+			);
+			const previewUserId = previewAuth?.auth?.user?._id;
+			if (previewUserId && !isJwtExpired(previewAuth?.auth?.token)) {
+				return {
+					...reservation,
+					requestingUserId: previewUserId,
+					__previewAudit: true,
+					__previewAuditActorId:
+						previewAuth?.actor?._id || previewAuth?.preview?.actorId || "",
+				};
+			}
+			if (previewAuth?.auth?.token && isJwtExpired(previewAuth.auth.token)) {
+				stopDashboardPreview();
+			}
 		}
 	} catch (error) {
 		// Keep the update usable even if preview storage is unavailable.

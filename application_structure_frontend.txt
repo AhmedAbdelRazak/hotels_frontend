@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-05-30
+Audited: 2026-05-31
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -1341,3 +1341,165 @@ Future TODO Backlog - Added 2026-05-26
 - Validation completed locally:
   - npm.cmd run build compiled successfully.
   - Backend node --check controllers/hotel_inventory.js passed.
+
+2026-05-31 Agent Account UX, Payout Details, Wallet Claims, Finance Actions, And QA
+- Business purpose:
+  - External agents should feel that the dashboard is speaking to them personally, not showing a generic owner dashboard.
+  - Agents must be able to add payout/banking details so finance can pay commissions.
+  - Finance users, owners, Hotel System Admins, authorized users, and configured Super Admins must be able to review those payout details within their allowed hotel/account scope.
+  - Agents must be able to submit wallet top-up claims without entering their own agent name.
+  - Finance users must be able to approve wallet top-up claims and mark unpaid reservation commissions as paid.
+- Main frontend API client:
+  - src/HotelModule/apiAdmin.js contains the hotel-management API helpers for agent wallet summaries, todos, claims, claim review, overall account APIs, invitation generation, payout updates, commission-paid updates, and reservation APIs.
+  - Important functions/endpoints:
+    - getAgentWalletSummary -> GET /api/agent-wallet/summary/:userId with optional agentId query.
+    - getAgentWalletTodos -> GET /api/agent-wallet/todos/:userId.
+    - createAgentWalletClaim -> POST /api/agent-wallet/claims/:userId.
+    - reviewAgentWalletClaim -> PUT /api/agent-wallet/claims/:userId/:transactionId/review.
+    - createAgentWalletTransaction / updateAgentWalletTransaction / voidAgentWalletTransaction for manual wallet movements.
+    - markReservationCommissionPaid -> PUT /api/reservations/commission-paid/:reservationId/:userId.
+    - createSignupInvitation -> POST /api/overall-dashboard/signup-invitation/:userId.
+    - updateOwnerProfile -> PUT /api/user/:userId for self profile and agentPayoutDetails updates.
+- Create New Account / Agent invitation UX:
+  - File: src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js.
+  - The old top-right Generate Link button/modal pattern was removed for the account creation experience.
+  - The page now supports two in-page choices:
+    - create the account immediately with a password.
+    - generate an invitation/signup link.
+  - Invitation generation uses the same form context and does not include passwords in the generated link or invitation payload.
+  - Arabic labels should clearly say "إنشاء رابط التسجيل" for the generate-link action, not only "رابط تسجيل".
+  - RTL/LTR behavior matters:
+    - Arabic layout direction should be right-to-left.
+    - Numeric/user-entered figures may stay Latin/English digits but the input alignment and label flow should respect RTL.
+    - The setup-method area and generate-link button should be centered, with comfortable spacing from tabs.
+  - Link actions should remain easy to use:
+    - Generate link button centered.
+    - Copy link, email, and WhatsApp actions available after a link is generated.
+    - Search fields should not be duplicated in drawers or modals when already present on the page.
+- Account Management / payout visibility:
+  - Files:
+    - src/HotelModule/MainHotelDashboard.js for scoped dashboard account-management surfaces.
+    - src/HotelModule/TheOverallStructure/OverallAccountManagement/AccountManagementMain.js.
+    - src/HotelModule/TheOverallStructure/OverallAccountManagement/UpdateExistingAccount.js.
+    - src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js.
+  - Agent rows include payout details summaries for authorized viewers.
+  - Payout summaries should remain compact and should show meaningful method/account details without exposing technical schema noise.
+  - Authorized account editors can view or update agent payout details only for external agent/order-taker accounts.
+- Agent dashboard payout details:
+  - File: src/HotelModule/MainHotelDashboard.js.
+  - ScopedUserMainDashboard contains the agent-facing payout details form.
+  - Supported payout fields:
+    - country.
+    - preferredCurrency.
+    - preferredMethod.
+    - accountHolderName.
+    - bankName.
+    - bankCountry.
+    - iban.
+    - accountNumber.
+    - swiftCode.
+    - instapayAddress.
+    - instapayPhone.
+    - mobileWalletProvider.
+    - mobileWalletNumber.
+    - stcPayNumber.
+    - paypalEmail.
+    - notes.
+  - Regional UX expectations:
+    - Egypt-friendly fields include InstaPay and mobile wallet provider/number.
+    - Saudi-friendly fields include IBAN, bank account, and STC Pay.
+    - Keep fields flexible because clients may also use other GCC/Egypt-style transfer details.
+  - Saving calls updateOwnerProfile(user._id, token, { agentPayoutDetails }).
+  - On success, the local auth user is updated with the returned agentPayoutDetails.
+- Agent wallet UX:
+  - Files:
+    - src/HotelModule/MainHotelDashboard.js for agent wallet cards/todos in scoped dashboards.
+    - src/HotelModule/Financials/FinancialMain.js for finance-facing wallet/agent context.
+    - src/HotelModule/TheOverallStructure/OverallFinancials/OverallWalletManagement.js for overall wallet management.
+    - src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions.js for finance action queues.
+    - src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialReport.js for wallet/commission reporting.
+  - Agent wallet top-up submission should use the signed-in agent context.
+  - The agent should never be asked to type/select their own agent name to add credit.
+  - Wallet summary cards should show opening credit, approved wallet credits, used wallet amounts, balance, reservations, commissions, pending claims, and rejected claims where the component supports them.
+  - Pending or rejected wallet claims should appear in agent todos.
+  - Finance claim review should call reviewAgentWalletClaim and keep reviewed/audited user as the finance employee.
+- Reservation commission paid UX:
+  - File/API: src/HotelModule/apiAdmin.js markReservationCommissionPaid.
+  - Finance-facing reservation lists should allow finance users to mark unpaid agent commissions as paid where the backend says the user has scope.
+  - After marking paid, agent-owned reservations may require agent confirmation through commissionAgentApproval.status = pending.
+  - Agent dashboard todos should surface the commission_agent_approval item so the agent can respond.
+- Super Admin preview/dashboard safety:
+  - Files:
+    - src/HotelModule/AdminNavbar/TopNavbar.js.
+    - src/HotelModule/apiAdmin.js.
+    - src/AdminModule/apiAdmin.js.
+    - src/auth/index.js.
+  - Only configured Super Admins should be able to open another user/agent dashboard as that account.
+  - When a Super Admin previews another dashboard, the hotel-management UI should show the previewed user's respectful role/position in the middle navbar area.
+  - Clicking the previewed name should route back to that account's executive summary/landing dashboard, using the same landing intent as normal sign-in.
+  - Hotel-management API calls may use dashboardPreviewAuth when previewing.
+  - AdminModule /admin API calls must ignore dashboardPreviewAuth and use the base admin JWT.
+  - Reservation create/update calls from previewed hotel-management dashboards should act as the previewed employee/agent for backend scoping and audit actor purposes.
+- Respectful user-role display:
+  - File: src/HotelModule/AdminNavbar/TopNavbar.js.
+  - When a user is signed into their own dashboard, show a respectful role label rather than generic "Employee".
+  - Examples:
+    - reservationemployee should read like "Responsible for Reservations" / "مسؤول الحجوزات".
+    - finance should read like "Finance Responsible" / "مسؤول المالية".
+    - ordertaker should read like "Booking Agent" / "وكيل حجوزات".
+  - If a Super Admin, owner, or authorized user is previewing someone else's dashboard, the displayed role should be the previewed user's role as that user would see it.
+- Reservation list filter/export/scorecard UX:
+  - File: src/HotelModule/TheOverallStructure/OverallReservationsList/OverallReservationMain.js.
+  - Reservation list route example:
+    - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=reservation-main&page=1&range=custom&tab=list.
+  - Search row:
+    - Search input remains on the page.
+    - Filter icon/button should sit on the same row, right side in Arabic RTL, with Arabic label "فلاتر".
+    - Export to Excel can sit beside the search input on the page and should not be duplicated in the side drawer.
+    - The side drawer should contain filter controls only, not another search input.
+  - Scorecards:
+    - Right-side scorecards represent today's reservations/actions.
+    - Left-side scorecards represent overall action-needed/suspended/pending items.
+    - Scorecard figures are fixed to their intended date logic and should not change just because general filters change, except for hotel-scope filters.
+    - Clicking a scorecard applies that scorecard filter.
+    - Clicking the same active scorecard again removes/unfilters it.
+    - Keep the two scorecard groups separated by about 50px on large screens and responsive on phones.
+    - Arabic order should follow the desired RTL visual order from the provided design.
+    - The small "عرض" action text is not universal across every card; preserve the intended per-card display behavior.
+    - Avoid overflow for large currency values by using responsive width/font sizing on cards such as القيمة الإجمالية.
+  - Table density:
+    - Only body records in the Status and Source columns should use the smaller font/tighter body styling.
+    - Do not reduce the table header font for those columns.
+  - Sort/calendar strip:
+    - Show Summary button sits above the sort/calendar area and uses a greenish gradient.
+    - Export to Excel button sits in the sort/calendar strip where requested.
+    - Hijri/Miladi calendar buttons and sorting controls should keep their existing styling but align vertically centered and follow the target layout position.
+    - The unused "قائمة طلبات حجوزات" label was removed from the sorting frame.
+- New reservation unavailable-room color:
+  - Files:
+    - src/HotelModule/NewReservation/HotelOverviewReservation.js.
+    - src/HotelModule/NewReservation/ZReservationForm2.js.
+  - When a room/room type does not exist or is unavailable for an agent new-reservation flow, the unavailable background should use a light reddish gradient rather than the older orange/yellow treatment.
+  - Keep the state clear without making the room look like a destructive delete action.
+- Notification destination rule:
+  - Activation/account notifications should deep-link back to the activation accounts view:
+    - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=activate-accounts&page=1&range=custom.
+  - Avoid sending activation/account notifications to unrelated dashboard pages.
+- 2026-05-31 local end-to-end QA completed:
+  - Verified the backend pointed to a local database before mutating any QA data.
+  - Generated an agent invitation link from the owner/authorized account flow.
+  - Resolved the generated link and confirmed it carried accountType = agent and selected hotel scope.
+  - Confirmed invitation generation/resolution did not expose password, hashed_password, or salt.
+  - Created a fresh external ordertaker agent through the immediate account creation API.
+  - Saved payout details as that agent.
+  - Confirmed owner/account-management and finance/wallet views can see the payout details.
+  - Submitted wallet credit as the agent without supplying an agent name.
+  - Confirmed the agent todo list showed the pending wallet claim.
+  - Approved the wallet claim as a finance employee.
+  - Confirmed the wallet balance increased and reviewedBy was the finance employee.
+  - Marked an unpaid agent reservation commission as paid as the finance employee.
+  - Confirmed the agent receives a commission approval todo.
+  - Confirmed all Codex QA users, wallet transactions, reservations, and invitations were cleaned up after the test.
+  - Validation passed:
+    - hotels_backend node --check for auth, user, overall_dashboard, agent_wallet, reservations, and activityTracker.
+    - hotels_frontend npm.cmd run build compiled successfully.

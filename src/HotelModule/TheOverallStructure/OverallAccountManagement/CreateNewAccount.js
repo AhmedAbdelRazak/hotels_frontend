@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CopyOutlined, LinkOutlined, MailOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
-import { Input, message, Modal } from "antd";
+import { Input, message } from "antd";
 import styled from "styled-components";
 import { signupHotelStaff } from "../../../auth";
 import { createSignupInvitation, getOverallAccounts } from "../../apiAdmin";
@@ -39,17 +39,10 @@ const roleOptions = [
 	{ value: "housekeeping", role: 5000, en: "Housekeeping", ar: "النظافة" },
 ];
 
-const jobRoleOptions = [
-	"reception",
-	"reservationemployee",
-	"finance",
-	"housekeeping",
-	"housekeepingmanager",
-	"hotelmanager",
-];
-
 const ACCOUNT_MODE_STAFF = "staff";
 const ACCOUNT_MODE_AGENT = "agent";
+const CREATE_FLOW_DIRECT = "direct";
+const CREATE_FLOW_LINK = "link";
 
 const staffRoleOptions = roleOptions.filter((option) => option.value !== "ordertaker");
 
@@ -111,6 +104,14 @@ const textByLang = {
 		access: "Access limits",
 		createAccount: "Create account",
 		creating: "Creating...",
+		creationMethod: "Account setup method",
+		createNow: "Create now",
+		createNowHint: "Create the account immediately with a password entered here.",
+		signupLink: "Signup link",
+		signupLinkHint:
+			"Generate a secure link so the person can set their own password during signup.",
+		passwordNotIncluded:
+			"Passwords are never included in signup links. The invited person creates their own password.",
 		loadingHotels: "Loading hotels...",
 		noHotels: "No hotels are available for this owner scope.",
 		requiredFields: "Please complete the required account fields.",
@@ -166,6 +167,15 @@ const textByLang = {
 		access: "الصلاحيات",
 		createAccount: "إنشاء الحساب",
 		creating: "جاري الإنشاء...",
+		creationMethod: "\u0637\u0631\u064a\u0642\u0629 \u0625\u0639\u062f\u0627\u062f \u0627\u0644\u062d\u0633\u0627\u0628",
+		createNow: "\u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u062d\u0633\u0627\u0628 \u0627\u0644\u0622\u0646",
+		createNowHint:
+			"\u0623\u0646\u0634\u0626 \u0627\u0644\u062d\u0633\u0627\u0628 \u0645\u0628\u0627\u0634\u0631\u0629 \u0628\u0643\u0644\u0645\u0629 \u0645\u0631\u0648\u0631 \u064a\u062a\u0645 \u0625\u062f\u062e\u0627\u0644\u0647\u0627 \u0647\u0646\u0627.",
+		signupLink: "\u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0633\u062c\u064a\u0644",
+		signupLinkHint:
+			"\u0623\u0646\u0634\u0626 \u0631\u0627\u0628\u0637\u0627 \u0622\u0645\u0646\u0627 \u0644\u064a\u0642\u0648\u0645 \u0627\u0644\u0634\u062e\u0635 \u0628\u0625\u0639\u062f\u0627\u062f \u0643\u0644\u0645\u0629 \u0645\u0631\u0648\u0631\u0647 \u0623\u062b\u0646\u0627\u0621 \u0627\u0644\u062a\u0633\u062c\u064a\u0644.",
+		passwordNotIncluded:
+			"\u0644\u0627 \u064a\u062a\u0645 \u062a\u0636\u0645\u064a\u0646 \u0643\u0644\u0645\u0627\u062a \u0627\u0644\u0645\u0631\u0648\u0631 \u0641\u064a \u0631\u0648\u0627\u0628\u0637 \u0627\u0644\u062a\u0633\u062c\u064a\u0644. \u0627\u0644\u0645\u062f\u0639\u0648 \u064a\u0646\u0634\u0626 \u0643\u0644\u0645\u0629 \u0645\u0631\u0648\u0631\u0647 \u0628\u0646\u0641\u0633\u0647.",
 		loadingHotels: "جاري تحميل الفنادق...",
 		noHotels: "لا توجد فنادق متاحة لهذا النطاق.",
 		requiredFields: "يرجى إكمال الحقول المطلوبة للحساب.",
@@ -217,21 +227,6 @@ const initialForm = {
 	password2: "",
 };
 
-const initialInvitationForm = {
-	accountType: "",
-	hotelIds: [],
-	requestedRoleDescription: "",
-	name: "",
-	email: "",
-	phone: "",
-	companyName: "",
-	companyOfficialName: "",
-	companyEin: "",
-	agentCommercialModel: "",
-	agentOpeningWalletCredit: "",
-	applicationNotes: "",
-};
-
 const defaultAccessForRole = (role) => {
 	if (["systemadmin", "hotelmanager"].includes(role)) {
 		return accessOptions.map((option) => option.value);
@@ -258,17 +253,6 @@ const initialFormForMode = (mode) => {
 		};
 	}
 	return initialForm;
-};
-
-const invitationFormForMode = (mode, hotelIds = []) => {
-	const scopedHotelIds = Array.isArray(hotelIds) ? hotelIds.filter(Boolean) : [];
-	const accountType = mode === ACCOUNT_MODE_AGENT ? "agent" : "job";
-	return {
-		...initialInvitationForm,
-		accountType,
-		hotelIds: accountType === "job" ? scopedHotelIds.slice(0, 1) : scopedHotelIds,
-		agentCommercialModel: accountType === "agent" ? "wallet_inventory" : "",
-	};
 };
 
 const parseMoney = (value) => {
@@ -365,11 +349,10 @@ const CreateNewAccount = ({
 	const labels = { ...common, ...textByLang[isRTL ? "ar" : "en"] };
 	const [form, setForm] = useState(initialForm);
 	const [activeAccountMode, setActiveAccountMode] = useState(ACCOUNT_MODE_STAFF);
+	const [createFlow, setCreateFlow] = useState(CREATE_FLOW_DIRECT);
 	const [hotels, setHotels] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
-	const [invitationOpen, setInvitationOpen] = useState(false);
-	const [invitationForm, setInvitationForm] = useState(initialInvitationForm);
 	const [invitationToken, setInvitationToken] = useState("");
 	const [invitationCode, setInvitationCode] = useState("");
 	const [invitationLoading, setInvitationLoading] = useState(false);
@@ -442,31 +425,6 @@ const CreateNewAccount = ({
 		}
 	}, [hotels, setAccountsModalHotels]);
 
-	useEffect(() => {
-		setInvitationForm((previous) => {
-			const availableIds = new Set(hotels.map((hotel) => hotel._id));
-			const nextHotelIds = previous.hotelIds.filter((hotelId) =>
-				availableIds.has(hotelId)
-			);
-			const normalizedHotelIds =
-				previous.accountType === "job" && nextHotelIds.length
-					? [nextHotelIds[0]]
-					: nextHotelIds;
-			if (
-				stringListSignature(previous.hotelIds) ===
-				stringListSignature(normalizedHotelIds)
-			) {
-				return previous;
-			}
-			return { ...previous, hotelIds: normalizedHotelIds };
-		});
-	}, [hotels]);
-
-	useEffect(() => {
-		setInvitationToken("");
-		setInvitationCode("");
-	}, [invitationForm]);
-
 	const invitationLink = useMemo(() => {
 		if (!invitationCode && !invitationToken) return "";
 		const origin =
@@ -481,27 +439,68 @@ const CreateNewAccount = ({
 	}, [invitationCode, invitationToken]);
 
 	const invitationReady = Boolean(invitationCode || invitationToken);
+	const isLinkFlow = createFlow === CREATE_FLOW_LINK;
+	const invitationAccountType =
+		activeAccountMode === ACCOUNT_MODE_AGENT ? "agent" : "job";
+	const invitationRoleDescription =
+		activeAccountMode === ACCOUNT_MODE_AGENT
+			? "ordertaker"
+			: form.roleDescriptions.find((role) => role !== "ordertaker") || "";
+	const invitationHotelIds = useMemo(
+		() =>
+			invitationAccountType === "job"
+				? form.hotelIds.slice(0, 1)
+				: form.hotelIds,
+		[form.hotelIds, invitationAccountType]
+	);
 	const canGenerateInvitationLink =
-		Boolean(invitationForm.accountType) &&
-		invitationForm.hotelIds.length > 0 &&
-		(invitationForm.accountType !== "job" ||
-			Boolean(invitationForm.requestedRoleDescription));
+		invitationHotelIds.length > 0 &&
+		(invitationAccountType !== "job" || Boolean(invitationRoleDescription));
+
+	const invitationPrefillSignature = useMemo(
+		() =>
+			JSON.stringify({
+				activeAccountMode,
+				hotelIds: invitationHotelIds,
+				roleDescription: invitationRoleDescription,
+				name: form.name,
+				email: form.email,
+				phone: form.phone,
+				companyName: form.companyName,
+				companyOfficialName: form.companyOfficialName,
+				companyEin: form.companyEin,
+				agentCommercialModel: form.agentCommercialModel,
+				agentOpeningWalletCredit: form.agentOpeningWalletCredit,
+			}),
+		[
+			activeAccountMode,
+			form.agentCommercialModel,
+			form.agentOpeningWalletCredit,
+			form.companyEin,
+			form.companyName,
+			form.companyOfficialName,
+			form.email,
+			form.name,
+			form.phone,
+			invitationHotelIds,
+			invitationRoleDescription,
+		]
+	);
+
+	useEffect(() => {
+		setInvitationToken("");
+		setInvitationCode("");
+	}, [invitationPrefillSignature]);
 
 	const updateForm = (field, value) => {
 		setForm((previous) => ({ ...previous, [field]: value }));
 	};
 
-	const updateInvitationForm = (field, value) => {
-		setInvitationForm((previous) => ({ ...previous, [field]: value }));
-	};
-
 	const switchAccountMode = (mode) => {
 		if (mode === activeAccountMode) return;
 		setActiveAccountMode(mode);
-		setInvitationOpen(false);
 		setInvitationCode("");
 		setInvitationToken("");
-		setInvitationForm(invitationFormForMode(mode, form.hotelIds));
 		setForm((previous) => {
 			if (mode === ACCOUNT_MODE_AGENT) {
 				return {
@@ -525,31 +524,36 @@ const CreateNewAccount = ({
 		});
 	};
 
-	const openInvitationModal = () => {
-		setInvitationForm(invitationFormForMode(activeAccountMode, form.hotelIds));
+	const switchCreateFlow = (flow) => {
+		if (flow === createFlow) return;
+		setCreateFlow(flow);
 		setInvitationCode("");
 		setInvitationToken("");
-		setInvitationOpen(true);
-	};
-
-	const toggleInvitationHotel = (hotelId) => {
-		setInvitationForm((previous) => {
-			if (previous.accountType === "job") {
-				return { ...previous, hotelIds: [hotelId] };
-			}
-			const current = previous.hotelIds || [];
-			const next = current.includes(hotelId)
-				? current.filter((item) => item !== hotelId)
-				: [...current, hotelId];
-			return { ...previous, hotelIds: next };
-		});
+		if (flow === CREATE_FLOW_LINK && activeAccountMode === ACCOUNT_MODE_STAFF) {
+			setForm((previous) => {
+				const roleDescriptions = previous.roleDescriptions.slice(0, 1);
+				const hotelIds = previous.hotelIds.slice(0, 1);
+				if (
+					stringListSignature(roleDescriptions) ===
+						stringListSignature(previous.roleDescriptions) &&
+					stringListSignature(hotelIds) === stringListSignature(previous.hotelIds)
+				) {
+					return previous;
+				}
+				return {
+					...previous,
+					hotelIds,
+					roleDescriptions,
+					accessTo: defaultAccessForRoles(roleDescriptions),
+				};
+			});
+		}
 	};
 
 	const validateInvitationForm = () => {
 		if (
 			!canGenerateInvitationLink ||
-			(invitationForm.accountType === "job" &&
-				!invitationForm.requestedRoleDescription)
+			(invitationAccountType === "job" && !invitationRoleDescription)
 		) {
 			message.error(labels.requiredFields);
 			return false;
@@ -563,15 +567,26 @@ const CreateNewAccount = ({
 		setInvitationCode("");
 		setInvitationToken("");
 		const payload = {
-			...invitationForm,
-			hotelIds:
-				invitationForm.accountType === "job"
-					? invitationForm.hotelIds.slice(0, 1)
-					: invitationForm.hotelIds,
-			roleDescription:
-				invitationForm.accountType === "agent"
-					? "ordertaker"
-					: invitationForm.requestedRoleDescription,
+			accountType: invitationAccountType,
+			hotelIds: invitationHotelIds,
+			requestedRoleDescription:
+				invitationAccountType === "job" ? invitationRoleDescription : "",
+			roleDescription: invitationRoleDescription,
+			name: form.name,
+			email: form.email,
+			phone: form.phone,
+			companyName: form.companyName,
+			companyOfficialName: form.companyOfficialName,
+			companyEin: form.companyEin,
+			agentCommercialModel:
+				invitationAccountType === "agent"
+					? form.agentCommercialModel || "wallet_inventory"
+					: "",
+			agentOpeningWalletCredit:
+				invitationAccountType === "agent" &&
+				form.agentCommercialModel !== "commission_only"
+					? parseMoney(form.agentOpeningWalletCredit)
+					: 0,
 		};
 		createSignupInvitation(userId, token, payload, buildOwnerParams(ownerId))
 			.then((data) => {
@@ -618,13 +633,13 @@ const CreateNewAccount = ({
 			? `يرجى إكمال طلب التسجيل من خلال الرابط التالي:\n${invitationLink}`
 			: `Please complete your signup request using this link:\n${invitationLink}`;
 		window.location.href = `mailto:${encodeURIComponent(
-			invitationForm.email || ""
+			form.email || ""
 		)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 	};
 
 	const whatsappInvitationLink = () => {
 		if (!invitationReady) return;
-		const phone = String(invitationForm.phone || "").replace(/\D/g, "");
+		const phone = String(form.phone || "").replace(/\D/g, "");
 		const text = isRTL
 			? `يرجى إكمال طلب التسجيل من خلال الرابط التالي:\n${invitationLink}`
 			: `Please complete your signup request using this link:\n${invitationLink}`;
@@ -636,6 +651,9 @@ const CreateNewAccount = ({
 
 	const toggleHotel = (hotelId) => {
 		setForm((previous) => {
+			if (createFlow === CREATE_FLOW_LINK && activeAccountMode === ACCOUNT_MODE_STAFF) {
+				return { ...previous, hotelIds: [hotelId] };
+			}
 			const current = previous.hotelIds || [];
 			const next = current.includes(hotelId)
 				? current.filter((item) => item !== hotelId)
@@ -647,6 +665,14 @@ const CreateNewAccount = ({
 	const toggleRole = (role) => {
 		setForm((previous) => {
 			const current = previous.roleDescriptions || [];
+			if (createFlow === CREATE_FLOW_LINK) {
+				const roleDescriptions = current.includes(role) ? [] : [role];
+				return {
+					...previous,
+					roleDescriptions,
+					accessTo: defaultAccessForRoles(roleDescriptions),
+				};
+			}
 			if (role === "systemadmin") {
 				const roleDescriptions = current.includes("systemadmin")
 					? []
@@ -719,6 +745,10 @@ const CreateNewAccount = ({
 
 	const submit = (event) => {
 		event.preventDefault();
+		if (isLinkFlow) {
+			generateInvitationLink();
+			return;
+		}
 		const roleDescriptionsForSubmit =
 			activeAccountMode === ACCOUNT_MODE_AGENT
 				? ["ordertaker"]
@@ -803,9 +833,6 @@ const CreateNewAccount = ({
 		{ value: ACCOUNT_MODE_STAFF, label: labels.staffCreationTab },
 		{ value: ACCOUNT_MODE_AGENT, label: labels.agentCreationTab },
 	];
-	const invitationButtonLabel = isAgentMode
-		? labels.generateAgentLink
-		: labels.generateStaffLink;
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
@@ -823,230 +850,33 @@ const CreateNewAccount = ({
 							</button>
 						))}
 					</AccountModeTabs>
-					<InviteToolbar>
-						<InviteButton type='button' onClick={openInvitationModal}>
-							<LinkOutlined />
-							<span>{invitationButtonLabel}</span>
-						</InviteButton>
-					</InviteToolbar>
 				</WorkflowHeader>
 
-				<Modal
-					open={invitationOpen}
-					onCancel={() => setInvitationOpen(false)}
-					footer={null}
-					width={860}
-					title={labels.invitationTitle}
-					destroyOnClose={false}
-				>
-					<InvitationModalBody $isRTL={isRTL}>
-						<SelectionBlock $compact>
-							<SelectionHeader>
-								<span>{labels.invitationType}</span>
-								<Requirement $required>{labels.required}</Requirement>
-							</SelectionHeader>
-							<ChoiceRow $single>
-								<SelectionPill type='button' $active $passive tabIndex={-1}>
-									<strong>
-										{invitationForm.accountType === "agent"
-											? labels.agentInvite
-											: labels.employeeInvite}
-									</strong>
-								</SelectionPill>
-							</ChoiceRow>
-						</SelectionBlock>
+				<ActionFlowPanel>
+					<ActionFlowCopy>
+						<strong>{labels.creationMethod}</strong>
+						<span>{isLinkFlow ? labels.signupLinkHint : labels.createNowHint}</span>
+					</ActionFlowCopy>
+					<ActionFlowChoices>
+						<button
+							type='button'
+							className={!isLinkFlow ? "active" : ""}
+							onClick={() => switchCreateFlow(CREATE_FLOW_DIRECT)}
+						>
+							{labels.createNow}
+						</button>
+						<button
+							type='button'
+							className={isLinkFlow ? "active" : ""}
+							onClick={() => switchCreateFlow(CREATE_FLOW_LINK)}
+						>
+							<LinkOutlined />
+							<span>{labels.signupLink}</span>
+						</button>
+					</ActionFlowChoices>
+				</ActionFlowPanel>
 
-						<SelectionBlock>
-							<SelectionHeader>
-								<span>{labels.chooseHotels}</span>
-								<Requirement $required>{labels.required}</Requirement>
-							</SelectionHeader>
-							<SelectionGrid>
-								{loading ? (
-									<InlineNote>{labels.loadingHotels}</InlineNote>
-								) : hotels.length ? (
-									hotels.map((hotel) => (
-										<SelectionPill
-											type='button'
-											key={hotel._id}
-											$active={invitationForm.hotelIds.includes(hotel._id)}
-											onClick={() => toggleInvitationHotel(hotel._id)}
-										>
-											<strong>{titleCase(hotel.hotelName || "Hotel")}</strong>
-											<input
-												type={invitationForm.accountType === "job" ? "radio" : "checkbox"}
-												readOnly
-												checked={invitationForm.hotelIds.includes(hotel._id)}
-											/>
-										</SelectionPill>
-									))
-								) : (
-									<InlineNote $error>{labels.noHotels}</InlineNote>
-								)}
-							</SelectionGrid>
-						</SelectionBlock>
-
-						{invitationForm.accountType === "job" ? (
-							<Field>
-								<FieldLabel>
-									<span>{labels.employeeRole}</span>
-									<Requirement $required>{labels.required}</Requirement>
-								</FieldLabel>
-								<select
-									value={invitationForm.requestedRoleDescription}
-									onChange={(event) =>
-										updateInvitationForm(
-											"requestedRoleDescription",
-											event.target.value
-										)
-									}
-								>
-									<option value=''>{labels.employeeRole}</option>
-									{jobRoleOptions.map((role) => {
-										const option = roleOptions.find((item) => item.value === role);
-										return (
-											<option key={role} value={role}>
-												{isRTL ? option?.ar || role : option?.en || role}
-											</option>
-										);
-									})}
-								</select>
-							</Field>
-						) : invitationForm.accountType === "agent" ? (
-							<AgentBlock>
-								<SelectionHeader>
-									<span>{labels.agentCommercialModel}</span>
-									<Requirement>{labels.optional}</Requirement>
-								</SelectionHeader>
-								<CommercialGrid>
-									{commercialModelOptions.map((option) => (
-										<CommercialOption
-											type='button'
-											key={option.value}
-											$active={
-												invitationForm.agentCommercialModel === option.value
-											}
-											onClick={() =>
-												updateInvitationForm(
-													"agentCommercialModel",
-													option.value
-												)
-											}
-										>
-											<strong>{isRTL ? option.ar : option.en}</strong>
-											<span>{isRTL ? option.arHint : option.enHint}</span>
-										</CommercialOption>
-									))}
-								</CommercialGrid>
-								<Field>
-									<FieldLabel>
-										<span>{labels.openingWalletCredit}</span>
-										<Requirement>{labels.optional}</Requirement>
-									</FieldLabel>
-									<input
-										type='number'
-										min='0'
-										step='0.01'
-										dir='ltr'
-										value={invitationForm.agentOpeningWalletCredit}
-										disabled={
-											invitationForm.agentCommercialModel === "commission_only"
-										}
-										onChange={(event) =>
-											updateInvitationForm(
-												"agentOpeningWalletCredit",
-												event.target.value
-											)
-										}
-									/>
-									<FieldHint>{labels.openingWalletHint}</FieldHint>
-								</Field>
-							</AgentBlock>
-						) : null}
-
-						<SelectionBlock>
-							<SelectionHeader>
-								<span>{labels.optionalPrefill}</span>
-								<Requirement>{labels.optional}</Requirement>
-							</SelectionHeader>
-							<InvitationFields>
-								{[
-									["name", labels.name],
-									["email", labels.email],
-									["phone", labels.phone],
-									["companyName", labels.companyName],
-									["companyOfficialName", labels.companyOfficialName],
-									["companyEin", labels.companyEin],
-								].map(([field, label]) => (
-									<Field key={field}>
-										<FieldLabel>
-											<span>{label}</span>
-											<Requirement>{labels.optional}</Requirement>
-										</FieldLabel>
-										<input
-											dir={["email", "phone", "companyEin"].includes(field) ? "ltr" : undefined}
-											value={invitationForm[field]}
-											onChange={(event) =>
-												updateInvitationForm(field, event.target.value)
-											}
-										/>
-									</Field>
-								))}
-							</InvitationFields>
-						</SelectionBlock>
-
-						<LinkBox>
-							<FieldLabel>
-								<span>{labels.generatedLink}</span>
-								<Requirement>{invitationLoading ? labels.securingLink : labels.optional}</Requirement>
-							</FieldLabel>
-							<textarea readOnly dir='ltr' value={invitationLink} />
-						</LinkBox>
-
-						<InviteActions>
-							<InviteActionButton
-								type='button'
-								onClick={generateInvitationLink}
-								disabled={invitationLoading || !canGenerateInvitationLink}
-							>
-								<LinkOutlined />
-								<span>
-									{invitationLoading
-										? labels.securingLink
-										: isRTL
-										? "إنشاء الرابط"
-										: labels.generateLink || "Generate link"}
-								</span>
-							</InviteActionButton>
-							<InviteActionButton
-								type='button'
-								onClick={copyInvitationLink}
-								disabled={!invitationReady}
-							>
-								<CopyOutlined />
-								<span>{labels.copyLink}</span>
-							</InviteActionButton>
-							<InviteActionButton
-								type='button'
-								onClick={emailInvitationLink}
-								disabled={!invitationReady}
-							>
-								<MailOutlined />
-								<span>{labels.emailLink}</span>
-							</InviteActionButton>
-							<InviteActionButton
-								type='button'
-								onClick={whatsappInvitationLink}
-								disabled={!invitationReady}
-							>
-								<SendOutlined />
-								<span>{labels.whatsappLink}</span>
-							</InviteActionButton>
-						</InviteActions>
-					</InvitationModalBody>
-				</Modal>
-
-				<AccountForm onSubmit={submit}>
+				<AccountForm onSubmit={submit} $isRTL={isRTL}>
 					<SelectionBlock $halfOnDesktop={!isAgentMode}>
 						<SelectionHeader>
 							<span>{labels.chooseHotels}</span>
@@ -1065,7 +895,9 @@ const CreateNewAccount = ({
 									>
 										<strong>{titleCase(hotel.hotelName || "Hotel")}</strong>
 										<input
-											type='checkbox'
+											type={
+												isLinkFlow && !isAgentMode ? "radio" : "checkbox"
+											}
 											readOnly
 											checked={form.hotelIds.includes(hotel._id)}
 										/>
@@ -1099,7 +931,7 @@ const CreateNewAccount = ({
 									>
 										<strong>{isRTL ? option.ar : option.en}</strong>
 										<input
-											type='checkbox'
+											type={isLinkFlow ? "radio" : "checkbox"}
 											readOnly
 											checked={form.roleDescriptions.includes(option.value)}
 										/>
@@ -1152,14 +984,18 @@ const CreateNewAccount = ({
 					<Field>
 						<FieldLabel>
 							<span>{labels.name}</span>
-							<Requirement $required>{labels.required}</Requirement>
+							<Requirement $required={!isLinkFlow}>
+								{isLinkFlow ? labels.optional : labels.required}
+							</Requirement>
 						</FieldLabel>
 						<input value={form.name} onChange={(event) => updateForm("name", event.target.value)} />
 					</Field>
 					<Field>
 						<FieldLabel>
 							<span>{labels.email}</span>
-							<Requirement $required>{labels.required}</Requirement>
+							<Requirement $required={!isLinkFlow}>
+								{isLinkFlow ? labels.optional : labels.required}
+							</Requirement>
 						</FieldLabel>
 						<input
 							type='email'
@@ -1171,7 +1007,9 @@ const CreateNewAccount = ({
 					<Field>
 						<FieldLabel>
 							<span>{labels.phone}</span>
-							<Requirement $required>{labels.required}</Requirement>
+							<Requirement $required={!isLinkFlow}>
+								{isLinkFlow ? labels.optional : labels.required}
+							</Requirement>
 						</FieldLabel>
 						<input
 							dir='ltr'
@@ -1213,78 +1051,144 @@ const CreateNewAccount = ({
 						/>
 					</Field>
 
-					<DocumentBlock>
-						<SelectionHeader>
-							<span>{labels.companyDocuments}</span>
-							<Requirement>{labels.optional}</Requirement>
-						</SelectionHeader>
-						<UploadButton type='button'>
-							<UploadOutlined />
-							<span>{labels.uploadDocuments}</span>
-							<input
-								type='file'
-								accept='image/*,.pdf,application/pdf'
-								multiple
-								onChange={handleDocumentUpload}
-							/>
-						</UploadButton>
-						<FieldHint>{labels.documentLimitHint}</FieldHint>
-						{form.companyDocuments.length > 0 && (
-							<DocumentList>
-								{form.companyDocuments.map((document, index) => (
-									<DocumentChip key={`${document.fileName}-${index}`}>
-										<span>{document.fileName}</span>
-										<button type='button' onClick={() => removeDocument(index)}>
-											x
-										</button>
-									</DocumentChip>
+					{!isLinkFlow && (
+						<DocumentBlock>
+							<SelectionHeader>
+								<span>{labels.companyDocuments}</span>
+								<Requirement>{labels.optional}</Requirement>
+							</SelectionHeader>
+							<UploadButton type='button'>
+								<UploadOutlined />
+								<span>{labels.uploadDocuments}</span>
+								<input
+									type='file'
+									accept='image/*,.pdf,application/pdf'
+									multiple
+									onChange={handleDocumentUpload}
+								/>
+							</UploadButton>
+							<FieldHint>{labels.documentLimitHint}</FieldHint>
+							{form.companyDocuments.length > 0 && (
+								<DocumentList>
+									{form.companyDocuments.map((document, index) => (
+										<DocumentChip key={`${document.fileName}-${index}`}>
+											<span>{document.fileName}</span>
+											<button type='button' onClick={() => removeDocument(index)}>
+												x
+											</button>
+										</DocumentChip>
+									))}
+								</DocumentList>
+							)}
+						</DocumentBlock>
+					)}
+
+					{!isLinkFlow && (
+						<>
+							<Field>
+								<FieldLabel>
+									<span>{labels.password}</span>
+									<Requirement $required>{labels.required}</Requirement>
+								</FieldLabel>
+								<StyledPasswordInput
+									value={form.password}
+									onChange={(event) => updateForm("password", event.target.value)}
+								/>
+							</Field>
+							<Field>
+								<FieldLabel>
+									<span>{labels.confirmPassword}</span>
+									<Requirement $required>{labels.required}</Requirement>
+								</FieldLabel>
+								<StyledPasswordInput
+									value={form.password2}
+									onChange={(event) => updateForm("password2", event.target.value)}
+								/>
+							</Field>
+						</>
+					)}
+
+					{!isLinkFlow && (
+						<AccessBlock>
+							<SelectionHeader>
+								<span>{labels.access}</span>
+								<Requirement>{labels.optional}</Requirement>
+							</SelectionHeader>
+							<div>
+								{accessOptions.map((option) => (
+									<label key={option.value}>
+										<input
+											type='checkbox'
+											checked={form.accessTo.includes(option.value)}
+											onChange={() => toggleAccess(option.value)}
+										/>
+										<span>{isRTL ? option.ar : option.en}</span>
+									</label>
 								))}
-							</DocumentList>
-						)}
-					</DocumentBlock>
+							</div>
+						</AccessBlock>
+					)}
 
-					<Field>
-						<FieldLabel>
-							<span>{labels.password}</span>
-							<Requirement $required>{labels.required}</Requirement>
-						</FieldLabel>
-						<StyledPasswordInput
-							value={form.password}
-							onChange={(event) => updateForm("password", event.target.value)}
-						/>
-					</Field>
-					<Field>
-						<FieldLabel>
-							<span>{labels.confirmPassword}</span>
-							<Requirement $required>{labels.required}</Requirement>
-						</FieldLabel>
-						<StyledPasswordInput
-							value={form.password2}
-							onChange={(event) => updateForm("password2", event.target.value)}
-						/>
-					</Field>
+					{isLinkFlow && (
+						<InlineInvitationPanel>
+							<InlineNote>{labels.passwordNotIncluded}</InlineNote>
+							<LinkBox>
+								<FieldLabel>
+									<span>{labels.generatedLink}</span>
+									<Requirement>
+										{invitationLoading ? labels.securingLink : labels.optional}
+									</Requirement>
+								</FieldLabel>
+								<textarea readOnly dir='ltr' value={invitationLink} />
+							</LinkBox>
+							<InviteActions>
+								<InviteActionButton
+									type='button'
+									onClick={copyInvitationLink}
+									disabled={!invitationReady}
+								>
+									<CopyOutlined />
+									<span>{labels.copyLink}</span>
+								</InviteActionButton>
+								<InviteActionButton
+									type='button'
+									onClick={emailInvitationLink}
+									disabled={!invitationReady}
+								>
+									<MailOutlined />
+									<span>{labels.emailLink}</span>
+								</InviteActionButton>
+								<InviteActionButton
+									type='button'
+									onClick={whatsappInvitationLink}
+									disabled={!invitationReady}
+								>
+									<SendOutlined />
+									<span>{labels.whatsappLink}</span>
+								</InviteActionButton>
+							</InviteActions>
+						</InlineInvitationPanel>
+					)}
 
-					<AccessBlock>
-						<SelectionHeader>
-							<span>{labels.access}</span>
-							<Requirement>{labels.optional}</Requirement>
-						</SelectionHeader>
-						<div>
-							{accessOptions.map((option) => (
-								<label key={option.value}>
-									<input
-										type='checkbox'
-										checked={form.accessTo.includes(option.value)}
-										onChange={() => toggleAccess(option.value)}
-									/>
-									<span>{isRTL ? option.ar : option.en}</span>
-								</label>
-							))}
-						</div>
-					</AccessBlock>
-
-					<CreateButton type='submit' disabled={creating || loading}>
-						{creating
+					<CreateButton
+						type='submit'
+						$centered={isLinkFlow}
+						disabled={
+							creating ||
+							loading ||
+							(isLinkFlow && (invitationLoading || !canGenerateInvitationLink))
+						}
+					>
+						{isLinkFlow ? (
+							<>
+								<LinkOutlined />
+								<span>
+									{invitationLoading
+										? labels.securingLink
+										: labels.generateLink || labels.signupLink}
+								</span>
+							</>
+						) : creating
 							? labels.creating
 							: isAgentMode
 							? labels.createAgentAccount
@@ -1393,82 +1297,80 @@ const AccountModeTabs = styled.div`
 	}
 `;
 
-const InviteToolbar = styled.div`
-	display: flex;
+const ActionFlowPanel = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(260px, 420px);
 	align-items: stretch;
-	justify-content: flex-end;
-	min-width: 0;
-
-	@media (max-width: 560px) {
-		justify-content: stretch;
-	}
-`;
-
-const InviteButton = styled.button`
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 0.35rem;
-	min-height: 34px;
-	padding: 0 0.72rem;
-	border: 1px solid #1677ff;
-	border-radius: 8px;
-	background: #1677ff;
-	color: #fff;
-	font-size: 0.78rem;
-	font-weight: 900;
-	box-shadow: 0 8px 18px rgba(22, 119, 255, 0.18);
-
-	@media (max-width: 560px) {
-		width: 100%;
-		min-height: 44px;
-	}
-`;
-
-const InvitationModalBody = styled.div`
-	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
-	display: grid;
-	gap: 0.75rem;
-	min-width: 0;
-
-	input,
-	select,
-	textarea {
-		width: 100%;
-		min-height: 40px;
-		border: 1px solid #c8daee;
-		border-radius: 9px;
-		background: #fff;
-		color: #1f2937;
-		font-weight: 700;
-		padding: 0 0.75rem;
-	}
-
-	textarea {
-		min-height: 92px;
-		padding: 0.75rem;
-		resize: vertical;
-	}
-`;
-
-const ChoiceRow = styled.div`
-	display: grid;
-	grid-template-columns: ${(props) =>
-		props.$single ? "minmax(0, 220px)" : "repeat(2, minmax(0, 1fr))"};
-	justify-content: ${(props) => (props.$single ? "start" : "stretch")};
 	gap: 0.55rem;
+	justify-self: center;
+	width: min(100%, 900px);
+	min-width: 0;
+	margin-top: 0.65rem;
+	padding: 0.55rem;
+	border: 1px solid #dce8f6;
+	border-radius: 10px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.98)),
+		linear-gradient(135deg, rgba(45, 93, 145, 0.07), rgba(111, 31, 120, 0.05));
 
-	@media (max-width: 520px) {
+	@media (max-width: 760px) {
 		grid-template-columns: 1fr;
 	}
 `;
 
-const InvitationFields = styled.div`
+const ActionFlowCopy = styled.div`
+	display: grid;
+	align-content: center;
+	gap: 0.18rem;
+	min-width: 0;
+
+	strong {
+		color: #102033;
+		font-size: 0.86rem;
+		font-weight: 950;
+	}
+
+	span {
+		color: #62748f;
+		font-size: 0.72rem;
+		font-weight: 800;
+		line-height: 1.35;
+	}
+`;
+
+const ActionFlowChoices = styled.div`
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 0.65rem;
+	gap: 6px;
+	padding: 5px;
+	border: 1px solid rgba(45, 93, 145, 0.16);
+	border-radius: 9px;
+	background: #ffffff;
 
-	@media (max-width: 640px) {
+	button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		min-height: 36px;
+		padding: 0 0.65rem;
+		border: 1px solid #cfe1f4;
+		border-radius: 8px;
+		background: #f7fbff;
+		color: #102033;
+		font-size: 0.76rem;
+		font-weight: 950;
+		cursor: pointer;
+	}
+
+	button.active {
+		border-color: rgba(22, 119, 255, 0.72);
+		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
+		color: #ffffff;
+		box-shadow: 0 8px 18px rgba(16, 32, 51, 0.14);
+	}
+
+	@media (max-width: 520px) {
 		grid-template-columns: 1fr;
 	}
 `;
@@ -1483,6 +1385,29 @@ const LinkBox = styled.label`
 	background: #fff;
 	color: #25364b;
 	font-weight: 800;
+
+	textarea {
+		width: 100%;
+		min-height: 82px;
+		border: 1px solid #c8daee;
+		border-radius: 9px;
+		background: #fff;
+		color: #1f2937;
+		font-weight: 800;
+		padding: 0.75rem;
+		resize: vertical;
+	}
+`;
+
+const InlineInvitationPanel = styled.div`
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.55rem;
+	min-width: 0;
+	padding: 0.65rem;
+	border: 1px solid #d7e7f8;
+	border-radius: 10px;
+	background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
 `;
 
 const InviteActions = styled.div`
@@ -1527,6 +1452,7 @@ const AccountForm = styled.form`
 	gap: 0.52rem;
 	min-width: 0;
 	padding: 0.18rem 0 0;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 
 	input,
 	select {
@@ -1539,6 +1465,21 @@ const AccountForm = styled.form`
 		font-size: 0.78rem;
 		font-weight: 700;
 		padding: 0 0.55rem;
+		text-align: start;
+	}
+
+	input[type="number"] {
+		direction: ltr;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+		font-variant-numeric: tabular-nums;
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+
+	input[type="number"]::-webkit-outer-spin-button,
+	input[type="number"]::-webkit-inner-spin-button {
+		margin: 0;
+		-webkit-appearance: none;
 	}
 
 	@media (max-width: 1280px) {
@@ -1580,11 +1521,15 @@ const StyledPasswordInput = styled(Input.Password)`
 const FieldLabel = styled.span`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.35rem;
 	min-width: 0;
 	font-size: 0.74rem;
 	line-height: 1.25;
+
+	> span:first-child {
+		min-width: 0;
+	}
 `;
 
 const FieldHint = styled.small`
@@ -1592,6 +1537,7 @@ const FieldHint = styled.small`
 	font-size: 0.68rem;
 	font-weight: 700;
 	line-height: 1.25;
+	text-align: start;
 `;
 
 const Requirement = styled.span`
@@ -1607,6 +1553,7 @@ const Requirement = styled.span`
 	color: ${(props) => (props.$required ? "#cf1322" : "#0b63b6")};
 	font-size: 0.6rem;
 	font-weight: 900;
+	white-space: nowrap;
 `;
 
 const SelectionBlock = styled.div`
@@ -1627,12 +1574,16 @@ const SelectionBlock = styled.div`
 const SelectionHeader = styled.div`
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.4rem;
 	color: #17324d;
 	font-size: 0.8rem;
 	line-height: 1.2;
 	font-weight: 900;
+
+	> span:first-child {
+		min-width: 0;
+	}
 `;
 
 const SelectionGrid = styled.div`
@@ -1820,8 +1771,12 @@ const AccessBlock = styled.div`
 
 const CreateButton = styled.button`
 	grid-column: 1 / -1;
-	justify-self: end;
-	min-width: 150px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.38rem;
+	justify-self: ${(props) => (props.$centered ? "center" : "end")};
+	min-width: ${(props) => (props.$centered ? "190px" : "150px")};
 	min-height: 36px;
 	padding: 0 0.85rem;
 	border: 0;

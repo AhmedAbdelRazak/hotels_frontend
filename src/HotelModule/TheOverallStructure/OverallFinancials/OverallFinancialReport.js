@@ -12,6 +12,7 @@ import styled from "styled-components";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	getAgentWalletSummary,
+	markReservationCommissionPaid,
 	getOverallSummary,
 	trackOverallFinancialReportExport,
 } from "../../apiAdmin";
@@ -30,9 +31,14 @@ const TEXT = {
 		title: "General Financial Report",
 		subtitle:
 			"Agent wallets, reservation deductions, commissions, and confirmations across assigned hotels.",
+		agentTitle: "My Financial Report",
+		agentSubtitle:
+			"Wallet activity, reservation deductions, commissions, and confirmations tied to my agent account.",
 		chooseHotel: "Choose hotel",
 		allHotels: "All hotels",
 		chooseAgent: "Choose agent",
+		selfAgent: "Your agent account",
+		selfAgentHint: "This report is filtered to your signed-in agent account.",
 		allAgents: "All agents",
 		from: "From",
 		to: "To",
@@ -53,6 +59,11 @@ const TEXT = {
 		commissionPaid: "Commission paid",
 		commissionDue: "Commission due",
 		commissionUnpaid: "Unpaid commission",
+		markCommissionPaid: "Mark paid",
+		markingCommissionPaid: "Marking...",
+		commissionMarkedPaid: "Commission marked paid.",
+		commissionMarkPaidError: "Could not mark commission paid.",
+		commissionPayment: "Commission payment",
 		pending: "Pending confirmation",
 		transactions: "Wallet movements",
 		reservationDeductions: "Reservations / deductions",
@@ -81,9 +92,15 @@ const TEXT = {
 		title: "التقرير المالي العام",
 		subtitle:
 			"محافظ الوكلاء وخصومات الحجوزات والعمولات والتأكيدات عبر الفنادق المخصصة.",
+		agentTitle: "\u062a\u0642\u0631\u064a\u0631\u064a \u0627\u0644\u0645\u0627\u0644\u064a",
+		agentSubtitle:
+			"\u062d\u0631\u0643\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0648\u062e\u0635\u0648\u0645\u0627\u062a \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0627\u062a \u0627\u0644\u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u0633\u0627\u0628\u064a \u0643\u0648\u0643\u064a\u0644.",
 		chooseHotel: "اختر الفندق",
 		allHotels: "كل الفنادق",
 		chooseAgent: "اختر الوكيل",
+		selfAgent: "\u062d\u0633\u0627\u0628\u0643 \u0643\u0648\u0643\u064a\u0644",
+		selfAgentHint:
+			"\u0647\u0630\u0627 \u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0645\u0641\u0644\u062a\u0631 \u0639\u0644\u0649 \u062d\u0633\u0627\u0628\u0643 \u0627\u0644\u0645\u0633\u062c\u0644.",
 		allAgents: "كل الوكلاء",
 		from: "من",
 		to: "إلى",
@@ -131,6 +148,11 @@ const TEXT = {
 Object.assign(TEXT.ar, {
 	commissionPaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
 	commissionUnpaid: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
+	markCommissionPaid: "\u062a\u0639\u0644\u064a\u0645\u0647\u0627 \u0643\u0645\u062f\u0641\u0648\u0639\u0629",
+	markingCommissionPaid: "\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u0639\u0644\u064a\u0645...",
+	commissionMarkedPaid: "\u062a\u0645 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0643\u0645\u062f\u0641\u0648\u0639\u0629.",
+	commissionMarkPaidError: "\u062a\u0639\u0630\u0631 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0643\u0645\u062f\u0641\u0648\u0639\u0629.",
+	commissionPayment: "\u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 });
 
 const money = (value) =>
@@ -508,6 +530,19 @@ const isOrderTakerOnly = (user = {}) => {
 	return isAgent && !hasFullAccess;
 };
 
+const canMarkCommissionPaidForUser = (user = {}) => {
+	const roles = roleNumbers(user);
+	const descriptions = roleDescriptions(user).map(normalizeRoleKey);
+	return (
+		roles.some((role) => [1000, 2000, 6000, 10000].includes(role)) ||
+		descriptions.some((description) =>
+			["finance", "hotelmanager", "systemadmin", "superadmin"].includes(
+				description
+			)
+		)
+	);
+};
+
 const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const txt = useMemo(
@@ -517,11 +552,14 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 	const history = useHistory();
 	const location = useLocation();
 	const agentOnly = isOrderTakerOnly(user);
+	const canMarkCommissionPaid =
+		!agentOnly && canMarkCommissionPaidForUser(user);
 	const ownAgentId = normalizeId(user?._id);
 	const [hotels, setHotels] = useState([]);
 	const [allRows, setAllRows] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
+	const [markingReservationId, setMarkingReservationId] = useState("");
 	const [filters, setFilters] = useState({
 		hotelId: getQueryValue(location.search, "hotelId"),
 		agentId: getQueryValue(location.search, "agentId"),
@@ -800,6 +838,39 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		userId,
 	]);
 
+	const markCommissionPaid = useCallback(
+		(row = {}) => {
+			const reservationId = normalizeId(row._id);
+			if (!reservationId || !userId || markingReservationId) return;
+			setMarkingReservationId(reservationId);
+			markReservationCommissionPaid({
+				reservationId,
+				userId,
+				payload: {
+					commissionPaid: true,
+					commissionStatus: "commission paid",
+				},
+			})
+				.then((data) => {
+					if (!data || data.error) {
+						message.error(data?.error || txt.commissionMarkPaidError);
+						return;
+					}
+					message.success(txt.commissionMarkedPaid);
+					loadFinancials();
+				})
+				.catch(() => message.error(txt.commissionMarkPaidError))
+				.finally(() => setMarkingReservationId(""));
+		},
+		[
+			loadFinancials,
+			markingReservationId,
+			txt.commissionMarkPaidError,
+			txt.commissionMarkedPaid,
+			userId,
+		]
+	);
+
 	const agentColumns = [
 		{ title: txt.hotel, dataIndex: "hotelName", render: (value) => titleCase(value || "-") },
 		{
@@ -877,6 +948,38 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 			title: txt.commissionDue,
 			render: (_, row) => money(row.commission || row.financial_cycle?.commissionAmount || 0),
 		},
+		{
+			title: txt.commissionPayment,
+			render: (_, row) => {
+				const commission = Number(
+					row.commission || row.financial_cycle?.commissionAmount || 0
+				);
+				const paid =
+					row.commissionPaid === true ||
+					/commission\s*paid/i.test(String(row.commissionStatus || ""));
+				if (paid) return <Tag color='green'>{txt.commissionPaid}</Tag>;
+				if (!commission || commission <= 0) {
+					return <Tag>{txt.commissionDue}</Tag>;
+				}
+				if (!canMarkCommissionPaid) {
+					return <Tag color='volcano'>{txt.commissionUnpaid}</Tag>;
+				}
+				const reservationId = normalizeId(row._id);
+				return (
+					<Button
+						size='small'
+						type='primary'
+						onClick={() => markCommissionPaid(row)}
+						loading={markingReservationId === reservationId}
+						disabled={Boolean(markingReservationId)}
+					>
+						{markingReservationId === reservationId
+							? txt.markingCommissionPaid
+							: txt.markCommissionPaid}
+					</Button>
+				);
+			},
+		},
 		{ title: txt.status, dataIndex: "reservation_status", render: (value, row) => <Tag>{value || row.state || "-"}</Tag> },
 	];
 
@@ -887,9 +990,9 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 					<div>
 						<Pill>
 							<WalletOutlined />
-							{txt.title}
+							{agentOnly ? txt.agentTitle : txt.title}
 						</Pill>
-						<p>{txt.subtitle}</p>
+						<p>{agentOnly ? txt.agentSubtitle : txt.subtitle}</p>
 					</div>
 					<HeroActions>
 						<Button icon={<ReloadOutlined />} onClick={loadFinancials}>
@@ -925,17 +1028,27 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 							))}
 						</Select>
 					</label>
-					<label>
-						<span>{txt.chooseAgent}</span>
-						<Select
-							value={filters.agentId}
-							onChange={(value) => updateFilter("agentId", value)}
-							disabled={agentOnly}
-							showSearch
-							optionFilterProp='label'
-							options={visibleAgentOptions}
-						/>
-					</label>
+					{agentOnly ? (
+						<SelfAgentFilter>
+							<span>{txt.selfAgent}</span>
+							<strong>
+								{visibleAgentOptions[0]?.label ||
+									titleCase(user?.companyName || user?.name || user?.email || txt.agent)}
+							</strong>
+							<small>{txt.selfAgentHint}</small>
+						</SelfAgentFilter>
+					) : (
+						<label>
+							<span>{txt.chooseAgent}</span>
+							<Select
+								value={filters.agentId}
+								onChange={(value) => updateFilter("agentId", value)}
+								showSearch
+								optionFilterProp='label'
+								options={visibleAgentOptions}
+							/>
+						</label>
+					)}
 					<label>
 						<span>{txt.from}</span>
 						<input
@@ -1028,7 +1141,7 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 											`${row.hotelId}-${row._id || row.confirmation_number || index}`
 										}
 										size='small'
-										scroll={{ x: 980 }}
+										scroll={{ x: 1120 }}
 										pagination={{ pageSize: 8 }}
 										locale={{ emptyText: txt.noData }}
 									/>
@@ -1158,6 +1271,34 @@ const FiltersGrid = styled.div`
 
 	@media (max-width: 520px) {
 		grid-template-columns: 1fr;
+	}
+`;
+
+const SelfAgentFilter = styled.div`
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+	color: #344054;
+	font-size: 0.75rem;
+	font-weight: 900;
+
+	strong {
+		min-height: 32px;
+		display: flex;
+		align-items: center;
+		padding: 6px 8px;
+		border: 1px solid #c9dff4;
+		border-radius: 6px;
+		background: #f8fbff;
+		color: #102033;
+		font-size: 0.86rem;
+		overflow-wrap: anywhere;
+	}
+
+	small {
+		color: #667085;
+		font-size: 0.72rem;
+		line-height: 1.35;
 	}
 `;
 

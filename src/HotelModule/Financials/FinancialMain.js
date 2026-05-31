@@ -474,6 +474,9 @@ Object.assign(labels.en, {
 		"Update the wallet movement details while keeping the ledger easy to audit.",
 	selectAgent: "Select agent",
 	selectType: "Select movement type",
+	selfAgent: "Your agent account",
+	selfAgentHint: "Wallet claims are submitted under your signed-in agent account.",
+	ownClaimRequired: "Please enter an amount for your wallet claim.",
 	optional: "Optional",
 	requiredMark: "Required",
 	amountPlaceholder: "0.00",
@@ -542,6 +545,11 @@ Object.assign(labels.ar, {
 		"\u0639\u062f\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u062d\u0631\u0643\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0628\u0634\u0643\u0644 \u064a\u0633\u0647\u0644 \u0645\u0631\u0627\u062c\u0639\u062a\u0647\u0627.",
 	selectAgent: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0648\u0643\u064a\u0644",
 	selectType: "\u0627\u062e\u062a\u0631 \u0646\u0648\u0639 \u0627\u0644\u062d\u0631\u0643\u0629",
+	selfAgent: "\u062d\u0633\u0627\u0628\u0643 \u0643\u0648\u0643\u064a\u0644",
+	selfAgentHint:
+		"\u064a\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0628\u0627\u0633\u0645 \u062d\u0633\u0627\u0628\u0643 \u0627\u0644\u0645\u0633\u062c\u0644.",
+	ownClaimRequired:
+		"\u064a\u0631\u062c\u0649 \u0625\u062f\u062e\u0627\u0644 \u0645\u0628\u0644\u063a \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 	optional: "\u0627\u062e\u062a\u064a\u0627\u0631\u064a",
 	requiredMark: "\u0645\u0637\u0644\u0648\u0628",
 	amountPlaceholder: "0.00",
@@ -634,7 +642,11 @@ const FinancialMain = ({ match }) => {
 	const [summary, setSummary] = useState(null);
 	const [todos, setTodos] = useState([]);
 	const [todosLoading, setTodosLoading] = useState(false);
-	const [selectedAgentId, setSelectedAgentId] = useState("");
+	const agentOnly = isOrderTakerOnly(user);
+	const ownAgentId = String(user?._id || "");
+	const [selectedAgentId, setSelectedAgentId] = useState(
+		agentOnly ? ownAgentId : ""
+	);
 	const [dateRange, setDateRange] = useState([]);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingTransactionId, setEditingTransactionId] = useState("");
@@ -649,7 +661,6 @@ const FinancialMain = ({ match }) => {
 		attachments: [],
 	});
 
-	const agentOnly = isOrderTakerOnly(user);
 	const agents = useMemo(
 		() => (Array.isArray(summary?.agents) ? summary.agents : []),
 		[summary?.agents]
@@ -704,9 +715,9 @@ const FinancialMain = ({ match }) => {
 		() => ({
 			startDate: dateRange?.[0]?.format("YYYY-MM-DD"),
 			endDate: dateRange?.[1]?.format("YYYY-MM-DD"),
-			agentId: agentOnly ? user?._id : selectedAgentId,
+			agentId: agentOnly ? ownAgentId : selectedAgentId,
 		}),
-		[agentOnly, dateRange, selectedAgentId, user?._id]
+		[agentOnly, dateRange, ownAgentId, selectedAgentId]
 	);
 
 	const loadFinancials = useCallback(async () => {
@@ -739,7 +750,7 @@ const FinancialMain = ({ match }) => {
 		setTodosLoading(true);
 		try {
 			const data = await getAgentTodoList(hotelId, userId, token, {
-				agentId: user?._id,
+				agentId: ownAgentId,
 			});
 			if (data?.error) {
 				message.error(data.error);
@@ -750,7 +761,7 @@ const FinancialMain = ({ match }) => {
 		} finally {
 			setTodosLoading(false);
 		}
-	}, [agentOnly, hotelId, token, user?._id, userId]);
+	}, [agentOnly, hotelId, ownAgentId, token, userId]);
 
 	useEffect(() => {
 		getHotelById(hotelId).then((data) => {
@@ -782,13 +793,19 @@ const FinancialMain = ({ match }) => {
 	}, [agents, queryAgentId, queryWalletTransactionId, selectedAgentId]);
 
 	useEffect(() => {
+		if (!agentOnly || !ownAgentId || selectedAgentId === ownAgentId) return;
+		setSelectedAgentId(ownAgentId);
+	}, [agentOnly, ownAgentId, selectedAgentId]);
+
+	useEffect(() => {
 		loadTodos();
 	}, [loadTodos]);
 
 	const openEntryModal = (agentId = activeAgentId) => {
+		const effectiveAgentId = agentOnly ? ownAgentId : agentId;
 		setEditingTransactionId("");
 		setEntry({
-			agentId,
+			agentId: effectiveAgentId,
 			transactionType: "deposit",
 			amount: 0,
 			note: "",
@@ -883,8 +900,9 @@ const FinancialMain = ({ match }) => {
 	};
 
 	const saveEntry = async () => {
-		if (!entry.agentId || !Number(entry.amount)) {
-			message.error(txt.required);
+		const effectiveAgentId = agentOnly ? ownAgentId : entry.agentId;
+		if (!effectiveAgentId || !Number(entry.amount)) {
+			message.error(agentOnly ? txt.ownClaimRequired : txt.required);
 			return;
 		}
 		if (
@@ -898,6 +916,9 @@ const FinancialMain = ({ match }) => {
 		setEntrySaving(true);
 		const payload = {
 			...entry,
+			agentId: effectiveAgentId,
+			transactionType:
+				agentOnly && !editingTransactionId ? "deposit" : entry.transactionType,
 			transactionDate: entry.transactionDate?.format("YYYY-MM-DD"),
 			startDate: filters.startDate,
 			endDate: filters.endDate,
@@ -1470,7 +1491,7 @@ const FinancialMain = ({ match }) => {
 								<Button
 									type='primary'
 									icon={<PlusOutlined />}
-									onClick={() => openEntryModal(user?._id)}
+									onClick={() => openEntryModal(ownAgentId)}
 								>
 									{txt.claimWalletCredit}
 								</Button>
@@ -1742,26 +1763,37 @@ const FinancialMain = ({ match }) => {
 						>
 						<WalletEntryModalBody $isArabic={isArabic}>
 						<EntryGrid>
-							<label className='agent-field'>
-								<span className='field-label'>
-									{txt.agent}
-									<em>{txt.requiredMark}</em>
-								</span>
-									<Select
-										showSearch
-										optionFilterProp='label'
-										placeholder={txt.selectAgent}
-										value={entry.agentId || undefined}
-										disabled={Boolean(editingTransactionId) || agentOnly}
-										onChange={(value) =>
-										setEntry((current) => ({ ...current, agentId: value }))
-									}
-									options={agents.map((item) => ({
-										value: item.agent?._id,
-										label: getAgentLabel(item.agent),
-									}))}
-								/>
-							</label>
+							{agentOnly ? (
+								<SelfAgentField className='agent-field'>
+									<span className='field-label'>
+										{txt.selfAgent}
+										<em>{txt.requiredMark}</em>
+									</span>
+									<strong>{getAgentLabel(activeAgent?.agent || user || {})}</strong>
+									<small>{txt.selfAgentHint}</small>
+								</SelfAgentField>
+							) : (
+								<label className='agent-field'>
+									<span className='field-label'>
+										{txt.agent}
+										<em>{txt.requiredMark}</em>
+									</span>
+										<Select
+											showSearch
+											optionFilterProp='label'
+											placeholder={txt.selectAgent}
+											value={entry.agentId || undefined}
+											disabled={Boolean(editingTransactionId)}
+											onChange={(value) =>
+											setEntry((current) => ({ ...current, agentId: value }))
+										}
+										options={agents.map((item) => ({
+											value: item.agent?._id,
+											label: getAgentLabel(item.agent),
+										}))}
+									/>
+								</label>
+							)}
 							<label>
 								<span className='field-label'>
 									{txt.transactionType}
@@ -2812,6 +2844,34 @@ const EntryGrid = styled.div`
 	@media (max-width: 620px) {
 		grid-template-columns: 1fr;
 		gap: 12px;
+	}
+`;
+
+const SelfAgentField = styled.div`
+	display: grid;
+	align-content: start;
+	gap: 7px;
+	min-width: 0;
+	color: #0f172a;
+	font-weight: 800;
+
+	strong {
+		min-height: 40px;
+		display: flex;
+		align-items: center;
+		padding: 8px 10px;
+		border: 1px solid #d8e8f7;
+		border-radius: 8px;
+		background: #f8fbff;
+		color: #102033;
+		font-size: 0.92rem;
+		overflow-wrap: anywhere;
+	}
+
+	small {
+		color: #667085;
+		font-size: 0.76rem;
+		line-height: 1.45;
 	}
 `;
 
