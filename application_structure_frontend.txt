@@ -1318,3 +1318,25 @@ Future TODO Backlog - Added 2026-05-26
   - Room type options merge live inventory, hotel roomCountDetails, and the reservation's existing pickedRoomsType so legacy reservations keep their current room line visible and editable.
   - ReservationDetail now opens EditWholeReservation with a local reservation draft. In-modal edits no longer update the outer details modal until the API save succeeds, preventing the details modal from refetching/remounting and closing the edit modal while changing or removing room lines.
   - The EditWholeReservation component was checked for mojibake markers after the room-edit cleanup so Arabic labels render as Arabic again.
+
+2026-05-31 Pending Confirmation Inventory Brief
+- Shared component:
+  - src/HotelModule/NewReservation/PendingReservationInventoryBrief.js renders a compact PMS-style inventory card for pending reservation review surfaces.
+  - The card shows room displayName, roomType, requested count, booking-time inventory before/after from availabilitySnapshot when available, and current available inventory for the same stay range.
+  - Agent-scoped reservations show an agent stock badge when the saved snapshot or current availability indicates private agent inventory.
+  - Older reservations without availabilitySnapshot show a clear no-snapshot note while still showing current inventory when the live endpoint returns it.
+- Reservation employee confirmation:
+  - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations.js now uses a controlled AntD Modal instead of Modal.confirm so it can render the inventory brief before the user confirms.
+  - src/HotelModule/NewReservation/PendingConfirmationReport.js also renders the same inventory brief inside the single-hotel pending confirmation modal.
+- Finance review:
+  - src/HotelModule/NewReservation/PendingConfirmationReport.js renders the same brief in the single-hotel finance/commission modal.
+  - src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions.js renders the brief in the overall financial actions review modal.
+- API behavior:
+  - src/HotelModule/apiAdmin.js getHotelInventoryAvailability accepts includePendingConfirmation and passes includePendingConfirmation=true from these review modals.
+  - This keeps "available now" aligned with backend inventory rules by counting pending holds during review while leaving ordinary availability callers unchanged.
+- UX rule:
+  - Keep this inventory display brief and operational. It is supporting context for confirm/finance decisions, not a full inventory report.
+  - Do not recalculate booking-time inventory on the client; use reservation.availabilitySnapshot when it exists.
+- Validation completed locally:
+  - npm.cmd run build compiled successfully.
+  - Backend node --check controllers/hotel_inventory.js passed.

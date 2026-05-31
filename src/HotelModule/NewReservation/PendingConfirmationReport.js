@@ -24,6 +24,10 @@ import {
 } from "../apiAdmin";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
 import { formatSaudiHijriDate } from "../../utils/saudiDates";
+import PendingReservationInventoryBrief, {
+	extractPendingInventoryRows,
+	getPendingReservationInventoryRequest,
+} from "./PendingReservationInventoryBrief";
 
 const labels = {
 	en: {
@@ -273,12 +277,6 @@ const ChoiceOptionLabel = ({ label, help, isArabic }) => (
 	</ChoiceLabel>
 );
 
-const formatDate = (value) => {
-	if (!value) return "-";
-	const parsed = moment(value);
-	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "-";
-};
-
 const formatMoney = (value) =>
 	Number(value || 0).toLocaleString(undefined, {
 		maximumFractionDigits: 2,
@@ -342,14 +340,6 @@ const getPendingWorkflowPermissions = (account = {}) => {
 		reservationEmployeeOnly,
 	};
 };
-
-const getAgentIdFromReservation = (reservation = {}) =>
-	String(
-		reservation?.orderTakeId ||
-			reservation?.orderTaker?._id ||
-			reservation?.createdByUserId ||
-			"",
-	);
 
 const getStayLength = (reservation = {}) => {
 	const checkin = moment(reservation.checkin_date);
@@ -449,6 +439,48 @@ const PendingConfirmationReport = ({
 		setPage(1);
 	};
 
+	const loadDecisionSupport = useCallback(
+		(reservation = {}, { includeWallet = false } = {}) => {
+			const inventoryRequest = getPendingReservationInventoryRequest(
+				reservation,
+				hotelDetails?._id,
+			);
+			const canLoadInventory =
+				inventoryRequest.hotelId &&
+				inventoryRequest.start &&
+				inventoryRequest.end;
+			const canLoadWallet =
+				includeWallet &&
+				inventoryRequest.agentId &&
+				inventoryRequest.hotelId &&
+				user?._id;
+
+			setDecisionSupport({ loading: true, wallet: null, inventory: [] });
+			Promise.all([
+				canLoadWallet
+					? getAgentWalletSummary(inventoryRequest.hotelId, user._id, token, {
+							agentId: inventoryRequest.agentId,
+					  }).catch(() => null)
+					: Promise.resolve(null),
+				canLoadInventory
+					? getHotelInventoryAvailability(inventoryRequest.hotelId, {
+							start: inventoryRequest.start,
+							end: inventoryRequest.end,
+							agentId: inventoryRequest.agentId,
+							includePendingConfirmation: true,
+					  }).catch(() => [])
+					: Promise.resolve([]),
+			]).then(([wallet, inventory]) => {
+				setDecisionSupport({
+					loading: false,
+					wallet: wallet && !wallet.error ? wallet : null,
+					inventory: extractPendingInventoryRows(inventory),
+				});
+			});
+		},
+		[hotelDetails?._id, token, user?._id],
+	);
+
 	const loadData = () => {
 		if (!hotelDetails?._id || !user?._id) return;
 		setLoading(true);
@@ -537,39 +569,7 @@ const PendingConfirmationReport = ({
 			reservation,
 			rejectionReason: "",
 		});
-		setDecisionSupport({ loading: true, wallet: null, inventory: [] });
-		const agentId = getAgentIdFromReservation(reservation);
-		const checkin = formatDate(reservation?.checkin_date);
-		const checkout = formatDate(reservation?.checkout_date);
-		Promise.all([
-			agentId && hotelDetails?._id
-				? getAgentWalletSummary(hotelDetails._id, user._id, token, {
-						agentId,
-				  }).catch(() => null)
-				: Promise.resolve(null),
-			hotelDetails?._id && checkin !== "-" && checkout !== "-"
-				? getHotelInventoryAvailability(hotelDetails._id, {
-						start: checkin,
-						end: checkout,
-						agentId,
-				  }).catch(() => [])
-				: Promise.resolve([]),
-		]).then(([wallet, inventory]) => {
-			const inventoryRows = Array.isArray(inventory)
-				? inventory
-				: Array.isArray(inventory?.data)
-				? inventory.data
-				: Array.isArray(inventory?.rooms)
-				? inventory.rooms
-				: Array.isArray(inventory?.availableRooms)
-				? inventory.availableRooms
-				: [];
-			setDecisionSupport({
-				loading: false,
-				wallet: wallet && !wallet.error ? wallet : null,
-				inventory: inventoryRows,
-			});
-		});
+		loadDecisionSupport(reservation, { includeWallet: true });
 	};
 
 	const closeStatusModal = () => {
@@ -663,6 +663,7 @@ const PendingConfirmationReport = ({
 					? "no commission due"
 					: "commission due"),
 		});
+		loadDecisionSupport(reservation);
 	};
 
 	const closeFinanceModal = () => {
@@ -675,6 +676,7 @@ const PendingConfirmationReport = ({
 			totalReviewStatus: "approved",
 			totalRejectionReason: "",
 		});
+		setDecisionSupport({ loading: false, wallet: null, inventory: [] });
 	};
 
 	const submitFinanceUpdate = () => {
@@ -1051,35 +1053,13 @@ const PendingConfirmationReport = ({
 										: txt.noWallet}
 								</strong>
 							</DecisionSupportCard>
-							<DecisionSupportCard>
-								<span>{txt.availableInventory}</span>
-								<strong>
-									{decisionSupport.loading
-										? "..."
-										: decisionSupport.inventory.length
-										? decisionSupport.inventory
-												.slice(0, 3)
-												.map((item) => {
-													const name =
-														item.displayName ||
-														item.roomDisplayName ||
-														item.room_type ||
-														item.roomType ||
-														item.name ||
-														"Room";
-													const available =
-														item.available ??
-														item.availableRooms ??
-														item.remaining ??
-														item.count ??
-														0;
-													return `${name}: ${available}`;
-												})
-												.join(" | ")
-										: txt.noInventory}
-								</strong>
-							</DecisionSupportCard>
 						</DecisionSupportGrid>
+						<PendingReservationInventoryBrief
+							reservation={statusModal.reservation}
+							currentInventory={decisionSupport.inventory}
+							loading={decisionSupport.loading}
+							isArabic={isArabic}
+						/>
 						<label>
 							<FieldLabelText
 								help={definitions.rejectionReason}
@@ -1136,6 +1116,14 @@ const PendingConfirmationReport = ({
 				className={isArabic ? "pending-choice-modal rtl" : "pending-choice-modal"}
 			>
 				<DecisionModalBody $isRTL={isArabic}>
+					{financeModal.reservation ? (
+						<PendingReservationInventoryBrief
+							reservation={financeModal.reservation}
+							currentInventory={decisionSupport.inventory}
+							loading={decisionSupport.loading}
+							isArabic={isArabic}
+						/>
+					) : null}
 					<label>
 						<FieldLabelText
 							help={definitions.commissionAmount}
@@ -1753,7 +1741,7 @@ const TooltipContent = styled.div`
 
 const DecisionSupportGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 	gap: 10px;
 
 	@media (max-width: 560px) {

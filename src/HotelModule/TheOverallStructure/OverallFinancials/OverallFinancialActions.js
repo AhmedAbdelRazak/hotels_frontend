@@ -6,6 +6,7 @@ import styled from "styled-components";
 import dayjs from "dayjs";
 import {
 	exportOverallFinancialActions,
+	getHotelInventoryAvailability,
 	getOverallFinancialActions,
 	reviewAgentWalletClaim,
 	trackOverallFinancialReportExport,
@@ -34,6 +35,10 @@ import {
 import OverallReservationDetailsModal, {
 	setReservationIdInQuery,
 } from "../OverallReservationsList/OverallReservationDetailsModal";
+import PendingReservationInventoryBrief, {
+	extractPendingInventoryRows,
+	getPendingReservationInventoryRequest,
+} from "../../NewReservation/PendingReservationInventoryBrief";
 
 const TEXT = {
 	en: {
@@ -390,6 +395,10 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		totalReviewStatus: "approved",
 		totalRejectionReason: "",
 	});
+	const [financeInventory, setFinanceInventory] = useState({
+		loading: false,
+		rows: [],
+	});
 
 	const params = useMemo(
 		() => ({
@@ -458,6 +467,32 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		setReservationIdInQuery(history, location, reservation);
 	};
 
+	const loadFinanceInventory = (reservation = {}) => {
+		const inventoryRequest = getPendingReservationInventoryRequest(reservation);
+		if (
+			!inventoryRequest.hotelId ||
+			!inventoryRequest.start ||
+			!inventoryRequest.end
+		) {
+			setFinanceInventory({ loading: false, rows: [] });
+			return;
+		}
+		setFinanceInventory({ loading: true, rows: [] });
+		getHotelInventoryAvailability(inventoryRequest.hotelId, {
+			start: inventoryRequest.start,
+			end: inventoryRequest.end,
+			agentId: inventoryRequest.agentId,
+			includePendingConfirmation: true,
+		})
+			.then((inventory) => {
+				setFinanceInventory({
+					loading: false,
+					rows: extractPendingInventoryRows(inventory),
+				});
+			})
+			.catch(() => setFinanceInventory({ loading: false, rows: [] }));
+	};
+
 	const openFinanceModal = (reservation = {}) => {
 		const commission = getCommissionValue(reservation);
 		const commissionPaid = !!reservation.commissionPaid;
@@ -484,6 +519,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					? "no commission due"
 					: "commission due"),
 		});
+		loadFinanceInventory(reservation);
 	};
 
 	const closeFinanceModal = () => {
@@ -496,6 +532,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			totalReviewStatus: "approved",
 			totalRejectionReason: "",
 		});
+		setFinanceInventory({ loading: false, rows: [] });
 	};
 
 	const refreshUpdatedReservation = (updatedReservation = {}) => {
@@ -1131,6 +1168,14 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			>
 				<div dir={isRTL ? "rtl" : "ltr"}>
 					<div style={{ display: "grid", gap: "14px" }}>
+						{financeModal.reservation ? (
+							<PendingReservationInventoryBrief
+								reservation={financeModal.reservation}
+								currentInventory={financeInventory.rows}
+								loading={financeInventory.loading}
+								isArabic={isRTL}
+							/>
+						) : null}
 						<label>
 							<strong>{labels.commission}</strong>
 							<InputNumber

@@ -774,7 +774,13 @@ export const getHotelInventoryDayReservations = (
 
 export const getHotelInventoryAvailability = (
 	hotelId,
-	{ start, end, includeCancelled = false, agentId = "" } = {},
+	{
+		start,
+		end,
+		includeCancelled = false,
+		agentId = "",
+		includePendingConfirmation = false,
+	} = {},
 ) => {
 	if (!hotelId) {
 		return Promise.reject(new Error("hotelId is required"));
@@ -784,6 +790,9 @@ export const getHotelInventoryAvailability = (
 	if (end) params.set("end", end);
 	if (includeCancelled) params.set("includeCancelled", "true");
 	if (agentId) params.set("agentId", agentId);
+	if (includePendingConfirmation) {
+		params.set("includePendingConfirmation", "true");
+	}
 
 	return fetch(
 		`${

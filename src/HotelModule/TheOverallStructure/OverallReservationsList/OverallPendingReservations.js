@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { DatePicker, Input, message, Modal, Select } from "antd";
+import { Button, DatePicker, Input, message, Modal, Select } from "antd";
 import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
+import styled from "styled-components";
 import {
 	exportOverallPendingReservations,
+	getHotelInventoryAvailability,
 	getOverallPendingReservations,
 	updatePendingConfirmationReservation,
 } from "../../apiAdmin";
@@ -34,6 +36,10 @@ import OverallReservationDetailsModal, {
 	setReservationIdInQuery,
 } from "./OverallReservationDetailsModal";
 import { downloadReservationWorkbook } from "./reservationExcelExport";
+import PendingReservationInventoryBrief, {
+	extractPendingInventoryRows,
+	getPendingReservationInventoryRequest,
+} from "../../NewReservation/PendingReservationInventoryBrief";
 
 const PENDING_RESERVATIONS_TEXT = {
 	en: {
@@ -231,6 +237,12 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [confirmingReservationId, setConfirmingReservationId] = useState("");
+	const [confirmModal, setConfirmModal] = useState({
+		open: false,
+		reservation: null,
+		inventoryLoading: false,
+		currentInventory: [],
+	});
 	const [dateMode, setDateMode] = useState("gregorian");
 
 	const params = useMemo(
@@ -376,6 +388,59 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 		setReservationIdInQuery(history, location, reservation);
 	};
 
+	const loadConfirmInventory = (reservation = {}) => {
+		const inventoryRequest = getPendingReservationInventoryRequest(reservation);
+		if (
+			!inventoryRequest.hotelId ||
+			!inventoryRequest.start ||
+			!inventoryRequest.end
+		) {
+			setConfirmModal((previous) => ({
+				...previous,
+				inventoryLoading: false,
+				currentInventory: [],
+			}));
+			return;
+		}
+		setConfirmModal((previous) => ({
+			...previous,
+			inventoryLoading: true,
+			currentInventory: [],
+		}));
+		getHotelInventoryAvailability(inventoryRequest.hotelId, {
+			start: inventoryRequest.start,
+			end: inventoryRequest.end,
+			agentId: inventoryRequest.agentId,
+			includePendingConfirmation: true,
+		})
+			.then((inventory) => {
+				setConfirmModal((previous) => ({
+					...previous,
+					inventoryLoading:
+						String(previous.reservation?._id || "") === String(reservation?._id || "")
+							? false
+							: previous.inventoryLoading,
+					currentInventory:
+						String(previous.reservation?._id || "") === String(reservation?._id || "")
+							? extractPendingInventoryRows(inventory)
+							: previous.currentInventory,
+				}));
+			})
+			.catch(() => {
+				setConfirmModal((previous) => ({
+					...previous,
+					inventoryLoading:
+						String(previous.reservation?._id || "") === String(reservation?._id || "")
+							? false
+							: previous.inventoryLoading,
+					currentInventory:
+						String(previous.reservation?._id || "") === String(reservation?._id || "")
+							? []
+							: previous.currentInventory,
+				}));
+			});
+	};
+
 	const refreshUpdatedReservation = (updatedReservation = {}) => {
 		if (!updatedReservation || updatedReservation.error) {
 			message.error(updatedReservation?.error || labels.updateError);
@@ -410,46 +475,55 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 			return;
 		}
 
-		const stayLength = getStayLength(reservation);
-		Modal.confirm({
-			title: labels.confirmTitle,
-			content: (
-				<div dir={isRTL ? "rtl" : "ltr"}>
-					{labels.confirmQuestion
-						.replace(
-							"{confirmation}",
-							reservation.confirmation_number || reservation._id || "-"
-						)
-						.replace("{days}", stayLength.days)
-						.replace("{nights}", stayLength.nights)
-						.replace("{amount}", formatMoney(reservation.total_amount))}
-				</div>
-			),
-			okText: labels.yesConfirm,
-			cancelText: labels.cancel,
-			centered: true,
-			onOk: () => {
-				setConfirmingReservationId(String(reservation._id));
-				return updatePendingConfirmationReservation({
-					reservationId: reservation._id,
-					userId: actorId,
-					payload: { action: "confirm" },
-				})
-					.then((data) => {
-						if (!data || data.error) {
-							throw new Error(data?.error || labels.updateError);
-						}
-						refreshUpdatedReservation(data);
-						message.success(labels.updateSuccess);
-						return data;
-					})
-					.catch((error) => {
-						message.error(error?.message || labels.updateError);
-						return false;
-					})
-					.finally(() => setConfirmingReservationId(""));
-			},
+		setConfirmModal({
+			open: true,
+			reservation,
+			inventoryLoading: true,
+			currentInventory: [],
 		});
+		loadConfirmInventory(reservation);
+	};
+
+	const closeConfirmModal = () => {
+		if (confirmingReservationId) return;
+		setConfirmModal({
+			open: false,
+			reservation: null,
+			inventoryLoading: false,
+			currentInventory: [],
+		});
+	};
+
+	const submitConfirmPendingReservation = () => {
+		const reservation = confirmModal.reservation;
+		const actorId = currentUser?._id || userId;
+		if (!reservation?._id || !actorId) {
+			message.error(labels.updateError);
+			return;
+		}
+		setConfirmingReservationId(String(reservation._id));
+		updatePendingConfirmationReservation({
+			reservationId: reservation._id,
+			userId: actorId,
+			payload: { action: "confirm" },
+		})
+			.then((data) => {
+				if (!data || data.error) {
+					throw new Error(data?.error || labels.updateError);
+				}
+				refreshUpdatedReservation(data);
+				message.success(labels.updateSuccess);
+				setConfirmModal({
+					open: false,
+					reservation: null,
+					inventoryLoading: false,
+					currentInventory: [],
+				});
+			})
+			.catch((error) => {
+				message.error(error?.message || labels.updateError);
+			})
+			.finally(() => setConfirmingReservationId(""));
 	};
 
 	const handleExportExcel = () => {
@@ -483,6 +557,9 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 			.catch(() => message.error(labels.exportFailed))
 			.finally(() => setExporting(false));
 	};
+
+	const confirmModalReservation = confirmModal.reservation || {};
+	const confirmModalStayLength = getStayLength(confirmModalReservation);
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
@@ -788,6 +865,57 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 				</button>
 			</Pager>
 
+			<Modal
+				open={confirmModal.open}
+				onCancel={closeConfirmModal}
+				title={labels.confirmTitle}
+				footer={null}
+				centered
+				destroyOnClose
+				width={680}
+			>
+				<ConfirmModalBody dir={isRTL ? "rtl" : "ltr"} $isRTL={isRTL}>
+					<ConfirmQuestion>
+						{labels.confirmQuestion
+							.replace(
+								"{confirmation}",
+								confirmModalReservation.confirmation_number ||
+									confirmModalReservation._id ||
+									"-"
+							)
+							.replace("{days}", confirmModalStayLength.days)
+							.replace("{nights}", confirmModalStayLength.nights)
+							.replace("{amount}", formatMoney(confirmModalReservation.total_amount))}
+					</ConfirmQuestion>
+					<PendingReservationInventoryBrief
+						reservation={confirmModalReservation}
+						currentInventory={confirmModal.currentInventory}
+						loading={confirmModal.inventoryLoading}
+						isArabic={isRTL}
+					/>
+					<ConfirmModalActions>
+						<Button htmlType='button' onClick={closeConfirmModal}>
+							{labels.cancel}
+						</Button>
+						<Button
+							htmlType='button'
+							className='primary-confirm'
+							disabled={!confirmModalReservation?._id}
+							loading={
+								String(confirmingReservationId) ===
+								String(confirmModalReservation?._id || "")
+							}
+							onClick={submitConfirmPendingReservation}
+						>
+							{String(confirmingReservationId) ===
+							String(confirmModalReservation?._id || "")
+								? labels.saving
+								: labels.yesConfirm}
+						</Button>
+					</ConfirmModalActions>
+				</ConfirmModalBody>
+			</Modal>
+
 			<OverallReservationDetailsModal
 				reservations={reservations}
 				selectedReservation={selectedReservation}
@@ -801,3 +929,43 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 };
 
 export default OverallPendingReservations;
+
+const ConfirmModalBody = styled.div`
+	display: grid;
+	gap: 12px;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+`;
+
+const ConfirmQuestion = styled.div`
+	padding: 11px 12px;
+	border: 1px solid #d9e9fa;
+	border-radius: 8px;
+	background: #f6fbff;
+	color: #172c43;
+	font-size: 0.95rem;
+	font-weight: 850;
+	line-height: 1.6;
+	text-align: center;
+`;
+
+const ConfirmModalActions = styled.div`
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+
+	.primary-confirm {
+		border-color: #53115f;
+		background: #53115f;
+		color: #fff;
+		font-weight: 850;
+	}
+
+	.primary-confirm:hover,
+	.primary-confirm:focus {
+		border-color: #6e1b7b !important;
+		background: #6e1b7b !important;
+		color: #fff !important;
+	}
+`;
