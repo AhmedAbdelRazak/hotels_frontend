@@ -71,8 +71,9 @@ const toTitleCase = (value = "") =>
 	String(value || "")
 		.replace(/\s+/g, " ")
 		.trim()
-		.toLowerCase()
-		.replace(/\b([a-z])/g, (match) => match.toUpperCase());
+		.replace(/[A-Za-z][A-Za-z'’-]*/g, (word) =>
+			`${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`
+		);
 
 const getReservationHotelName = (reservation = {}, snapshot = {}) =>
 	String(
@@ -291,7 +292,7 @@ const PendingReservationInventoryBrief = ({
 	const stayStart = dateOnly(reservation?.checkin_date || snapshot?.checkin_date);
 	const stayEnd = dateOnly(reservation?.checkout_date || snapshot?.checkout_date);
 	const hotelName = getReservationHotelName(reservation, snapshot);
-	const displayHotelName = isArabic ? hotelName : toTitleCase(hotelName);
+	const displayHotelName = toTitleCase(hotelName);
 
 	const visibleRooms = rooms.slice(0, limit);
 
@@ -501,15 +502,15 @@ const InventoryBriefHeader = styled.div`
 `;
 
 const HotelIdentityBar = styled.div`
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
+	display: grid;
+	justify-items: center;
+	gap: 3px;
 	padding: 8px 10px;
 	border-radius: 7px;
 	background: #102a43;
 	color: #fff;
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+	text-align: center;
 
 	span {
 		color: #cce2f5;
@@ -525,18 +526,13 @@ const HotelIdentityBar = styled.div`
 		font-size: 0.9rem;
 		font-weight: 950;
 		line-height: 1.3;
-		text-align: end;
+		text-align: center;
+		text-transform: capitalize;
 		overflow-wrap: anywhere;
 	}
 
 	@media (max-width: 460px) {
-		align-items: flex-start;
-		flex-direction: column;
 		gap: 3px;
-
-		strong {
-			text-align: inherit;
-		}
 	}
 `;
 
