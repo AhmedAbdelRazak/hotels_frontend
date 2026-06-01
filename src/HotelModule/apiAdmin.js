@@ -1323,7 +1323,35 @@ export const updateRoomAgentOverrides = (
 			return data;
 		})
 		.catch((err) => ({
-			error: err?.message || "Could not save agent room settings",
+		error: err?.message || "Could not save agent room settings",
+	}));
+};
+
+export const prepareOtaCalendarJob = (userId, payload) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/ota-calendar/jobs/${userId}/prepare`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error: data?.error || data?.message || "Could not prepare OTA calendar job",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Could not prepare OTA calendar job",
 		}));
 };
 
@@ -2230,6 +2258,96 @@ export const getOverallSettings = (userId, token, params = {}) => {
 	)
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
+};
+
+export const getOverallRoomManagerOptions = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-room-manager/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => ({ error: err?.message || "Could not load rooms" }));
+};
+
+export const saveOverallRoomManagerRoom = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-room-manager/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error: data?.error || data?.message || "Could not save room",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({ error: err?.message || "Could not save room" }));
+};
+
+export const getOverallCalendarPricingOptions = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-calendar-pricing/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load calendar pricing",
+		}));
+};
+
+export const saveOverallCalendarPricing = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-calendar-pricing/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error: data?.error || data?.message || "Could not save calendar pricing",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Could not save calendar pricing",
+		}));
 };
 
 export const getReservationAgentWalletSnapshot = ({

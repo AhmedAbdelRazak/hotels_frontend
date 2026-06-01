@@ -8,6 +8,12 @@ import {
 	isArabicLanguage as isArabicDateLanguage,
 } from "../../utils/saudiDates";
 
+export const OVERALL_DASHBOARD_MODAL_Z_INDEX = 50000;
+export const OVERALL_DASHBOARD_MODAL_ROOT_CLASS =
+	"overall-dashboard-modal-root";
+export const OVERALL_DASHBOARD_MODAL_WRAP_CLASS =
+	"overall-dashboard-modal-wrap";
+
 export const normalizeId = (value) => {
 	if (!value) return "";
 	if (typeof value === "object") return String(value._id || value.id || "");

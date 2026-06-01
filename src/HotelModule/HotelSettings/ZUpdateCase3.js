@@ -8,6 +8,9 @@ import moment from "moment";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import ZCustomInput from "./ZCustomInput";
+import { isAuthenticated } from "../../auth";
+import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
+import { prepareOtaCalendarJob } from "../apiAdmin";
 import {
 	buildCalendarRateTitle,
 	getCalendarRateClassNames,
@@ -39,21 +42,60 @@ const ZUpdateCase3 = ({
 	const pricingRatesRef = useRef(existingRoomDetails?.pricingRate || []);
 	const priceInputRef = useRef(null);
 	const [isBlocked, setIsBlocked] = useState(false);
+	const [otaModalOpen, setOtaModalOpen] = useState(false);
+	const [otaPreparing, setOtaPreparing] = useState(false);
+	const [otaSelected, setOtaSelected] = useState([
+		"expedia",
+		"agoda",
+		"airbnb",
+		"booking",
+	]);
+	const [otaAvailability, setOtaAvailability] = useState(
+		Number(existingRoomDetails?.count || 0)
+	);
+	const [otaNotes, setOtaNotes] = useState("");
+	const [otaAccounts, setOtaAccounts] = useState({
+		expedia: "",
+		agoda: "",
+		airbnb: "",
+		booking: "",
+	});
 	const isArabic = chosenLanguage === "Arabic";
+	const auth = isAuthenticated() || {};
+	const user = auth?.user || {};
+	const roleNumbers = [
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	];
+	const roleDescriptions = [
+		String(user?.roleDescription || ""),
+		...(Array.isArray(user?.roleDescriptions) ? user.roleDescriptions : []),
+	].map((role) => String(role || "").toLowerCase().replace(/[\s_-]+/g, ""));
+	const canPrepareOtaCalendar =
+		isSuperAdminUser(user) ||
+		roleNumbers.includes(1000) ||
+		roleDescriptions.includes("superadmin");
 	const calendarText = {
 		dateRangeRequired: isArabic
 			? "يرجى اختيار نطاق التاريخ"
 			: "Please select a date range",
 	};
+	const otaOptions = [
+		{ label: "Expedia", value: "expedia" },
+		{ label: "Agoda", value: "agoda" },
+		{ label: "Airbnb", value: "airbnb" },
+		{ label: "Booking.com", value: "booking" },
+	];
 	const selectedRangeEventId = "selected-date-range-highlight";
 	const selectedRangeColor = "#dbeeff";
 
 	useEffect(() => {
 		pricingRatesRef.current = existingRoomDetails?.pricingRate || [];
+		setOtaAvailability(Number(existingRoomDetails?.count || 0));
 		if (calendarRef.current) {
 			calendarRef.current.getApi().refetchEvents();
 		}
-	}, [existingRoomDetails?.pricingRate]);
+	}, [existingRoomDetails?.pricingRate, existingRoomDetails?.count]);
 
 	const removeSelectedRangeEvents = (calendarApi) => {
 		if (!calendarApi) return;
@@ -307,7 +349,7 @@ const ZUpdateCase3 = ({
 			setIsBlocked(false);
 			message.error(
 				isArabic
-					? "ÙŠØ±Ø¬Ù‰ ØªØ­Ø¯ÙŠØ¯ Ù†Ø·Ø§Ù‚ Ø§Ù„ØªØ§Ø±ÙŠØ® Ø£ÙˆÙ„Ø§Ù‹."
+					? "يرجى تحديد نطاق التاريخ أولاً."
 					: "Please select a date range first."
 			);
 			return;
@@ -346,6 +388,93 @@ const ZUpdateCase3 = ({
 
 		const calendarApi = calendarRef.current.getApi();
 		removeSelectedRangeEvents(calendarApi);
+	};
+
+	const openOtaModal = () => {
+		if (!selectedDateRange?.[0] || !selectedDateRange?.[1]) {
+			message.error(
+				isArabic
+					? "ÙŠØ±Ø¬Ù‰ ØªØ­Ø¯ÙŠØ¯ Ù†Ø·Ø§Ù‚ Ø§Ù„ØªØ§Ø±ÙŠØ® Ø£ÙˆÙ„Ø§Ù‹."
+					: "Please select a date range first."
+			);
+			return;
+		}
+		if (!isBlocked && !(Number(pricingRate) > 0)) {
+			message.error(
+				isArabic
+					? "يرجى إدخال سعر النطاق أولاً."
+					: "Please enter the price before preparing the OTA update."
+			);
+			return;
+		}
+		setOtaAvailability(isBlocked ? 0 : Number(existingRoomDetails?.count || 0));
+		setOtaModalOpen(true);
+	};
+
+	const buildOtaPayload = () => {
+		const resolvedRootPrice =
+			rootPrice ||
+			existingRoomDetails?.defaultCost ||
+			existingRoomDetails?.rootPrice ||
+			existingRoomDetails?.price?.basePrice ||
+			pricingRate;
+		const accounts = Object.entries(otaAccounts).reduce((acc, [ota, username]) => {
+			const clean = String(username || "").trim();
+			if (clean) acc[ota] = { username: clean };
+			return acc;
+		}, {});
+		return {
+			hotelId: hotelDetails?._id,
+			roomId: existingRoomDetails?._id,
+			dateFrom: moment(selectedDateRange[0]).format("YYYY-MM-DD"),
+			dateTo: moment(selectedDateRange[1]).format("YYYY-MM-DD"),
+			timezone: "Asia/Riyadh",
+			nightlyRateSar: isBlocked ? null : Number(pricingRate),
+			rootRateSar: isBlocked ? null : Number(resolvedRootPrice || 0),
+			availability: isBlocked ? 0 : Number(otaAvailability),
+			closed: isBlocked,
+			selectedOtas: otaSelected,
+			otaAccounts: accounts,
+			notes: otaNotes,
+			source: "hotel_settings_calendar",
+			confirmSupervisedOnly: true,
+		};
+	};
+
+	const handlePrepareOtaCalendar = async () => {
+		if (!otaSelected.length) {
+			message.error("Select at least one OTA.");
+			return;
+		}
+		if (
+			!isBlocked &&
+			(!Number.isInteger(Number(otaAvailability)) || Number(otaAvailability) < 0)
+		) {
+			message.error("Availability must be a whole number.");
+			return;
+		}
+		setOtaPreparing(true);
+		try {
+			const data = await prepareOtaCalendarJob(user?._id, buildOtaPayload());
+			if (!data || data.error || data.ok === false) {
+				message.error(data?.error || "Could not prepare OTA calendar job.");
+				return;
+			}
+			setOtaModalOpen(false);
+			Modal.success({
+				title: "OTA calendar job prepared",
+				content: (
+					<div>
+						<div>Job: {data.job?.jobNumber || data.job?._id}</div>
+						<div>Status: {data.job?.status || "prepared"}</div>
+					</div>
+				),
+			});
+		} catch (error) {
+			message.error("Could not prepare OTA calendar job.");
+		} finally {
+			setOtaPreparing(false);
+		}
 	};
 
 	const renderEventContent = (eventInfo) => {
@@ -554,6 +683,13 @@ const ZUpdateCase3 = ({
 										: "Add Pricing Rate Range"}
 								</Button>
 							</div>
+							{canPrepareOtaCalendar ? (
+								<div className='text-center mt-3'>
+									<OtaCalendarButton type='button' onClick={openOtaModal}>
+										Update Calendar to OTA
+									</OtaCalendarButton>
+								</div>
+							) : null}
 						</>
 					) : (
 						<div className='text-center mt-3'>
@@ -566,6 +702,71 @@ const ZUpdateCase3 = ({
 					)}
 				</div>
 			</div>
+			<Modal
+				title='Update Calendar to OTA'
+				open={otaModalOpen}
+				onCancel={() => setOtaModalOpen(false)}
+				onOk={handlePrepareOtaCalendar}
+				okText='Prepare'
+				cancelText='Cancel'
+				confirmLoading={otaPreparing}
+				destroyOnClose
+			>
+				<OtaModalBody>
+					<FieldLabel>OTAs</FieldLabel>
+					<Checkbox.Group
+						options={otaOptions}
+						value={otaSelected}
+						onChange={setOtaSelected}
+					/>
+					<FieldLabel>Date range</FieldLabel>
+					<SummaryLine>
+						{selectedDateRange?.[0]
+							? moment(selectedDateRange[0]).format("YYYY-MM-DD")
+							: ""}{" "}
+						to{" "}
+						{selectedDateRange?.[1]
+							? moment(selectedDateRange[1]).format("YYYY-MM-DD")
+							: ""}
+					</SummaryLine>
+					<FieldLabel>Nightly rate</FieldLabel>
+					<SummaryLine>
+						{isBlocked ? "Closed" : `${Number(pricingRate || 0)} SAR`}
+					</SummaryLine>
+					<FieldLabel>Availability</FieldLabel>
+					<Input
+						type='number'
+						min={0}
+						value={isBlocked ? 0 : otaAvailability}
+						disabled={isBlocked}
+						onChange={(event) => setOtaAvailability(event.target.value)}
+					/>
+					<FieldLabel>OTA usernames</FieldLabel>
+					{otaOptions.map((option) => (
+						<Input
+							key={option.value}
+							placeholder={`${option.label} username/email`}
+							value={otaAccounts[option.value]}
+							onChange={(event) =>
+								setOtaAccounts((previous) => ({
+									...previous,
+									[option.value]: event.target.value,
+								}))
+							}
+						/>
+					))}
+					<FieldLabel>Notes</FieldLabel>
+					<Input.TextArea
+						rows={3}
+						value={otaNotes}
+						onChange={(event) => setOtaNotes(event.target.value)}
+					/>
+					<GuardrailLine>
+						Supervised calendar/availability job only. Password is read from
+						OTA_PASSWORD on the backend.
+					</GuardrailLine>
+				</OtaModalBody>
+			</Modal>
 		</ZUpdateCase3Wrapper>
 	);
 };
@@ -645,4 +846,54 @@ const ZUpdateCase3Wrapper = styled.div`
 			max-width: none;
 		}
 	}
+`;
+
+const OtaCalendarButton = styled.button`
+	width: 100%;
+	min-height: 38px;
+	border: 0;
+	border-radius: 8px;
+	background: #0f766e;
+	color: #ffffff;
+	font-weight: 900;
+	cursor: pointer;
+	box-shadow: 0 10px 20px rgba(15, 118, 110, 0.22);
+
+	&:hover {
+		background: #0d625c;
+	}
+`;
+
+const OtaModalBody = styled.div`
+	display: grid;
+	gap: 10px;
+
+	.ant-checkbox-group {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+	}
+`;
+
+const FieldLabel = styled.div`
+	font-weight: 900;
+	color: #172033;
+	margin-top: 4px;
+`;
+
+const SummaryLine = styled.div`
+	padding: 8px 10px;
+	border: 1px solid #d9e8f8;
+	border-radius: 8px;
+	background: #f8fbff;
+	font-weight: 800;
+`;
+
+const GuardrailLine = styled.div`
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: #fff7ed;
+	color: #7c2d12;
+	font-size: 0.85rem;
+	font-weight: 800;
 `;

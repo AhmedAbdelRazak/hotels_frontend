@@ -1578,3 +1578,166 @@ Future TODO Backlog - Added 2026-05-26
   - npm.cmd run build in hotels_frontend compiled successfully after the final agent wallet/commission clarification.
   - node -c controllers/reservations.js in hotels_backend passed after the final backend reservation commission clarification.
   - No additional live QA reservations were created during this documentation pass.
+
+2026-06-01 OTA Calendar Preparation UI
+- Business purpose:
+  - Super Admins can prepare a supervised OTA calendar update from the hotel room custom-calendar screen without exposing the feature to ordinary hotel staff.
+- Files:
+  - src/HotelModule/HotelSettings/ZUpdateCase3.js.
+  - src/HotelModule/apiAdmin.js.
+- UI behavior:
+  - The "Update Calendar to OTA" action appears only for Super Admin users: configured Super Admins, role 1000, or superadmin-style role descriptions.
+  - The action appears in the selected-room custom calendar only after a date range is selected.
+  - The modal sends the selected date range, nightly SAR rate or closed state, availability, selected OTAs, optional OTA usernames, and notes to the backend preparation endpoint.
+  - The request includes confirmSupervisedOnly: true and never sends passwords, cookies, tokens, or session data.
+  - Supported OTA checkboxes are Expedia, Agoda, Airbnb, and Booking.com.
+  - The UI does not collect OTA passwords. Backend execution references OTA_PASSWORD only.
+  - The backend response shows the prepared job number/status; actual OTA login, captcha/MFA, verification emails, final review, and final submit remain supervised/manual.
+- API client:
+  - prepareOtaCalendarJob -> POST /api/ota-calendar/jobs/:userId/prepare.
+
+2026-06-01 Overall Settings Room Manager And Calendar Pricing
+- Business purpose:
+  - The Overall Settings page now has two high-visibility action buttons at the top so owners/managers can configure many hotels without opening every single hotel settings page.
+  - The workflow is designed for Arabic/English PMS users and keeps the existing HotelDetails room/calendar schema rather than replacing it.
+- Main route:
+  - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1.
+  - OverallSettingsMain reads and preserves ownerId, overall=settings, and page query params.
+- Frontend files:
+  - src/HotelModule/TheOverallStructure/OverallSettings/OverallSettingsMain.js.
+  - src/HotelModule/TheOverallStructure/OverallSettings/OverallRoomManagerModal.js.
+  - src/HotelModule/TheOverallStructure/OverallSettings/OverallCalendarPricingModal.js.
+  - src/HotelModule/TheOverallStructure/overallShared.js for shared modal z-index/root classes and overall helpers.
+  - src/HotelModule/apiAdmin.js for the room-manager and calendar-pricing API clients.
+- Overall Settings action buttons:
+  - Room Add / Update.
+  - Calendar Pricing.
+  - Buttons are centered above the existing settings table with 20px top/bottom spacing.
+  - The two buttons use different metallic gradients:
+    - Room Add / Update uses the application green/teal style.
+    - Calendar Pricing uses a classy blue treatment.
+  - The buttons use icons and a stronger smooth heartbeat animation to attract attention without changing layout.
+  - Arabic/RTL and English/LTR alignment are respected.
+- Query params for modals:
+  - Room modal:
+    - settingsModal=rooms.
+    - settingsRoomTab=add or update.
+    - Example: /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1&settingsModal=rooms&settingsRoomTab=add.
+  - Calendar pricing modal:
+    - settingsModal=calendar.
+    - settingsCalendarTab=general or agents.
+    - Example: /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1&settingsModal=calendar&settingsCalendarTab=general.
+  - Closing either modal removes settingsModal and the tab-specific modal params but leaves the regular settings context.
+  - Tab changes replace the current URL so browser history is not noisy.
+- Modal layering:
+  - Overall modals use OVERALL_DASHBOARD_MODAL_ROOT_CLASS, OVERALL_DASHBOARD_MODAL_WRAP_CLASS, and OVERALL_DASHBOARD_MODAL_Z_INDEX.
+  - They must render above the right/left side menu and navbar overlays.
+  - Select dropdowns inside these modals use an elevated z-index through popupStyle and the overall-dashboard-select-dropdown class.
+- Room Add / Update modal behavior:
+  - Component: OverallRoomManagerModal.js.
+  - API options: getOverallRoomManagerOptions.
+  - Save API: saveOverallRoomManagerRoom.
+  - Tabs:
+    - Add a new room.
+    - Update rooms.
+  - Add flow:
+    - User can multi-select hotels.
+    - User chooses one room type.
+    - User enters room name, description, and hotel-specific room counts.
+    - Room counts appear per selected hotel; the old active toggle was removed from the add experience.
+    - Description is a taller text input and has its own row.
+    - Room count is on the first row.
+  - Update flow:
+    - User chooses hotel/room and edits the same room details safely.
+  - Room type ordering:
+    - Common options appear first: single/fardy, double, triple, quad, quintuple/family, shared men, shared women.
+    - Remaining room types follow after the common list.
+  - Shared rooms:
+    - Shared men/women are represented through the existing individualBed roomType plus roomForGender instead of creating a new schema path.
+  - Amenities:
+    - Amenity sections are widened and aligned for Arabic and English.
+    - Preselected common amenities include WiFi, Laundry Service, Non-Smoking, Housekeeping, Air Conditioning, TV, Street View, Prayer Mat, Islamic Television Channels, and Nearby Souks/Markets.
+    - Amenities/views/extra amenities remain in the existing arrays; the frontend only makes them easier to choose.
+  - UI notes:
+    - The title inside the modal was removed to move the form content upward.
+    - The unused bilingual-text footer/label was removed.
+    - The save button is centered and uses the green metallic gradient.
+    - The modal is wide and responsive so the amenity grids do not feel cramped.
+- Room manager backend expectations from frontend:
+  - The user only types one display name and one description.
+  - Backend AI text orchestration returns/persists English and Arabic display/description fields where configured.
+  - If AI is unavailable, backend still saves a fallback text payload so the user is not blocked.
+- Calendar Pricing modal behavior:
+  - Component: OverallCalendarPricingModal.js.
+  - API options: getOverallCalendarPricingOptions.
+  - Save API: saveOverallCalendarPricing.
+  - Tabs:
+    - Add / Update Pricing General.
+    - Add / Update Pricing Agents.
+  - General tab writes the public/website/general room calendar.
+  - Agents tab writes agent-specific calendar rows and requires an agent selection.
+  - The modal has been moved upward from center for better fit on the settings page.
+  - The preview modal remains naturally centered and is 95vh high.
+- Calendar Pricing inputs:
+  - Hotels are multi-select.
+  - Rooms are manually selected by the user; rooms are no longer auto-selected after hotel selection.
+  - Agent tab adds an agent multi-select filtered by selected hotel scope.
+  - Hijri is the default calendar.
+  - Gregorian/Miladi is also available.
+  - Period modes:
+    - Months: select one or more Hijri/Gregorian months and a year.
+    - Custom range: select start/end Gregorian dates.
+  - The active segmented controls use the green/teal highlight with forced readable white text.
+  - The visible PMS fields are intentionally simple:
+    - Selling Price Per Night.
+    - Commission %.
+    - Open/Closed status.
+  - Root price is intentionally hidden in the UI, but backend still calculates it.
+- Calendar preview modal:
+  - Clicking Generate Preview opens a separate preview modal rather than placing the tables inside the form modal.
+  - Preview modal has month chips centered near the top.
+  - Professional month navigation arrows sit beside the month chips.
+  - Only one month card/table is shown at a time.
+  - The table/card is centered like a product carousel experience.
+  - The table frame itself scrolls vertically; the table header is sticky while scrolling.
+  - Horizontal table scrolling should be avoided; columns wrap inside the card.
+  - Date column shows Hijri date first and Gregorian/Miladi date below it.
+  - Room column shows the actual room type, not the displayName.
+  - Room displayName is available on hover through the title tooltip.
+  - This prevents display names like "Twin Room" from visually confusing the stored roomType such as doubleRooms or twinRooms.
+  - Price and commission cells can be double-clicked to edit individual preview rows.
+  - Blocked/restricted rows cannot edit price/commission until reopened.
+  - Each row has a restrict/open action button.
+  - Save button text/icon is forced white for readability.
+- Calendar preview/save payload behavior:
+  - Generate Preview creates one preview row per selected date and selected room.
+  - The Save button sends rows with:
+    - hotelId.
+    - roomId.
+    - calendarDate.
+    - status open/blocked.
+    - sellingPrice.
+    - commissionPercent.
+  - If the user edits a row in the preview modal, the edited value is what gets sent to the backend.
+  - Save still works even if the user skips preview; the frontend builds a preview payload before saving.
+- Calendar merge/overwrite expectations:
+  - Saving a full month replaces only the matching selected room/date rows for that month/date set.
+  - Saving a smaller range, e.g. July 7 to July 20, replaces only those selected dates and leaves other calendar dates unchanged.
+  - Agent calendar replacement is scoped by agent + room + date, so updating Agent A does not overwrite Agent B.
+  - General calendar replacement is scoped by room + date.
+- Calendar fallback price expectation:
+  - General Calendar Pricing saves also update the selected rooms' fallback prices:
+    - roomCountDetails[n].price.basePrice = modal selling price per night.
+    - roomCountDetails[n].defaultCost = calculated root price.
+  - Root price formula:
+    - rootPrice = sellingPrice - (sellingPrice * commissionPercent / 100).
+  - Agent Calendar Pricing does not update the public/general fallback prices.
+- API client helpers:
+  - getOverallRoomManagerOptions -> GET /api/overall-dashboard/settings-room-manager/:userId.
+  - saveOverallRoomManagerRoom -> POST /api/overall-dashboard/settings-room-manager/:userId.
+  - getOverallCalendarPricingOptions -> GET /api/overall-dashboard/settings-calendar-pricing/:userId.
+  - saveOverallCalendarPricing -> POST /api/overall-dashboard/settings-calendar-pricing/:userId.
+  - All helpers use buildOverallQuery(params), so ownerId is passed for Super Admin/owner scoped overall views.
+- Validation completed during implementation:
+  - hotels_frontend npm.cmd run build compiled successfully after the modal, preview, room-type, scroll, and fallback-price UI changes.
+  - Backend smoke tests verified calendar rows and fallback price behavior; see backend structure notes for details.
