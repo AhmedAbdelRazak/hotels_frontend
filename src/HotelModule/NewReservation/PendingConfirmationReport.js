@@ -11,7 +11,11 @@ import {
 	Tooltip,
 	message,
 } from "antd";
-import { InfoCircleOutlined } from "@ant-design/icons";
+import {
+	CheckCircleOutlined,
+	CloseCircleOutlined,
+	InfoCircleOutlined,
+} from "@ant-design/icons";
 import styled, { createGlobalStyle, css, keyframes } from "styled-components";
 import moment from "moment";
 import { useHistory, useLocation } from "react-router-dom";
@@ -111,6 +115,8 @@ Object.assign(labels.en, {
 	commissionDue: "Commission due",
 	commissionPaid: "Commission paid",
 	commissionNone: "No commission due",
+	commissionPercentOfTotal: "Commission % of total",
+	commissionPercentRatio: "Commission / total",
 	adjustCommission: "Adjust commission",
 	saveCommission: "Save commission",
 	confirmTitle: "Confirm reservation",
@@ -184,6 +190,19 @@ Object.assign(labels.en, {
 	totalRejected: "Total rejected",
 	totalRejectionReason: "Total rejection reason",
 	totalRejectionPlaceholder: "Write what the agent must correct in the amount.",
+	acceptFinance: "Accept",
+	rejectFinance: "Reject",
+	financeRejectTitle: "Reject finance review",
+	financeRejectType: "What needs correction?",
+	financeRejectTotal: "Total Amount Rejected",
+	financeRejectCommission: "Commission Rejected",
+	financeRejectBoth: "Total Amount & Commission Rejected",
+	financeRejectComment: "Comments for the agent",
+	financeRejectPlaceholder:
+		"Write exactly what must be corrected so the agent can adjust the reservation.",
+	financeRejectTypeRequired: "Choose what was rejected.",
+	financeRejectCommentRequired: "Rejection comments are required.",
+	financeRejectSubmit: "Send rejection",
 	cancelReservation: "Cancel reservation",
 });
 
@@ -197,6 +216,28 @@ Object.assign(labels.ar, {
 	totalRejectionReason: "سبب رفض المبلغ",
 	totalRejectionPlaceholder: "اكتب ما يجب على الوكيل تصحيحه في المبلغ.",
 	cancelReservation: "إلغاء الحجز",
+});
+
+Object.assign(labels.ar, {
+	acceptFinance: "\u0642\u0628\u0648\u0644",
+	rejectFinance: "\u0631\u0641\u0636",
+	financeRejectTitle: "\u0631\u0641\u0636 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	financeRejectType: "\u0645\u0627 \u0627\u0644\u0630\u064a \u064a\u062d\u062a\u0627\u062c \u062a\u0635\u062d\u064a\u062d\u0627\u061f",
+	financeRejectTotal: "\u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	financeRejectCommission: "\u0631\u0641\u0636 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	financeRejectBoth: "\u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	financeRejectComment: "\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0644\u0644\u0648\u0643\u064a\u0644",
+	financeRejectPlaceholder:
+		"\u0627\u0643\u062a\u0628 \u0628\u0648\u0636\u0648\u062d \u0645\u0627 \u064a\u062c\u0628 \u062a\u0635\u062d\u064a\u062d\u0647 \u062d\u062a\u0649 \u064a\u0639\u062f\u0644 \u0627\u0644\u0648\u0643\u064a\u0644 \u0627\u0644\u062d\u062c\u0632.",
+	financeRejectTypeRequired:
+		"\u0627\u062e\u062a\u0631 \u0645\u0627 \u062a\u0645 \u0631\u0641\u0636\u0647.",
+	financeRejectCommentRequired:
+		"\u064a\u062c\u0628 \u0643\u062a\u0627\u0628\u0629 \u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636.",
+	financeRejectSubmit: "\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0631\u0641\u0636",
+	commissionPercentOfTotal:
+		"\u0646\u0633\u0628\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0645\u0646 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	commissionPercentRatio:
+		"\u0627\u0644\u0639\u0645\u0648\u0644\u0629 / \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
 });
 
 const choiceDefinitions = {
@@ -282,6 +323,15 @@ const formatMoney = (value) =>
 	Number(value || 0).toLocaleString(undefined, {
 		maximumFractionDigits: 2,
 	});
+
+const formatPercent = (value) => {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "-";
+	return number.toLocaleString("en-US", {
+		minimumFractionDigits: number % 1 === 0 ? 0 : 2,
+		maximumFractionDigits: 2,
+	});
+};
 
 const pendingSortOptions = (txt) => [
 	{ value: "createdAt", label: txt.createdAt },
@@ -399,6 +449,11 @@ const PendingConfirmationReport = ({
 		totalReviewStatus: "approved",
 		totalRejectionReason: "",
 	});
+	const [financeRejectionModal, setFinanceRejectionModal] = useState({
+		open: false,
+		rejectionType: "total_amount",
+		comment: "",
+	});
 	const [actionLoading, setActionLoading] = useState(false);
 	const [decisionSupport, setDecisionSupport] = useState({
 		loading: false,
@@ -408,9 +463,19 @@ const PendingConfirmationReport = ({
 	const financeReservationTotal = financeModal.reservation
 		? formatMoney(financeModal.reservation.total_amount)
 		: "";
-	const totalReviewLabel = financeReservationTotal
-		? `${txt.totalReview} (${financeReservationTotal} SAR)`
-		: txt.totalReview;
+	const financeReservationTotalNumber = financeModal.reservation
+		? Number(financeModal.reservation.total_amount || 0)
+		: 0;
+	const financeCommissionAmount = Number(financeModal.commission || 0);
+	const financeCommissionPercent =
+		financeReservationTotalNumber > 0
+			? (financeCommissionAmount / financeReservationTotalNumber) * 100
+			: null;
+	const financeRejectionOptions = [
+		{ value: "total_amount", label: txt.financeRejectTotal },
+		{ value: "commission", label: txt.financeRejectCommission },
+		{ value: "total_and_commission", label: txt.financeRejectBoth },
+	];
 
 	const formatDisplayDate = useCallback(
 		(value) => {
@@ -677,10 +742,35 @@ const PendingConfirmationReport = ({
 			totalReviewStatus: "approved",
 			totalRejectionReason: "",
 		});
+		setFinanceRejectionModal({
+			open: false,
+			rejectionType: "total_amount",
+			comment: "",
+		});
 		setDecisionSupport({ loading: false, wallet: null, inventory: [] });
 	};
 
-	const submitFinanceUpdate = () => {
+	const closeFinanceRejectionModal = () => {
+		setFinanceRejectionModal({
+			open: false,
+			rejectionType: "total_amount",
+			comment: "",
+		});
+	};
+
+	const openFinanceRejectionModal = () => {
+		setFinanceRejectionModal({
+			open: true,
+			rejectionType: "total_amount",
+			comment: "",
+		});
+	};
+
+	const submitFinanceDecision = ({
+		totalReviewStatus = "approved",
+		totalRejectionReason = "",
+		financeRejectionType = "",
+	} = {}) => {
 		const reservation = financeModal.reservation;
 		if (!reservation?._id || !user?._id) return;
 		const nextCommission = Number(financeModal.commission || 0);
@@ -689,16 +779,9 @@ const PendingConfirmationReport = ({
 				? financeModal.commissionStatus === "commission paid"
 					? "commission paid"
 					: "no commission due"
-				: financeModal.commissionStatus === "no commission due"
-				? "commission due"
-				: financeModal.commissionStatus;
-		if (
-			financeModal.totalReviewStatus === "rejected" &&
-			!String(financeModal.totalRejectionReason || "").trim()
-		) {
-			message.error(txt.totalRejectionReason);
-			return;
-		}
+			: financeModal.commissionStatus === "no commission due"
+			? "commission due"
+			: financeModal.commissionStatus;
 		setActionLoading(true);
 		updatePendingConfirmationReservation({
 			reservationId: reservation._id,
@@ -708,14 +791,41 @@ const PendingConfirmationReport = ({
 				commission: nextCommission,
 				commissionPaid: nextCommissionStatus === "commission paid",
 				commissionStatus: nextCommissionStatus,
-				totalReviewStatus: financeModal.totalReviewStatus,
-				totalRejectionReason: financeModal.totalRejectionReason,
+				totalReviewStatus,
+				totalRejectionReason,
+				financeRejectionType,
 			},
 		})
 			.then((data) => {
 				if (refreshAfterUpdate(data)) closeFinanceModal();
 			})
 			.finally(() => setActionLoading(false));
+	};
+
+	const submitFinanceUpdate = () => {
+		submitFinanceDecision({
+			totalReviewStatus: "approved",
+			totalRejectionReason: "",
+			financeRejectionType: "",
+		});
+	};
+
+	const submitFinanceRejection = () => {
+		const reason = String(financeRejectionModal.comment || "").trim();
+		const rejectionType = financeRejectionModal.rejectionType;
+		if (!rejectionType) {
+			message.error(txt.financeRejectTypeRequired);
+			return;
+		}
+		if (!reason) {
+			message.error(txt.financeRejectCommentRequired);
+			return;
+		}
+		submitFinanceDecision({
+			totalReviewStatus: "rejected",
+			totalRejectionReason: reason,
+			financeRejectionType: rejectionType,
+		});
 	};
 
 	const columns = useMemo(
@@ -1060,6 +1170,10 @@ const PendingConfirmationReport = ({
 								</strong>
 							</DecisionSupportCard>
 						</DecisionSupportGrid>
+						<ReservationSourceStrip $isRTL={isArabic}>
+							<span>{txt.source}</span>
+							<strong>{statusModal.reservation.booking_source || "-"}</strong>
+						</ReservationSourceStrip>
 						<PendingReservationInventoryBrief
 							reservation={statusModal.reservation}
 							currentInventory={decisionSupport.inventory}
@@ -1119,6 +1233,7 @@ const PendingConfirmationReport = ({
 				title={<ModalTitleText $isRTL={isArabic}>{txt.adjustCommission}</ModalTitleText>}
 				footer={null}
 				destroyOnClose
+				width='min(94vw, 720px)'
 				className={
 					isArabic
 						? `${PENDING_REVIEW_MODAL_CLASS} pending-choice-modal rtl`
@@ -1127,12 +1242,18 @@ const PendingConfirmationReport = ({
 			>
 				<DecisionModalBody $isRTL={isArabic}>
 					{financeModal.reservation ? (
-						<PendingReservationInventoryBrief
-							reservation={financeModal.reservation}
-							currentInventory={decisionSupport.inventory}
-							loading={decisionSupport.loading}
-							isArabic={isArabic}
-						/>
+						<>
+							<ReservationSourceStrip $isRTL={isArabic}>
+								<span>{txt.source}</span>
+								<strong>{financeModal.reservation.booking_source || "-"}</strong>
+							</ReservationSourceStrip>
+							<PendingReservationInventoryBrief
+								reservation={financeModal.reservation}
+								currentInventory={decisionSupport.inventory}
+								loading={decisionSupport.loading}
+								isArabic={isArabic}
+							/>
+						</>
 					) : null}
 					<label>
 						<FieldLabelText
@@ -1154,70 +1275,24 @@ const PendingConfirmationReport = ({
 							addonAfter='SAR'
 						/>
 					</label>
-					<label>
-						<FieldLabelText help={definitions.totalReview} isArabic={isArabic}>
-							{totalReviewLabel}
-						</FieldLabelText>
-						<Select
-							popupClassName={
-								isArabic
-									? "pending-choice-select-dropdown rtl"
-									: "pending-choice-select-dropdown"
-							}
-							value={financeModal.totalReviewStatus}
-							onChange={(value) =>
-								setFinanceModal((prev) => ({
-									...prev,
-									totalReviewStatus: value,
-									totalRejectionReason:
-										value === "rejected" ? prev.totalRejectionReason : "",
-								}))
-							}
-							options={[
-								{
-									value: "approved",
-									label: (
-										<ChoiceOptionLabel
-											label={txt.totalApproved}
-											help={definitions.totalApproved}
-											isArabic={isArabic}
-										/>
-									),
-								},
-								{
-									value: "rejected",
-									label: (
-										<ChoiceOptionLabel
-											label={txt.totalRejected}
-											help={definitions.totalRejected}
-											isArabic={isArabic}
-										/>
-									),
-								},
-							]}
-						/>
-					</label>
-					{financeModal.totalReviewStatus === "rejected" ? (
-						<label>
-							<FieldLabelText
-								help={definitions.rejectionReason}
-								isArabic={isArabic}
-							>
-								{txt.totalRejectionReason}
-							</FieldLabelText>
-							<Input.TextArea
-								rows={3}
-								value={financeModal.totalRejectionReason}
-								placeholder={txt.totalRejectionPlaceholder}
-								onChange={(event) =>
-									setFinanceModal((prev) => ({
-										...prev,
-										totalRejectionReason: event.target.value,
-									}))
-								}
-							/>
-						</label>
-					) : null}
+					<CommissionPercentCard $isRTL={isArabic}>
+						<span>{txt.commissionPercentOfTotal}</span>
+						<strong dir='ltr'>
+							{financeCommissionPercent === null
+								? "-"
+								: `${formatPercent(financeCommissionPercent)}%`}
+						</strong>
+						<small dir='ltr'>
+							{formatMoney(financeCommissionAmount)} /{" "}
+							{financeReservationTotal || "0.00"} SAR
+						</small>
+					</CommissionPercentCard>
+					<FinanceReviewSummary $isRTL={isArabic}>
+						<span>{txt.totalReview}</span>
+						<strong>
+							{financeReservationTotal || "0.00"} SAR
+						</strong>
+					</FinanceReviewSummary>
 					<label>
 						<FieldLabelText
 							help={definitions.commissionStatus}
@@ -1276,14 +1351,104 @@ const PendingConfirmationReport = ({
 					<ModalActions>
 						<Button onClick={closeFinanceModal}>{txt.cancel}</Button>
 						<Button
+							danger
+							icon={<CloseCircleOutlined />}
+							loading={actionLoading}
+							onClick={openFinanceRejectionModal}
+						>
+							{txt.rejectFinance}
+						</Button>
+						<Button
 							type='primary'
+							icon={<CheckCircleOutlined />}
 							loading={actionLoading}
 							onClick={submitFinanceUpdate}
 						>
-							{txt.saveCommission}
+							{txt.acceptFinance}
 						</Button>
 					</ModalActions>
 				</DecisionModalBody>
+			</Modal>
+
+			<Modal
+				open={financeRejectionModal.open}
+				onCancel={closeFinanceRejectionModal}
+				title={
+					<ModalTitleText $isRTL={isArabic}>
+						{txt.financeRejectTitle}
+					</ModalTitleText>
+				}
+				footer={null}
+				destroyOnClose
+				centered
+				width='min(94vw, 540px)'
+				className={
+					isArabic
+						? "pending-choice-modal rtl"
+						: "pending-choice-modal"
+				}
+			>
+				<FinanceRejectModalBody $isRTL={isArabic}>
+					<FinanceRejectIntro>
+						<span>{txt.totalReview}</span>
+						<strong>{financeReservationTotal || "0.00"} SAR</strong>
+					</FinanceRejectIntro>
+					<label>
+						<FieldLabelText
+							help={definitions.rejectionReason}
+							isArabic={isArabic}
+						>
+							{txt.financeRejectType}
+						</FieldLabelText>
+						<Select
+							popupClassName={
+								isArabic
+									? "pending-choice-select-dropdown rtl"
+									: "pending-choice-select-dropdown"
+							}
+							value={financeRejectionModal.rejectionType}
+							onChange={(value) =>
+								setFinanceRejectionModal((prev) => ({
+									...prev,
+									rejectionType: value,
+								}))
+							}
+							options={financeRejectionOptions}
+						/>
+					</label>
+					<label>
+						<FieldLabelText
+							help={definitions.rejectionReason}
+							isArabic={isArabic}
+						>
+							{txt.financeRejectComment}
+						</FieldLabelText>
+						<Input.TextArea
+							rows={4}
+							value={financeRejectionModal.comment}
+							placeholder={txt.financeRejectPlaceholder}
+							onChange={(event) =>
+								setFinanceRejectionModal((prev) => ({
+									...prev,
+									comment: event.target.value,
+								}))
+							}
+						/>
+					</label>
+					<ModalActions>
+						<Button onClick={closeFinanceRejectionModal}>
+							{txt.cancel}
+						</Button>
+						<Button
+							danger
+							icon={<CloseCircleOutlined />}
+							loading={actionLoading}
+							onClick={submitFinanceRejection}
+						>
+							{txt.financeRejectSubmit}
+						</Button>
+					</ModalActions>
+				</FinanceRejectModalBody>
 			</Modal>
 
 			<PaginationRow>
@@ -1679,6 +1844,141 @@ const DecisionModalBody = styled.div`
 
 	.ant-input-number-group-addon {
 		direction: ltr;
+	}
+`;
+
+const ReservationSourceStrip = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 9px 12px;
+	border: 1px solid #cfe8ff;
+	border-radius: 10px;
+	background: #f7fbff;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	span {
+		color: #53627a;
+		font-size: 0.76rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.86rem;
+		font-weight: 950;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 520px) {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+`;
+
+const FinanceReviewSummary = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid #d7e7f8;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #fbfdff 0%, #f4faff 100%);
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	span {
+		color: #53627a;
+		font-size: 0.78rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.94rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 520px) {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+`;
+
+const CommissionPercentCard = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 4px 10px;
+	padding: 10px 12px;
+	border: 1px solid #c9e7ff;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #f2f9ff 0%, #ffffff 100%);
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	span {
+		color: #245172;
+		font-size: 0.78rem;
+		font-weight: 950;
+	}
+
+	strong {
+		color: #0b4a6f;
+		font-size: 1rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	small {
+		grid-column: 1 / -1;
+		color: #5f6f82;
+		font-size: 0.72rem;
+		font-weight: 850;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+
+		strong {
+			justify-self: start;
+		}
+	}
+`;
+
+const FinanceRejectModalBody = styled(DecisionModalBody)`
+	.ant-select,
+	.ant-input,
+	textarea.ant-input {
+		width: 100%;
+	}
+`;
+
+const FinanceRejectIntro = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid #ffd6d6;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #fff7f7 0%, #ffffff 100%);
+
+	span {
+		color: #8f1f1f;
+		font-size: 0.78rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #4c0519;
+		font-size: 0.96rem;
+		font-weight: 950;
 	}
 `;
 

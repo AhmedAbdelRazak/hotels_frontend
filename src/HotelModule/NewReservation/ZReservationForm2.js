@@ -53,6 +53,12 @@ const splitRoomKey = (key = "") => {
 	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
 };
 const normalizeId = (value) => String(value?._id || value?.id || value || "").trim();
+const normalizeAgentCommercialModel = (value = "") => {
+	const normalized = String(value || "").trim().toLowerCase();
+	return ["wallet_inventory", "commission_only", "mixed"].includes(normalized)
+		? normalized
+		: "wallet_inventory";
+};
 const normalizeDateKey = (value) => {
 	if (!value) return "";
 	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
@@ -187,6 +193,13 @@ const ZReservationForm2 = ({
 	setPaidAmount,
 	isBoss,
 	limitedOrderTakerAccount = false,
+	agentCommercialModel = "wallet_inventory",
+	agentSettlementModel = "agent_wallet_commission",
+	setAgentSettlementModel,
+	agentCommissionPercent = 8,
+	setAgentCommissionPercent,
+	agentCommissionAmount = 0,
+	setAgentCommissionAmount,
 	pickedRoomPricing, // kept for parity
 	setPickedRoomPricing,
 }) => {
@@ -745,6 +758,42 @@ const ZReservationForm2 = ({
 		return Number((totalPerDay * nights).toFixed(2));
 	}, [totalPerDay, days_of_residence]);
 
+	const normalizedAgentCommissionPercent = Number.isFinite(
+		Number(agentCommissionPercent),
+	)
+		? Number(agentCommissionPercent)
+		: 8;
+	const normalizedAgentCommercialModel = normalizeAgentCommercialModel(
+		agentCommercialModel,
+	);
+	const agentCanChooseSettlement =
+		limitedOrderTakerAccount && normalizedAgentCommercialModel === "mixed";
+	const resolvedAgentSettlementModel =
+		normalizedAgentCommercialModel === "commission_only"
+			? "agent_commission_only"
+			: normalizedAgentCommercialModel === "wallet_inventory"
+			? "agent_wallet_commission"
+			: agentSettlementModel === "agent_commission_only"
+			? "agent_commission_only"
+			: "agent_wallet_commission";
+	const agentHasCommission = Boolean(limitedOrderTakerAccount);
+	const agentUsesWalletTreatment =
+		resolvedAgentSettlementModel === "agent_wallet_commission";
+	const computedAgentCommissionAmount = Number(
+		(agentHasCommission
+			? (grandTotal * normalizedAgentCommissionPercent) / 100
+			: 0).toFixed(2),
+	);
+
+	useEffect(() => {
+		if (!limitedOrderTakerAccount) return;
+		setAgentCommissionAmount?.(computedAgentCommissionAmount);
+	}, [
+		computedAgentCommissionAmount,
+		limitedOrderTakerAccount,
+		setAgentCommissionAmount,
+	]);
+
 	const pricingColumns = [
 		{
 			title: "Date",
@@ -781,7 +830,10 @@ const ZReservationForm2 = ({
 					<p>Loading...</p>
 				</div>
 			) : (
-				<Wrapper $arabic={chosenLanguage === "Arabic"}>
+				<Wrapper
+					$arabic={chosenLanguage === "Arabic"}
+					$agentMode={limitedOrderTakerAccount}
+				>
 					{/* Count modal */}
 					<Modal
 						title={
@@ -1330,6 +1382,114 @@ const ZReservationForm2 = ({
 										/>
 									</div>
 								</div>
+								{limitedOrderTakerAccount ? (
+									<AgentCommissionPanel>
+										<div>
+											<strong>
+												{chosenLanguage === "Arabic"
+													? "\u0637\u0631\u064a\u0642\u0629 \u0645\u0639\u0627\u0645\u0644\u0629 \u0627\u0644\u062d\u062c\u0632"
+													: "Reservation Treatment"}
+											</strong>
+											<span>
+												{agentUsesWalletTreatment
+													? chosenLanguage === "Arabic"
+														? "سيتم تمييز هذا الحجز كمحفظة + عمولة، وتبقى العمولة قيد مراجعة المالية."
+														: "This reservation is wallet-backed and still carries commission pending finance approval."
+													: chosenLanguage === "Arabic"
+													? "هذا الحجز عمولة فقط، وتبقى العمولة قيد مراجعة المالية."
+													: "This reservation is commission-only and stays pending finance approval."}
+											</span>
+										</div>
+										<div className='commission-input'>
+											{agentCanChooseSettlement ? (
+												<>
+													<Label>
+														{chosenLanguage === "Arabic"
+															? "\u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u0639\u0627\u0645\u0644\u0629"
+															: "Choose treatment"}
+													</Label>
+													<Select
+														value={resolvedAgentSettlementModel}
+														onChange={(value) =>
+															setAgentSettlementModel?.(value)
+														}
+														options={[
+															{
+																value: "agent_wallet_commission",
+																label:
+																	chosenLanguage === "Arabic"
+																		? "محفظة + عمولة"
+																		: "Wallet + commission",
+															},
+															{
+																value: "agent_commission_only",
+																label:
+																	chosenLanguage === "Arabic"
+																		? "عمولة فقط"
+																		: "Commission only",
+															},
+														]}
+														style={{ width: "100%" }}
+													/>
+												</>
+											) : (
+												<FixedTreatmentBadge $commission={!agentUsesWalletTreatment}>
+													{agentUsesWalletTreatment
+														? chosenLanguage === "Arabic"
+															? "محفظة + عمولة"
+															: "Wallet + commission"
+														: chosenLanguage === "Arabic"
+														? "عمولة فقط"
+														: "Commission only"}
+												</FixedTreatmentBadge>
+											)}
+										</div>
+										<div className='commission-preview'>
+											<small>
+												{chosenLanguage === "Arabic"
+													? "\u0646\u0633\u0628\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+													: "Commission %"}
+											</small>
+											<InputNumber
+												min={0}
+												max={100}
+												step={0.25}
+												value={normalizedAgentCommissionPercent}
+												onChange={(value) =>
+													setAgentCommissionPercent?.(
+														Number.isFinite(Number(value))
+															? Number(value)
+															: 8,
+													)
+												}
+												addonAfter='%'
+												style={{ width: "100%" }}
+											/>
+											<strong>
+												{Number(
+													agentCommissionAmount ||
+														computedAgentCommissionAmount,
+												).toLocaleString(undefined, {
+													maximumFractionDigits: 2,
+												})}{" "}
+												SAR
+											</strong>
+											<em>
+												{normalizedAgentCommissionPercent}% /{" "}
+												{grandTotal.toLocaleString()} SAR
+											</em>
+											<em>
+												{agentUsesWalletTreatment
+													? chosenLanguage === "Arabic"
+														? "محفظة + عمولة"
+														: "Wallet-backed + commission"
+													: chosenLanguage === "Arabic"
+													? "عمولة فقط"
+													: "Commission only"}
+											</em>
+										</div>
+									</AgentCommissionPanel>
+								) : null}
 							</Block>
 						</Left>
 
@@ -1642,7 +1802,8 @@ export default ZReservationForm2;
 /* ───────── styles ───────── */
 
 const Wrapper = styled.div.withConfig({
-	shouldForwardProp: (prop) => !["arabic", "$arabic", "zIndex"].includes(prop),
+	shouldForwardProp: (prop) =>
+		!["arabic", "$arabic", "$agentMode", "zIndex"].includes(prop),
 })`
 	position: relative;
 	width: min(100%, 1320px);
@@ -1747,6 +1908,17 @@ const Wrapper = styled.div.withConfig({
 		border: 1px solid #d6e3f3;
 		box-shadow: none;
 	}
+
+	${(p) =>
+		p.$agentMode
+			? `
+	.field-passport,
+	.field-copy,
+	.field-birthdate {
+		display: none;
+	}
+	`
+			: ""}
 
 	.pill-inline {
 		background: #eef2ff;
@@ -2131,6 +2303,90 @@ const Block = styled.div`
 			grid-column: span 12;
 		}
 	}
+`;
+
+const AgentCommissionPanel = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1.45fr) minmax(160px, 0.55fr) minmax(180px, 0.7fr);
+	align-items: center;
+	gap: 12px;
+	margin-top: 14px;
+	padding: 12px 14px;
+	border: 1px solid #b9e4cf;
+	border-radius: 10px;
+	background: linear-gradient(135deg, #f0fff8 0%, #ffffff 100%);
+	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.08);
+
+	strong,
+	span,
+	small,
+	em {
+		display: block;
+	}
+
+	> div:first-child strong {
+		color: #064e3b;
+		font-size: 0.98rem;
+		font-weight: 950;
+	}
+
+	> div:first-child span {
+		margin-top: 4px;
+		color: #276749;
+		font-size: 0.78rem;
+		font-weight: 800;
+		line-height: 1.5;
+	}
+
+	.commission-preview {
+		padding: 9px 11px;
+		border: 1px solid #c5e7e1;
+		border-radius: 8px;
+		background: #fbfffd;
+	}
+
+	.commission-preview small {
+		color: #47627d;
+		font-size: 0.72rem;
+		font-weight: 900;
+	}
+
+	.commission-preview strong {
+		color: #065f46;
+		font-size: 1rem;
+		font-weight: 950;
+	}
+
+	.commission-preview em {
+		color: #64748b;
+		font-size: 0.72rem;
+		font-style: normal;
+		font-weight: 850;
+		direction: ltr;
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const FixedTreatmentBadge = styled.div`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 42px;
+	padding: 8px 12px;
+	border: 1px solid ${({ $commission }) =>
+		$commission ? "#bae6fd" : "#bbf7d0"};
+	border-radius: 8px;
+	background: ${({ $commission }) =>
+		$commission
+			? "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)"
+			: "linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%)"};
+	color: ${({ $commission }) => ($commission ? "#075985" : "#047857")};
+	font-size: 0.9rem;
+	font-weight: 950;
 `;
 
 const Right = styled.div`

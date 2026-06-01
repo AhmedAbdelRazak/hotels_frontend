@@ -1485,6 +1485,77 @@ Future TODO Backlog - Added 2026-05-26
   - Activation/account notifications should deep-link back to the activation accounts view:
     - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=activate-accounts&page=1&range=custom.
   - Avoid sending activation/account notifications to unrelated dashboard pages.
+- 2026-05-31 finance actions redesign:
+  - File: src/HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions.js.
+  - The page is a single finance workspace with three tabs, not three stacked tables:
+    - Reservation finance actions.
+    - Commission reconciliation.
+    - Pending wallet approvals.
+  - The old separate table headers should not be reintroduced above each table; the active tab title/count is the page-level context.
+  - The toolbar keeps hotel, booking source, agent/company, action type, search, reset, export, and one MM/YYYY month picker for commission reconciliation. The old visible from/to date filters were removed from this page UI.
+  - The agent/company filter applies across reservation finance actions, wallet approvals, and commission reconciliation where backend rows have an agent/source relationship.
+  - The reservation finance review modal is intentionally wider and split:
+    - Source/reservation context is visible even when there is no agent.
+    - Booking source must be visible in finance review and in reservation employee confirmation/review modals.
+    - Agent details appear only when the reservation has an agent/order-taker source.
+    - The agent model tile uses a distinct readable background because it drives finance handling.
+    - PendingReservationInventoryBrief remains inside the modal as supporting inventory context.
+  - Finance handling labels:
+    - source_commission_only means source commission only when no agent exists.
+    - agent_commission_only means agent commission without wallet deduction.
+    - agent_wallet_commission means wallet-backed reservation plus commission.
+    - wallet_inventory agent accounts should display as Wallet + commission, not Wallet only.
+    - mixed agent accounts can be reviewed as Wallet + commission or Commission only, but only options supported by the agent account should be shown.
+  - Commission review controls:
+    - Commission is editable as a SAR amount.
+    - The modal shows Commission % of total as commission / total_amount * 100 for finance review clarity.
+    - Total amount review is no longer a Select field. Accept submits the approved finance review.
+    - Reject opens a second modal that requires:
+      - rejection type: total_amount, commission, or total_and_commission.
+      - a written comment explaining exactly what the agent/source must correct.
+  - Wallet balance cards inside the modal:
+    - Wallet before comes from agentWalletSnapshot balance/current balance fields when available.
+    - Wallet deduction equals total_amount only when finance handling is agent_wallet_commission.
+    - Wallet after is calculated as wallet before minus wallet deduction, so a zero wallet before a 3400.34 reservation shows -3400.34.
+    - Commission-only/source-only reviews do not deduct the wallet.
+  - Commission reconciliation tab:
+    - Shows checked-out agent reservations with unpaid/unreconciled commission for the selected MM/YYYY commission month and authorized scope.
+    - Supports multi-select and a confirm modal before marking selected commissions reconciled/paid.
+    - Marking selected commissions calls markReservationCommissionPaid and sends the selected rows into the agent approval/todo flow when the reservation belongs to an agent.
+  - Pending wallet approvals tab:
+    - Shows pending agent wallet credit claims separately from reservation finance rows.
+    - Approve/reject actions use the agent-wallet review endpoint and confirmation/rejection modals rather than silent table actions.
+- 2026-05-31 wallet-management page redesign:
+  - File: src/HotelModule/TheOverallStructure/OverallFinancials/OverallWalletManagement.js.
+  - /hotel-management/main-dashboard?overall=wallet-management uses two tabs:
+    - Add new: creates a new wallet movement or agent wallet claim.
+    - Update: lists agents and transactions, then opens the selected transaction in a modal for editing.
+  - The Add tab uses a compact form with Ant Design-style date picker behavior instead of the old oversized plain date input.
+  - The Update tab should not force users through an empty form before selecting a transaction. The tables are visible first, and the edit form opens in a modal after clicking Update.
+  - The edit modal must close cleanly by cancel button, Escape, or clicking outside when not saving. Keep destroyOnClose and saving guards so stale form state does not cause modal hiccups.
+  - The page intentionally reduces excessive white space and oversized fonts while keeping labels readable on desktop and phone screens.
+- 2026-05-31 agent new-reservation finance behavior:
+  - Files:
+    - src/HotelModule/NewReservation/NewReservationMain.js.
+    - src/HotelModule/NewReservation/ZReservationForm2.js.
+  - For limited order-taker/agent accounts, the guest date of birth, passport number, and passport copy inputs are hidden from the new reservation form and passport is not required on submit.
+  - Agents see a Reservation Treatment / commission panel inside the reservation form.
+  - Default agent commission percentage is 8%.
+  - Agents can adjust the commission percentage; the proposed commission amount is calculated from the reservation grand total.
+  - All agents get commission. Wallet-backed agents are not free/no-commission agents.
+  - Treatment meanings:
+    - wallet_inventory account -> fixed agent_wallet_commission.
+    - commission_only account -> fixed agent_commission_only.
+    - mixed account -> agent can choose agent_wallet_commission or agent_commission_only on each reservation.
+  - agent_wallet_commission means Wallet + commission. It only changes whether the reservation should be wallet-backed/deducted; commission is still proposed and awaits finance approval.
+  - agent_commission_only means Commission only. There is no wallet deduction, but commission is still proposed and awaits finance approval.
+  - Reservation payloads from agents include agentSettlementModel, commissionData, and financial_cycle values so finance sees the intended handling and pending commission proposal.
+  - The backend remains authoritative; frontend labels and values are only the agent's proposal until finance review.
+- 2026-05-31 top-navbar/profile behavior:
+  - File: src/HotelModule/AdminNavbar/TopNavbar.js.
+  - Clicking Profile for hotel users or agents should route to the executive overall summary landing page, not the older profile/update page.
+  - In Super Admin account preview mode, the previewed name/role in the middle navbar routes to that previewed account's executive summary landing page.
+  - Clicking Exit preview returns the Super Admin to the original account-management context when returnTo is available.
 - 2026-05-31 local end-to-end QA completed:
   - Verified the backend pointed to a local database before mutating any QA data.
   - Generated an agent invitation link from the owner/authorized account flow.
@@ -1503,3 +1574,7 @@ Future TODO Backlog - Added 2026-05-26
   - Validation passed:
     - hotels_backend node --check for auth, user, overall_dashboard, agent_wallet, reservations, and activityTracker.
     - hotels_frontend npm.cmd run build compiled successfully.
+- 2026-05-31 final documentation-pass validation:
+  - npm.cmd run build in hotels_frontend compiled successfully after the final agent wallet/commission clarification.
+  - node -c controllers/reservations.js in hotels_backend passed after the final backend reservation commission clarification.
+  - No additional live QA reservations were created during this documentation pass.

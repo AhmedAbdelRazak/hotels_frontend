@@ -279,42 +279,6 @@ const getAssignedHotelIds = (user = {}) => {
 
 const assignedHotelScopeKey = (user = {}) => getAssignedHotelIds(user).join("|");
 
-const HOTEL_EMPLOYEE_LANDING_PATH =
-	"/hotel-management/main-dashboard?overall=summary&page=1";
-
-const HOTEL_AGENT_LANDING_PATH = "/hotel-management/main-dashboard";
-
-const isPureExternalAgentTopNavUser = (user = {}) => {
-	const roles = getUserRoles(user);
-	const descriptions = getUserRoleDescriptions(user);
-	const accessTo = Array.isArray(user.accessTo)
-		? user.accessTo.map((item) => String(item || "").toLowerCase())
-		: [];
-	const hasAgentAccess =
-		roles.includes(7000) ||
-		descriptions.includes("ordertaker") ||
-		accessTo.includes("ownreservations");
-	const hasBroaderHotelAccess =
-		[1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000].some((role) =>
-			roles.includes(role)
-		) ||
-		descriptions.some((description) =>
-			[
-				"superadmin",
-				"super admin",
-				"hotelmanager",
-				"reception",
-				"housekeepingmanager",
-				"housekeeping",
-				"finance",
-				"reservationemployee",
-				"systemadmin",
-				"system admin",
-			].includes(description)
-		);
-	return hasAgentAccess && !hasBroaderHotelAccess;
-};
-
 const mainDashboardPath = (ownerId = "", { summary = false } = {}) => {
 	const params = new URLSearchParams();
 	if (ownerId) params.set("ownerId", ownerId);
@@ -437,6 +401,16 @@ const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 			? "\u062a\u0645\u062a \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
 			: "Finance accepted";
 	}
+	if (reason === "finance_commission_rejected") {
+		return isArabic
+			? "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+			: "Commission rejected";
+	}
+	if (reason === "finance_amount_and_commission_rejected") {
+		return isArabic
+			? "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+			: "Total and commission rejected";
+	}
 	if (reason === "agent_account_pending_approval") {
 		return isArabic
 			? "\u062d\u0633\u0627\u0628 \u0648\u0643\u064a\u0644 \u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u062f\u064a\u0631"
@@ -479,6 +453,12 @@ const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 		finance_total_rejected: isArabic
 			? "مرفوض من المالية"
 			: "Finance rejected",
+		finance_commission_rejected: isArabic
+			? "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+			: "Commission rejected",
+		finance_amount_and_commission_rejected: isArabic
+			? "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629"
+			: "Total and commission rejected",
 		agent_commission_pending: isArabic
 			? "بانتظار موافقة الوكيل"
 			: "Agent commission approval",
@@ -491,6 +471,12 @@ const notificationReasonLabel = (reason, isArabic, isAgent = false) => {
 
 const cleanNotificationReasonLabel = (reason, isArabic, isAgent = false) => {
 	if (!isArabic) return notificationReasonLabel(reason, false, isAgent);
+	if (reason === "finance_commission_rejected") {
+		return "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0639\u0645\u0648\u0644\u0629";
+	}
+	if (reason === "finance_amount_and_commission_rejected") {
+		return "\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629";
+	}
 	const labels = {
 		wallet_claim_pending: "مطالبة محفظة بانتظار مراجعة المالية",
 		wallet_claim_rejected: "تم رفض مطالبة المحفظة",
@@ -572,6 +558,8 @@ const isFinancialNotificationItem = (item = {}) => {
 				"commission_missing",
 				"finance_review_pending",
 				"finance_total_rejected",
+				"finance_commission_rejected",
+				"finance_amount_and_commission_rejected",
 				"agent_commission_pending",
 				"agent_commission_rejected",
 				"finance_accepted",
@@ -1304,8 +1292,12 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	};
 
 	const stopPreview = () => {
-		stopDashboardPreview();
-		history.push("/hotel-management/main-dashboard");
+		const preview = stopDashboardPreview();
+		const returnTo =
+			preview?.returnTo ||
+			preview?.preview?.returnTo ||
+			"/hotel-management/main-dashboard?overall=account-management";
+		history.push(returnTo);
 		window.location.reload();
 	};
 
@@ -1322,15 +1314,11 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId
 		);
 
+		if (pathname.startsWith("/hotel-management")) {
+			return mainDashboardPath(selectedHotelOwnerId, { summary: true });
+		}
+
 		if (configuredSuperAdmin) {
-			if (pathname === "/hotel-management/main-dashboard") {
-				return "/admin/dashboard";
-			}
-			if (pathname.startsWith("/hotel-management")) {
-				return `/hotel-management/main-dashboard${
-					selectedHotelOwnerId ? `?ownerId=${selectedHotelOwnerId}` : ""
-				}`;
-			}
 			return "/admin/dashboard";
 		}
 
@@ -1864,12 +1852,6 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 			: "";
 	const previewLandingPath = useMemo(() => {
 		if (!dashboardPreview) return "";
-		if (isPureExternalAgentTopNavUser(user)) return HOTEL_AGENT_LANDING_PATH;
-
-		const isScopedStaffAccount =
-			normalizeTopNavId(user?.belongsToId) || getAssignedHotelIds(user).length;
-		if (isScopedStaffAccount) return HOTEL_EMPLOYEE_LANDING_PATH;
-
 		const ownerContextId =
 			normalizeTopNavId(dashboardPreview.ownerId) ||
 			queryOwnerId ||
@@ -1880,7 +1862,6 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					selectedHotel.ownerId
 			) ||
 			normalizeTopNavId(user?._id);
-
 		return mainDashboardPath(ownerContextId, { summary: true });
 	}, [
 		dashboardPreview,
@@ -1979,6 +1960,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						const financeAcceptedTitle = isArabic
 							? "تمت الموافقة المالية"
 							: "Finance accepted";
+						const financeRejectedTitle = isArabic
+							? "\u0631\u0641\u0636 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629"
+							: "Finance correction required";
 						const agentAccountTitle =
 							item.notificationType === "agent_account_approved"
 								? isArabic
@@ -2027,6 +2011,8 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 											? agentAccountTitle
 											: item.notificationType === "agent_finance_accepted"
 											? isArabic ? "تمت الموافقة المالية" : financeAcceptedTitle
+											: item.notificationType === "agent_finance_rejected"
+											? financeRejectedTitle
 											: item.confirmation_number || "N/A"}
 									</strong>
 									{!agentAccountNotice && !staffApplicationNotice && !housekeepingNotice && (

@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, DatePicker, Input, InputNumber, message, Modal, Select, Tag } from "antd";
-import { DownloadOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+	CheckCircleOutlined,
+	CloseCircleOutlined,
+	DownloadOutlined,
+	ReloadOutlined,
+	SearchOutlined,
+	StopOutlined,
+} from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import dayjs from "dayjs";
@@ -8,6 +15,7 @@ import {
 	exportOverallFinancialActions,
 	getHotelInventoryAvailability,
 	getOverallFinancialActions,
+	markReservationCommissionPaid,
 	reviewAgentWalletClaim,
 	trackOverallFinancialReportExport,
 	updatePendingConfirmationReservation,
@@ -65,14 +73,45 @@ const TEXT = {
 		commissionDue: "Commission due",
 		commissionPaid: "Commission paid",
 		commissionNone: "No commission due",
+		commissionPercentOfTotal: "Commission % of total",
+		commissionPercentRatio: "Commission / total",
 		totalReview: "Total amount review",
 		totalApproved: "Approved",
 		totalRejected: "Rejected",
 		totalRejectionReason: "Rejection reason",
 		totalRejectionPlaceholder: "Write why the total amount is rejected.",
-		saveFinance: "Save finance action",
+		saveFinance: "Accept",
+		acceptFinance: "Accept",
+		rejectFinance: "Reject",
+		financeRejectTitle: "Reject finance review",
+		financeRejectType: "What needs correction?",
+		financeRejectTotal: "Total Amount Rejected",
+		financeRejectCommission: "Commission Rejected",
+		financeRejectBoth: "Total Amount & Commission Rejected",
+		financeRejectComment: "Comments for the agent",
+		financeRejectPlaceholder:
+			"Write exactly what must be corrected so the agent can adjust the reservation.",
+		financeRejectTypeRequired: "Choose what was rejected.",
+		financeRejectCommentRequired: "Rejection comments are required.",
+		financeRejectSubmit: "Send rejection",
 		cancel: "Cancel",
 		allBookingSources: "All booking sources",
+		allAgents: "All agents / companies",
+		sourceDetails: "Source details",
+		agentDetails: "Agent details",
+		agentCompany: "Company",
+		agentModel: "Agent model",
+		agentWalletOnly: "Wallet + commission",
+		agentWalletSettlement: "Wallet + commission",
+		financeSettlementModel: "Finance handling",
+		walletAndCommission: "Wallet + commission",
+		agentCommissionOnly: "Agent commission only",
+		sourceCommissionOnly: "Source commission only",
+		walletBalanceBefore: "Wallet before",
+		walletBalanceAfter: "Wallet after",
+		reservationWalletAmount: "Wallet deduction",
+		noAgentForSource:
+			"No agent is linked to this reservation, so finance handles it as source commission only.",
 		updateSuccess: "Reservation updated.",
 		updateError: "Could not update the reservation.",
 		totalRejectionRequired: "Rejection reason is required.",
@@ -94,11 +133,45 @@ const TEXT = {
 		walletDate: "Date",
 		walletApprove: "Approve",
 		walletReject: "Reject",
+		walletRejectForCorrection: "Reject for correction",
+		walletRejectFinal: "Final reject",
 		walletPending: "Pending approval",
 		walletApproved: "Wallet claim approved.",
 		walletRejected: "Wallet claim rejected.",
+		walletApproveTitle: "Approve wallet claim?",
+		walletApproveHint:
+			"Review the claim details before adding this amount to the agent wallet.",
+		walletApproveOk: "Yes, approve",
 		walletRejectTitle: "Reject wallet claim?",
+		walletCorrectionRejectTitle: "Reject wallet claim for correction?",
+		walletFinalRejectTitle: "Final rejection for wallet claim?",
+		walletCorrectionRejectHint:
+			"The agent can submit a corrected claim after reviewing this reason.",
+		walletFinalRejectHint:
+			"This closes the claim as finally rejected, with no correction follow-up.",
+		walletRejectCommentLabel: "Rejection reason",
+		walletRejectPlaceholder:
+			"Write a clear reason so the agent can correct and resubmit if allowed.",
 		walletRejectReasonRequired: "Rejection reason is required.",
+		commissionReconciliationTitle: "Commission reconciliation",
+		commissionReconciliationSubtitle:
+			"Checked-out agent reservations with commission still waiting to be reconciled.",
+		commissionMonth: "Commission month",
+		commissionMarkSelectedPaid: "Mark selected as reconciled",
+		commissionSelected: "Selected",
+		commissionAgent: "Agent",
+		commissionDueDate: "Checkout",
+		commissionNoRows: "No commission reconciliation rows found.",
+		commissionMarkSuccess: "Selected commissions were sent to agents for approval.",
+		commissionMarkError: "Could not mark selected commissions as reconciled.",
+		commissionApproveTitle: "Mark commission as reconciled?",
+		commissionApproveHint:
+			"This will send the selected commission reconciliation to the agent for approval.",
+		commissionApproveOk: "Yes, mark reconciled",
+		financeApproveTitle: "Confirm financial action?",
+		financeApproveHint:
+			"Please review the action before saving this approval on the reservation.",
+		financeApproveOk: "Yes, save action",
 		reservationActionsTitle: "Reservation finance queue",
 		reservationActionsSubtitle:
 			"Reservations that need finance review, commission setup, or agent commission approval.",
@@ -205,6 +278,113 @@ Object.assign(TEXT.ar, {
 	dateFrom: "\u0645\u0646 \u062a\u0627\u0631\u064a\u062e",
 	dateTo: "\u0625\u0644\u0649 \u062a\u0627\u0631\u064a\u062e",
 	all: "\u0627\u0644\u0643\u0644",
+	walletRejectForCorrection:
+		"\u0631\u0641\u0636 \u0644\u0644\u062a\u0635\u062d\u064a\u062d",
+	walletRejectFinal: "\u0631\u0641\u0636 \u0646\u0647\u0627\u0626\u064a",
+	walletCorrectionRejectTitle:
+		"\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0644\u062a\u0635\u062d\u064a\u062d\u061f",
+	walletFinalRejectTitle:
+		"\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0646\u0647\u0627\u0626\u064a\u0627\u061f",
+	walletCorrectionRejectHint:
+		"\u0627\u0644\u0648\u0643\u064a\u0644 \u064a\u0633\u062a\u0637\u064a\u0639 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u0635\u062d\u062d\u0629 \u0628\u0639\u062f \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0633\u0628\u0628.",
+	walletFinalRejectHint:
+		"\u0647\u0630\u0627 \u0631\u0641\u0636 \u0646\u0647\u0627\u0626\u064a \u0648\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u062a\u0627\u0628\u0639\u0629 \u062a\u0635\u062d\u064a\u062d \u0644\u0647\u0630\u0647 \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629.",
+	walletApproveTitle:
+		"\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629\u061f",
+	walletApproveHint:
+		"\u0631\u0627\u062c\u0639 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629 \u0642\u0628\u0644 \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0645\u0628\u0644\u063a \u0625\u0644\u0649 \u0645\u062d\u0641\u0638\u0629 \u0627\u0644\u0648\u0643\u064a\u0644.",
+	walletApproveOk:
+		"\u0646\u0639\u0645\u060c \u0645\u0648\u0627\u0641\u0642\u0629",
+	walletRejectCommentLabel:
+		"\u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636",
+	walletRejectPlaceholder:
+		"\u0627\u0643\u062a\u0628 \u0633\u0628\u0628\u0627 \u0648\u0627\u0636\u062d\u0627 \u0644\u064a\u062a\u0645\u0643\u0646 \u0627\u0644\u0648\u0643\u064a\u0644 \u0645\u0646 \u0627\u0644\u062a\u0635\u062d\u064a\u062d \u0648\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0625\u0631\u0633\u0627\u0644.",
+	commissionReconciliationTitle:
+		"\u0645\u0637\u0627\u0628\u0642\u0629 \u0639\u0645\u0648\u0644\u0627\u062a \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
+	commissionReconciliationSubtitle:
+		"\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0628\u0639\u062f \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0644\u0645 \u062a\u062a\u0645 \u0645\u0637\u0627\u0628\u0642\u062a\u0647\u0627 \u0628\u0639\u062f.",
+	commissionMonth: "\u0634\u0647\u0631 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	commissionMarkSelectedPaid:
+		"\u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0645\u062d\u062f\u062f \u0643\u0645\u0637\u0627\u0628\u0642",
+	commissionSelected: "\u0627\u0644\u0645\u062d\u062f\u062f",
+	commissionAgent: "\u0627\u0644\u0648\u0643\u064a\u0644",
+	commissionDueDate: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+	commissionNoRows:
+		"\u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0645\u0648\u0644\u0627\u062a \u062a\u062d\u062a\u0627\u062c \u0645\u0637\u0627\u0628\u0642\u0629.",
+	commissionMarkSuccess:
+		"\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0639\u0645\u0648\u0644\u0627\u062a \u0627\u0644\u0645\u062d\u062f\u062f\u0629 \u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0648\u0643\u0644\u0627\u0621.",
+	commissionMarkError:
+		"\u062a\u0639\u0630\u0631 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0627\u062a \u0643\u0645\u0637\u0627\u0628\u0642\u0629.",
+	commissionApproveTitle:
+		"\u062a\u0623\u0643\u064a\u062f \u0645\u0637\u0627\u0628\u0642\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629\u061f",
+	commissionApproveHint:
+		"\u0633\u064a\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0628\u0642\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u062d\u062f\u062f\u0629 \u0644\u0644\u0648\u0643\u064a\u0644 \u0644\u0644\u0645\u0648\u0627\u0641\u0642\u0629.",
+	commissionApproveOk:
+		"\u0646\u0639\u0645\u060c \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629",
+	financeApproveTitle:
+		"\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0625\u062c\u0631\u0627\u0621 \u0627\u0644\u0645\u0627\u0644\u064a\u061f",
+	financeApproveHint:
+		"\u0631\u0627\u062c\u0639 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0625\u062c\u0631\u0627\u0621 \u0642\u0628\u0644 \u062d\u0641\u0638 \u0647\u0630\u0627 \u0627\u0644\u0627\u0639\u062a\u0645\u0627\u062f \u0639\u0644\u0649 \u0627\u0644\u062d\u062c\u0632.",
+	financeApproveOk:
+		"\u0646\u0639\u0645\u060c \u062d\u0641\u0638 \u0627\u0644\u0625\u062c\u0631\u0627\u0621",
+	acceptFinance:
+		"\u0642\u0628\u0648\u0644",
+	rejectFinance:
+		"\u0631\u0641\u0636",
+	financeRejectTitle:
+		"\u0631\u0641\u0636 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	financeRejectType:
+		"\u0645\u0627 \u0627\u0644\u0630\u064a \u064a\u062d\u062a\u0627\u062c \u062a\u0635\u062d\u064a\u062d\u0627\u061f",
+	financeRejectTotal:
+		"\u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	financeRejectCommission:
+		"\u0631\u0641\u0636 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	financeRejectBoth:
+		"\u0631\u0641\u0636 \u0627\u0644\u0645\u0628\u0644\u063a \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	financeRejectComment:
+		"\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0644\u0644\u0648\u0643\u064a\u0644",
+	financeRejectPlaceholder:
+		"\u0627\u0643\u062a\u0628 \u0628\u0648\u0636\u0648\u062d \u0645\u0627 \u0627\u0644\u0630\u064a \u064a\u062c\u0628 \u062a\u0635\u062d\u064a\u062d\u0647 \u0644\u064a\u0642\u0648\u0645 \u0627\u0644\u0648\u0643\u064a\u0644 \u0628\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632.",
+	financeRejectTypeRequired:
+		"\u0627\u062e\u062a\u0631 \u0645\u0627 \u0627\u0644\u0630\u064a \u062a\u0645 \u0631\u0641\u0636\u0647.",
+	financeRejectCommentRequired:
+		"\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u0631\u0641\u0636 \u0645\u0637\u0644\u0648\u0628\u0629.",
+	financeRejectSubmit:
+		"\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0631\u0641\u0636",
+	commissionPercentOfTotal:
+		"\u0646\u0633\u0628\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0645\u0646 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	commissionPercentRatio:
+		"\u0627\u0644\u0639\u0645\u0648\u0644\u0629 / \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
+	allAgents:
+		"\u0643\u0644 \u0627\u0644\u0648\u0643\u0644\u0627\u0621 / \u0627\u0644\u0634\u0631\u0643\u0627\u062a",
+	sourceDetails:
+		"\u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u0645\u0635\u062f\u0631",
+	agentDetails:
+		"\u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u0648\u0643\u064a\u0644",
+	agentCompany:
+		"\u0627\u0644\u0634\u0631\u0643\u0629",
+	agentModel:
+		"\u0646\u0645\u0648\u0630\u062c \u0627\u0644\u0648\u0643\u064a\u0644",
+	agentWalletOnly:
+		"\u0645\u062d\u0641\u0638\u0629 + \u0639\u0645\u0648\u0644\u0629",
+	agentWalletSettlement:
+		"\u0645\u062d\u0641\u0638\u0629 + \u0639\u0645\u0648\u0644\u0629",
+	financeSettlementModel:
+		"\u0637\u0631\u064a\u0642\u0629 \u0627\u0644\u0645\u0639\u0627\u0644\u062c\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	walletAndCommission:
+		"\u0645\u062d\u0641\u0638\u0629 + \u0639\u0645\u0648\u0644\u0629",
+	agentCommissionOnly:
+		"\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0648\u0643\u064a\u0644 \u0641\u0642\u0637",
+	sourceCommissionOnly:
+		"\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0645\u0635\u062f\u0631 \u0641\u0642\u0637",
+	walletBalanceBefore:
+		"\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0642\u0628\u0644",
+	walletBalanceAfter:
+		"\u0631\u0635\u064a\u062f \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0628\u0639\u062f",
+	reservationWalletAmount:
+		"\u062e\u0635\u0645 \u0627\u0644\u0645\u062d\u0641\u0638\u0629",
+	noAgentForSource:
+		"\u0644\u0627 \u064a\u0648\u062c\u062f \u0648\u0643\u064a\u0644 \u0645\u0631\u062a\u0628\u0637 \u0628\u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632\u060c \u0644\u0630\u0644\u0643 \u062a\u062a\u0639\u0627\u0645\u0644 \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u0645\u0639\u0647 \u0643\u0639\u0645\u0648\u0644\u0629 \u0645\u0635\u062f\u0631 \u0641\u0642\u0637.",
 });
 
 const reasonTone = (reason = "") => {
@@ -292,7 +472,178 @@ const hasCommissionAssignment = (reservation = {}) =>
 		String(reservation?.commissionStatus || "").trim().toLowerCase()
 	);
 
+const accountLooksLikeAgent = (account = {}) => {
+	const roles = getAccountRoleNumbers(account);
+	const descriptions = getAccountRoleDescriptions(account).map(normalizeRoleKey);
+	const accessTo = Array.isArray(account?.accessTo) ? account.accessTo : [];
+	return (
+		roles.includes(7000) ||
+		descriptions.includes("ordertaker") ||
+		accessTo.includes("ownReservations") ||
+		!!account?.agentCommercialModel
+	);
+};
+
+const getReservationAgentInfo = (reservation = {}) => {
+	const candidates = [
+		reservation.agent,
+		reservation?.agentWalletSnapshot?.agent,
+		reservation.orderTaker,
+		reservation.createdBy,
+	].filter(Boolean);
+	const agent =
+		candidates.find(
+			(candidate) =>
+				normalizeId(candidate?._id) &&
+				(accountLooksLikeAgent(candidate) ||
+					normalizeId(candidate?._id) === normalizeId(reservation.agentId))
+		) || null;
+	if (!agent && normalizeId(reservation.agentId)) {
+		return {
+			_id: normalizeId(reservation.agentId),
+			name: "",
+			email: "",
+			phone: "",
+			companyName: "",
+			agentCommercialModel:
+				reservation?.agentWalletSnapshot?.commercialModel || "",
+		};
+	}
+	if (!agent) return null;
+	return {
+		_id: normalizeId(agent._id),
+		name: agent.name || agent.email || "",
+		email: agent.email || "",
+		phone: agent.phone || "",
+		companyName: agent.companyName || "",
+		agentCommercialModel:
+			agent.agentCommercialModel ||
+			reservation?.agentWalletSnapshot?.commercialModel ||
+			"",
+	};
+};
+
+const normalizeCommercialModel = (value = "") => {
+	const normalized = String(value || "").trim().toLowerCase();
+	return ["wallet_inventory", "commission_only", "mixed"].includes(normalized)
+		? normalized
+		: "";
+};
+
+const getSettlementModelFromReservation = (reservation = {}) => {
+	const agent = getReservationAgentInfo(reservation);
+	const existing = String(
+		reservation?.financial_cycle?.settlementModel ||
+			reservation?.financial_cycle?.agentSettlementModel ||
+			reservation?.financial_cycle?.sourceSettlementModel ||
+			""
+	)
+		.trim()
+		.toLowerCase();
+	if (
+		[
+			"source_commission_only",
+			"agent_commission_only",
+			"agent_wallet_commission",
+		].includes(existing)
+	) {
+		const supportedAgentModels = agent
+			? settlementModelOptions(agent, TEXT.en).map((option) => option.value)
+			: [];
+		const validForSource =
+			!agent && existing === "source_commission_only";
+		const validForAgent =
+			!!agent &&
+			supportedAgentModels.includes(existing);
+		if (validForSource || validForAgent) return existing;
+	}
+	if (!agent) return "source_commission_only";
+	const commercialModel = normalizeCommercialModel(
+		agent.agentCommercialModel ||
+			reservation?.agentWalletSnapshot?.commercialModel ||
+			reservation?.financial_cycle?.agent?.agentCommercialModel
+	);
+	if (
+		reservation?.agentWalletSnapshot?.walletRequired === false ||
+		commercialModel === "commission_only"
+	) {
+		return "agent_commission_only";
+	}
+	return "agent_wallet_commission";
+};
+
+const commercialModelLabel = (model = "", labels = TEXT.en) => {
+	const normalized = normalizeCommercialModel(model);
+	if (normalized === "commission_only") return labels.agentCommissionOnly;
+	if (normalized === "mixed") return labels.walletAndCommission;
+	if (normalized === "wallet_inventory")
+		return labels.agentWalletSettlement || labels.walletAndCommission;
+	return "-";
+};
+
+const settlementModelOptions = (agentOrHasAgent, labels = TEXT.en) => {
+	const hasAgent =
+		typeof agentOrHasAgent === "object" ? !!agentOrHasAgent : !!agentOrHasAgent;
+	const commercialModel =
+		typeof agentOrHasAgent === "object"
+			? normalizeCommercialModel(agentOrHasAgent?.agentCommercialModel)
+			: "";
+	const walletOption = {
+		value: "agent_wallet_commission",
+		label: labels.agentWalletSettlement || labels.agentWalletOnly,
+	};
+	const commissionOption = {
+		value: "agent_commission_only",
+		label: labels.agentCommissionOnly,
+	};
+	return (
+	hasAgent
+		? commercialModel === "commission_only"
+			? [commissionOption]
+			: commercialModel === "wallet_inventory"
+			? [walletOption]
+			: [walletOption, commissionOption]
+		: [
+				{
+					value: "source_commission_only",
+					label: labels.sourceCommissionOnly,
+				},
+		  ]
+	);
+};
+
+const settlementModelLabel = (value = "", labels = TEXT.en) =>
+	(settlementModelOptions(true, labels).find((option) => option.value === value) ||
+		settlementModelOptions(false, labels).find(
+			(option) => option.value === value
+		))?.label ||
+	value ||
+	"-";
+
 const n2 = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+const formatPercent = (value) => {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "-";
+	return number.toLocaleString("en-US", {
+		minimumFractionDigits: number % 1 === 0 ? 0 : 2,
+		maximumFractionDigits: 2,
+	});
+};
+
+const payoutSummary = (details = {}) => {
+	const items = [
+		details.iban,
+		details.instapayAddress,
+		details.instapayPhone,
+		details.mobileWalletNumber,
+		details.stcPayNumber,
+		details.paypalEmail,
+	]
+		.map((item) => String(item || "").trim())
+		.filter(Boolean);
+	return items.length ? items.slice(0, 2).join(" / ") : "-";
+};
 
 const safeFileSegment = (value = "financial-actions") =>
 	String(value || "financial-actions")
@@ -456,13 +807,18 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	const [filters, setFilters] = useState({
 		hotelId: "",
 		bookingSource: "",
+		agentId: "",
 		actionType: "",
 		dateBy: "booked_at",
 		dateFrom: "",
 		dateTo: "",
+		commissionMonth: dayjs().format("YYYY-MM"),
 	});
 	const [page, setPage] = useState(1);
 	const [walletPage, setWalletPage] = useState(1);
+	const [commissionPage, setCommissionPage] = useState(1);
+	const [selectedCommissionIds, setSelectedCommissionIds] = useState([]);
+	const [activeFinanceTab, setActiveFinanceTab] = useState("reservations");
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
@@ -474,12 +830,18 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		commission: 0,
 		commissionPaid: false,
 		commissionStatus: "commission due",
+		settlementModel: "source_commission_only",
 		totalReviewStatus: "approved",
 		totalRejectionReason: "",
 	});
 	const [financeInventory, setFinanceInventory] = useState({
 		loading: false,
 		rows: [],
+	});
+	const [financeRejectionModal, setFinanceRejectionModal] = useState({
+		open: false,
+		rejectionType: "total_amount",
+		comment: "",
 	});
 
 	const params = useMemo(
@@ -490,8 +852,10 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			limit: OVERALL_PAGE_SIZE,
 			walletPage,
 			walletLimit: 8,
+			commissionPage,
+			commissionLimit: 8,
 		}),
-		[filters, ownerId, page, walletPage]
+		[commissionPage, filters, ownerId, page, walletPage]
 	);
 
 	const loadActions = () => {
@@ -513,6 +877,9 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	const bookingSources = Array.isArray(result.bookingSources)
 		? result.bookingSources
 		: [];
+	const agentOptions = Array.isArray(result.agentOptions)
+		? result.agentOptions
+		: [];
 	const reservations = Array.isArray(result.reservations) ? result.reservations : [];
 	const pages = Math.max(Number(result.pages || 1), 1);
 	const walletClaims = result.walletClaims || {};
@@ -521,6 +888,32 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		: [];
 	const walletClaimPages = Math.max(Number(walletClaims.pages || 1), 1);
 	const walletClaimTotal = Number(walletClaims.total || 0);
+	const commissionReconciliation = result.commissionReconciliation || {};
+	const commissionRows = Array.isArray(commissionReconciliation.rows)
+		? commissionReconciliation.rows
+		: [];
+	const commissionPages = Math.max(Number(commissionReconciliation.pages || 1), 1);
+	const commissionTotal = Number(commissionReconciliation.total || 0);
+	const selectedCommissionRows = commissionRows.filter((row) =>
+		selectedCommissionIds.includes(normalizeId(row._id))
+	);
+	const financeTabs = [
+		{
+			key: "reservations",
+			label: labels.reservationActionsTitle,
+			count: Number(result.total || 0),
+		},
+		{
+			key: "commissions",
+			label: labels.commissionReconciliationTitle,
+			count: commissionTotal,
+		},
+		{
+			key: "wallets",
+			label: labels.walletClaimsTitle,
+			count: walletClaimTotal,
+		},
+	];
 	const actionOptions = [
 		{ value: "", label: labels.allActions },
 		{ value: "commission_missing", label: labels.commissionMissing },
@@ -532,11 +925,160 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	const financeModalTotalAmount = Number(
 		financeModal.reservation?.total_amount || 0
 	);
+	const financeCommissionAmount = n2(financeModal.commission);
+	const financeCommissionPercent =
+		financeModalTotalAmount > 0
+			? n2((financeCommissionAmount / financeModalTotalAmount) * 100)
+			: null;
+	const financeAgentInfo = getReservationAgentInfo(financeModal.reservation || {});
+	const financeSettlementOptions = settlementModelOptions(financeAgentInfo, labels);
+	const financeWalletSnapshot =
+		financeModal.reservation?.agentWalletSnapshot || {};
+	const financeWalletBalanceBefore = n2(
+		financeWalletSnapshot.balanceBeforeReservation ??
+			financeWalletSnapshot.currentBalance ??
+			financeWalletSnapshot.balance ??
+			0
+	);
+	const financeWalletDeduction =
+		financeModal.settlementModel === "agent_wallet_commission"
+			? n2(financeModalTotalAmount)
+			: 0;
+	const financeWalletBalanceAfter = n2(
+		financeWalletBalanceBefore - financeWalletDeduction
+	);
+	const financeRejectionOptions = [
+		{ value: "total_amount", label: labels.financeRejectTotal },
+		{ value: "commission", label: labels.financeRejectCommission },
+		{ value: "total_and_commission", label: labels.financeRejectBoth },
+	];
+
+	const confirmAcceptanceAction = ({ title, content, okText, onConfirm }) => {
+		Modal.confirm({
+			title,
+			icon: <CheckCircleOutlined style={{ color: "#11865d" }} />,
+			content,
+			okText,
+			cancelText: labels.cancel,
+			centered: true,
+			maskClosable: true,
+			onOk: onConfirm,
+		});
+	};
+
+	const walletClaimReviewContent = (transaction = {}) => (
+		<ActionReviewDetails $isRTL={isRTL}>
+			<p>{labels.walletApproveHint}</p>
+			<dl>
+				<div>
+					<dt>{labels.agent}</dt>
+					<dd>
+						{titleCase(
+							transaction.agent?.name || transaction.agent?.email || "-"
+						)}
+					</dd>
+				</div>
+				<div>
+					<dt>{labels.walletAmount}</dt>
+					<dd>
+						{formatMoney(transaction.amount)} {labels.sar}
+					</dd>
+				</div>
+				<div>
+					<dt>{labels.walletDate}</dt>
+					<dd>{formatDate(transaction.transactionDate, chosenLanguage)}</dd>
+				</div>
+				<div>
+					<dt>{labels.walletReference}</dt>
+					<dd>{transaction.reference || "-"}</dd>
+				</div>
+			</dl>
+		</ActionReviewDetails>
+	);
+
+	const commissionReviewContent = (rows = []) => {
+		const commissionTotalAmount = n2(
+			rows.reduce(
+				(total, reservation) =>
+					total +
+					Number(
+						reservation.commissionAmount ||
+							getCommissionValue(reservation) ||
+							0
+					),
+				0
+			)
+		);
+
+		return (
+			<ActionReviewDetails $isRTL={isRTL}>
+				<p>{labels.commissionApproveHint}</p>
+				<dl>
+					<div>
+						<dt>{labels.rowsCount}</dt>
+						<dd>{rows.length}</dd>
+					</div>
+					<div>
+						<dt>{labels.commission}</dt>
+						<dd>
+							{formatMoney(commissionTotalAmount)} {labels.sar}
+						</dd>
+					</div>
+					<div>
+						<dt>{labels.commissionMonth}</dt>
+						<dd>{filters.commissionMonth || "-"}</dd>
+					</div>
+				</dl>
+			</ActionReviewDetails>
+		);
+	};
+
+	const financeReviewContent = () => (
+		<ActionReviewDetails $isRTL={isRTL}>
+			<p>{labels.financeApproveHint}</p>
+			<dl>
+				<div>
+					<dt>{labels.confirmation}</dt>
+					<dd>{financeModal.reservation?.confirmation_number || "-"}</dd>
+				</div>
+				<div>
+					<dt>{labels.source}</dt>
+					<dd>{financeModal.reservation?.booking_source || "-"}</dd>
+				</div>
+				<div>
+					<dt>{labels.financeSettlementModel}</dt>
+					<dd>{settlementModelLabel(financeModal.settlementModel, labels)}</dd>
+				</div>
+				<div>
+					<dt>{labels.total}</dt>
+					<dd>
+						{formatMoney(financeModalTotalAmount)} {labels.sar}
+					</dd>
+				</div>
+				<div>
+					<dt>{labels.commission}</dt>
+					<dd>
+						{formatMoney(financeCommissionAmount)} {labels.sar}
+					</dd>
+				</div>
+				<div>
+					<dt>{labels.commissionPercentOfTotal}</dt>
+					<dd dir='ltr'>
+						{financeCommissionPercent === null
+							? "-"
+							: `${formatPercent(financeCommissionPercent)}%`}
+					</dd>
+				</div>
+			</dl>
+		</ActionReviewDetails>
+	);
 
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value }));
 		setPage(1);
 		setWalletPage(1);
+		setCommissionPage(1);
+		setSelectedCommissionIds([]);
 	};
 
 	const openReservation = (reservation = {}) => {
@@ -590,6 +1132,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			reservation,
 			commission,
 			commissionPaid,
+			settlementModel: getSettlementModelFromReservation(reservation),
 			totalReviewStatus: totalReviewStatus === "rejected" ? "rejected" : "approved",
 			totalRejectionReason:
 				reservation?.financial_cycle?.totalRejectionReason || "",
@@ -611,10 +1154,16 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			commission: 0,
 			commissionPaid: false,
 			commissionStatus: "commission due",
+			settlementModel: "source_commission_only",
 			totalReviewStatus: "approved",
 			totalRejectionReason: "",
 		});
 		setFinanceInventory({ loading: false, rows: [] });
+		setFinanceRejectionModal({
+			open: false,
+			rejectionType: "total_amount",
+			comment: "",
+		});
 	};
 
 	const refreshUpdatedReservation = (updatedReservation = {}) => {
@@ -633,17 +1182,10 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		loadActions();
 	};
 
-	const submitFinanceUpdate = () => {
+	const performFinanceUpdate = (overrides = {}) => {
 		const reservation = financeModal.reservation;
 		const actorId = currentUser?._id || userId;
 		if (!reservation?._id || !actorId) return;
-		if (
-			financeModal.totalReviewStatus === "rejected" &&
-			!String(financeModal.totalRejectionReason || "").trim()
-		) {
-			message.error(labels.totalRejectionRequired);
-			return;
-		}
 		const nextCommission = Number(financeModal.commission || 0);
 		const nextCommissionStatus =
 			nextCommission <= 0
@@ -662,8 +1204,10 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				commission: nextCommission,
 				commissionPaid: nextCommissionStatus === "commission paid",
 				commissionStatus: nextCommissionStatus,
-				totalReviewStatus: financeModal.totalReviewStatus,
-				totalRejectionReason: financeModal.totalRejectionReason,
+				financeSettlementModel: financeModal.settlementModel,
+				totalReviewStatus: overrides.totalReviewStatus || "approved",
+				totalRejectionReason: overrides.totalRejectionReason || "",
+				financeRejectionType: overrides.financeRejectionType || "",
 			},
 		})
 			.then((data) => {
@@ -679,15 +1223,78 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			.finally(() => setActionLoading(false));
 	};
 
-	const reviewWalletClaim = (transaction = {}, action = "approve", reason = "") => {
+	const submitFinanceUpdate = () => {
+		confirmAcceptanceAction({
+			title: labels.financeApproveTitle,
+			content: financeReviewContent(),
+			okText: labels.financeApproveOk,
+			onConfirm: () =>
+				performFinanceUpdate({
+					totalReviewStatus: "approved",
+					totalRejectionReason: "",
+					financeRejectionType: "",
+				}),
+		});
+	};
+
+	const openFinanceRejectionModal = () => {
+		setFinanceRejectionModal({
+			open: true,
+			rejectionType: "total_amount",
+			comment: "",
+		});
+	};
+
+	const closeFinanceRejectionModal = () => {
+		setFinanceRejectionModal({
+			open: false,
+			rejectionType: "total_amount",
+			comment: "",
+		});
+	};
+
+	const submitFinanceRejection = () => {
+		const rejectionType = String(
+			financeRejectionModal.rejectionType || ""
+		).trim();
+		const comment = String(financeRejectionModal.comment || "").trim();
+		if (!rejectionType) {
+			message.error(labels.financeRejectTypeRequired);
+			return;
+		}
+		if (!comment) {
+			message.error(labels.financeRejectCommentRequired);
+			return;
+		}
+		performFinanceUpdate({
+			totalReviewStatus: "rejected",
+			totalRejectionReason: comment,
+			financeRejectionType: rejectionType,
+		});
+	};
+
+	const reviewWalletClaim = (
+		transaction = {},
+		action = "approve",
+		reason = "",
+		rejectionType = ""
+	) => {
 		const transactionId = normalizeId(transaction._id);
 		const actorId = currentUser?._id || userId;
 		if (!transactionId || !actorId) return;
 		setActionLoading(true);
-		reviewAgentWalletClaim("", actorId, token, transactionId, {
-			action,
-			rejectionReason: reason,
-		})
+		return reviewAgentWalletClaim(
+			"",
+			actorId,
+			token,
+			transactionId,
+			{
+				action,
+				rejectionReason: reason,
+				rejectionType,
+			},
+			buildOwnerParams(ownerId)
+		)
 			.then((data) => {
 				if (!data || data.error) {
 					message.error(data?.error || labels.updateError);
@@ -703,24 +1310,52 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	};
 
 	const approveWalletClaim = (transaction = {}) => {
-		reviewWalletClaim(transaction, "approve");
+		confirmAcceptanceAction({
+			title: labels.walletApproveTitle,
+			content: walletClaimReviewContent(transaction),
+			okText: labels.walletApproveOk,
+			onConfirm: () => reviewWalletClaim(transaction, "approve"),
+		});
 	};
 
-	const rejectWalletClaim = (transaction = {}) => {
+	const rejectWalletClaim = (
+		transaction = {},
+		rejectionType = "correction_required"
+	) => {
 		let reason = "";
 		Modal.confirm({
-			title: labels.walletRejectTitle,
+			title:
+				rejectionType === "final"
+					? labels.walletFinalRejectTitle
+					: labels.walletCorrectionRejectTitle || labels.walletRejectTitle,
 			content: (
-				<Input.TextArea
-					rows={3}
-					placeholder={labels.totalRejectionPlaceholder}
-					onChange={(event) => {
-						reason = event.target.value;
-					}}
-				/>
+				<RejectDialogContent>
+					<p>
+						{rejectionType === "final"
+							? labels.walletFinalRejectHint
+							: labels.walletCorrectionRejectHint}
+					</p>
+					<strong>{labels.walletRejectCommentLabel}</strong>
+					<Input.TextArea
+						rows={3}
+						aria-label={labels.walletRejectCommentLabel}
+						placeholder={
+							labels.walletRejectPlaceholder ||
+							labels.totalRejectionPlaceholder
+						}
+						onChange={(event) => {
+							reason = event.target.value;
+						}}
+					/>
+				</RejectDialogContent>
 			),
-			okText: labels.walletReject,
+			okText:
+				rejectionType === "final"
+					? labels.walletRejectFinal
+					: labels.walletRejectForCorrection || labels.walletReject,
 			cancelText: labels.cancel,
+			centered: true,
+			maskClosable: true,
 			okButtonProps: { danger: true },
 			onOk: () => {
 				const trimmed = String(reason || "").trim();
@@ -728,9 +1363,83 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					message.error(labels.walletRejectReasonRequired);
 					return Promise.reject(new Error("rejection reason required"));
 				}
-				reviewWalletClaim(transaction, "reject", trimmed);
-				return Promise.resolve();
+				return (
+					reviewWalletClaim(transaction, "reject", trimmed, rejectionType) ||
+					Promise.resolve()
+				);
 			},
+		});
+	};
+
+	const toggleCommissionSelection = (reservationId = "") => {
+		const id = normalizeId(reservationId);
+		if (!id) return;
+		setSelectedCommissionIds((previous) =>
+			previous.includes(id)
+				? previous.filter((item) => item !== id)
+				: [...previous, id]
+		);
+	};
+
+	const toggleAllCommissionRows = () => {
+		const currentIds = commissionRows.map((row) => normalizeId(row._id)).filter(Boolean);
+		const allSelected =
+			currentIds.length &&
+			currentIds.every((id) => selectedCommissionIds.includes(id));
+		setSelectedCommissionIds((previous) =>
+			allSelected
+				? previous.filter((id) => !currentIds.includes(id))
+				: [...new Set([...previous, ...currentIds])]
+		);
+	};
+
+	const markCommissionRowsPaid = async (rows = []) => {
+		const actorId = currentUser?._id || userId;
+		const targets = (Array.isArray(rows) ? rows : []).filter((row) =>
+			normalizeId(row?._id)
+		);
+		if (!actorId || !targets.length) return;
+		setActionLoading(true);
+		try {
+			const results = await Promise.all(
+				targets.map((reservation) =>
+					markReservationCommissionPaid({
+						reservationId: reservation._id,
+						userId: actorId,
+						payload: {
+							commission:
+								reservation.commissionAmount ||
+								getCommissionValue(reservation) ||
+								0,
+						},
+					})
+				)
+			);
+			const failed = results.find((item) => !item || item.error);
+			if (failed) {
+				message.error(failed?.error || labels.commissionMarkError);
+				return;
+			}
+			message.success(labels.commissionMarkSuccess);
+			setSelectedCommissionIds([]);
+			loadActions();
+		} catch (error) {
+			message.error(labels.commissionMarkError);
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	const confirmCommissionRowsPaid = (rows = []) => {
+		const targets = (Array.isArray(rows) ? rows : []).filter((row) =>
+			normalizeId(row?._id)
+		);
+		if (!targets.length) return;
+		confirmAcceptanceAction({
+			title: labels.commissionApproveTitle,
+			content: commissionReviewContent(targets),
+			okText: labels.commissionApproveOk,
+			onConfirm: () => markCommissionRowsPaid(targets),
 		});
 	};
 
@@ -782,6 +1491,9 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 			const selectedAction = actionOptions.find(
 				(option) => option.value === filters.actionType
 			);
+			const selectedAgent = agentOptions.find(
+				(agent) => normalizeId(agent._id) === normalizeId(filters.agentId)
+			);
 			const summaryRows = [
 				{ Metric: labels.generatedAt, Value: new Date().toLocaleString() },
 				{
@@ -793,11 +1505,25 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					Value: filterLabel(titleCase(filters.bookingSource), labels.allBookingSources),
 				},
 				{
+					Metric: labels.commissionAgent,
+					Value: filterLabel(
+						titleCase(
+							selectedAgent?.companyName ||
+								selectedAgent?.name ||
+								selectedAgent?.email ||
+								""
+						),
+						labels.allAgents
+					),
+				},
+				{
 					Metric: labels.actionType,
 					Value: selectedAction?.label || labels.allActions,
 				},
-				{ Metric: labels.dateFrom, Value: filters.dateFrom || labels.all },
-				{ Metric: labels.dateTo, Value: filters.dateTo || labels.all },
+				{
+					Metric: labels.commissionMonth,
+					Value: filters.commissionMonth || labels.all,
+				},
 				{
 					Metric: labels.reservationActionsTitle,
 					Value: reservationRows.length,
@@ -934,6 +1660,23 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				/>
 				<Select
 					allowClear
+					showSearch
+					className='overall-filter-select'
+					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
+					direction={isRTL ? "rtl" : "ltr"}
+					value={filters.agentId}
+					onChange={(value) => updateFilter("agentId", value || "")}
+					placeholder={labels.allAgents}
+					optionFilterProp='label'
+					options={agentOptions.map((agent) => ({
+						value: normalizeId(agent._id),
+						label: `${titleCase(
+							agent.companyName || agent.name || agent.email || ""
+						)}${agent.email ? ` - ${agent.email}` : ""}`,
+					}))}
+				/>
+				<Select
+					allowClear
 					className='overall-filter-select'
 					popupClassName={`overall-filter-dropdown ${isRTL ? "rtl" : "ltr"}`}
 					direction={isRTL ? "rtl" : "ltr"}
@@ -944,24 +1687,19 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					options={actionOptions}
 				/>
 				<DatePicker
-					allowClear
+					allowClear={false}
 					inputReadOnly
-					format='YYYY-MM-DD'
+					picker='month'
+					format='MM/YYYY'
 					className='overall-date-picker'
-					value={toDatePickerValue(filters.dateFrom)}
-					onChange={(_, dateString) => updateFilter("dateFrom", dateString)}
-					placeholder={labels.dateFrom}
-					getPopupContainer={() => document.body}
-					popupStyle={{ zIndex: 2100 }}
-				/>
-				<DatePicker
-					allowClear
-					inputReadOnly
-					format='YYYY-MM-DD'
-					className='overall-date-picker'
-					value={toDatePickerValue(filters.dateTo)}
-					onChange={(_, dateString) => updateFilter("dateTo", dateString)}
-					placeholder={labels.dateTo}
+					value={toDatePickerValue(`${filters.commissionMonth || dayjs().format("YYYY-MM")}-01`)}
+					onChange={(value) =>
+						updateFilter(
+							"commissionMonth",
+							value ? value.format("YYYY-MM") : dayjs().format("YYYY-MM")
+						)
+					}
+					placeholder={labels.commissionMonth}
 					getPopupContainer={() => document.body}
 					popupStyle={{ zIndex: 2100 }}
 				/>
@@ -976,13 +1714,17 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 						setFilters({
 							hotelId: "",
 							bookingSource: "",
+							agentId: "",
 							actionType: "",
 							dateBy: "booked_at",
 							dateFrom: "",
 							dateTo: "",
+							commissionMonth: dayjs().format("YYYY-MM"),
 						});
 						setPage(1);
 						setWalletPage(1);
+						setCommissionPage(1);
+						setSelectedCommissionIds([]);
 					}}
 				>
 					<ReloadOutlined />
@@ -999,15 +1741,23 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				</button>
 			</OverallToolbar>
 
-			<FinancialSectionHeader>
-				<div>
-					<strong>{labels.reservationActionsTitle}</strong>
-					<span>{labels.reservationActionsSubtitle}</span>
-				</div>
-				<Tag color='blue'>
-					{labels.rowsCount}: {Number(result.total || 0)}
-				</Tag>
-			</FinancialSectionHeader>
+			<FinancialTabs $isRTL={isRTL}>
+				{financeTabs.map((tab) => (
+					<button
+						key={tab.key}
+						type='button'
+						data-active={activeFinanceTab === tab.key}
+						onClick={() => setActiveFinanceTab(tab.key)}
+					>
+						<span>{tab.label}</span>
+						<strong>{tab.count}</strong>
+					</button>
+				))}
+			</FinancialTabs>
+
+			<FinancialTabPanel>
+				{activeFinanceTab === "reservations" ? (
+					<>
 
 			<OverallTableWrap>
 				<table>
@@ -1115,16 +1865,175 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					{labels.next}
 				</button>
 			</Pager>
+					</>
+				) : null}
 
-			<FinancialSectionHeader>
-				<div>
-					<strong>{labels.walletClaimsTitle}</strong>
-					<span>{labels.walletClaimsSubtitle}</span>
-				</div>
-				<Tag color='orange'>
-					{labels.rowsCount}: {walletClaimTotal}
-				</Tag>
-			</FinancialSectionHeader>
+				{activeFinanceTab === "commissions" ? (
+					<>
+						<TabActionBar $isRTL={isRTL}>
+							<Tag color='blue'>
+								{labels.commissionSelected}: {selectedCommissionIds.length}
+							</Tag>
+							{canUpdateFinance ? (
+								<Button
+									size='small'
+									type='primary'
+									loading={actionLoading}
+									disabled={!selectedCommissionRows.length}
+									onClick={() => confirmCommissionRowsPaid(selectedCommissionRows)}
+								>
+									{labels.commissionMarkSelectedPaid}
+								</Button>
+							) : null}
+						</TabActionBar>
+
+			<OverallTableWrap>
+				<table>
+					<thead>
+						<tr>
+							<th>#</th>
+							<th>
+								<input
+									type='checkbox'
+									checked={
+										commissionRows.length > 0 &&
+										commissionRows.every((row) =>
+											selectedCommissionIds.includes(normalizeId(row._id))
+										)
+									}
+									onChange={toggleAllCommissionRows}
+								/>
+							</th>
+							<th>{labels.hotel}</th>
+							<th>{labels.confirmation}</th>
+							<th>{labels.commissionAgent}</th>
+							<th>{labels.guest}</th>
+							<th>{labels.source}</th>
+							<th>{labels.commissionDueDate}</th>
+							<th>{labels.total}</th>
+							<th>{labels.commission}</th>
+							<th>{labels.payoutDetails || "Payout details"}</th>
+							<th>{labels.action}</th>
+						</tr>
+					</thead>
+					<tbody>
+						{loading ? (
+							<tr>
+								<td colSpan='12'>{labels.loading}</td>
+							</tr>
+						) : commissionRows.length ? (
+							commissionRows.map((reservation, index) => {
+								const reservationId = normalizeId(reservation._id);
+								return (
+									<tr key={reservationId}>
+										<td>
+											{pageRowNumber(
+												commissionPage,
+												index,
+												Number(commissionReconciliation.limit || 8)
+											)}
+										</td>
+										<td>
+											<input
+												type='checkbox'
+												checked={selectedCommissionIds.includes(reservationId)}
+												onChange={() => toggleCommissionSelection(reservationId)}
+											/>
+										</td>
+										<td>{titleCase(reservation.hotelName || "-")}</td>
+										<td>
+											<button
+												type='button'
+												className='link-btn'
+												onClick={() => openMoreDetails(reservation)}
+											>
+												{reservation.confirmation_number || "-"}
+											</button>
+										</td>
+										<td>
+											<strong>
+												{titleCase(
+													reservation.agent?.name ||
+														reservation.agent?.email ||
+														"-"
+												)}
+											</strong>
+											<br />
+											<small>
+												{titleCase(reservation.agent?.companyName || "")}
+											</small>
+										</td>
+										<td>{reservation.customer_details?.name || "-"}</td>
+										<td>{reservation.booking_source || "-"}</td>
+										<td>{formatDate(reservation.checkout_date, chosenLanguage)}</td>
+										<td>
+											{formatMoney(reservation.total_amount)} {labels.sar}
+										</td>
+										<td>
+											{formatMoney(
+												reservation.commissionAmount ||
+													getCommissionValue(reservation)
+											)}{" "}
+											{labels.sar}
+										</td>
+										<td>
+											<small>
+												{payoutSummary(
+													reservation.agent?.agentPayoutDetails || {}
+												)}
+											</small>
+										</td>
+										<td>
+											{canUpdateFinance ? (
+												<Button
+													size='small'
+													type='primary'
+													loading={actionLoading}
+													onClick={() => confirmCommissionRowsPaid([reservation])}
+												>
+													{labels.commissionMarkSelectedPaid}
+												</Button>
+											) : (
+												"-"
+											)}
+										</td>
+									</tr>
+								);
+							})
+						) : (
+							<tr>
+								<td colSpan='12'>{labels.commissionNoRows}</td>
+							</tr>
+						)}
+					</tbody>
+				</table>
+			</OverallTableWrap>
+
+			<Pager>
+				<button
+					type='button'
+					disabled={commissionPage <= 1}
+					onClick={() => setCommissionPage(commissionPage - 1)}
+				>
+					{labels.previous}
+				</button>
+				<span>
+					{labels.page} {commissionPage} {labels.of} {commissionPages} (
+					{commissionTotal})
+				</span>
+				<button
+					type='button'
+					disabled={commissionPage >= commissionPages}
+					onClick={() => setCommissionPage(commissionPage + 1)}
+				>
+					{labels.next}
+				</button>
+			</Pager>
+					</>
+				) : null}
+
+				{activeFinanceTab === "wallets" ? (
+					<>
 
 			<OverallTableWrap>
 				<table>
@@ -1187,6 +2096,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 												<Button
 													size='small'
 													type='primary'
+													icon={<CheckCircleOutlined />}
 													loading={actionLoading}
 													onClick={() => approveWalletClaim(transaction)}
 												>
@@ -1195,10 +2105,24 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 												<Button
 													size='small'
 													danger
+													icon={<CloseCircleOutlined />}
 													loading={actionLoading}
-													onClick={() => rejectWalletClaim(transaction)}
+													onClick={() =>
+														rejectWalletClaim(transaction, "correction_required")
+													}
 												>
-													{labels.walletReject}
+													{labels.walletRejectForCorrection || labels.walletReject}
+												</Button>
+												<Button
+													size='small'
+													danger
+													icon={<StopOutlined />}
+													loading={actionLoading}
+													onClick={() =>
+														rejectWalletClaim(transaction, "final")
+													}
+												>
+													{labels.walletRejectFinal}
 												</Button>
 											</div>
 										) : (
@@ -1236,6 +2160,9 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 					{labels.next}
 				</button>
 			</Pager>
+					</>
+				) : null}
+			</FinancialTabPanel>
 
 			<OverallReservationDetailsModal
 				reservations={reservations}
@@ -1252,113 +2179,254 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 				title={labels.adjustFinance}
 				footer={null}
 				destroyOnClose
-				width={620}
-				className={PENDING_REVIEW_MODAL_CLASS}
+				width='min(96vw, 1120px)'
+				className={`${PENDING_REVIEW_MODAL_CLASS} overall-finance-review-modal`}
 			>
 				<div dir={isRTL ? "rtl" : "ltr"}>
-					<div style={{ display: "grid", gap: "14px" }}>
-						{financeModal.reservation ? (
-							<PendingReservationInventoryBrief
-								reservation={financeModal.reservation}
-								currentInventory={financeInventory.rows}
-								loading={financeInventory.loading}
-								isArabic={isRTL}
-							/>
-						) : null}
-						<label>
-							<strong>{labels.commission}</strong>
-							<InputNumber
-								min={0}
-								value={financeModal.commission}
-								onChange={(value) =>
-									setFinanceModal((previous) => ({
-										...previous,
-										commission: Number(value || 0),
-									}))
-								}
-								style={{ width: "100%", marginTop: 6 }}
-								addonAfter={labels.sar}
-							/>
-						</label>
-						<label>
-							<strong>
-								{labels.totalReview} ({formatMoney(financeModalTotalAmount)}{" "}
-								{labels.sar})
-							</strong>
-							<Select
-								value={financeModal.totalReviewStatus}
-								onChange={(value) =>
-									setFinanceModal((previous) => ({
-										...previous,
-										totalReviewStatus: value,
-										totalRejectionReason:
-											value === "rejected"
-												? previous.totalRejectionReason
-												: "",
-									}))
-								}
-								style={{ width: "100%", marginTop: 6 }}
-								options={[
-									{ value: "approved", label: labels.totalApproved },
-									{ value: "rejected", label: labels.totalRejected },
-								]}
-							/>
-						</label>
-						{financeModal.totalReviewStatus === "rejected" ? (
-							<label>
-								<strong>{labels.totalRejectionReason}</strong>
-								<Input.TextArea
-									rows={3}
-									value={financeModal.totalRejectionReason}
-									placeholder={labels.totalRejectionPlaceholder}
-									onChange={(event) =>
+					<FinanceModalFrame $isRTL={isRTL} $hasAgent={!!financeAgentInfo}>
+						<FinanceContextPanel>
+							<FinancePanelTitle>
+								{financeAgentInfo ? labels.agentDetails : labels.sourceDetails}
+							</FinancePanelTitle>
+							<FinanceDetailGrid>
+								<FinanceDetailTile>
+									<span>{labels.source}</span>
+									<strong>{financeModal.reservation?.booking_source || "-"}</strong>
+								</FinanceDetailTile>
+								<FinanceDetailTile>
+									<span>{labels.confirmation}</span>
+									<strong>
+										{financeModal.reservation?.confirmation_number || "-"}
+									</strong>
+								</FinanceDetailTile>
+								<FinanceDetailTile>
+									<span>{labels.hotel}</span>
+									<strong>{titleCase(financeModal.reservation?.hotelName || "-")}</strong>
+								</FinanceDetailTile>
+								<FinanceDetailTile>
+									<span>{labels.total}</span>
+									<strong>
+										{formatMoney(financeModalTotalAmount)} {labels.sar}
+									</strong>
+								</FinanceDetailTile>
+							</FinanceDetailGrid>
+							{financeAgentInfo ? (
+								<FinanceAgentCard>
+									<FinancePanelTitle>
+										{labels.agent || labels.commissionAgent}
+									</FinancePanelTitle>
+									<FinanceDetailGrid>
+										<FinanceDetailTile>
+											<span>{labels.name || "Name"}</span>
+											<strong>{titleCase(financeAgentInfo.name || "-")}</strong>
+										</FinanceDetailTile>
+										<FinanceDetailTile>
+											<span>{labels.agentCompany}</span>
+											<strong>
+												{titleCase(financeAgentInfo.companyName || "-")}
+											</strong>
+										</FinanceDetailTile>
+										<FinanceDetailTile>
+											<span>{labels.email || "Email"}</span>
+											<strong>{financeAgentInfo.email || "-"}</strong>
+										</FinanceDetailTile>
+										<FinanceDetailTile $tone='agentModel'>
+											<span>{labels.agentModel}</span>
+											<strong>
+												{commercialModelLabel(
+													financeAgentInfo.agentCommercialModel ||
+														financeModal.reservation?.agentWalletSnapshot
+															?.commercialModel,
+													labels
+												)}
+											</strong>
+										</FinanceDetailTile>
+									</FinanceDetailGrid>
+								</FinanceAgentCard>
+							) : (
+								<FinanceInfoStrip>{labels.noAgentForSource}</FinanceInfoStrip>
+							)}
+							{financeModal.reservation ? (
+								<PendingReservationInventoryBrief
+									reservation={financeModal.reservation}
+									currentInventory={financeInventory.rows}
+									loading={financeInventory.loading}
+									isArabic={isRTL}
+								/>
+							) : null}
+						</FinanceContextPanel>
+						<FinanceControlsPanel>
+							<FinancePanelTitle>{labels.financeReview}</FinancePanelTitle>
+							<FinanceField>
+								<strong>{labels.financeSettlementModel}</strong>
+								<Select
+									value={financeModal.settlementModel}
+									onChange={(value) =>
 										setFinanceModal((previous) => ({
 											...previous,
-											totalRejectionReason: event.target.value,
+											settlementModel: value,
 										}))
 									}
-									style={{ marginTop: 6 }}
+									options={financeSettlementOptions}
 								/>
-							</label>
-						) : null}
-						<label>
-							<strong>{labels.commissionStatus}</strong>
-							<Select
-								value={financeModal.commissionStatus}
-								onChange={(value) =>
-									setFinanceModal((previous) => ({
-										...previous,
-										commissionStatus: value,
-										commissionPaid: value === "commission paid",
-									}))
-								}
-								style={{ width: "100%", marginTop: 6 }}
-								options={[
-									{ value: "commission due", label: labels.commissionDue },
-									{ value: "commission paid", label: labels.commissionPaid },
-									{ value: "no commission due", label: labels.commissionNone },
-								]}
-							/>
-						</label>
-						<div
-							style={{
-								display: "flex",
-								justifyContent: "flex-end",
-								gap: 8,
-								flexWrap: "wrap",
-							}}
-						>
-							<Button onClick={closeFinanceModal}>{labels.cancel}</Button>
-							<Button
-								type='primary'
-								loading={actionLoading}
-								onClick={submitFinanceUpdate}
-							>
-								{labels.saveFinance}
-							</Button>
-						</div>
-					</div>
+							</FinanceField>
+							{financeModal.settlementModel === "agent_wallet_commission" ? (
+								<FinanceDetailGrid>
+									<FinanceDetailTile>
+										<span>{labels.walletBalanceBefore}</span>
+										<strong>
+											{formatMoney(financeWalletBalanceBefore)}{" "}
+											{labels.sar}
+										</strong>
+									</FinanceDetailTile>
+									<FinanceDetailTile>
+										<span>{labels.reservationWalletAmount}</span>
+										<strong>
+											{formatMoney(financeWalletDeduction)}{" "}
+											{labels.sar}
+										</strong>
+									</FinanceDetailTile>
+									<FinanceDetailTile>
+										<span>{labels.walletBalanceAfter}</span>
+										<strong dir='ltr'>
+											{formatMoney(financeWalletBalanceAfter)}{" "}
+											{labels.sar}
+										</strong>
+									</FinanceDetailTile>
+								</FinanceDetailGrid>
+							) : null}
+							<FinanceField>
+								<strong>{labels.commission}</strong>
+								<InputNumber
+									min={0}
+									value={financeModal.commission}
+									onChange={(value) =>
+										setFinanceModal((previous) => ({
+											...previous,
+											commission: Number(value || 0),
+										}))
+									}
+									addonAfter={labels.sar}
+								/>
+							</FinanceField>
+							<CommissionPercentCard $isRTL={isRTL}>
+								<span>{labels.commissionPercentOfTotal}</span>
+								<strong dir='ltr'>
+									{financeCommissionPercent === null
+										? "-"
+										: `${formatPercent(financeCommissionPercent)}%`}
+								</strong>
+								<small dir='ltr'>
+									{formatMoney(financeCommissionAmount)} /{" "}
+									{formatMoney(financeModalTotalAmount)} {labels.sar}
+								</small>
+							</CommissionPercentCard>
+							<FinanceReviewSummary>
+								<span>{labels.totalReview}</span>
+								<strong>
+									{formatMoney(financeModalTotalAmount)} {labels.sar}
+								</strong>
+							</FinanceReviewSummary>
+							<FinanceField>
+								<strong>{labels.commissionStatus}</strong>
+								<Select
+									value={financeModal.commissionStatus}
+									onChange={(value) =>
+										setFinanceModal((previous) => ({
+											...previous,
+											commissionStatus: value,
+											commissionPaid: value === "commission paid",
+										}))
+									}
+									options={[
+										{ value: "commission due", label: labels.commissionDue },
+										{ value: "commission paid", label: labels.commissionPaid },
+										{ value: "no commission due", label: labels.commissionNone },
+									]}
+								/>
+							</FinanceField>
+							<FinanceModalActions $isRTL={isRTL}>
+								<Button onClick={closeFinanceModal}>{labels.cancel}</Button>
+								<Button
+									danger
+									icon={<CloseCircleOutlined />}
+									loading={actionLoading}
+									onClick={openFinanceRejectionModal}
+								>
+									{labels.rejectFinance}
+								</Button>
+								<Button
+									type='primary'
+									icon={<CheckCircleOutlined />}
+									loading={actionLoading}
+									onClick={submitFinanceUpdate}
+								>
+									{labels.acceptFinance || labels.saveFinance}
+								</Button>
+							</FinanceModalActions>
+						</FinanceControlsPanel>
+					</FinanceModalFrame>
 				</div>
+			</Modal>
+
+			<Modal
+				open={financeRejectionModal.open}
+				onCancel={closeFinanceRejectionModal}
+				title={labels.financeRejectTitle}
+				footer={null}
+				destroyOnClose
+				centered
+				width='min(94vw, 520px)'
+			>
+				<FinanceRejectModalBody $isRTL={isRTL}>
+					<FinanceRejectIntro>
+						<strong>{financeModal.reservation?.confirmation_number || "-"}</strong>
+						<span>
+							{formatMoney(financeModalTotalAmount)} {labels.sar}
+						</span>
+					</FinanceRejectIntro>
+					<FinanceField>
+						<strong>{labels.financeRejectType}</strong>
+						<Select
+							value={financeRejectionModal.rejectionType}
+							onChange={(value) =>
+								setFinanceRejectionModal((previous) => ({
+									...previous,
+									rejectionType: value,
+								}))
+							}
+							options={financeRejectionOptions}
+						/>
+					</FinanceField>
+					<FinanceField>
+						<strong>{labels.financeRejectComment}</strong>
+						<Input.TextArea
+							rows={4}
+							value={financeRejectionModal.comment}
+							placeholder={labels.financeRejectPlaceholder}
+							onChange={(event) =>
+								setFinanceRejectionModal((previous) => ({
+									...previous,
+									comment: event.target.value,
+								}))
+							}
+						/>
+					</FinanceField>
+					<FinanceModalActions $isRTL={isRTL}>
+						<Button onClick={closeFinanceRejectionModal}>
+							{labels.cancel}
+						</Button>
+						<Button
+							danger
+							type='primary'
+							icon={<CloseCircleOutlined />}
+							loading={actionLoading}
+							onClick={submitFinanceRejection}
+						>
+							{labels.financeRejectSubmit}
+						</Button>
+					</FinanceModalActions>
+				</FinanceRejectModalBody>
 			</Modal>
 		</OverallPageShell>
 	);
@@ -1409,6 +2477,426 @@ const FinancialSectionHeader = styled.header`
 	@media (max-width: 640px) {
 		align-items: stretch;
 		flex-direction: column;
+	}
+`;
+
+const FinancialTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	padding: 8px;
+	border: 1px solid #d7e7f8;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+	box-shadow: 0 8px 22px rgba(15, 40, 66, 0.05);
+
+	button {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		min-width: 0;
+		min-height: 42px;
+		padding: 8px 12px;
+		border: 1px solid #cfdced;
+		border-radius: 6px;
+		background: #fbfdff;
+		color: #102033;
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-weight: 950;
+		text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+		transition:
+			background 0.2s ease,
+			border-color 0.2s ease,
+			box-shadow 0.2s ease,
+			color 0.2s ease;
+	}
+
+	button:hover,
+	button[data-active="true"] {
+		border-color: #64166e;
+		background: linear-gradient(135deg, #3d0b48 0%, #792286 100%);
+		color: #ffffff;
+		box-shadow: 0 10px 22px rgba(82, 20, 93, 0.18);
+	}
+
+	span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	strong {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 30px;
+		height: 24px;
+		padding: 0 8px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.86);
+		color: #2c1634;
+		font-size: 0.8rem;
+		font-weight: 950;
+	}
+
+	button:not([data-active="true"]) strong {
+		background: #eef6ff;
+		color: #24547d;
+	}
+
+	@media (max-width: 780px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const FinancialTabPanel = styled.section`
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+`;
+
+const TabActionBar = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: ${({ $isRTL }) => ($isRTL ? "flex-start" : "flex-end")};
+	gap: 8px;
+	flex-wrap: wrap;
+	padding: 8px 10px;
+	border: 1px solid #d7e7f8;
+	border-radius: 7px;
+	background: #fbfdff;
+
+	.ant-tag {
+		margin: 0;
+		border-radius: 999px;
+		font-weight: 900;
+	}
+
+	.ant-btn {
+		border-radius: 7px;
+		font-weight: 900;
+	}
+
+	@media (max-width: 640px) {
+		align-items: stretch;
+		flex-direction: column;
+
+		.ant-btn {
+			width: 100%;
+		}
+	}
+`;
+
+const FinanceModalFrame = styled.div`
+	display: grid;
+	grid-template-columns: ${({ $hasAgent }) =>
+		$hasAgent ? "minmax(0, 1.08fr) minmax(340px, 0.92fr)" : "minmax(0, 1fr) minmax(340px, 0.82fr)"};
+	gap: 14px;
+	align-items: start;
+	direction: ${({ $isRTL }) => ($isRTL ? "rtl" : "ltr")};
+	text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const FinanceContextPanel = styled.section`
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+`;
+
+const FinanceControlsPanel = styled.section`
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid #d7e7f8;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+	box-shadow: 0 10px 26px rgba(15, 40, 66, 0.06);
+`;
+
+const FinancePanelTitle = styled.strong`
+	display: block;
+	color: #102033;
+	font-size: 0.9rem;
+	font-weight: 950;
+	line-height: 1.35;
+`;
+
+const FinanceDetailGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const FinanceDetailTile = styled.div`
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+	padding: 8px 10px;
+	border: 1px solid ${({ $tone }) =>
+		$tone === "agentModel" ? "#b7eadf" : "#d7e7f8"};
+	border-radius: 7px;
+	background: ${({ $tone }) =>
+		$tone === "agentModel"
+			? "linear-gradient(135deg, #ebfff8 0%, #f7fffc 100%)"
+			: "#fbfdff"};
+	border-inline-start: ${({ $tone }) =>
+		$tone === "agentModel" ? "4px solid #22c55e" : "1px solid #d7e7f8"};
+
+	span {
+		color: ${({ $tone }) => ($tone === "agentModel" ? "#047857" : "#53627a")};
+		font-size: 0.72rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: ${({ $tone }) => ($tone === "agentModel" ? "#064e3b" : "#102033")};
+		font-size: 0.84rem;
+		font-weight: 950;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
+	}
+`;
+
+const FinanceAgentCard = styled.section`
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid #a7e3d4;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #ecfdf7 0%, #f8fffc 50%, #ffffff 100%);
+	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.08);
+`;
+
+const FinanceInfoStrip = styled.div`
+	padding: 10px 12px;
+	border: 1px solid #d7e7f8;
+	border-radius: 8px;
+	background: #f6fbff;
+	color: #37516b;
+	font-size: 0.8rem;
+	font-weight: 850;
+	line-height: 1.55;
+`;
+
+const FinanceField = styled.label`
+	display: grid;
+	gap: 6px;
+	min-width: 0;
+
+	> strong {
+		color: #203044;
+		font-size: 0.78rem;
+		font-weight: 950;
+		line-height: 1.35;
+	}
+
+	.ant-select,
+	.ant-input-number,
+	.ant-input-number-group-wrapper,
+	.ant-input {
+		width: 100%;
+	}
+`;
+
+const FinanceReviewSummary = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid #d7e7f8;
+	border-radius: 7px;
+	background: #fbfdff;
+
+	span {
+		color: #53627a;
+		font-size: 0.78rem;
+		font-weight: 900;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.9rem;
+		font-weight: 950;
+	}
+`;
+
+const CommissionPercentCard = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 4px 10px;
+	padding: 10px 12px;
+	border: 1px solid #c9e7ff;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #f2f9ff 0%, #ffffff 100%);
+	direction: ${({ $isRTL }) => ($isRTL ? "rtl" : "ltr")};
+	text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+
+	span {
+		color: #245172;
+		font-size: 0.78rem;
+		font-weight: 950;
+	}
+
+	strong {
+		color: #0b4a6f;
+		font-size: 1rem;
+		font-weight: 950;
+		white-space: nowrap;
+	}
+
+	small {
+		grid-column: 1 / -1;
+		color: #5f6f82;
+		font-size: 0.72rem;
+		font-weight: 850;
+		text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+	}
+
+	@media (max-width: 520px) {
+		grid-template-columns: 1fr;
+
+		strong {
+			justify-self: start;
+		}
+	}
+`;
+
+const FinanceModalActions = styled.div`
+	display: flex;
+	justify-content: ${({ $isRTL }) => ($isRTL ? "flex-start" : "flex-end")};
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-top: 2px;
+
+	@media (max-width: 520px) {
+		.ant-btn {
+			flex: 1 1 100%;
+		}
+	}
+`;
+
+const FinanceRejectModalBody = styled.div`
+	display: grid;
+	gap: 12px;
+	direction: ${({ $isRTL }) => ($isRTL ? "rtl" : "ltr")};
+	text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+`;
+
+const FinanceRejectIntro = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid #ffd6d6;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #fff7f7 0%, #ffffff 100%);
+
+	strong {
+		color: #7f1d1d;
+		font-size: 0.9rem;
+		font-weight: 950;
+	}
+
+	span {
+		color: #102033;
+		font-size: 0.84rem;
+		font-weight: 900;
+	}
+
+	@media (max-width: 520px) {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+`;
+
+const ActionReviewDetails = styled.div`
+	display: grid;
+	gap: 10px;
+	text-align: ${({ $isRTL }) => ($isRTL ? "right" : "left")};
+
+	p {
+		margin: 0;
+		color: #53627a;
+		font-size: 0.84rem;
+		font-weight: 850;
+		line-height: 1.5;
+	}
+
+	dl {
+		display: grid;
+		gap: 7px;
+		margin: 0;
+	}
+
+	dl > div {
+		display: grid;
+		grid-template-columns: minmax(90px, 0.4fr) minmax(0, 1fr);
+		gap: 10px;
+		align-items: center;
+		padding: 7px 8px;
+		border: 1px solid #e2e8f3;
+		border-radius: 6px;
+		background: #fbfdff;
+	}
+
+	dt,
+	dd {
+		margin: 0;
+		min-width: 0;
+	}
+
+	dt {
+		color: #53627a;
+		font-size: 0.76rem;
+		font-weight: 900;
+	}
+
+	dd {
+		color: #102033;
+		font-size: 0.84rem;
+		font-weight: 950;
+		word-break: break-word;
+	}
+
+	@media (max-width: 520px) {
+		dl > div {
+			grid-template-columns: 1fr;
+			gap: 3px;
+		}
+	}
+`;
+
+const RejectDialogContent = styled.div`
+	display: grid;
+	gap: 10px;
+
+	p {
+		margin: 0;
+		color: #53627a;
+		font-size: 0.82rem;
+		font-weight: 850;
+		line-height: 1.5;
+	}
+
+	strong {
+		color: #102033;
+		font-size: 0.8rem;
+		font-weight: 950;
 	}
 `;
 

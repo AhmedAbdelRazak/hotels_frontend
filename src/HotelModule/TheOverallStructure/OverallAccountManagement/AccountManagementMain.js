@@ -202,27 +202,6 @@ const getDashboardRoleDescriptions = (user = {}) => [
 		: []),
 ];
 
-const getPrimaryScopedRole = (user = {}) => {
-	const roleNumbers = getDashboardRoleNumbers(user);
-	const roleDescriptions = getDashboardRoleDescriptions(user);
-	const hasRole = (role) => roleNumbers.includes(Number(role));
-	const hasRoleDescription = (description) =>
-		roleDescriptions.includes(String(description || "").toLowerCase());
-
-	if (hasRole(2000) || hasRoleDescription("hotelmanager")) return "hotelmanager";
-	if (hasRole(3000) || hasRoleDescription("reception")) return "reception";
-	if (hasRole(4000) || hasRoleDescription("housekeepingmanager")) {
-		return "housekeepingmanager";
-	}
-	if (hasRole(5000) || hasRoleDescription("housekeeping")) return "housekeeping";
-	if (hasRole(6000) || hasRoleDescription("finance")) return "finance";
-	if (hasRole(8000) || hasRoleDescription("reservationemployee")) {
-		return "reservationemployee";
-	}
-	if (hasRole(7000) || hasRoleDescription("ordertaker")) return "ordertaker";
-	return "user";
-};
-
 const isPreviewOwnerLike = (user = {}) => {
 	const roleNumbers = getDashboardRoleNumbers(user);
 	const roleDescriptions = getDashboardRoleDescriptions(user);
@@ -238,56 +217,23 @@ const isPreviewOwnerLike = (user = {}) => {
 	);
 };
 
-const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") => {
-	if (!ownerId || !hotelId) return "/hotel-management/main-dashboard";
-
-	if (roleKey === "ordertaker") {
-		if (action === "todos") {
-			return `/hotel-management/financials/${ownerId}/${hotelId}?focus=todos`;
-		}
-		if (action === "finance") {
-			return `/hotel-management/financials/${ownerId}/${hotelId}`;
-		}
-		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
-			action === "list" ? "?list=&page=1" : "?newReservation"
-		}`;
+const buildMainDashboardRoute = (ownerId = "", { summary = false } = {}) => {
+	const params = new URLSearchParams();
+	if (ownerId) params.set("ownerId", ownerId);
+	if (summary) {
+		params.set("overall", "summary");
+		params.set("page", "1");
 	}
-	if (roleKey === "reception") {
-		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
-			action === "list" ? "?list=&page=1" : "?reserveARoom"
-		}`;
-	}
-	if (roleKey === "reservationemployee") {
-		return `/hotel-management/new-reservation/${ownerId}/${hotelId}${
-			action === "list"
-				? "?list=&page=1"
-				: action === "newReservation"
-				? "?newReservation"
-				: "?pendingConfirmation"
-		}`;
-	}
-	if (roleKey === "housekeeping" || roleKey === "housekeepingmanager") {
-		return `/hotel-management/house-keeping/${ownerId}/${hotelId}`;
-	}
-	if (roleKey === "finance") {
-		return action === "payment"
-			? `/hotel-management-payment/${ownerId}/${hotelId}`
-			: action === "reservations"
-			? `/hotel-management/new-reservation/${ownerId}/${hotelId}?list=&page=1`
-			: `/hotel-management/financials/${ownerId}/${hotelId}`;
-	}
-
-	return `/hotel-management/dashboard/${ownerId}/${hotelId}`;
+	const search = params.toString();
+	return `/hotel-management/main-dashboard${search ? `?${search}` : ""}`;
 };
 
-const getPreviewRouteForUser = (user = {}, ownerId = "", hotelId = "") => {
+const getPreviewRouteForUser = (user = {}, ownerId = "") => {
 	if (isPreviewOwnerLike(user)) {
 		const previewOwnerId = ownerId || normalizeId(user._id);
-		return `/hotel-management/main-dashboard${
-			previewOwnerId ? `?ownerId=${previewOwnerId}` : ""
-		}`;
+		return buildMainDashboardRoute(previewOwnerId, { summary: true });
 	}
-	return getScopedRouteForRole(getPrimaryScopedRole(user), ownerId, hotelId);
+	return buildMainDashboardRoute(ownerId, { summary: true });
 };
 
 const AccountManagementMain = ({
@@ -540,9 +486,10 @@ const AccountManagementMain = ({
 					auth: { token: data.token, user: data.user },
 					preview: data.preview,
 					selectedHotel,
+					returnTo: `${location.pathname}${location.search || ""}`,
 				});
 				message.success(labels.previewOpened);
-				history.push(getPreviewRouteForUser(data.user, previewOwnerId, hotelId));
+				history.push(getPreviewRouteForUser(data.user, previewOwnerId));
 			})
 			.catch(() => message.error(labels.previewFailed))
 			.finally(() => setPreviewingAccountId(""));

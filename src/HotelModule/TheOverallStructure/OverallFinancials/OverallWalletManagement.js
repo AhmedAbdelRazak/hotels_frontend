@@ -1,12 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Input, InputNumber, Modal, Select, Spin, Table, Tag, message } from "antd";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, DatePicker, Input, InputNumber, Modal, Select, Spin, Table, Tag, message } from "antd";
 import {
+	CalendarOutlined,
+	CheckCircleOutlined,
+	CloseCircleOutlined,
 	EditOutlined,
+	ExclamationCircleOutlined,
 	PaperClipOutlined,
 	PlusOutlined,
 	ReloadOutlined,
+	StopOutlined,
 	WalletOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import {
@@ -17,6 +23,7 @@ import {
 	updateAgentWalletTransaction,
 } from "../../apiAdmin";
 import {
+	buildOwnerParams,
 	formatDate,
 	getOverallText,
 	normalizeId,
@@ -68,10 +75,23 @@ const TEXT = {
 		rejectedStatus: "Rejected",
 		approve: "Approve",
 		reject: "Reject",
+		rejectForCorrection: "Reject for correction",
+		rejectFinal: "Final reject",
 		claimApproved: "Wallet claim approved.",
 		claimRejected: "Wallet claim rejected.",
 		rejectionReason: "Write the rejection reason",
 		rejectClaimTitle: "Reject wallet claim?",
+		correctionRejectTitle: "Reject wallet claim for correction?",
+		finalRejectTitle: "Final rejection for wallet claim?",
+		correctionRejectHint:
+			"The agent can submit a corrected claim after reviewing this reason.",
+		finalRejectHint:
+			"This closes the claim as finally rejected, with no correction follow-up.",
+		correctionRequiredStatus: "Needs correction",
+		finalRejectedStatus: "Final rejection",
+		allWalletData: "All agent wallet data",
+		formAgentHint:
+			"Choose an agent to add a new movement. Existing movements are managed from the Update tab.",
 		pendingClaimAmount: "Pending claims",
 		from: "From",
 		to: "To",
@@ -162,10 +182,28 @@ const TEXT = {
 		rejectedStatus: "\u0645\u0631\u0641\u0648\u0636",
 		approve: "\u0645\u0648\u0627\u0641\u0642\u0629",
 		reject: "\u0631\u0641\u0636",
+		rejectForCorrection: "\u0631\u0641\u0636 \u0644\u0644\u062a\u0635\u062d\u064a\u062d",
+		rejectFinal: "\u0631\u0641\u0636 \u0646\u0647\u0627\u0626\u064a",
 		claimApproved: "\u062a\u0645\u062a \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		claimRejected: "\u062a\u0645 \u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629.",
 		rejectionReason: "\u0627\u0643\u062a\u0628 \u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636",
 		rejectClaimTitle: "\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629\u061f",
+		correctionRejectTitle:
+			"\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0644\u0644\u062a\u0635\u062d\u064a\u062d\u061f",
+		finalRejectTitle:
+			"\u0631\u0641\u0636 \u0645\u0637\u0627\u0644\u0628\u0629 \u0627\u0644\u0645\u062d\u0641\u0638\u0629 \u0646\u0647\u0627\u0626\u064a\u0627\u061f",
+		correctionRejectHint:
+			"\u0627\u0644\u0648\u0643\u064a\u0644 \u064a\u0633\u062a\u0637\u064a\u0639 \u0625\u0631\u0633\u0627\u0644 \u0645\u0637\u0627\u0644\u0628\u0629 \u0645\u0635\u062d\u062d\u0629 \u0628\u0639\u062f \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0633\u0628\u0628.",
+		finalRejectHint:
+			"\u0647\u0630\u0627 \u0631\u0641\u0636 \u0646\u0647\u0627\u0626\u064a \u0648\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u062a\u0627\u0628\u0639\u0629 \u062a\u0635\u062d\u064a\u062d \u0644\u0647\u0630\u0647 \u0627\u0644\u0645\u0637\u0627\u0644\u0628\u0629.",
+		correctionRequiredStatus:
+			"\u064a\u062d\u062a\u0627\u062c \u062a\u0635\u062d\u064a\u062d",
+		finalRejectedStatus:
+			"\u0645\u0631\u0641\u0648\u0636 \u0646\u0647\u0627\u0626\u064a\u0627",
+		allWalletData:
+			"\u0643\u0644 \u0628\u064a\u0627\u0646\u0627\u062a \u0645\u062d\u0627\u0641\u0638 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
+		formAgentHint:
+			"\u0627\u062e\u062a\u0631 \u0627\u0644\u0648\u0643\u064a\u0644 \u0644\u0625\u0636\u0627\u0641\u0629 \u062d\u0631\u0643\u0629 \u062c\u062f\u064a\u062f\u0629. \u0627\u0644\u062d\u0631\u0643\u0627\u062a \u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u062a\u062a\u0645 \u0625\u062f\u0627\u0631\u062a\u0647\u0627 \u0645\u0646 \u062a\u0628\u0648\u064a\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.",
 		pendingClaimAmount: "\u0645\u0637\u0627\u0644\u0628\u0627\u062a \u0642\u064a\u062f \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629",
 		from: "\u0645\u0646",
 		to: "\u0625\u0644\u0649",
@@ -225,6 +263,18 @@ const walletAttachmentMaxBytes = 10 * 1024 * 1024;
 const walletAttachmentTotalMaxBytes = 32 * 1024 * 1024;
 const today = () => new Date().toISOString().slice(0, 10);
 
+const datePickerValue = (value = "") => {
+	if (!value) return null;
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed : null;
+};
+
+const datePickerString = (value) => {
+	if (!value) return today();
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : today();
+};
+
 const money = (value) =>
 	Number(value || 0).toLocaleString("en-US", {
 		minimumFractionDigits: 2,
@@ -282,8 +332,13 @@ const transactionSourceLabel = (value = "", txt = TEXT.en) => {
 const transactionStatusLabel = (row = {}, txt = TEXT.en) => {
 	const status = String(row.status || "posted").toLowerCase();
 	const reviewStatus = String(row.reviewStatus || "").toLowerCase();
+	const rejectionType = String(row.rejectionType || "").toLowerCase();
 	if (status === "pending" || reviewStatus === "pending") return txt.pendingReview;
-	if (status === "rejected" || reviewStatus === "rejected") return txt.rejectedStatus;
+	if (status === "rejected" || reviewStatus === "rejected") {
+		return rejectionType === "final"
+			? txt.finalRejectedStatus
+			: txt.correctionRequiredStatus || txt.rejectedStatus;
+	}
 	return txt.posted;
 };
 
@@ -307,17 +362,6 @@ const buildEmptyEntry = (agentId = "") => ({
 
 const queryValue = (search = "", key = "") =>
 	new URLSearchParams(search || "").get(key) || "";
-
-const WALLET_TAB_ADD = "add";
-const WALLET_TAB_UPDATE = "update";
-
-const walletTabFromSearch = (search = "") => {
-	const params = new URLSearchParams(search || "");
-	if (params.get("transactionId")) return WALLET_TAB_UPDATE;
-	return params.get("walletTab") === WALLET_TAB_UPDATE
-		? WALLET_TAB_UPDATE
-		: WALLET_TAB_ADD;
-};
 
 const roleNumbers = (user = {}) => [
 	...new Set([user.role, ...(Array.isArray(user.roles) ? user.roles : [])]
@@ -349,22 +393,33 @@ const isOrderTakerOnly = (user = {}) => {
 	return isAgent && !hasFullAccess;
 };
 
-const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
+const OverallWalletManagement = ({
+	userId,
+	user,
+	token,
+	ownerId = "",
+	chosenLanguage,
+}) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const txt = { ...getOverallText(chosenLanguage), ...TEXT[isRTL ? "ar" : "en"] };
 	const history = useHistory();
 	const location = useLocation();
+	const dismissedTransactionIdRef = useRef("");
 	const agentOnly = isOrderTakerOnly(user);
 	const ownAgentId = normalizeId(user?._id);
 	const queryTransactionId = normalizeId(queryValue(location.search, "transactionId"));
+	const queryWalletTab =
+		queryValue(location.search, "walletTab") === "update" || queryTransactionId
+			? "update"
+			: "add";
+	const ownerParams = useMemo(() => buildOwnerParams(ownerId), [ownerId]);
 	const [summary, setSummary] = useState(null);
 	const [loadingWallets, setLoadingWallets] = useState(false);
 	const [saving, setSaving] = useState(false);
-	const [activeWalletTab, setActiveWalletTab] = useState(() =>
-		walletTabFromSearch(location.search)
-	);
+	const [activeWalletTab, setActiveWalletTab] = useState(queryWalletTab);
 	const [editingTransactionId, setEditingTransactionId] =
 		useState(queryTransactionId);
+	const [editModalOpen, setEditModalOpen] = useState(Boolean(queryTransactionId));
 	const [entryTransactionId, setEntryTransactionId] = useState("");
 	const [agentPage, setAgentPage] = useState(1);
 	const [txPage, setTxPage] = useState(1);
@@ -380,11 +435,8 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		[summary?.agents]
 	);
 	const visibleAgentRows = useMemo(
-		() =>
-			filters.agentId
-				? agentRows.filter((item) => normalizeId(item.agent) === filters.agentId)
-				: agentRows,
-		[agentRows, filters.agentId]
+		() => agentRows,
+		[agentRows]
 	);
 	const agentOptions = useMemo(
 		() =>
@@ -418,9 +470,6 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		entryAgentRow?.walletRequired === false;
 	const canSubmitEntry =
 		canManage || (agentOnly && !editingTransactionId && !entryAgentIsCommissionOnly);
-	const isUpdateTab = activeWalletTab === WALLET_TAB_UPDATE;
-	const shouldShowUpdatePrompt =
-		isUpdateTab && (!editingTransactionId || entryTransactionId !== editingTransactionId);
 
 	const syncQuery = useCallback(
 		(
@@ -431,7 +480,8 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 			const params = new URLSearchParams(location.search || "");
 			params.set("overall", "wallet-management");
 			params.delete("hotelId");
-			params.set("walletTab", walletTab === WALLET_TAB_UPDATE ? "update" : "add");
+			if (walletTab === "update") params.set("walletTab", "update");
+			else params.delete("walletTab");
 			["agentId"].forEach((key) => {
 				if (nextFilters[key]) params.set(key, nextFilters[key]);
 				else params.delete(key);
@@ -440,7 +490,10 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 			params.delete("endDate");
 			if (transactionId) params.set("transactionId", transactionId);
 			else params.delete("transactionId");
-			history.replace({ pathname: location.pathname, search: `?${params}` });
+			const nextSearch = `?${params.toString()}`;
+			if (nextSearch !== location.search) {
+				history.replace({ pathname: location.pathname, search: nextSearch });
+			}
 		},
 		[
 			activeWalletTab,
@@ -459,7 +512,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}
 		setLoadingWallets(true);
 		try {
-			const data = await getAgentWalletSummary("", userId, token);
+			const data = await getAgentWalletSummary("", userId, token, ownerParams);
 			if (data?.error) {
 				message.error(data.error || txt.error);
 				setSummary(null);
@@ -475,6 +528,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	}, [
 		token,
 		txt.error,
+		ownerParams,
 		userId,
 	]);
 
@@ -483,22 +537,24 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 	}, [loadWallets]);
 
 	useEffect(() => {
-		syncQuery(
-			filters,
-			activeWalletTab === WALLET_TAB_UPDATE ? editingTransactionId : "",
-			activeWalletTab
-		);
+		syncQuery(filters, editingTransactionId, activeWalletTab);
 	}, [activeWalletTab, filters, editingTransactionId, syncQuery]);
 
 	useEffect(() => {
-		const nextTab = walletTabFromSearch(location.search);
-		setActiveWalletTab(nextTab);
+		const nextTab =
+			queryValue(location.search, "walletTab") === "update" ||
+			normalizeId(queryValue(location.search, "transactionId"))
+				? "update"
+				: "add";
+		setActiveWalletTab((current) => (current === nextTab ? current : nextTab));
 		const nextTransactionId = normalizeId(queryValue(location.search, "transactionId"));
 		if (nextTransactionId) {
 			setEditingTransactionId(nextTransactionId);
-		} else if (nextTab === WALLET_TAB_ADD) {
+			setEditModalOpen(true);
+		} else {
 			setEditingTransactionId("");
 			setEntryTransactionId("");
+			setEditModalOpen(false);
 		}
 	}, [location.search]);
 
@@ -526,19 +582,70 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}));
 	}, [agentOnly, editingTransactionId, filters.agentId, ownAgentId]);
 
-	const resetEntry = (nextTab = WALLET_TAB_ADD) => {
-		setActiveWalletTab(nextTab);
+	const resetEntry = useCallback(() => {
+		dismissedTransactionIdRef.current =
+			editingTransactionId ||
+			normalizeId(queryValue(location.search, "transactionId"));
 		setEditingTransactionId("");
 		setEntryTransactionId("");
-		setEntry(buildEmptyEntry(filters.agentId));
+		setEditModalOpen(false);
+		setEntry(buildEmptyEntry(agentOnly ? ownAgentId : filters.agentId));
+	}, [
+		agentOnly,
+		editingTransactionId,
+		filters.agentId,
+		location.search,
+		ownAgentId,
+	]);
+
+	const closeEditModal = useCallback(() => {
+		const currentTransactionId =
+			editingTransactionId ||
+			normalizeId(queryValue(location.search, "transactionId"));
+		dismissedTransactionIdRef.current = currentTransactionId;
+		setEditingTransactionId("");
+		setEntryTransactionId("");
+		setEditModalOpen(false);
+		setEntry(buildEmptyEntry(agentOnly ? ownAgentId : filters.agentId));
+
+		const params = new URLSearchParams(location.search || "");
+		params.set("overall", "wallet-management");
+		params.set("walletTab", "update");
+		params.delete("transactionId");
+		params.delete("hotelId");
+		const nextSearch = `?${params.toString()}`;
+		if (nextSearch !== location.search) {
+			history.replace({ pathname: location.pathname, search: nextSearch });
+		}
+	}, [
+		agentOnly,
+		editingTransactionId,
+		filters.agentId,
+		history,
+		location.pathname,
+		location.search,
+		ownAgentId,
+	]);
+
+	const switchWalletTab = (tab) => {
+		setActiveWalletTab(tab);
+		if (tab === "add") {
+			resetEntry();
+			return;
+		}
+		setEditingTransactionId("");
+		setEntryTransactionId("");
+		setEditModalOpen(false);
 	};
 
 	const editTransaction = useCallback((transaction = {}) => {
 		const transactionId = normalizeId(transaction._id);
 		if (!transactionId) return;
-		setActiveWalletTab(WALLET_TAB_UPDATE);
+		dismissedTransactionIdRef.current = "";
+		setActiveWalletTab("update");
 		setEditingTransactionId(transactionId);
 		setEntryTransactionId(transactionId);
+		setEditModalOpen(true);
 		setFilters((current) => ({
 			...current,
 			agentId: transaction.agentId || current.agentId,
@@ -560,6 +667,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 
 	useEffect(() => {
 		if (!queryTransactionId || !transactionRows.length) return;
+		if (dismissedTransactionIdRef.current === queryTransactionId) return;
 		const transaction = transactionRows.find(
 			(row) => normalizeId(row._id) === queryTransactionId
 		);
@@ -639,16 +747,23 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		};
 		try {
 			const response = agentOnly && !editingTransactionId
-				? await createAgentWalletClaim("", userId, token, payload)
+				? await createAgentWalletClaim("", userId, token, payload, ownerParams)
 				: editingTransactionId
 				? await updateAgentWalletTransaction(
 						"",
 						userId,
 						token,
 						editingTransactionId,
-						payload
+						payload,
+						ownerParams
 				  )
-				: await createAgentWalletTransaction("", userId, token, payload);
+				: await createAgentWalletTransaction(
+						"",
+						userId,
+						token,
+						payload,
+						ownerParams
+				  );
 			if (response?.error) {
 				message.error(isRTL && response.errorArabic ? response.errorArabic : response.error || txt.saveError);
 				return;
@@ -660,7 +775,7 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 					? txt.updated
 					: txt.saved
 			);
-			resetEntry(editingTransactionId ? WALLET_TAB_UPDATE : WALLET_TAB_ADD);
+			resetEntry();
 			loadWallets();
 		} catch (error) {
 			message.error(txt.saveError);
@@ -669,7 +784,12 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}
 	};
 
-	const reviewWalletClaim = async (transaction = {}, action, reason = "") => {
+	const reviewWalletClaim = async (
+		transaction = {},
+		action,
+		reason = "",
+		rejectionType = ""
+	) => {
 		const transactionId = normalizeId(transaction._id);
 		if (!transactionId) return;
 		setSaving(true);
@@ -679,7 +799,8 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 				userId,
 				token,
 				transactionId,
-				{ action, rejectionReason: reason }
+				{ action, rejectionReason: reason, rejectionType },
+				ownerParams
 			);
 			if (response?.error) {
 				message.error(response.error);
@@ -694,23 +815,43 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		}
 	};
 
-	const rejectWalletClaim = (transaction = {}) => {
+	const rejectWalletClaim = (transaction = {}, rejectionType = "correction_required") => {
 		let reason = "";
 		Modal.confirm({
-			title: txt.rejectClaimTitle,
+			title:
+				rejectionType === "final"
+					? txt.finalRejectTitle
+					: txt.correctionRejectTitle || txt.rejectClaimTitle,
 			content: (
-				<Input.TextArea
-					rows={3}
-					placeholder={txt.rejectionReason}
-					onChange={(event) => {
-						reason = event.target.value;
-					}}
-				/>
+				<RejectDialogContent>
+					<p>
+						{rejectionType === "final"
+							? txt.finalRejectHint
+							: txt.correctionRejectHint}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={txt.rejectionReason}
+						onChange={(event) => {
+							reason = event.target.value;
+						}}
+					/>
+				</RejectDialogContent>
 			),
-			okText: txt.reject,
+			okText:
+				rejectionType === "final"
+					? txt.rejectFinal
+					: txt.rejectForCorrection || txt.reject,
 			cancelText: txt.cancel || "Cancel",
 			okButtonProps: { danger: true },
-			onOk: () => reviewWalletClaim(transaction, "reject", reason),
+			onOk: () => {
+				const trimmed = String(reason || "").trim();
+				if (!trimmed) {
+					message.error(txt.rejectionReason);
+					return Promise.reject(new Error("rejection reason required"));
+				}
+				return reviewWalletClaim(transaction, "reject", trimmed, rejectionType);
+			},
 		});
 	};
 
@@ -741,16 +882,181 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		);
 	};
 
-	const switchWalletTab = (tab) => {
-		if (tab === WALLET_TAB_ADD) {
-			resetEntry(WALLET_TAB_ADD);
-			return;
-		}
-		setActiveWalletTab(WALLET_TAB_UPDATE);
-		if (!editingTransactionId) {
-			setEntryTransactionId("");
-			setEntry(buildEmptyEntry(filters.agentId));
-		}
+	const renderEntryForm = (mode = "add") => {
+		const isEditing = mode === "edit" && Boolean(editingTransactionId);
+		return (
+			<EntryGrid>
+				{agentOnly ? (
+					<SelfAgentField>
+						<span>
+							{txt.selfAgent}
+							<em>{txt.requiredMark}</em>
+						</span>
+						<strong>
+							{agentLabel(entryAgentRow?.agent || user || {})}
+						</strong>
+						<small>{txt.selfAgentHint}</small>
+					</SelfAgentField>
+				) : (
+					<label>
+						<span>{txt.agent}<em>{txt.requiredMark}</em></span>
+						<Select
+							value={entry.agentId || undefined}
+							placeholder={txt.chooseAgent}
+							showSearch
+							optionFilterProp='label'
+							options={agentOptions}
+							onChange={(value) => {
+								setEntry((current) => ({ ...current, agentId: value || "" }));
+								updateFilter("agentId", value || "");
+							}}
+						/>
+					</label>
+				)}
+				{!agentOnly && mode === "add" ? (
+					<FormHint className='wide'>
+						<ExclamationCircleOutlined />
+						<span>{txt.formAgentHint}</span>
+					</FormHint>
+				) : null}
+				<label>
+					<span>{txt.type}<em>{txt.requiredMark}</em></span>
+					<Select
+						value={entry.transactionType}
+						options={transactionOptions(txt)}
+						disabled={agentOnly && !isEditing}
+						onChange={(value) =>
+							setEntry((current) => ({ ...current, transactionType: value }))
+						}
+					/>
+				</label>
+				<label>
+					<span>{txt.amount}<em>{txt.requiredMark}</em></span>
+					<InputNumber
+						value={entry.amount}
+						min={0}
+						precision={2}
+						controls={false}
+						addonAfter='SAR'
+						onChange={(value) =>
+							setEntry((current) => ({ ...current, amount: value || 0 }))
+						}
+					/>
+				</label>
+				<label>
+					<span>{txt.date}<em>{txt.requiredMark}</em></span>
+					<DatePicker
+						className='wallet-date-picker'
+						format='YYYY-MM-DD'
+						suffixIcon={<CalendarOutlined />}
+						value={datePickerValue(entry.transactionDate)}
+						disabledDate={(current) =>
+							current && current > dayjs().endOf("day")
+						}
+						onChange={(value) =>
+							setEntry((current) => ({
+								...current,
+								transactionDate: datePickerString(value),
+							}))
+						}
+					/>
+				</label>
+				<label className='wide'>
+					<span>{txt.reference}<small>{txt.optional}</small></span>
+					<Input
+						value={entry.reference}
+						onChange={(event) =>
+							setEntry((current) => ({ ...current, reference: event.target.value }))
+						}
+					/>
+				</label>
+				<label className='wide'>
+					<span>{txt.note}<small>{txt.optional}</small></span>
+					<Input.TextArea
+						value={entry.note}
+						rows={2}
+						onChange={(event) =>
+							setEntry((current) => ({ ...current, note: event.target.value }))
+						}
+					/>
+				</label>
+				<AttachmentPicker className='wide'>
+					<div className='attachment-picker-head'>
+						<div>
+							<strong><PaperClipOutlined /> {txt.attachments}</strong>
+							<span>{txt.attachmentHint}</span>
+						</div>
+						<span className='attachment-count'>
+							{txt.attachmentCount}: {entryAttachments.length}/{walletAttachmentLimit}
+						</span>
+					</div>
+					<label className='attachment-upload-button'>
+						<PaperClipOutlined />
+						{txt.uploadAttachments}
+						<input
+							type='file'
+							multiple
+							accept='image/*,application/pdf,.pdf'
+							disabled={saving}
+							onChange={handleAttachmentFiles}
+						/>
+					</label>
+					{entryAttachments.length ? (
+						<AttachmentList>
+							{entryAttachments.map((attachment, index) => (
+								<li key={`${attachment.public_id || attachment.fileName || index}`}>
+									<div>
+										<PaperClipOutlined />
+										<span>{attachmentLabel(attachment, index)}</span>
+										<small>{formatFileSize(attachment.fileSize)}</small>
+									</div>
+									<div className='attachment-actions'>
+										{attachment.url ? (
+											<a href={attachment.url} target='_blank' rel='noreferrer'>
+												{txt.viewAttachment}
+											</a>
+										) : (
+											<span>{txt.pendingUpload}</span>
+										)}
+										<button
+											type='button'
+											disabled={saving}
+											onClick={() => removeEntryAttachment(index)}
+										>
+											{txt.removeAttachment}
+										</button>
+									</div>
+								</li>
+							))}
+						</AttachmentList>
+					) : (
+						<EmptyAttachments>
+							<PaperClipOutlined />
+							<span>{txt.noAttachments}</span>
+						</EmptyAttachments>
+					)}
+				</AttachmentPicker>
+				<FormActions className='wide'>
+					<Button onClick={() => (isEditing ? closeEditModal() : resetEntry())}>
+						{isEditing ? txt.cancelEdit : txt.newEntry}
+					</Button>
+					<Button
+						type='primary'
+						className='wallet-save-action'
+						icon={isEditing ? <EditOutlined /> : <PlusOutlined />}
+						loading={saving}
+						onClick={saveEntry}
+						disabled={!canSubmitEntry}
+					>
+						{isEditing
+							? txt.update
+							: agentOnly
+							? txt.claimWalletCredit
+							: txt.save}
+					</Button>
+				</FormActions>
+			</EntryGrid>
+		);
 	};
 
 	const agentColumns = [
@@ -785,11 +1091,72 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 		},
 	];
 
+	const renderTransactionActions = (row) => {
+		const isPendingClaim =
+			row.source === "agent_claim" &&
+			String(row.status || "").toLowerCase() === "pending";
+		if (!canManage || row.reservationId) return "-";
+		if (isPendingClaim) {
+			return (
+				<WalletActionButtons>
+					<Button
+						size='small'
+						icon={<EditOutlined />}
+						onClick={() => editTransaction(row)}
+					>
+						{txt.edit}
+					</Button>
+					<Button
+						size='small'
+						type='primary'
+						icon={<CheckCircleOutlined />}
+						loading={saving}
+						onClick={() => reviewWalletClaim(row, "approve")}
+					>
+						{txt.approve}
+					</Button>
+					<Button
+						size='small'
+						danger
+						icon={<CloseCircleOutlined />}
+						loading={saving}
+						onClick={() => rejectWalletClaim(row, "correction_required")}
+					>
+						{txt.rejectForCorrection || txt.reject}
+					</Button>
+					<Button
+						size='small'
+						danger
+						icon={<StopOutlined />}
+						loading={saving}
+						onClick={() => rejectWalletClaim(row, "final")}
+					>
+						{txt.rejectFinal}
+					</Button>
+				</WalletActionButtons>
+			);
+		}
+		return (
+			<Button
+				size='small'
+				icon={<EditOutlined />}
+				onClick={() => editTransaction(row)}
+			>
+				{txt.edit}
+			</Button>
+		);
+	};
+
 	const transactionColumns = [
 		{
 			title: "#",
 			width: 58,
 			render: (_, __, index) => (txPage - 1) * 8 + index + 1,
+		},
+		{
+			title: txt.actions,
+			width: 170,
+			render: (_, row) => renderTransactionActions(row),
 		},
 		{ title: txt.agent, dataIndex: "agentName", render: (value) => titleCase(value || "-") },
 		{
@@ -820,53 +1187,6 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 			dataIndex: "attachments",
 			render: renderAttachments,
 		},
-		{
-			title: txt.actions,
-			render: (_, row) => {
-				const isPendingClaim =
-					row.source === "agent_claim" &&
-					String(row.status || "").toLowerCase() === "pending";
-				if (!canManage || row.reservationId) return "-";
-				if (isPendingClaim) {
-					return (
-						<WalletActionButtons>
-							<Button
-								size='small'
-								icon={<EditOutlined />}
-								onClick={() => editTransaction(row)}
-							>
-								{txt.edit}
-							</Button>
-							<Button
-								size='small'
-								type='primary'
-								loading={saving}
-								onClick={() => reviewWalletClaim(row, "approve")}
-							>
-								{txt.approve}
-							</Button>
-							<Button
-								size='small'
-								danger
-								loading={saving}
-								onClick={() => rejectWalletClaim(row)}
-							>
-								{txt.reject}
-							</Button>
-						</WalletActionButtons>
-					);
-				}
-				return (
-					<Button
-						size='small'
-						icon={<EditOutlined />}
-						onClick={() => editTransaction(row)}
-					>
-						{txt.edit}
-					</Button>
-				);
-			},
-		},
 	];
 
 	return (
@@ -882,260 +1202,117 @@ const OverallWalletManagement = ({ userId, user, token, chosenLanguage }) => {
 								<p>{txt.subtitle}</p>
 							</div>
 						</WalletPageHeader>
-						<WalletTabs>
+						<WalletTabs role='tablist' aria-label={txt.title}>
 							<button
 								type='button'
-								className={activeWalletTab === WALLET_TAB_ADD ? "active" : ""}
-								onClick={() => switchWalletTab(WALLET_TAB_ADD)}
+								role='tab'
+								aria-selected={activeWalletTab === "add"}
+								data-active={activeWalletTab === "add" ? "true" : "false"}
+								onClick={() => switchWalletTab("add")}
 							>
 								<PlusOutlined />
-								<span>{txt.addTab}</span>
+								<span>{agentOnly ? txt.claimWalletCredit : txt.addTab}</span>
 							</button>
 							<button
 								type='button'
-								className={activeWalletTab === WALLET_TAB_UPDATE ? "active" : ""}
-								onClick={() => switchWalletTab(WALLET_TAB_UPDATE)}
+								role='tab'
+								aria-selected={activeWalletTab === "update"}
+								data-active={activeWalletTab === "update" ? "true" : "false"}
+								onClick={() => switchWalletTab("update")}
 							>
 								<EditOutlined />
 								<span>{txt.updateTab}</span>
 							</button>
 						</WalletTabs>
-						<EntryPanel>
-							<PanelTitle>
-								<span>
-									{isUpdateTab
-										? txt.update
-										: agentOnly
-										? txt.claimWalletCredit
-										: txt.entryTitle}
-								</span>
-								<div className='panel-title-actions'>
-									<Button
-										icon={<ReloadOutlined />}
-										onClick={loadWallets}
-									>
+
+						{activeWalletTab === "add" ? (
+							<EntryPanel>
+								<PanelTitle>
+									<span>{agentOnly ? txt.claimWalletCredit : txt.entryTitle}</span>
+									<Button icon={<ReloadOutlined />} onClick={loadWallets}>
 										{txt.refresh}
 									</Button>
-									{editingTransactionId && (
-										<Button
-											type='link'
-											onClick={() => resetEntry(WALLET_TAB_UPDATE)}
-										>
-											{txt.cancelEdit}
-										</Button>
-									)}
-								</div>
-							</PanelTitle>
-							{shouldShowUpdatePrompt ? (
-								<UpdatePrompt>
-									<EditOutlined />
-									<strong>{txt.updatePromptTitle}</strong>
-									<span>{txt.updatePrompt}</span>
-								</UpdatePrompt>
-							) : (
-							<EntryGrid>
-								{agentOnly ? (
-									<SelfAgentField>
-										<span>
-											{txt.selfAgent}
-											<em>{txt.requiredMark}</em>
-										</span>
-										<strong>
-											{agentLabel(entryAgentRow?.agent || user || {})}
-										</strong>
-										<small>{txt.selfAgentHint}</small>
-									</SelfAgentField>
-								) : (
-									<label>
-										<span>{txt.agent}<em>{txt.requiredMark}</em></span>
-										<Select
-											value={entry.agentId || undefined}
-											placeholder={txt.chooseAgent}
-											showSearch
-											optionFilterProp='label'
-											options={agentOptions}
-											onChange={(value) => {
-												setEntry((current) => ({ ...current, agentId: value || "" }));
-												updateFilter("agentId", value || "");
+								</PanelTitle>
+								{renderEntryForm("add")}
+							</EntryPanel>
+						) : (
+							<Spin spinning={loadingWallets}>
+								<UpdateWorkspace>
+									<Panel>
+										<PanelTitle>
+											<span>{txt.agents}</span>
+											<small>{txt.allWalletData}</small>
+										</PanelTitle>
+										<Table
+											rowKey={(row) => normalizeId(row.agent)}
+											dataSource={visibleAgentRows}
+											columns={agentColumns}
+											size='small'
+											scroll={{ x: 920 }}
+											pagination={{
+												pageSize: 10,
+												current: agentPage,
+												onChange: setAgentPage,
 											}}
+											locale={{ emptyText: txt.noData }}
 										/>
-									</label>
-								)}
-								<label>
-									<span>{txt.type}<em>{txt.requiredMark}</em></span>
-									<Select
-										value={entry.transactionType}
-										options={transactionOptions(txt)}
-										disabled={agentOnly && !editingTransactionId}
-										onChange={(value) =>
-											setEntry((current) => ({ ...current, transactionType: value }))
-										}
-									/>
-								</label>
-								<label>
-									<span>{txt.amount}<em>{txt.requiredMark}</em></span>
-									<InputNumber
-										value={entry.amount}
-										min={0}
-										precision={2}
-										controls={false}
-										addonAfter='SAR'
-										onChange={(value) =>
-											setEntry((current) => ({ ...current, amount: value || 0 }))
-										}
-									/>
-								</label>
-								<label>
-									<span>{txt.date}<em>{txt.requiredMark}</em></span>
-									<input
-										type='date'
-										value={entry.transactionDate}
-										max={today()}
-										onChange={(event) =>
-											setEntry((current) => ({
-												...current,
-												transactionDate: event.target.value || today(),
-											}))
-										}
-									/>
-								</label>
-								<label>
-									<span>{txt.reference}<small>{txt.optional}</small></span>
-									<Input
-										value={entry.reference}
-										onChange={(event) =>
-											setEntry((current) => ({ ...current, reference: event.target.value }))
-										}
-									/>
-								</label>
-								<label className='wide'>
-									<span>{txt.note}<small>{txt.optional}</small></span>
-									<Input.TextArea
-										value={entry.note}
-										rows={4}
-										onChange={(event) =>
-											setEntry((current) => ({ ...current, note: event.target.value }))
-										}
-									/>
-								</label>
-								<AttachmentPicker className='wide'>
-									<div className='attachment-picker-head'>
-										<div>
-											<strong><PaperClipOutlined /> {txt.attachments}</strong>
-											<span>{txt.attachmentHint}</span>
-										</div>
-										<span className='attachment-count'>
-											{txt.attachmentCount}: {entryAttachments.length}/{walletAttachmentLimit}
-										</span>
-									</div>
-									<label className='attachment-upload-button'>
-										<PaperClipOutlined />
-										{txt.uploadAttachments}
-										<input
-											type='file'
-											multiple
-											accept='image/*,application/pdf,.pdf'
-											disabled={saving}
-											onChange={handleAttachmentFiles}
+									</Panel>
+									<Panel>
+										<PanelTitle>
+											<span>{txt.transactions}</span>
+											<Button size='small' icon={<ReloadOutlined />} onClick={loadWallets}>
+												{txt.refresh}
+											</Button>
+										</PanelTitle>
+										<Table
+											rowKey={(row) =>
+												[
+													row._id,
+													row.reference,
+													row.transactionDate,
+													row.agentId,
+													row.hotelId,
+												]
+													.map((item) => normalizeId(item) || String(item || ""))
+													.filter(Boolean)
+													.join("-")
+											}
+											dataSource={transactionRows}
+											columns={transactionColumns}
+											size='small'
+											scroll={{ x: 1380 }}
+											rowClassName={(row) =>
+												normalizeId(row._id) === editingTransactionId
+													? "overall-wallet-row-selected"
+													: ""
+											}
+											pagination={{
+												pageSize: 8,
+												current: txPage,
+												onChange: setTxPage,
+											}}
+											locale={{ emptyText: txt.noData }}
 										/>
-									</label>
-									{entryAttachments.length ? (
-										<AttachmentList>
-											{entryAttachments.map((attachment, index) => (
-												<li key={`${attachment.public_id || attachment.fileName || index}`}>
-													<div>
-														<PaperClipOutlined />
-														<span>{attachmentLabel(attachment, index)}</span>
-														<small>{formatFileSize(attachment.fileSize)}</small>
-													</div>
-													<div className='attachment-actions'>
-														{attachment.url ? (
-															<a href={attachment.url} target='_blank' rel='noreferrer'>
-																{txt.viewAttachment}
-															</a>
-														) : (
-															<span>{txt.pendingUpload}</span>
-														)}
-														<button
-															type='button'
-															disabled={saving}
-															onClick={() => removeEntryAttachment(index)}
-														>
-															{txt.removeAttachment}
-														</button>
-													</div>
-												</li>
-											))}
-										</AttachmentList>
-									) : (
-										<EmptyAttachments>
-											<PaperClipOutlined />
-											<span>{txt.noAttachments}</span>
-										</EmptyAttachments>
-									)}
-								</AttachmentPicker>
-								<FormActions className='wide'>
-									<Button onClick={() => resetEntry(WALLET_TAB_ADD)}>
-										{txt.newEntry}
-									</Button>
-									<Button
-										type='primary'
-										className='wallet-save-action'
-										icon={editingTransactionId ? <EditOutlined /> : <PlusOutlined />}
-										loading={saving}
-										onClick={saveEntry}
-										disabled={!canSubmitEntry}
-									>
-										{editingTransactionId
-											? txt.update
-											: agentOnly
-											? txt.claimWalletCredit
-											: txt.save}
-									</Button>
-								</FormActions>
-							</EntryGrid>
-							)}
-						</EntryPanel>
+									</Panel>
+								</UpdateWorkspace>
+							</Spin>
+						)}
 
-						<Spin spinning={loadingWallets}>
-							<Panel>
-								<PanelTitle>{txt.agents}</PanelTitle>
-								<Table
-									rowKey={(row) => normalizeId(row.agent)}
-									dataSource={visibleAgentRows}
-									columns={agentColumns}
-									size='small'
-									scroll={{ x: 920 }}
-									pagination={{
-										pageSize: 10,
-										current: agentPage,
-										onChange: setAgentPage,
-									}}
-									locale={{ emptyText: txt.noData }}
-								/>
-							</Panel>
-							<Panel>
-								<PanelTitle>{txt.transactions}</PanelTitle>
-								<Table
-									rowKey={(row, index) => `${row._id || row.reference || index}-${row.hotelId}`}
-									dataSource={transactionRows}
-									columns={transactionColumns}
-									size='small'
-									scroll={{ x: 1380 }}
-									rowClassName={(row) =>
-										normalizeId(row._id) === editingTransactionId
-											? "overall-wallet-row-selected"
-											: ""
-									}
-									pagination={{
-										pageSize: 8,
-										current: txPage,
-										onChange: setTxPage,
-									}}
-									locale={{ emptyText: txt.noData }}
-								/>
-							</Panel>
-						</Spin>
+						<Modal
+							open={activeWalletTab === "update" && editModalOpen}
+							title={txt.update}
+							footer={null}
+							width={920}
+							zIndex={2600}
+							centered
+							destroyOnClose
+							maskClosable={!saving}
+							keyboard={!saving}
+							onCancel={closeEditModal}
+							className='wallet-edit-modal'
+						>
+							<ModalFormPanel>{renderEntryForm("edit")}</ModalFormPanel>
+						</Modal>
 				</>
 			</WalletShell>
 		</OverallPageShell>
@@ -1148,17 +1325,17 @@ const WalletShell = styled.div`
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	display: grid;
-	gap: 12px;
+	gap: 9px;
 `;
 
 const WalletPageHeader = styled.header`
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 10px;
 	min-width: 0;
-	padding: 12px 14px;
+	padding: 9px 12px;
 	border: 1px solid rgba(216, 232, 247, 0.95);
-	border-radius: 12px;
+	border-radius: 10px;
 	background:
 		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.98)),
 		linear-gradient(135deg, rgba(100, 22, 110, 0.08), rgba(14, 116, 144, 0.06));
@@ -1168,10 +1345,10 @@ const WalletPageHeader = styled.header`
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		flex: 0 0 38px;
-		width: 38px;
-		height: 38px;
-		border-radius: 10px;
+		flex: 0 0 34px;
+		width: 34px;
+		height: 34px;
+		border-radius: 9px;
 		background: linear-gradient(135deg, #24102d, #64166e);
 		color: #ffffff;
 		font-size: 1.1rem;
@@ -1189,7 +1366,7 @@ const WalletPageHeader = styled.header`
 	h1 {
 		margin: 0;
 		color: #111827;
-		font-size: clamp(1rem, 1.3vw, 1.18rem);
+		font-size: clamp(0.96rem, 1.1vw, 1.08rem);
 		font-weight: 950;
 		line-height: 1.2;
 		letter-spacing: 0;
@@ -1198,14 +1375,14 @@ const WalletPageHeader = styled.header`
 	p {
 		margin: 0;
 		color: #5d6678;
-		font-size: 0.78rem;
+		font-size: 0.73rem;
 		font-weight: 800;
 		line-height: 1.45;
 	}
 
 	@media (max-width: 560px) {
 		align-items: flex-start;
-		padding: 10px 11px;
+		padding: 9px 10px;
 
 		.wallet-title-icon {
 			flex-basis: 34px;
@@ -1219,131 +1396,66 @@ const WalletTabs = styled.div`
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
-	min-width: 0;
-	padding: 8px;
-	border: 1px solid rgba(45, 93, 145, 0.22);
+	padding: 7px;
+	border: 1px solid #d8e8f7;
 	border-radius: 10px;
-	background:
-		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.98)),
-		linear-gradient(180deg, rgba(141, 76, 157, 0.12), rgba(16, 32, 51, 0.08));
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.9),
-		0 8px 18px rgba(16, 32, 51, 0.05);
+	background: #f8fbff;
 
 	button {
-		position: relative;
+		min-height: 36px;
+		border: 1px solid #cfe0ef;
+		border-radius: 8px;
+		background: #ffffff;
+		color: #102033;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		min-width: 0;
-		min-height: 38px;
-		padding: 8px 12px;
-		border: 1px solid rgba(45, 93, 145, 0.18);
-		border-radius: 8px;
-		background: linear-gradient(180deg, #ffffff 0%, #f4f8fe 100%);
-		color: #102033;
-		cursor: pointer;
+		gap: 7px;
 		font-size: 0.82rem;
 		font-weight: 950;
-		line-height: 1.2;
+		cursor: pointer;
 		transition:
 			background 0.18s ease,
 			border-color 0.18s ease,
 			box-shadow 0.18s ease,
-			color 0.18s ease,
-			transform 0.18s ease;
+			color 0.18s ease;
 	}
 
-	button.active {
-		background:
-			linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 36%),
-			linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
-		border-color: rgba(183, 123, 198, 0.72);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.2),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.22),
-			0 8px 18px rgba(80, 23, 96, 0.2);
+	button[data-active="true"] {
+		border-color: #64166e;
+		background: linear-gradient(135deg, #24102d, #64166e);
 		color: #ffffff;
-		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
-		transform: translateY(-1px);
+		box-shadow: 0 10px 18px rgba(80, 23, 96, 0.18);
 	}
 
-	button.active::after {
-		content: "";
-		position: absolute;
-		inset-inline: 18px;
-		bottom: 5px;
-		height: 2px;
-		border-radius: 999px;
-		background: linear-gradient(90deg, #d7b5df, #ffffff, #67a7df);
-		box-shadow: 0 0 10px rgba(215, 181, 223, 0.62);
-	}
-
-	button:hover:not(.active),
-	button:focus-visible:not(.active) {
-		background: linear-gradient(180deg, #244e7d 0%, #102033 100%);
-		border-color: rgba(45, 93, 145, 0.35);
-		color: #ffffff;
-		outline: none;
-	}
-
-	@media (max-width: 520px) {
+	@media (max-width: 560px) {
 		grid-template-columns: 1fr;
 	}
 `;
 
 const EntryPanel = styled.section`
 	border: 1px solid #d8e8f7;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #ffffff;
 	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-	padding: 12px;
+	padding: 10px;
 `;
 
-const UpdatePrompt = styled.div`
+const ModalFormPanel = styled.div`
+	padding-top: 2px;
+`;
+
+const UpdateWorkspace = styled.div`
 	display: grid;
-	justify-items: center;
-	gap: 8px;
-	min-height: 142px;
-	padding: 24px 16px;
-	border: 1px dashed #b9d7f5;
-	border-radius: 12px;
-	background: linear-gradient(135deg, #f8fbff 0%, #edf7ff 100%);
-	color: #17324d;
-	text-align: center;
-
-	svg {
-		display: inline-flex;
-		width: 36px;
-		height: 36px;
-		padding: 8px;
-		border-radius: 999px;
-		background: #ffffff;
-		color: #64166e;
-		box-shadow: 0 8px 16px rgba(80, 23, 96, 0.12);
-	}
-
-	strong {
-		font-size: 0.95rem;
-		font-weight: 950;
-	}
-
-	span {
-		max-width: 560px;
-		color: #52677a;
-		font-size: 0.8rem;
-		font-weight: 850;
-		line-height: 1.55;
-	}
+	gap: 9px;
 `;
 
 const Panel = styled.section`
 	border: 1px solid #d8e8f7;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: #ffffff;
 	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-	padding: 10px;
+	padding: 8px;
 	overflow: hidden;
 
 	.ant-table-thead > tr > th {
@@ -1352,11 +1464,14 @@ const Panel = styled.section`
 		font-weight: 900;
 		text-align: inherit;
 		white-space: nowrap;
+		padding: 8px 9px;
 	}
 
 	.ant-table-tbody > tr > td {
 		text-align: inherit;
 		vertical-align: middle;
+		padding: 7px 9px;
+		font-size: 0.78rem;
 	}
 
 	.overall-wallet-row-selected > td {
@@ -1373,9 +1488,9 @@ const PanelTitle = styled.h2`
 	align-items: center;
 	justify-content: space-between;
 	gap: 10px;
-	margin: 0 0 10px;
+	margin: 0 0 8px;
 	color: #0f172a;
-	font-size: 1rem;
+	font-size: 0.92rem;
 	font-weight: 950;
 
 	.panel-title-actions {
@@ -1384,6 +1499,13 @@ const PanelTitle = styled.h2`
 		justify-content: flex-end;
 		gap: 8px;
 		flex-wrap: wrap;
+	}
+
+	> small {
+		color: #64748b;
+		font-size: 0.74rem;
+		font-weight: 850;
+		line-height: 1.35;
 	}
 
 	@media (max-width: 560px) {
@@ -1400,14 +1522,34 @@ const PanelTitle = styled.h2`
 	}
 `;
 
+const FormHint = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 34px;
+	padding: 7px 9px;
+	border: 1px solid #d8e8f7;
+	border-radius: 9px;
+	background: #f8fbff;
+	color: #52677a;
+	font-size: 0.74rem;
+	font-weight: 850;
+	line-height: 1.45;
+
+	svg {
+		flex: 0 0 auto;
+		color: #64166e;
+	}
+`;
+
 const EntryGrid = styled.div`
 	display: grid;
 	grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
-	gap: 12px;
+	gap: 9px;
 
 	label {
 		display: grid;
-		gap: 7px;
+		gap: 5px;
 		min-width: 0;
 		color: #0f172a;
 		font-weight: 900;
@@ -1418,17 +1560,17 @@ const EntryGrid = styled.div`
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 	}
 
 	em,
 	small {
 		display: inline-flex;
-		min-height: 20px;
+		min-height: 18px;
 		align-items: center;
 		padding: 2px 8px;
 		border-radius: 999px;
-		font-size: 0.68rem;
+		font-size: 0.64rem;
 		font-style: normal;
 		font-weight: 900;
 		white-space: nowrap;
@@ -1447,17 +1589,25 @@ const EntryGrid = styled.div`
 	}
 
 	.ant-select,
+	.ant-picker,
 	.ant-input-number,
 	.ant-input {
 		width: 100%;
 	}
 
 	input,
+	.ant-picker,
 	.ant-select-selector,
 	.ant-input-number,
 	.ant-input {
-		min-height: 40px !important;
+		min-height: 36px !important;
 		border-radius: 8px !important;
+	}
+
+	.ant-picker-input > input {
+		min-height: 24px !important;
+		padding: 0;
+		border: 0;
 	}
 
 	input {
@@ -1476,7 +1626,7 @@ const EntryGrid = styled.div`
 
 const SelfAgentField = styled.div`
 	display: grid;
-	gap: 7px;
+	gap: 5px;
 	min-width: 0;
 	color: #0f172a;
 	font-weight: 900;
@@ -1486,11 +1636,11 @@ const SelfAgentField = styled.div`
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 	}
 
 	strong {
-		min-height: 40px;
+		min-height: 36px;
 		display: flex;
 		align-items: center;
 		padding: 8px 10px;
@@ -1498,7 +1648,7 @@ const SelfAgentField = styled.div`
 		border-radius: 8px;
 		background: #f8fbff;
 		color: #102033;
-		font-size: 0.92rem;
+		font-size: 0.86rem;
 		overflow-wrap: anywhere;
 	}
 
@@ -1508,7 +1658,7 @@ const SelfAgentField = styled.div`
 		border: 0;
 		background: transparent;
 		color: #667085;
-		font-size: 0.76rem;
+		font-size: 0.72rem;
 		line-height: 1.45;
 		white-space: normal;
 	}
@@ -1518,25 +1668,25 @@ const FormActions = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 10px;
+	gap: 8px;
 	flex-wrap: wrap;
-	padding-top: 4px;
+	padding-top: 2px;
 
 	.ant-btn {
-		min-height: 38px;
+		min-height: 34px;
 		border-radius: 8px;
 		font-weight: 900;
 	}
 
 	.wallet-save-action {
-		min-width: min(280px, 100%);
-		min-height: 46px;
-		padding-inline: 28px;
+		min-width: min(250px, 100%);
+		min-height: 40px;
+		padding-inline: 22px;
 		border: 0;
-		border-radius: 11px;
+		border-radius: 9px;
 		background: linear-gradient(135deg, #102033 0%, #352044 48%, #6f1f78 100%);
 		color: #ffffff;
-		font-size: 0.92rem;
+		font-size: 0.84rem;
 		font-weight: 950;
 		box-shadow:
 			inset 0 1px 0 rgba(255, 255, 255, 0.2),
@@ -1576,12 +1726,25 @@ const WalletActionButtons = styled.div`
 	}
 `;
 
+const RejectDialogContent = styled.div`
+	display: grid;
+	gap: 10px;
+
+	p {
+		margin: 0;
+		color: #52677a;
+		font-size: 0.82rem;
+		font-weight: 850;
+		line-height: 1.5;
+	}
+`;
+
 const AttachmentPicker = styled.div`
 	display: grid;
-	gap: 12px;
-	padding: 14px;
+	gap: 9px;
+	padding: 10px;
 	border: 1px solid #d8e8f7;
-	border-radius: 12px;
+	border-radius: 10px;
 	background: linear-gradient(135deg, #f8fbff 0%, #edf7ff 100%);
 
 	.attachment-picker-head {
@@ -1608,14 +1771,14 @@ const AttachmentPicker = styled.div`
 
 	.attachment-picker-head span {
 		color: #64748b;
-		font-size: 0.78rem;
+		font-size: 0.72rem;
 		font-weight: 800;
 	}
 
 	.attachment-count {
 		display: inline-flex;
 		align-items: center;
-		min-height: 26px;
+		min-height: 24px;
 		padding: 3px 10px;
 		border: 1px solid #bfdbfe;
 		border-radius: 999px;
@@ -1628,12 +1791,12 @@ const AttachmentPicker = styled.div`
 	.attachment-upload-button {
 		position: relative;
 		width: fit-content;
-		min-height: 38px;
+		min-height: 34px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 7px;
-		padding: 8px 16px;
+		padding: 7px 14px;
 		border-radius: 9px;
 		background: #1677ff;
 		color: #fff;
@@ -1657,7 +1820,7 @@ const AttachmentPicker = styled.div`
 `;
 
 const EmptyAttachments = styled.div`
-	min-height: 48px;
+	min-height: 40px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1666,7 +1829,7 @@ const EmptyAttachments = styled.div`
 	border-radius: 10px;
 	background: rgba(255, 255, 255, 0.7);
 	color: #64748b;
-	font-size: 0.78rem;
+	font-size: 0.72rem;
 	font-weight: 850;
 	text-align: center;
 

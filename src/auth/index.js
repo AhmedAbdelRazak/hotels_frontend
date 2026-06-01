@@ -271,7 +271,12 @@ export const getBaseAuthentication = () => {
 	return baseAuth;
 };
 
-export const startDashboardPreview = ({ auth, preview, selectedHotel }) => {
+export const startDashboardPreview = ({
+	auth,
+	preview,
+	selectedHotel,
+	returnTo = "",
+}) => {
 	if (
 		typeof window === "undefined" ||
 		!auth?.token ||
@@ -289,6 +294,7 @@ export const startDashboardPreview = ({ auth, preview, selectedHotel }) => {
 			preview: preview || {},
 			actor: baseAuth?.user || null,
 			originalSelectedHotel,
+			returnTo,
 			startedAt: new Date().toISOString(),
 		}),
 	);
@@ -322,6 +328,7 @@ export const isAuthenticated = () => {
 				dashboardPreview: {
 					...(preview.preview || {}),
 					actor: preview.actor || baseAuth?.user || null,
+					returnTo: preview.returnTo || preview.preview?.returnTo || "",
 					startedAt: preview.startedAt,
 				},
 			};

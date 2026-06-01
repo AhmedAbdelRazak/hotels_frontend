@@ -3812,16 +3812,25 @@ const OwnerAccountsModal = ({
 					auth: { token: data.token, user: data.user },
 					preview: data.preview,
 					selectedHotel,
+					returnTo: `${location.pathname}${location.search || ""}`,
 				});
-				const roleKey = getPrimaryScopedRole(data.user);
 				const ownerId =
 					normalizeHotelId(data.preview?.ownerId) ||
 					normalizeHotelId(data.user?.belongsToId);
+				const previewParams = new URLSearchParams();
+				if (ownerId) previewParams.set("ownerId", ownerId);
+				previewParams.set("overall", "summary");
+				previewParams.set("page", "1");
+				const previewSearch = previewParams.toString();
 				message.success(
 					isRTL ? "تم فتح معاينة الحساب." : "Account preview opened."
 				);
 				onClose?.();
-				history.push(getScopedRouteForRole(roleKey, ownerId, hotelId));
+				history.push(
+					`/hotel-management/main-dashboard${
+						previewSearch ? `?${previewSearch}` : ""
+					}`
+				);
 			})
 			.finally(() => setPreviewingAccountId(""));
 	};

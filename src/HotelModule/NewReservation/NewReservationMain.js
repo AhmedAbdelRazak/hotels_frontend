@@ -36,6 +36,15 @@ import { normalizePaymentMethod } from "../utils/paymentMethods";
 const defaultAgentBookingSource = (user) =>
 	String(user?.companyName || user?.name || user?.email || "").trim();
 
+const DEFAULT_AGENT_COMMISSION_PERCENT = 8;
+
+const normalizeAgentCommercialModel = (value = "") => {
+	const normalized = String(value || "").trim().toLowerCase();
+	return ["wallet_inventory", "commission_only", "mixed"].includes(normalized)
+		? normalized
+		: "wallet_inventory";
+};
+
 const normalizeReservationId = (value) => {
 	if (!value) return "";
 	if (typeof value === "object") return String(value._id || value.id || "");
@@ -118,6 +127,13 @@ const NewReservationMain = ({
 	const [start_date_Map, setStart_date_Map] = useState("");
 	const [end_date_Map, setEnd_date_Map] = useState("");
 	const [paidAmount, setPaidAmount] = useState("");
+	const [agentCommissionPercent, setAgentCommissionPercent] = useState(
+		DEFAULT_AGENT_COMMISSION_PERCENT,
+	);
+	const [agentCommissionAmount, setAgentCommissionAmount] = useState(0);
+	const [agentSettlementModel, setAgentSettlementModel] = useState(
+		"agent_wallet_commission",
+	);
 	const [currentRoom, setCurrentRoom] = useState(null);
 	const [pricingByDay, setPricingByDay] = useState([]);
 	const [pendingConfirmationCount, setPendingConfirmationCount] = useState(0);
@@ -147,6 +163,9 @@ const NewReservationMain = ({
 
 	const { user, token } = isAuthenticated();
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
+	const agentCommercialModel = normalizeAgentCommercialModel(
+		user?.agentCommercialModel,
+	);
 	const canConfirmReservations = canAccessPendingConfirmation(user);
 	const roleNumbers = getAccountRoleNumbers(user);
 	const roleDescriptions = getAccountRoleDescriptions(user);
@@ -214,6 +233,23 @@ const NewReservationMain = ({
 		if (!limitedOrderTakerAccount || !agentDefaultBookingSource) return;
 		setBookingSource((previous) => previous || agentDefaultBookingSource);
 	}, [agentDefaultBookingSource, limitedOrderTakerAccount]);
+
+	useEffect(() => {
+		if (!limitedOrderTakerAccount) return;
+		if (agentCommercialModel === "commission_only") {
+			setAgentSettlementModel("agent_commission_only");
+			return;
+		}
+		if (agentCommercialModel === "wallet_inventory") {
+			setAgentSettlementModel("agent_wallet_commission");
+			return;
+		}
+		setAgentSettlementModel((previous) =>
+			["agent_wallet_commission", "agent_commission_only"].includes(previous)
+				? previous
+				: "agent_wallet_commission",
+		);
+	}, [agentCommercialModel, limitedOrderTakerAccount]);
 
 	useEffect(() => {
 		if (forceNewReservation) {
@@ -787,7 +823,8 @@ const NewReservationMain = ({
 	const clickSubmit = () => {
 		if (!customer_details.name) return toast.error("Name is required");
 		if (!customer_details.phone) return toast.error("Phone is required");
-		if (!customer_details.passport) return toast.error("passport is required");
+		if (!limitedOrderTakerAccount && !customer_details.passport)
+			return toast.error("passport is required");
 		if (!customer_details.nationality)
 			return toast.error("nationality is required");
 		if (!start_date) return toast.error("Check in Date is required");
@@ -842,6 +879,31 @@ const NewReservationMain = ({
 		// eslint-disable-next-line
 		const total_amount_calculated = calculateTotalAmountNoRooms();
 		const total_amount_calculated_WithRooms = calculateTotalAmountWithRooms();
+		const reservationTotalAmount =
+			Number(total_amount) !== 0
+				? Number(total_amount) * nights
+				: total_amount_calculated || total_amount_calculated_WithRooms;
+		const resolvedAgentCommissionPercent = Number.isFinite(
+			Number(agentCommissionPercent),
+		)
+			? Number(agentCommissionPercent)
+			: DEFAULT_AGENT_COMMISSION_PERCENT;
+		const resolvedAgentSettlementModel =
+			agentCommercialModel === "commission_only"
+				? "agent_commission_only"
+				: agentCommercialModel === "wallet_inventory"
+				? "agent_wallet_commission"
+				: agentSettlementModel === "agent_commission_only"
+				? "agent_commission_only"
+				: "agent_wallet_commission";
+		const resolvedAgentUsesCommission = Boolean(limitedOrderTakerAccount);
+		const resolvedAgentCommissionAmount = resolvedAgentUsesCommission
+			? roundMoney(
+					(Number(reservationTotalAmount || 0) *
+						resolvedAgentCommissionPercent) /
+						100,
+			  )
+			: 0;
 
 		// === OrderTaker parity (for New Reservation path) ===
 		// Child ZReservationForm2 exports `pickedRoomPricing` already in transformPickedRooms shape.
@@ -858,10 +920,7 @@ const NewReservationMain = ({
 			checkout_date: end_date,
 			days_of_residence,
 			payment_status,
-			total_amount:
-				Number(total_amount) !== 0
-					? Number(total_amount) * nights
-					: total_amount_calculated,
+			total_amount: reservationTotalAmount,
 			booking_source: resolvedBookingSource,
 			belongsTo: hotelDetails.belongsTo._id || hotelDetails.belongsTo,
 			hotelId: hotelDetails._id,
@@ -915,6 +974,39 @@ const NewReservationMain = ({
 
 			confirmation_number: confirmation_number,
 		};
+
+		if (limitedOrderTakerAccount) {
+			const collectionModel =
+				resolvedAgentSettlementModel === "agent_commission_only"
+					? "agent_commission_only"
+					: "agent_wallet";
+			new_reservation.commission = resolvedAgentCommissionAmount;
+			new_reservation.commissionPaid = false;
+			new_reservation.commissionStatus = "";
+			new_reservation.agentSettlementModel = resolvedAgentSettlementModel;
+			new_reservation.commissionData = {
+				assigned: false,
+				amount: resolvedAgentCommissionAmount,
+				rate: resolvedAgentCommissionPercent,
+				status: "pending hotel review",
+				source: "agent_reservation",
+				proposedByAgent: resolvedAgentUsesCommission,
+			};
+			new_reservation.financial_cycle = {
+				settlementModel: resolvedAgentSettlementModel,
+				agentSettlementModel: resolvedAgentSettlementModel,
+				collectionModel,
+				walletRequired:
+					resolvedAgentSettlementModel === "agent_wallet_commission",
+				commissionType: "percentage",
+				commissionValue: resolvedAgentCommissionPercent,
+				commissionAmount: resolvedAgentCommissionAmount,
+				commissionAssigned: false,
+				commissionReviewStatus: "pending",
+				status: "open",
+				proposedByAgent: resolvedAgentUsesCommission,
+			};
+		}
 
 		if (searchedReservation && searchedReservation._id) {
 			const mergedCustomerDetails = {
@@ -1322,6 +1414,13 @@ const NewReservationMain = ({
 								sendEmail={sendEmail}
 								isBoss={isBoss}
 								limitedOrderTakerAccount={limitedOrderTakerAccount}
+								agentCommercialModel={agentCommercialModel}
+								agentSettlementModel={agentSettlementModel}
+								setAgentSettlementModel={setAgentSettlementModel}
+								agentCommissionPercent={agentCommissionPercent}
+								setAgentCommissionPercent={setAgentCommissionPercent}
+								agentCommissionAmount={agentCommissionAmount}
+								setAgentCommissionAmount={setAgentCommissionAmount}
 								paidAmount={paidAmount}
 								setPaidAmount={setPaidAmount}
 								setCurrentRoom={setCurrentRoom}
@@ -1340,6 +1439,11 @@ export default NewReservationMain;
 function safeParseFloat(value, fallback = 0) {
 	const parsed = parseFloat(value);
 	return isNaN(parsed) ? fallback : parsed;
+}
+
+function roundMoney(value) {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
 }
 
 function getConfirmationFromSearch(search = "") {

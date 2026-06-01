@@ -759,6 +759,7 @@ const ZAgentRoomOverridesButton = ({
 			</AgentOverridesTrigger>
 			<Modal
 				open={open}
+				zIndex={2600}
 				title={
 					<ModalTitle $isArabic={isArabic}>
 						<span className='title-icon'>

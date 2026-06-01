@@ -353,9 +353,12 @@ export const createAgentWalletClaim = (
 	userId,
 	token,
 	payload = {},
+	params = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}${buildOverallQuery(
+			params
+		)}`,
 		{
 			method: "POST",
 			headers: {
@@ -377,9 +380,12 @@ export const reviewAgentWalletClaim = (
 	token,
 	transactionId,
 	payload = {},
+	params = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}/${transactionId}/review`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/claims/${userId}/${transactionId}/review${buildOverallQuery(
+			params
+		)}`,
 		{
 			method: "PUT",
 			headers: {
@@ -423,9 +429,12 @@ export const createAgentWalletTransaction = (
 	userId,
 	token,
 	payload = {},
+	params = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}${buildOverallQuery(
+			params
+		)}`,
 		{
 			method: "POST",
 			headers: {
@@ -447,9 +456,12 @@ export const updateAgentWalletTransaction = (
 	token,
 	transactionId,
 	payload = {},
+	params = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}${buildOverallQuery(
+			params
+		)}`,
 		{
 			method: "PUT",
 			headers: {
@@ -470,9 +482,12 @@ export const deleteAgentWalletTransaction = (
 	userId,
 	token,
 	transactionId,
+	params = {},
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}`,
+		`${process.env.REACT_APP_API_URL}/agent-wallet/transactions/${userId}/${transactionId}${buildOverallQuery(
+			params
+		)}`,
 		{
 			method: "DELETE",
 			headers: {

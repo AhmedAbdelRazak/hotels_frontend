@@ -433,6 +433,18 @@ const PendingReviewModalGlobalStyle = createGlobalStyle`
 		max-height: calc(100vh - 32vh);
 	}
 
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal {
+		top: 6vh !important;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal .ant-modal-content {
+		max-height: calc(100vh - 8vh);
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal .ant-modal-body {
+		max-height: calc(100vh - 18vh);
+	}
+
 	@media (max-width: 640px) {
 		.${PENDING_REVIEW_MODAL_CLASS} {
 			top: 8vh !important;
