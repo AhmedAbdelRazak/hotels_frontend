@@ -1023,10 +1023,15 @@ export const OverallTableWrap = styled.div`
 		table-layout: fixed;
 	}
 
+	table.reservation-pending-table {
+		min-width: 1320px;
+	}
+
 	table.reservation-list-table td {
 		overflow: hidden;
 		padding-inline: 7px;
 		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	table.reservation-list-table th {
@@ -1163,37 +1168,44 @@ export const OverallTableWrap = styled.div`
 
 		table.reservation-pending-table th:nth-child(1),
 		table.reservation-pending-table td:nth-child(1) {
-			width: 2.8%;
+			width: 3.1%;
 		}
 
 		table.reservation-pending-table th:nth-child(2),
 		table.reservation-pending-table td:nth-child(2) {
-			width: 7%;
+			width: 7.7%;
 		}
 
 		table.reservation-pending-table th:nth-child(3),
 		table.reservation-pending-table td:nth-child(3) {
-			width: 6.4%;
+			width: 7.1%;
 		}
 
 		table.reservation-pending-table th:nth-child(4),
 		table.reservation-pending-table td:nth-child(4) {
-			width: 13.4%;
+			width: 10.2%;
 		}
 
 		table.reservation-pending-table th:nth-child(5),
 		table.reservation-pending-table td:nth-child(5) {
-			width: 10.8%;
+			width: 10.2%;
 		}
 
 		table.reservation-pending-table th:nth-child(6),
 		table.reservation-pending-table td:nth-child(6) {
-			width: 9%;
+			width: 8.6%;
 		}
 
 		table.reservation-pending-table th:nth-child(7),
 		table.reservation-pending-table td:nth-child(7) {
-			width: 6.2%;
+			width: 7.2%;
+			padding-inline: 4px;
+			text-align: center;
+		}
+
+		table.reservation-pending-table td:nth-child(7) {
+			overflow: visible;
+			text-overflow: clip;
 		}
 
 		table.reservation-pending-table th:nth-child(8),
@@ -1202,7 +1214,7 @@ export const OverallTableWrap = styled.div`
 		table.reservation-pending-table td:nth-child(9),
 		table.reservation-pending-table th:nth-child(10),
 		table.reservation-pending-table td:nth-child(10) {
-			width: 6.1%;
+			width: 6.4%;
 		}
 
 		table.reservation-pending-table th:nth-child(11),
@@ -1212,17 +1224,17 @@ export const OverallTableWrap = styled.div`
 
 		table.reservation-pending-table th:nth-child(12),
 		table.reservation-pending-table td:nth-child(12) {
-			width: 7.2%;
+			width: 7.4%;
 		}
 
 		table.reservation-pending-table th:nth-child(13),
 		table.reservation-pending-table td:nth-child(13) {
-			width: 7.2%;
+			width: 7.4%;
 		}
 
 		table.reservation-pending-table th:nth-child(14),
 		table.reservation-pending-table td:nth-child(14) {
-			width: 5.1%;
+			width: 4.9%;
 		}
 	}
 

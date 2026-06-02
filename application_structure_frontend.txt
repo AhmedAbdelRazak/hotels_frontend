@@ -1741,3 +1741,33 @@ Future TODO Backlog - Added 2026-05-26
 - Validation completed during implementation:
   - hotels_frontend npm.cmd run build compiled successfully after the modal, preview, room-type, scroll, and fallback-price UI changes.
   - Backend smoke tests verified calendar rows and fallback price behavior; see backend structure notes for details.
+
+2026-06-02 Overall Pending Reservations Reject And Cancel UX
+- Route:
+  - /hotel-management/main-dashboard?ownerId=<ownerId>&hotelId=<hotelId>&overall=pending-reservations&page=1.
+- Frontend files:
+  - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations.js.
+  - src/HotelModule/TheOverallStructure/overallShared.js.
+  - src/HotelModule/AdminNavbar/TopNavbar.js.
+- Pending table action column:
+  - Reservation/manager/admin users now see Confirm and Reject beside each other for pending-confirmation reservations.
+  - Confirm keeps the existing inventory-review modal and submits action=confirm.
+  - Reject is a red action button and opens a controlled modal.
+  - The two action buttons are forced into one row; the table can horizontally scroll on very small screens instead of stacking the buttons.
+- Reject modal behavior:
+  - The rejection/cancellation comment is required.
+  - Normal rejection submits action=reject with rejectionReason.
+  - The "Cancel the whole reservation" checkbox submits action=cancel with cancelReason/rejectionReason.
+  - The cancel option is for completely unacceptable reservations; the agent is notified but cannot update that closed reservation.
+- Pending table layout:
+  - Pending table columns are balanced so hotel, confirmation, guest, source, status, action, dates, amounts, and details each keep a clean desktop footprint.
+  - Guest/source/status columns use ellipsis/tooltips instead of wrapping long values.
+  - The action column stays compact and centered; Confirm/Reject are small inline buttons that fit together without turning the action column into a large blank area.
+  - Pending-reservation table cells are no-wrap with ellipsis/tooltips where appropriate.
+  - Do not allow text wrapping in this table unless a future mobile-specific layout intentionally changes it.
+- Agent notification display:
+  - TopNavbar now displays cancelled reservation-team decisions as "Reservation cancelled" with a danger tone.
+  - Clicking agent reservation decision notifications still routes to overall=pending-reservations inside the overall dashboard context.
+- Validation:
+  - hotels_frontend npm.cmd run build compiled successfully after the pending table Confirm/Reject layout, reject/cancel modal, TopNavbar decision notification display, and no-wrap table styling.
+  - Backend workflow test coverage for the same feature is documented in hotels_backend/application_structure_backend.txt under the matching 2026-06-02 section.

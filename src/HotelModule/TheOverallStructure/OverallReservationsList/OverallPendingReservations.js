@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, DatePicker, Input, message, Modal, Select } from "antd";
+import { Button, Checkbox, DatePicker, Input, message, Modal, Select } from "antd";
 import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
@@ -47,11 +47,24 @@ const PENDING_RESERVATIONS_TEXT = {
 		title: "Overall Pending Reservations",
 		subtitle: "Pending confirmation and finance-review reservations",
 		confirmReservation: "Confirm",
+		rejectReservation: "Reject",
 		confirmTitle: "Confirm reservation",
+		rejectTitle: "Reject reservation",
 		confirmQuestion:
 			"Confirm reservation #{confirmation} with {days} days / {nights} nights for {amount} SAR?",
+		rejectQuestion:
+			"Write a clear comment for the agent. The agent can update the reservation unless you cancel it completely.",
+		rejectionReasonLabel: "Rejection / cancellation comment",
+		rejectionReasonPlaceholder:
+			"Example: guest name is missing, dates are not acceptable, room count needs correction...",
+		cancelWholeReservation: "Cancel the whole reservation",
+		cancelWholeReservationHelp:
+			"Use only when the reservation is completely unacceptable. The agent will be notified, but cannot update this reservation.",
 		yesConfirm: "Yes, confirm",
+		yesReject: "Reject reservation",
+		yesCancelReservation: "Cancel reservation",
 		cancel: "Cancel",
+		rejectionReasonRequired: "Please write a clear reason first.",
 		updateSuccess: "Reservation updated.",
 		updateError: "Could not update reservation.",
 		notAllowedToConfirm: "This account cannot confirm pending reservations.",
@@ -89,6 +102,42 @@ const PENDING_FILTER_TEXT = {
 		checkoutDate: "تاريخ المغادرة",
 		fromDate: "من تاريخ",
 		toDate: "إلى تاريخ",
+	},
+};
+
+const PENDING_DECISION_TEXT = {
+	en: {
+		rejectReservation: "Reject",
+		rejectTitle: "Reject reservation",
+		rejectQuestion:
+			"Write a clear comment for the agent. The agent can update the reservation unless you cancel it completely.",
+		rejectionReasonLabel: "Rejection / cancellation comment",
+		rejectionReasonPlaceholder:
+			"Example: guest name is missing, dates are not acceptable, room count needs correction...",
+		cancelWholeReservation: "Cancel the whole reservation",
+		cancelWholeReservationHelp:
+			"Use only when the reservation is completely unacceptable. The agent will be notified, but cannot update this reservation.",
+		yesReject: "Reject reservation",
+		yesCancelReservation: "Cancel reservation",
+		rejectionReasonRequired: "Please write a clear reason first.",
+	},
+	ar: {
+		rejectReservation: "\u0631\u0641\u0636",
+		rejectTitle: "\u0631\u0641\u0636 \u0627\u0644\u062d\u062c\u0632",
+		rejectQuestion:
+			"\u0627\u0643\u062a\u0628 \u062a\u0639\u0644\u064a\u0642\u0627 \u0648\u0627\u0636\u062d\u0627 \u0644\u0644\u0648\u0643\u064a\u0644. \u064a\u0633\u062a\u0637\u064a\u0639 \u0627\u0644\u0648\u0643\u064a\u0644 \u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0625\u0644\u0627 \u0625\u0630\u0627 \u062a\u0645 \u0625\u0644\u063a\u0627\u0624\u0647 \u0628\u0627\u0644\u0643\u0627\u0645\u0644.",
+		rejectionReasonLabel:
+			"\u062a\u0639\u0644\u064a\u0642 \u0627\u0644\u0631\u0641\u0636 / \u0627\u0644\u0625\u0644\u063a\u0627\u0621",
+		rejectionReasonPlaceholder:
+			"\u0645\u062b\u0627\u0644: \u0627\u0633\u0645 \u0627\u0644\u0636\u064a\u0641 \u063a\u064a\u0631 \u0648\u0627\u0636\u062d\u060c \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u063a\u064a\u0631 \u0645\u0642\u0628\u0648\u0644\u0629\u060c \u0639\u062f\u062f \u0627\u0644\u063a\u0631\u0641 \u064a\u062d\u062a\u0627\u062c \u062a\u0635\u062d\u064a\u062d...",
+		cancelWholeReservation:
+			"\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632 \u0628\u0627\u0644\u0643\u0627\u0645\u0644",
+		cancelWholeReservationHelp:
+			"\u0627\u0633\u062a\u062e\u062f\u0645\u0647\u0627 \u0641\u0642\u0637 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0627\u0644\u062d\u062c\u0632 \u063a\u064a\u0631 \u0645\u0642\u0628\u0648\u0644 \u062a\u0645\u0627\u0645\u0627. \u0633\u064a\u0635\u0644 \u0625\u0634\u0639\u0627\u0631 \u0644\u0644\u0648\u0643\u064a\u0644 \u0648\u0644\u0646 \u064a\u0633\u062a\u0637\u064a\u0639 \u062a\u0639\u062f\u064a\u0644 \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632.",
+		yesReject: "\u0631\u0641\u0636 \u0627\u0644\u062d\u062c\u0632",
+		yesCancelReservation: "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632",
+		rejectionReasonRequired:
+			"\u064a\u0631\u062c\u0649 \u0643\u062a\u0627\u0628\u0629 \u0633\u0628\u0628 \u0648\u0627\u0636\u062d \u0623\u0648\u0644\u0627.",
 	},
 };
 
@@ -213,6 +262,7 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 		...common,
 		...PENDING_RESERVATIONS_TEXT[isRTL ? "ar" : "en"],
 		...PENDING_FILTER_TEXT[isRTL ? "ar" : "en"],
+		...PENDING_DECISION_TEXT[isRTL ? "ar" : "en"],
 	};
 	const history = useHistory();
 	const location = useLocation();
@@ -243,6 +293,12 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 		reservation: null,
 		inventoryLoading: false,
 		currentInventory: [],
+	});
+	const [rejectModal, setRejectModal] = useState({
+		open: false,
+		reservation: null,
+		reason: "",
+		cancelWholeReservation: false,
 	});
 	const [dateMode, setDateMode] = useState("gregorian");
 
@@ -495,6 +551,34 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 		});
 	};
 
+	const openRejectModal = (reservation = {}) => {
+		if (!workflowPermissions.canReviewStatus) {
+			message.error(labels.notAllowedToConfirm);
+			return;
+		}
+		if (!isPendingConfirmationReservation(reservation)) return;
+		setRejectModal({
+			open: true,
+			reservation,
+			reason: "",
+			cancelWholeReservation: false,
+		});
+	};
+
+	const closeRejectModal = () => {
+		if (confirmingReservationId) return;
+		setRejectModal({
+			open: false,
+			reservation: null,
+			reason: "",
+			cancelWholeReservation: false,
+		});
+	};
+
+	const updateRejectModal = (patch = {}) => {
+		setRejectModal((previous) => ({ ...previous, ...patch }));
+	};
+
 	const submitConfirmPendingReservation = () => {
 		const reservation = confirmModal.reservation;
 		const actorId = currentUser?._id || userId;
@@ -519,6 +603,48 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 					reservation: null,
 					inventoryLoading: false,
 					currentInventory: [],
+				});
+			})
+			.catch((error) => {
+				message.error(error?.message || labels.updateError);
+			})
+			.finally(() => setConfirmingReservationId(""));
+	};
+
+	const submitRejectPendingReservation = () => {
+		const reservation = rejectModal.reservation;
+		const actorId = currentUser?._id || userId;
+		const reason = String(rejectModal.reason || "").trim();
+		if (!reservation?._id || !actorId) {
+			message.error(labels.updateError);
+			return;
+		}
+		if (!reason) {
+			message.error(labels.rejectionReasonRequired);
+			return;
+		}
+		const action = rejectModal.cancelWholeReservation ? "cancel" : "reject";
+		setConfirmingReservationId(String(reservation._id));
+		updatePendingConfirmationReservation({
+			reservationId: reservation._id,
+			userId: actorId,
+			payload: {
+				action,
+				rejectionReason: reason,
+				cancelReason: action === "cancel" ? reason : undefined,
+			},
+		})
+			.then((data) => {
+				if (!data || data.error) {
+					throw new Error(data?.error || labels.updateError);
+				}
+				refreshUpdatedReservation(data);
+				message.success(labels.updateSuccess);
+				setRejectModal({
+					open: false,
+					reservation: null,
+					reason: "",
+					cancelWholeReservation: false,
 				});
 			})
 			.catch((error) => {
@@ -792,20 +918,33 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 									<td>
 										{isPendingConfirmationReservation(reservation) &&
 										workflowPermissions.canReviewStatus ? (
-											<ActionButton
-												type='button'
-												$success
-												disabled={
-													String(confirmingReservationId) ===
+											<PendingActionGroup>
+												<ActionButton
+													type='button'
+													$success
+													disabled={
+														String(confirmingReservationId) ===
+														String(reservation._id)
+													}
+													onClick={() => confirmPendingReservation(reservation)}
+												>
+													{String(confirmingReservationId) ===
 													String(reservation._id)
-												}
-												onClick={() => confirmPendingReservation(reservation)}
-											>
-												{String(confirmingReservationId) ===
-												String(reservation._id)
-													? labels.saving
-													: labels.confirmReservation}
-											</ActionButton>
+														? labels.saving
+														: labels.confirmReservation}
+												</ActionButton>
+												<ActionButton
+													type='button'
+													$danger
+													disabled={
+														String(confirmingReservationId) ===
+														String(reservation._id)
+													}
+													onClick={() => openRejectModal(reservation)}
+												>
+													{labels.rejectReservation}
+												</ActionButton>
+											</PendingActionGroup>
 										) : (
 											"-"
 										)}
@@ -917,6 +1056,80 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 				</ConfirmModalBody>
 			</Modal>
 
+			<Modal
+				open={rejectModal.open}
+				onCancel={closeRejectModal}
+				title={labels.rejectTitle}
+				footer={null}
+				destroyOnClose
+				width={620}
+				className={PENDING_REVIEW_MODAL_CLASS}
+			>
+				<DecisionModalBody dir={isRTL ? "rtl" : "ltr"} $isRTL={isRTL}>
+					<DecisionNotice>
+						<strong>
+							{rejectModal.reservation?.confirmation_number ||
+								rejectModal.reservation?._id ||
+								"-"}
+						</strong>
+						<span>{labels.rejectQuestion}</span>
+					</DecisionNotice>
+					<label className='decision-label'>
+						<span>{labels.rejectionReasonLabel}</span>
+						<Input.TextArea
+							value={rejectModal.reason}
+							onChange={(event) =>
+								updateRejectModal({ reason: event.target.value })
+							}
+							rows={5}
+							maxLength={1200}
+							showCount
+							placeholder={labels.rejectionReasonPlaceholder}
+							dir={isRTL ? "rtl" : "ltr"}
+						/>
+					</label>
+					<CancelWholeReservationBox
+						$isActive={rejectModal.cancelWholeReservation}
+					>
+						<Checkbox
+							checked={rejectModal.cancelWholeReservation}
+							onChange={(event) =>
+								updateRejectModal({
+									cancelWholeReservation: event.target.checked,
+								})
+							}
+						>
+							{labels.cancelWholeReservation}
+						</Checkbox>
+						<small>{labels.cancelWholeReservationHelp}</small>
+					</CancelWholeReservationBox>
+					<ConfirmModalActions>
+						<Button htmlType='button' onClick={closeRejectModal}>
+							{labels.cancel}
+						</Button>
+						<Button
+							htmlType='button'
+							danger={rejectModal.cancelWholeReservation}
+							className={
+								rejectModal.cancelWholeReservation
+									? "danger-confirm"
+									: "reject-confirm"
+							}
+							disabled={!rejectModal.reservation?._id}
+							loading={
+								String(confirmingReservationId) ===
+								String(rejectModal.reservation?._id || "")
+							}
+							onClick={submitRejectPendingReservation}
+						>
+							{rejectModal.cancelWholeReservation
+								? labels.yesCancelReservation
+								: labels.yesReject}
+						</Button>
+					</ConfirmModalActions>
+				</DecisionModalBody>
+			</Modal>
+
 			<OverallReservationDetailsModal
 				reservations={reservations}
 				selectedReservation={selectedReservation}
@@ -931,11 +1144,61 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 export default OverallPendingReservations;
 
+const PendingActionGroup = styled.div`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex-wrap: nowrap;
+	white-space: nowrap;
+
+	${ActionButton} {
+		min-width: 42px;
+		min-height: 29px;
+		padding: 0.24rem 0.5rem;
+		font-size: 0.68rem;
+		line-height: 1.15;
+	}
+
+	@media (max-width: 480px) {
+		${ActionButton} {
+			min-width: 44px;
+			min-height: 32px;
+			padding-inline: 0.44rem;
+		}
+	}
+`;
+
 const ConfirmModalBody = styled.div`
 	display: grid;
 	gap: 12px;
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+`;
+
+const DecisionModalBody = styled(ConfirmModalBody)`
+	gap: 14px;
+
+	.decision-label {
+		display: grid;
+		gap: 7px;
+		margin: 0;
+		color: #142033;
+		font-weight: 900;
+	}
+
+	.ant-input {
+		border-color: #d8e2ee;
+		border-radius: 8px;
+		font-weight: 750;
+		line-height: 1.7;
+	}
+
+	.ant-input:focus,
+	.ant-input-focused {
+		border-color: #b91c1c;
+		box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
+	}
 `;
 
 const ConfirmQuestion = styled.div`
@@ -948,6 +1211,50 @@ const ConfirmQuestion = styled.div`
 	font-weight: 850;
 	line-height: 1.6;
 	text-align: center;
+`;
+
+const DecisionNotice = styled.div`
+	display: grid;
+	gap: 4px;
+	padding: 12px 14px;
+	border: 1px solid #fde2e2;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #fff7f7, #fff);
+	color: #172033;
+	line-height: 1.6;
+
+	strong {
+		color: #991b1b;
+		font-size: 1rem;
+	}
+
+	span {
+		font-weight: 800;
+	}
+`;
+
+const CancelWholeReservationBox = styled.div`
+	display: grid;
+	gap: 5px;
+	padding: 12px 14px;
+	border: 1px solid ${(props) => (props.$isActive ? "#fecaca" : "#d8e2ee")};
+	border-radius: 8px;
+	background: ${(props) =>
+		props.$isActive
+			? "linear-gradient(135deg, #fff1f2, #fff)"
+			: "linear-gradient(135deg, #f8fbff, #fff)"};
+
+	.ant-checkbox-wrapper {
+		margin: 0;
+		color: ${(props) => (props.$isActive ? "#991b1b" : "#162033")};
+		font-weight: 950;
+	}
+
+	small {
+		color: ${(props) => (props.$isActive ? "#7f1d1d" : "#506174")};
+		font-weight: 750;
+		line-height: 1.55;
+	}
 `;
 
 const ConfirmModalActions = styled.div`
@@ -967,6 +1274,23 @@ const ConfirmModalActions = styled.div`
 	.primary-confirm:focus {
 		border-color: #6e1b7b !important;
 		background: #6e1b7b !important;
+		color: #fff !important;
+	}
+
+	.reject-confirm,
+	.danger-confirm {
+		border-color: #b91c1c;
+		background: linear-gradient(135deg, #991b1b, #dc2626);
+		color: #fff;
+		font-weight: 900;
+	}
+
+	.reject-confirm:hover,
+	.reject-confirm:focus,
+	.danger-confirm:hover,
+	.danger-confirm:focus {
+		border-color: #7f1d1d !important;
+		background: linear-gradient(135deg, #7f1d1d, #b91c1c) !important;
 		color: #fff !important;
 	}
 `;

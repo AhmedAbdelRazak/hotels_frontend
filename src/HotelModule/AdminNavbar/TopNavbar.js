@@ -502,6 +502,11 @@ const cleanNotificationReasonLabel = (reason, isArabic, isAgent = false) => {
 
 const cleanAgentDecisionText = (item = {}, isArabic = false) => {
 	const status = String(item.decisionStatus || "").toLowerCase();
+	if (status === "cancelled" || status === "canceled") {
+		return isArabic
+			? "\u062a\u0645 \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u062d\u062c\u0632"
+			: "Reservation cancelled";
+	}
 	if (status === "rejected") {
 		return isArabic ? "تم رفض الحجز" : "Reservation rejected";
 	}
@@ -523,7 +528,13 @@ const notificationTone = (item = {}) => {
 	) {
 		return "success";
 	}
-	if (type.includes("rejected") || status === "rejected") return "danger";
+	if (
+		type.includes("rejected") ||
+		status === "rejected" ||
+		status === "cancelled" ||
+		status === "canceled"
+	)
+		return "danger";
 	if (type.includes("pending") || status === "pending") return "warning";
 	return "default";
 };
@@ -1957,6 +1968,8 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 									? "تم قبول الحجز"
 									: "Reservation confirmed"
 								: "";
+						const agentDecisionDisplayText =
+							cleanAgentDecisionText(item, isArabic) || agentDecisionText;
 						const financeAcceptedTitle = isArabic
 							? "تمت الموافقة المالية"
 							: "Finance accepted";
@@ -2051,7 +2064,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 										<span>
 											{isArabic
 												? cleanAgentDecisionText(item, isArabic)
-												: agentDecisionText}
+												: agentDecisionDisplayText}
 										</span>
 									) : (
 										visibleReasons.slice(0, 2).map((reason) => (
