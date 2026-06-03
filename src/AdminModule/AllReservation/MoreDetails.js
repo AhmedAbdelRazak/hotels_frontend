@@ -4118,7 +4118,7 @@ const OtaAuditCallout = styled.div`
 	display: grid;
 	gap: 5px;
 	line-height: 1.35;
-	margin-top: 10px;
+	margin-top: 0;
 	padding: 10px 12px;
 	text-align: left;
 
@@ -4426,12 +4426,14 @@ const ReservationDetail = ({
 	const configuredSuperAdminId = String(
 		process.env.REACT_APP_SUPER_ADMIN_ID || "",
 	).trim();
+	const isAdminRouteViewer =
+		typeof window !== "undefined" &&
+		/^\/admin(?:\/|$)/.test(window.location?.pathname || "");
 	const canViewOtaEmailAudit =
-		Number(user?.role) === 1000 ||
-		Number(user?.role) === 10000 ||
-		isSuperAdminUser(user) ||
-		(!!configuredSuperAdminId &&
-			String(user?._id || "").trim() === configuredSuperAdminId);
+		isAdminRouteViewer &&
+		(isPlatformAdminViewer(user) ||
+			(!!configuredSuperAdminId &&
+				String(user?._id || "").trim() === configuredSuperAdminId));
 	const otaInboundEmailId =
 		supplierData.otaInboundEmailId || supplierData.otaLastInboundEmailId || "";
 	const createdByOtaEmail =
@@ -5121,6 +5123,13 @@ const ReservationDetail = ({
 		: /confirm|accept|approve/.test(pendingWorkflowStatus)
 		? "accepted"
 		: "neutral";
+	const isPendingOtaPlatformReviewReservation =
+		String(reservation?.otaPlatformReview?.status || "")
+			.trim()
+			.toLowerCase() === "pending" ||
+		String(reservation?.reservation_status || reservation?.state || "")
+			.trim()
+			.toLowerCase() === "ota platform review";
 	const pendingDecisionReason =
 		reservation?.pendingConfirmation?.rejectionReason ||
 		reservation?.pendingConfirmation?.confirmationReason ||
@@ -9386,7 +9395,9 @@ const ReservationDetail = ({
 											)}
 										</div>
 									</div>
-									{canManagePendingDecision && newProcessReservation ? (
+									{canManagePendingDecision &&
+									newProcessReservation &&
+									!isPendingOtaPlatformReviewReservation ? (
 										<div className='workflow-actions'>
 											{pendingDecisionTone === "pending" ? (
 												<>
@@ -9579,7 +9590,9 @@ const ReservationDetail = ({
 														</small>
 													) : null}
 												</div>
-												{canManageFinanceCycle && newProcessReservation ? (
+												{canManageFinanceCycle &&
+												newProcessReservation &&
+												!isPendingOtaPlatformReviewReservation ? (
 													<div className='payment-preview-actions'>
 														{pendingDecisionTone === "pending" ? (
 															<>

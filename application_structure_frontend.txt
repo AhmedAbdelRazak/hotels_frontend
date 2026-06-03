@@ -1854,6 +1854,7 @@ Future TODO Backlog - Added 2026-05-26
   - src/AdminModule/OtaReservations/OtaReservationsMain.js owns the OTA reservation review table.
   - src/AdminModule/JannatTools/EditPricingModal.js is reused for Change pricing.
   - src/AdminModule/Reservations/MoreDetails.js is reused for Show Details through the reservationId query parameter.
+  - src/AdminModule/AllReservation/MoreDetails.js renders the shared admin details modal used by the OTA review details query parameter.
   - src/AdminModule/AdminNavbar/AdminNavbar.js and the admin side menu expose the OTA Reservations entry only for authorized platform users.
   - src/HotelModule/AdminNavbar/TopNavbar.js handles live notification sound/bell behavior in the correct user context.
 - OTA review table behavior:
@@ -1865,11 +1866,18 @@ Future TODO Backlog - Added 2026-05-26
   - Release To Hotel opens a confirmation modal that clearly shows the current hotel-visible price before submitting release.
   - Release To Hotel is disabled unless the backend marks hotel_base_price_ready. Missing Total base hotel price must block release in the UI and on the backend.
   - Show Details opens the same admin reservation detail modal used by /admin/all-reservations?page=1 via reservationId.
+- Admin detail modal OTA evidence:
+  - The "Created by OTA email automation" / Source / Platform # / View inbound email callout is classified platform evidence.
+  - It must render only inside /admin/* for platform admin/SUPER admin viewers.
+  - The callout should stay visible to platform admins after a reservation is released to the hotel, so admins can still trace the inbound email audit.
+  - Hotel-management routes must not render this callout for any hotel-side role.
+  - Pending OTA Platform Review details do not show the generic return-to-pending or cancel-reservation middle-panel buttons because hotel users cannot see or act on the reservation before release.
 - Hotel-management privacy invariant:
   - Pending OTA platform-review reservations must not appear anywhere under /hotel-management/*.
   - After release, OTA reservations should appear to the hotel as Pending Confirmation and continue through the reservation employee workflow.
   - Hotel-management screens must rely on backend-sanitized reservation.total_amount for OTA/platform-managed reservations.
   - Hotel-management screens must not reconstruct totals from adminPricing, otaPlatformReview, OTA gross/client totals, room clientPrice, platform margin, or OTA expense fields.
+  - Hotel-management screens must not consume or display supplierData OTA email audit keys such as otaCreatedFromEmail, otaInboundEmailId, otaLastInboundEmailId, otaProvider, otaConfirmationNumber, or platformConfirmationNumber.
   - For adminPricingVisibility.rootOnlyForHotelManagement reservations, the hotel should see the assigned hotel/root amount only; platform admins may still see the client/OTA total in admin screens.
 - Notifications:
   - New pending OTA review reservations should produce live admin notifications and bell sound behavior for platform users.
