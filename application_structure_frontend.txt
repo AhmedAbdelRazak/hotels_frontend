@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-05-31
+Audited: 2026-06-03
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -60,6 +60,7 @@ Main Route Map In src/App.js
   - /admin/janat-website
   - /admin/added-hotels
   - /admin/overall-hotel-reports
+  - /admin/global-hotel-settings
   - /admin/expenses-financials
   - /admin/payouts-report
 - HotelRoute routes
@@ -139,6 +140,9 @@ AdminModule Structure
   - Admin expenses and financial-report screens.
 - src/AdminModule/HotelsReport/
   - Admin hotel/reservation report screens and exports.
+- src/AdminModule/GlobalHotelSettings/
+  - Platform-admin all-hotels settings workflow for room add/update and calendar pricing.
+  - This module has separate admin-owned components and admin-global API calls. It intentionally does not render the hotel-management OverallSettings modals.
 - src/AdminModule/JanatWebsite/
   - Public website hotel/reservation management tools.
 - src/AdminModule/JannatTools/
@@ -1741,6 +1745,71 @@ Future TODO Backlog - Added 2026-05-26
 - Validation completed during implementation:
   - hotels_frontend npm.cmd run build compiled successfully after the modal, preview, room-type, scroll, and fallback-price UI changes.
   - Backend smoke tests verified calendar rows and fallback price behavior; see backend structure notes for details.
+
+2026-06-03 Admin Global Hotel Settings
+- Business purpose:
+  - Platform admins and SUPER admins can manage room definitions and calendar pricing across all hotels from /admin/global-hotel-settings.
+  - This is separate from /hotel-management/main-dashboard?overall=settings. The frontend uses new AdminModule components and new admin-global API helpers.
+  - The UI mirrors the hotel-management Overall Settings workflow where useful, but the route, query params, components, and backend endpoints are admin-global.
+- Route and access:
+  - Main route: /admin/global-hotel-settings.
+  - src/App.js registers AdminGlobalHotelSettingsMain on this route.
+  - src/auth/AdminRoute.js allows the route for configured SUPER admins and role 1000 platform admins with AdminDashboard or HotelReports access.
+  - src/AdminModule/AdminNavbar/AdminNavbar.js, src/AdminModule/AdminNavbar/AdminNavbarArabic.js, and src/AdminModule/AdminNavbar/AdminTopNavbar.js expose the page in admin navigation.
+- Frontend files:
+  - src/AdminModule/GlobalHotelSettings/AdminGlobalHotelSettingsMain.js.
+  - src/AdminModule/GlobalHotelSettings/AdminGlobalRoomManagerModal.js.
+  - src/AdminModule/GlobalHotelSettings/AdminGlobalCalendarPricingModal.js.
+  - src/AdminModule/apiAdmin.js for admin-global settings API clients.
+  - The admin-global components may reuse neutral shared format/status helpers from src/HotelModule/TheOverallStructure/overallShared.js, but they should not import or render the hotel-management OverallSettings modal components.
+- Query params for admin-global modals:
+  - Room modal:
+    - globalSettingsModal=rooms.
+    - globalSettingsRoomTab=add or update.
+    - Example: /admin/global-hotel-settings?page=1&globalSettingsModal=rooms&globalSettingsRoomTab=add.
+  - Calendar pricing modal:
+    - globalSettingsModal=calendar.
+    - globalSettingsCalendarTab=general or agents.
+    - Example: /admin/global-hotel-settings?page=1&globalSettingsModal=calendar&globalSettingsCalendarTab=general.
+  - Closing either modal removes globalSettingsModal and the tab-specific modal params while preserving unrelated admin page params.
+  - Tab changes replace the current URL so browser history is not noisy.
+- Page behavior:
+  - AdminGlobalHotelSettingsMain loads all hotels through getAdminGlobalHotelSettings.
+  - The table shows hotel, owner, setup status, total rooms, room types, photos, location/data/bank readiness, last update, and an Open Settings action for the single-hotel settings route when needed.
+  - The two high-visibility action buttons are Room Add / Update and Calendar Pricing.
+  - The page uses the same AdminNavbar/AdminNavbarArabic shell pattern as other /admin pages.
+- Room Add / Update modal behavior:
+  - Component: AdminGlobalRoomManagerModal.js.
+  - API options: getAdminGlobalRoomManagerOptions.
+  - Save API: saveAdminGlobalRoomManagerRoom.
+  - Add flow supports multi-selecting hotels and setting per-hotel room counts.
+  - Update flow targets one hotel and one room.
+  - The modal preserves the bilingual room text, room type, shared men/women room, amenity, view, extra amenity, activeRoom, and count behavior from the overall settings workflow.
+  - Admin-global modal z-index/root classes are separate from the hotel-management overall modal classes.
+- Calendar Pricing modal behavior:
+  - Component: AdminGlobalCalendarPricingModal.js.
+  - API options: getAdminGlobalCalendarPricingOptions.
+  - Save API: saveAdminGlobalCalendarPricing.
+  - Tabs are Add / Update Pricing General and Add / Update Pricing Agents.
+  - General tab writes public/general pricing rows; Agents tab writes agent-specific rows and requires selected agents.
+  - Hotels are multi-select; rooms are selected manually from selected hotels; agents are filtered by selected hotel scope.
+  - Hijri and Gregorian calendar periods are supported, including month mode and custom range mode.
+  - Preview supports month navigation, row-level price/commission editing, and open/blocked toggling before save.
+  - The frontend cap remains 370 preview days before save.
+- API client helpers in src/AdminModule/apiAdmin.js:
+  - getAdminGlobalHotelSettings -> GET /api/admin/global-hotel-settings/overview/:userId.
+  - getAdminGlobalRoomManagerOptions -> GET /api/admin/global-hotel-settings/room-manager/:userId.
+  - saveAdminGlobalRoomManagerRoom -> POST /api/admin/global-hotel-settings/room-manager/:userId.
+  - getAdminGlobalCalendarPricingOptions -> GET /api/admin/global-hotel-settings/calendar-pricing/:userId.
+  - saveAdminGlobalCalendarPricing -> POST /api/admin/global-hotel-settings/calendar-pricing/:userId.
+  - These helpers use AdminModule auth header behavior, so /admin routes use the base admin JWT and ignore dashboardPreviewAuth.
+- Backend boundary expectation:
+  - Do not point this page at /api/overall-dashboard/settings*, even if the layouts look similar.
+  - Backend ownership is routes/admin_global_hotel_settings.js and controllers/admin_global_hotel_settings.js.
+- Validation completed during implementation:
+  - hotels_frontend npm.cmd run build compiled successfully.
+  - Backend node --check passed for server.js, controllers/admin_global_hotel_settings.js, and routes/admin_global_hotel_settings.js.
+  - Backend route import smoke check passed with local dummy JWT/SENDGRID env values.
 
 2026-06-02 Overall Pending Reservations Reject And Cancel UX
 - Route:

@@ -200,6 +200,8 @@ const AR = {
 	otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
 	tools: "\u0623\u062f\u0648\u0627\u062a \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
 	reports: "\u062a\u0642\u0627\u0631\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	globalSettings:
+		"\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	newHotel: "\u0625\u0636\u0627\u0641\u0629 \u0641\u0646\u062f\u0642 \u062c\u062f\u064a\u062f",
 	ownerAccount: "\u0625\u0636\u0627\u0641\u0629 \u062d\u0633\u0627\u0628 \u0645\u0627\u0644\u0643",
 	customerRelations: "\u0625\u062f\u0627\u0631\u0629 \u0639\u0644\u0627\u0642\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
@@ -224,6 +226,11 @@ getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <Sh
 getItem(<Link to='/admin/ota-reservations'>{AR.otaReservations}</Link>, "sub19", <InboxOutlined />),
 getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),
 	getItem(<Link to='/admin/overall-hotel-reports'>{AR.reports}</Link>, "sub7", <TeamOutlined />),
+	getItem(
+		<Link to='/admin/global-hotel-settings'>{AR.globalSettings}</Link>,
+		"sub20",
+		<SettingOutlined />
+	),
 	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
 	getItem(<Link to='/admin/add-owner-account'>{AR.ownerAccount}</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
 	getItem(<Link to='/admin/expenses-financials'>{AR.financials}</Link>, "sub16", <DollarCircleOutlined />, null, null, "black-bg"),
@@ -250,6 +257,7 @@ const selectedKeyByPage = {
 	OTAReservations: "sub19",
 	Tools: "sub6",
 	AdminReports: "sub7",
+	GlobalHotelSettings: "sub20",
 	AddedHotels: "sub8",
 	WebsiteManagement: "sub10",
 	JanatWebsite: "sub10",

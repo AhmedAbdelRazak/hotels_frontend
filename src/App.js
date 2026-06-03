@@ -26,6 +26,7 @@ import HotelReportsMainAdmin from "./AdminModule/HotelsReport/HotelReportsMainAd
 import CustomerServiceMain from "./AdminModule/CustomerService/CustomerServiceMain";
 import JanatWebsiteMain from "./AdminModule/JanatWebsite/JanatWebsiteMain";
 import AdminAccountsMain from "./AdminModule/AdminAccounts/AdminAccountsMain";
+import AdminGlobalHotelSettingsMain from "./AdminModule/GlobalHotelSettings/AdminGlobalHotelSettingsMain";
 
 // Hotel Routes
 import HotelRoute from "./auth/HotelRoute";
@@ -219,6 +220,11 @@ function App() {
 					path='/admin/overall-hotel-reports'
 					exact
 					component={HotelReportsMainAdmin}
+				/>
+				<AdminRoute
+					path='/admin/global-hotel-settings'
+					exact
+					component={AdminGlobalHotelSettingsMain}
 				/>
 
 				<AdminRoute

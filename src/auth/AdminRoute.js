@@ -22,6 +22,7 @@ const ADMIN_ROUTE_ACCESS = {
 	"/admin/janat-website": ["JannatBookingWebsite"],
 	"/admin/added-hotels": ["AdminDashboard"],
 	"/admin/overall-hotel-reports": ["AdminDashboard", "HotelReports"],
+	"/admin/global-hotel-settings": ["AdminDashboard", "HotelReports"],
 	"/admin/expenses-financials": ["Financials", "AdminDashboard"],
 	"/admin/payouts-report": ["Financials", "Payouts", "AdminDashboard"],
 	"/admin/accounts-management": ["AdminAccounts"],

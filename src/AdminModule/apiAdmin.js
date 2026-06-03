@@ -254,6 +254,93 @@ export const updateAdminAccount = (userId, token, accountId, payload = {}) =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
+const adminGlobalHotelSettingsHeaders = (token = "") => ({
+	Accept: "application/json",
+	"Content-Type": "application/json",
+	...authHeaders(token),
+	...getStoredActiveAuthHeaders(),
+});
+
+export const getAdminGlobalHotelSettings = (userId, token) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/global-hotel-settings/overview/${userId}`,
+		{
+			method: "GET",
+			headers: adminGlobalHotelSettingsHeaders(token),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => {
+			console.error(err);
+			return { error: "Could not load global hotel settings." };
+		});
+
+export const getAdminGlobalRoomManagerOptions = (userId, token) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/global-hotel-settings/room-manager/${userId}`,
+		{
+			method: "GET",
+			headers: adminGlobalHotelSettingsHeaders(token),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => {
+			console.error(err);
+			return { error: "Could not load global room options." };
+		});
+
+export const saveAdminGlobalRoomManagerRoom = (
+	userId,
+	token,
+	payload = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/global-hotel-settings/room-manager/${userId}`,
+		{
+			method: "POST",
+			headers: adminGlobalHotelSettingsHeaders(token),
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => {
+			console.error(err);
+			return { error: "Could not save global room settings." };
+		});
+
+export const getAdminGlobalCalendarPricingOptions = (userId, token) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/global-hotel-settings/calendar-pricing/${userId}`,
+		{
+			method: "GET",
+			headers: adminGlobalHotelSettingsHeaders(token),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => {
+			console.error(err);
+			return { error: "Could not load global calendar pricing options." };
+		});
+
+export const saveAdminGlobalCalendarPricing = (
+	userId,
+	token,
+	payload = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/global-hotel-settings/calendar-pricing/${userId}`,
+		{
+			method: "POST",
+			headers: adminGlobalHotelSettingsHeaders(token),
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => {
+			console.error(err);
+			return { error: "Could not save global calendar pricing." };
+		});
+
 export const sendReservationConfirmationSMS = (reservationId, opts = {}) => {
 	const params = { notifyAdmins: opts.notifyAdmins ? "true" : "false" };
 	return axios

@@ -13,6 +13,7 @@ import {
 	GlobalOutlined,
 	LogoutOutlined,
 	MessageOutlined,
+	SettingOutlined,
 	ToolOutlined,
 	UserOutlined,
 } from "@ant-design/icons";
@@ -57,6 +58,7 @@ const labels = {
 		reservations: "Reservations",
 		otaReservations: "OTA reservations",
 		reports: "Reports",
+		globalSettings: "Hotel settings",
 		financials: "Financials",
 		tools: "Tools",
 		service: "Service",
@@ -91,6 +93,8 @@ const labels = {
 		reservations: "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
 		reports: "\u0627\u0644\u062a\u0642\u0627\u0631\u064a\u0631",
+		globalSettings:
+			"\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		financials: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
 		tools: "\u0627\u0644\u0623\u062f\u0648\u0627\u062a",
 		service: "\u062e\u062f\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
@@ -141,6 +145,12 @@ const adminLinks = [
 		key: "tools",
 		icon: <ToolOutlined />,
 		access: ["JannatTools"],
+	},
+	{
+		to: "/admin/global-hotel-settings",
+		key: "globalSettings",
+		icon: <SettingOutlined />,
+		access: ["AdminDashboard", "HotelReports"],
 	},
 	{
 		key: "notifications",

@@ -11,6 +11,7 @@ import {
 	CreditCardOutlined,
 	DollarCircleOutlined,
 	InboxOutlined,
+	SettingOutlined,
 	ShopOutlined,
 	TeamOutlined,
 } from "@ant-design/icons";
@@ -89,6 +90,11 @@ getItem(
 	<Link to='/admin/overall-hotel-reports'>Hotel Reports</Link>,
 	"sub7",
 	<TeamOutlined />
+),
+getItem(
+	<Link to='/admin/global-hotel-settings'>Global Hotel Settings</Link>,
+	"sub20",
+	<SettingOutlined />
 ),
 
 getItem(
@@ -236,21 +242,23 @@ const AdminNavbar = ({
 							            ? "sub6"
 							            : fromPage === "AdminReports"
 							              ? "sub7"
-							              : fromPage === "AddProducts"
-							                ? "sub8"
-							                : fromPage === "JanatWebsite"
-							                  ? "sub10"
-							                  : fromPage === "NewHotel"
-							                    ? "sub12"
-							                    : fromPage === "OwnerAccount"
-							                      ? "sub13"
-							                      : fromPage === "Payouts"
-							                        ? "sub18"
-							                        : fromPage === "Financials"
-							                          ? "sub16"
-							                          : fromPage === "AdminAccounts"
-							                            ? "sub17"
-							                            : "sub1"
+							              : fromPage === "GlobalHotelSettings"
+							                ? "sub20"
+							                : fromPage === "AddProducts"
+							                  ? "sub8"
+							                  : fromPage === "JanatWebsite"
+							                    ? "sub10"
+							                    : fromPage === "NewHotel"
+							                      ? "sub12"
+							                      : fromPage === "OwnerAccount"
+							                        ? "sub13"
+							                        : fromPage === "Payouts"
+							                          ? "sub18"
+							                          : fromPage === "Financials"
+							                            ? "sub16"
+							                            : fromPage === "AdminAccounts"
+							                              ? "sub17"
+							                              : "sub1"
 					}
 					defaultOpenKeys={[
 						"sub1",
