@@ -20,6 +20,7 @@ import AddedHotelsMain from "./AdminModule/AddedHotels/AddedHotelsMain";
 import AddOwnerAccount from "./AdminModule/AddOwner/AddOwnerAccount";
 import IntegratorMain from "./AdminModule/ElIntegrator/IntegratorMain";
 import AllReservationMain from "./AdminModule/AllReservation/AllReservationMain";
+import OtaReservationsMain from "./AdminModule/OtaReservations/OtaReservationsMain";
 import JannatBookingToolsMain from "./AdminModule/JannatTools/JannatBookingToolsMain";
 import HotelReportsMainAdmin from "./AdminModule/HotelsReport/HotelReportsMainAdmin";
 import CustomerServiceMain from "./AdminModule/CustomerService/CustomerServiceMain";
@@ -184,6 +185,11 @@ function App() {
 					path='/admin/all-reservations'
 					exact
 					component={AllReservationMain}
+				/>
+				<AdminRoute
+					path='/admin/ota-reservations'
+					exact
+					component={OtaReservationsMain}
 				/>
 				<AdminRoute
 					path='/admin/jannatbooking-tools'

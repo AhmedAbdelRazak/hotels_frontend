@@ -1105,6 +1105,107 @@ export const getAllReservationForAdmin = (
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
 
+export const getOtaReservationsForAdmin = (
+	userId,
+	token,
+	{
+		page = 1,
+		limit = 50,
+		searchQuery = "",
+		bookingSource = "",
+		checkinFrom = "",
+		checkinTo = "",
+		checkoutFrom = "",
+		checkoutTo = "",
+		createdFrom = "",
+		createdTo = "",
+	} = {},
+) => {
+	const params = new URLSearchParams({ page, limit });
+	const setIf = (key, value) => {
+		if (value && String(value).trim()) params.set(key, String(value).trim());
+	};
+	setIf("searchQuery", searchQuery);
+	setIf("bookingSource", bookingSource);
+	setIf("checkinFrom", checkinFrom);
+	setIf("checkinTo", checkinTo);
+	setIf("checkoutFrom", checkoutFrom);
+	setIf("checkoutTo", checkoutTo);
+	setIf("createdFrom", createdFrom);
+	setIf("createdTo", createdTo);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not load OTA reservations",
+			data: [],
+			totalDocuments: 0,
+		}));
+};
+
+export const updateOtaReservationPricing = (
+	reservationId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/pricing/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not update OTA reservation pricing",
+		}));
+};
+
+export const releaseOtaReservationToHotel = (
+	reservationId,
+	userId,
+	token,
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/release/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify({}),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not release OTA reservation",
+		}));
+};
+
 export const distinctBookingSources = (userId, token) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/distinct-booking-sources/${userId}`,

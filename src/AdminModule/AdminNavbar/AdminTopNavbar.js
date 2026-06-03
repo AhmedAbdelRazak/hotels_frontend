@@ -1,6 +1,6 @@
 /** @format */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { Link, useHistory, useLocation } from "react-router-dom";
 import { Badge, Dropdown, Empty, Spin, Tag } from "antd";
@@ -55,6 +55,7 @@ const labels = {
 		dashboard: "Dashboard",
 		hotels: "Hotels",
 		reservations: "Reservations",
+		otaReservations: "OTA reservations",
 		reports: "Reports",
 		financials: "Financials",
 		tools: "Tools",
@@ -68,6 +69,7 @@ const labels = {
 		notificationTitle: "Pending Hotel Actions",
 		notificationSubtitle: "All hotels across the platform",
 		noNotifications: "No pending hotel notifications.",
+		otaPending: "New OTA reservation",
 		openAction: "Open action",
 		chatTitle: "Active Chats",
 		chatSubtitle: "Support and B2B conversations",
@@ -87,6 +89,7 @@ const labels = {
 		dashboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645",
 		hotels: "\u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		reservations: "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
 		reports: "\u0627\u0644\u062a\u0642\u0627\u0631\u064a\u0631",
 		financials: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
 		tools: "\u0627\u0644\u0623\u062f\u0648\u0627\u062a",
@@ -100,6 +103,7 @@ const labels = {
 		notificationTitle: "\u0625\u062c\u0631\u0627\u0621\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
 		notificationSubtitle: "\u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0639\u0644\u0649 \u0627\u0644\u0645\u0646\u0635\u0629",
 		noNotifications: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0625\u0634\u0639\u0627\u0631\u0627\u062a \u0641\u0646\u0627\u062f\u0642 \u0645\u0639\u0644\u0642\u0629.",
+		otaPending: "\u062d\u062c\u0632 OTA \u062c\u062f\u064a\u062f",
 		openAction: "\u0641\u062a\u062d \u0627\u0644\u0625\u062c\u0631\u0627\u0621",
 		chatTitle: "\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0646\u0634\u0637\u0629",
 		chatSubtitle: "\u062f\u0639\u0645 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0648\u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0648\u0645\u062d\u0627\u062f\u062b\u0627\u062a B2B",
@@ -127,6 +131,12 @@ const adminLinks = [
 		access: ["HotelsReservations", "AllReservations"],
 	},
 	{
+		to: "/admin/ota-reservations",
+		key: "otaReservations",
+		icon: <BellOutlined />,
+		access: ["OTAReservations"],
+	},
+	{
 		to: "/admin/jannatbooking-tools",
 		key: "tools",
 		icon: <ToolOutlined />,
@@ -135,9 +145,8 @@ const adminLinks = [
 	{
 		key: "notifications",
 		icon: <BellOutlined />,
-		access: ["AdminDashboard"],
+		access: ["OTAReservations"],
 		iconOnly: true,
-		superOnly: true,
 		dropdown: true,
 	},
 	{
@@ -216,6 +225,9 @@ const formatNotificationDate = (value, isArabic = false) => {
 
 const notificationTitle = (item = {}, isArabic = false) => {
 	const type = String(item.notificationType || "").toLowerCase();
+	if (type === "ota_platform_review" || type === "ota_reservation_pending") {
+		return isArabic ? labels.ar.otaPending : labels.en.otaPending;
+	}
 	if (type === "staff_application_pending") {
 		return isArabic ? "\u0637\u0644\u0628 \u0648\u0638\u064a\u0641\u0629" : "Job application";
 	}
@@ -242,6 +254,10 @@ const notificationReasonLabel = (reason, isArabic = false) => {
 		pending_confirmation: {
 			en: "Pending confirmation",
 			ar: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062d\u062c\u0632",
+		},
+		ota_platform_review: {
+			en: "Awaiting platform release",
+			ar: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0625\u0637\u0644\u0627\u0642 \u0627\u0644\u0645\u0646\u0635\u0629",
 		},
 		commission_missing: {
 			en: "Commission needs review",
@@ -381,6 +397,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 		(item) => item.key === "notifications"
 	);
 	const hasServiceLink = visibleLinks.some((item) => item.key === "service");
+	const canUsePlatformNotifications =
+		hasNotificationLink &&
+		(isConfiguredSuperAdmin || accessTo.includes("OTAReservations"));
 	const hotelNotificationCount = Number(hotelNotificationFeed.total || 0);
 	const chatNotificationCount =
 		Number(chatNotificationSummary.supportOpenCases || 0) +
@@ -388,10 +407,119 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const supportEscalatedChatCount = Number(
 		chatNotificationSummary.supportEscalatedCases || 0
 	);
+	const [notificationBellRinging, setNotificationBellRinging] = useState(false);
+	const notificationAudioContextRef = useRef(null);
+	const notificationAudioUnlockedRef = useRef(false);
+	const notificationBellTimerRef = useRef(null);
+	const notificationFeedTotalRef = useRef(0);
+	const notificationFeedReadyRef = useRef(false);
+	const lastNotificationBellAtRef = useRef(0);
 
 	useEffect(() => {
 		const timer = window.setInterval(() => setClockNow(new Date()), 1000 * 30);
 		return () => window.clearInterval(timer);
+	}, []);
+
+	const ensureNotificationAudioReady = useCallback(async () => {
+		if (typeof window === "undefined") return null;
+		const AudioContextConstructor =
+			window.AudioContext || window.webkitAudioContext;
+		if (!AudioContextConstructor) return null;
+
+		let audioContext = notificationAudioContextRef.current;
+		if (!audioContext || audioContext.state === "closed") {
+			audioContext = new AudioContextConstructor();
+			notificationAudioContextRef.current = audioContext;
+		}
+
+		if (audioContext.state === "suspended") {
+			try {
+				await audioContext.resume();
+			} catch (error) {
+				return audioContext;
+			}
+		}
+
+		notificationAudioUnlockedRef.current = audioContext.state === "running";
+		return audioContext;
+	}, []);
+
+	const playNotificationBell = useCallback(async () => {
+		if (typeof window === "undefined") return;
+		const nowMs = Date.now();
+		if (nowMs - lastNotificationBellAtRef.current < 2200) return;
+		lastNotificationBellAtRef.current = nowMs;
+
+		setNotificationBellRinging(true);
+		if (notificationBellTimerRef.current) {
+			clearTimeout(notificationBellTimerRef.current);
+		}
+		notificationBellTimerRef.current = setTimeout(() => {
+			setNotificationBellRinging(false);
+		}, 950);
+
+		const audioContext = await ensureNotificationAudioReady();
+		if (!audioContext || audioContext.state !== "running") return;
+
+		try {
+			const startTime = audioContext.currentTime;
+			const masterGain = audioContext.createGain();
+			masterGain.gain.setValueAtTime(0.0001, startTime);
+			masterGain.gain.exponentialRampToValueAtTime(0.13, startTime + 0.025);
+			masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.02);
+			masterGain.connect(audioContext.destination);
+
+			[
+				{ frequency: 880, offset: 0, duration: 0.22, gain: 0.58 },
+				{ frequency: 1174.66, offset: 0.12, duration: 0.28, gain: 0.45 },
+				{ frequency: 1567.98, offset: 0.3, duration: 0.42, gain: 0.32 },
+			].forEach(({ frequency, offset, duration, gain }) => {
+				const oscillator = audioContext.createOscillator();
+				const noteGain = audioContext.createGain();
+				const noteStart = startTime + offset;
+				const noteEnd = noteStart + duration;
+				oscillator.type = "sine";
+				oscillator.frequency.setValueAtTime(frequency, noteStart);
+				noteGain.gain.setValueAtTime(0.0001, noteStart);
+				noteGain.gain.exponentialRampToValueAtTime(gain, noteStart + 0.018);
+				noteGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+				oscillator.connect(noteGain);
+				noteGain.connect(masterGain);
+				oscillator.start(noteStart);
+				oscillator.stop(noteEnd + 0.04);
+			});
+		} catch (error) {
+			// Audio is best-effort; the badge still updates immediately.
+		}
+	}, [ensureNotificationAudioReady]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const unlockAudio = () => {
+			if (!notificationAudioUnlockedRef.current) {
+				ensureNotificationAudioReady();
+			}
+		};
+		window.addEventListener("pointerdown", unlockAudio, { passive: true });
+		window.addEventListener("touchstart", unlockAudio, { passive: true });
+		window.addEventListener("keydown", unlockAudio);
+		return () => {
+			window.removeEventListener("pointerdown", unlockAudio);
+			window.removeEventListener("touchstart", unlockAudio);
+			window.removeEventListener("keydown", unlockAudio);
+		};
+	}, [ensureNotificationAudioReady]);
+
+	useEffect(() => {
+		return () => {
+			if (notificationBellTimerRef.current) {
+				clearTimeout(notificationBellTimerRef.current);
+			}
+			const audioContext = notificationAudioContextRef.current;
+			if (audioContext && audioContext.state !== "closed") {
+				audioContext.close().catch(() => {});
+			}
+		};
 	}, []);
 
 	const loadAdminChatFeed = useCallback(
@@ -494,18 +622,30 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			}
 
 			try {
-				if (hasNotificationLink && isConfiguredSuperAdmin) {
+				if (canUsePlatformNotifications) {
 					if (!silent) setHotelNotificationsLoading(true);
 					const hotelFeed = await getAdminHotelNotificationFeed({
 						userId: user._id,
 						token,
 						limit: 12,
 					});
+					const nextTotal = Number(hotelFeed?.total || 0);
+					const previousTotal = Number(notificationFeedTotalRef.current || 0);
+					if (
+						notificationFeedReadyRef.current &&
+						nextTotal > previousTotal
+					) {
+						playNotificationBell();
+					}
+					notificationFeedReadyRef.current = true;
+					notificationFeedTotalRef.current = nextTotal;
 					setHotelNotificationFeed({
-						total: Number(hotelFeed?.total || 0),
+						total: nextTotal,
 						data: Array.isArray(hotelFeed?.data) ? hotelFeed.data : [],
 					});
 				} else {
+					notificationFeedReadyRef.current = false;
+					notificationFeedTotalRef.current = 0;
 					setHotelNotificationFeed({ total: 0, data: [] });
 				}
 
@@ -543,9 +683,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			}
 		},
 		[
-			hasNotificationLink,
+			canUsePlatformNotifications,
 			hasServiceLink,
-			isConfiguredSuperAdmin,
+			playNotificationBell,
 			token,
 			user?._id,
 		]
@@ -566,7 +706,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			socket.emit("joinB2BUser", { userId: user._id });
 			if (isConfiguredSuperAdmin) socket.emit("joinB2BPlatform");
 		}
-		if (hasNotificationLink && isConfiguredSuperAdmin) {
+		if (canUsePlatformNotifications) {
 			socket.emit("joinPlatformNotifications");
 		}
 
@@ -597,13 +737,13 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 				socket.emit("leaveB2BUser", { userId: user._id });
 				if (isConfiguredSuperAdmin) socket.emit("leaveB2BPlatform");
 			}
-			if (hasNotificationLink && isConfiguredSuperAdmin) {
+			if (canUsePlatformNotifications) {
 				socket.emit("leavePlatformNotifications");
 			}
 		};
 	}, [
+		canUsePlatformNotifications,
 		chatDropdownOpen,
-		hasNotificationLink,
 		hasServiceLink,
 		isConfiguredSuperAdmin,
 		loadAdminChatFeed,
@@ -633,6 +773,16 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	};
 
 	const buildHotelNotificationRoute = (item = {}) => {
+		if (
+			item.notificationType === "ota_platform_review" ||
+			item.notificationType === "ota_reservation_pending"
+		) {
+			const reservationId = normalizeAdminId(item.reservationId || item._id);
+			const params = new URLSearchParams({ page: "1" });
+			if (reservationId) params.set("pricingReservationId", reservationId);
+			return `/admin/ota-reservations?${params.toString()}`;
+		}
+
 		const targetOwnerId = normalizeAdminId(
 			item.hotelOwnerId || item.ownerId || item.belongsTo
 		);
@@ -746,8 +896,13 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 							>
 								<AdminNotificationItemTop>
 									<strong>{notificationTitle(item, isArabic)}</strong>
-									{item.total_amount ? (
-										<span>{formatNotificationMoney(item.total_amount)} SAR</span>
+									{item.hotel_visible_amount || item.total_amount ? (
+										<span>
+											{formatNotificationMoney(
+												item.hotel_visible_amount || item.total_amount
+											)}{" "}
+											SAR
+										</span>
 									) : (
 										<span>{L.openAction}</span>
 									)}
@@ -803,6 +958,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			<NavIconButton
 				type='button'
 				$active={hotelNotificationsOpen}
+				className={
+					notificationBellRinging ? "admin-notification-bell-ringing" : ""
+				}
 				title={L.notifications}
 				aria-label={L.notifications}
 			>
@@ -1504,6 +1662,32 @@ const NavIconButton = styled.button`
 	.admin-bell-icon {
 		color: #ffe8a3;
 		filter: drop-shadow(0 0 7px rgba(255, 232, 163, 0.32));
+	}
+
+	&.admin-notification-bell-ringing .admin-bell-icon {
+		animation: adminTopbarBellRing 0.8s ease-in-out both;
+		transform-origin: 50% 0%;
+	}
+
+	@keyframes adminTopbarBellRing {
+		0% {
+			transform: rotate(0deg) scale(1);
+		}
+		18% {
+			transform: rotate(-18deg) scale(1.08);
+		}
+		36% {
+			transform: rotate(16deg) scale(1.08);
+		}
+		54% {
+			transform: rotate(-10deg) scale(1.04);
+		}
+		72% {
+			transform: rotate(7deg) scale(1.02);
+		}
+		100% {
+			transform: rotate(0deg) scale(1);
+		}
 	}
 
 	.admin-chat-icon {

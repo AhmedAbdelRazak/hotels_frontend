@@ -14,12 +14,14 @@ import {
 	CustomerServiceOutlined,
 	CreditCardOutlined,
 	DollarCircleOutlined,
+	InboxOutlined,
 	ShopOutlined,
 	TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Menu } from "antd";
 import { useCartContext } from "../../cart_context";
-import { signout } from "../../auth";
+import { isAuthenticated, signout } from "../../auth";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
 
 function getItem(label, key, icon, children, type, className) {
@@ -183,6 +185,7 @@ const AR = {
 	website: "\u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
 	customerService: "\u062e\u062f\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
 	reservations: "\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
 	tools: "\u0623\u062f\u0648\u0627\u062a \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
 	reports: "\u062a\u0642\u0627\u0631\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	newHotel: "\u0625\u0636\u0627\u0641\u0629 \u0641\u0646\u062f\u0642 \u062c\u062f\u064a\u062f",
@@ -204,9 +207,10 @@ const adminArabicItemsClean = [
 		"sub10",
 		<DollarCircleOutlined />
 	),
-	getItem(<Link to='/admin/customer-service'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
-	getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <ShopOutlined />),
-	getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),
+getItem(<Link to='/admin/customer-service'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
+getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <ShopOutlined />),
+getItem(<Link to='/admin/ota-reservations'>{AR.otaReservations}</Link>, "sub19", <InboxOutlined />),
+getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),
 	getItem(<Link to='/admin/overall-hotel-reports'>{AR.reports}</Link>, "sub7", <TeamOutlined />),
 	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
 	getItem(<Link to='/admin/add-owner-account'>{AR.ownerAccount}</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
@@ -231,6 +235,7 @@ const selectedKeyByPage = {
 	CustomerService: "sub2",
 	ElIntegrator: "sub3",
 	AllReservations: "sub4",
+	OTAReservations: "sub19",
 	Tools: "sub6",
 	AdminReports: "sub7",
 	AddedHotels: "sub8",
@@ -276,6 +281,14 @@ const AdminNavbarArabic = ({
 	};
 
 	const history = useHistory();
+	const authUser = (isAuthenticated() || {}).user || {};
+	const canSeeOtaReservations =
+		isConfiguredSuperAdminUser(authUser) ||
+		(Array.isArray(authUser.accessTo) &&
+			authUser.accessTo.includes("OTAReservations"));
+	const visibleItems = canSeeOtaReservations
+		? adminArabicItemsClean
+		: adminArabicItemsClean.filter((item) => item.key !== "sub19");
 	const isMobile = () =>
 		typeof window !== "undefined" && window.innerWidth <= 992;
 
@@ -329,7 +342,7 @@ const AdminNavbarArabic = ({
 					mode='inline'
 					theme='dark'
 					inlineCollapsed={collapsed}
-					items={adminArabicItemsClean}
+					items={visibleItems}
 					onClick={(e) => {
 						if (e.key === "signout") {
 							handleSignout(history);

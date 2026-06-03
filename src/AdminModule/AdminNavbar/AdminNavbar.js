@@ -10,12 +10,14 @@ import {
 	ImportOutlined,
 	CreditCardOutlined,
 	DollarCircleOutlined,
+	InboxOutlined,
 	ShopOutlined,
 	TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Menu } from "antd";
 import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
-import { signout } from "../../auth";
+import { isAuthenticated, signout } from "../../auth";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 
 function getItem(label, key, icon, children, type, className) {
 	return {
@@ -59,6 +61,11 @@ getItem(
 	"sub4",
 		<ShopOutlined />
 	),
+getItem(
+	<Link to='/admin/ota-reservations'>OTA Reservations</Link>,
+	"sub19",
+	<InboxOutlined />
+),
 
 	getItem(
 		<Link to='/admin/jannatbooking-tools'>Jannat Booking Tools</Link>,
@@ -163,6 +170,14 @@ const AdminNavbar = ({
 	};
 
 	const history = useHistory();
+	const authUser = (isAuthenticated() || {}).user || {};
+	const canSeeOtaReservations =
+		isConfiguredSuperAdminUser(authUser) ||
+		(Array.isArray(authUser.accessTo) &&
+			authUser.accessTo.includes("OTAReservations"));
+	const visibleItems = canSeeOtaReservations
+		? items
+		: items.filter((item) => item.key !== "sub19");
 	const isMobile = () =>
 		typeof window !== "undefined" && window.innerWidth <= 992;
 
@@ -204,27 +219,29 @@ const AdminNavbar = ({
 							    ? "sub3"
 							    : fromPage === "AllReservations"
 							      ? "sub4"
-							      : fromPage === "StoreBilling"
-							        ? "sub5"
-							        : fromPage === "Tools"
-							          ? "sub6"
-							          : fromPage === "AdminReports"
-							            ? "sub7"
-							            : fromPage === "AddProducts"
-							              ? "sub8"
-							              : fromPage === "JanatWebsite"
-							                ? "sub10"
-							                : fromPage === "NewHotel"
-							                  ? "sub12"
-							                  : fromPage === "OwnerAccount"
-							                    ? "sub13"
-							                    : fromPage === "Payouts"
-							                      ? "sub18"
-							                      : fromPage === "Financials"
-							                        ? "sub16"
-							                        : fromPage === "AdminAccounts"
-							                          ? "sub17"
-							                          : "sub1"
+							      : fromPage === "OTAReservations"
+							        ? "sub19"
+							        : fromPage === "StoreBilling"
+							          ? "sub5"
+							          : fromPage === "Tools"
+							            ? "sub6"
+							            : fromPage === "AdminReports"
+							              ? "sub7"
+							              : fromPage === "AddProducts"
+							                ? "sub8"
+							                : fromPage === "JanatWebsite"
+							                  ? "sub10"
+							                  : fromPage === "NewHotel"
+							                    ? "sub12"
+							                    : fromPage === "OwnerAccount"
+							                      ? "sub13"
+							                      : fromPage === "Payouts"
+							                        ? "sub18"
+							                        : fromPage === "Financials"
+							                          ? "sub16"
+							                          : fromPage === "AdminAccounts"
+							                            ? "sub17"
+							                            : "sub1"
 					}
 					defaultOpenKeys={[
 						"sub1",
@@ -242,7 +259,7 @@ const AdminNavbar = ({
 					mode='inline'
 					theme='dark'
 					inlineCollapsed={collapsed}
-					items={items}
+					items={visibleItems}
 					onClick={(e) => {
 						if (e.key === "signout") {
 							handleSignout(history);
