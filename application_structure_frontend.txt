@@ -1776,6 +1776,9 @@ Future TODO Backlog - Added 2026-05-26
 - Page behavior:
   - AdminGlobalHotelSettingsMain loads all hotels through getAdminGlobalHotelSettings.
   - The table shows hotel, owner, setup status, total rooms, room types, photos, location/data/bank readiness, last update, and an Open Settings action for the single-hotel settings route when needed.
+  - The page includes a case-insensitive client-side search input above the table.
+  - Search matches any substring in hotelName, ownerName, or ownerEmail; for example ZAD, zad, or ZaD should show every hotel whose hotel name, owner name, or owner email contains zad anywhere in the string.
+  - The header count shows filtered / total hotels while a search term is active, and the table renders the filtered hotel array only.
   - The two high-visibility action buttons are Room Add / Update and Calendar Pricing.
   - The page uses the same AdminNavbar/AdminNavbarArabic shell pattern as other /admin pages.
 - Room Add / Update modal behavior:

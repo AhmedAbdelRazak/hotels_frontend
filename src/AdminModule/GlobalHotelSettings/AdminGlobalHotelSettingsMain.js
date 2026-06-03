@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	CalendarOutlined,
 	EditOutlined,
 	PlusCircleOutlined,
 	ReloadOutlined,
+	SearchOutlined,
 } from "@ant-design/icons";
-import { message } from "antd";
+import { Input, message } from "antd";
 import { useHistory, useLocation } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
 import { isAuthenticated } from "../../auth";
@@ -45,6 +46,8 @@ const PAGE_TEXT = {
 		calendarAction: "Calendar Pricing",
 		owner: "Owner",
 		refresh: "Refresh",
+		searchPlaceholder: "Search hotel, owner, or owner email",
+		noSearchResults: "No hotels match your search.",
 	},
 	ar: {
 		title: "\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
@@ -55,8 +58,26 @@ const PAGE_TEXT = {
 			"\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u062a\u0642\u0648\u064a\u0645",
 		owner: "\u0627\u0644\u0645\u0627\u0644\u0643",
 		refresh: "\u062a\u062d\u062f\u064a\u062b",
+		searchPlaceholder:
+			"\u0627\u0628\u062d\u062b \u0628\u0627\u0644\u0641\u0646\u062f\u0642 \u0623\u0648 \u0627\u0644\u0645\u0627\u0644\u0643 \u0623\u0648 \u0628\u0631\u064a\u062f \u0627\u0644\u0645\u0627\u0644\u0643",
+		noSearchResults:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0641\u0646\u0627\u062f\u0642 \u0645\u0637\u0627\u0628\u0642\u0629 \u0644\u0644\u0628\u062d\u062b.",
 	},
 };
+
+const normalizeSearchValue = (value = "") =>
+	String(value || "")
+		.trim()
+		.toLowerCase();
+
+const hotelSearchHaystack = (hotel = {}) =>
+	[
+		hotel.hotelName,
+		hotel.ownerName,
+		hotel.ownerEmail,
+	]
+		.map((value) => String(value || "").toLowerCase())
+		.join(" ");
 
 const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 	const isArabic = chosenLanguage === "Arabic";
@@ -86,6 +107,15 @@ const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 	const [loading, setLoading] = useState(false);
 	const [rows, setRows] = useState([]);
 	const [total, setTotal] = useState(0);
+	const [searchTerm, setSearchTerm] = useState("");
+	const normalizedSearchTerm = normalizeSearchValue(searchTerm);
+	const filteredRows = useMemo(() => {
+		if (!normalizedSearchTerm) return rows;
+		return rows.filter((hotel) =>
+			hotelSearchHaystack(hotel).includes(normalizedSearchTerm)
+		);
+	}, [normalizedSearchTerm, rows]);
+	const hasSearch = normalizedSearchTerm.length > 0;
 
 	const loadSettings = useCallback(() => {
 		if (!userId || !token) return;
@@ -218,7 +248,9 @@ const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 							<div>
 								<h1>{labels.title}</h1>
 								<span>
-									{labels.subtitle} | {total} {labels.hotels}
+									{labels.subtitle} |{" "}
+									{hasSearch ? `${filteredRows.length} / ${total}` : total}{" "}
+									{labels.hotels}
 								</span>
 							</div>
 							<button
@@ -256,6 +288,18 @@ const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 							</SettingsActionButton>
 						</SettingsActions>
 
+						<SearchPanel $isRTL={isArabic}>
+							<Input
+								allowClear
+								size='large'
+								prefix={<SearchOutlined />}
+								value={searchTerm}
+								onChange={(event) => setSearchTerm(event.target.value)}
+								placeholder={labels.searchPlaceholder}
+								dir='auto'
+							/>
+						</SearchPanel>
+
 						<AdminGlobalRoomManagerModal
 							open={roomModalOpen}
 							onClose={closeModal}
@@ -283,6 +327,8 @@ const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 
 						{!loading && !rows.length ? (
 							<EmptyState>{labels.noHotelsFound}</EmptyState>
+						) : !loading && !filteredRows.length ? (
+							<EmptyState>{labels.noSearchResults}</EmptyState>
 						) : (
 							<OverallTableWrap>
 								<table>
@@ -308,7 +354,7 @@ const AdminGlobalHotelSettingsMain = ({ chosenLanguage }) => {
 												<td colSpan='12'>{labels.loading}</td>
 											</tr>
 										) : (
-											rows.map((hotel, index) => (
+											filteredRows.map((hotel, index) => (
 												<tr key={hotel._id}>
 													<td>{index + 1}</td>
 													<td>
@@ -538,6 +584,40 @@ const SettingsActions = styled.div`
 	@media (max-width: 640px) {
 		display: grid;
 		grid-template-columns: 1fr;
+	}
+`;
+
+const SearchPanel = styled.div`
+	display: flex;
+	justify-content: center;
+	margin: 0 auto 16px;
+	width: min(100%, 720px);
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+
+	.ant-input-affix-wrapper {
+		min-height: 44px;
+		border-radius: 8px;
+		border-color: rgba(139, 190, 227, 0.56);
+		background: #ffffff;
+		box-shadow: 0 8px 18px rgba(13, 49, 88, 0.07);
+	}
+
+	.ant-input-affix-wrapper-focused {
+		border-color: rgba(36, 144, 200, 0.82);
+		box-shadow:
+			0 0 0 3px rgba(36, 144, 200, 0.12),
+			0 10px 22px rgba(13, 49, 88, 0.1);
+	}
+
+	.anticon-search {
+		color: #176899;
+	}
+
+	input {
+		color: #10243a;
+		font-size: 0.92rem;
+		font-weight: 850;
+		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	}
 `;
 
