@@ -411,9 +411,21 @@ const OtaPricingModal = ({
 			open={open}
 			onCancel={onCancel}
 			width='min(96vw, 1480px)'
-			centered
+			centered={false}
+			zIndex={26000}
+			wrapClassName='ota-pricing-modal-wrap'
+			rootClassName='ota-pricing-modal-root'
+			style={{ top: 94, paddingBottom: 24 }}
 			destroyOnClose
 			title='Edit pricing details'
+			styles={{
+				mask: { zIndex: 25990 },
+				body: {
+					maxHeight: "calc(100vh - 190px)",
+					overflowY: "auto",
+					paddingInlineEnd: 4,
+				},
+			}}
 			footer={[
 				<Button key='cancel' onClick={onCancel}>
 					Cancel
