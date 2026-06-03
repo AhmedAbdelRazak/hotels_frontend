@@ -383,15 +383,24 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const isArabic = chosenLanguage === "Arabic";
 	const L = labels[isArabic ? "ar" : "en"];
 	const isConfiguredSuperAdmin = isConfiguredSuperAdminUser(user);
+	const hasPlatformAdminRole = [
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	].includes(1000);
 	const accessTo = Array.isArray(user.accessTo)
 		? user.accessTo.map((item) => String(item || "").trim()).filter(Boolean)
 		: [];
+	const canAccessAdminLink = (item = {}) => {
+		const accessKeys = item.access || [];
+		if (accessKeys.includes("OTAReservations")) {
+			return hasPlatformAdminRole && accessTo.includes("OTAReservations");
+		}
+		return accessKeys.some((key) => accessTo.includes(key));
+	};
 	const visibleLinks = (
 		isConfiguredSuperAdmin
 			? adminLinks
-			: adminLinks.filter((item) =>
-					(item.access || []).some((key) => accessTo.includes(key))
-			  )
+			: adminLinks.filter(canAccessAdminLink)
 	).filter((item) => !item.superOnly || isConfiguredSuperAdmin);
 	const hasNotificationLink = visibleLinks.some(
 		(item) => item.key === "notifications"
@@ -399,7 +408,8 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const hasServiceLink = visibleLinks.some((item) => item.key === "service");
 	const canUsePlatformNotifications =
 		hasNotificationLink &&
-		(isConfiguredSuperAdmin || accessTo.includes("OTAReservations"));
+		(isConfiguredSuperAdmin ||
+			(hasPlatformAdminRole && accessTo.includes("OTAReservations")));
 	const hotelNotificationCount = Number(hotelNotificationFeed.total || 0);
 	const chatNotificationCount =
 		Number(chatNotificationSummary.supportOpenCases || 0) +

@@ -41,6 +41,18 @@ const handleSignout = (history) => {
 	});
 };
 
+const hasPlatformAdminRole = (user = {}) =>
+	[
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	].includes(1000);
+
+const canAccessOtaReservations = (user = {}) =>
+	isConfiguredSuperAdminUser(user) ||
+	(hasPlatformAdminRole(user) &&
+		Array.isArray(user?.accessTo) &&
+		user.accessTo.includes("OTAReservations"));
+
 const items = [
 	getItem(
 		<Link to='/admin/dashboard'>لوحة التحكم الرئيسية</Link>,
@@ -282,10 +294,7 @@ const AdminNavbarArabic = ({
 
 	const history = useHistory();
 	const authUser = (isAuthenticated() || {}).user || {};
-	const canSeeOtaReservations =
-		isConfiguredSuperAdminUser(authUser) ||
-		(Array.isArray(authUser.accessTo) &&
-			authUser.accessTo.includes("OTAReservations"));
+	const canSeeOtaReservations = canAccessOtaReservations(authUser);
 	const visibleItems = canSeeOtaReservations
 		? adminArabicItemsClean
 		: adminArabicItemsClean.filter((item) => item.key !== "sub19");

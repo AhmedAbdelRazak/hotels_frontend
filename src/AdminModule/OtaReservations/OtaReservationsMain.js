@@ -16,6 +16,10 @@ import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import MoreDetails from "../AllReservation/MoreDetails";
 import { isAuthenticated } from "../../auth";
 import {
+	formatSaudiGregorianDate,
+	formatSaudiHijriDate,
+} from "../../utils/saudiDates";
+import {
 	getOtaReservationsForAdmin,
 	readUserId,
 	releaseOtaReservationToHotel,
@@ -33,6 +37,41 @@ const numberValue = (value) => {
 const money = (value) => numberValue(value).toFixed(2);
 
 const round2 = (value) => Number(numberValue(value).toFixed(2));
+
+const hasExplicitNumberInput = (value) =>
+	value !== null &&
+	value !== undefined &&
+	value !== "" &&
+	Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
+
+const firstExplicitNumber = (...values) => {
+	for (const value of values) {
+		if (hasExplicitNumberInput(value)) {
+			return Number(String(value).replace(/,/g, "").trim());
+		}
+	}
+	return null;
+};
+
+const savedClientTotalForReservation = (reservation = {}) => {
+	const value = firstExplicitNumber(
+		reservation?.adminPricing?.clientTotal,
+		reservation?.total_amount
+	);
+	return value !== null ? round2(value) : 0;
+};
+
+const savedRootTotalForReservation = (reservation = {}) => {
+	const value = firstExplicitNumber(reservation?.adminPricing?.rootTotal);
+	return value !== null ? round2(value) : 0;
+};
+
+const savedNetTotalForReservation = (reservation = {}) => {
+	const value = firstExplicitNumber(
+		reservation?.adminPricing?.netAfterExpensesTotal
+	);
+	return value !== null ? round2(value) : 0;
+};
 
 const formatDate = (value) => {
 	if (!value) return "-";
@@ -62,9 +101,12 @@ const normalizeDay = (day = {}) => {
 			day.totalPriceWithCommission ??
 			day.price
 	);
-	const rootPrice = round2(
-		day.rootPrice ?? day.totalPriceWithoutCommission ?? day.basePrice ?? day.price
+	const explicitRootPrice = firstExplicitNumber(
+		day.rootPrice,
+		day.totalPriceWithoutCommission,
+		day.basePrice
 	);
+	const rootPrice = explicitRootPrice !== null ? round2(explicitRootPrice) : 0;
 	const explicitNet =
 		day.netAfterExpenses ??
 		day.netAfterOtaExpenses ??
@@ -173,10 +215,81 @@ const recalcDay = (day = {}, patch = {}) => {
 	};
 };
 
+const distributeRoomsTotal = (rooms = [], field, totalValue) => {
+	const total = numberValue(totalValue);
+	const flatDays = [];
+	rooms.forEach((room) => {
+		(room.pricingByDay || []).forEach(() => {
+			flatDays.push({ room });
+		});
+	});
+	if (!total || !flatDays.length) return rooms;
+	const weightedNights = flatDays.reduce(
+		(sum, item) => sum + roomCount(item.room),
+		0
+	);
+	const perRoomNight = weightedNights > 0 ? round2(total / weightedNights) : 0;
+	return rooms.map((room) => ({
+		...room,
+		pricingByDay: (room.pricingByDay || []).map((day) => {
+			if (field === "client") return recalcDay(day, { clientPrice: perRoomNight });
+			if (field === "root") return recalcDay(day, { rootPrice: perRoomNight });
+			return recalcDay(day, { netAfterExpenses: perRoomNight });
+		}),
+	}));
+};
+
 const getReservationKey = (reservation = {}) =>
 	String(reservation._id || reservation.confirmation_number || "");
 
-const OtaPricingModal = ({ open, reservation, onCancel, onSave, saving }) => {
+const otaConfirmationNumberForReservation = (reservation = {}) =>
+	reservation?.supplierData?.otaConfirmationNumber ||
+	reservation?.supplierData?.suppliedBookingNo ||
+	reservation?.otaPlatformReview?.confirmationNumber ||
+	reservation?.confirmation_number2 ||
+	"-";
+
+const formatModalDatePair = (value, language = "English") => ({
+	gregorian: formatSaudiGregorianDate(value, {
+		language,
+		month: "short",
+		fallback: "-",
+	}),
+	hijri: formatSaudiHijriDate(value, {
+		language,
+		month: "long",
+		fallback: "-",
+	}),
+});
+
+const isReleaseReady = (reservation = {}) =>
+	Boolean(reservation?.hotel_base_price_ready) &&
+	numberValue(reservation?.hotel_visible_amount) > 0;
+
+const releaseBlockedMessage = (reservation = {}) =>
+	reservation?.hotel_base_price_issue ||
+	"Save Total base hotel price in Change pricing before releasing this reservation.";
+
+const hasPlatformAdminRole = (user = {}) =>
+	[
+		Number(user?.role),
+		...(Array.isArray(user?.roles) ? user.roles.map(Number) : []),
+	].includes(1000);
+
+const hasOtaReservationAdminAccess = (user = {}) =>
+	SUPER_USER_IDS.includes(user?._id) ||
+	(hasPlatformAdminRole(user) &&
+		Array.isArray(user?.accessTo) &&
+		user.accessTo.includes("OTAReservations"));
+
+const OtaPricingModal = ({
+	open,
+	reservation,
+	onCancel,
+	onSave,
+	saving,
+	chosenLanguage = "English",
+}) => {
 	const [rooms, setRooms] = useState([]);
 	const [distributeValues, setDistributeValues] = useState({
 		client: "",
@@ -186,8 +299,23 @@ const OtaPricingModal = ({ open, reservation, onCancel, onSave, saving }) => {
 
 	useEffect(() => {
 		if (!open || !reservation) return;
-		setRooms(normalizeRoomsForEdit(reservation));
-		setDistributeValues({ client: "", root: "", net: "" });
+		const savedClientTotal = savedClientTotalForReservation(reservation);
+		const savedRootTotal = savedRootTotalForReservation(reservation);
+		const savedNetTotal = savedNetTotalForReservation(reservation);
+		let nextRooms = normalizeRoomsForEdit(reservation);
+		const currentClientTotal = round2(summarizeRooms(nextRooms).clientTotal);
+		if (
+			savedClientTotal > 0 &&
+			Math.abs(currentClientTotal - savedClientTotal) > 0.01
+		) {
+			nextRooms = distributeRoomsTotal(nextRooms, "client", savedClientTotal);
+		}
+		setRooms(nextRooms);
+		setDistributeValues({
+			client: savedClientTotal > 0 ? money(savedClientTotal) : "",
+			root: savedRootTotal > 0 ? money(savedRootTotal) : "",
+			net: savedNetTotal > 0 ? money(savedNetTotal) : "",
+		});
 	}, [open, reservation]);
 
 	const totals = useMemo(() => {
@@ -269,6 +397,15 @@ const OtaPricingModal = ({ open, reservation, onCancel, onSave, saving }) => {
 		onSave(payload);
 	};
 
+	const checkinDate = formatModalDatePair(
+		reservation?.checkin_date,
+		chosenLanguage
+	);
+	const checkoutDate = formatModalDatePair(
+		reservation?.checkout_date,
+		chosenLanguage
+	);
+
 	return (
 		<Modal
 			open={open}
@@ -287,12 +424,36 @@ const OtaPricingModal = ({ open, reservation, onCancel, onSave, saving }) => {
 			]}
 		>
 			<PricingModalContent>
+				<PricingContextGrid>
+					<PricingContextItem>
+						<span>Confirmation Number</span>
+						<strong>{reservation?.confirmation_number || "-"}</strong>
+					</PricingContextItem>
+					<PricingContextItem>
+						<span>OTA confirmation number</span>
+						<strong>{otaConfirmationNumberForReservation(reservation)}</strong>
+					</PricingContextItem>
+					<PricingContextItem>
+						<span>Hotel Name</span>
+						<strong>{reservation?.hotel_name || reservation?.hotelId?.hotelName || "-"}</strong>
+					</PricingContextItem>
+					<PricingContextItem>
+						<span>Check in</span>
+						<strong>{checkinDate.gregorian}</strong>
+						<small>{checkinDate.hijri}</small>
+					</PricingContextItem>
+					<PricingContextItem>
+						<span>Check out</span>
+						<strong>{checkoutDate.gregorian}</strong>
+						<small>{checkoutDate.hijri}</small>
+					</PricingContextItem>
+				</PricingContextGrid>
 				<PricingSummaryRows>
 					<PricingSummaryRow>
 						<strong>Total client price</strong>
 						<Input value={money(totals.clientTotal)} readOnly />
 						<Input
-							placeholder='Enter total to distribute'
+							placeholder='Saved total to distribute'
 							value={distributeValues.client}
 							onChange={(event) =>
 								setDistributeValues((prev) => ({
@@ -448,10 +609,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const releaseReservationId = params.get("releaseReservationId") || "";
 	const pageSize = 20;
 
-	const hasOtaAccess =
-		SUPER_USER_IDS.includes(getUser?._id) ||
-		(Array.isArray(getUser?.accessTo) &&
-			getUser.accessTo.includes("OTAReservations"));
+	const hasOtaAccess = hasOtaReservationAdminAccess(getUser);
 
 	const replaceQuery = useCallback(
 		(updates = {}) => {
@@ -535,8 +693,13 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const openPricing = (reservation) =>
 		replaceQuery({ pricingReservationId: getReservationKey(reservation) });
 	const closePricing = () => replaceQuery({ pricingReservationId: "" });
-	const openRelease = (reservation) =>
+	const openRelease = (reservation) => {
+		if (!isReleaseReady(reservation)) {
+			message.warning(releaseBlockedMessage(reservation));
+			return;
+		}
 		replaceQuery({ releaseReservationId: getReservationKey(reservation) });
+	};
 	const closeRelease = () => replaceQuery({ releaseReservationId: "" });
 	const openDetails = (reservation) =>
 		replaceQuery({ reservationId: getReservationKey(reservation) });
@@ -581,6 +744,10 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 
 	const handleRelease = async () => {
 		if (!selectedReleaseReservation || !getUser?._id) return;
+		if (!isReleaseReady(selectedReleaseReservation)) {
+			message.error(releaseBlockedMessage(selectedReleaseReservation));
+			return;
+		}
 		setReleasing(true);
 		const response = await releaseOtaReservationToHotel(
 			getReservationKey(selectedReleaseReservation),
@@ -736,9 +903,21 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 														</ActionButton>
 													</td>
 													<td>
-														<ReleaseButton type='button' onClick={() => openRelease(reservation)}>
+														<Tooltip
+															title={
+																isReleaseReady(reservation)
+																	? "Release to hotel"
+																	: releaseBlockedMessage(reservation)
+															}
+														>
+															<ReleaseButton
+																type='button'
+																disabled={!isReleaseReady(reservation)}
+																onClick={() => openRelease(reservation)}
+															>
 															<CheckCircleOutlined /> Release To Hotel
-														</ReleaseButton>
+															</ReleaseButton>
+														</Tooltip>
 													</td>
 												</tr>
 											))
@@ -779,6 +958,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				onCancel={closePricing}
 				onSave={handlePricingSave}
 				saving={savingPricing}
+				chosenLanguage={chosenLanguage}
 			/>
 
 			<Modal
@@ -822,17 +1002,29 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				okText='Yes, release'
 				cancelText='No'
 				confirmLoading={releasing}
+				okButtonProps={{
+					disabled: !isReleaseReady(selectedReleaseReservation),
+				}}
 				onOk={handleRelease}
 				centered
 			>
-				<p>
-					Are you sure you want to release this reservation to the hotel for{" "}
-					<strong>
-						{money(selectedReleaseReservation?.hotel_visible_amount)} SAR
-					</strong>
-					?
-				</p>
-				<p>The hotel will then see it as Pending Confirmation.</p>
+				{isReleaseReady(selectedReleaseReservation) ? (
+					<>
+						<p>
+							Are you sure you want to release this reservation to the hotel for{" "}
+							<strong>
+								{money(selectedReleaseReservation?.hotel_visible_amount)} SAR
+							</strong>
+							?
+						</p>
+						<p>The hotel will then see it as Pending Confirmation.</p>
+					</>
+				) : (
+					<BasePriceWarning>
+						<strong>Release is locked.</strong>
+						<span>{releaseBlockedMessage(selectedReleaseReservation)}</span>
+					</BasePriceWarning>
+				)}
 			</Modal>
 		</OtaPageWrapper>
 	);
@@ -1008,6 +1200,11 @@ const ActionButton = styled.button`
 
 const ReleaseButton = styled(ActionButton)`
 	color: #047857;
+
+	&:disabled {
+		color: #94a3b8;
+		cursor: not-allowed;
+	}
 `;
 
 const PaginationRow = styled.div`
@@ -1021,6 +1218,55 @@ const PaginationRow = styled.div`
 const PricingModalContent = styled.div`
 	display: grid;
 	gap: 14px;
+`;
+
+const PricingContextGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 8px;
+	padding: 10px;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	background: #ffffff;
+
+	@media (max-width: 1100px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	@media (max-width: 720px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const PricingContextItem = styled.div`
+	min-width: 0;
+	padding: 8px 10px;
+	border-inline-start: 3px solid #0f766e;
+	background: #f8fafc;
+
+	span,
+	small {
+		display: block;
+		color: #64748b;
+		font-size: 11px;
+		font-weight: 700;
+	}
+
+	strong {
+		display: block;
+		margin-top: 3px;
+		color: #0f172a;
+		font-size: 13px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	small {
+		margin-top: 2px;
+		font-weight: 600;
+		text-transform: none;
+	}
 `;
 
 const PricingSummaryRows = styled.div`
@@ -1093,5 +1339,23 @@ const PricingTableWrap = styled.div`
 	tfoot th {
 		background: #f8fafc;
 		color: #0f172a;
+	}
+`;
+
+const BasePriceWarning = styled.div`
+	display: grid;
+	gap: 6px;
+	padding: 12px;
+	border: 1px solid #fecaca;
+	border-radius: 8px;
+	background: #fff1f2;
+	color: #991b1b;
+
+	strong {
+		font-size: 14px;
+	}
+
+	span {
+		font-size: 13px;
 	}
 `;
