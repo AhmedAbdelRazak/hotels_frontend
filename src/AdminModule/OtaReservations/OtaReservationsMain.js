@@ -7,11 +7,13 @@ import { Button, Input, Modal, Spin, Tooltip, message } from "antd";
 import {
 	CheckCircleOutlined,
 	EditOutlined,
+	EyeOutlined,
 	ReloadOutlined,
 	SearchOutlined,
 } from "@ant-design/icons";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
+import MoreDetails from "../AllReservation/MoreDetails";
 import { isAuthenticated } from "../../auth";
 import {
 	getOtaReservationsForAdmin,
@@ -441,6 +443,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	);
 	const currentPage = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 	const searchTerm = params.get("search") || "";
+	const detailsReservationId = params.get("reservationId") || "";
 	const pricingReservationId = params.get("pricingReservationId") || "";
 	const releaseReservationId = params.get("releaseReservationId") || "";
 	const pageSize = 20;
@@ -521,6 +524,9 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const selectedReleaseReservation = reservations.find(
 		(reservation) => getReservationKey(reservation) === releaseReservationId
 	);
+	const selectedDetailsReservation = reservations.find(
+		(reservation) => getReservationKey(reservation) === detailsReservationId
+	);
 	const totalPages = Math.max(
 		Math.ceil(Number(dataState.totalDocuments || 0) / pageSize),
 		1
@@ -532,6 +538,27 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const openRelease = (reservation) =>
 		replaceQuery({ releaseReservationId: getReservationKey(reservation) });
 	const closeRelease = () => replaceQuery({ releaseReservationId: "" });
+	const openDetails = (reservation) =>
+		replaceQuery({ reservationId: getReservationKey(reservation) });
+	const closeDetails = () => replaceQuery({ reservationId: "" });
+
+	const handleReservationUpdated = (updated) => {
+		if (!updated) return;
+		const updatedKey = getReservationKey(updated);
+		setDataState((previous) => ({
+			...previous,
+			data: (previous.data || []).map((reservation) =>
+				getReservationKey(reservation) === updatedKey
+					? {
+							...reservation,
+							...updated,
+							hotelId: updated.hotelId || reservation.hotelId,
+							belongsTo: updated.belongsTo || reservation.belongsTo,
+					  }
+					: reservation
+			),
+		}));
+	};
 
 	const handlePricingSave = async (payload) => {
 		if (!selectedPricingReservation || !getUser?._id) return;
@@ -666,6 +693,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 											<th>Client Total</th>
 											<th>Hotel Amount</th>
 											<th>Change Pricing</th>
+											<th>Show Details</th>
 											<th>Release To Hotel</th>
 										</tr>
 									</thead>
@@ -703,6 +731,11 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 														</ActionButton>
 													</td>
 													<td>
+														<ActionButton type='button' onClick={() => openDetails(reservation)}>
+															<EyeOutlined /> Show Details
+														</ActionButton>
+													</td>
+													<td>
 														<ReleaseButton type='button' onClick={() => openRelease(reservation)}>
 															<CheckCircleOutlined /> Release To Hotel
 														</ReleaseButton>
@@ -711,7 +744,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 											))
 										) : (
 											<tr>
-												<td colSpan='14'>No pending OTA reservations.</td>
+												<td colSpan='15'>No pending OTA reservations.</td>
 											</tr>
 										)}
 									</tbody>
@@ -747,6 +780,40 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				onSave={handlePricingSave}
 				saving={savingPricing}
 			/>
+
+			<Modal
+				open={!!detailsReservationId && !!selectedDetailsReservation}
+				onCancel={closeDetails}
+				width='min(98vw, 1720px)'
+				centered
+				className='admin-reservation-details-modal reservation-details-modal'
+				rootClassName='admin-reservation-details-layer'
+				wrapClassName='admin-reservation-details-wrap'
+				footer={null}
+				destroyOnClose
+				zIndex={12000}
+				styles={{
+					mask: { zIndex: 11999 },
+					header: { display: "none" },
+					content: { padding: "6px 8px 8px" },
+					body: {
+						maxHeight: "92vh",
+						overflowY: "auto",
+						padding: "0",
+					},
+				}}
+			>
+				{selectedDetailsReservation ? (
+					<MoreDetails
+						key={getReservationKey(selectedDetailsReservation)}
+						selectedReservation={selectedDetailsReservation}
+						hotelDetails={selectedDetailsReservation.hotelId}
+						reservation={selectedDetailsReservation}
+						setReservation={handleReservationUpdated}
+						onReservationUpdated={handleReservationUpdated}
+					/>
+				) : null}
+			</Modal>
 
 			<Modal
 				open={!!releaseReservationId && !!selectedReleaseReservation}
