@@ -457,11 +457,28 @@ const isOrderTakerOnly = (account = {}) => {
 	return isAgent && !hasFullAccess;
 };
 
+const moneyNumber = (value) => {
+	if (value === null || value === undefined || value === "") return 0;
+	const parsed = Number(String(value).replace(/,/g, "").trim());
+	return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const firstPositiveMoney = (...values) => {
+	for (const value of values) {
+		const amount = moneyNumber(value);
+		if (amount > 0) return amount;
+	}
+	return 0;
+};
+
 const getCommissionValue = (reservation = {}) =>
-	Number(
-		reservation.commission ||
-			reservation?.financial_cycle?.commissionAmount ||
-			0
+	firstPositiveMoney(
+		reservation.commissionAmount,
+		reservation.commission,
+		reservation?.commissionData?.amount,
+		reservation?.commissionData?.commissionAmount,
+		reservation?.financial_cycle?.commissionAmount,
+		reservation?.financial_cycle?.commissionValue
 	);
 
 const hasCommissionAssignment = (reservation = {}) =>
