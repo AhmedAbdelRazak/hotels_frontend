@@ -72,6 +72,7 @@ const labels = {
 		notificationSubtitle: "All hotels across the platform",
 		noNotifications: "No pending hotel notifications.",
 		otaPending: "New OTA reservation",
+		rejectedReservation: "Reservation #{confirmation} was rejected",
 		openAction: "Open action",
 		chatTitle: "Active Chats",
 		chatSubtitle: "Support and B2B conversations",
@@ -108,6 +109,8 @@ const labels = {
 		notificationSubtitle: "\u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0639\u0644\u0649 \u0627\u0644\u0645\u0646\u0635\u0629",
 		noNotifications: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0625\u0634\u0639\u0627\u0631\u0627\u062a \u0641\u0646\u0627\u062f\u0642 \u0645\u0639\u0644\u0642\u0629.",
 		otaPending: "\u062d\u062c\u0632 OTA \u062c\u062f\u064a\u062f",
+		rejectedReservation:
+			"\u062a\u0645 \u0631\u0641\u0636 \u0627\u0644\u062d\u062c\u0632 #{confirmation}",
 		openAction: "\u0641\u062a\u062d \u0627\u0644\u0625\u062c\u0631\u0627\u0621",
 		chatTitle: "\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0646\u0634\u0637\u0629",
 		chatSubtitle: "\u062f\u0639\u0645 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0648\u0627\u0644\u0639\u0645\u0644\u0627\u0621 \u0648\u0645\u062d\u0627\u062f\u062b\u0627\u062a B2B",
@@ -155,7 +158,7 @@ const adminLinks = [
 	{
 		key: "notifications",
 		icon: <BellOutlined />,
-		access: ["OTAReservations"],
+		access: ["OTAReservations", "HotelsReservations", "AllReservations"],
 		iconOnly: true,
 		dropdown: true,
 	},
@@ -248,6 +251,13 @@ const notificationTitle = (item = {}, isArabic = false) => {
 	const type = String(item.notificationType || "").toLowerCase();
 	if (type === "ota_platform_review" || type === "ota_reservation_pending") {
 		return isArabic ? labels.ar.otaPending : labels.en.otaPending;
+	}
+	if (isAdminRejectedReservationNotification(item)) {
+		const confirmation = item.confirmation_number || item.confirmationNumber || "";
+		const template = isArabic
+			? labels.ar.rejectedReservation
+			: labels.en.rejectedReservation;
+		return template.replace("{confirmation}", confirmation || "N/A");
 	}
 	if (type === "staff_application_pending") {
 		return isArabic ? "\u0637\u0644\u0628 \u0648\u0638\u064a\u0641\u0629" : "Job application";
@@ -413,6 +423,12 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 		: [];
 	const canAccessAdminLink = (item = {}) => {
 		const accessKeys = item.access || [];
+		if (item.key === "notifications") {
+			return (
+				hasPlatformAdminRole &&
+				accessKeys.some((key) => accessTo.includes(key))
+			);
+		}
 		if (accessKeys.includes("OTAReservations")) {
 			return hasPlatformAdminRole && accessTo.includes("OTAReservations");
 		}
@@ -430,7 +446,10 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 	const canUsePlatformNotifications =
 		hasNotificationLink &&
 		(isConfiguredSuperAdmin ||
-			(hasPlatformAdminRole && accessTo.includes("OTAReservations")));
+			(hasPlatformAdminRole &&
+				["OTAReservations", "HotelsReservations", "AllReservations"].some(
+					(key) => accessTo.includes(key)
+				)));
 	const hotelNotificationCount = Number(hotelNotificationFeed.total || 0);
 	const chatNotificationCount =
 		Number(chatNotificationSummary.supportOpenCases || 0) +

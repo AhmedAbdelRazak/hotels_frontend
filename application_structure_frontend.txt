@@ -1989,7 +1989,12 @@ Future TODO Backlog - Added 2026-05-26
   - Table includes a Rejection Reason column sourced from pendingConfirmation, agentDecisionSnapshot, finance cycle, commission approval, or stored rejection fields.
   - Filters/search/date/sort/export stay aligned with the pending reservations page.
   - Rejected Excel export includes the rejection reason; the normal pending export remains unchanged.
-  - Notification cards show the rejection comment and route hotel/reservation-team rejection clicks to the rejected workspace. Finance rejections continue to use finance-action routing.
+ - Notification cards show the rejection comment and route hotel/reservation-team rejection clicks to the rejected workspace. Finance rejections continue to use finance-action routing.
+  - 2026-06-04 platform admin notification wording/access follow-up:
+    - SUPER ADMIN users and role-1000 platform users with OTAReservations, HotelsReservations, or AllReservations access can see the platform notification bell.
+    - Backend notification scope for role-1000 platform users and configured SUPER ADMIN users remains all hotels when no ownerId/hotelId filter is passed.
+    - Rejected reservation notification titles are explicit: "Reservation #<confirmation> was rejected" / Arabic equivalent.
+    - Rejected notification clicks route to /admin/rejected-reservations?reservationId=<reservationId>&page=1.
 
 2026-06-04 Platform Admin Rejected Reservations Separation
 - Frontend files:
