@@ -7797,17 +7797,19 @@ const ReservationDetail = ({
 										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 									</strong>
 								</div>
-								<div className='pricing-summary-card'>
-									<span>
-										{chosenLanguage === "Arabic"
-											? AR_LABELS.platformMargin
-											: "Platform Margin"}
-									</span>
-									<strong className='detail-value-ltr'>
-										{formatMoney(pricingBreakdownByDay.platformMarginTotal)}{" "}
-										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
-									</strong>
-								</div>
+								{isConfiguredSuperAdmin ? (
+									<div className='pricing-summary-card'>
+										<span>
+											{chosenLanguage === "Arabic"
+												? AR_LABELS.platformMargin
+												: "Platform Margin"}
+										</span>
+										<strong className='detail-value-ltr'>
+											{formatMoney(pricingBreakdownByDay.platformMarginTotal)}{" "}
+											{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										</strong>
+									</div>
+								) : null}
 							</div>
 
 							{pricingBreakdownByDay.sections.length &&
@@ -7867,11 +7869,13 @@ const ReservationDetail = ({
 																? AR_LABELS.otaOtherExpense
 																: "OTA/Other Expense"}
 														</th>
-														<th>
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.platformMargin
-																: "Platform Margin"}
-														</th>
+														{isConfiguredSuperAdmin ? (
+															<th>
+																{chosenLanguage === "Arabic"
+																	? AR_LABELS.platformMargin
+																	: "Platform Margin"}
+															</th>
+														) : null}
 														<th>
 															{chosenLanguage === "Arabic"
 																? AR_LABELS.quantity
@@ -7917,12 +7921,14 @@ const ReservationDetail = ({
 																		? AR_LABELS.currency
 																		: "SAR"}
 																</td>
-																<td className='detail-value-ltr'>
-																	{formatMoney(day.platformMargin)}{" "}
-																	{chosenLanguage === "Arabic"
-																		? AR_LABELS.currency
-																		: "SAR"}
-																</td>
+																{isConfiguredSuperAdmin ? (
+																	<td className='detail-value-ltr'>
+																		{formatMoney(day.platformMargin)}{" "}
+																		{chosenLanguage === "Arabic"
+																			? AR_LABELS.currency
+																			: "SAR"}
+																	</td>
+																) : null}
 																<td>{section.count}</td>
 																<td className='detail-value-ltr'>
 																	{formatMoney(day.clientTotal)}{" "}
@@ -7965,12 +7971,14 @@ const ReservationDetail = ({
 																? AR_LABELS.currency
 																: "SAR"}
 														</td>
-														<td className='detail-value-ltr'>
-															{formatMoney(section.platformMarginTotal)}{" "}
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.currency
-																: "SAR"}
-														</td>
+														{isConfiguredSuperAdmin ? (
+															<td className='detail-value-ltr'>
+																{formatMoney(section.platformMarginTotal)}{" "}
+																{chosenLanguage === "Arabic"
+																	? AR_LABELS.currency
+																	: "SAR"}
+															</td>
+														) : null}
 														<td>{section.count}</td>
 														<td className='detail-value-ltr'>
 															{formatMoney(section.total)}{" "}

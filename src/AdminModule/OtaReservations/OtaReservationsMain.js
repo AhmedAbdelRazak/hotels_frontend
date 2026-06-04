@@ -289,6 +289,7 @@ const OtaPricingModal = ({
 	onSave,
 	saving,
 	chosenLanguage = "English",
+	canViewPlatformProfit = false,
 }) => {
 	const [rooms, setRooms] = useState([]);
 	const [distributeValues, setDistributeValues] = useState({
@@ -517,8 +518,12 @@ const OtaPricingModal = ({
 								<th>Base hotel price</th>
 								<th>Net after expenses</th>
 								<th>OTA/other expenses</th>
-								<th>Platform margin</th>
-								<th>Margin %</th>
+								{canViewPlatformProfit ? (
+									<>
+										<th>Platform margin</th>
+										<th>Margin %</th>
+									</>
+								) : null}
 							</tr>
 						</thead>
 						<tbody>
@@ -565,13 +570,19 @@ const OtaPricingModal = ({
 											/>
 										</td>
 										<td>{money(day.otaExpenseAmount)}</td>
-										<td>{money(day.platformMargin)}</td>
-										<td>{money(day.platformMarginRate)}%</td>
+										{canViewPlatformProfit ? (
+											<>
+												<td>{money(day.platformMargin)}</td>
+												<td>{money(day.platformMarginRate)}%</td>
+											</>
+										) : null}
 									</tr>
 								))
 							) : (
 								<tr>
-									<td colSpan='7'>No daily pricing rows were found.</td>
+									<td colSpan={canViewPlatformProfit ? 7 : 5}>
+										No daily pricing rows were found.
+									</td>
 								</tr>
 							)}
 						</tbody>
@@ -582,8 +593,12 @@ const OtaPricingModal = ({
 								<th>{money(totals.rootTotal)}</th>
 								<th>{money(totals.netAfterExpensesTotal)}</th>
 								<th>{money(totals.otaExpenseTotal)}</th>
-								<th>{money(totals.platformMarginTotal)}</th>
-								<th />
+								{canViewPlatformProfit ? (
+									<>
+										<th>{money(totals.platformMarginTotal)}</th>
+										<th />
+									</>
+								) : null}
 							</tr>
 						</tfoot>
 					</table>
@@ -622,6 +637,9 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const pageSize = 20;
 
 	const hasOtaAccess = hasOtaReservationAdminAccess(getUser);
+	const canViewPlatformProfit = SUPER_USER_IDS.includes(
+		String(getUser?._id || authUser?._id || "")
+	);
 
 	const replaceQuery = useCallback(
 		(updates = {}) => {
@@ -971,6 +989,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				onSave={handlePricingSave}
 				saving={savingPricing}
 				chosenLanguage={chosenLanguage}
+				canViewPlatformProfit={canViewPlatformProfit}
 			/>
 
 			<Modal

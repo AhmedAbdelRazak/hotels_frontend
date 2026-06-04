@@ -1949,3 +1949,13 @@ Future TODO Backlog - Added 2026-05-26
   - Saved rootPrice is preserved when the Edit Pricing modal opens.
   - totalPriceWithoutCommission is kept aligned with the root/hotel price for admin three-price/OTA rows instead of being rewritten to the client/OTA gross price.
   - Net After Expenses, OTA/Other Expense, and Platform Margin continue to pre-populate from saved daily fields when they exist.
+
+2026-06-04 SUPER ADMIN Only Platform Profit Display
+- Frontend files:
+  - src/AdminModule/AllReservation/MoreDetails.js.
+  - src/AdminModule/JannatTools/EditPricingModal.js.
+  - src/AdminModule/OtaReservations/OtaReservationsMain.js.
+- Role rule:
+  - Explicit platform profit/margin displays are visible only to configured SUPER ADMIN users from REACT_APP_SUPER_ADMIN_ID.
+  - Regular platform employees may still see client/OTA total, hotel-visible/root total, net after OTA expenses, and OTA/other expense.
+  - Regular platform employees must not see "Platform Profit", "Platform Margin", "ربح المنصة", or "هامش المنصة" cards/columns in admin reservation details, Edit Pricing, or OTA pricing review modals.

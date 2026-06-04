@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
+import { isAuthenticated } from "../../auth";
+import { isSuperAdminUser } from "../utils/superUsers";
 
 const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
@@ -227,6 +229,8 @@ const EDIT_PRICING_MODAL_Z = 19020;
 
 const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	const { chosenLanguage } = useCartContext();
+	const auth = isAuthenticated() || {};
+	const canViewPlatformProfit = isSuperAdminUser(auth?.user);
 	const isArabic = chosenLanguage === "Arabic";
 	const t = TEXT[isArabic ? "ar" : "en"];
 	const [editableData, setEditableData] = useState([]);
@@ -443,7 +447,8 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			width: 160,
 			render: (value) => <span>{formatMoney(value)}</span>,
 		},
-		{
+		canViewPlatformProfit
+			? {
 			title: labelWithHelp(
 				t.columns.platformMargin,
 				t.help.platformMargin,
@@ -457,7 +462,8 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 					{formatMoney(value)}
 				</span>
 			),
-		},
+		  }
+			: null,
 		{
 			title: t.columns.rate,
 			dataIndex: "commissionRate",
@@ -475,7 +481,7 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 				/>
 			),
 		},
-	];
+	].filter(Boolean);
 
 	const distributionControls = [
 		{
@@ -684,15 +690,17 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 							<Table.Summary.Cell>
 								<b>{formatMoney(totals.expense)}</b>
 							</Table.Summary.Cell>
-							<Table.Summary.Cell>
-								<b
-									style={{
-										color: totals.margin < 0 ? "#b42318" : "#1a6d2f",
-									}}
-								>
-									{formatMoney(totals.margin)}
-								</b>
-							</Table.Summary.Cell>
+							{canViewPlatformProfit ? (
+								<Table.Summary.Cell>
+									<b
+										style={{
+											color: totals.margin < 0 ? "#b42318" : "#1a6d2f",
+										}}
+									>
+										{formatMoney(totals.margin)}
+									</b>
+								</Table.Summary.Cell>
+							) : null}
 							<Table.Summary.Cell />
 						</Table.Summary.Row>
 					</Table.Summary>
