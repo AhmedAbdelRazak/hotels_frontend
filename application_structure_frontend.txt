@@ -1959,3 +1959,11 @@ Future TODO Backlog - Added 2026-05-26
   - Explicit platform profit/margin displays are visible only to configured SUPER ADMIN users from REACT_APP_SUPER_ADMIN_ID.
   - Regular platform employees may still see client/OTA total, hotel-visible/root total, net after OTA expenses, and OTA/other expense.
   - Regular platform employees must not see "Platform Profit", "Platform Margin", "ربح المنصة", or "هامش المنصة" cards/columns in admin reservation details, Edit Pricing, or OTA pricing review modals.
+
+2026-06-04 OTA Pricing Modal Arabic Labels And Help Tooltips
+- Frontend file:
+  - src/AdminModule/OtaReservations/OtaReservationsMain.js.
+- UX behavior:
+  - The /admin/ota-reservations Change pricing modal now respects chosenLanguage for Arabic/English modal title, context labels, distribution controls, table headers, empty-state text, and footer buttons.
+  - Pricing labels include info tooltips matching the admin all-reservations Edit Pricing guidance for client/main total, base hotel/root total, net after OTA expenses, OTA/other expenses, and SUPER ADMIN-only platform margin fields.
+  - The pricing math and save payload are unchanged; this is only a readability/help enhancement for platform users reviewing OTA pricing.

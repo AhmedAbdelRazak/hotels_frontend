@@ -7,6 +7,7 @@ import { Button, Input, Modal, Spin, Tooltip, message } from "antd";
 import {
 	CheckCircleOutlined,
 	EditOutlined,
+	ExclamationCircleOutlined,
 	EyeOutlined,
 	ReloadOutlined,
 	SearchOutlined,
@@ -37,6 +38,107 @@ const numberValue = (value) => {
 const money = (value) => numberValue(value).toFixed(2);
 
 const round2 = (value) => Number(numberValue(value).toFixed(2));
+
+const OTA_PRICING_TEXT = {
+	English: {
+		title: "Edit pricing details",
+		cancel: "Cancel",
+		save: "Save",
+		distribute: "Distribute",
+		savedTotalPlaceholder: "Saved total to distribute",
+		enterTotalPlaceholder: "Enter total to distribute",
+		noDailyPricing: "No daily pricing rows were found.",
+		context: {
+			confirmationNumber: "Confirmation Number",
+			otaConfirmationNumber: "OTA confirmation number",
+			hotelName: "Hotel Name",
+			checkIn: "Check in",
+			checkOut: "Check out",
+		},
+		labels: {
+			totalClientPrice: "Total client price",
+			totalBaseHotelPrice: "Total base hotel price",
+			netAfterOtaExpenses: "Net after OTA expenses",
+			date: "Date",
+			mainClientPrice: "Main client price",
+			baseHotelPrice: "Base hotel price",
+			netAfterExpenses: "Net after expenses",
+			otaOtherExpenses: "OTA/other expenses",
+			platformMargin: "Platform margin",
+			marginRate: "Margin %",
+			total: "Total",
+		},
+		help: {
+			totalClientPrice:
+				"The full OTA/client-facing reservation total. Use Distribute to spread this total across all nights.",
+			totalBaseHotelPrice:
+				"The total amount the hotel should see and confirm. This is the hotel-visible root/base total.",
+			netAfterOtaExpenses:
+				"The remaining total after OTA or other platform expenses are deducted from the client total.",
+			mainClientPrice:
+				"The nightly OTA/client-facing amount for this date.",
+			baseHotelPrice:
+				"The nightly hotel-visible amount for this date.",
+			netAfterExpenses:
+				"The nightly amount after OTA or other platform expenses.",
+			otaOtherExpenses:
+				"Calculated automatically as client price minus net after expenses.",
+			platformMargin:
+				"Calculated automatically as net after expenses minus base hotel price. Visible only to SUPER ADMINS.",
+			marginRate:
+				"Platform margin percentage from the net after expenses. Visible only to SUPER ADMINS.",
+		},
+	},
+	Arabic: {
+		title: "تعديل تفاصيل الأسعار",
+		cancel: "إلغاء",
+		save: "حفظ",
+		distribute: "توزيع",
+		savedTotalPlaceholder: "الإجمالي المحفوظ للتوزيع",
+		enterTotalPlaceholder: "أدخل الإجمالي للتوزيع",
+		noDailyPricing: "لا توجد صفوف أسعار يومية لهذا الحجز.",
+		context: {
+			confirmationNumber: "رقم التأكيد",
+			otaConfirmationNumber: "رقم تأكيد OTA",
+			hotelName: "اسم الفندق",
+			checkIn: "تاريخ الوصول",
+			checkOut: "تاريخ المغادرة",
+		},
+		labels: {
+			totalClientPrice: "إجمالي سعر العميل",
+			totalBaseHotelPrice: "إجمالي السعر الأساسي للفندق",
+			netAfterOtaExpenses: "الصافي بعد مصاريف OTA",
+			date: "التاريخ",
+			mainClientPrice: "سعر العميل الرئيسي",
+			baseHotelPrice: "السعر الأساسي للفندق",
+			netAfterExpenses: "الصافي بعد المصاريف",
+			otaOtherExpenses: "مصاريف OTA/أخرى",
+			platformMargin: "هامش المنصة",
+			marginRate: "نسبة الهامش %",
+			total: "الإجمالي",
+		},
+		help: {
+			totalClientPrice:
+				"إجمالي السعر الظاهر للعميل أو منصة OTA. استخدم توزيع لتقسيم الإجمالي على كل الليالي.",
+			totalBaseHotelPrice:
+				"إجمالي المبلغ الذي يجب أن يراه الفندق ويؤكده. هذا هو السعر الأساسي الظاهر للفندق.",
+			netAfterOtaExpenses:
+				"الإجمالي المتبقي بعد خصم مصاريف OTA أو أي مصاريف منصات أخرى من إجمالي العميل.",
+			mainClientPrice:
+				"السعر الليلي الظاهر للعميل أو منصة OTA لهذا التاريخ.",
+			baseHotelPrice:
+				"السعر الليلي الظاهر للفندق لهذا التاريخ.",
+			netAfterExpenses:
+				"المبلغ الليلي بعد خصم مصاريف OTA أو المصاريف الأخرى.",
+			otaOtherExpenses:
+				"يتم حسابه تلقائيا: سعر العميل ناقص الصافي بعد المصاريف.",
+			platformMargin:
+				"يتم حسابه تلقائيا: الصافي بعد المصاريف ناقص السعر الأساسي للفندق. يظهر فقط للـ SUPER ADMINS.",
+			marginRate:
+				"نسبة هامش المنصة من الصافي بعد المصاريف. تظهر فقط للـ SUPER ADMINS.",
+		},
+	},
+};
 
 const hasExplicitNumberInput = (value) =>
 	value !== null &&
@@ -282,6 +384,23 @@ const hasOtaReservationAdminAccess = (user = {}) =>
 		Array.isArray(user?.accessTo) &&
 		user.accessTo.includes("OTAReservations"));
 
+const PricingHelpLabel = ({ label, help }) => (
+	<span className='pricing-help-label'>
+		<span>{label}</span>
+		<Tooltip
+			title={help}
+			trigger={["hover", "focus", "click"]}
+			overlayStyle={{ maxWidth: 320 }}
+		>
+			<ExclamationCircleOutlined
+				className='pricing-help-icon'
+				tabIndex={0}
+				aria-label={label}
+			/>
+		</Tooltip>
+	</span>
+);
+
 const OtaPricingModal = ({
 	open,
 	reservation,
@@ -291,6 +410,8 @@ const OtaPricingModal = ({
 	chosenLanguage = "English",
 	canViewPlatformProfit = false,
 }) => {
+	const isArabic = chosenLanguage === "Arabic";
+	const t = OTA_PRICING_TEXT[isArabic ? "Arabic" : "English"];
 	const [rooms, setRooms] = useState([]);
 	const [distributeValues, setDistributeValues] = useState({
 		client: "",
@@ -418,7 +539,7 @@ const OtaPricingModal = ({
 			rootClassName='ota-pricing-modal-root'
 			style={{ top: 94, paddingBottom: 24 }}
 			destroyOnClose
-			title='Edit pricing details'
+			title={<span dir={isArabic ? "rtl" : "ltr"}>{t.title}</span>}
 			styles={{
 				mask: { zIndex: 25990 },
 				body: {
@@ -429,44 +550,52 @@ const OtaPricingModal = ({
 			}}
 			footer={[
 				<Button key='cancel' onClick={onCancel}>
-					Cancel
+					{t.cancel}
 				</Button>,
 				<Button key='save' type='primary' loading={saving} onClick={handleSave}>
-					Save
+					{t.save}
 				</Button>,
 			]}
 		>
-			<PricingModalContent>
+			<PricingModalContent
+				dir={isArabic ? "rtl" : "ltr"}
+				className={isArabic ? "is-arabic" : ""}
+			>
 				<PricingContextGrid>
 					<PricingContextItem>
-						<span>Confirmation Number</span>
+						<span>{t.context.confirmationNumber}</span>
 						<strong>{reservation?.confirmation_number || "-"}</strong>
 					</PricingContextItem>
 					<PricingContextItem>
-						<span>OTA confirmation number</span>
+						<span>{t.context.otaConfirmationNumber}</span>
 						<strong>{otaConfirmationNumberForReservation(reservation)}</strong>
 					</PricingContextItem>
 					<PricingContextItem>
-						<span>Hotel Name</span>
+						<span>{t.context.hotelName}</span>
 						<strong>{reservation?.hotel_name || reservation?.hotelId?.hotelName || "-"}</strong>
 					</PricingContextItem>
 					<PricingContextItem>
-						<span>Check in</span>
+						<span>{t.context.checkIn}</span>
 						<strong>{checkinDate.gregorian}</strong>
 						<small>{checkinDate.hijri}</small>
 					</PricingContextItem>
 					<PricingContextItem>
-						<span>Check out</span>
+						<span>{t.context.checkOut}</span>
 						<strong>{checkoutDate.gregorian}</strong>
 						<small>{checkoutDate.hijri}</small>
 					</PricingContextItem>
 				</PricingContextGrid>
 				<PricingSummaryRows>
 					<PricingSummaryRow>
-						<strong>Total client price</strong>
+						<strong>
+							<PricingHelpLabel
+								label={t.labels.totalClientPrice}
+								help={t.help.totalClientPrice}
+							/>
+						</strong>
 						<Input value={money(totals.clientTotal)} readOnly />
 						<Input
-							placeholder='Saved total to distribute'
+							placeholder={t.savedTotalPlaceholder}
 							value={distributeValues.client}
 							onChange={(event) =>
 								setDistributeValues((prev) => ({
@@ -475,13 +604,20 @@ const OtaPricingModal = ({
 								}))
 							}
 						/>
-						<Button onClick={() => distributeTotal("client")}>Distribute</Button>
+						<Button onClick={() => distributeTotal("client")}>
+							{t.distribute}
+						</Button>
 					</PricingSummaryRow>
 					<PricingSummaryRow>
-						<strong>Total base hotel price</strong>
+						<strong>
+							<PricingHelpLabel
+								label={t.labels.totalBaseHotelPrice}
+								help={t.help.totalBaseHotelPrice}
+							/>
+						</strong>
 						<Input value={money(totals.rootTotal)} readOnly />
 						<Input
-							placeholder='Enter total to distribute'
+							placeholder={t.enterTotalPlaceholder}
 							value={distributeValues.root}
 							onChange={(event) =>
 								setDistributeValues((prev) => ({
@@ -490,13 +626,20 @@ const OtaPricingModal = ({
 								}))
 							}
 						/>
-						<Button onClick={() => distributeTotal("root")}>Distribute</Button>
+						<Button onClick={() => distributeTotal("root")}>
+							{t.distribute}
+						</Button>
 					</PricingSummaryRow>
 					<PricingSummaryRow>
-						<strong>Net after OTA expenses</strong>
+						<strong>
+							<PricingHelpLabel
+								label={t.labels.netAfterOtaExpenses}
+								help={t.help.netAfterOtaExpenses}
+							/>
+						</strong>
 						<Input value={money(totals.netAfterExpensesTotal)} readOnly />
 						<Input
-							placeholder='Enter total to distribute'
+							placeholder={t.enterTotalPlaceholder}
 							value={distributeValues.net}
 							onChange={(event) =>
 								setDistributeValues((prev) => ({
@@ -505,7 +648,9 @@ const OtaPricingModal = ({
 								}))
 							}
 						/>
-						<Button onClick={() => distributeTotal("net")}>Distribute</Button>
+						<Button onClick={() => distributeTotal("net")}>
+							{t.distribute}
+						</Button>
 					</PricingSummaryRow>
 				</PricingSummaryRows>
 
@@ -513,15 +658,45 @@ const OtaPricingModal = ({
 					<table>
 						<thead>
 							<tr>
-								<th>Date</th>
-								<th>Main client price</th>
-								<th>Base hotel price</th>
-								<th>Net after expenses</th>
-								<th>OTA/other expenses</th>
+								<th>{t.labels.date}</th>
+								<th>
+									<PricingHelpLabel
+										label={t.labels.mainClientPrice}
+										help={t.help.mainClientPrice}
+									/>
+								</th>
+								<th>
+									<PricingHelpLabel
+										label={t.labels.baseHotelPrice}
+										help={t.help.baseHotelPrice}
+									/>
+								</th>
+								<th>
+									<PricingHelpLabel
+										label={t.labels.netAfterExpenses}
+										help={t.help.netAfterExpenses}
+									/>
+								</th>
+								<th>
+									<PricingHelpLabel
+										label={t.labels.otaOtherExpenses}
+										help={t.help.otaOtherExpenses}
+									/>
+								</th>
 								{canViewPlatformProfit ? (
 									<>
-										<th>Platform margin</th>
-										<th>Margin %</th>
+										<th>
+											<PricingHelpLabel
+												label={t.labels.platformMargin}
+												help={t.help.platformMargin}
+											/>
+										</th>
+										<th>
+											<PricingHelpLabel
+												label={t.labels.marginRate}
+												help={t.help.marginRate}
+											/>
+										</th>
 									</>
 								) : null}
 							</tr>
@@ -581,14 +756,14 @@ const OtaPricingModal = ({
 							) : (
 								<tr>
 									<td colSpan={canViewPlatformProfit ? 7 : 5}>
-										No daily pricing rows were found.
+										{t.noDailyPricing}
 									</td>
 								</tr>
 							)}
 						</tbody>
 						<tfoot>
 							<tr>
-								<th>Total</th>
+								<th>{t.labels.total}</th>
 								<th>{money(totals.clientTotal)}</th>
 								<th>{money(totals.rootTotal)}</th>
 								<th>{money(totals.netAfterExpensesTotal)}</th>
@@ -1249,6 +1424,26 @@ const PaginationRow = styled.div`
 const PricingModalContent = styled.div`
 	display: grid;
 	gap: 14px;
+
+	&.is-arabic {
+		font-family: "Droid Arabic Kufi", "Tajawal", "Cairo", "Noto Kufi Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+		text-align: right;
+	}
+
+	.pricing-help-label {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		min-width: 0;
+	}
+
+	.pricing-help-icon {
+		color: #38bdf8;
+		cursor: help;
+		font-size: 13px;
+		flex: 0 0 auto;
+	}
 `;
 
 const PricingContextGrid = styled.div`
