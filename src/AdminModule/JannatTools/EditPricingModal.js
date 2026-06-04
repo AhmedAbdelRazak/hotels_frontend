@@ -29,7 +29,9 @@ const TEXT = {
 		title: "Edit Pricing Breakdown",
 		cancel: "Cancel",
 		inherit: "Inherit First Row Values",
-		save: "Save",
+		save: "Apply Pricing",
+		applied:
+			"Pricing was applied in the editor. Click Submit/Update Reservation to save it permanently.",
 		distribute: "Distribute",
 		moreDetails: "More details",
 		enterPlaceholder: (label) => `Enter ${label.toLowerCase()}`,
@@ -73,6 +75,8 @@ const TEXT = {
 		},
 	},
 	ar: {
+		applied:
+			"\u062a\u0645 \u062a\u0637\u0628\u064a\u0642 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u062f\u0627\u062e\u0644 \u0646\u0645\u0648\u0630\u062c \u0627\u0644\u062d\u062c\u0632. \u0627\u0636\u063a\u0637 \u062d\u0641\u0638/\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u062c\u0632 \u0644\u062a\u062b\u0628\u064a\u062a\u0647\u0627.",
 		title: "تعديل تفاصيل الأسعار",
 		cancel: "إلغاء",
 		inherit: "نسخ قيم أول يوم",
@@ -196,6 +200,16 @@ const normalizePricingRow = (row = {}) => {
 	};
 };
 
+const summarizePricingRows = (rows = []) =>
+	(Array.isArray(rows) ? rows : []).reduce(
+		(acc, row) => ({
+			client: roundMoney(acc.client + safeParseFloat(row.clientPrice, 0)),
+			root: roundMoney(acc.root + safeParseFloat(row.rootPrice, 0)),
+			net: roundMoney(acc.net + safeParseFloat(row.netAfterExpenses, 0)),
+		}),
+		{ client: 0, root: 0, net: 0 },
+	);
+
 const distributeMoney = (total, count) => {
 	const totalCents = Math.round(safeParseFloat(total, 0) * 100);
 	const baseCents = Math.floor(totalCents / count);
@@ -222,7 +236,9 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 
 	useEffect(() => {
 		if (visible) {
-			setEditableData((pricingByDay || []).map(normalizePricingRow));
+			const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
+			setEditableData(normalizedRows);
+			setDistributionTotals(summarizePricingRows(normalizedRows));
 		}
 	}, [visible, pricingByDay]);
 
@@ -245,6 +261,7 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	const commitRows = (rows) => {
 		const normalizedRows = rows.map(normalizePricingRow);
 		setEditableData(normalizedRows);
+		setDistributionTotals(summarizePricingRows(normalizedRows));
 		onUpdate(normalizedRows);
 	};
 
@@ -356,6 +373,7 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 		}
 
 		commitRows(editableData);
+		message.success(t.applied, 5);
 		onClose();
 	};
 

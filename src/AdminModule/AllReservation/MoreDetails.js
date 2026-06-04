@@ -742,6 +742,12 @@ const AR_LABELS = {
 		"\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u0628\u0644\u063a",
 	reservationValue:
 		"\u0642\u064a\u0645\u0629 \u0627\u0644\u062d\u062c\u0632",
+	hotelVisibleAmount:
+		"\u0645\u0627 \u064a\u0638\u0647\u0631 \u0644\u0644\u0641\u0646\u062f\u0642",
+	netAfterOtaExpenses:
+		"\u0628\u0639\u062f \u0645\u0635\u0627\u0631\u064a\u0641 OTA",
+	platformProfit:
+		"\u0631\u0628\u062d \u0627\u0644\u0645\u0646\u0635\u0629",
 	taxesAndFees:
 		"\u0627\u0644\u0636\u0631\u0627\u0626\u0628 \u0648\u0627\u0644\u0631\u0633\u0648\u0645",
 	commission:
@@ -3431,7 +3437,7 @@ const ContentSection = styled.div`
 	.payment-total-grid {
 		display: grid;
 		gap: 6px;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
 	}
 
 	.payment-total-card {
@@ -3482,6 +3488,25 @@ const ContentSection = styled.div`
 
 	.payment-total-card.due.is-due strong {
 		color: #be123c;
+	}
+
+	.payment-total-card.hotel-visible {
+		background: #f0fdfa;
+		border-color: #5eead4;
+	}
+
+	.payment-total-card.net {
+		background: #f8fafc;
+		border-color: #c4b5fd;
+	}
+
+	.payment-total-card.profit {
+		background: #fff7ed;
+		border-color: #fdba74;
+	}
+
+	.payment-total-card.profit strong {
+		color: #9a3412;
 	}
 
 	.finance-cycle-card {
@@ -6436,6 +6461,97 @@ const ReservationDetail = ({
 		daysOfResidence,
 		normalizeNumber,
 		reservation?.pickedRoomsType,
+	]);
+
+	const otaPricingSummary = useMemo(() => {
+		const adminPricing = reservation?.adminPricing || {};
+		const hasExplicitMoney = (value) =>
+			value !== null &&
+			value !== undefined &&
+			value !== "" &&
+			Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
+		const firstMoney = (...values) => {
+			for (const value of values) {
+				if (!hasExplicitMoney(value)) continue;
+				return normalizeNumber(value, 0);
+			}
+			return 0;
+		};
+		const firstPositiveMoney = (...values) => {
+			for (const value of values) {
+				if (!hasExplicitMoney(value)) continue;
+				const parsed = normalizeNumber(value, 0);
+				if (parsed > 0) return parsed;
+			}
+			return 0;
+		};
+		const adminPricingMode = String(adminPricing?.mode || "").toLowerCase();
+		const hasAdminOtaAmounts =
+			firstPositiveMoney(
+				adminPricing.otaExpenseTotal,
+				pricingBreakdownByDay.otaExpenseTotal,
+				adminPricing.platformMarginTotal,
+				pricingBreakdownByDay.platformMarginTotal,
+			) > 0;
+		const hasOtaPricing =
+			!!reservation?.otaPlatformReview ||
+			!!reservation?.supplierData?.otaCreatedFromEmail ||
+			!!reservation?.supplierData?.otaProvider ||
+			!!reservation?.adminPricingVisibility?.rootOnlyForHotelManagement ||
+			(/(ota|admin_three_price|platform)/i.test(adminPricingMode) &&
+				hasAdminOtaAmounts) ||
+			/(ota|expedia|agoda|booking\.?com|airbnb)/i.test(
+				String(reservation?.booking_source || ""),
+			);
+
+		if (!hasOtaPricing) {
+			return {
+				show: false,
+				hotelVisibleAmount: 0,
+				netAfterExpenses: 0,
+				profit: 0,
+			};
+		}
+
+		const hotelVisibleAmount = firstPositiveMoney(
+			adminPricing.rootTotal,
+			reservation?.hotel_visible_amount,
+			pricingBreakdownByDay.rootTotal,
+			reservation?.sub_total,
+			totalAmountValue,
+		);
+		const netAfterExpenses = firstPositiveMoney(
+			adminPricing.netAfterExpensesTotal,
+			pricingBreakdownByDay.netTotal,
+			totalAmountValue - firstMoney(adminPricing.otaExpenseTotal),
+			totalAmountValue,
+		);
+		const profit = firstMoney(
+			adminPricing.platformMarginTotal,
+			pricingBreakdownByDay.platformMarginTotal,
+			netAfterExpenses - hotelVisibleAmount,
+		);
+
+		return {
+			show: true,
+			hotelVisibleAmount,
+			netAfterExpenses,
+			profit,
+		};
+	}, [
+		normalizeNumber,
+		pricingBreakdownByDay.netTotal,
+		pricingBreakdownByDay.otaExpenseTotal,
+		pricingBreakdownByDay.platformMarginTotal,
+		pricingBreakdownByDay.rootTotal,
+		reservation?.adminPricing,
+		reservation?.adminPricingVisibility,
+		reservation?.booking_source,
+		reservation?.hotel_visible_amount,
+		reservation?.otaPlatformReview,
+		reservation?.sub_total,
+		reservation?.supplierData,
+		totalAmountValue,
 	]);
 
 	const roomTypeAccommodationPricing = useMemo(() => {
@@ -9985,6 +10101,45 @@ const ReservationDetail = ({
 												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 											</strong>
 										</div>
+										{otaPricingSummary.show ? (
+											<>
+												<div className='payment-total-card hotel-visible'>
+													<span>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.hotelVisibleAmount
+															: "Hotel Can See"}
+													</span>
+													<strong className='detail-value-ltr'>
+														{formatMoney(otaPricingSummary.hotelVisibleAmount)}{" "}
+														{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+													</strong>
+												</div>
+												<div className='payment-total-card net'>
+													<span>
+														{chosenLanguage === "Arabic"
+															? AR_LABELS.netAfterOtaExpenses
+															: "After OTA Expenses"}
+													</span>
+													<strong className='detail-value-ltr'>
+														{formatMoney(otaPricingSummary.netAfterExpenses)}{" "}
+														{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+													</strong>
+												</div>
+												{isConfiguredSuperAdmin ? (
+													<div className='payment-total-card profit'>
+														<span>
+															{chosenLanguage === "Arabic"
+																? AR_LABELS.platformProfit
+																: "Platform Profit"}
+														</span>
+														<strong className='detail-value-ltr'>
+															{formatMoney(otaPricingSummary.profit)}{" "}
+															{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+														</strong>
+													</div>
+												) : null}
+											</>
+										) : null}
 									</div>
 								</div>
 								<div

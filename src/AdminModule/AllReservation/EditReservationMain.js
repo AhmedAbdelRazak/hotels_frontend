@@ -1101,8 +1101,39 @@ const EditReservationMain = ({
 					hotelId: incoming.hotelId || reservation.hotelId,
 					belongsTo: incoming.belongsTo || reservation.belongsTo,
 				};
+				const correctionResubmitted =
+					response?.adminCorrectionResubmitted === true;
+				const savedTitle = successMessage(
+					correctionResubmitted
+						? "Reservation corrected and resubmitted"
+						: "Reservation updated and saved",
+					correctionResubmitted
+						? "\u062a\u0645 \u062a\u0635\u062d\u064a\u062d \u0627\u0644\u062d\u062c\u0632 \u0648\u0625\u0639\u0627\u062f\u062a\u0647 \u0644\u0644\u0645\u0631\u0627\u062c\u0639\u0629"
+						: "\u062a\u0645 \u062d\u0641\u0638 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u062c\u0632"
+				);
+				const savedConfirmation =
+					mergedReservation.confirmation_number ||
+					reservation.confirmation_number ||
+					"";
 				setReservation(mergedReservation);
 				onReservationUpdated(mergedReservation);
+				message.success({ content: savedTitle, duration: 6 });
+				Modal.success({
+					title: savedTitle,
+					content: successMessage(
+						correctionResubmitted
+							? `Confirmation ${savedConfirmation || "N/A"} is now saved and back in Pending Confirmation for hotel review.`
+							: `Confirmation ${savedConfirmation || "N/A"} is now updated across the reservation details and lists.`,
+						correctionResubmitted
+							? `\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f ${
+									savedConfirmation || "N/A"
+							  } \u062a\u0645 \u062d\u0641\u0638\u0647 \u0648\u0625\u0639\u0627\u062f\u062a\u0647 \u0625\u0644\u0649 \u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0641\u0646\u062f\u0642.`
+							: `\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f ${
+									savedConfirmation || "N/A"
+							  } \u062a\u0645 \u062a\u062d\u062f\u064a\u062b\u0647 \u0641\u064a \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644 \u0648\u0627\u0644\u0642\u0648\u0627\u0626\u0645.`
+					),
+					centered: true,
+				});
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error(apiErrorMessage(response));

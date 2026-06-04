@@ -1346,6 +1346,16 @@ Future TODO Backlog - Added 2026-05-26
   - npm.cmd run build compiled successfully.
   - Backend node --check controllers/hotel_inventory.js passed.
 
+2026-06-04 Shared Inventory Availability Auth Boundary
+- PMS/hotel-management caller:
+  - src/HotelModule/apiAdmin.js getHotelInventoryAvailability must continue sending stored auth headers for hotel-management and overall dashboard users.
+  - Authenticated PMS/admin/staff calls keep the full internal availability payload, including reserved/occupied counts, root price, commission fields, and authorized agent inventory fields.
+  - includePendingConfirmation and agentId remain authenticated-only PMS/admin/staff behaviors for pending review and agent-scoped inventory.
+- Public checkout contrast:
+  - jannatbooking_frontend/src/apiCore.js calls the same /hotel-inventory/:hotelId/availability endpoint without a staff token.
+  - The backend now returns a sanitized public payload for that no-token checkout flow so guest payment pages do not fail with 401.
+  - hotels_frontend code should not remove auth headers from PMS calls; a bad staff token should still surface as 401 rather than silently becoming a public checkout response.
+
 2026-05-31 Agent Account UX, Payout Details, Wallet Claims, Finance Actions, And QA
 - Business purpose:
   - External agents should feel that the dashboard is speaking to them personally, not showing a generic owner dashboard.
