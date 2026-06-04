@@ -1967,3 +1967,26 @@ Future TODO Backlog - Added 2026-05-26
   - The /admin/ota-reservations Change pricing modal now respects chosenLanguage for Arabic/English modal title, context labels, distribution controls, table headers, empty-state text, and footer buttons.
   - Pricing labels include info tooltips matching the admin all-reservations Edit Pricing guidance for client/main total, base hotel/root total, net after OTA expenses, OTA/other expenses, and SUPER ADMIN-only platform margin fields.
   - The pricing math and save payload are unchanged; this is only a readability/help enhancement for platform users reviewing OTA pricing.
+
+2026-06-04 Overall Rejected Reservations Workspace And Notifications
+- Frontend files:
+  - src/HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations.js now supports rejectedOnly mode.
+  - src/HotelModule/TheOverallStructure/page.js renders rejectedOnly mode for overall=rejected-reservations.
+  - src/HotelModule/AdminOverallSideMenu/AdminOverallSideMenu.js adds a Reservations > Rejected Reservations menu item.
+  - src/HotelModule/apiAdmin.js adds getOverallRejectedReservations and exportOverallRejectedReservations.
+  - src/AdminModule/AdminNavbar/AdminNavbar.js and the active clean Arabic navbar entry repoint the old owner-account shortcut to the rejected reservations workspace.
+  - src/AdminModule/AdminNavbar/AdminTopNavbar.js and src/HotelModule/AdminNavbar/TopNavbar.js route rejected reservation notifications to the rejected workspace and show rejection comments when supplied.
+- Route:
+  - /hotel-management/main-dashboard?overall=rejected-reservations&page=1
+  - Optional reservationId opens the existing reservation details modal for correction/resubmission.
+- Role/UI rules:
+  - SUPER ADMIN and platform/admin users can open the workspace and correct any rejected reservation within their allowed hotel scope.
+  - Pure order-taking/agent users remain scoped to their own rejected reservations.
+  - The rejected workspace uses the same details/edit modal as the pending page; saving a corrected rejected reservation relies on the backend resubmission logic to push it back to Pending Confirmation.
+  - The page does not expose direct confirm/reject buttons; corrections should go through reservation details/edit so the cycle remains Pending Confirmation -> Finance Confirmation -> confirmed/etc.
+- UX behavior:
+  - Rejected page includes scorecards for rejected count, rejected today, hotels with rejections, and rejected value.
+  - Table includes a Rejection Reason column sourced from pendingConfirmation, agentDecisionSnapshot, finance cycle, commission approval, or stored rejection fields.
+  - Filters/search/date/sort/export stay aligned with the pending reservations page.
+  - Rejected Excel export includes the rejection reason; the normal pending export remains unchanged.
+  - Notification cards show the rejection comment and route hotel/reservation-team rejection clicks to the rejected workspace. Finance rejections continue to use finance-action routing.

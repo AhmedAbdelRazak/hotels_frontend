@@ -6,6 +6,7 @@ import {
 	BarChartOutlined,
 	CalendarOutlined,
 	ClearOutlined,
+	CloseCircleOutlined,
 	CreditCardOutlined,
 	DashboardOutlined,
 	DollarCircleOutlined,
@@ -48,6 +49,7 @@ const SIDE_MENU_TEXT = {
 		newReservation: "New Reservation",
 		reservationsList: "Reservations List",
 		pendingReservations: "Pending Reservations",
+		rejectedReservations: "Rejected Reservations",
 		hotelMap: "Hotel Rooms Map",
 		houseKeeping: "House Keeping",
 		financialAffairs: "Financial Affairs",
@@ -213,6 +215,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 	if (
 		[
 			"overall-pending-reservations",
+			"overall-rejected-reservations",
 		].includes(key)
 	) {
 		return (
@@ -323,6 +326,9 @@ const AdminOverallSideMenu = ({
 	const reservationsListLabel = isArabic
 		? "قائمة الحجوزات"
 		: text.reservationsList;
+	const rejectedReservationsLabel = isArabic
+		? "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629"
+		: text.rejectedReservations || "Rejected Reservations";
 
 	const applyMenuCollapsedState = useCallback(
 		(nextCollapsed) => {
@@ -473,6 +479,14 @@ const AdminOverallSideMenu = ({
 					null,
 					"overall-menu-child"
 				),
+				getItem(
+					menuLink("rejected-reservations", rejectedReservationsLabel),
+					"overall-rejected-reservations",
+					<CloseCircleOutlined />,
+					null,
+					null,
+					"overall-menu-child"
+				),
 			], null, "overall-menu-section"),
 			getItem(
 				menuLink("hotel-map", text.hotelMap),
@@ -583,7 +597,7 @@ const AdminOverallSideMenu = ({
 				"reddish-bg"
 			),
 		],
-		[menuLink, menuText, reservationsListLabel, text]
+		[menuLink, menuText, rejectedReservationsLabel, reservationsListLabel, text]
 	);
 
 	const filterItemsByRole = (list = []) =>
@@ -610,6 +624,7 @@ const AdminOverallSideMenu = ({
 			"reservations-list": "overall-reservation-list",
 			reservations: "overall-reservation-list",
 			"pending-reservations": "overall-pending-reservations",
+			"rejected-reservations": "overall-rejected-reservations",
 			housekeeping: "overall-housekeeping",
 			"hotel-map": "overall-hotel-map",
 			"account-management": "overall-account-main",

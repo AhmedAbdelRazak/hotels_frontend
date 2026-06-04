@@ -5,8 +5,10 @@ import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import {
 	exportOverallPendingReservations,
+	exportOverallRejectedReservations,
 	getHotelInventoryAvailability,
 	getOverallPendingReservations,
+	getOverallRejectedReservations,
 	updatePendingConfirmationReservation,
 } from "../../apiAdmin";
 import { isAuthenticated } from "../../../auth";
@@ -69,6 +71,18 @@ const PENDING_RESERVATIONS_TEXT = {
 		updateError: "Could not update reservation.",
 		notAllowedToConfirm: "This account cannot confirm pending reservations.",
 		allBookingSources: "All booking sources",
+		rejectedTitle: "Rejected Reservations",
+		rejectedSubtitle:
+			"Rejected reservations from agents, admins, and platform staff that need correction and resubmission.",
+		rejectedTotalCard: "Rejected Reservations",
+		rejectedTodayCard: "Rejected Today",
+		rejectedHotelsCard: "Hotels With Rejections",
+		rejectedValueCard: "Rejected Value",
+		rejectionReason: "Rejection Reason",
+		rejectedCorrectionAction: "Correct / Resubmit",
+		rejectedCorrectionHint:
+			"Open the reservation details, adjust what was rejected, then save to send it back to Pending Confirmation.",
+		noRejectedReservationsFound: "No rejected reservations found.",
 	},
 	ar: {
 		title: "الحجوزات المعلقة العامة",
@@ -83,6 +97,44 @@ const PENDING_RESERVATIONS_TEXT = {
 		updateError: "تعذر تحديث الحجز.",
 		notAllowedToConfirm: "هذا الحساب غير مصرح له بتأكيد الحجوزات المعلقة.",
 		allBookingSources: "كل مصادر الحجز",
+	},
+};
+
+const REJECTED_RESERVATIONS_TEXT = {
+	en: {
+		rejectedTitle: "Rejected Reservations",
+		rejectedSubtitle:
+			"Rejected reservations from agents, admins, and platform staff that need correction and resubmission.",
+		rejectedTotalCard: "Rejected Reservations",
+		rejectedTodayCard: "Rejected Today",
+		rejectedHotelsCard: "Hotels With Rejections",
+		rejectedValueCard: "Rejected Value",
+		rejectionReason: "Rejection Reason",
+		rejectedCorrectionAction: "Correct / Resubmit",
+		rejectedCorrectionHint:
+			"Open the reservation details, adjust what was rejected, then save to send it back to Pending Confirmation.",
+		noRejectedReservationsFound: "No rejected reservations found.",
+	},
+	ar: {
+		rejectedTitle:
+			"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629",
+		rejectedSubtitle:
+			"\u062d\u062c\u0648\u0632\u0627\u062a \u0645\u0631\u0641\u0648\u0636\u0629 \u0645\u0646 \u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0648\u0627\u0644\u0625\u062f\u0627\u0631\u0629 \u0648\u0641\u0631\u064a\u0642 \u0627\u0644\u0645\u0646\u0635\u0629 \u0648\u062a\u062d\u062a\u0627\u062c \u062a\u0635\u062d\u064a\u062d\u0627 \u0648\u0625\u0639\u0627\u062f\u0629 \u0625\u0631\u0633\u0627\u0644.",
+		rejectedTotalCard:
+			"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629",
+		rejectedTodayCard:
+			"\u0645\u0631\u0641\u0648\u0636 \u0627\u0644\u064a\u0648\u0645",
+		rejectedHotelsCard:
+			"\u0641\u0646\u0627\u062f\u0642 \u0628\u0647\u0627 \u0631\u0641\u0636",
+		rejectedValueCard:
+			"\u0642\u064a\u0645\u0629 \u0627\u0644\u0645\u0631\u0641\u0648\u0636",
+		rejectionReason: "\u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636",
+		rejectedCorrectionAction:
+			"\u062a\u0635\u062d\u064a\u062d / \u0625\u0639\u0627\u062f\u0629 \u0625\u0631\u0633\u0627\u0644",
+		rejectedCorrectionHint:
+			"\u0627\u0641\u062a\u062d \u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u062d\u062c\u0632\u060c \u0639\u062f\u0644 \u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636\u060c \u062b\u0645 \u0627\u062d\u0641\u0638 \u0644\u0625\u0631\u0633\u0627\u0644\u0647 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0625\u0644\u0649 \u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f.",
+		noRejectedReservationsFound:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u062c\u0648\u0632\u0627\u062a \u0645\u0631\u0641\u0648\u0636\u0629.",
 	},
 };
 
@@ -255,12 +307,34 @@ const isPendingConfirmationReservation = (reservation = {}) => {
 	);
 };
 
-const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) => {
+const getRejectionReason = (reservation = {}) =>
+	String(
+		reservation?.pendingConfirmation?.rejectionReason ||
+			reservation?.pendingConfirmation?.cancelReason ||
+			reservation?.agentDecisionSnapshot?.reason ||
+			reservation?.agentDecisionSnapshot?.rejectionReason ||
+			reservation?.financial_cycle?.financeRejectionComment ||
+			reservation?.financial_cycle?.totalRejectionReason ||
+			reservation?.financial_cycle?.totalReviewComment ||
+			reservation?.commissionAgentApproval?.rejectionReason ||
+			reservation?.reservation_rejection_reason ||
+			reservation?.rejectionReason ||
+			""
+	).trim();
+
+const OverallPendingReservations = ({
+	userId,
+	token,
+	ownerId,
+	chosenLanguage,
+	rejectedOnly = false,
+}) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
 	const labels = {
 		...common,
 		...PENDING_RESERVATIONS_TEXT[isRTL ? "ar" : "en"],
+		...REJECTED_RESERVATIONS_TEXT[isRTL ? "ar" : "en"],
 		...PENDING_FILTER_TEXT[isRTL ? "ar" : "en"],
 		...PENDING_DECISION_TEXT[isRTL ? "ar" : "en"],
 	};
@@ -314,18 +388,24 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	useEffect(() => {
 		if (!userId || !token) return;
+		const reservationLoader = rejectedOnly
+			? getOverallRejectedReservations
+			: getOverallPendingReservations;
 		setLoading(true);
-		getOverallPendingReservations(userId, token, params)
+		reservationLoader(userId, token, params)
 			.then((data) => {
 				setResult(data && !data.error ? data : { reservations: [], hotels: [], total: 0 });
 			})
 			.finally(() => setLoading(false));
-	}, [params, token, userId]);
+	}, [params, rejectedOnly, token, userId]);
 
 	const loadPendingReservations = () => {
 		if (!userId || !token) return;
+		const reservationLoader = rejectedOnly
+			? getOverallRejectedReservations
+			: getOverallPendingReservations;
 		setLoading(true);
-		getOverallPendingReservations(userId, token, params)
+		reservationLoader(userId, token, params)
 			.then((data) => {
 				setResult(data && !data.error ? data : { reservations: [], hotels: [], total: 0 });
 			})
@@ -655,8 +735,11 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	const handleExportExcel = () => {
 		if (!userId || !token || exporting) return;
+		const exportReservations = rejectedOnly
+			? exportOverallRejectedReservations
+			: exportOverallPendingReservations;
 		setExporting(true);
-		exportOverallPendingReservations(userId, token, {
+		exportReservations(userId, token, {
 			...buildOwnerParams(ownerId),
 			...filters,
 			sortBy: filters.sortBy || "createdAt",
@@ -678,7 +761,10 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 					reservations: rows,
 					labels,
 					chosenLanguage,
-					filePrefix: "overall-pending-reservations",
+					filePrefix: rejectedOnly
+						? "overall-rejected-reservations"
+						: "overall-pending-reservations",
+					includeRejectionReason: rejectedOnly,
 				});
 			})
 			.catch(() => message.error(labels.exportFailed))
@@ -687,9 +773,66 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 
 	const confirmModalReservation = confirmModal.reservation || {};
 	const confirmModalStayLength = getStayLength(confirmModalReservation);
+	const tableColSpan = rejectedOnly ? 15 : 14;
+	const scorecardTotals = result.scorecards?.totals || {};
+	const scorecardToday = result.scorecards?.today || {};
+	const rejectedScorecards = [
+		{
+			key: "total",
+			label: labels.rejectedTotalCard,
+			value: Number(result.total || scorecardTotals.reservationsCount || 0),
+			meta: labels.rejectedCorrectionAction,
+			tone: "red",
+		},
+		{
+			key: "today",
+			label: labels.rejectedTodayCard,
+			value: Number(scorecardToday.reservationsCount || 0),
+			meta: labels.createdAt,
+			tone: "amber",
+		},
+		{
+			key: "hotels",
+			label: labels.rejectedHotelsCard,
+			value: Number(scorecardTotals.hotelsCount || 0),
+			meta: labels.hotels,
+			tone: "blue",
+		},
+		{
+			key: "value",
+			label: labels.rejectedValueCard,
+			value: `${formatMoney(scorecardTotals.totalAmount || 0)} ${labels.sar}`,
+			meta: labels.totalAmount,
+			tone: "green",
+		},
+	];
 
 	return (
 		<OverallPageShell $isRTL={isRTL}>
+			{rejectedOnly ? (
+				<RejectedOverviewPanel $isRTL={isRTL}>
+					<div className='rejected-header'>
+						<div>
+							<h2>{labels.rejectedTitle}</h2>
+							<p>{labels.rejectedSubtitle}</p>
+						</div>
+						<span>{labels.rejectedCorrectionHint}</span>
+					</div>
+					<RejectedScorecardGrid>
+						{rejectedScorecards.map((card) => (
+							<div
+								key={card.key}
+								className={`rejected-scorecard tone-${card.tone}`}
+							>
+								<span>{card.label}</span>
+								<strong>{card.value}</strong>
+								<small>{card.meta}</small>
+							</div>
+						))}
+					</RejectedScorecardGrid>
+				</RejectedOverviewPanel>
+			) : null}
+
 			<OverallCenteredSearch $isRTL={isRTL}>
 				<Input
 					allowClear
@@ -859,6 +1002,7 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 							<th>{labels.guest}</th>
 							<th>{sortableHeader(labels.source, "booking_source")}</th>
 							<th>{labels.status}</th>
+							{rejectedOnly ? <th>{labels.rejectionReason}</th> : null}
 							<th>{labels.action}</th>
 							<th>{sortableHeader(labels.booked, "createdAt")}</th>
 							<th>{sortableHeader(labels.checkIn, "checkin_date")}</th>
@@ -872,7 +1016,7 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 					<tbody>
 						{loading ? (
 							<tr>
-								<td colSpan='14'>{labels.loading}</td>
+								<td colSpan={tableColSpan}>{labels.loading}</td>
 							</tr>
 						) : reservations.length ? (
 							reservations.map((reservation, index) => (
@@ -915,8 +1059,24 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 											/>
 										</StatusPill>
 									</td>
+									{rejectedOnly ? (
+										<td className='rejection-cell'>
+											<TableTooltipText
+												value={getRejectionReason(reservation) || "-"}
+												className='table-truncate'
+												max={42}
+											/>
+										</td>
+									) : null}
 									<td>
-										{isPendingConfirmationReservation(reservation) &&
+										{rejectedOnly ? (
+											<ActionButton
+												type='button'
+												onClick={() => openMoreDetails(reservation)}
+											>
+												{labels.rejectedCorrectionAction}
+											</ActionButton>
+										) : isPendingConfirmationReservation(reservation) &&
 										workflowPermissions.canReviewStatus ? (
 											<PendingActionGroup>
 												<ActionButton
@@ -972,7 +1132,11 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 							))
 						) : (
 							<tr>
-								<td colSpan='14'>{labels.noPendingReservationsFound}</td>
+								<td colSpan={tableColSpan}>
+									{rejectedOnly
+										? labels.noRejectedReservationsFound
+										: labels.noPendingReservationsFound}
+								</td>
 							</tr>
 						)}
 					</tbody>
@@ -1143,6 +1307,135 @@ const OverallPendingReservations = ({ userId, token, ownerId, chosenLanguage }) 
 };
 
 export default OverallPendingReservations;
+
+const RejectedOverviewPanel = styled.section`
+	display: grid;
+	gap: 12px;
+	margin: 0 auto 14px;
+	max-width: 1280px;
+	width: 100%;
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isRTL ? "right" : "left")};
+
+	.rejected-header {
+		align-items: flex-end;
+		display: flex;
+		gap: 12px;
+		justify-content: space-between;
+		padding: 2px 4px 0;
+	}
+
+	h2 {
+		color: #142033;
+		font-size: 1.45rem;
+		font-weight: 950;
+		letter-spacing: 0;
+		line-height: 1.25;
+		margin: 0;
+	}
+
+	p {
+		color: #506174;
+		font-size: 0.86rem;
+		font-weight: 800;
+		line-height: 1.55;
+		margin: 4px 0 0;
+		max-width: 760px;
+	}
+
+	.rejected-header > span {
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 8px;
+		color: #7c2d12;
+		font-size: 0.78rem;
+		font-weight: 850;
+		line-height: 1.5;
+		max-width: 420px;
+		padding: 8px 10px;
+	}
+
+	@media (max-width: 860px) {
+		.rejected-header {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.rejected-header > span {
+			max-width: none;
+		}
+	}
+`;
+
+const RejectedScorecardGrid = styled.div`
+	display: grid;
+	gap: 10px;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+
+	.rejected-scorecard {
+		border: 1px solid #d9e6f2;
+		border-inline-start-width: 5px;
+		border-radius: 8px;
+		display: grid;
+		gap: 4px;
+		min-height: 108px;
+		padding: 13px 14px;
+	}
+
+	.rejected-scorecard span {
+		color: #243449;
+		font-size: 0.82rem;
+		font-weight: 900;
+		line-height: 1.35;
+	}
+
+	.rejected-scorecard strong {
+		color: #0f172a;
+		font-size: 1.72rem;
+		font-weight: 950;
+		letter-spacing: 0;
+		line-height: 1.1;
+	}
+
+	.rejected-scorecard small {
+		color: #64748b;
+		font-size: 0.72rem;
+		font-weight: 850;
+		line-height: 1.35;
+	}
+
+	.tone-red {
+		background: #fff1f2;
+		border-color: #fecdd3;
+		border-inline-start-color: #dc2626;
+	}
+
+	.tone-amber {
+		background: #fffbeb;
+		border-color: #fde68a;
+		border-inline-start-color: #d97706;
+	}
+
+	.tone-blue {
+		background: #eff6ff;
+		border-color: #bfdbfe;
+		border-inline-start-color: #2563eb;
+	}
+
+	.tone-green {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		border-inline-start-color: #16a34a;
+	}
+
+	@media (max-width: 980px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
+	}
+`;
 
 const PendingActionGroup = styled.div`
 	display: inline-flex;

@@ -579,6 +579,17 @@ const isFinancialNotificationItem = (item = {}) => {
 	);
 };
 
+const isRejectedReservationNotificationItem = (item = {}) => {
+	const type = String(item.notificationType || "").toLowerCase();
+	const reasons = notificationReasonList(item);
+	const status = String(item.decisionStatus || "").toLowerCase();
+	return (
+		reasons.includes("pending_rejected") ||
+		status === "rejected" ||
+		(type === "agent_decision" && status === "rejected")
+	);
+};
+
 const formatNotificationMoney = (value) =>
 	Number(value || 0).toLocaleString("en-US", {
 		maximumFractionDigits: 2,
@@ -1751,12 +1762,19 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 
 		params.set(
 			"overall",
-			isPendingConfirmationNotificationItem(item)
+			isRejectedReservationNotificationItem(item) &&
+				!isFinancialNotificationItem(item)
+				? "rejected-reservations"
+				: isPendingConfirmationNotificationItem(item)
 				? "pending-reservations"
 				: isFinancialNotificationItem(item)
 					? "financial-actions"
 					: "pending-reservations"
 		);
+		const reservationId = normalizeTopNavId(item.reservationId || item._id);
+		if (reservationId && !String(reservationId).startsWith("agent-wallet-")) {
+			params.set("reservationId", reservationId);
+		}
 		return `/hotel-management/main-dashboard?${params.toString()}`;
 	};
 
@@ -1970,6 +1988,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 								: "";
 						const agentDecisionDisplayText =
 							cleanAgentDecisionText(item, isArabic) || agentDecisionText;
+						const decisionReason = String(item.decisionReason || "").trim();
 						const financeAcceptedTitle = isArabic
 							? "تمت الموافقة المالية"
 							: "Finance accepted";
@@ -2061,21 +2080,27 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 												: item.task_status || "Assigned to you"}
 										</span>
 									) : item.notificationType === "agent_decision" ? (
-										<span>
-											{isArabic
-												? cleanAgentDecisionText(item, isArabic)
-												: agentDecisionDisplayText}
-										</span>
-									) : (
-										visibleReasons.slice(0, 2).map((reason) => (
-											<span key={reason}>
-												{cleanNotificationReasonLabel(
-													reason,
-													isArabic,
-													isAgentNotificationAudience
-												)}
+										<>
+											<span>
+												{isArabic
+													? cleanAgentDecisionText(item, isArabic)
+													: agentDecisionDisplayText}
 											</span>
-										))
+											{decisionReason ? <span>{decisionReason}</span> : null}
+										</>
+									) : (
+										<>
+											{visibleReasons.slice(0, 2).map((reason) => (
+												<span key={reason}>
+													{cleanNotificationReasonLabel(
+														reason,
+														isArabic,
+														isAgentNotificationAudience
+													)}
+												</span>
+											))}
+											{decisionReason ? <span>{decisionReason}</span> : null}
+										</>
 									)}
 								</NotificationReasons>
 							</NotificationItem>

@@ -2110,6 +2110,20 @@ export const getOverallPendingReservations = (userId, token, params = {}) => {
 		.catch((err) => console.log(err));
 };
 
+export const getOverallRejectedReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/rejected-reservations/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getOverallFinancialActions = (userId, token, params = {}) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/overall-dashboard/financial-actions/${userId}${buildOverallQuery(
@@ -2161,6 +2175,20 @@ export const trackOverallFinancialReportExport = (
 export const exportOverallPendingReservations = (userId, token, params = {}) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/overall-dashboard/pending-reservations-export/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const exportOverallRejectedReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/rejected-reservations-export/${userId}${buildOverallQuery(
 			params
 		)}`,
 		{

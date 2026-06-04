@@ -105,7 +105,9 @@ getItem(
 		"divider"
 ),
 getItem(
-	<Link to='/admin/add-owner-account'>Add Owner Account</Link>,
+	<Link to='/hotel-management/main-dashboard?overall=rejected-reservations&page=1'>
+		Rejected Reservations
+	</Link>,
 	"sub13",
 	<ImportOutlined />,
 	null,

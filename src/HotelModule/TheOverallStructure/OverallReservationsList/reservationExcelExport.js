@@ -19,48 +19,73 @@ const roomNumbers = (reservation = {}) =>
 		.filter(Boolean)
 		.join(", ");
 
+const rejectionReason = (reservation = {}) =>
+	String(
+		reservation?.pendingConfirmation?.rejectionReason ||
+			reservation?.pendingConfirmation?.cancelReason ||
+			reservation?.agentDecisionSnapshot?.reason ||
+			reservation?.agentDecisionSnapshot?.rejectionReason ||
+			reservation?.financial_cycle?.financeRejectionComment ||
+			reservation?.financial_cycle?.totalRejectionReason ||
+			reservation?.financial_cycle?.totalReviewComment ||
+			reservation?.commissionAgentApproval?.rejectionReason ||
+			reservation?.reservation_rejection_reason ||
+			reservation?.rejectionReason ||
+			""
+	).trim();
+
 export const buildReservationExportRows = ({
 	reservations = [],
 	labels = {},
 	chosenLanguage,
+	includeRejectionReason = false,
 }) =>
-	(Array.isArray(reservations) ? reservations : []).map((reservation, index) => ({
-		[labels.index || "#"]: index + 1,
-		[labels.hotel]: titleCase(reservation.hotelName || ""),
-		[labels.confirmation]: reservation.confirmation_number || "",
-		[labels.guest]: reservation.customer_details?.name || "",
-		[labels.phone]: reservation.customer_details?.phone || "",
-		[labels.email]: reservation.customer_details?.email || "",
-		[labels.source]: reservation.booking_source || "",
-		[labels.status]: localizeStatus(
-			reservation.reservation_status || reservation.state,
-			chosenLanguage
-		),
-		[labels.bookedAt]: formatDate(reservation.booked_at || reservation.createdAt, chosenLanguage),
-		[labels.createdAt]: formatDate(reservation.createdAt, chosenLanguage),
-		[labels.checkIn]: formatDate(reservation.checkin_date, chosenLanguage),
-		[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
-		[labels.nights]: getReservationNights(reservation),
-		[labels.pricePerDay]: Number(getReservationPricePerDay(reservation) || 0),
-		[labels.totalAmount]: Number(reservation.total_amount || 0),
-		[labels.paidAmount]: Number(reservation.paid_amount || 0),
-		[labels.commission]: Number(
-			reservation.commission || reservation.commision || 0
-		),
-		[labels.payment]: reservation.payment || "",
-		[labels.roomNumbers]: roomNumbers(reservation),
-	}));
+	(Array.isArray(reservations) ? reservations : []).map((reservation, index) => {
+		const row = {
+			[labels.index || "#"]: index + 1,
+			[labels.hotel]: titleCase(reservation.hotelName || ""),
+			[labels.confirmation]: reservation.confirmation_number || "",
+			[labels.guest]: reservation.customer_details?.name || "",
+			[labels.phone]: reservation.customer_details?.phone || "",
+			[labels.email]: reservation.customer_details?.email || "",
+			[labels.source]: reservation.booking_source || "",
+			[labels.status]: localizeStatus(
+				reservation.reservation_status || reservation.state,
+				chosenLanguage
+			),
+			[labels.bookedAt]: formatDate(reservation.booked_at || reservation.createdAt, chosenLanguage),
+			[labels.createdAt]: formatDate(reservation.createdAt, chosenLanguage),
+			[labels.checkIn]: formatDate(reservation.checkin_date, chosenLanguage),
+			[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
+			[labels.nights]: getReservationNights(reservation),
+			[labels.pricePerDay]: Number(getReservationPricePerDay(reservation) || 0),
+			[labels.totalAmount]: Number(reservation.total_amount || 0),
+			[labels.paidAmount]: Number(reservation.paid_amount || 0),
+			[labels.commission]: Number(
+				reservation.commission || reservation.commision || 0
+			),
+			[labels.payment]: reservation.payment || "",
+			[labels.roomNumbers]: roomNumbers(reservation),
+		};
+		if (includeRejectionReason) {
+			row[labels.rejectionReason || "Rejection Reason"] =
+				rejectionReason(reservation);
+		}
+		return row;
+	});
 
 export const downloadReservationWorkbook = ({
 	reservations = [],
 	labels = {},
 	chosenLanguage,
 	filePrefix = "overall-reservations",
+	includeRejectionReason = false,
 }) => {
 	const rows = buildReservationExportRows({
 		reservations,
 		labels,
 		chosenLanguage,
+		includeRejectionReason,
 	});
 	const worksheet = XLSX.utils.json_to_sheet(rows);
 	worksheet["!cols"] = [

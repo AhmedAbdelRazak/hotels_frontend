@@ -203,7 +203,8 @@ const AR = {
 	globalSettings:
 		"\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0643\u0644 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	newHotel: "\u0625\u0636\u0627\u0641\u0629 \u0641\u0646\u062f\u0642 \u062c\u062f\u064a\u062f",
-	ownerAccount: "\u0625\u0636\u0627\u0641\u0629 \u062d\u0633\u0627\u0628 \u0645\u0627\u0644\u0643",
+	ownerAccount:
+		"\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0636\u0629",
 	customerRelations: "\u0625\u062f\u0627\u0631\u0629 \u0639\u0644\u0627\u0642\u0627\u062a \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
 	pos: "\u0646\u0642\u0627\u0637 \u0627\u0644\u0628\u064a\u0639 \u0648\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
 	financials: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
@@ -232,7 +233,16 @@ getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaCh
 		<SettingOutlined />
 	),
 	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
-	getItem(<Link to='/admin/add-owner-account'>{AR.ownerAccount}</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
+	getItem(
+		<Link to='/hotel-management/main-dashboard?overall=rejected-reservations&page=1'>
+			{AR.ownerAccount}
+		</Link>,
+		"sub13",
+		<ImportOutlined />,
+		null,
+		null,
+		"black-bg"
+	),
 	getItem(<Link to='/admin/expenses-financials'>{AR.financials}</Link>, "sub16", <DollarCircleOutlined />, null, null, "black-bg"),
 	getItem(<Link to='/admin/accounts-management'>{AR.employees}</Link>, "sub17", <TeamOutlined />, null, null, "black-bg"),
 	getItem(<div className='margin-divider'></div>, "divider2", null, null, "divider2"),

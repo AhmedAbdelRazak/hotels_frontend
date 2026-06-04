@@ -217,6 +217,17 @@ const isAdminFinancialNotification = (item = {}) => {
 	);
 };
 
+const isAdminRejectedReservationNotification = (item = {}) => {
+	const type = String(item.notificationType || "").toLowerCase();
+	const status = String(item.decisionStatus || "").toLowerCase();
+	const reasons = notificationReasonList(item);
+	return (
+		reasons.includes("pending_rejected") ||
+		status === "rejected" ||
+		(type === "agent_decision" && status === "rejected")
+	);
+};
+
 const formatNotificationMoney = (value) =>
 	Number(value || 0).toLocaleString("en-US", {
 		maximumFractionDigits: 2,
@@ -837,6 +848,8 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			"overall",
 			isAdminFinancialNotification(item)
 				? "financial-actions"
+				: isAdminRejectedReservationNotification(item)
+				? "rejected-reservations"
 				: "pending-reservations"
 		);
 		const reservationId = normalizeAdminId(item.reservationId || item._id);
@@ -900,6 +913,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 				<AdminNotificationList>
 					{hotelNotificationFeed.data.map((item) => {
 						const reasons = notificationReasonList(item).slice(0, 2);
+						const decisionReason = String(item.decisionReason || "").trim();
 						const range = [
 							formatNotificationDate(item.checkin_date, isArabic),
 							formatNotificationDate(item.checkout_date, isArabic),
@@ -938,13 +952,14 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 									<span>{item.hotelName || item.booking_source || "Hotel"}</span>
 									{range && <span>{range}</span>}
 								</AdminNotificationMeta>
-								{!!reasons.length && (
+								{(!!reasons.length || !!decisionReason) && (
 									<AdminNotificationReasons>
 										{reasons.map((reason) => (
 											<span key={reason}>
 												{notificationReasonLabel(reason, isArabic)}
 											</span>
 										))}
+										{decisionReason ? <span>{decisionReason}</span> : null}
 									</AdminNotificationReasons>
 								)}
 							</AdminNotificationItem>
