@@ -16,6 +16,7 @@ const ADMIN_ROUTE_ACCESS = {
 	"/admin/el-integrator": ["Integrator"],
 	"/admin/all-reservations": ["HotelsReservations", "AllReservations"],
 	"/admin/ota-reservations": ["OTAReservations"],
+	"/admin/rejected-reservations": ["HotelsReservations", "AllReservations"],
 	"/admin/jannatbooking-tools": ["JannatTools"],
 	"/admin/new-hotel": ["AdminDashboard"],
 	"/admin/add-owner-account": ["AdminDashboard"],

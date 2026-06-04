@@ -170,7 +170,7 @@ const adminArabicItems = [
 	getItem(<Link to='/admin/jannatbooking-tools'>أدوات جنات بوكينج</Link>, "sub6", <AreaChartOutlined />),
 	getItem(<Link to='/admin/overall-hotel-reports'>تقارير الفنادق</Link>, "sub7", <TeamOutlined />),
 	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
-	getItem(<Link to='/admin/add-owner-account'>إضافة حساب مالك</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
+	getItem(<Link to='/admin/rejected-reservations'>Rejected Reservations</Link>, "sub13", <ImportOutlined />, null, null, "black-bg"),
 	getItem("إدارة علاقات العملاء", "sub14", <CustomerServiceOutlined />, null, null, "black-bg"),
 	getItem("نقاط البيع والمنتجات", "sub15", <ShopOutlined />, null, null, "black-bg"),
 	getItem(<Link to='/admin/expenses-financials'>المالية</Link>, "sub16", <DollarCircleOutlined />, null, null, "black-bg"),
@@ -234,7 +234,7 @@ getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaCh
 	),
 	getItem(<div className='margin-divider'></div>, "divider1", null, null, "divider"),
 	getItem(
-		<Link to='/hotel-management/main-dashboard?overall=rejected-reservations&page=1'>
+		<Link to='/admin/rejected-reservations'>
 			{AR.ownerAccount}
 		</Link>,
 		"sub13",
@@ -273,6 +273,7 @@ const selectedKeyByPage = {
 	JanatWebsite: "sub10",
 	NewHotel: "sub12",
 	OwnerAccount: "sub13",
+	RejectedReservations: "sub13",
 	Financials: "sub16",
 	AdminAccounts: "sub17",
 	Payouts: "sub18",

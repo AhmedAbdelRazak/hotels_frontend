@@ -105,7 +105,7 @@ getItem(
 		"divider"
 ),
 getItem(
-	<Link to='/hotel-management/main-dashboard?overall=rejected-reservations&page=1'>
+	<Link to='/admin/rejected-reservations'>
 		Rejected Reservations
 	</Link>,
 	"sub13",
@@ -252,7 +252,8 @@ const AdminNavbar = ({
 							                    ? "sub10"
 							                    : fromPage === "NewHotel"
 							                      ? "sub12"
-							                      : fromPage === "OwnerAccount"
+							                      : fromPage === "OwnerAccount" ||
+							                        fromPage === "RejectedReservations"
 							                        ? "sub13"
 							                        : fromPage === "Payouts"
 							                          ? "sub18"

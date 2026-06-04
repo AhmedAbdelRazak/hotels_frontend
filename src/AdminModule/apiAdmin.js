@@ -1192,6 +1192,74 @@ export const getAllReservationForAdmin = (
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
 
+const buildAdminRejectedReservationQuery = (params = {}) => {
+	const searchParams = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		const stringValue = String(value).trim();
+		if (!stringValue) return;
+		searchParams.set(key, stringValue);
+	});
+	const query = searchParams.toString();
+	return query ? `?${query}` : "";
+};
+
+export const getAdminRejectedReservations = (userId, token, params = {}) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/admin/rejected-reservations/${userId}${buildAdminRejectedReservationQuery(
+			params,
+		)}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not load rejected reservations",
+			data: [],
+			totalDocuments: 0,
+		}));
+};
+
+export const exportAdminRejectedReservations = (
+	userId,
+	token,
+	params = {},
+) => {
+	return fetch(
+		`${
+			process.env.REACT_APP_API_URL
+		}/admin/rejected-reservations-export/${userId}${buildAdminRejectedReservationQuery(
+			params,
+		)}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not export rejected reservations",
+			data: [],
+			totalDocuments: 0,
+		}));
+};
+
 export const getOtaReservationsForAdmin = (
 	userId,
 	token,

@@ -1990,3 +1990,26 @@ Future TODO Backlog - Added 2026-05-26
   - Filters/search/date/sort/export stay aligned with the pending reservations page.
   - Rejected Excel export includes the rejection reason; the normal pending export remains unchanged.
   - Notification cards show the rejection comment and route hotel/reservation-team rejection clicks to the rejected workspace. Finance rejections continue to use finance-action routing.
+
+2026-06-04 Platform Admin Rejected Reservations Separation
+- Frontend files:
+  - src/AdminModule/RejectedReservations/AdminRejectedReservationsMain.js adds the new platform-admin rejected reservations page.
+  - src/App.js registers /admin/rejected-reservations behind AdminRoute.
+  - src/auth/AdminRoute.js allows /admin/rejected-reservations for HotelsReservations or AllReservations platform access; configured SUPER ADMIN users still pass automatically.
+  - src/AdminModule/apiAdmin.js adds getAdminRejectedReservations and exportAdminRejectedReservations, both calling /api/admin/* endpoints rather than hotel overall-dashboard endpoints.
+  - src/AdminModule/AdminNavbar/AdminNavbar.js and src/AdminModule/AdminNavbar/AdminNavbarArabic.js route the admin side-menu Rejected Reservations shortcut to /admin/rejected-reservations.
+  - src/AdminModule/AdminNavbar/AdminTopNavbar.js routes platform admin rejected reservation notifications to /admin/rejected-reservations?reservationId=<reservationId>&page=1.
+- Route distinction:
+  - Keep /hotel-management/main-dashboard?overall=rejected-reservations&page=1 for hotel-management and overall-dashboard users.
+  - Use /admin/rejected-reservations for xhotelpro platform admins and SUPER ADMINS.
+  - The platform admin page is not limited to assigned hotels; it consumes the dedicated backend all-hotels admin endpoint.
+- UI behavior:
+  - Score cards show rejected count, rejected today, hotels with rejections, client/OTA rejected value, and hotel-visible value.
+  - Filters include search, hotel, booking source, date type, from date, and to date.
+  - The table shows hotel, confirmation, guest, source, rejection type, rejection reason, rejected date, stay dates, nights, total, and Open/Fix.
+  - Open/Fix opens the existing admin MoreDetails modal inside the /admin/rejected-reservations route so admins can adjust pricing/details without being redirected to hotel-management.
+  - Saving a corrected rejected reservation relies on the existing admin reservation update/resubmission logic to send it back to Pending Confirmation.
+- Role/privacy rules:
+  - Regular platform employees with HotelsReservations/AllReservations can view all rejected reservations and safe OTA financial summaries needed for operations.
+  - SUPER ADMIN-only platform profit behavior remains controlled by the backend safe summary and REACT_APP_SUPER_ADMIN_ID checks in detail/pricing components.
+  - Hotel-management users must continue using the hotel-management rejected workspace and must not receive platform admin gross/profit details.

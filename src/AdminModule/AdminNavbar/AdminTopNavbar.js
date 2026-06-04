@@ -814,6 +814,13 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 			return `/admin/ota-reservations?${params.toString()}`;
 		}
 
+		if (isAdminRejectedReservationNotification(item)) {
+			const reservationId = normalizeAdminId(item.reservationId || item._id);
+			const params = new URLSearchParams({ page: "1" });
+			if (reservationId) params.set("reservationId", reservationId);
+			return `/admin/rejected-reservations?${params.toString()}`;
+		}
+
 		const targetOwnerId = normalizeAdminId(
 			item.hotelOwnerId || item.ownerId || item.belongsTo
 		);
