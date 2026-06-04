@@ -147,6 +147,8 @@ AdminModule Structure
   - Public website hotel/reservation management tools.
 - src/AdminModule/JannatTools/
   - Admin operational tools.
+  - 2026-06-04 OrderTaker.js creates reservations through /api/new-reservation-client-employee. Backend saves these as hotel Pending Confirmation, and the success toast must tell the admin the reservation was created and sent to the hotel pending confirmation.
+  - Admin users may tell guests the reservation is confirmed/created, but the hotel team still has to confirm it internally. Do not add public-facing "pending hotel confirmation" copy to this admin-created guest flow unless the business rule changes.
 - src/AdminModule/NewHotels/
   - New hotel/property onboarding screens.
 - src/AdminModule/Payment/
@@ -207,6 +209,7 @@ HotelModule Structure
   - Important files include NewReservationMain.js, ZReservationForm.js, ZReservationForm2.js, HotelHeatMap.js, HotelRunnerReservationList.js, and PendingConfirmationReport.js.
   - Agent/order-taker availability requests pass the current agent id so assigned stock is prioritized, and room chips show assigned stock when an override applies.
   - Agent-scoped availability now treats pending-confirmation agent reservations as consuming that agent's assigned stock. This keeps the room chips aligned with backend enforcement: stock=1 becomes available=0 after the first pending agent reservation, and stock=0 blocks all agent reservation attempts for that room.
+  - PendingConfirmationReport.js must show reservations whose backend pendingConfirmation.status is "pending" even when reservation_status remains "confirmed" for client-visible public/paid bookings.
 - src/HotelModule/HouseKeeping/
   - Housekeeping task list, task details, assignment/update flows, and supplies.
 - src/HotelModule/HotelSettings/
@@ -268,6 +271,10 @@ Important UI And UX Notes
 - The overall new-reservation hotel selector is intentionally prominent before hotel selection and should stop attention animation on hover, focus, pointer down, keyboard interaction, or selection.
 
 Frontend Critical Workflows To Protect
+- Public checkout and client-visible reservation status
+  - Public/client-created reservations are internally pending hotel confirmation, including paid PayPal bookings, chatbot-assisted bookings, and verified public bookings.
+  - Paid guests must continue to see calm confirmed/created messaging after successful payment. Frontend public checkout, payment-link, invoice, WhatsApp-triggering, and single-reservation screens should not display internal pending-confirmation wording.
+  - Backend public responses remove pendingConfirmation/agentDecisionSnapshot and apply pendingConfirmation.clientVisibleStatus when needed. Do not reintroduce UI that reads internal hotel-review fields on public pages.
 - Public signup
   - /signup must keep the existing owner flow unchanged when Hotel Manager / Owner is selected.
   - Without query params, Hotel Manager / Owner is selected by default.

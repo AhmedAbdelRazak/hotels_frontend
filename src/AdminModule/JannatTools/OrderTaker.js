@@ -1296,7 +1296,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				clearAll();
 
 				message.success({
-					content: `Reservation created successfully${
+					content: `Reservation created and sent to hotel pending confirmation${
 						response?.data?.confirmation_number
 							? ` (Confirmation #${response.data.confirmation_number})`
 							: ""
