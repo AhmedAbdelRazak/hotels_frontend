@@ -306,13 +306,8 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 	};
 
 	const handleDistributeTotal = (key, field, label) => {
-		if (!hasNumericInput(distributionTotals[key])) {
-			message.error(t.invalidAmount(label));
-			return;
-		}
 		const total = safeParseFloat(distributionTotals[key], 0);
-		const zeroAllowed = key === "net";
-		if (total < 0 || (!zeroAllowed && total <= 0)) {
+		if (total <= 0) {
 			message.error(t.invalidAmount(label));
 			return;
 		}
