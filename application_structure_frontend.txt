@@ -1963,10 +1963,12 @@ Future TODO Backlog - Added 2026-05-26
 2026-06-04 OTA Pricing Modal Arabic Labels And Help Tooltips
 - Frontend file:
   - src/AdminModule/OtaReservations/OtaReservationsMain.js.
+  - src/AdminModule/JannatTools/EditPricingModal.js.
 - UX behavior:
   - The /admin/ota-reservations Change pricing modal now respects chosenLanguage for Arabic/English modal title, context labels, distribution controls, table headers, empty-state text, and footer buttons.
   - Pricing labels include info tooltips matching the admin all-reservations Edit Pricing guidance for client/main total, base hotel/root total, net after OTA expenses, OTA/other expenses, and SUPER ADMIN-only platform margin fields.
   - The pricing math and save payload are unchanged; this is only a readability/help enhancement for platform users reviewing OTA pricing.
+  - Net After Expenses Total may be distributed as 0.00 because a valid OTA/platform expense case can consume the full client total. Client/Main Total and Root Total still require positive values.
 
 2026-06-04 Overall Rejected Reservations Workspace And Notifications
 - Frontend files:
