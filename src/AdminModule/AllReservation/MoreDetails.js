@@ -6465,6 +6465,10 @@ const ReservationDetail = ({
 
 	const otaPricingSummary = useMemo(() => {
 		const adminPricing = reservation?.adminPricing || {};
+		const safeSummary =
+			reservation?.ota_financial_summary ||
+			reservation?.otaFinancialSummary ||
+			{};
 		const hasExplicitMoney = (value) =>
 			value !== null &&
 			value !== undefined &&
@@ -6486,14 +6490,18 @@ const ReservationDetail = ({
 			return 0;
 		};
 		const adminPricingMode = String(adminPricing?.mode || "").toLowerCase();
+		const hasSafeSummary = safeSummary?.show === true;
 		const hasAdminOtaAmounts =
 			firstPositiveMoney(
+				safeSummary.otaExpenseTotal,
+				safeSummary.platformProfit,
 				adminPricing.otaExpenseTotal,
 				pricingBreakdownByDay.otaExpenseTotal,
 				adminPricing.platformMarginTotal,
 				pricingBreakdownByDay.platformMarginTotal,
 			) > 0;
 		const hasOtaPricing =
+			hasSafeSummary ||
 			!!reservation?.otaPlatformReview ||
 			!!reservation?.supplierData?.otaCreatedFromEmail ||
 			!!reservation?.supplierData?.otaProvider ||
@@ -6514,6 +6522,8 @@ const ReservationDetail = ({
 		}
 
 		const hotelVisibleAmount = firstPositiveMoney(
+			safeSummary.hotelVisibleAmount,
+			safeSummary.hotel_visible_amount,
 			adminPricing.rootTotal,
 			reservation?.hotel_visible_amount,
 			pricingBreakdownByDay.rootTotal,
@@ -6521,12 +6531,17 @@ const ReservationDetail = ({
 			totalAmountValue,
 		);
 		const netAfterExpenses = firstPositiveMoney(
+			safeSummary.netAfterExpenses,
+			safeSummary.netAfterOtaExpenses,
+			safeSummary.totalAfterOtaExpenses,
 			adminPricing.netAfterExpensesTotal,
 			pricingBreakdownByDay.netTotal,
 			totalAmountValue - firstMoney(adminPricing.otaExpenseTotal),
 			totalAmountValue,
 		);
 		const profit = firstMoney(
+			safeSummary.platformProfit,
+			safeSummary.profit,
 			adminPricing.platformMarginTotal,
 			pricingBreakdownByDay.platformMarginTotal,
 			netAfterExpenses - hotelVisibleAmount,
@@ -6548,6 +6563,8 @@ const ReservationDetail = ({
 		reservation?.adminPricingVisibility,
 		reservation?.booking_source,
 		reservation?.hotel_visible_amount,
+		reservation?.ota_financial_summary,
+		reservation?.otaFinancialSummary,
 		reservation?.otaPlatformReview,
 		reservation?.sub_total,
 		reservation?.supplierData,

@@ -155,7 +155,9 @@ const normalizePricingRow = (row = {}) => {
 			row.price,
 		) ?? 0,
 	);
-	const rootPrice = roundMoney(firstNumber(row.rootPrice) ?? 0);
+	const rootPrice = roundMoney(
+		firstNumber(row.rootPrice, row.totalPriceWithoutCommission) ?? 0,
+	);
 	const netInput = firstNumber(
 		row.netAfterExpenses,
 		row.netAfterOtaExpenses,
@@ -190,7 +192,7 @@ const normalizePricingRow = (row = {}) => {
 		rootPrice,
 		commissionRate: safeParseFloat(row.commissionRate, 0),
 		totalPriceWithCommission: clientPrice,
-		totalPriceWithoutCommission: clientPrice,
+		totalPriceWithoutCommission: rootPrice,
 		netAfterExpenses,
 		netAfterOtaExpenses: netAfterExpenses,
 		otaExpenseAmount,

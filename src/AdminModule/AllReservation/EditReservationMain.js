@@ -65,7 +65,7 @@ const resolveAdminPricingDay = (day = {}) => {
 			day.totalPriceWithCommission ??
 			day.price,
 	);
-	const rootPrice = roundMoney(day.rootPrice);
+	const rootPrice = roundMoney(day.rootPrice ?? day.totalPriceWithoutCommission);
 	const netAfterExpenses = roundMoney(
 		day.netAfterExpenses ??
 			day.netAfterOtaExpenses ??
@@ -82,7 +82,7 @@ const resolveAdminPricingDay = (day = {}) => {
 		rootPrice,
 		commissionRate: safeParseFloat(day.commissionRate, 0),
 		totalPriceWithCommission: clientPrice,
-		totalPriceWithoutCommission: clientPrice,
+		totalPriceWithoutCommission: rootPrice,
 		netAfterExpenses,
 		netAfterOtaExpenses: netAfterExpenses,
 		otaExpenseAmount,
@@ -575,20 +575,21 @@ const EditReservationMain = ({
 					rows[index] ||
 					firstTemplate;
 				const totalPriceWithoutCommission = safeParseFloat(
-					template.totalPriceWithoutCommission ?? template.price,
+					template.rootPrice ?? template.totalPriceWithoutCommission ?? template.price,
 					nightly
+				);
+				const rootPrice = safeParseFloat(
+					template.rootPrice,
+					totalPriceWithoutCommission || nightly
 				);
 				return {
 					...template,
 					date,
 					price: nightly,
-					rootPrice: safeParseFloat(
-						template.rootPrice,
-						totalPriceWithoutCommission || nightly
-					),
+					rootPrice,
 					commissionRate: safeParseFloat(template.commissionRate, 0),
 					totalPriceWithCommission: nightly,
-					totalPriceWithoutCommission,
+					totalPriceWithoutCommission: rootPrice,
 				};
 			});
 		},

@@ -1932,3 +1932,20 @@ Future TODO Backlog - Added 2026-05-26
   - Reservation 3331936952 resolves to hotel-visible total 510, commission 60, and commission percentage 11.76%.
   - Production frontend served static/js/main.f8beea8a.js after deployment.
   - hotels_frontend npm run build compiled successfully before deployment.
+
+2026-06-04 Admin All-Reservations OTA Pricing Summary And Edit Prefill
+- Frontend files:
+  - src/AdminModule/AllReservation/MoreDetails.js renders the payment summary cards in /admin/all-reservations detail modals.
+  - src/AdminModule/AllReservation/EditReservationMain.js prepares saved room pricing rows before opening the shared pricing editor.
+  - src/AdminModule/JannatTools/EditPricingModal.js owns the shared Edit Pricing Breakdown modal.
+- Role display rules:
+  - Hotel-management users must continue to receive and see only the hotel-visible/root price for adminPricingVisibility.rootOnlyForHotelManagement reservations.
+  - Internal platform employees may see the safe OTA payment-summary cards for Hotel Can See and After OTA Expenses.
+  - The Platform Profit card remains visible only to configured SUPER ADMIN users from REACT_APP_SUPER_ADMIN_ID.
+- Pricing summary behavior:
+  - MoreDetails now prefers the backend ota_financial_summary object when it exists, then falls back to adminPricing, hotel_visible_amount, and saved daily pricing rows.
+  - This keeps reservations such as 1445133730 showing the OTA/client paid total separately from the 42.50 SAR hotel-visible/root amount.
+- Edit pricing prefill behavior:
+  - Saved rootPrice is preserved when the Edit Pricing modal opens.
+  - totalPriceWithoutCommission is kept aligned with the root/hotel price for admin three-price/OTA rows instead of being rewritten to the client/OTA gross price.
+  - Net After Expenses, OTA/Other Expense, and Platform Margin continue to pre-populate from saved daily fields when they exist.
