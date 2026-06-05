@@ -2018,3 +2018,45 @@ Future TODO Backlog - Added 2026-05-26
   - Regular platform employees with HotelsReservations/AllReservations can view all rejected reservations and safe OTA financial summaries needed for operations.
   - SUPER ADMIN-only platform profit behavior remains controlled by the backend safe summary and REACT_APP_SUPER_ADMIN_ID checks in detail/pricing components.
   - Hotel-management users must continue using the hotel-management rejected workspace and must not receive platform admin gross/profit details.
+
+2026-06-04 Reservation Lifecycle Summary For Future Reference
+- Core lifecycle:
+  - New operational reservations should be shown internally as Pending Confirmation until the hotel team reviews them.
+  - This applies to reservations created by agents/order takers, admins, SUPER ADMINs, Jannat Tools, chatbot flows, and OTA reservations after platform release.
+  - Paid public/client-facing reservations may still look confirmed to the guest, but the admin/hotel workflow must still show the internal pendingConfirmation review state.
+- Main cycle:
+  - Pending Confirmation: hotel reservation employee/team must accept or reject.
+  - Accepted by hotel: reservation moves toward finance review.
+  - Pending Finance Review: finance/management checks total amount, settlement handling, and commission.
+  - Pending Agent Commission Approval: appears when agent-side commission approval is required.
+  - Confirmed: hotel acceptance plus finance/commission requirements are complete.
+  - In House / Checked Out / No Show / Cancelled: later operational statuses after confirmation.
+- Rejected cycle:
+  - Rejected reservations must show in rejected workspaces and notification feeds with the rejection reason/comment where available.
+  - Agent/order taker users see their own rejected reservations and can correct allowed fields.
+  - Platform admins and SUPER ADMINs can open rejected reservations, correct price/details, and save; the backend resubmits the corrected reservation to Pending Confirmation.
+  - Rejected workspaces should not expose direct accept/reject buttons. Corrections should go through reservation details/edit so the workflow stays Pending Confirmation -> Finance Review -> Confirmed.
+- Frontend routes:
+  - Hotel/overall scoped rejected workspace:
+    /hotel-management/main-dashboard?overall=rejected-reservations&page=1
+  - Platform admin all-hotels rejected workspace:
+    /admin/rejected-reservations
+  - Platform rejected notification deep link:
+    /admin/rejected-reservations?reservationId=<reservationId>&page=1
+- Role/UI expectations:
+  - Agent / Order Taker: create reservations, view own decision/rejection notices, correct allowed rejected reservations; cannot confirm hotel acceptance or finance.
+  - Reservation Employee: accepts/rejects Pending Confirmation reservations; does not perform finance review.
+  - Finance: reviews/assigns commission and finance cycle after hotel acceptance; finance rejection should show as an action item with reason.
+  - Hotel Manager/System Admin: manages hotel-side workflow within their permitted hotel scope.
+  - Platform Admin: role-1000 users with HotelsReservations/AllReservations can use /admin/rejected-reservations for all hotels and see platform notification bell entries.
+  - SUPER ADMIN: can see and manage everything, but normal corrections should still send rejected reservations back to Pending Confirmation.
+- Notification behavior:
+  - Rejected reservation notification titles should be explicit: "Reservation #<confirmation> was rejected" / Arabic equivalent.
+  - Notification cards should include guest, hotel/source, stay dates, amount, and rejection reason/comment if supplied.
+  - Rejected notification clicks from the admin top navbar route to /admin/rejected-reservations with reservationId.
+  - Finance rejection notifications may still route through finance-action behavior where appropriate.
+- OTA pricing privacy:
+  - OTA Platform Review reservations stay in /admin/ota-reservations until released to hotel.
+  - After release, hotel-management sees Pending Confirmation and the hotel-visible/root amount only.
+  - Platform admin screens may show safe OTA summaries for client total, hotel-visible amount, net after expenses, and OTA expenses.
+  - Platform Profit / Platform Margin remains SUPER ADMIN-only.
