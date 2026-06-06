@@ -14,13 +14,15 @@ import {
 import {
 	CalendarOutlined,
 	DollarOutlined,
+	EditOutlined,
 	GlobalOutlined,
 	LeftOutlined,
 	PercentageOutlined,
 	RightOutlined,
 	SaveOutlined,
 	StopOutlined,
-	TeamOutlined,
+	TagsOutlined,
+	UnorderedListOutlined,
 } from "@ant-design/icons";
 import moment from "moment-hijri";
 import styled, { createGlobalStyle } from "styled-components";
@@ -38,6 +40,8 @@ import {
 
 const MODAL_TAB_GENERAL = "general";
 const MODAL_TAB_AGENTS = "agents";
+const GENERAL_PRICING_TAB_ADD = "add";
+const GENERAL_PRICING_TAB_UPDATE = "update";
 const MAX_PREVIEW_DAYS = 370;
 
 const hijriMonthsEn = [
@@ -90,12 +94,40 @@ const TEXT = {
 	en: {
 		generalTab: "Add / Update Pricing General",
 		agentsTab: "Add / Update Pricing Agents",
+		addPricingTab: "Add pricing",
+		updatePricingTab: "Update pricing",
+		addPricingHint:
+			"Add only new main calendar pricing. Existing room/date pricing must be changed from the Update tab.",
+		updatePricingHint:
+			"Choose saved main pricing to prefill the form, then preview and save the updated rows.",
+		agentPricingModeQuestion: "Use price variants for this agent pricing?",
+		useVariants: "Yes, assign variants",
+		customAgentCalendar: "No, customize calendar",
+		assignVariantHint:
+			"Assign saved price variants to agents. Hotels are limited to the selected variants.",
+		customAgentCalendarHint:
+			"Create a custom agent calendar with manual price and commission values.",
+		priceVariants: "Price variants",
+		choosePriceVariants: "Choose price variants",
+		noVariantHotels: "Select pricing variants first",
+		assignmentSaved: "Agent price variants assigned successfully",
+		existingPricing: "Saved main pricing",
+		noExistingPricing: "No main calendar pricing has been saved yet.",
+		editPricing: "Edit",
+		selectedPricing: "Selected for update",
+		openDays: "open",
+		blockedDays: "closed",
+		fromDate: "From",
+		toDate: "To",
 		hotels: "Hotels",
 		rooms: "Rooms",
 		agents: "Agents",
 		chooseHotels: "Choose hotels",
 		chooseRooms: "Choose rooms",
 		chooseAgents: "Choose agents",
+		priceVariant: "Price variant",
+		choosePriceVariant: "Choose price variant",
+		priceVariantHint: "Assigned from Price Variants",
 		calendar: "Calendar",
 		hijri: "Hijri",
 		gregorian: "Gregorian",
@@ -113,6 +145,8 @@ const TEXT = {
 		status: "Status",
 		open: "Open",
 		blocked: "Closed",
+		increase: "Increase",
+		decrease: "Decrease",
 		restrict: "Restrict",
 		reopen: "Open",
 		action: "Action",
@@ -121,6 +155,8 @@ const TEXT = {
 		save: "Save pricing",
 		close: "Close",
 		required: "Required",
+		validationRequired:
+			"Please complete the required fields before generating the preview.",
 		preview: "Preview",
 		noPreview: "Generate a preview before saving.",
 		day: "Day",
@@ -139,12 +175,55 @@ const TEXT = {
 			"\u0625\u0636\u0627\u0641\u0629 / \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u0639\u0627\u0645",
 		agentsTab:
 			"\u0625\u0636\u0627\u0641\u0629 / \u062a\u062d\u062f\u064a\u062b \u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
+		addPricingTab:
+			"\u0625\u0636\u0627\u0641\u0629 \u062a\u0633\u0639\u064a\u0631",
+		updatePricingTab:
+			"\u062a\u062d\u062f\u064a\u062b \u062a\u0633\u0639\u064a\u0631",
+		addPricingHint:
+			"\u0623\u0636\u0641 \u062a\u0633\u0639\u064a\u0631\u0627\u064b \u062c\u062f\u064a\u062f\u0627\u064b \u0641\u0642\u0637. \u0625\u0630\u0627 \u0648\u062c\u062f \u062a\u0633\u0639\u064a\u0631 \u0644\u0646\u0641\u0633 \u0627\u0644\u063a\u0631\u0641\u0629 \u0648\u0627\u0644\u062a\u0627\u0631\u064a\u062e \u0641\u0627\u0633\u062a\u062e\u062f\u0645 \u062a\u0628\u0648\u064a\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.",
+		updatePricingHint:
+			"\u0627\u062e\u062a\u0631 \u062a\u0633\u0639\u064a\u0631\u0627\u064b \u0631\u0626\u064a\u0633\u064a\u0627\u064b \u0645\u062d\u0641\u0648\u0638\u0627\u064b \u0644\u062a\u0639\u0628\u0626\u0629 \u0627\u0644\u062d\u0642\u0648\u0644\u060c \u062b\u0645 \u0623\u0646\u0634\u0626 \u0627\u0644\u0645\u0639\u0627\u064a\u0646\u0629 \u0648\u0627\u062d\u0641\u0638 \u0627\u0644\u062a\u062d\u062f\u064a\u062b.",
+		agentPricingModeQuestion:
+			"\u0627\u0633\u062a\u062e\u062f\u0627\u0645 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631 \u0644\u0644\u0648\u0643\u064a\u0644\u061f",
+		useVariants:
+			"\u0646\u0639\u0645\u060c \u062a\u0639\u064a\u064a\u0646 \u062a\u0646\u0648\u064a\u0639\u0627\u062a",
+		customAgentCalendar:
+			"\u0644\u0627\u060c \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u062a\u0642\u0648\u064a\u0645",
+		assignVariantHint:
+			"\u0639\u064a\u0651\u0646 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0645\u062d\u0641\u0648\u0638\u0629 \u0644\u0644\u0648\u0643\u0644\u0627\u0621. \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u062a\u0638\u0647\u0631 \u062d\u0633\u0628 \u0627\u0644\u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062d\u062f\u062f\u0629.",
+		customAgentCalendarHint:
+			"\u0623\u0646\u0634\u0626 \u062a\u0642\u0648\u064a\u0645\u0627\u064b \u0645\u062e\u0635\u0635\u0627\u064b \u0644\u0644\u0648\u0643\u064a\u0644 \u0628\u0633\u0639\u0631 \u0648\u0639\u0645\u0648\u0644\u0629 \u064a\u062f\u0648\u064a\u0629.",
+		priceVariants:
+			"\u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631",
+		choosePriceVariants:
+			"\u0627\u062e\u062a\u0631 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631",
+		noVariantHotels:
+			"\u0627\u062e\u062a\u0631 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0623\u0648\u0644\u0627\u064b",
+		assignmentSaved:
+			"\u062a\u0645 \u062a\u0639\u064a\u064a\u0646 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631 \u0644\u0644\u0648\u0643\u0644\u0627\u0621 \u0628\u0646\u062c\u0627\u062d",
+		existingPricing:
+			"\u062a\u0633\u0639\u064a\u0631 \u0631\u0626\u064a\u0633\u064a \u0645\u062d\u0641\u0648\u0638",
+		noExistingPricing:
+			"\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0633\u0639\u064a\u0631 \u0631\u0626\u064a\u0633\u064a \u0645\u062d\u0641\u0648\u0638 \u0628\u0639\u062f.",
+		editPricing: "\u062a\u0639\u062f\u064a\u0644",
+		selectedPricing:
+			"\u0645\u062d\u062f\u062f \u0644\u0644\u062a\u062d\u062f\u064a\u062b",
+		openDays: "\u0645\u0641\u062a\u0648\u062d",
+		blockedDays: "\u0645\u063a\u0644\u0642",
+		fromDate: "\u0645\u0646",
+		toDate: "\u0625\u0644\u0649",
 		hotels: "\u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		rooms: "\u0627\u0644\u063a\u0631\u0641",
 		agents: "\u0627\u0644\u0648\u0643\u0644\u0627\u0621",
 		chooseHotels: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		chooseRooms: "\u0627\u062e\u062a\u0631 \u0627\u0644\u063a\u0631\u0641",
 		chooseAgents: "\u0627\u062e\u062a\u0631 \u0627\u0644\u0648\u0643\u0644\u0627\u0621",
+		priceVariant:
+			"\u062a\u0646\u0648\u064a\u0639 \u0627\u0644\u0633\u0639\u0631",
+		choosePriceVariant:
+			"\u0627\u062e\u062a\u0631 \u062a\u0646\u0648\u064a\u0639 \u0633\u0639\u0631",
+		priceVariantHint:
+			"\u0645\u0631\u062a\u0628\u0637 \u0628\u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0623\u0633\u0639\u0627\u0631",
 		calendar: "\u0627\u0644\u062a\u0642\u0648\u064a\u0645",
 		hijri: "\u0647\u062c\u0631\u064a",
 		gregorian: "\u0645\u064a\u0644\u0627\u062f\u064a",
@@ -163,6 +242,8 @@ const TEXT = {
 		status: "\u0627\u0644\u062d\u0627\u0644\u0629",
 		open: "\u0645\u0641\u062a\u0648\u062d",
 		blocked: "\u0645\u063a\u0644\u0642",
+		increase: "\u0632\u064a\u0627\u062f\u0629",
+		decrease: "\u062e\u0635\u0645",
 		restrict: "\u0645\u062d\u0638\u0648\u0631",
 		reopen: "\u0641\u062a\u062d",
 		action: "\u0625\u062c\u0631\u0627\u0621",
@@ -171,6 +252,8 @@ const TEXT = {
 		save: "\u062d\u0641\u0638 \u0627\u0644\u062a\u0633\u0639\u064a\u0631",
 		close: "\u0625\u063a\u0644\u0627\u0642",
 		required: "\u0645\u0637\u0644\u0648\u0628",
+		validationRequired:
+			"\u064a\u0631\u062c\u0649 \u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u062d\u0642\u0648\u0644 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629 \u0642\u0628\u0644 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u0645\u0639\u0627\u064a\u0646\u0629.",
 		preview: "\u0627\u0644\u0645\u0639\u0627\u064a\u0646\u0629",
 		noPreview: "\u0623\u0646\u0634\u0626 \u0645\u0639\u0627\u064a\u0646\u0629 \u0642\u0628\u0644 \u0627\u0644\u062d\u0641\u0638.",
 		day: "\u0627\u0644\u064a\u0648\u0645",
@@ -268,6 +351,9 @@ const defaultValues = () => {
 		hotelIds: [],
 		roomSelections: [],
 		agentIds: [],
+		agentPricingMode: "variants",
+		priceVariantItemKeys: [],
+		priceVariantItemKey: "",
 		calendarType: "hijri",
 		periodMode: "months",
 		hijriYear: now.iYear(),
@@ -364,6 +450,133 @@ const parseRoomKey = (key = "") => {
 	return { hotelId, roomId };
 };
 
+const parsePriceVariantKey = (key = "") => {
+	const [priceVariantDataId, priceVariantItemId] = String(key || "").split("::");
+	return {
+		priceVariantDataId: priceVariantDataId || "",
+		priceVariantItemId: priceVariantItemId || "",
+	};
+};
+
+const priceVariantBasisLabel = (item = {}, labels = {}) => {
+	const basis =
+		item.pricingBasis && typeof item.pricingBasis === "object"
+			? item.pricingBasis
+			: {};
+	if (basis.mode !== "calendar_base") {
+		return `${Number(item.sellingPrice || 0)} SAR`;
+	}
+	const direction =
+		basis.direction === "decrease" ? labels.decrease : labels.increase;
+	const suffix = basis.adjustmentType === "money" ? " SAR" : "%";
+	return `${direction} ${Number(basis.amount || 0).toFixed(2)}${suffix}`;
+};
+
+const applyPriceVariantAdjustment = (basePrice = 0, basis = {}) => {
+	const amount = Number(basis.amount || 0);
+	const sign = basis.direction === "decrease" ? -1 : 1;
+	const next =
+		basis.adjustmentType === "money"
+			? Number(basePrice || 0) + sign * amount
+			: Number(basePrice || 0) * (1 + sign * (amount / 100));
+	return Number(Math.max(next, 0).toFixed(2));
+};
+
+const roomCalendarBaseValues = (room = {}, calendarDate = "") => {
+	const calendarRow = (Array.isArray(room.pricingRate) ? room.pricingRate : []).find(
+		(row) => String(row?.calendarDate || "").slice(0, 10) === calendarDate
+	);
+	if (calendarRow) {
+		const blocked =
+			calendarRow.blocked === true ||
+			calendarRow.status === "blocked" ||
+			String(calendarRow.color || "").toLowerCase() === "black";
+		if (blocked) return { status: "blocked", sellingPrice: 0 };
+		const rowPrice = Number(calendarRow.sellingPrice ?? calendarRow.price ?? 0);
+		if (rowPrice > 0) return { status: "open", sellingPrice: rowPrice };
+	}
+	const basePrice = Number(room.basePrice ?? room.price?.basePrice ?? 0);
+	return {
+		status: basePrice > 0 ? "open" : "missing",
+		sellingPrice: basePrice,
+	};
+};
+
+const priceVariantValuesForRoom = (
+	record = {},
+	item = {},
+	room = {},
+	calendarDate = ""
+) => {
+	const basis =
+		item.pricingBasis && typeof item.pricingBasis === "object"
+			? item.pricingBasis
+			: {};
+	if (
+		record.dataType === "price_variant" ||
+		record.basePriceSource === "calendar_main_price" ||
+		basis.mode === "calendar_base"
+	) {
+		const baseValues = roomCalendarBaseValues(room, calendarDate);
+		if (item.status === "blocked" || baseValues.status === "blocked") {
+			return { status: "blocked", sellingPrice: 0, commissionPercent: 0 };
+		}
+		if (baseValues.status !== "open" || !(baseValues.sellingPrice > 0)) {
+			return {
+				status: item.status || "open",
+				sellingPrice: Number(item.sellingPrice || 0),
+				commissionPercent: Number(item.commissionPercent || 0),
+			};
+		}
+		return {
+			status: "open",
+			sellingPrice: applyPriceVariantAdjustment(baseValues.sellingPrice, basis),
+			commissionPercent: Number(item.commissionPercent || 0),
+		};
+	}
+	const roomPricing = (Array.isArray(record.roomPricing)
+		? record.roomPricing
+		: []
+	).find(
+		(row) =>
+			normalizeId(row.hotelId) === normalizeId(room.hotelId) &&
+			normalizeId(row.roomId) === normalizeId(room.roomId)
+	);
+	const roomItem = (Array.isArray(roomPricing?.pricingItems)
+		? roomPricing.pricingItems
+		: []
+	).find(
+		(price) =>
+			normalizeId(price.priceVariantItemId) === normalizeId(item._id)
+	);
+	const periodPrice = (Array.isArray(roomItem?.periodPrices)
+		? roomItem.periodPrices
+		: []
+	).find((period) => {
+		const startDate = String(period?.startDate || "");
+		const endDate = String(period?.endDate || "");
+		return (
+			calendarDate &&
+			startDate &&
+			endDate &&
+			calendarDate >= startDate &&
+			calendarDate <= endDate
+		);
+	});
+	return {
+		status: periodPrice?.status || roomItem?.status || item.status || "open",
+		sellingPrice: Number(
+			periodPrice?.sellingPrice ?? roomItem?.sellingPrice ?? item.sellingPrice ?? 0
+		),
+		commissionPercent: Number(
+			periodPrice?.commissionPercent ??
+				roomItem?.commissionPercent ??
+				item.commissionPercent ??
+				0
+		),
+	};
+};
+
 const OverallCalendarPricingModal = ({
 	open,
 	onClose,
@@ -374,18 +587,26 @@ const OverallCalendarPricingModal = ({
 	ownerId,
 	chosenLanguage,
 	onSaved,
+	embedded = false,
 }) => {
 	const isArabic = chosenLanguage === "Arabic";
 	const labels = TEXT[isArabic ? "ar" : "en"];
-	const normalizedActiveTab = normalizeCalendarTab(activeTab);
+	const normalizedActiveTab = embedded
+		? normalizeCalendarTab(activeTab || MODAL_TAB_AGENTS)
+		: MODAL_TAB_GENERAL;
 	const [hotels, setHotels] = useState([]);
 	const [agents, setAgents] = useState([]);
+	const [priceVariantData, setPriceVariantData] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [preview, setPreview] = useState(null);
 	const [previewIndex, setPreviewIndex] = useState(0);
 	const [previewModalOpen, setPreviewModalOpen] = useState(false);
 	const [editingCell, setEditingCell] = useState(null);
+	const [generalPricingTab, setGeneralPricingTab] = useState(
+		GENERAL_PRICING_TAB_ADD
+	);
+	const [editingGeneralPricingKey, setEditingGeneralPricingKey] = useState("");
 	const [generalForm] = Form.useForm();
 	const [agentsForm] = Form.useForm();
 	const activeForm = normalizedActiveTab === MODAL_TAB_AGENTS ? agentsForm : generalForm;
@@ -403,7 +624,22 @@ const OverallCalendarPricingModal = ({
 		[hotels]
 	);
 
-	const selectedHotelIds = Form.useWatch("hotelIds", activeForm) || [];
+	const watchedHotelIds = Form.useWatch("hotelIds", activeForm);
+	const selectedHotelIds = useMemo(
+		() => (Array.isArray(watchedHotelIds) ? watchedHotelIds : []),
+		[watchedHotelIds]
+	);
+	const selectedAgentPricingMode =
+		Form.useWatch("agentPricingMode", agentsForm) || "variants";
+	const watchedAgentPriceVariantKeys =
+		Form.useWatch("priceVariantItemKeys", agentsForm);
+	const selectedAgentPriceVariantKeys = useMemo(
+		() =>
+			Array.isArray(watchedAgentPriceVariantKeys)
+				? watchedAgentPriceVariantKeys
+				: [],
+		[watchedAgentPriceVariantKeys]
+	);
 	const selectedStatus = Form.useWatch("status", activeForm) || "open";
 	const selectedCalendarType = Form.useWatch("calendarType", activeForm) || "hijri";
 	const selectedPeriodMode = Form.useWatch("periodMode", activeForm) || "months";
@@ -432,6 +668,9 @@ const OverallCalendarPricingModal = ({
 					roomForGender: room.roomForGender || "",
 					roomTypeLabel: actualRoomTypeLabel,
 					roomDisplayName: displayName || room.displayName || room.roomType || "",
+					basePrice: Number(room.basePrice || 0),
+					defaultCost: Number(room.defaultCost || 0),
+					pricingRate: Array.isArray(room.pricingRate) ? room.pricingRate : [],
 				};
 			})
 	);
@@ -449,6 +688,134 @@ const OverallCalendarPricingModal = ({
 			}`,
 		}));
 
+	const priceVariantOptions = useMemo(() => {
+		return (Array.isArray(priceVariantData) ? priceVariantData : [])
+			.flatMap((record) =>
+				(Array.isArray(record.pricingItems) ? record.pricingItems : []).map(
+					(item) => {
+						const itemName =
+							isArabic && item.nameOtherLanguage
+								? item.nameOtherLanguage
+								: item.name;
+						const hotelNames = (record.hotelNames || []).join(", ");
+						const assignedCount = Array.isArray(item.assignedAgents)
+							? item.assignedAgents.length
+							: 0;
+						return {
+							value: `${normalizeId(record._id)}::${normalizeId(item._id)}`,
+							label: `${itemName || labels.priceVariant} - ${priceVariantBasisLabel(
+								item,
+								labels
+							)}${
+								assignedCount
+									? ` - ${assignedCount} ${
+											isArabic ? "\u0648\u0643\u0644\u0627\u0621" : "agents"
+									  }`
+									: ""
+							}${
+								hotelNames ? ` - ${hotelNames}` : ""
+							}`,
+							record,
+							item,
+						};
+					}
+				)
+			);
+	}, [isArabic, labels, priceVariantData]);
+
+	const selectedAgentPriceVariantOptions = useMemo(
+		() =>
+			priceVariantOptions.filter((option) =>
+				selectedAgentPriceVariantKeys.includes(option.value)
+			),
+		[priceVariantOptions, selectedAgentPriceVariantKeys]
+	);
+	const agentVariantHotelOptions = useMemo(() => {
+		const hotelSet = new Set(
+			selectedAgentPriceVariantOptions.flatMap((option) =>
+				(option.record?.hotelIds || []).map(normalizeId)
+			)
+		);
+		return hotelOptions.filter((hotel) => hotelSet.has(normalizeId(hotel.value)));
+	}, [hotelOptions, selectedAgentPriceVariantOptions]);
+
+	const existingGeneralPricingGroups = useMemo(
+		() =>
+			(Array.isArray(hotels) ? hotels : []).flatMap((hotel) =>
+				(Array.isArray(hotel.rooms) ? hotel.rooms : [])
+					.filter((room) => room.activeRoom !== false)
+					.map((room) => {
+						const rows = (Array.isArray(room.pricingRate)
+							? room.pricingRate
+							: []
+						)
+							.map((row) => {
+								const calendarDate = String(row?.calendarDate || "").slice(0, 10);
+								const blocked =
+									row?.blocked === true ||
+									row?.status === "blocked" ||
+									String(row?.color || "").toLowerCase() === "black";
+								return {
+									calendarDate,
+									status: blocked ? "blocked" : "open",
+									blocked,
+									sellingPrice: blocked
+										? 0
+										: Number(row?.sellingPrice ?? row?.price ?? 0),
+									commissionPercent: blocked
+										? 0
+										: Number(row?.commissionPercent || 0),
+								};
+							})
+							.filter((row) => row.calendarDate)
+							.sort((left, right) =>
+								left.calendarDate.localeCompare(right.calendarDate)
+							);
+						if (!rows.length) return null;
+						const hotelId = normalizeId(hotel._id);
+						const roomId = normalizeId(room._id);
+						const displayName = isArabic
+							? room.displayName_OtherLanguage || room.displayName
+							: room.displayName || room.displayName_OtherLanguage;
+						const actualRoomTypeLabel = roomTypeLabel(room, isArabic);
+						const openRows = rows.filter((row) => !row.blocked);
+						const representativeRow = openRows[0] || rows[0] || {};
+						return {
+							key: makeRoomKey(hotelId, roomId),
+							hotelId,
+							roomId,
+							roomKey: makeRoomKey(hotelId, roomId),
+							hotelName: titleCase(hotel.hotelName),
+							roomType: room.roomType || "",
+							roomForGender: room.roomForGender || "",
+							roomTypeLabel: actualRoomTypeLabel,
+							roomDisplayName: displayName || room.displayName || room.roomType || "",
+							basePrice: Number(room.basePrice || 0),
+							defaultCost: Number(room.defaultCost || 0),
+							label: `${titleCase(hotel.hotelName)} - ${actualRoomTypeLabel}${
+								displayName ? ` - ${displayName}` : ""
+							}`,
+							rows,
+							startDate: rows[0]?.calendarDate || "",
+							endDate: rows[rows.length - 1]?.calendarDate || "",
+							totalDays: rows.length,
+							openCount: openRows.length,
+							blockedCount: rows.length - openRows.length,
+							firstPrice: Number(representativeRow.sellingPrice || 0),
+							firstCommission: Number(representativeRow.commissionPercent || 0),
+							firstStatus: representativeRow.blocked ? "blocked" : "open",
+						};
+					})
+					.filter(Boolean)
+			),
+		[hotels, isArabic]
+	);
+
+	const selectedGeneralPricingGroup =
+		existingGeneralPricingGroups.find(
+			(group) => group.key === editingGeneralPricingKey
+		) || null;
+
 	useEffect(() => {
 		if (!open || !userId || !token) return;
 		setLoading(true);
@@ -460,6 +827,9 @@ const OverallCalendarPricingModal = ({
 				}
 				setHotels(Array.isArray(data?.hotels) ? data.hotels : []);
 				setAgents(Array.isArray(data?.agents) ? data.agents : []);
+				setPriceVariantData(
+					Array.isArray(data?.priceVariantData) ? data.priceVariantData : []
+				);
 			})
 			.finally(() => setLoading(false));
 	}, [open, ownerId, token, userId]);
@@ -473,7 +843,52 @@ const OverallCalendarPricingModal = ({
 		setPreviewIndex(0);
 		setPreviewModalOpen(false);
 		setEditingCell(null);
+		setEditingGeneralPricingKey("");
+		setGeneralPricingTab(GENERAL_PRICING_TAB_ADD);
 	}, [agentsForm, generalForm, open]);
+
+	useEffect(() => {
+		if (
+			!open ||
+			normalizedActiveTab !== MODAL_TAB_AGENTS ||
+			selectedAgentPricingMode !== "variants"
+		) {
+			return;
+		}
+		const validHotelIds = new Set(agentVariantHotelOptions.map((option) => option.value));
+		const currentHotelIds = agentsForm.getFieldValue("hotelIds") || [];
+		const nextHotelIds = currentHotelIds.filter((hotelId) =>
+			validHotelIds.has(normalizeId(hotelId))
+		);
+		const currentAgentIds = agentsForm.getFieldValue("agentIds") || [];
+		const nextAgentIds = currentAgentIds.filter((agentId) => {
+			const agent = agents.find(
+				(item) => normalizeId(item._id) === normalizeId(agentId)
+			);
+			const scoped = new Set((agent?.hotelIds || []).map(normalizeId));
+			return nextHotelIds.some((hotelId) => scoped.has(normalizeId(hotelId)));
+		});
+		if (
+			nextHotelIds.length !== currentHotelIds.length ||
+			nextAgentIds.length !== currentAgentIds.length
+		) {
+			agentsForm.setFieldsValue({
+				hotelIds: nextHotelIds,
+				agentIds: nextAgentIds,
+				roomSelections: [],
+			});
+			setPreview(null);
+			setPreviewIndex(0);
+			setPreviewModalOpen(false);
+		}
+	}, [
+		agentVariantHotelOptions,
+		agents,
+		agentsForm,
+		normalizedActiveTab,
+		open,
+		selectedAgentPricingMode,
+	]);
 
 	const syncHotelDependentFields = (form, hotelIds = [], mode = MODAL_TAB_GENERAL) => {
 		const selected = hotels.filter((hotel) =>
@@ -502,20 +917,42 @@ const OverallCalendarPricingModal = ({
 				: currentAgents;
 		form.setFieldsValue({
 			roomSelections: nextRooms,
-			...(mode === MODAL_TAB_AGENTS ? { agentIds: nextAgentIds } : {}),
+			...(mode === MODAL_TAB_AGENTS
+				? { agentIds: nextAgentIds, priceVariantItemKey: "" }
+				: {}),
 		});
 		setPreview(null);
 		setPreviewIndex(0);
 		setPreviewModalOpen(false);
 		setEditingCell(null);
+		if (mode === MODAL_TAB_GENERAL) setEditingGeneralPricingKey("");
 	};
 
 	const buildPreview = async (
 		mode = normalizedActiveTab,
-		{ openPreviewModal = true } = {}
+		{ openPreviewModal = true, operation } = {}
 	) => {
 		const form = mode === MODAL_TAB_AGENTS ? agentsForm : generalForm;
-		const values = await form.validateFields();
+		let values;
+		try {
+			values = await form.validateFields();
+		} catch (error) {
+			const firstField = Array.isArray(error?.errorFields)
+				? error.errorFields[0]
+				: null;
+			const firstMessage = Array.isArray(firstField?.errors)
+				? firstField.errors.find(Boolean)
+				: "";
+			message.error(
+				firstMessage && firstMessage !== labels.required
+					? firstMessage
+					: labels.validationRequired
+			);
+			if (firstField?.name && typeof form.scrollToField === "function") {
+				form.scrollToField(firstField.name, { block: "center" });
+			}
+			return null;
+		}
 		const dates = datesFromValues(values);
 		if (!dates.length) {
 			message.error(labels.required);
@@ -535,6 +972,9 @@ const OverallCalendarPricingModal = ({
 				roomForGender: option.roomForGender || "",
 				roomTypeLabel: option.roomTypeLabel || option.label || roomKey,
 				roomDisplayName: option.roomDisplayName || option.label || roomKey,
+				basePrice: Number(option.basePrice || 0),
+				defaultCost: Number(option.defaultCost || 0),
+				pricingRate: Array.isArray(option.pricingRate) ? option.pricingRate : [],
 				...parseRoomKey(roomKey),
 			};
 		});
@@ -551,25 +991,49 @@ const OverallCalendarPricingModal = ({
 		const defaultCommissionPercent = defaultBlocked
 			? 0
 			: Number(values.commissionPercent || 0);
+		const masterOptionForPreview = null;
 		const rows = dates.flatMap((date) =>
-			rooms.map((room) => ({
-				id: `${date}::${room.key}`,
-				date,
-				room: room.label,
-				roomType: room.roomTypeLabel,
-				roomTypeKey: room.roomType,
-				roomForGender: room.roomForGender,
-				roomDisplayName: room.roomDisplayName,
-				hotelId: room.hotelId,
-				roomId: room.roomId,
-				sellingPrice: defaultSellingPrice,
-				commissionPercent: defaultCommissionPercent,
-				status: defaultBlocked ? "blocked" : "open",
-				blocked: defaultBlocked,
-			}))
+			rooms.map((room) => {
+				const masterValues = masterOptionForPreview
+						? priceVariantValuesForRoom(
+								masterOptionForPreview.record,
+								masterOptionForPreview.item,
+								room,
+								date
+						  )
+						: null;
+				const rowBlocked = masterValues
+					? masterValues.status === "blocked"
+					: defaultBlocked;
+				return {
+					id: `${date}::${room.key}`,
+					date,
+					room: room.label,
+					roomType: room.roomTypeLabel,
+					roomTypeKey: room.roomType,
+					roomForGender: room.roomForGender,
+					roomDisplayName: room.roomDisplayName,
+					hotelId: room.hotelId,
+					roomId: room.roomId,
+					sellingPrice: rowBlocked
+						? 0
+						: Number(masterValues?.sellingPrice ?? defaultSellingPrice),
+					commissionPercent: rowBlocked
+						? 0
+						: Number(
+								masterValues?.commissionPercent ?? defaultCommissionPercent
+						  ),
+					status: rowBlocked ? "blocked" : "open",
+					blocked: rowBlocked,
+				};
+			})
 		);
 		const nextPreview = {
 			mode,
+			operation:
+				mode === MODAL_TAB_GENERAL
+					? operation || generalPricingTab || GENERAL_PRICING_TAB_ADD
+					: "update",
 			values,
 			dates,
 			rooms,
@@ -581,6 +1045,99 @@ const OverallCalendarPricingModal = ({
 		setEditingCell(null);
 		if (openPreviewModal) setPreviewModalOpen(true);
 		return nextPreview;
+	};
+
+	const previewFromGeneralPricingGroup = (group, values) => {
+		if (!group) return null;
+		const dates = [
+			...new Set((group.rows || []).map((row) => row.calendarDate).filter(Boolean)),
+		].sort();
+		const room = {
+			key: group.roomKey,
+			label: group.label,
+			roomType: group.roomType,
+			roomForGender: group.roomForGender,
+			roomTypeLabel: group.roomTypeLabel,
+			roomDisplayName: group.roomDisplayName,
+			basePrice: group.basePrice,
+			defaultCost: group.defaultCost,
+			hotelId: group.hotelId,
+			roomId: group.roomId,
+		};
+		const rows = (group.rows || []).map((row) => ({
+			id: `${row.calendarDate}::${group.roomKey}`,
+			date: row.calendarDate,
+			room: group.label,
+			roomType: group.roomTypeLabel,
+			roomTypeKey: group.roomType,
+			roomForGender: group.roomForGender,
+			roomDisplayName: group.roomDisplayName,
+			hotelId: group.hotelId,
+			roomId: group.roomId,
+			sellingPrice: row.blocked ? 0 : Number(row.sellingPrice || 0),
+			commissionPercent: row.blocked
+				? 0
+				: Number(row.commissionPercent || 0),
+			status: row.blocked ? "blocked" : "open",
+			blocked: row.blocked,
+		}));
+		const nextPreview = {
+			mode: MODAL_TAB_GENERAL,
+			operation: GENERAL_PRICING_TAB_UPDATE,
+			values,
+			dates,
+			rooms: [room],
+			rows,
+			monthCards: buildMonthCardsFromRows(
+				rows,
+				values.calendarType || "hijri",
+				isArabic
+			),
+		};
+		setPreview(nextPreview);
+		setPreviewIndex(0);
+		setEditingCell(null);
+		setPreviewModalOpen(false);
+		return nextPreview;
+	};
+
+	const selectGeneralPricingForUpdate = (group) => {
+		if (!group) return;
+		const values = {
+			...defaultValues(),
+			hotelIds: [group.hotelId],
+			roomSelections: [group.roomKey],
+			calendarType: "hijri",
+			periodMode: "custom",
+			startDate: group.startDate,
+			endDate: group.endDate,
+			status: group.firstStatus || "open",
+			sellingPrice:
+				group.firstStatus === "blocked" ? null : Number(group.firstPrice || 0),
+			commissionPercent:
+				group.firstStatus === "blocked"
+					? 0
+					: Number(group.firstCommission || 0),
+		};
+		setGeneralPricingTab(GENERAL_PRICING_TAB_UPDATE);
+		setEditingGeneralPricingKey(group.key);
+		generalForm.setFieldsValue(values);
+		previewFromGeneralPricingGroup(group, values);
+	};
+
+	const openPricingPreview = (mode, operation) => {
+		const desiredOperation =
+			mode === MODAL_TAB_GENERAL
+				? operation || generalPricingTab || GENERAL_PRICING_TAB_ADD
+				: "update";
+		if (
+			preview?.mode === mode &&
+			(mode !== MODAL_TAB_GENERAL || preview.operation === desiredOperation)
+		) {
+			setPreviewModalOpen(true);
+			return preview;
+		}
+		return buildPreview(mode, { operation: desiredOperation });
 	};
 
 	const togglePreviewRowStatus = (rowId) => {
@@ -656,20 +1213,118 @@ const OverallCalendarPricingModal = ({
 
 	const finishEditingCell = () => setEditingCell(null);
 
-	const savePricing = async (mode = normalizedActiveTab) => {
+	const applySaveResponse = (data) => {
+		if (Array.isArray(data?.updatedHotels)) {
+			const updatedById = new Map(
+				data.updatedHotels.map((hotel) => [normalizeId(hotel._id), hotel])
+			);
+			setHotels((current) =>
+				current.map((hotel) => updatedById.get(normalizeId(hotel._id)) || hotel)
+			);
+		}
+		const savedVariantList = Array.isArray(data?.priceVariantDataList)
+			? data.priceVariantDataList
+			: data?.priceVariantData
+			  ? [data.priceVariantData]
+			  : [];
+		if (savedVariantList.length) {
+			setPriceVariantData((current) => {
+				const savedIds = new Set(savedVariantList.map((item) => normalizeId(item._id)));
+				return [
+					...savedVariantList,
+					...current.filter((item) => !savedIds.has(normalizeId(item._id))),
+				];
+			});
+		}
+	};
+
+	const saveAgentVariantAssignments = async () => {
+		let values;
+		try {
+			values = await agentsForm.validateFields([
+				"agentPricingMode",
+				"priceVariantItemKeys",
+				"hotelIds",
+				"agentIds",
+			]);
+		} catch (error) {
+			const firstField = Array.isArray(error?.errorFields)
+				? error.errorFields[0]
+				: null;
+			const firstMessage = Array.isArray(firstField?.errors)
+				? firstField.errors.find(Boolean)
+				: "";
+			message.error(
+				firstMessage && firstMessage !== labels.required
+					? firstMessage
+					: labels.validationRequired
+			);
+			if (firstField?.name && typeof agentsForm.scrollToField === "function") {
+				agentsForm.scrollToField(firstField.name, { block: "center" });
+			}
+			return;
+		}
+		setSaving(true);
+		try {
+			const data = await saveOverallCalendarPricing(
+				userId,
+				token,
+				{
+					scope: "agents",
+					assignmentMode: "price_variants",
+					priceVariantSelections: (values.priceVariantItemKeys || []).map(
+						parsePriceVariantKey
+					),
+					hotelIds: values.hotelIds || [],
+					agentIds: values.agentIds || [],
+				},
+				buildOwnerParams(ownerId)
+			);
+			if (data?.error) {
+				message.error(data.error);
+				return;
+			}
+			message.success(labels.assignmentSaved || labels.saved);
+			applySaveResponse(data);
+			onSaved?.(data);
+			setPreviewModalOpen(false);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const savePricing = async (mode = normalizedActiveTab, { operation } = {}) => {
+		const desiredOperation =
+			mode === MODAL_TAB_GENERAL
+				? operation || preview?.operation || generalPricingTab || GENERAL_PRICING_TAB_ADD
+				: "update";
 		const nextPreview =
-			preview?.mode === mode
+			preview?.mode === mode &&
+			(mode !== MODAL_TAB_GENERAL || preview.operation === desiredOperation)
 				? preview
-				: await buildPreview(mode, { openPreviewModal: false });
+				: await buildPreview(mode, {
+						openPreviewModal: false,
+						operation: desiredOperation,
+				  });
 		if (!nextPreview) return;
 		const values = nextPreview.values;
+		const priceVariantSelection =
+			mode === MODAL_TAB_AGENTS
+				? parsePriceVariantKey(values.priceVariantItemKey)
+				: {};
 		setSaving(true);
 		try {
 			const payload = {
 				scope: mode === MODAL_TAB_AGENTS ? "agents" : "general",
+				operation: mode === MODAL_TAB_GENERAL ? desiredOperation : "update",
 				hotelIds: values.hotelIds || [],
 				roomSelections: (values.roomSelections || []).map(parseRoomKey),
 				agentIds: mode === MODAL_TAB_AGENTS ? values.agentIds || [] : [],
+				...(mode === MODAL_TAB_AGENTS &&
+				priceVariantSelection.priceVariantDataId &&
+				priceVariantSelection.priceVariantItemId
+					? priceVariantSelection
+					: {}),
 				dates: nextPreview.dates,
 				calendarType: values.calendarType,
 				status: values.status,
@@ -695,14 +1350,7 @@ const OverallCalendarPricingModal = ({
 				return;
 			}
 			message.success(labels.saved);
-			if (Array.isArray(data?.updatedHotels)) {
-				const updatedById = new Map(
-					data.updatedHotels.map((hotel) => [normalizeId(hotel._id), hotel])
-				);
-				setHotels((current) =>
-					current.map((hotel) => updatedById.get(normalizeId(hotel._id)) || hotel)
-				);
-			}
+			applySaveResponse(data);
 			onSaved?.(data);
 			setPreviewModalOpen(false);
 		} finally {
@@ -719,10 +1367,181 @@ const OverallCalendarPricingModal = ({
 		  : gregorianMonthsEn
 	).map((label, index) => ({ value: index, label }));
 
-	const renderPricingForm = (mode) => {
+	const renderPricingForm = (
+		mode,
+		{ operation = "update", hint = "" } = {}
+	) => {
 		const form = mode === MODAL_TAB_AGENTS ? agentsForm : generalForm;
+		const agentUsesVariants =
+			mode === MODAL_TAB_AGENTS && selectedAgentPricingMode !== "custom";
+		const visibleHotelOptions = agentUsesVariants
+			? agentVariantHotelOptions
+			: hotelOptions;
+		const masterPriceSelected = false;
 		return (
 			<Form form={form} layout='vertical' requiredMark={false} initialValues={defaultValues()}>
+				{mode === MODAL_TAB_AGENTS ? (
+					<AgentModeQuestion>
+						<Form.Item
+							name='agentPricingMode'
+							label={labels.agentPricingModeQuestion}
+							rules={[{ required: true, message: labels.required }]}
+						>
+							<Radio.Group
+								optionType='button'
+								buttonStyle='solid'
+								onChange={(event) => {
+									const nextMode = event.target.value;
+									agentsForm.setFieldsValue({
+										hotelIds: [],
+										roomSelections: [],
+										agentIds: [],
+										priceVariantItemKey: "",
+										priceVariantItemKeys: [],
+										...(nextMode === "custom"
+											? { sellingPrice: null, commissionPercent: 0, status: "open" }
+											: {}),
+									});
+									setPreview(null);
+									setPreviewIndex(0);
+									setPreviewModalOpen(false);
+									setEditingCell(null);
+								}}
+							>
+								<Radio.Button value='variants'>{labels.useVariants}</Radio.Button>
+								<Radio.Button value='custom'>
+									{labels.customAgentCalendar}
+								</Radio.Button>
+							</Radio.Group>
+						</Form.Item>
+					</AgentModeQuestion>
+				) : hint ? (
+					<CalendarOperationNotice>
+						<CalendarOutlined />
+						<span>{hint}</span>
+					</CalendarOperationNotice>
+				) : null}
+				{agentUsesVariants ? (
+					<>
+						<CalendarOperationNotice>
+							<TagsOutlined />
+							<span>{labels.assignVariantHint}</span>
+						</CalendarOperationNotice>
+						<FormGrid>
+							<Form.Item
+								name='priceVariantItemKeys'
+								label={labels.priceVariants}
+								rules={[
+									{
+										required: true,
+										type: "array",
+										min: 1,
+										message: labels.required,
+									},
+								]}
+							>
+								<Select
+									showSearch
+									mode='multiple'
+									maxTagCount='responsive'
+									allowClear
+									loading={loading}
+									placeholder={labels.choosePriceVariants}
+									options={priceVariantOptions}
+									optionFilterProp='label'
+									popupStyle={selectPopupStyle}
+									popupClassName={selectPopupClassName}
+									onChange={() => {
+										agentsForm.setFieldsValue({
+											hotelIds: [],
+											roomSelections: [],
+											agentIds: [],
+										});
+										setPreview(null);
+									}}
+									suffixIcon={<TagsOutlined />}
+								/>
+							</Form.Item>
+							<Form.Item
+								name='hotelIds'
+								label={labels.hotels}
+								rules={[
+									{
+										required: true,
+										type: "array",
+										min: 1,
+										message: labels.required,
+									},
+								]}
+							>
+								<Select
+									showSearch
+									mode='multiple'
+									maxTagCount='responsive'
+									allowClear
+									loading={loading}
+									disabled={!selectedAgentPriceVariantKeys.length}
+									placeholder={
+										selectedAgentPriceVariantKeys.length
+											? labels.chooseHotels
+											: labels.noVariantHotels
+									}
+									options={visibleHotelOptions}
+									optionFilterProp='label'
+									popupStyle={selectPopupStyle}
+									popupClassName={selectPopupClassName}
+									onChange={(hotelIds) =>
+										syncHotelDependentFields(form, hotelIds, mode)
+									}
+								/>
+							</Form.Item>
+							<Form.Item
+								name='agentIds'
+								label={labels.agents}
+								rules={[
+									{
+										required: true,
+										type: "array",
+										min: 1,
+										message: labels.required,
+									},
+								]}
+							>
+								<Select
+									showSearch
+									mode='multiple'
+									maxTagCount='responsive'
+									allowClear
+									disabled={!selectedHotelIds.length}
+									placeholder={labels.chooseAgents}
+									options={filteredAgentOptions}
+									optionFilterProp='label'
+									popupStyle={selectPopupStyle}
+									popupClassName={selectPopupClassName}
+									onChange={() => setPreview(null)}
+								/>
+							</Form.Item>
+						</FormGrid>
+						<ActionRow>
+							<Button
+								type='primary'
+								size='large'
+								icon={<SaveOutlined />}
+								loading={saving}
+								onClick={saveAgentVariantAssignments}
+							>
+								{labels.save}
+							</Button>
+						</ActionRow>
+					</>
+				) : (
+				<>
+				{mode === MODAL_TAB_AGENTS ? (
+					<CalendarOperationNotice>
+						<CalendarOutlined />
+						<span>{labels.customAgentCalendarHint}</span>
+					</CalendarOperationNotice>
+				) : null}
 				<FormGrid>
 					<Form.Item
 						name='hotelIds'
@@ -736,7 +1555,7 @@ const OverallCalendarPricingModal = ({
 							allowClear
 							loading={loading}
 							placeholder={labels.chooseHotels}
-							options={hotelOptions}
+							options={visibleHotelOptions}
 							optionFilterProp='label'
 							popupStyle={selectPopupStyle}
 							popupClassName={selectPopupClassName}
@@ -759,7 +1578,10 @@ const OverallCalendarPricingModal = ({
 							optionFilterProp='label'
 							popupStyle={selectPopupStyle}
 							popupClassName={selectPopupClassName}
-							onChange={() => setPreview(null)}
+							onChange={() => {
+								setPreview(null);
+								if (mode === MODAL_TAB_GENERAL) setEditingGeneralPricingKey("");
+							}}
 						/>
 					</Form.Item>
 					{mode === MODAL_TAB_AGENTS ? (
@@ -792,6 +1614,7 @@ const OverallCalendarPricingModal = ({
 						<Radio.Group
 							optionType='button'
 							buttonStyle='solid'
+							disabled={masterPriceSelected}
 							onChange={() => setPreview(null)}
 						>
 							<Radio.Button value='hijri'>{labels.hijri}</Radio.Button>
@@ -894,7 +1717,7 @@ const OverallCalendarPricingModal = ({
 						<InputNumber
 							min={0}
 							precision={2}
-							disabled={selectedStatus === "blocked"}
+							disabled={selectedStatus === "blocked" || masterPriceSelected}
 							prefix={<DollarOutlined />}
 							onChange={() => setPreview(null)}
 						/>
@@ -904,7 +1727,7 @@ const OverallCalendarPricingModal = ({
 							min={0}
 							max={100}
 							precision={2}
-							disabled={selectedStatus === "blocked"}
+							disabled={selectedStatus === "blocked" || masterPriceSelected}
 							prefix={<PercentageOutlined />}
 							onChange={() => setPreview(null)}
 						/>
@@ -916,7 +1739,7 @@ const OverallCalendarPricingModal = ({
 						type='default'
 						size='large'
 						icon={<CalendarOutlined />}
-						onClick={() => buildPreview(mode)}
+						onClick={() => openPricingPreview(mode, operation)}
 					>
 						{labels.generate}
 					</Button>
@@ -925,14 +1748,100 @@ const OverallCalendarPricingModal = ({
 						size='large'
 						icon={<SaveOutlined />}
 						loading={saving}
-						onClick={() => savePricing(mode)}
+						onClick={() => savePricing(mode, { operation })}
 					>
 						{labels.save}
 					</Button>
 				</ActionRow>
+				</>
+				)}
 			</Form>
 		);
 	};
+
+	const handleGeneralPricingTabChange = (key) => {
+		const nextTab =
+			key === GENERAL_PRICING_TAB_UPDATE
+				? GENERAL_PRICING_TAB_UPDATE
+				: GENERAL_PRICING_TAB_ADD;
+		setGeneralPricingTab(nextTab);
+		setPreview(null);
+		setPreviewIndex(0);
+		setPreviewModalOpen(false);
+		setEditingCell(null);
+		if (nextTab === GENERAL_PRICING_TAB_ADD) {
+			setEditingGeneralPricingKey("");
+			generalForm.setFieldsValue(defaultValues());
+		}
+	};
+
+	const renderGeneralUpdateTab = () => (
+		<GeneralUpdateShell>
+			<GeneralUpdateListPanel>
+				<GeneralUpdateHeader>
+					<strong>{labels.existingPricing}</strong>
+					<Tag color='blue'>{existingGeneralPricingGroups.length}</Tag>
+				</GeneralUpdateHeader>
+				{existingGeneralPricingGroups.length ? (
+					<GeneralPricingCards>
+						{existingGeneralPricingGroups.map((group) => (
+							<button
+								key={group.key}
+								type='button'
+								className={
+									group.key === editingGeneralPricingKey ? "selected" : ""
+								}
+								onClick={() => selectGeneralPricingForUpdate(group)}
+							>
+								<span className='card-top'>
+									<strong>{group.hotelName}</strong>
+									<Tag color={group.blockedCount ? "orange" : "green"}>
+										{group.totalDays} {labels.day}
+									</Tag>
+								</span>
+								<span className='room-name'>{group.roomTypeLabel}</span>
+								<span className='room-display'>{group.roomDisplayName}</span>
+								<span className='date-range'>
+									{labels.fromDate} {group.startDate} {labels.toDate}{" "}
+									{group.endDate}
+								</span>
+								<span className='card-metrics'>
+									<span>
+										{group.openCount} {labels.openDays}
+									</span>
+									<span>
+										{group.blockedCount} {labels.blockedDays}
+									</span>
+									<span>{Number(group.firstPrice || 0).toFixed(2)}</span>
+								</span>
+								<span className='edit-chip'>
+									<EditOutlined /> {labels.editPricing}
+								</span>
+							</button>
+						))}
+					</GeneralPricingCards>
+				) : (
+					<PreviewEmpty>{labels.noExistingPricing}</PreviewEmpty>
+				)}
+			</GeneralUpdateListPanel>
+			<GeneralUpdateEditorPanel>
+				<UpdateEditorIntro className={selectedGeneralPricingGroup ? "selected" : ""}>
+					<UnorderedListOutlined />
+					<span>
+						{selectedGeneralPricingGroup
+							? labels.selectedPricing
+							: labels.updatePricingHint}
+					</span>
+					{selectedGeneralPricingGroup ? (
+						<strong>{selectedGeneralPricingGroup.label}</strong>
+					) : null}
+				</UpdateEditorIntro>
+				{renderPricingForm(MODAL_TAB_GENERAL, {
+					operation: GENERAL_PRICING_TAB_UPDATE,
+				})}
+			</GeneralUpdateEditorPanel>
+		</GeneralUpdateShell>
+	);
 
 	const monthCards = preview?.monthCards || [];
 	const hasPreview = Boolean(preview && monthCards.length);
@@ -979,59 +1888,74 @@ const OverallCalendarPricingModal = ({
 	return (
 		<>
 			<CalendarPricingGlobalStyle />
-			<Modal
-				open={open}
-				onCancel={onClose}
-				footer={null}
-				width='min(1440px, 98vw)'
-				centered
-				className='overall-calendar-pricing-modal'
-				style={{ transform: "translateY(-10vh)" }}
-				rootClassName={OVERALL_DASHBOARD_MODAL_ROOT_CLASS}
-				wrapClassName={OVERALL_DASHBOARD_MODAL_WRAP_CLASS}
-				zIndex={OVERALL_DASHBOARD_MODAL_Z_INDEX}
-				destroyOnClose={false}
-				styles={{
-					mask: { zIndex: OVERALL_DASHBOARD_MODAL_Z_INDEX - 1 },
-					body: {
-						maxHeight: "calc(100vh - 34px)",
-						overflowY: "auto",
-						paddingTop: 0,
-						paddingBottom: 8,
-					},
-				}}
-			>
-				<CalendarPricingBody dir={isArabic ? "rtl" : "ltr"} $isArabic={isArabic}>
-					<Tabs
-						activeKey={normalizedActiveTab}
-						onChange={(key) => {
-							setPreview(null);
-							setPreviewIndex(0);
-							onTabChange?.(normalizeCalendarTab(key));
-						}}
-						items={[
-							{
-								key: MODAL_TAB_GENERAL,
-								label: (
-									<span className='calendar-pricing-tab-label'>
-										<GlobalOutlined /> {labels.generalTab}
-									</span>
-								),
-								children: renderPricingForm(MODAL_TAB_GENERAL),
-							},
-							{
-								key: MODAL_TAB_AGENTS,
-								label: (
-									<span className='calendar-pricing-tab-label'>
-										<TeamOutlined /> {labels.agentsTab}
-									</span>
-								),
-								children: renderPricingForm(MODAL_TAB_AGENTS),
-							},
-						]}
-					/>
+			{embedded ? (
+				<CalendarPricingBody
+					dir={isArabic ? "rtl" : "ltr"}
+					$isArabic={isArabic}
+					$embedded
+				>
+					{renderPricingForm(normalizedActiveTab)}
 				</CalendarPricingBody>
-			</Modal>
+			) : (
+				<Modal
+					open={open}
+					onCancel={onClose}
+					footer={null}
+					width='min(1440px, 98vw)'
+					centered
+					className='overall-calendar-pricing-modal'
+					style={{ transform: "translateY(-10vh)" }}
+					rootClassName={OVERALL_DASHBOARD_MODAL_ROOT_CLASS}
+					wrapClassName={OVERALL_DASHBOARD_MODAL_WRAP_CLASS}
+					zIndex={OVERALL_DASHBOARD_MODAL_Z_INDEX}
+					destroyOnClose={false}
+					styles={{
+						mask: { zIndex: OVERALL_DASHBOARD_MODAL_Z_INDEX - 1 },
+						body: {
+							maxHeight: "calc(100vh - 34px)",
+							overflowY: "auto",
+							paddingTop: 0,
+							paddingBottom: 8,
+						},
+					}}
+				>
+					<CalendarPricingBody
+						dir={isArabic ? "rtl" : "ltr"}
+						$isArabic={isArabic}
+					>
+						<Tabs
+							activeKey={generalPricingTab}
+							onChange={(key) => {
+								handleGeneralPricingTabChange(key);
+								onTabChange?.(MODAL_TAB_GENERAL);
+							}}
+							items={[
+								{
+									key: GENERAL_PRICING_TAB_ADD,
+									label: (
+										<span className='calendar-pricing-tab-label'>
+											<CalendarOutlined /> {labels.addPricingTab}
+										</span>
+									),
+									children: renderPricingForm(MODAL_TAB_GENERAL, {
+										operation: GENERAL_PRICING_TAB_ADD,
+										hint: labels.addPricingHint,
+									}),
+								},
+								{
+									key: GENERAL_PRICING_TAB_UPDATE,
+									label: (
+										<span className='calendar-pricing-tab-label'>
+											<GlobalOutlined /> {labels.updatePricingTab}
+										</span>
+									),
+									children: renderGeneralUpdateTab(),
+								},
+							]}
+						/>
+					</CalendarPricingBody>
+				</Modal>
+			)}
 			<Modal
 				open={previewModalOpen && hasPreview}
 				onCancel={() => {
@@ -1071,7 +1995,11 @@ const OverallCalendarPricingModal = ({
 								type='primary'
 								icon={<SaveOutlined />}
 								loading={saving}
-								onClick={() => savePricing(preview?.mode || normalizedActiveTab)}
+								onClick={() =>
+									savePricing(preview?.mode || normalizedActiveTab, {
+										operation: preview?.operation,
+									})
+								}
 							>
 								{labels.save}
 							</Button>
@@ -1523,6 +2451,230 @@ const PricingGrid = styled.div`
 
 	@media (max-width: 540px) {
 		grid-template-columns: 1fr;
+	}
+`;
+
+const CalendarOperationNotice = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: ${(props) => (props.dir === "rtl" ? "flex-end" : "flex-start")};
+	gap: 8px;
+	margin: 0 0 10px;
+	padding: 10px 12px;
+	border: 1px solid rgba(20, 184, 166, 0.18);
+	border-radius: 8px;
+	background: linear-gradient(135deg, #f0fdfa 0%, #f8fbff 100%);
+	color: #1f3a59;
+	font-size: 0.82rem;
+	font-weight: 850;
+	text-align: start;
+
+	svg {
+		color: #0f766e;
+	}
+`;
+
+const AgentModeQuestion = styled.div`
+	display: flex;
+	justify-content: center;
+	margin-bottom: 10px;
+	padding: 12px;
+	border: 1px solid #d6e4f3;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+
+	.ant-form-item {
+		margin-bottom: 0;
+	}
+
+	.ant-form-item-label {
+		text-align: center;
+	}
+
+	.ant-radio-group {
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	@media (max-width: 620px) {
+		align-items: stretch;
+		flex-direction: column;
+
+		.ant-radio-group {
+			width: 100%;
+		}
+
+		.ant-radio-button-wrapper {
+			flex: 1 1 100%;
+		}
+	}
+`;
+
+const GeneralUpdateShell = styled.div`
+	display: grid;
+	grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.55fr);
+	gap: 14px;
+	align-items: start;
+
+	@media (max-width: 1100px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const GeneralUpdateListPanel = styled.div`
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid #d6e4f3;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+`;
+
+const GeneralUpdateHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+
+	strong {
+		color: #172033;
+		font-size: 0.92rem;
+		font-weight: 950;
+	}
+`;
+
+const GeneralPricingCards = styled.div`
+	display: grid;
+	gap: 9px;
+	max-height: min(56vh, 560px);
+	overflow-y: auto;
+	padding-inline-end: 2px;
+
+	button {
+		display: grid;
+		gap: 7px;
+		width: 100%;
+		padding: 11px;
+		border: 1px solid #d6e4f3;
+		border-radius: 8px;
+		background: #ffffff;
+		color: #172033;
+		text-align: start;
+		cursor: pointer;
+		box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+		transition:
+			border-color 160ms ease,
+			background 160ms ease,
+			box-shadow 160ms ease,
+			transform 160ms ease;
+	}
+
+	button:hover,
+	button.selected {
+		border-color: rgba(20, 184, 166, 0.58);
+		background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
+		box-shadow: 0 12px 24px rgba(15, 118, 110, 0.12);
+		transform: translateY(-1px);
+	}
+
+	.card-top,
+	.card-metrics {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.card-top strong,
+	.room-name {
+		min-width: 0;
+		overflow: hidden;
+		color: #0f172a;
+		font-weight: 950;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.room-display,
+	.date-range,
+	.card-metrics span {
+		color: #475569;
+		font-size: 0.76rem;
+		font-weight: 820;
+	}
+
+	.card-metrics {
+		flex-wrap: wrap;
+		justify-content: flex-start;
+	}
+
+	.card-metrics span {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		padding: 2px 8px;
+		border: 1px solid #dbeafe;
+		border-radius: 999px;
+		background: #f8fbff;
+		color: #1f3a59;
+	}
+
+	.edit-chip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		justify-self: start;
+		gap: 5px;
+		min-height: 28px;
+		padding: 0 10px;
+		border: 1px solid #d6e4f3;
+		border-radius: 7px;
+		background: #ffffff;
+		color: #0f766e;
+		font-size: 0.76rem;
+		font-weight: 950;
+	}
+`;
+
+const GeneralUpdateEditorPanel = styled.div`
+	min-width: 0;
+	padding: 12px;
+	border: 1px solid #d6e4f3;
+	border-radius: 8px;
+	background: #ffffff;
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+`;
+
+const UpdateEditorIntro = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	margin-bottom: 10px;
+	padding: 10px 12px;
+	border: 1px solid rgba(96, 165, 250, 0.28);
+	border-radius: 8px;
+	background: #f8fbff;
+	color: #1f3a59;
+	font-size: 0.82rem;
+	font-weight: 850;
+	text-align: start;
+
+	&.selected {
+		border-color: rgba(20, 184, 166, 0.34);
+		background: linear-gradient(135deg, #f0fdfa 0%, #f8fbff 100%);
+	}
+
+	strong {
+		color: #0f766e;
+		font-weight: 950;
+	}
+
+	@media (max-width: 640px) {
+		align-items: flex-start;
+		flex-direction: column;
 	}
 `;
 

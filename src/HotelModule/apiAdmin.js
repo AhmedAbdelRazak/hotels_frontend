@@ -2378,6 +2378,80 @@ export const saveOverallCalendarPricing = (
 		}));
 };
 
+export const getOverallPriceVariantOptions = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load price variants",
+		}));
+};
+
+export const getOverallPriceVariantsOptions = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load price variants",
+		}));
+};
+
+export const saveOverallPriceVariant = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not save price variants",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Could not save price variants",
+		}));
+};
+
 export const getReservationAgentWalletSnapshot = ({
 	reservationId,
 	userId,
@@ -2434,6 +2508,37 @@ export const PropertySignup = (userData) => {
 			console.log(err);
 			throw err;
 		});
+};
+
+export const saveOverallPriceVariants = (
+	userId,
+	token,
+	payload = {},
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "POST",
+			headers: overallHeaders(token),
+			body: JSON.stringify(payload),
+		}
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					error: data?.error || data?.message || "Could not save price variants",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Could not save price variants",
+		}));
 };
 
 export const hotelsForAccount = (accountId) => {

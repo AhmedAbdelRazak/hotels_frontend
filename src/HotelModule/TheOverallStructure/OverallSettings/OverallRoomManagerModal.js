@@ -174,6 +174,9 @@ const TEXT = {
 		description: "Description",
 		roomCount: "Room count",
 		roomCountFor: "Room count for",
+		basePrice: "Base price",
+		basePriceFor: "Base price for",
+		basePriceRequired: "Base price is required",
 		amenities: "Amenities",
 		views: "Views",
 		extraAmenities: "Extra amenities",
@@ -198,6 +201,9 @@ const TEXT = {
 		description: "\u0627\u0644\u0648\u0635\u0641",
 		roomCount: "\u0639\u062f\u062f \u0627\u0644\u063a\u0631\u0641",
 		roomCountFor: "\u0639\u062f\u062f \u0627\u0644\u063a\u0631\u0641 \u0644\u0640",
+		basePrice: "\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0623\u0633\u0627\u0633\u064a",
+		basePriceFor: "\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0623\u0633\u0627\u0633\u064a \u0644\u0640",
+		basePriceRequired: "\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0623\u0633\u0627\u0633\u064a \u0645\u0637\u0644\u0648\u0628",
 		amenities: "\u0648\u0633\u0627\u0626\u0644 \u0627\u0644\u0631\u0627\u062d\u0629",
 		views: "\u0627\u0644\u0625\u0637\u0644\u0627\u0644\u0627\u062a",
 		extraAmenities: "\u0645\u0645\u064a\u0632\u0627\u062a \u0625\u0636\u0627\u0641\u064a\u0629",
@@ -217,6 +223,15 @@ const TEXT = {
 const optionLabel = (pair, isArabic) =>
 	isArabic ? ARABIC_OPTION_LABELS[pair[0]] || pair[1] : pair[0];
 const normalizeId = (value) => String(value?._id || value || "").trim();
+
+const normalizeBasePriceEntry = (entry) => {
+	if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+		return {
+			price: entry.price ?? entry.basePrice,
+		};
+	}
+	return { price: entry };
+};
 
 const parseRoomTypeChoice = (value = "") => {
 	const [roomType, roomForGender] = String(value || "").split("|");
@@ -246,7 +261,9 @@ const normalizeRoomManagerTab = (value) =>
 const initialRoomValues = {
 	hotelIds: [],
 	count: 1,
+	basePrice: undefined,
 	countsByHotelId: {},
+	basePricesByHotelId: {},
 	amenities: DEFAULT_AMENITIES,
 	views: DEFAULT_VIEWS,
 	extraAmenities: DEFAULT_EXTRA_AMENITIES,
@@ -337,10 +354,8 @@ const OverallRoomManagerModal = ({
 			name: isArabic
 				? room.displayName_OtherLanguage || room.displayName
 				: room.displayName || room.displayName_OtherLanguage,
-			description: isArabic
-				? room.description_OtherLanguage || room.description
-				: room.description || room.description_OtherLanguage,
 			count: Number(room.count || 0),
+			basePrice: Number(room?.price?.basePrice ?? room.basePrice ?? 0),
 			amenities: Array.isArray(room.amenities) ? room.amenities : [],
 			views: Array.isArray(room.views) ? room.views : [],
 			extraAmenities: Array.isArray(room.extraAmenities)
@@ -378,17 +393,21 @@ const OverallRoomManagerModal = ({
 				hotelId: mode === "update" ? values.hotelId : undefined,
 				hotelIds: mode === "add" ? values.hotelIds : undefined,
 				countsByHotelId: mode === "add" ? values.countsByHotelId : undefined,
+				basePricesByHotelId:
+					mode === "add" ? values.basePricesByHotelId : undefined,
 				roomId: mode === "update" ? values.roomId : undefined,
 				language: chosenLanguage,
 				room: {
 					roomType: roomTypeChoice.roomType,
 					name: values.name,
-					descriptionInput: values.description,
 					count: mode === "update" ? values.count : undefined,
+					basePrice: mode === "update" ? values.basePrice : undefined,
+					defaultCost: mode === "update" ? values.basePrice : undefined,
 					amenities: values.amenities || [],
 					views: values.views || [],
 					extraAmenities: values.extraAmenities || [],
 					activeRoom: mode === "add" ? true : undefined,
+					regenerateDescription: true,
 					roomForGender: roomTypeChoice.roomForGender,
 				},
 			};
@@ -409,9 +428,9 @@ const OverallRoomManagerModal = ({
 					...initialRoomValues,
 					hotelIds: values.hotelIds,
 					countsByHotelId: values.countsByHotelId,
+					basePricesByHotelId: values.basePricesByHotelId,
 					roomType: undefined,
 					name: "",
-					description: "",
 				});
 			}
 		} finally {
@@ -462,14 +481,32 @@ const OverallRoomManagerModal = ({
 								if (mode === "add") {
 									const ids = Array.isArray(value) ? value : [];
 									const currentCounts = form.getFieldValue("countsByHotelId") || {};
+									const currentBasePrices =
+										form.getFieldValue("basePricesByHotelId") || {};
 									const nextCounts = {};
+									const nextBasePrices = {};
 									ids.forEach((hotelId) => {
 										nextCounts[hotelId] = currentCounts[hotelId] ?? 1;
+										nextBasePrices[hotelId] = normalizeBasePriceEntry(
+											currentBasePrices[hotelId]
+										);
 									});
-									form.setFieldsValue({ countsByHotelId: nextCounts });
+									form.setFieldsValue({
+										countsByHotelId: nextCounts,
+										basePricesByHotelId: nextBasePrices,
+									});
 									return;
 								}
-								form.setFieldsValue({ roomId: undefined });
+								form.setFieldsValue({
+									roomId: undefined,
+									roomType: undefined,
+									name: "",
+									count: undefined,
+									basePrice: undefined,
+									amenities: DEFAULT_AMENITIES,
+									views: DEFAULT_VIEWS,
+									extraAmenities: DEFAULT_EXTRA_AMENITIES,
+								});
 							}}
 						/>
 					</Form.Item>
@@ -514,40 +551,79 @@ const OverallRoomManagerModal = ({
 					>
 						<Input dir='auto' />
 					</Form.Item>
-					{mode === "update" ? (
-						<Form.Item name='count' label={labels.roomCount}>
-							<InputNumber min={0} precision={0} />
-						</Form.Item>
-					) : null}
 				</FirstRow>
 
 				{mode === "add" && selectedAddHotels.length ? (
-					<HotelCountsGrid>
+					<HotelRoomSetupGrid>
 						{selectedAddHotels.map((hotel) => {
 							const hotelId = normalizeId(hotel._id);
+							const hotelName = titleCase(hotel.hotelName);
 							return (
-								<Form.Item
-									key={hotelId}
-									name={["countsByHotelId", hotelId]}
-									label={`${labels.roomCountFor} ${titleCase(hotel.hotelName)}`}
-									rules={[{ required: true, message: labels.required }]}
-								>
-									<InputNumber min={0} precision={0} />
-								</Form.Item>
+								<HotelRoomSetupCard key={hotelId}>
+									<Form.Item
+										name={["countsByHotelId", hotelId]}
+										label={`${labels.roomCountFor} ${hotelName}`}
+										rules={[{ required: true, message: labels.required }]}
+									>
+										<InputNumber min={0} precision={0} />
+									</Form.Item>
+									<Form.Item
+										name={["basePricesByHotelId", hotelId, "price"]}
+										label={`${labels.basePriceFor} ${hotelName}`}
+										rules={[
+											{ required: true, message: labels.basePriceRequired },
+											{
+												validator: (_, value) =>
+													Number(value) > 0
+														? Promise.resolve()
+														: Promise.reject(new Error(labels.basePriceRequired)),
+											},
+										]}
+									>
+										<InputNumber min={0.01} precision={2} />
+									</Form.Item>
+								</HotelRoomSetupCard>
 							);
 						})}
-					</HotelCountsGrid>
+					</HotelRoomSetupGrid>
 				) : null}
 
-				<DescriptionRow>
-					<Form.Item
-						name='description'
-						label={labels.description}
-						rules={[{ required: true, message: labels.required }]}
-					>
-						<Input.TextArea dir='auto' autoSize={{ minRows: 3, maxRows: 4 }} />
-					</Form.Item>
-				</DescriptionRow>
+				{mode === "update" && selectedUpdateRoomId ? (
+					<HotelRoomSetupGrid $single>
+						<HotelRoomSetupCard>
+							<Form.Item
+								name='count'
+								label={`${labels.roomCountFor} ${
+									selectedUpdateHotel
+										? titleCase(selectedUpdateHotel.hotelName)
+										: ""
+								}`}
+								rules={[{ required: true, message: labels.required }]}
+							>
+								<InputNumber min={0} precision={0} />
+							</Form.Item>
+							<Form.Item
+								name='basePrice'
+								label={`${labels.basePriceFor} ${
+									selectedUpdateHotel
+										? titleCase(selectedUpdateHotel.hotelName)
+										: ""
+								}`}
+								rules={[
+									{ required: true, message: labels.basePriceRequired },
+									{
+										validator: (_, value) =>
+											Number(value) > 0
+												? Promise.resolve()
+												: Promise.reject(new Error(labels.basePriceRequired)),
+									},
+								]}
+							>
+								<InputNumber min={0.01} precision={2} />
+							</Form.Item>
+						</HotelRoomSetupCard>
+					</HotelRoomSetupGrid>
+				) : null}
 
 				<OptionsRow>
 					<Form.Item
@@ -918,7 +994,7 @@ const FirstRow = styled.div`
 	display: grid;
 	grid-template-columns: ${(props) =>
 		props.$hasRoomSelect
-			? "minmax(160px, 1fr) minmax(160px, 1fr) minmax(170px, 0.95fr) minmax(190px, 1fr) minmax(95px, 0.46fr)"
+			? "minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 0.9fr) minmax(220px, 1.05fr)"
 			: "minmax(240px, 1.2fr) minmax(180px, 0.82fr) minmax(220px, 1fr)"};
 	gap: 10px;
 	align-items: start;
@@ -933,31 +1009,70 @@ const FirstRow = styled.div`
 	}
 `;
 
-const DescriptionRow = styled.div`
-	margin-top: 2px;
-
-	.ant-input {
-		min-height: 82px;
-		line-height: 1.45;
-	}
-`;
-
-const HotelCountsGrid = styled.div`
+const HotelRoomSetupGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	grid-auto-flow: row;
+	grid-template-columns: ${(props) =>
+		props.$single ? "minmax(0, 1fr) 2fr" : "repeat(3, minmax(0, 1fr))"};
 	gap: 10px;
+	width: 100%;
 	margin: 2px 0 4px;
 	padding: 10px;
 	border: 1px solid #cfe1f5;
 	border-radius: 8px;
 	background: linear-gradient(135deg, #f8fbff 0%, #ecfdf5 100%);
 
+	> * {
+		min-width: 0;
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: ${(props) =>
+			props.$single ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))"};
+	}
+
+	@media (max-width: 640px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const HotelRoomSetupCard = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	min-width: 0;
+	padding: 8px 10px;
+	border: 1px solid rgba(14, 116, 144, 0.16);
+	border-radius: 7px;
+	background: rgba(255, 255, 255, 0.86);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+
 	.ant-form-item {
+		min-width: 0;
 		margin-bottom: 0;
+	}
+
+	.ant-form-item-label {
+		max-width: 100%;
+		overflow: hidden;
+		padding-bottom: 5px;
+	}
+
+	.ant-form-item-label > label {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.ant-input-number {
 		width: 100%;
+	}
+
+	@media (max-width: 620px) {
+		grid-template-columns: 1fr;
+		gap: 6px;
 	}
 `;
 

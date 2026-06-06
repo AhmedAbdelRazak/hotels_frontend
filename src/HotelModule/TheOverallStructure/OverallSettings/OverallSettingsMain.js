@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
 	CalendarOutlined,
+	DatabaseOutlined,
 	EditOutlined,
 	PlusCircleOutlined,
 } from "@ant-design/icons";
@@ -8,6 +9,7 @@ import { useHistory, useLocation } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
 import { getOverallSettings } from "../../apiAdmin";
 import OverallCalendarPricingModal from "./OverallCalendarPricingModal";
+import OverallPriceVariantModal from "./OverallPriceVariantModal";
 import OverallRoomManagerModal from "./OverallRoomManagerModal";
 import {
 	buildOwnerParams,
@@ -37,6 +39,7 @@ const SETTINGS_TEXT = {
 const ACTION_TEXT = {
 	en: {
 		roomAction: "Room Add / Update",
+		priceVariantAction: "Price Variants",
 		calendarAction: "Calendar Pricing",
 		calendarLater:
 			"Calendar Pricing will be prepared after the room workflow is confirmed.",
@@ -44,6 +47,7 @@ const ACTION_TEXT = {
 	ar: {
 		roomAction:
 			"\u0625\u0636\u0627\u0641\u0629 / \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u063a\u0631\u0641",
+		priceVariantAction: "\u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0623\u0633\u0639\u0627\u0631",
 		calendarAction:
 			"\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u062a\u0642\u0648\u064a\u0645",
 		calendarLater:
@@ -55,12 +59,15 @@ const ROOM_MANAGER_MODAL_PARAM = "settingsModal";
 const ROOM_MANAGER_TAB_PARAM = "settingsRoomTab";
 const ROOM_MANAGER_MODAL_VALUE = "rooms";
 const CALENDAR_PRICING_MODAL_VALUE = "calendar";
+const PRICE_VARIANTS_MODAL_VALUE = "price-variants";
 const CALENDAR_PRICING_TAB_PARAM = "settingsCalendarTab";
+const PRICE_VARIANTS_TAB_PARAM = "settingsPriceVariantTab";
 
 const normalizeRoomManagerTab = (value) =>
 	value === "update" ? "update" : "add";
-const normalizeCalendarPricingTab = (value) =>
-	value === "agents" ? "agents" : "general";
+const normalizeCalendarPricingTab = () => "general";
+const normalizePriceVariantTab = (value) =>
+	["update", "agents"].includes(value) ? value : "add";
 
 const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
@@ -78,9 +85,13 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		query.get(ROOM_MANAGER_MODAL_PARAM) === ROOM_MANAGER_MODAL_VALUE;
 	const roomManagerTab = normalizeRoomManagerTab(roomManagerTabParam);
 	const calendarPricingTabParam = query.get(CALENDAR_PRICING_TAB_PARAM);
+	const priceVariantTabParam = query.get(PRICE_VARIANTS_TAB_PARAM);
 	const calendarPricingModalOpen =
 		query.get(ROOM_MANAGER_MODAL_PARAM) === CALENDAR_PRICING_MODAL_VALUE;
+	const priceVariantModalOpen =
+		query.get(ROOM_MANAGER_MODAL_PARAM) === PRICE_VARIANTS_MODAL_VALUE;
 	const calendarPricingTab = normalizeCalendarPricingTab(calendarPricingTabParam);
+	const priceVariantTab = normalizePriceVariantTab(priceVariantTabParam);
 	const [loading, setLoading] = useState(false);
 	const [rows, setRows] = useState([]);
 
@@ -136,11 +147,31 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		[history, location.pathname, location.search]
 	);
 
+	const openPriceVariant = useCallback(
+		(nextTab = "add", { replace = false } = {}) => {
+			const nextQuery = new URLSearchParams(location.search || "");
+			nextQuery.set("overall", "settings");
+			if (!nextQuery.get("page")) nextQuery.set("page", "1");
+			nextQuery.set(ROOM_MANAGER_MODAL_PARAM, PRICE_VARIANTS_MODAL_VALUE);
+			nextQuery.set(PRICE_VARIANTS_TAB_PARAM, normalizePriceVariantTab(nextTab));
+			nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
+			nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+			const nextLocation = {
+				pathname: location.pathname,
+				search: `?${nextQuery.toString()}`,
+			};
+			if (replace) history.replace(nextLocation);
+			else history.push(nextLocation);
+		},
+		[history, location.pathname, location.search]
+	);
+
 	const closeRoomManager = useCallback(() => {
 		const nextQuery = new URLSearchParams(location.search || "");
 		nextQuery.delete(ROOM_MANAGER_MODAL_PARAM);
 		nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
 		nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+		nextQuery.delete(PRICE_VARIANTS_TAB_PARAM);
 		const nextSearch = nextQuery.toString();
 		history.push({
 			pathname: location.pathname,
@@ -158,19 +189,32 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 		[openCalendarPricing]
 	);
 
+	const handlePriceVariantTabChange = useCallback(
+		(nextTab) => openPriceVariant(nextTab, { replace: true }),
+		[openPriceVariant]
+	);
+
 	useEffect(() => {
 		if (!roomModalOpen || roomManagerTabParam) return;
 		openRoomManager("add", { replace: true });
 	}, [openRoomManager, roomManagerTabParam, roomModalOpen]);
 
 	useEffect(() => {
-		if (!calendarPricingModalOpen || calendarPricingTabParam) return;
+		if (!calendarPricingModalOpen) return;
+		if (calendarPricingTabParam === "general") return;
 		openCalendarPricing("general", { replace: true });
 	}, [
 		calendarPricingModalOpen,
 		calendarPricingTabParam,
 		openCalendarPricing,
 	]);
+
+	useEffect(() => {
+		if (!priceVariantModalOpen) return;
+		const normalized = normalizePriceVariantTab(priceVariantTabParam);
+		if (priceVariantTabParam === normalized) return;
+		openPriceVariant(normalized, { replace: true });
+	}, [openPriceVariant, priceVariantModalOpen, priceVariantTabParam]);
 
 	const openSettings = (hotel = {}) => {
 		const route = singleHotelRoute(hotel.ownerId || ownerId, hotel._id, "settings");
@@ -193,6 +237,16 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				</SettingsActionButton>
 				<SettingsActionButton
 					type='button'
+					$variant='pricing'
+					onClick={() => openPriceVariant("add")}
+				>
+					<span className='icon'>
+						<DatabaseOutlined />
+					</span>
+					<span>{labels.priceVariantAction}</span>
+				</SettingsActionButton>
+				<SettingsActionButton
+					type='button'
 					$variant='calendar'
 					onClick={() => openCalendarPricing("general")}
 				>
@@ -211,6 +265,17 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 				token={token}
 				ownerId={ownerId}
 				chosenLanguage={chosenLanguage}
+				onSaved={loadSettings}
+			/>
+			<OverallPriceVariantModal
+				open={priceVariantModalOpen}
+				onClose={closeRoomManager}
+				userId={userId}
+				token={token}
+				ownerId={ownerId}
+				chosenLanguage={chosenLanguage}
+				activeTab={priceVariantTab}
+				onTabChange={handlePriceVariantTabChange}
 				onSaved={loadSettings}
 			/>
 			<OverallCalendarPricingModal
@@ -360,28 +425,46 @@ const SettingsActionButton = styled.button`
 	--pulse-shadow: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(37, 99, 235, 0.22)"
+			: props.$variant === "pricing"
+			  ? "rgba(14, 116, 144, 0.22)"
 			: "rgba(15, 118, 110, 0.22)"};
 	--pulse-shadow-mid: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(37, 99, 235, 0.26)"
+			: props.$variant === "pricing"
+			  ? "rgba(124, 58, 237, 0.24)"
 			: "rgba(15, 118, 110, 0.26)"};
 	--pulse-shadow-strong: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(37, 99, 235, 0.34)"
+			: props.$variant === "pricing"
+			  ? "rgba(14, 116, 144, 0.34)"
 			: "rgba(15, 118, 110, 0.34)"};
 	--pulse-ring: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(96, 165, 250, 0.3)"
+			: props.$variant === "pricing"
+			  ? "rgba(34, 211, 238, 0.28)"
 			: "rgba(45, 212, 191, 0.3)"};
 	--pulse-ring-soft: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(96, 165, 250, 0.14)"
+			: props.$variant === "pricing"
+			  ? "rgba(34, 211, 238, 0.13)"
 			: "rgba(45, 212, 191, 0.13)"};
 	--pulse-ring-faint: ${(props) =>
 		props.$variant === "calendar"
 			? "rgba(96, 165, 250, 0.1)"
+			: props.$variant === "pricing"
+			  ? "rgba(34, 211, 238, 0.1)"
 			: "rgba(45, 212, 191, 0.1)"};
 	position: relative;
+	order: ${(props) =>
+		props.$variant === "pricing"
+			? 3
+			: props.$variant === "calendar"
+			  ? 2
+			  : 1};
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -394,6 +477,8 @@ const SettingsActionButton = styled.button`
 	background: ${(props) =>
 		props.$variant === "calendar"
 			? "linear-gradient(135deg, #1e3a8a 0%, #2563eb 44%, #60a5fa 64%, #1d4ed8 100%)"
+			: props.$variant === "pricing"
+			  ? "linear-gradient(135deg, #172554 0%, #7c3aed 42%, #06b6d4 72%, #164e63 100%)"
 			: "linear-gradient(135deg, #064e3b 0%, #0f766e 42%, #2dd4bf 62%, #07564f 100%)"};
 	color: #ffffff;
 	font-size: 0.94rem;

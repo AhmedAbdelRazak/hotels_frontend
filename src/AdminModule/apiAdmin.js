@@ -190,6 +190,16 @@ export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
+const buildQuery = (params = {}) => {
+	const searchParams = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		searchParams.set(key, Array.isArray(value) ? value.join(",") : value);
+	});
+	const query = searchParams.toString();
+	return query ? `?${query}` : "";
+};
+
 const buildAdminAccountQuery = (params = {}) => {
 	const searchParams = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {
@@ -1486,6 +1496,30 @@ export const getAdminHotelInventoryAvailability = (
 		.then((response) => response.json())
 		.catch((err) => console.error("Error fetching availability:", err));
 };
+
+export const getAdminPriceVariantOptions = (
+	userId,
+	token,
+	params = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildQuery(
+			params,
+		)}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load price variants",
+		}));
 
 const parseJSON = async (res) => {
 	const text = await res.text();

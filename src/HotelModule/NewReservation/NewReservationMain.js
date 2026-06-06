@@ -38,6 +38,57 @@ const defaultAgentBookingSource = (user) =>
 
 const DEFAULT_AGENT_COMMISSION_PERCENT = 8;
 
+const summarizeAssignedPricingCommission = (rooms = []) => {
+	const totals = (Array.isArray(rooms) ? rooms : []).reduce(
+		(acc, room) => {
+			const count = Math.max(1, Number(room.count || 1));
+			const rows = Array.isArray(room.pricingByDay) ? room.pricingByDay : [];
+			const roomTotal = rows.reduce(
+				(sum, day) =>
+					sum +
+					safeParseFloat(day.totalPriceWithCommission ?? day.price, 0),
+				0,
+			);
+			const roomRoot = rows.reduce(
+				(sum, day) => sum + safeParseFloat(day.rootPrice, 0),
+				0,
+			);
+			acc.total += roomTotal * count;
+			acc.root += roomRoot * count;
+			return acc;
+		},
+		{ total: 0, root: 0 },
+	);
+	const amount = roundMoney(Math.max(totals.total - totals.root, 0));
+	const percent =
+		totals.total > 0 ? roundMoney((amount / totals.total) * 100) : 0;
+	return { ...totals, amount, percent };
+};
+
+const pricingMetadataFields = [
+	"sellingPrice",
+	"commissionPercent",
+	"priceVariantDataId",
+	"priceVariantItemId",
+	"priceVariantName",
+	"priceVariantNameOtherLanguage",
+	"source",
+	"calendarType",
+	"color",
+];
+
+const pickPricingMetadata = (source = {}) =>
+	pricingMetadataFields.reduce((acc, field) => {
+		if (
+			source[field] !== undefined &&
+			source[field] !== null &&
+			source[field] !== ""
+		) {
+			acc[field] = source[field];
+		}
+		return acc;
+	}, {});
+
 const normalizeAgentCommercialModel = (value = "") => {
 	const normalized = String(value || "").trim().toLowerCase();
 	return ["wallet_inventory", "commission_only", "mixed"].includes(normalized)
@@ -748,6 +799,7 @@ const NewReservationMain = ({
 						d.totalPriceWithoutCommission,
 						0,
 					),
+					...pickPricingMetadata(d),
 				};
 			});
 			const totalWithComm = pricingDetails.reduce(
@@ -883,11 +935,6 @@ const NewReservationMain = ({
 			Number(total_amount) !== 0
 				? Number(total_amount) * nights
 				: total_amount_calculated || total_amount_calculated_WithRooms;
-		const resolvedAgentCommissionPercent = Number.isFinite(
-			Number(agentCommissionPercent),
-		)
-			? Number(agentCommissionPercent)
-			: DEFAULT_AGENT_COMMISSION_PERCENT;
 		const resolvedAgentSettlementModel =
 			agentCommercialModel === "commission_only"
 				? "agent_commission_only"
@@ -897,13 +944,6 @@ const NewReservationMain = ({
 				? "agent_commission_only"
 				: "agent_wallet_commission";
 		const resolvedAgentUsesCommission = Boolean(limitedOrderTakerAccount);
-		const resolvedAgentCommissionAmount = resolvedAgentUsesCommission
-			? roundMoney(
-					(Number(reservationTotalAmount || 0) *
-						resolvedAgentCommissionPercent) /
-						100,
-			  )
-			: 0;
 
 		// === OrderTaker parity (for New Reservation path) ===
 		// Child ZReservationForm2 exports `pickedRoomPricing` already in transformPickedRooms shape.
@@ -912,6 +952,16 @@ const NewReservationMain = ({
 			pickedRoomPricing && pickedRoomPricing.length > 0
 				? pickedRoomPricing
 				: transformFromSummaryToApi(pickedRoomsType);
+		const agentAssignedPricingCommission =
+			summarizeAssignedPricingCommission(apiPickedRooms);
+		const resolvedAgentCommissionPercent = resolvedAgentUsesCommission
+			? agentAssignedPricingCommission.percent
+			: Number.isFinite(Number(agentCommissionPercent))
+			  ? Number(agentCommissionPercent)
+			  : DEFAULT_AGENT_COMMISSION_PERCENT;
+		const resolvedAgentCommissionAmount = resolvedAgentUsesCommission
+			? agentAssignedPricingCommission.amount
+			: 0;
 
 		const new_reservation = {
 			customer_details,

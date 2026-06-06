@@ -40,6 +40,13 @@ const safeParseFloat = (v, fb = 0) => {
 	const n = parseFloat(v);
 	return Number.isNaN(n) ? fb : n;
 };
+const hasNumericInput = (value) =>
+	value !== null && value !== undefined && value !== "";
+const nullableNumber = (value) => {
+	if (!hasNumericInput(value)) return null;
+	const parsed = Number(String(value).replace(/,/g, "").trim());
+	return Number.isFinite(parsed) ? parsed : null;
+};
 const positiveNumber = (v, fb = 0) => {
 	const n = safeParseFloat(v, NaN);
 	return Number.isFinite(n) && n > 0 ? n : fb;
@@ -67,6 +74,28 @@ const normalizeDateKey = (value) => {
 	const parsed = moment(value);
 	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
 };
+const pricingMetadataFields = [
+	"sellingPrice",
+	"commissionPercent",
+	"priceVariantDataId",
+	"priceVariantItemId",
+	"priceVariantName",
+	"priceVariantNameOtherLanguage",
+	"source",
+	"calendarType",
+	"color",
+];
+const pickPricingMetadata = (source = {}) =>
+	pricingMetadataFields.reduce((acc, field) => {
+		if (
+			source[field] !== undefined &&
+			source[field] !== null &&
+			source[field] !== ""
+		) {
+			acc[field] = source[field];
+		}
+		return acc;
+	}, {});
 
 /* Build pricing rows like OrderTaker (commission fallback=10%) */
 const buildPricingByDay = ({
@@ -98,7 +127,11 @@ const buildPricingByDay = ({
 			effectiveRate.rootPrice ?? effectiveRate.defaultCost,
 			fallbackRoot || price
 		);
-		const c = positiveNumber(effectiveRate.commissionRate, comm);
+		const explicitCommission = nullableNumber(effectiveRate.commissionRate);
+		const c =
+			explicitCommission !== null && explicitCommission >= 0
+				? explicitCommission
+				: comm;
 		const finalWithComm = price + rootPrice * pct(c);
 		rows.push({
 			date: ds,
@@ -108,6 +141,7 @@ const buildPricingByDay = ({
 			totalPriceWithCommission: finalWithComm,
 			totalPriceWithoutCommission: price,
 			calendarBlocked: blockedOnCalendar,
+			...pickPricingMetadata(effectiveRate),
 		});
 	}
 	return rows;
@@ -196,7 +230,6 @@ const ZReservationForm2 = ({
 	agentCommercialModel = "wallet_inventory",
 	agentSettlementModel = "agent_wallet_commission",
 	setAgentSettlementModel,
-	agentCommissionPercent = 8,
 	setAgentCommissionPercent,
 	agentCommissionAmount = 0,
 	setAgentCommissionAmount,
@@ -283,19 +316,34 @@ const ZReservationForm2 = ({
 						(row) => normalizeId(row.agentId) === normalizeId(user._id)
 				  )
 				: [];
-			if (!agentRows.length) return hotelRows;
-
-			const agentDates = new Set(
-				agentRows.map((row) => normalizeDateKey(row.calendarDate)).filter(Boolean)
-			);
-			return [
-				...hotelRows.filter(
-					(row) => !agentDates.has(normalizeDateKey(row.calendarDate))
-				),
-				...agentRows,
-			];
+			return agentRows;
 		},
 		[limitedOrderTakerAccount, user?._id]
+	);
+
+	const getMissingAssignedPricingDates = useCallback(
+		(room_type, displayName) => {
+			if (!limitedOrderTakerAccount || !start_date || !end_date) return [];
+			const detail = findRoomDetail(room_type, displayName);
+			if (!detail) return [];
+			const stayDates = buildStayDateKeysForCalendar(start_date, end_date);
+			const rates = getEffectivePricingRate(detail);
+			return stayDates.filter(
+				(date) =>
+					!rates.some(
+						(item) =>
+							normalizeDateKey(item?.calendarDate) === date &&
+							!calendarRateIsBlocked(item)
+					)
+			);
+		},
+		[
+			limitedOrderTakerAccount,
+			start_date,
+			end_date,
+			findRoomDetail,
+			getEffectivePricingRate,
+		]
 	);
 
 	const getBlockedDatesForRoom = useCallback(
@@ -399,6 +447,12 @@ const ZReservationForm2 = ({
 			) {
 				return null;
 			}
+			if (
+				limitedOrderTakerAccount &&
+				getMissingAssignedPricingDates(room_type, resolvedDisplayName).length > 0
+			) {
+				return null;
+			}
 
 			const rows = buildPricingByDay({
 				pricingRate: getEffectivePricingRate(detail),
@@ -448,6 +502,7 @@ const ZReservationForm2 = ({
 			getEffectivePricingRate,
 			limitedOrderTakerAccount,
 			getBlockedDatesForRoom,
+			getMissingAssignedPricingDates,
 		]
 	);
 
@@ -464,6 +519,10 @@ const ZReservationForm2 = ({
 		const { room_type, displayName } = splitRoomKey(key);
 		const exists = selectedKeys.includes(key);
 		const blockedDates = getBlockedDatesForRoom(room_type, displayName);
+		const missingAssignedPricingDates = getMissingAssignedPricingDates(
+			room_type,
+			displayName
+		);
 		const availableCount = getAvailableCountForRoom(room_type, displayName);
 		if (exists) {
 			setPickedRoomsType((prev) =>
@@ -478,6 +537,17 @@ const ZReservationForm2 = ({
 					chosenLanguage === "Arabic"
 						? `هذه الغرفة محجوبة في تقويم الفندق خلال ${blockedDates.join(", ")} ولا يمكن للوكيل حجزها.`
 						: `This room is blocked on the hotel calendar for ${blockedDates.join(", ")} and cannot be booked by an agent.`
+				);
+				return;
+			}
+			if (
+				limitedOrderTakerAccount &&
+				missingAssignedPricingDates.length > 0
+			) {
+				toast.error(
+					chosenLanguage === "Arabic"
+						? `لا يوجد سعر مخصص لك لهذه الغرفة خلال ${missingAssignedPricingDates.join(", ")}.`
+						: `No assigned agent pricing for this room on ${missingAssignedPricingDates.join(", ")}.`
 				);
 				return;
 			}
@@ -590,12 +660,21 @@ const ZReservationForm2 = ({
 
 	/* Pricing modal (final nightly only) */
 	const openPricingModal = (idx) => {
+		if (limitedOrderTakerAccount) {
+			toast.info(
+				chosenLanguage === "Arabic"
+					? "أسعار الوكيل محددة من بيانات التسعير ولا يمكن تعديلها هنا."
+					: "Agent prices are assigned from price variants and cannot be edited here."
+			);
+			return;
+		}
 		setSelectedRoomIndex(idx);
 		setIsPricingModalOpen(true);
 	};
 	const closePricingModal = () => setIsPricingModalOpen(false);
 
 	const updateNightFinalAt = (dayIndex, finalValue) => {
+		if (limitedOrderTakerAccount) return;
 		setPickedRoomsType((prev) => {
 			const next = [...prev];
 			const line = { ...next[selectedRoomIndex] };
@@ -625,6 +704,7 @@ const ZReservationForm2 = ({
 	};
 
 	const inheritFirstNight = () => {
+		if (limitedOrderTakerAccount) return;
 		setPickedRoomsType((prev) => {
 			const next = [...prev];
 			const line = { ...next[selectedRoomIndex] };
@@ -651,6 +731,7 @@ const ZReservationForm2 = ({
 	};
 
 	const distributeTotalEvenly = () => {
+		if (limitedOrderTakerAccount) return;
 		const total = safeParseFloat(totalDistribute, 0);
 		if (!total || selectedRoomIndex == null) return;
 
@@ -722,6 +803,7 @@ const ZReservationForm2 = ({
 					totalPriceWithoutCommission: safeParseFloat(
 						d.totalPriceWithoutCommission
 					),
+					...pickPricingMetadata(d),
 				})),
 			};
 			const totalWithComm = unit.pricingByDay.reduce(
@@ -758,16 +840,46 @@ const ZReservationForm2 = ({
 		return Number((totalPerDay * nights).toFixed(2));
 	}, [totalPerDay, days_of_residence]);
 
-	const normalizedAgentCommissionPercent = Number.isFinite(
-		Number(agentCommissionPercent),
-	)
-		? Number(agentCommissionPercent)
-		: 8;
+	const assignedPricingTotals = useMemo(() => {
+		return (pickedRoomsType || []).reduce(
+			(acc, line) => {
+				const count = Math.max(1, Number(line.count || 1));
+				const rows = Array.isArray(line.pricingByDay)
+					? line.pricingByDay
+					: [];
+				const roomTotal = rows.reduce(
+					(sum, day) =>
+						sum + safeParseFloat(day.totalPriceWithCommission ?? day.price, 0),
+					0
+				);
+				const roomRoot = rows.reduce(
+					(sum, day) => sum + safeParseFloat(day.rootPrice, 0),
+					0
+				);
+				acc.total += roomTotal * count;
+				acc.root += roomRoot * count;
+				return acc;
+			},
+			{ total: 0, root: 0 }
+		);
+	}, [pickedRoomsType]);
+
 	const normalizedAgentCommercialModel = normalizeAgentCommercialModel(
 		agentCommercialModel,
 	);
-	const agentCanChooseSettlement =
-		limitedOrderTakerAccount && normalizedAgentCommercialModel === "mixed";
+	const assignedAgentCommissionAmount = Number(
+		Math.max(assignedPricingTotals.total - assignedPricingTotals.root, 0).toFixed(2)
+	);
+	const assignedAgentCommissionPercent =
+		assignedPricingTotals.total > 0
+			? Number(
+					(
+						(assignedAgentCommissionAmount / assignedPricingTotals.total) *
+						100
+					).toFixed(2)
+			  )
+			: 0;
+	const agentCanChooseSettlement = false;
 	const resolvedAgentSettlementModel =
 		normalizedAgentCommercialModel === "commission_only"
 			? "agent_commission_only"
@@ -781,17 +893,20 @@ const ZReservationForm2 = ({
 		resolvedAgentSettlementModel === "agent_wallet_commission";
 	const computedAgentCommissionAmount = Number(
 		(agentHasCommission
-			? (grandTotal * normalizedAgentCommissionPercent) / 100
+			? assignedAgentCommissionAmount
 			: 0).toFixed(2),
 	);
 
 	useEffect(() => {
 		if (!limitedOrderTakerAccount) return;
 		setAgentCommissionAmount?.(computedAgentCommissionAmount);
+		setAgentCommissionPercent?.(assignedAgentCommissionPercent);
 	}, [
+		assignedAgentCommissionPercent,
 		computedAgentCommissionAmount,
 		limitedOrderTakerAccount,
 		setAgentCommissionAmount,
+		setAgentCommissionPercent,
 	]);
 
 	const pricingColumns = [
@@ -810,15 +925,18 @@ const ZReservationForm2 = ({
 			title: "Nightly Rate (SAR)",
 			dataIndex: "totalPriceWithCommission",
 			key: "final",
-			render: (val, record, index) => (
-				<InputNumber
-					min={0}
-					value={safeParseFloat(val, 0)}
-					step={0.01}
-					onChange={(v) => updateNightFinalAt(index, v)}
-					style={{ width: "100%" }}
-				/>
-			),
+			render: (val, record, index) =>
+				limitedOrderTakerAccount ? (
+					<strong>{safeParseFloat(val, 0).toFixed(2)}</strong>
+				) : (
+					<InputNumber
+						min={0}
+						value={safeParseFloat(val, 0)}
+						step={0.01}
+						onChange={(v) => updateNightFinalAt(index, v)}
+						style={{ width: "100%" }}
+					/>
+				),
 		},
 	];
 
@@ -868,6 +986,7 @@ const ZReservationForm2 = ({
 							value={updatedRoomCount}
 							onChange={setUpdatedRoomCount}
 						/>
+						{!limitedOrderTakerAccount && (
 						<div className='mt-3'>
 							<Button
 								type='dashed'
@@ -881,6 +1000,7 @@ const ZReservationForm2 = ({
 									: "Adjust Pricing"}
 							</Button>
 						</div>
+						)}
 					</Modal>
 
 					{/* Pricing modal */}
@@ -1450,21 +1570,9 @@ const ZReservationForm2 = ({
 													? "\u0646\u0633\u0628\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629"
 													: "Commission %"}
 											</small>
-											<InputNumber
-												min={0}
-												max={100}
-												step={0.25}
-												value={normalizedAgentCommissionPercent}
-												onChange={(value) =>
-													setAgentCommissionPercent?.(
-														Number.isFinite(Number(value))
-															? Number(value)
-															: 8,
-													)
-												}
-												addonAfter='%'
-												style={{ width: "100%" }}
-											/>
+											<FixedTreatmentBadge $commission>
+												{assignedAgentCommissionPercent.toFixed(2)}%
+											</FixedTreatmentBadge>
 											<strong>
 												{Number(
 													agentCommissionAmount ||
@@ -1475,8 +1583,10 @@ const ZReservationForm2 = ({
 												SAR
 											</strong>
 											<em>
-												{normalizedAgentCommissionPercent}% /{" "}
-												{grandTotal.toLocaleString()} SAR
+												{chosenLanguage === "Arabic"
+													? "محسوبة من السعر المخصص"
+													: "Calculated from assigned pricing"}{" "}
+												/ {assignedPricingTotals.total.toLocaleString()} SAR
 											</em>
 											<em>
 												{agentUsesWalletTreatment
@@ -1593,21 +1703,41 @@ const ZReservationForm2 = ({
 												room.room_type,
 												resolvedDisplayName
 											);
+											const missingAssignedPricingDates =
+												getMissingAssignedPricingDates(
+													room.room_type,
+													resolvedDisplayName
+												);
 											const blockedForAgent =
 												limitedOrderTakerAccount && blockedDates.length > 0;
+											const missingPricingForAgent =
+												limitedOrderTakerAccount &&
+												missingAssignedPricingDates.length > 0;
 											const unavailableForAgent =
 												limitedOrderTakerAccount && availableCount <= 0;
 											return (
 												<RoomChip
 													key={key}
 													$active={active}
-													$blocked={blockedForAgent || unavailableForAgent}
-													disabled={blockedForAgent || unavailableForAgent}
+													$blocked={
+														blockedForAgent ||
+														unavailableForAgent ||
+														missingPricingForAgent
+													}
+													disabled={
+														blockedForAgent ||
+														unavailableForAgent ||
+														missingPricingForAgent
+													}
 													data-blocked-label={
 														unavailableForAgent
 															? chosenLanguage === "Arabic"
 																? "\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u062e\u0632\u0648\u0646"
 																: "No stock"
+															: missingPricingForAgent
+															? chosenLanguage === "Arabic"
+																? "\u0644\u0627 \u0633\u0639\u0631 \u0645\u062e\u0635\u0635"
+																: "No assigned price"
 															: chosenLanguage === "Arabic"
 															? "\u0645\u062d\u062c\u0648\u0628\u0629"
 															: "Blocked"
@@ -1618,8 +1748,10 @@ const ZReservationForm2 = ({
 															? `${
 																	chosenLanguage === "Arabic"
 																		? "محجوبة في التقويم"
-																		: "Blocked on calendar"
+																	: "Blocked on calendar"
 															  }: ${blockedDates.join(", ")}`
+															: missingPricingForAgent
+															? `No assigned agent pricing for ${missingAssignedPricingDates.join(", ")}`
 															: unavailableForAgent
 															? "No available inventory for agents"
 															: `${resolvedDisplayName} (${room.room_type})`
@@ -1752,6 +1884,7 @@ const ZReservationForm2 = ({
 													</Button>
 													<Button
 														size='small'
+														hidden={limitedOrderTakerAccount}
 														onClick={() => openPricingModal(index)}
 													>
 														{chosenLanguage === "Arabic" ? "السعر" : "Pricing"}

@@ -3,7 +3,10 @@ import { CopyOutlined, LinkOutlined, MailOutlined, SendOutlined, UploadOutlined 
 import { Input, message } from "antd";
 import styled from "styled-components";
 import { signupHotelStaff } from "../../../auth";
-import { createSignupInvitation, getOverallAccounts } from "../../apiAdmin";
+import {
+	createSignupInvitation,
+	getOverallAccounts,
+} from "../../apiAdmin";
 import {
 	buildOwnerParams,
 	getOverallText,

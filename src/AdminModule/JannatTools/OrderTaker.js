@@ -26,6 +26,7 @@ import { countryListWithAbbreviations } from "../CustomerService/utils";
 import { isAuthenticated } from "../../auth";
 import {
 	createNewReservationClient,
+	getAdminPriceVariantOptions,
 	getAdminHotelInventoryAvailability,
 	gettingHotelDetailsForAdminAll,
 	readUserId,
@@ -46,6 +47,35 @@ const safeParseFloat = (value, fallback = 0) => {
 };
 
 const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
+const normalizeId = (value) => String(value?._id || value?.id || value || "").trim();
+const normalizeMatchText = (value) =>
+	String(value || "")
+		.trim()
+		.toLowerCase();
+
+const pricingMetadataFields = [
+	"sellingPrice",
+	"commissionPercent",
+	"priceVariantDataId",
+	"priceVariantItemId",
+	"priceVariantName",
+	"priceVariantNameOtherLanguage",
+	"source",
+	"calendarType",
+	"color",
+];
+
+const pickPricingMetadata = (source = {}) =>
+	pricingMetadataFields.reduce((acc, field) => {
+		if (
+			source[field] !== undefined &&
+			source[field] !== null &&
+			source[field] !== ""
+		) {
+			acc[field] = source[field];
+		}
+		return acc;
+	}, {});
 
 const resolveAdminPricingDay = (day = {}) => {
 	const clientPrice = roundMoney(
@@ -76,6 +106,7 @@ const resolveAdminPricingDay = (day = {}) => {
 		netAfterOtaExpenses: netAfterExpenses,
 		otaExpenseAmount,
 		platformMargin,
+		...pickPricingMetadata(day),
 	};
 };
 
@@ -116,7 +147,14 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	/** -------------- State Variables -------------- */
 	const [selectedRooms, setSelectedRooms] = useState([
-		{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
+		{
+			roomType: "",
+			displayName: "",
+			count: 1,
+			pricingByDay: [],
+			priceVariantSelection: "",
+			priceVariantLabel: "",
+		},
 	]);
 	const [name, setName] = useState("");
 	const [nickName, setNickName] = useState("");
@@ -158,6 +196,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	const [allHotels, setAllHotels] = useState([]);
 	const [selectedHotel, setSelectedHotel] = useState(null);
 	const [roomAvailability, setRoomAvailability] = useState([]);
+	const [priceVariantData, setPriceVariantData] = useState([]);
+	const [priceVariantLoading, setPriceVariantLoading] = useState(false);
 
 	// Edit Pricing Modal
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
@@ -463,6 +503,200 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		[calculatePricingByDay],
 	);
 
+	const buildStayDateKeys = useCallback((startDate, endDate) => {
+		const start = dayjs(startDate).startOf("day");
+		const endExclusive = dayjs(endDate).startOf("day");
+		if (!start.isValid() || !endExclusive.isValid() || !endExclusive.isAfter(start)) {
+			return [];
+		}
+		const dates = [];
+		for (
+			let current = start.clone();
+			current.isBefore(endExclusive, "day");
+			current = current.add(1, "day")
+		) {
+			dates.push(current.format("YYYY-MM-DD"));
+		}
+		return dates;
+	}, []);
+
+	const resolveRoomDetail = useCallback(
+		(room = {}) => {
+			const normalizedRoomType = normalizeMatchText(room.roomType || room.room_type);
+			const normalizedDisplay = normalizeMatchText(
+				room.displayName || room.display_name,
+			);
+			const details = Array.isArray(selectedHotel?.roomCountDetails)
+				? selectedHotel.roomCountDetails
+				: [];
+			return (
+				details.find((detail) => {
+					const detailType = normalizeMatchText(detail.roomType || detail.room_type);
+					const detailDisplay = normalizeMatchText(
+						detail.displayName || detail.display_name,
+					);
+					return (
+						normalizedDisplay &&
+						detailDisplay === normalizedDisplay &&
+						(!normalizedRoomType || detailType === normalizedRoomType)
+					);
+				}) ||
+				details.find((detail) => {
+					const detailType = normalizeMatchText(detail.roomType || detail.room_type);
+					return normalizedRoomType && detailType === normalizedRoomType;
+				}) ||
+				null
+			);
+		},
+		[selectedHotel?.roomCountDetails],
+	);
+
+	const variantRoomMatches = useCallback(
+		(room = {}, selection = {}) => {
+			if (
+				selection.hotelId &&
+				normalizeId(selection.hotelId) !== normalizeId(selectedHotel?._id)
+			) {
+				return false;
+			}
+			const detail = resolveRoomDetail(room);
+			const selectionRoomId = normalizeId(selection.roomId);
+			if (selectionRoomId && detail?._id && selectionRoomId === normalizeId(detail._id)) {
+				return true;
+			}
+			const roomType = normalizeMatchText(room.roomType || detail?.roomType);
+			const displayName = normalizeMatchText(
+				room.displayName || detail?.displayName,
+			);
+			const selectionType = normalizeMatchText(selection.roomType);
+			const selectionDisplay = normalizeMatchText(selection.displayName);
+			if (selectionDisplay && displayName && selectionDisplay === displayName) {
+				return !selectionType || !roomType || selectionType === roomType;
+			}
+			return Boolean(selectionType && roomType && selectionType === roomType);
+		},
+		[resolveRoomDetail, selectedHotel?._id],
+	);
+
+	const buildPriceVariantOptionsForRoom = useCallback(
+		(room = {}) => {
+			if (!selectedHotel?._id || !room?.displayName) return [];
+			return (Array.isArray(priceVariantData) ? priceVariantData : [])
+				.flatMap((variant) => {
+					const hotelIds = Array.isArray(variant.hotelIds) ? variant.hotelIds : [];
+					const hotelMatches =
+						!hotelIds.length ||
+						hotelIds.map(normalizeId).includes(normalizeId(selectedHotel._id));
+					if (!hotelMatches) return [];
+					const roomSelections = Array.isArray(variant.roomSelections)
+						? variant.roomSelections
+						: [];
+					if (
+						roomSelections.length &&
+						!roomSelections.some((selection) =>
+							variantRoomMatches(room, selection),
+						)
+					) {
+						return [];
+					}
+					const firstDate =
+						variant.startDate ||
+						(Array.isArray(variant.dates) ? variant.dates[0] : "");
+					const lastDate =
+						variant.endDate ||
+						(Array.isArray(variant.dates)
+							? variant.dates[variant.dates.length - 1]
+							: "");
+					const periodLabel =
+						firstDate && lastDate ? `${firstDate} - ${lastDate}` : "";
+					return (Array.isArray(variant.pricingItems)
+						? variant.pricingItems
+						: []
+					)
+						.filter(
+							(item) =>
+								String(item.status || "open").toLowerCase() !== "blocked" &&
+								safeParseFloat(item.sellingPrice, 0) > 0,
+						)
+						.map((item) => {
+							const name = item.nameOtherLanguage
+								? `${item.name} / ${item.nameOtherLanguage}`
+								: item.name;
+							return {
+								value: `${variant._id}:${item._id}`,
+								label: `${name} - ${roundMoney(item.sellingPrice).toFixed(
+									2,
+								)} SAR${periodLabel ? ` (${periodLabel})` : ""}`,
+								variant,
+								item,
+								periodLabel,
+							};
+						});
+				})
+				.sort((left, right) => left.label.localeCompare(right.label));
+		},
+		[variantRoomMatches, priceVariantData, selectedHotel?._id],
+	);
+
+	const findPriceVariantOption = useCallback(
+		(room = {}, value = "") =>
+			buildPriceVariantOptionsForRoom(room).find(
+				(option) => option.value === value,
+			) || null,
+		[buildPriceVariantOptionsForRoom],
+	);
+
+	const buildRowsFromPriceVariantOption = useCallback(
+		(option = null, startDate, endDate) => {
+			if (!option?.item) return [];
+			const dates = buildStayDateKeys(startDate, endDate);
+			const sellingPrice = roundMoney(option.item.sellingPrice);
+			if (!dates.length || !(sellingPrice > 0)) return [];
+			const commissionPercent = safeParseFloat(
+				option.item.commissionPercent,
+				0,
+			);
+			const computedRoot = roundMoney(
+				sellingPrice - sellingPrice * (commissionPercent / 100),
+			);
+			const rootPrice = roundMoney(
+				safeParseFloat(option.item.rootPrice, computedRoot) || computedRoot,
+			);
+			const netAfterExpenses = sellingPrice;
+			const platformMargin = roundMoney(netAfterExpenses - rootPrice);
+			return dates.map((date) => ({
+				date,
+				price: sellingPrice,
+				clientPrice: sellingPrice,
+				mainPrice: sellingPrice,
+				rootPrice,
+				commissionRate: 0,
+				totalPriceWithCommission: sellingPrice,
+				totalPriceWithoutCommission: rootPrice,
+				netAfterExpenses,
+				netAfterOtaExpenses: netAfterExpenses,
+				otaExpenseAmount: 0,
+				otaExpenseRate: 0,
+				platformMargin,
+				platformMarginRate:
+					netAfterExpenses > 0
+						? roundMoney((platformMargin / netAfterExpenses) * 100)
+						: 0,
+				sellingPrice,
+				commissionPercent,
+				priceVariantDataId: option.variant?._id || "",
+				priceVariantItemId: option.item?._id || "",
+				priceVariantName: option.item?.name || "",
+				priceVariantNameOtherLanguage:
+					option.item?.nameOtherLanguage || "",
+				source: "price_variant",
+				calendarType: option.variant?.calendarType || "",
+				color: option.item?.color || "",
+			}));
+		},
+		[buildStayDateKeys],
+	);
+
 	const redistributeManualTotal = (room, newNights, newStart, newEnd) => {
 		if (!room.manualTotal || !room.averageRootToTotalRatio) {
 			return null;
@@ -516,11 +750,30 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					return room;
 				}
 
-				const userWantsManualOverride =
-					room.manualTotal && room.averageRootToTotalRatio;
-
 				const oldLength = room.pricingByDay ? room.pricingByDay.length : 0;
 				const lengthMismatch = oldLength !== nights;
+				const variantOption = room.priceVariantSelection
+					? findPriceVariantOption(room, room.priceVariantSelection)
+					: null;
+				if (
+					variantOption &&
+					(forceRecalcFromDb || lengthMismatch || oldLength === 0)
+				) {
+					const variantRows = buildRowsFromPriceVariantOption(
+						variantOption,
+						startDate,
+						endDate,
+					);
+					if (variantRows.length) {
+						room.pricingByDay = variantRows;
+						room.manualTotal = null;
+						room.averageRootToTotalRatio = null;
+						room.commissionRate = 0;
+					}
+				}
+
+				const userWantsManualOverride =
+					!variantOption && room.manualTotal && room.averageRootToTotalRatio;
 
 				if (userWantsManualOverride && (lengthMismatch || forceRecalcFromDb)) {
 					const reDistributed = redistributeManualTotal(
@@ -624,6 +877,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			selectedRooms,
 			selectedHotel,
 			calculatePricingByDayWithCommission,
+			findPriceVariantOption,
+			buildRowsFromPriceVariantOption,
 		],
 	);
 
@@ -714,6 +969,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			manualTotal: null,
 			averageRootToTotalRatio: null,
 			commissionRate: 10,
+			priceVariantSelection: "",
+			priceVariantLabel: "",
 		};
 		setSelectedRooms(updated);
 	};
@@ -723,6 +980,53 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		const updated = [...selectedRooms];
 		updated[index].count = count;
 		setSelectedRooms(updated);
+	};
+
+	const handlePriceVariantSelectionChange = (value, index) => {
+		const updated = [...selectedRooms];
+		const room = updated[index] || {};
+		if (!value) {
+			updated[index] = {
+				...room,
+				pricingByDay: [],
+				manualTotal: null,
+				averageRootToTotalRatio: null,
+				commissionRate: 10,
+				priceVariantSelection: "",
+				priceVariantLabel: "",
+			};
+			setSelectedRooms(updated);
+			return;
+		}
+		if (!checkInDate || !checkOutDate) {
+			message.warning("Please select check-in and check-out dates first.");
+			return;
+		}
+		const option = findPriceVariantOption(room, value);
+		if (!option) {
+			message.error("This pricing option is not available for the selected room.");
+			return;
+		}
+		const pricingByDay = buildRowsFromPriceVariantOption(
+			option,
+			checkInDate,
+			checkOutDate,
+		);
+		if (!pricingByDay.length) {
+			message.error("Could not apply this pricing option to the selected dates.");
+			return;
+		}
+		updated[index] = {
+			...room,
+			priceVariantSelection: value,
+			priceVariantLabel: option.label,
+			pricingByDay,
+			manualTotal: null,
+			averageRootToTotalRatio: null,
+			commissionRate: 0,
+		};
+		setSelectedRooms(updated);
+		message.success(`Applied ${option.item?.name || "pricing option"}.`);
 	};
 
 	// Add new room
@@ -735,6 +1039,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				count: 1,
 				pricingByDay: [],
 				commissionRate: 10, // default
+				priceVariantSelection: "",
+				priceVariantLabel: "",
 			},
 		]);
 	};
@@ -791,6 +1097,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						manualTotal: sumWithComm > 0 ? sumWithComm : null,
 						averageRootToTotalRatio: ratio > 0 ? ratio : 0,
 						commissionRate: newCommRate,
+						priceVariantSelection: "",
+						priceVariantLabel: "",
 				  }
 				: room,
 		);
@@ -806,6 +1114,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				count: 1,
 				pricingByDay: [],
 				commissionRate: 10,
+				priceVariantSelection: "",
+				priceVariantLabel: "",
 			},
 		]);
 		setName("");
@@ -918,6 +1228,39 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			}
 		});
 	}, [selectedHotel?._id, checkInDate, checkOutDate, effectiveUserId, token]);
+
+	useEffect(() => {
+		if (!selectedHotel?._id || !effectiveUserId || !token) {
+			setPriceVariantData([]);
+			return;
+		}
+		let cancelled = false;
+		setPriceVariantLoading(true);
+		getAdminPriceVariantOptions(effectiveUserId, token, {
+			hotelId: selectedHotel._id,
+		})
+			.then((data) => {
+				if (cancelled) return;
+				if (data?.error) {
+					setPriceVariantData([]);
+					return;
+				}
+				setPriceVariantData(
+					Array.isArray(data?.priceVariantData)
+						? data.priceVariantData
+						: [],
+				);
+			})
+			.catch(() => {
+				if (!cancelled) setPriceVariantData([]);
+			})
+			.finally(() => {
+				if (!cancelled) setPriceVariantLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedHotel?._id, effectiveUserId, token]);
 
 	// Hotel dropdown
 	const handleHotelChange = (hotelId) => {
@@ -1493,6 +1836,54 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								disabled={!selectedHotel}
 							/>
 						</Form.Item>
+
+						{room.displayName && (
+							<Form.Item label='Price Variant'>
+								<Select
+									placeholder='Choose price variant'
+									value={room.priceVariantSelection || undefined}
+									onChange={(value) =>
+										handlePriceVariantSelectionChange(value, index)
+									}
+									disabled={
+										!selectedHotel ||
+										!checkInDate ||
+										!checkOutDate ||
+										priceVariantLoading
+									}
+									loading={priceVariantLoading}
+									allowClear
+									showSearch
+									optionFilterProp='label'
+									notFoundContent={
+										priceVariantLoading
+											? "Loading..."
+											: "No price variants for this room"
+									}
+								>
+									{buildPriceVariantOptionsForRoom(room).map((option) => (
+										<Option
+											key={option.value}
+											value={option.value}
+											label={option.label}
+										>
+											<span
+												style={{
+													display: "flex",
+													justifyContent: "space-between",
+													gap: 8,
+												}}
+											>
+												<span>{option.item?.name || "Price variant"}</span>
+												<span style={{ opacity: 0.75, fontSize: 12 }}>
+													{roundMoney(option.item?.sellingPrice).toFixed(2)} SAR
+												</span>
+											</span>
+										</Option>
+									))}
+								</Select>
+							</Form.Item>
+						)}
 
 						{room.pricingByDay.length > 0 && (
 							<Form.Item label='Pricing Breakdown'>
