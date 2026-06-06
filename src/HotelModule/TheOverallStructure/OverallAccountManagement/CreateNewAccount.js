@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CopyOutlined, LinkOutlined, MailOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
-import { Input, message } from "antd";
+import { Input, message, Select } from "antd";
 import styled from "styled-components";
 import { signupHotelStaff } from "../../../auth";
 import {
 	createSignupInvitation,
 	getOverallAccounts,
+	getOverallPriceVariantsOptions,
 } from "../../apiAdmin";
 import {
 	buildOwnerParams,
@@ -15,6 +16,10 @@ import {
 	OverallPageShell,
 	titleCase,
 } from "../overallShared";
+import {
+	buildPriceVariantAssignmentOptions,
+	buildPriceVariantAssignmentsFromKeys,
+} from "./priceVariantAssignmentHelpers";
 
 const roleOptions = [
 	{ value: "systemadmin", role: 10000, en: "Hotel System Admin", ar: "مسؤول نظام الفندق" },
@@ -117,6 +122,12 @@ const textByLang = {
 			"Passwords are never included in signup links. The invited person creates their own password.",
 		loadingHotels: "Loading hotels...",
 		noHotels: "No hotels are available for this owner scope.",
+		assignedPricing: "Assigned pricing",
+		assignedPricingHint:
+			"Optional. Pricing variants are filtered by the selected hotels.",
+		assignedPricingPlaceholder: "Select price variants",
+		noPricingVariants:
+			"No price variants are available for the selected hotels.",
 		requiredFields: "Please complete the required account fields.",
 		passwordsMismatch: "Passwords do not match.",
 		created: "Account created successfully.",
@@ -150,6 +161,13 @@ const textByLang = {
 		securingLink: "Securing link...",
 	},
 	ar: {
+		assignedPricing: "\u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u0645\u0639\u064a\u0646",
+		assignedPricingHint:
+			"\u0627\u062e\u062a\u064a\u0627\u0631\u064a. \u062a\u0638\u0647\u0631 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u062d\u0633\u0628 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0645\u062d\u062f\u062f\u0629.",
+		assignedPricingPlaceholder:
+			"\u0627\u062e\u062a\u0631 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0623\u0633\u0639\u0627\u0631",
+		noPricingVariants:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0623\u0633\u0639\u0627\u0631 \u0645\u062a\u0627\u062d\u0629 \u0644\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0645\u062d\u062f\u062f\u0629.",
 		currentAccounts: "الحسابات الحالية",
 		addAccount: "إضافة حساب جديد",
 		required: "مطلوب",
@@ -224,6 +242,7 @@ const initialForm = {
 	companyOfficialName: "",
 	companyEin: "",
 	companyDocuments: [],
+	priceVariantAssignmentKeys: [],
 	agentCommercialModel: "",
 	agentOpeningWalletCredit: "",
 	password: "",
@@ -359,11 +378,14 @@ const CreateNewAccount = ({
 	const [invitationToken, setInvitationToken] = useState("");
 	const [invitationCode, setInvitationCode] = useState("");
 	const [invitationLoading, setInvitationLoading] = useState(false);
+	const [priceVariantData, setPriceVariantData] = useState([]);
+	const [loadingPriceVariants, setLoadingPriceVariants] = useState(false);
 
 	const params = useMemo(
 		() => ({ ...buildOwnerParams(ownerId), limit: 1 }),
 		[ownerId]
 	);
+	const priceVariantParams = useMemo(() => buildOwnerParams(ownerId), [ownerId]);
 	const userHotelFallbackKey = hotelFallbackKeyForUser(user);
 	const userHotelFallbacks = useMemo(() => {
 		try {
@@ -423,6 +445,25 @@ const CreateNewAccount = ({
 	}, [params, token, userHotelFallbacks, userHotelFallbacksSignature, userId]);
 
 	useEffect(() => {
+		if (!userId || !token) return;
+		let active = true;
+		setLoadingPriceVariants(true);
+		getOverallPriceVariantsOptions(userId, token, priceVariantParams)
+			.then((data) => {
+				if (!active) return;
+				setPriceVariantData(
+					Array.isArray(data?.priceVariantData) ? data.priceVariantData : []
+				);
+			})
+			.finally(() => {
+				if (active) setLoadingPriceVariants(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [priceVariantParams, token, userId]);
+
+	useEffect(() => {
 		if (typeof setAccountsModalHotels === "function") {
 			setAccountsModalHotels(hotels);
 		}
@@ -459,6 +500,37 @@ const CreateNewAccount = ({
 	const canGenerateInvitationLink =
 		invitationHotelIds.length > 0 &&
 		(invitationAccountType !== "job" || Boolean(invitationRoleDescription));
+	const canAssignPriceVariants =
+		activeAccountMode === ACCOUNT_MODE_AGENT ||
+		form.roleDescriptions.includes("ordertaker") ||
+		form.roleDescriptions.includes("reception");
+	const priceVariantAssignmentOptions = useMemo(
+		() =>
+			buildPriceVariantAssignmentOptions({
+				priceVariantData,
+				hotelIds: form.hotelIds,
+				isRTL,
+			}),
+		[form.hotelIds, isRTL, priceVariantData]
+	);
+
+	useEffect(() => {
+		setForm((previous) => {
+			const current = Array.isArray(previous.priceVariantAssignmentKeys)
+				? previous.priceVariantAssignmentKeys
+				: [];
+			const validValues = new Set(
+				priceVariantAssignmentOptions.map((option) => option.value)
+			);
+			const next = canAssignPriceVariants
+				? current.filter((key) => validValues.has(key))
+				: [];
+			if (stringListSignature(current) === stringListSignature(next)) {
+				return previous;
+			}
+			return { ...previous, priceVariantAssignmentKeys: next };
+		});
+	}, [canAssignPriceVariants, priceVariantAssignmentOptions]);
 
 	const invitationPrefillSignature = useMemo(
 		() =>
@@ -474,6 +546,7 @@ const CreateNewAccount = ({
 				companyEin: form.companyEin,
 				agentCommercialModel: form.agentCommercialModel,
 				agentOpeningWalletCredit: form.agentOpeningWalletCredit,
+				priceVariantAssignmentKeys: form.priceVariantAssignmentKeys,
 			}),
 		[
 			activeAccountMode,
@@ -485,6 +558,7 @@ const CreateNewAccount = ({
 			form.email,
 			form.name,
 			form.phone,
+			form.priceVariantAssignmentKeys,
 			invitationHotelIds,
 			invitationRoleDescription,
 		]
@@ -590,6 +664,12 @@ const CreateNewAccount = ({
 				form.agentCommercialModel !== "commission_only"
 					? parseMoney(form.agentOpeningWalletCredit)
 					: 0,
+			priceVariantAssignments: canAssignPriceVariants
+				? buildPriceVariantAssignmentsFromKeys(
+						form.priceVariantAssignmentKeys,
+						priceVariantAssignmentOptions
+				  )
+				: [],
 		};
 		createSignupInvitation(userId, token, payload, buildOwnerParams(ownerId))
 			.then((data) => {
@@ -785,6 +865,16 @@ const CreateNewAccount = ({
 				? 0
 				: parseMoney(form.agentOpeningWalletCredit)
 			: 0;
+		const canAssignPricingForSubmit =
+			isAgentAccount ||
+			roleDescriptionsForSubmit.includes("ordertaker") ||
+			roleDescriptionsForSubmit.includes("reception");
+		const priceVariantAssignmentsForSubmit = canAssignPricingForSubmit
+			? buildPriceVariantAssignmentsFromKeys(
+					form.priceVariantAssignmentKeys,
+					priceVariantAssignmentOptions
+			  )
+			: [];
 		const accessToForPayload = form.accessTo.length
 			? form.accessTo
 			: defaultAccessForRoles(roleDescriptionsForSubmit);
@@ -815,6 +905,7 @@ const CreateNewAccount = ({
 			hotelIdWork: form.hotelIds[0],
 			hotelIdsWork: form.hotelIds,
 			hotelsToSupport: form.hotelIds,
+			priceVariantAssignments: priceVariantAssignmentsForSubmit,
 			accessTo: accessToForPayload,
 		})
 			.then((data) => {
@@ -941,6 +1032,46 @@ const CreateNewAccount = ({
 									</SelectionPill>
 								))}
 							</SelectionGrid>
+						</SelectionBlock>
+					)}
+
+					{canAssignPriceVariants && (
+						<SelectionBlock>
+							<SelectionHeader>
+								<span>{labels.assignedPricing}</span>
+								<Requirement>{labels.optional}</Requirement>
+							</SelectionHeader>
+							<FieldHint>{labels.assignedPricingHint}</FieldHint>
+							<PriceVariantSelectWrap $isRTL={isRTL}>
+								<Select
+									mode='multiple'
+									allowClear
+									showSearch
+									maxTagCount='responsive'
+									value={form.priceVariantAssignmentKeys}
+									options={priceVariantAssignmentOptions}
+									loading={loadingPriceVariants}
+									placeholder={labels.assignedPricingPlaceholder}
+									notFoundContent={
+										loadingPriceVariants
+											? labels.loadingHotels
+											: labels.noPricingVariants
+									}
+									disabled={
+										!form.hotelIds.length ||
+										loadingPriceVariants ||
+										!priceVariantAssignmentOptions.length
+									}
+									filterOption={(input, option) =>
+										String(option?.label || "")
+											.toLowerCase()
+											.includes(String(input || "").toLowerCase())
+									}
+									onChange={(values) =>
+										updateForm("priceVariantAssignmentKeys", values)
+									}
+								/>
+							</PriceVariantSelectWrap>
 						</SelectionBlock>
 					)}
 
@@ -1594,6 +1725,27 @@ const SelectionGrid = styled.div`
 	grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
 	gap: 0.35rem;
 	min-width: 0;
+`;
+
+const PriceVariantSelectWrap = styled.div`
+	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+	min-width: 0;
+
+	.ant-select {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.ant-select-selector {
+		min-height: 38px !important;
+		border-color: #c8daee !important;
+		border-radius: 8px !important;
+		background: #fff !important;
+	}
+
+	.ant-select-selection-overflow {
+		flex-wrap: wrap;
+	}
 `;
 
 const SelectionPill = styled.button`

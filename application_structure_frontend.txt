@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-06-03
+Audited: 2026-06-06
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -192,6 +192,7 @@ HotelModule Structure
 - src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js
   - The create-account route is split into Internal Staff and External Agents tabs for HR clarity. Staff mode shows hotel staff roles only and excludes external agents; agent mode locks the payload to roleDescription ordertaker and shows the agent business model/wallet-opening controls.
   - The generate-link action follows the active tab: staff mode opens a staff invitation that requires an employee role, while agent mode opens an agent invitation with agent commercial settings. Both modes still require explicit hotel selection.
+  - Assigned Pricing appears for External Agents and for Internal Staff with the Reception role. Options are filtered by selected hotels and are saved as priceVariantAssignments for direct creation or signup invitations.
   - The screen is intentionally compact on desktop with smaller fonts, lower input/button heights, and dense two/four-column grids; phone layouts collapse to single-column controls.
 - src/HotelModule/TheOverallStructure/OverallAccountManagement/UpdateExistingAccount.js
   - The update-account route mirrors account-management with Hotel Employees and External Agents tabs driven by the shared accountView query param. Each tab filters the account list and role controls to its own account type, and accountId may preselect the matching row when it is present in the active tab.
@@ -1617,9 +1618,9 @@ Future TODO Backlog - Added 2026-05-26
 - API client:
   - prepareOtaCalendarJob -> POST /api/ota-calendar/jobs/:userId/prepare.
 
-2026-06-01 Overall Settings Room Manager And Calendar Pricing
+2026-06-01 / 2026-06-06 Overall Settings Rooms, Main Calendar Pricing, And Price Variants
 - Business purpose:
-  - The Overall Settings page now has two high-visibility action buttons at the top so owners/managers can configure many hotels without opening every single hotel settings page.
+  - The Overall Settings page has high-visibility action buttons at the top so owners/managers can configure many hotels without opening every single hotel settings page.
   - The workflow is designed for Arabic/English PMS users and keeps the existing HotelDetails room/calendar schema rather than replacing it.
 - Main route:
   - /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1.
@@ -1628,14 +1629,19 @@ Future TODO Backlog - Added 2026-05-26
   - src/HotelModule/TheOverallStructure/OverallSettings/OverallSettingsMain.js.
   - src/HotelModule/TheOverallStructure/OverallSettings/OverallRoomManagerModal.js.
   - src/HotelModule/TheOverallStructure/OverallSettings/OverallCalendarPricingModal.js.
+  - src/HotelModule/TheOverallStructure/OverallSettings/OverallPriceVariantModal.js.
+  - src/HotelModule/TheOverallStructure/OverallAccountManagement/priceVariantAssignmentHelpers.js.
+  - src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js.
   - src/HotelModule/TheOverallStructure/overallShared.js for shared modal z-index/root classes and overall helpers.
-  - src/HotelModule/apiAdmin.js for the room-manager and calendar-pricing API clients.
+  - src/HotelModule/apiAdmin.js for the room-manager, calendar-pricing, and price-variant API clients.
 - Overall Settings action buttons:
   - Room Add / Update.
+  - Price Variants.
   - Calendar Pricing.
   - Buttons are centered above the existing settings table with 20px top/bottom spacing.
-  - The two buttons use different metallic gradients:
+  - The buttons use different metallic gradients:
     - Room Add / Update uses the application green/teal style.
+    - Price Variants uses the darker teal treatment and is labeled "Price Variants" / Arabic "تنويعات الأسعار".
     - Calendar Pricing uses a classy blue treatment.
   - The buttons use icons and a stronger smooth heartbeat animation to attract attention without changing layout.
   - Arabic/RTL and English/LTR alignment are respected.
@@ -1646,8 +1652,12 @@ Future TODO Backlog - Added 2026-05-26
     - Example: /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1&settingsModal=rooms&settingsRoomTab=add.
   - Calendar pricing modal:
     - settingsModal=calendar.
-    - settingsCalendarTab=general or agents.
+    - settingsCalendarTab=general. This modal owns the main/general calendar price.
     - Example: /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1&settingsModal=calendar&settingsCalendarTab=general.
+  - Price Variants modal:
+    - settingsModal=price-variants.
+    - settingsPriceVariantTab=add, update, or agents.
+    - Example: /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1&settingsModal=price-variants&settingsPriceVariantTab=add.
   - Closing either modal removes settingsModal and the tab-specific modal params but leaves the regular settings context.
   - Tab changes replace the current URL so browser history is not noisy.
 - Modal layering:
@@ -1664,12 +1674,12 @@ Future TODO Backlog - Added 2026-05-26
   - Add flow:
     - User can multi-select hotels.
     - User chooses one room type.
-    - User enters room name, description, and hotel-specific room counts.
-    - Room counts appear per selected hotel; the old active toggle was removed from the add experience.
-    - Description is a taller text input and has its own row.
-    - Room count is on the first row.
+    - User enters one room display name plus hotel-specific room counts and base prices.
+    - The description input is not shown in the add/update modal; backend AI orchestration creates a concise bilingual room description from room type, display name, amenities, views, and hotel context.
+    - Room count and base price are shown per selected hotel, three hotels per row on desktop so labels do not wrap.
+    - The old active toggle was removed from the add experience.
   - Update flow:
-    - User chooses hotel/room and edits the same room details safely.
+    - User chooses hotel/room and edits the same room details safely, including the selected room's base price.
   - Room type ordering:
     - Common options appear first: single/fardy, double, triple, quad, quintuple/family, shared men, shared women.
     - Remaining room types follow after the common list.
@@ -1685,24 +1695,31 @@ Future TODO Backlog - Added 2026-05-26
     - The save button is centered and uses the green metallic gradient.
     - The modal is wide and responsive so the amenity grids do not feel cramped.
 - Room manager backend expectations from frontend:
-  - The user only types one display name and one description.
+  - The user only types one display name.
   - Backend AI text orchestration returns/persists English and Arabic display/description fields where configured.
   - If AI is unavailable, backend still saves a fallback text payload so the user is not blocked.
+  - Every selected hotel must receive a positive base price for the new room.
+  - Duplicate protection uses roomType + displayName/displayName_OtherLanguage inside each hotel.
+  - Room Manager is the place that writes fallback pricing:
+    - roomCountDetails[n].price.basePrice.
+    - roomCountDetails[n].defaultCost.
 - Calendar Pricing modal behavior:
   - Component: OverallCalendarPricingModal.js.
   - API options: getOverallCalendarPricingOptions.
   - Save API: saveOverallCalendarPricing.
   - Tabs:
-    - Add / Update Pricing General.
-    - Add / Update Pricing Agents.
-  - General tab writes the public/website/general room calendar.
-  - Agents tab writes agent-specific calendar rows and requires an agent selection.
+    - Add Pricing General.
+    - Update Pricing General.
+  - General add tab writes only new main/general calendar rows and should show a descriptive duplicate-pricing error if room/date pricing already exists.
+  - General update tab edits existing main/general calendar rows with the same preview-table UX used by variant previews.
+  - Calendar Pricing is responsible for main/general calendar rows only. It must not update room basePrice or defaultCost; those fallback fields are owned by Room Manager.
+  - Agent-specific pricing assignment/customization is handled from the Price Variants modal Agents tab, not from the main Calendar Pricing entry point.
   - The modal has been moved upward from center for better fit on the settings page.
   - The preview modal remains naturally centered and is 95vh high.
 - Calendar Pricing inputs:
-  - Hotels are multi-select.
+  - General calendar pricing is the lead/main price that Price Variants derive from.
+  - Hotels are multi-select in the main calendar workflow.
   - Rooms are manually selected by the user; rooms are no longer auto-selected after hotel selection.
-  - Agent tab adds an agent multi-select filtered by selected hotel scope.
   - Hijri is the default calendar.
   - Gregorian/Miladi is also available.
   - Period modes:
@@ -1744,24 +1761,56 @@ Future TODO Backlog - Added 2026-05-26
 - Calendar merge/overwrite expectations:
   - Saving a full month replaces only the matching selected room/date rows for that month/date set.
   - Saving a smaller range, e.g. July 7 to July 20, replaces only those selected dates and leaves other calendar dates unchanged.
-  - Agent calendar replacement is scoped by agent + room + date, so updating Agent A does not overwrite Agent B.
   - General calendar replacement is scoped by room + date.
-- Calendar fallback price expectation:
-  - General Calendar Pricing saves also update the selected rooms' fallback prices:
-    - roomCountDetails[n].price.basePrice = modal selling price per night.
-    - roomCountDetails[n].defaultCost = calculated root price.
-  - Root price formula:
-    - rootPrice = sellingPrice - (sellingPrice * commissionPercent / 100).
-  - Agent Calendar Pricing does not update the public/general fallback prices.
+- Price Variants modal behavior:
+  - Component: OverallPriceVariantModal.js.
+  - API options: getOverallPriceVariantsOptions.
+  - Save API: saveOverallPriceVariants.
+  - The stored/business term is Price Variants. Do not reintroduce pricingmasterdatas naming.
+  - Query param tabs are add, update, and agents.
+  - Add tab lets the user select one or more hotels. Every active room in those hotels is included automatically; there is no manual room selector.
+  - A Price Variant derives from the main calendar price day by day. If a main calendar row exists for a date/room it is used; otherwise the room basePrice from Room Manager is used.
+  - A variant cannot be created until all active rooms in the selected hotel set have usable main calendar/base pricing.
+  - There is no separate default variant row in the variant modal. The main/general calendar price is the lead price.
+  - The user supplies the variant name, commission %, open/closed status, and a pricing adjustment:
+    - increase or discount.
+    - money or percentage.
+    - adjustment value.
+  - Defaults are Discount, Percentage, and Open.
+  - Backend translation saves name/nameOtherLanguage from the single visible pricing-name field.
+  - Preview/Mo3ayana is available on add and update when required fields are complete.
+  - Preview is day-level for up to 18 months ahead. The modal opens on the first month and lazily materializes additional month rows as the employee navigates, so only one month is visible at a time.
+  - Preview has a hotel filter; the first available hotel is selected by default and at least one hotel is always selected.
+  - Preview rows show date, variant name, room, main calendar price, variant price, commission %, source, and open/blocked action.
+  - Users may edit individual dates in the variant preview, and may open or block an entire preview month for the selected variant. These manual variant changes override the main calendar for that variant until the main calendar is updated again.
+  - Updating the main/general calendar propagates to calendar-based variants and overwrites variant day rows for the affected main-calendar dates because the main calendar is the lead.
+  - Updating a Price Variant propagates to any assigned agents/reception users and refreshes their agentPricingRate rows.
+  - Update tab uses a split layout on desktop and remains responsive on mobile. Variant cards keep Edit and Preview actions on the same row.
+  - Agents tab starts with a yes/no mode choice:
+    - Assign saved Price Variants to agents.
+    - Customize the agent calendar manually.
+  - In Price Variant assignment mode, the employee selects one or more variants first, then selects hotels filtered to only the hotels covered by those variants, then selects the agents. Room, date, manual price, and commission controls are hidden because the selected variants provide that data.
+  - In custom agent calendar mode, the variant selector is hidden and the existing manual hotel/room/date/price/commission preview workflow is used for authorized staff.
+- Account/create-account price variant assignment:
+  - src/HotelModule/TheOverallStructure/OverallAccountManagement/CreateNewAccount.js shows an Assigned Pricing multi-select for External Agents and for Internal Staff when the Reception role is selected.
+  - Options are built by priceVariantAssignmentHelpers.js and are filtered by the hotels selected for the new account.
+  - The selected assignments are sent in direct account creation and signup invitation payloads as priceVariantAssignments.
+  - The multiselect clears invalid assignments automatically when the selected hotels or role no longer match the selected variants.
+- New reservation pricing behavior:
+  - Agent/order-taker users cannot manually update pricing or commission in the reservation form.
+  - Agents may only choose from pricing assigned to them, or use the existing assigned/custom calendar values.
+  - Authorized hotel staff, owners, Hotel System Admins, and SUPER ADMIN/platform users can still use the broader pricing dropdown/manual controls according to their permissions.
 - API client helpers:
   - getOverallRoomManagerOptions -> GET /api/overall-dashboard/settings-room-manager/:userId.
   - saveOverallRoomManagerRoom -> POST /api/overall-dashboard/settings-room-manager/:userId.
   - getOverallCalendarPricingOptions -> GET /api/overall-dashboard/settings-calendar-pricing/:userId.
   - saveOverallCalendarPricing -> POST /api/overall-dashboard/settings-calendar-pricing/:userId.
+  - getOverallPriceVariantsOptions -> GET /api/overall-dashboard/settings-price-variants/:userId.
+  - saveOverallPriceVariants -> POST /api/overall-dashboard/settings-price-variants/:userId.
   - All helpers use buildOverallQuery(params), so ownerId is passed for Super Admin/owner scoped overall views.
 - Validation completed during implementation:
-  - hotels_frontend npm.cmd run build compiled successfully after the modal, preview, room-type, scroll, and fallback-price UI changes.
-  - Backend smoke tests verified calendar rows and fallback price behavior; see backend structure notes for details.
+  - Earlier builds passed for the original room/calendar work.
+  - Latest Price Variants/account-assignment edits were verified with scoped frontend lint checks and backend node --check checks; full frontend build was intentionally deferred for the final pass.
 
 2026-06-03 Admin Global Hotel Settings
 - Business purpose:

@@ -393,6 +393,8 @@ const enumerateDates = (startValue, endValue) => {
 	return dates;
 };
 
+const normalizeDateKey = (value = "") => String(value || "").slice(0, 10);
+
 const monthDateRange = ({ calendarType, month, year }) => {
 	if (calendarType === "hijri") {
 		const start = moment().iYear(Number(year)).iMonth(Number(month)).startOf("iMonth");
@@ -774,6 +776,24 @@ const nextVariantDateKeys = (monthCount = VARIANT_PREVIEW_MONTHS) => {
 	return enumerateDates(start.format("YYYY-MM-DD"), end.format("YYYY-MM-DD"));
 };
 
+const monthCardsFromDates = (dates = [], calendarType = "hijri", isArabic = false) =>
+	Object.values(
+		(Array.isArray(dates) ? dates : []).reduce((acc, date) => {
+			const key = monthKey(date, calendarType);
+			if (!key) return acc;
+			if (!acc[key]) {
+				acc[key] = {
+					key,
+					firstDate: date,
+					title: monthTitle(date, calendarType, isArabic),
+					dateKeys: [],
+				};
+			}
+			acc[key].dateKeys.push(date);
+			return acc;
+		}, {})
+	).sort((left, right) => left.firstDate.localeCompare(right.firstDate));
+
 const calendarBaseForRoomDate = (room = {}, dateKey = "") => {
 	const basePrice = Number(room.basePrice ?? room.price?.basePrice ?? 0);
 	const calendarRow = (Array.isArray(room.pricingRate) ? room.pricingRate : []).find(
@@ -873,6 +893,7 @@ const buildVariantPreviewFromRecord = ({
 	hotels = [],
 	isArabic = false,
 	labels = {},
+	dateKeys = null,
 }) => {
 	const item = (Array.isArray(record.pricingItems) ? record.pricingItems : [])[0];
 	const hotelIds = uniqueIds(record.hotelIds || record.hotelId);
@@ -890,7 +911,8 @@ const buildVariantPreviewFromRecord = ({
 	const rooms = selectedRoomKeys.size
 		? hotelRooms.filter((room) => selectedRoomKeys.has(room.roomKey))
 		: hotelRooms;
-	const dates = nextVariantDateKeys();
+	const allDates = nextVariantDateKeys();
+	const dates = Array.isArray(dateKeys) && dateKeys.length ? dateKeys : allDates;
 	if (!item || !rooms.length || !dates.length) return null;
 
 	const basis = pricingBasisForItem(item, 0);
@@ -971,17 +993,21 @@ const buildVariantPreviewFromRecord = ({
 
 	return {
 		recordId: normalizeId(record._id),
+		record,
 		mode: "price_variant",
 		values: { calendarType: record.calendarType || "hijri" },
-		dates,
+		dates: allDates,
+		loadedDateKeys: dates,
 		rooms,
 		pricingItems: [{ ...item, pricingBasis: basis }],
 		rows,
-		monthCards: buildMonthCardsFromRows(
-			rows,
-			record.calendarType || "hijri",
-			isArabic
-		),
+		loadedMonthKeys: [
+			...new Set(
+				dates
+					.map((date) => monthKey(date, record.calendarType || "hijri"))
+					.filter(Boolean)
+			),
+		],
 	};
 };
 
@@ -1423,6 +1449,23 @@ const OverallPriceVariantModal = ({
 					)
 			  )
 			: [];
+		const overrideKey = (row = {}) =>
+			[
+				normalizeId(row.priceVariantItemId),
+				normalizeId(row.hotelId),
+				normalizeId(row.roomId),
+				normalizeDateKey(row.calendarDate || row.date),
+			].join("::");
+		const mergedOverrideRowsByKey = new Map();
+		existingOverrideRows.forEach((row) => {
+			const key = overrideKey(row);
+			if (key) mergedOverrideRowsByKey.set(key, row);
+		});
+		previewOverrideRows.forEach((row) => {
+			const key = overrideKey(row);
+			if (key) mergedOverrideRowsByKey.set(key, row);
+		});
+		const mergedOverrideRows = [...mergedOverrideRowsByKey.values()];
 		const payload = {
 			...(editingRecordId ? { priceVariantDataId: editingRecordId } : {}),
 			dataType: "price_variant",
@@ -1450,9 +1493,7 @@ const OverallPriceVariantModal = ({
 					},
 				},
 			],
-			variantPreviewRows: previewOverrideRows.length
-				? previewOverrideRows
-				: existingOverrideRows,
+			variantPreviewRows: mergedOverrideRows,
 		};
 		setSaving(true);
 		try {
@@ -1533,11 +1574,15 @@ const OverallPriceVariantModal = ({
 				roomId: room.roomId,
 			})),
 		};
+		const firstMonthDates =
+			monthCardsFromDates(nextVariantDateKeys(), selectedCalendarType, isArabic)[0]
+				?.dateKeys || [];
 		const nextPreview = buildVariantPreviewFromRecord({
 			record: draftRecord,
 			hotels,
 			isArabic,
 			labels,
+			dateKeys: firstMonthDates,
 		});
 		if (!nextPreview?.rows?.length) {
 			message.error(labels.noRooms);
@@ -1565,11 +1610,18 @@ const OverallPriceVariantModal = ({
 		setEditingRecordId(normalizeId(record._id));
 		form.setFieldsValue(variantRecordToFormValues(record, isArabic));
 		setActiveVariantTab(VARIANT_TAB_UPDATE);
+		const firstMonthDates =
+			monthCardsFromDates(
+				nextVariantDateKeys(),
+				record.calendarType || "hijri",
+				isArabic
+			)[0]?.dateKeys || [];
 		const nextPreview = buildVariantPreviewFromRecord({
 			record,
 			hotels,
 			isArabic,
 			labels,
+			dateKeys: firstMonthDates,
 		});
 		if (!nextPreview?.rows?.length) {
 			message.error(labels.noRooms);
@@ -1581,6 +1633,60 @@ const OverallPriceVariantModal = ({
 		setPreviewModalOpen(true);
 		setEditingCell(null);
 	};
+
+	const ensurePreviewMonthLoaded = useCallback(
+		(month, index) => {
+			if (!preview || !month?.dateKeys?.length) {
+				setPreviewIndex(index);
+				return;
+			}
+			const loadedMonthKeys = new Set(preview.loadedMonthKeys || []);
+			if (loadedMonthKeys.has(month.key)) {
+				setPreviewIndex(index);
+				return;
+			}
+			const recordForBuild =
+				preview.record ||
+				variantData.find(
+					(record) => normalizeId(record._id) === normalizeId(preview.recordId)
+				);
+			if (!recordForBuild) {
+				setPreviewIndex(index);
+				return;
+			}
+			const monthPreview = buildVariantPreviewFromRecord({
+				record: recordForBuild,
+				hotels,
+				isArabic,
+				labels,
+				dateKeys: month.dateKeys,
+			});
+			if (!monthPreview?.rows?.length) {
+				setPreviewIndex(index);
+				return;
+			}
+			setPreview((current) => {
+				if (!current) return current;
+				const existingRows = Array.isArray(current.rows) ? current.rows : [];
+				const monthRowIds = new Set(monthPreview.rows.map((row) => row.id));
+				return {
+					...current,
+					rows: [
+						...existingRows.filter((row) => !monthRowIds.has(row.id)),
+						...monthPreview.rows,
+					],
+					loadedDateKeys: [
+						...new Set([...(current.loadedDateKeys || []), ...month.dateKeys]),
+					],
+					loadedMonthKeys: [
+						...new Set([...(current.loadedMonthKeys || []), month.key]),
+					],
+				};
+			});
+			setPreviewIndex(index);
+		},
+		[hotels, isArabic, labels, preview, variantData]
+	);
 
 	const cancelEdit = () => {
 		setEditingRecordId("");
@@ -1628,15 +1734,24 @@ const OverallPriceVariantModal = ({
 		});
 		return [...roomsByKey.values()];
 	}, [filteredPreviewRows]);
-	const monthCards = useMemo(
-		() =>
-			buildMonthCardsFromRows(
-				filteredPreviewRows,
-				preview?.values?.calendarType || "hijri",
-				isArabic
-			),
-		[filteredPreviewRows, isArabic, preview?.values?.calendarType]
-	);
+	const monthCards = useMemo(() => {
+		if (!preview) return [];
+		const calendarType = preview?.values?.calendarType || "hijri";
+		const rowsByMonth = buildMonthCardsFromRows(
+			filteredPreviewRows,
+			calendarType,
+			isArabic
+		).reduce((acc, month) => {
+			acc.set(month.key, month.rows);
+			return acc;
+		}, new Map());
+		return monthCardsFromDates(preview.dates || [], calendarType, isArabic).map(
+			(month) => ({
+				...month,
+				rows: rowsByMonth.get(month.key) || [],
+			})
+		);
+	}, [filteredPreviewRows, isArabic, preview]);
 	const hasPreview = Boolean(preview && monthCards.length);
 	const maxPreviewStart = hasPreview ? Math.max(monthCards.length - 1, 0) : 0;
 	const safePreviewIndex = hasPreview
@@ -2697,9 +2812,10 @@ const OverallPriceVariantModal = ({
 						<MonthNavArrow
 							type='button'
 							disabled={!hasPreview || safePreviewIndex <= 0}
-							onClick={() =>
-								setPreviewIndex((value) => Math.max(0, value - 1))
-							}
+							onClick={() => {
+								const nextIndex = Math.max(0, safePreviewIndex - 1);
+								ensurePreviewMonthLoaded(monthCards[nextIndex], nextIndex);
+							}}
 							aria-label='Previous month'
 						>
 							<LeftOutlined />
@@ -2710,7 +2826,7 @@ const OverallPriceVariantModal = ({
 									key={month.key}
 									type='button'
 									className={index === safePreviewIndex ? "active" : ""}
-									onClick={() => setPreviewIndex(index)}
+									onClick={() => ensurePreviewMonthLoaded(month, index)}
 								>
 									{month.title}
 								</button>
@@ -2719,11 +2835,13 @@ const OverallPriceVariantModal = ({
 						<MonthNavArrow
 							type='button'
 							disabled={!hasPreview || safePreviewIndex >= maxPreviewStart}
-							onClick={() =>
-								setPreviewIndex((value) =>
-									Math.min(maxPreviewStart, value + 1)
-								)
-							}
+							onClick={() => {
+								const nextIndex = Math.min(
+									maxPreviewStart,
+									safePreviewIndex + 1
+								);
+								ensurePreviewMonthLoaded(monthCards[nextIndex], nextIndex);
+							}}
 							aria-label='Next month'
 						>
 							<RightOutlined />
