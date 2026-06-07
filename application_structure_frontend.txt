@@ -276,6 +276,8 @@ Frontend Critical Workflows To Protect
   - Public/client-created reservations are internally pending hotel confirmation, including paid PayPal bookings, chatbot-assisted bookings, and verified public bookings.
   - Paid guests must continue to see calm confirmed/created messaging after successful payment. Frontend public checkout, payment-link, invoice, WhatsApp-triggering, and single-reservation screens should not display internal pending-confirmation wording.
   - Backend public responses remove pendingConfirmation/agentDecisionSnapshot and apply pendingConfirmation.clientVisibleStatus when needed. Do not reintroduce UI that reads internal hotel-review fields on public pages.
+  - Chatbot-created reservations are backend-created AI Chat records, not admin frontend manual submissions. Hotel/admin UI should show them in pending-confirmation queues because pendingConfirmation.status is pending and inventoryBlocks is true.
+  - Guest-facing chatbot copy should say the reservation was created/confirmed, include the confirmation number, details link, payment link, and ask whether anything else is needed. It must not expose internal pending-confirmation wording to the guest.
 - Public signup
   - /signup must keep the existing owner flow unchanged when Hotel Manager / Owner is selected.
   - Without query params, Hotel Manager / Owner is selected by default.
@@ -965,6 +967,8 @@ Future TODO Backlog - Added 2026-05-26
   - ChatDetail renders markdown hotel links such as [Hotel](https://...) as clickable new-tab links.
   - Active client chat selection is query-param stable on desktop and mobile.
   - Active hotel and active client support case lists use the same notification sound context after the user unlocks sound.
+  - When the backend chatbot creates a reservation, customer-service views should show the saved support conversation and the AI response with confirmation/details/payment links. The backend owns reservation creation and link wording; PMS frontend should not duplicate or rewrite that booking-finalization logic.
+  - After a successful chatbot booking, the AI asks whether anything else is needed and waits. Customer-service staff can still take over manually; any staff reply pauses AI as usual.
 - Hotel activation frontend behavior:
   - Hotel owner/manager settings continue to write activateHotel.
   - Platform admin Added Hotels dashboard writes xHotelProActive for the Jannat/XHotelPro gate.
@@ -1040,7 +1044,7 @@ Future TODO Backlog - Added 2026-05-26
   - Live QA showed typing events and AI replies for Arabic B2C cases after backend fixes.
 - 2026-05-27 QA cleanup:
   - Backend cleanup removed six Arabic chatbot QA support cases that appeared in /admin/customer-service.
-  - No chatbot QA reservations were found or deleted.
+  - Historical note: no chatbot QA reservations were found or deleted in this 2026-05-27 run. Current production chatbot behavior can create guarded reservations after backend save.
   - Future frontend QA should use unmistakable test display names such as names containing "اختبار" or "QA Pass", then remove the exact support-case IDs after testing.
 - 2026-05-27 final pre-production cleanup:
   - The temporary rude escalation QA case 6a16417650a34b197ce4d2ee was removed after validating the escalated-client-cases tab.
