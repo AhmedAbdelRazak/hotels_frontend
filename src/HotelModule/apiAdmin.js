@@ -1,6 +1,11 @@
 import axios from "axios";
 import { isJwtExpired, stopDashboardPreview } from "../auth";
 
+const DASHBOARD_PREVIEW_STORAGE_KEY = "dashboardPreviewAuth";
+
+const normalizeAuthId = (value) =>
+	String(value?._id || value?.id || value || "").trim();
+
 const isAdminRoutePath = () =>
 	typeof window !== "undefined" &&
 	String(window.location?.pathname || "").startsWith("/admin");
@@ -16,14 +21,41 @@ const withHotelManagementSourceViewHeader = (headers = {}) => ({
 		: {}),
 });
 
+const safeParseStoredAuth = (key = "") => {
+	try {
+		if (typeof window === "undefined") return null;
+		const raw = localStorage.getItem(key);
+		return raw ? JSON.parse(raw) : null;
+	} catch (err) {
+		return null;
+	}
+};
+
+const removeStoredPreviewAuth = () => {
+	try {
+		if (typeof window !== "undefined") {
+			localStorage.removeItem(DASHBOARD_PREVIEW_STORAGE_KEY);
+		}
+	} catch (err) {
+		// Ignore storage failures and let the request continue with base auth.
+	}
+};
+
+const previewBelongsToBaseSession = (preview = null, baseAuth = null) => {
+	const baseUserId = normalizeAuthId(baseAuth?.user);
+	const previewActorId =
+		normalizeAuthId(preview?.actor) ||
+		normalizeAuthId(preview?.preview?.actorId);
+	return Boolean(baseUserId && previewActorId && baseUserId === previewActorId);
+};
+
 const getStoredBaseAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
-		const raw = localStorage.getItem("jwt");
-		const parsed = raw ? JSON.parse(raw) : null;
+		const parsed = safeParseStoredAuth("jwt");
 		if (parsed?.token && isJwtExpired(parsed.token)) {
 			localStorage.removeItem("jwt");
-			localStorage.removeItem("dashboardPreviewAuth");
+			removeStoredPreviewAuth();
 			return withHotelManagementSourceViewHeader();
 		}
 		return withHotelManagementSourceViewHeader(
@@ -38,11 +70,13 @@ const getStoredAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
 		if (isAdminRoutePath()) return getStoredBaseAuthHeaders();
-		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
-		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		const baseAuth = safeParseStoredAuth("jwt");
+		const preview = safeParseStoredAuth(DASHBOARD_PREVIEW_STORAGE_KEY);
 		if (preview?.auth?.token) {
 			if (isJwtExpired(preview.auth.token)) {
 				stopDashboardPreview();
+			} else if (!previewBelongsToBaseSession(preview, baseAuth)) {
+				removeStoredPreviewAuth();
 			} else {
 				return withHotelManagementSourceViewHeader({
 					Authorization: `Bearer ${preview.auth.token}`,
@@ -59,10 +93,14 @@ const getStoredPreviewAuth = () => {
 	try {
 		if (typeof window === "undefined") return null;
 		if (isAdminRoutePath()) return null;
-		const previewRaw = localStorage.getItem("dashboardPreviewAuth");
-		const preview = previewRaw ? JSON.parse(previewRaw) : null;
+		const baseAuth = safeParseStoredAuth("jwt");
+		const preview = safeParseStoredAuth(DASHBOARD_PREVIEW_STORAGE_KEY);
 		if (preview?.auth?.token && isJwtExpired(preview.auth.token)) {
 			stopDashboardPreview();
+			return null;
+		}
+		if (preview?.auth?.token && !previewBelongsToBaseSession(preview, baseAuth)) {
+			removeStoredPreviewAuth();
 			return null;
 		}
 		return preview;
@@ -2068,8 +2106,8 @@ const buildOverallQuery = (params = {}) => {
 const overallHeaders = (token = "") => ({
 	Accept: "application/json",
 	"Content-Type": "application/json",
-	...(token ? { Authorization: `Bearer ${token}` } : {}),
 	...getStoredAuthHeaders(),
+	...(token ? { Authorization: `Bearer ${token}` } : {}),
 });
 
 export const getOverallSummary = (userId, token, params = {}) => {

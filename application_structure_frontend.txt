@@ -906,6 +906,7 @@ Future TODO Backlog - Added 2026-05-26
 - Problem observed:
   - Hotel-management pages could briefly call protected APIs with an expired dashboard-preview token stored in localStorage.
   - This created 401 jwt expired responses and noisy backend log lines before a fresh/base session was used.
+  - 2026-06-08 production follow-up: a stale but unexpired dashboardPreviewAuth record could also override a fresh owner login token in src/HotelModule/apiAdmin.js, causing owner overall-dashboard report calls to return 403 access denied even though the owner account and hotel scope were valid.
 - Frontend fix:
   - Files:
     - src/auth/index.js
@@ -915,11 +916,14 @@ Future TODO Backlog - Added 2026-05-26
   - Expired base auth is removed from localStorage and route guards can redirect normally.
   - Expired dashboard-preview auth is removed before API calls and the original selected hotel is restored.
   - API helpers now avoid attaching expired preview/base Authorization headers.
+  - HotelModule/apiAdmin.js now only honors dashboardPreviewAuth when the preview actor id matches the current base jwt user id; mismatched preview records are removed and the current signed-in user's token is used.
+  - Overall-dashboard report helpers let the explicit token passed by isAuthenticated win after adding stored hotel-management headers, so a fresh owner session cannot be overridden by stale preview storage.
   - Reservation update audit helpers no longer use expired preview actors.
 - Backend companion fix:
   - server.js now converts express-jwt expired-token errors into clean 401 JSON with code TOKEN_EXPIRED.
 - User-facing expectation:
   - Users should not see repeated failed requests from stale preview sessions.
+  - Root owners, Hotel System Admins, hotel managers, finance users, reservation employees, and agents should not lose overall-dashboard access because of an old Super Admin preview session left in localStorage.
   - If the main login session itself expires, the app should treat the user as signed out instead of continuing to call APIs with the expired token.
 
 2026-05-26 Executive Summary UI Clarification Completion
