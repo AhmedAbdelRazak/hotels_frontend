@@ -2234,3 +2234,13 @@ Future TODO Backlog - Added 2026-05-26
   - Admin and hotel customer-service views should treat the handoff as the same support case changing from Jannat Booking concierge scope into hotel support scope.
   - Quick replies labeled as hotel connection choices should remain audit chips in staff chat detail views.
   - Complaint escalations from Jannat Booking support appear through the normal escalated client-case queue and should be handled urgently.
+
+2026-06-08 Jannat Concierge Transfer UX Staff Contract
+- Backend-owned behavior:
+  - Jannat Booking concierge handoff now includes a neutral system transfer breaker message, then the hotel assistant replies after a short 5-8 second default pause.
+  - The same support case changes into the selected hotel scope before the hotel assistant continues; staff views should treat this as one continuous case, not a new case.
+  - Backend AI now avoids advancing platform-hotel-choice or reservation review state unless the guest actually received the message/buttons.
+- Staff UI expectations:
+  - System transfer messages should remain visible in admin/hotel customer-service transcripts so employees can understand why the agent name changed.
+  - Stored quickReplies remain read-only audit chips, including hotel connect choices, Confirm / Something is wrong, date-update options, and optional email Skip.
+  - Hijri guest date ranges may be displayed in AI messages with both Hijri and Gregorian/Miladi dates; staff views should not hide or rewrite those lines.
