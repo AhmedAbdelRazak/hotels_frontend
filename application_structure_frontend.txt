@@ -2224,3 +2224,13 @@ Future TODO Backlog - Added 2026-05-26
 - Backend-owned enforcement:
   - The backend prompt/routing layer blocks active hotel chats from listing, linking, comparing, or implying knowledge of other hotels.
   - Frontend changes should not attempt to bypass that by constructing public hotel URLs from support-case messages.
+
+2026-06-08 Jannat Booking Concierge Support Exception
+- Backend-owned behavior:
+  - Jannat Booking support is the only public B2C context allowed to compare hotels platform-wide.
+  - It can recommend and price hotels, but it must connect the guest to the selected hotel's support desk before official reservation confirmation, payment/details links, or existing-reservation updates.
+  - Hotel support cases remain strict hotel-only after the backend changes supportScope to hotel and assigns the selected hotelId.
+- Staff UI expectations:
+  - Admin and hotel customer-service views should treat the handoff as the same support case changing from Jannat Booking concierge scope into hotel support scope.
+  - Quick replies labeled as hotel connection choices should remain audit chips in staff chat detail views.
+  - Complaint escalations from Jannat Booking support appear through the normal escalated client-case queue and should be handled urgently.
