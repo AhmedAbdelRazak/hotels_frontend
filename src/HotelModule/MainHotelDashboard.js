@@ -557,7 +557,7 @@ const ManagerMainHotelDashboard = () => {
 	useEffect(() => {
 		if (!isSingleHotelUser) return;
 
-		getHotelDetails(assignedHotelId).then((hotel) => {
+		getHotelDetails(assignedHotelId, { summary: true }).then((hotel) => {
 			if (!hotel || hotel.error || !hotel._id) return;
 			localStorage.setItem("selectedHotel", JSON.stringify(hotel));
 			const ownerId = hotel.belongsTo?._id || hotel.belongsTo || assignedOwnerId;
@@ -1875,7 +1875,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 					rawFallback && typeof rawFallback === "object"
 						? rawFallback
 						: { _id: hotelId };
-				return getHotelDetails(hotelId)
+				return getHotelDetails(hotelId, { summary: true })
 					.then((hotel) => normalizeAgentHotel(hotel, fallback, user))
 					.catch(() => normalizeAgentHotel(null, fallback, user));
 			})

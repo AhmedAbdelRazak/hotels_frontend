@@ -1273,7 +1273,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 							rawAssignedHotels.find(
 								(item) => normalizeTopNavId(item) === assignedHotelId
 							) || { _id: assignedHotelId };
-						return getHotelDetails(assignedHotelId)
+						return getHotelDetails(assignedHotelId, { summary: true })
 							.then((hotel) => hotel || fallback)
 							.catch(() => fallback);
 					})

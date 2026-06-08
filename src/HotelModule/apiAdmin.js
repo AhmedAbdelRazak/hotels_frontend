@@ -266,8 +266,12 @@ export const commitReservationExcelImport = ({
 		.catch((err) => console.log(err));
 };
 
-export const getHotelDetails = (userId) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${userId}`, {
+export const getHotelDetails = (userId, options = {}) => {
+	const query = new URLSearchParams();
+	if (options.view) query.set("view", options.view);
+	if (options.summary) query.set("view", "summary");
+	const suffix = query.toString() ? `?${query.toString()}` : "";
+	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${userId}${suffix}`, {
 		method: "GET",
 		headers: {
 			Accept: "application/json",
@@ -1485,8 +1489,12 @@ export const prepareOtaCalendarJob = (userId, payload) => {
 		}));
 };
 
-export const getHotelById = (hotelId) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}`, {
+export const getHotelById = (hotelId, options = {}) => {
+	const query = new URLSearchParams();
+	if (options.view) query.set("view", options.view);
+	if (options.summary) query.set("view", "summary");
+	const suffix = query.toString() ? `?${query.toString()}` : "";
+	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}${suffix}`, {
 		method: "GET",
 		headers: {
 			"Content-Type": "application/json",

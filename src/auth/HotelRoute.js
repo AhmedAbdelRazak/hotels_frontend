@@ -535,7 +535,7 @@ const HotelContextGate = ({ children, hotelId, userId }) => {
 
 			try {
 				const response = await fetch(
-					`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}`,
+					`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}?view=summary`,
 					{ method: "GET" }
 				);
 				const data = await response.json();
