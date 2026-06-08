@@ -2179,3 +2179,20 @@ Future TODO Backlog - Added 2026-05-26
   - npm run build completed successfully.
   - npm test -- --watchAll=false reports no test files in this frontend repo; rerun with --passWithNoTests for a green no-tests smoke check.
   - git diff --check should remain clean apart from normal Windows LF-to-CRLF warnings.
+
+2026-06-08 Production Deployment Note - xhotelpro / jannat
+- Deployment:
+  - Frontend master was pushed through commit 853351f and pulled on ssh jannat at /home/ahmedadmin/Hotels/hotels_frontend.
+  - The production build was regenerated successfully and hotels-frontend was restarted under PM2.
+  - The served production HTML referenced /static/js/main.d63b5bd9.js after deployment.
+- Build ownership note:
+  - The old production build directory was root-owned and blocked npm run build from writing asset-manifest.json.
+  - The deployment generated BUILD_PATH=build-next, then promoted build-next to build. The active build directory is now owned by ahmedadmin.
+  - A root-owned backup directory named build-root-owned-backup-before-853351f may remain on the production host until sudo cleanup; it is not the served build and is ignored by git.
+- Production smoke checks:
+  - https://xhotelpro.com returned 200.
+  - https://xhotelpro.com/admin/all-reservations returned 200 and served the React app.
+  - https://xhotelpro.com/static/js/main.d63b5bd9.js returned 200.
+  - https://xhotelpro.com/socket.io/?EIO=4&transport=polling returned 200.
+- Chatbot UX note:
+  - The backend production .env was tuned to use a visible but shorter human-like cadence, so the AI bot should feel responsive without instant robotic replies.
