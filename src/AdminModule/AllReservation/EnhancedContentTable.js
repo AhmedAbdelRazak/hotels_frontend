@@ -782,6 +782,15 @@ const EnhancedContentTable = ({
 								);
 								const paymentText =
 									reservation.payment_status || reservation.payment || "-";
+								const mainBookingSource = reservation.booking_source || "-";
+								const originalBookingSource =
+									reservation.customer_booking_source ||
+									reservation.customer_details?.booking_source ||
+									"";
+								const showOriginalBookingSource =
+									originalBookingSource &&
+									originalBookingSource.toLowerCase() !==
+										String(mainBookingSource || "").toLowerCase();
 
 								return (
 									<tr
@@ -821,10 +830,18 @@ const EnhancedContentTable = ({
 											/>
 										</td>
 										<td className='source-cell'>
-											<AdminTableTooltipText
-												value={reservation.booking_source || "-"}
-												className='table-truncate'
-											/>
+											<div className='source-stack'>
+												<AdminTableTooltipText
+													value={mainBookingSource}
+													className='table-truncate'
+												/>
+												{showOriginalBookingSource ? (
+													<small>
+														Original:{" "}
+														<span>{originalBookingSource}</span>
+													</small>
+												) : null}
+											</div>
 										</td>
 										<td>
 											<AdminStatusPill
@@ -1145,6 +1162,23 @@ const StyledTable = styled.table`
 	.source-cell {
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.source-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 0.12rem;
+		min-width: 0;
+	}
+
+	.source-stack small {
+		color: #7c3aed;
+		font-size: 0.68rem;
+		font-weight: 850;
+		line-height: 1.1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.table-truncate,

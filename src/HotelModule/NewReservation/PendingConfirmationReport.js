@@ -20,6 +20,7 @@ import styled, { createGlobalStyle, css, keyframes } from "styled-components";
 import moment from "moment";
 import { useHistory, useLocation } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
+import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
 import {
 	getAgentWalletSummary,
 	getHotelInventoryAvailability,
@@ -417,6 +418,7 @@ const PendingConfirmationReport = ({
 	const txt = labels[isArabic ? "ar" : "en"];
 	const definitions = choiceDefinitions[isArabic ? "ar" : "en"];
 	const { user, token } = isAuthenticated();
+	const canRevertPendingConfirmation = isSuperAdminUser(user);
 	const workflowPermissions = useMemo(
 		() => getPendingWorkflowPermissions(user),
 		[user],
@@ -674,7 +676,7 @@ const PendingConfirmationReport = ({
 
 	const submitRevertToPending = (reservation) => {
 		if (!reservation?._id || !user?._id) return;
-		if (!workflowPermissions.canReviewStatus) {
+		if (!canRevertPendingConfirmation) {
 			message.error(txt.updateError);
 			return;
 		}
@@ -919,14 +921,14 @@ const PendingConfirmationReport = ({
 									? openReservation(record)
 									: isPendingConfirmation
 									? openStatusModal(record)
-									: isConfirmed
+									: isConfirmed && canRevertPendingConfirmation
 									? submitRevertToPending(record)
 									: openReservation(record)
 							}
 							title={
 								isPendingConfirmation
 									? txt.confirmTitle
-									: isConfirmed
+									: isConfirmed && canRevertPendingConfirmation
 									? txt.revertTitle
 									: ""
 							}
@@ -1037,6 +1039,7 @@ const PendingConfirmationReport = ({
 			page,
 			records,
 			txt,
+			canRevertPendingConfirmation,
 			workflowPermissions.canReviewCommission,
 			workflowPermissions.canReviewStatus,
 		],

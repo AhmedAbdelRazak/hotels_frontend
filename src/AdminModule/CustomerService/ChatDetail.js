@@ -608,6 +608,14 @@ const ChatDetail = ({
 		});
 	};
 
+	const quickRepliesForMessage = (msg = {}) =>
+		Array.isArray(msg.quickReplies)
+			? msg.quickReplies
+					.map((reply) => String(reply?.label || "").trim())
+					.filter(Boolean)
+					.slice(0, 4)
+			: [];
+
 	useEffect(() => {
 		const handleTyping = (data) => {
 			if (
@@ -807,6 +815,7 @@ const ChatDetail = ({
 						msg.messageBy.customerName,
 						isAdminMessage ? user.name || "Management" : "Client"
 					);
+					const quickReplies = quickRepliesForMessage(msg);
 					const messageText = cleanDisplayText(
 						msg.message,
 						chatIsRtl
@@ -827,6 +836,15 @@ const ChatDetail = ({
 								<MessageBody dir={messageRtl ? "rtl" : "auto"}>
 									{renderMessageWithLinks(messageText)}
 								</MessageBody>
+								{quickReplies.length > 0 && (
+									<QuickReplyPreview $isRtl={messageRtl}>
+										{quickReplies.map((label) => (
+											<QuickReplyChip key={label} type='button' disabled>
+												{label}
+											</QuickReplyChip>
+										))}
+									</QuickReplyPreview>
+								)}
 							</MessageText>
 							<MessageMeta $isRtl={messageRtl}>
 								<small>{new Date(msg.date).toLocaleString()}</small>
@@ -1135,6 +1153,28 @@ const MessageBody = styled.div`
 	display: block;
 	line-height: 1.55;
 	overflow-wrap: anywhere;
+`;
+
+const QuickReplyPreview = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: ${(props) => (props.$isRtl ? "flex-end" : "flex-start")};
+	margin-top: 8px;
+`;
+
+const QuickReplyChip = styled.button`
+	max-width: 100%;
+	padding: 4px 9px;
+	border: 1px solid #b9d7ef;
+	border-radius: 8px;
+	background: #f5fbff;
+	color: #123b5d;
+	font-size: 0.8rem;
+	font-weight: 800;
+	line-height: 1.25;
+	cursor: default;
+	opacity: 1;
 `;
 
 const MessageMeta = styled.div`

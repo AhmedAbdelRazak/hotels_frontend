@@ -277,7 +277,10 @@ Frontend Critical Workflows To Protect
   - Paid guests must continue to see calm confirmed/created messaging after successful payment. Frontend public checkout, payment-link, invoice, WhatsApp-triggering, and single-reservation screens should not display internal pending-confirmation wording.
   - Backend public responses remove pendingConfirmation/agentDecisionSnapshot and apply pendingConfirmation.clientVisibleStatus when needed. Do not reintroduce UI that reads internal hotel-review fields on public pages.
   - Chatbot-created reservations are backend-created AI Chat records, not admin frontend manual submissions. Hotel/admin UI should show them in pending-confirmation queues because pendingConfirmation.status is pending and inventoryBlocks is true.
+  - Source visibility is route-sensitive: platform /admin/all-reservations may show backend AI Chat source to admins/SUPER ADMINs, but every /hotel-management/* reservation view must display chatbot-created reservations as Jannat Employee. HotelModule/apiAdmin.js and OwnerContent/apiOwner.js send X-Reservation-Source-View: hotel-management only on /hotel-management paths; AdminModule/apiAdmin.js must not send it.
+  - Existing reservation source is immutable outside authorized platform admin/SUPER ADMIN flows. Hotel-management edit forms may display the source, but the backend will strip or reject booking_source changes from hotel system admins, hotel managers, reservation employees, agents, and public/client flows.
   - Guest-facing chatbot copy should say the reservation was created/confirmed, include the confirmation number, details link, payment link, and ask whether anything else is needed. It must not expose internal pending-confirmation wording to the guest.
+  - Support-case conversation turns may include quickReplies from the B2C AI bot. Admin and hotel support detail views render them as read-only chips under the AI message so staff can audit which guest buttons were offered; only the public guest widget sends quick-reply clicks.
 - Public signup
   - /signup must keep the existing owner flow unchanged when Hotel Manager / Owner is selected.
   - Without query params, Hotel Manager / Owner is selected by default.
@@ -2113,3 +2116,38 @@ Future TODO Backlog - Added 2026-05-26
   - After release, hotel-management sees Pending Confirmation and the hotel-visible/root amount only.
   - Platform admin screens may show safe OTA summaries for client total, hotel-visible amount, net after expenses, and OTA expenses.
   - Platform Profit / Platform Margin remains SUPER ADMIN-only.
+
+2026-06-08 Hotel-Management Reservation History Visibility Cutoff
+- Frontend rule:
+  - Any reservation-derived hotel-management view should expect the backend to return only reservations taken on or after April 1, 2026 UTC for hotel-side users.
+  - SUPER ADMIN and platform employee/admin viewers keep full reservation history when the API request includes a valid bearer token that the backend can recognize.
+  - "Taken" means booked_at on the reservation schema, with createdAt as the fallback when booked_at is missing.
+- API client expectation:
+  - src/HotelModule/apiAdmin.js must include getStoredAuthHeaders() on legacy reservation/report GET calls, including reservation history, search, occupancy, single-reservation reads, checkout/general reports, pending/commission finance lists, room inventory summaries, hotel inventory calendar/day reports, hotel dashboard reservation panels, and hotel-adminreports calls.
+  - src/OwnerContent/apiOwner.js must include stored auth headers for owner aggregation and owner reservation-date endpoints.
+  - If a legacy request is made without auth, the backend treats it as non-platform and applies the April 1, 2026 cutoff.
+- UI expectation:
+  - Do not add React-only filtering for this policy. The backend query is the source of truth.
+  - Hotel-management screens should not promise or depend on pre-April-1-2026 reservation history for non-platform users.
+  - AdminModule /admin/* screens remain the platform full-history experience when protected by platform/SUPER auth.
+
+2026-06-08 SUPER ADMIN Pending-Confirmation Reversion UI Lock
+- Rule:
+  - Only configured SUPER ADMIN users from REACT_APP_SUPER_ADMIN_ID should see or trigger "Revert to pending" / "Return reservation to pending" UI actions.
+  - Platform admins, hotel system admins, hotel managers, reservation employees, finance users, order takers, and hotel-management users must not see a direct reversion action once the reservation is no longer pending.
+- Frontend coverage:
+  - src/AdminModule/AllReservation/MoreDetails.js hides and guards the admin detail "Revert to pending" action unless isSuperAdminUser(user) passes.
+  - src/HotelModule/ReservationsFolder/ReservationDetail.js applies the same hide/guard behavior in hotel-management reservation details.
+  - src/HotelModule/NewReservation/PendingConfirmationReport.js no longer treats confirmed status pills as a revert shortcut for non-SUPER users; they open details instead.
+- Backend contract:
+  - The backend remains the source of truth and rejects unauthorized direct API attempts with reservation_pending_reversion_super_admin_only.
+  - SUPER ADMIN reversion should refresh pending-confirmation notifications and return the reservation to the normal Pending Confirmation queue.
+
+2026-06-08 OTA Inbound Original Booking Source UI
+- Rule:
+  - Admin reservation screens continue to show the editable top-level booking_source as the main source.
+  - When customer_details.booking_source is present, it represents the immutable original OTA/email source saved by the backend.
+- UI behavior:
+  - src/AdminModule/AllReservation/MoreDetails.js shows the original source to platform admin / SUPER ADMIN viewers inside the reservation workflow/source area.
+  - src/AdminModule/AllReservation/EnhancedContentTable.js shows a small "Original" source line only when the immutable source differs from the editable main source.
+  - The existing Booking Source filter uses backend options that include both top-level booking_source and customer_details.booking_source, so admins can filter by the original OTA source after the main source has been changed.

@@ -4469,6 +4469,13 @@ const ReservationDetail = ({
 		supplierData.supplierName ||
 		reservation?.booking_source ||
 		"OTA email";
+	const immutableCustomerBookingSource = String(
+		reservation?.customer_details?.booking_source || "",
+	).trim();
+	const canViewImmutableCustomerBookingSource =
+		isAdminRouteViewer && isPlatformAdminViewer(user);
+	const showImmutableCustomerBookingSource =
+		canViewImmutableCustomerBookingSource && immutableCustomerBookingSource;
 	const limitedOrderTakerAccount = false && isLimitedOrderTakerAccount(user);
 	const canFullManageReservation = true;
 	const canLimitedOrderTakerEditReservation =
@@ -4511,6 +4518,7 @@ const ReservationDetail = ({
 			activeRoleDescriptions.some((role) =>
 				["hotelmanager", "systemadmin", "reservationemployee"].includes(role),
 			));
+	const canRevertPendingDecision = isConfiguredSuperAdmin;
 
 	const normalizeNumber = useCallback((value, fallback = 0) => {
 		if (value === null || value === undefined) return fallback;
@@ -5534,6 +5542,14 @@ const ReservationDetail = ({
 		user?._id,
 	]);
 	const openRevertDecisionModal = useCallback(() => {
+		if (!canRevertPendingDecision) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "\u064a\u0645\u0643\u0646 \u0644\u0644\u0645\u0634\u0631\u0641 \u0627\u0644\u0623\u0639\u0644\u0649 \u0641\u0642\u0637 \u0625\u0631\u062c\u0627\u0639 \u0627\u0644\u062d\u062c\u0632 \u0625\u0644\u0649 \u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f."
+					: "Only the configured SUPER ADMIN can revert a reservation to pending confirmation.",
+			);
+			return;
+		}
 		let revertReason = "";
 		Modal.confirm({
 			...confirmModalProps(),
@@ -5566,7 +5582,7 @@ const ReservationDetail = ({
 					confirmationReason: revertReason,
 				}),
 		});
-	}, [chosenLanguage, updatePendingDecision]);
+	}, [canRevertPendingDecision, chosenLanguage, updatePendingDecision]);
 	const reservationCycleRows = useMemo(() => {
 		const rows = [];
 		const pushRow = ({ at, title, by, detail }) => {
@@ -9390,6 +9406,30 @@ const ReservationDetail = ({
 												</strong>
 											</div>
 										</div>
+										{showImmutableCustomerBookingSource ? (
+											<div className='workflow-source-card'>
+												<span className='detail-icon'>
+													<BankOutlined />
+												</span>
+												<div>
+													<span>
+														{chosenLanguage === "Arabic"
+															? "\u0627\u0644\u0645\u0635\u062f\u0631 \u0627\u0644\u0623\u0635\u0644\u064a"
+															: "Original Source"}
+													</span>
+													<strong>
+														{formatLeadingCapital(
+															immutableCustomerBookingSource,
+														)}
+													</strong>
+													<small>
+														{chosenLanguage === "Arabic"
+															? "\u0645\u062d\u0641\u0648\u0638 \u0645\u0646 \u0628\u0631\u064a\u062f OTA"
+															: "Saved from OTA email"}
+													</small>
+												</div>
+											</div>
+										) : null}
 										<div className='workflow-source-card'>
 											<span className='detail-icon'>
 												<CalendarOutlined />
@@ -9563,7 +9603,7 @@ const ReservationDetail = ({
 															: "Accept"}
 													</button>
 												</>
-											) : (
+											) : canRevertPendingDecision ? (
 												<button
 													className='workflow-action pending'
 													type='button'
@@ -9574,7 +9614,7 @@ const ReservationDetail = ({
 														? AR_LABELS.revertToPending
 														: "Revert to pending"}
 												</button>
-											)}
+											) : null}
 											<button
 												className='workflow-action cancel'
 												type='button'
@@ -9606,6 +9646,26 @@ const ReservationDetail = ({
 												</strong>
 											</span>
 										</div>
+										{showImmutableCustomerBookingSource ? (
+											<div className='detail-item'>
+												<span className='detail-icon'>
+													<BankOutlined />
+												</span>
+												<span className='middle-inline-line'>
+													<span className='inline-label'>
+														{chosenLanguage === "Arabic"
+															? "\u0627\u0644\u0645\u0635\u062f\u0631 \u0627\u0644\u0623\u0635\u0644\u064a"
+															: "Original Source"}
+														:
+													</span>
+													<strong>
+														{formatLeadingCapital(
+															immutableCustomerBookingSource,
+														)}
+													</strong>
+												</span>
+											</div>
+										) : null}
 										<div className='detail-item'>
 											<span className='detail-icon'>
 												<CalendarOutlined />
@@ -9758,7 +9818,7 @@ const ReservationDetail = ({
 																		: "Accept"}
 																</button>
 															</>
-														) : (
+														) : canRevertPendingDecision ? (
 															<button
 																className='payment-preview-action pending'
 																type='button'
@@ -9769,7 +9829,7 @@ const ReservationDetail = ({
 																	? AR_LABELS.revertToPending
 																	: "Revert to pending"}
 															</button>
-														)}
+														) : null}
 														<button
 															className='payment-preview-action cancel'
 															type='button'

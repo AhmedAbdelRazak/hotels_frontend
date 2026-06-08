@@ -5,6 +5,17 @@ const isAdminRoutePath = () =>
 	typeof window !== "undefined" &&
 	String(window.location?.pathname || "").startsWith("/admin");
 
+const isHotelManagementRoutePath = () =>
+	typeof window !== "undefined" &&
+	String(window.location?.pathname || "").startsWith("/hotel-management");
+
+const withHotelManagementSourceViewHeader = (headers = {}) => ({
+	...headers,
+	...(isHotelManagementRoutePath()
+		? { "X-Reservation-Source-View": "hotel-management" }
+		: {}),
+});
+
 const getStoredBaseAuthHeaders = () => {
 	try {
 		if (typeof window === "undefined") return {};
@@ -13,11 +24,13 @@ const getStoredBaseAuthHeaders = () => {
 		if (parsed?.token && isJwtExpired(parsed.token)) {
 			localStorage.removeItem("jwt");
 			localStorage.removeItem("dashboardPreviewAuth");
-			return {};
+			return withHotelManagementSourceViewHeader();
 		}
-		return parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {};
+		return withHotelManagementSourceViewHeader(
+			parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {}
+		);
 	} catch (err) {
-		return {};
+		return withHotelManagementSourceViewHeader();
 	}
 };
 
@@ -31,12 +44,14 @@ const getStoredAuthHeaders = () => {
 			if (isJwtExpired(preview.auth.token)) {
 				stopDashboardPreview();
 			} else {
-				return { Authorization: `Bearer ${preview.auth.token}` };
+				return withHotelManagementSourceViewHeader({
+					Authorization: `Bearer ${preview.auth.token}`,
+				});
 			}
 		}
 		return getStoredBaseAuthHeaders();
 	} catch (err) {
-		return {};
+		return withHotelManagementSourceViewHeader();
 	}
 };
 
@@ -245,6 +260,7 @@ export const getHotelMainDashboardStats = (
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -265,6 +281,7 @@ export const getManagerExecutiveSummary = (userId, token, params = {}) => {
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -293,6 +310,7 @@ export const getManagerExecutiveIncompleteReservations = (
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -523,6 +541,7 @@ export const getHotelDashboardOpenReservations = (
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -551,6 +570,7 @@ export const getHotelDashboardIncompleteReservations = (
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -715,6 +735,10 @@ export const getHotelReservations = (hotelId, userId, startdate, enddate) => {
 		`${process.env.REACT_APP_API_URL}/reservations/${startdate}/${enddate}/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -733,6 +757,10 @@ export const getHotelReservationsRange = (
 		`${process.env.REACT_APP_API_URL}/reservations/occupancy/range/${startdate}/${enddate}/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -744,6 +772,10 @@ export const getHotelReservationsCurrent = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/occupancy/current/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -755,6 +787,10 @@ export const getHotelMapSummary = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/occupancy/summary/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -766,6 +802,10 @@ export const getTodaysCheckins = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/checkins-today/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -808,6 +848,10 @@ export const getHotelInventoryCalendar = (
 		}/hotel-inventory/${hotelId}/calendar?${params.toString()}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -837,6 +881,10 @@ export const getHotelInventoryDayReservations = (
 		}/hotel-inventory/${hotelId}/day?${params.toString()}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => response.json())
@@ -886,6 +934,10 @@ export const getReservationSearch = (searchQuery, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/search/${searchQuery}/${hotelId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -899,6 +951,10 @@ export const getReservationSearchAllMatches = (searchQuery, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/search/all-list/${searchQuery}/${hotelId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -936,6 +992,10 @@ export const checkedoutReservationsList = (
 		`${process.env.REACT_APP_API_URL}/reservations-checkedout/${page}/${records}/${hotelId}/${channel}/${startDate}/${endDate}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -949,6 +1009,10 @@ export const getCheckedOutReservations = (page, records, hotelId) => {
 		`${process.env.REACT_APP_API_URL}/checkedout-reservations/list/${page}/${records}/${hotelId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -975,6 +1039,10 @@ export const generalReportReservationsList = (
 		`${process.env.REACT_APP_API_URL}/reservations-general-report/${page}/${records}/${hotelId}/${channel}/${startDate}/${endDate}/${dateBy}/${noshow}/${cancel}/${inhouse}/${showCheckedout}/${payment}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1000,6 +1068,10 @@ export const getGeneralReportReservations = (
 		`${process.env.REACT_APP_API_URL}/general-report-reservations/list/${hotelId}/${channel}/${startDate}/${endDate}/${dateBy}/${noshow}/${cancel}/${inhouse}/${showCheckedout}/${payment}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1067,6 +1139,10 @@ export const checkedoutReservationsTotalRecords = (
 		`${process.env.REACT_APP_API_URL}/reservations-summary-checkedout/${hotelId}/${channel}/${startDate}/${endDate}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1080,6 +1156,10 @@ export const singlePreReservation = (reservationNumber, hotelId, belongsTo) => {
 		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationNumber}/${hotelId}/${belongsTo}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1138,6 +1218,10 @@ export const getOpenFinanceCycleNotifications = (hotelId, userId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/open-finance-cycles/${hotelId}/${userId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1151,6 +1235,10 @@ export const gettingRoomInventory = (startdate, enddate, userId, accountId) => {
 		`${process.env.REACT_APP_API_URL}/room-inventory-reserved/${startdate}/${enddate}/${userId}/${accountId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1164,6 +1252,10 @@ export const gettingDayOverDayInventory = (userId, accountId) => {
 		`${process.env.REACT_APP_API_URL}/inventory-report/${userId}/${accountId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1375,6 +1467,10 @@ export const gettingDateReport = (date, hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/reservations/todate/ahowan/yaba/${date}/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1388,6 +1484,10 @@ export const gettingDayOverDay = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/dayoverday/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1401,6 +1501,10 @@ export const gettingMonthOverMonth = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/monthovermonth/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1414,6 +1518,10 @@ export const gettingBookingSource = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/bookingsource/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1427,6 +1535,10 @@ export const gettingReservationStatus = (hotelId, userMainId) => {
 		`${process.env.REACT_APP_API_URL}/reservationstatus/${hotelId}/${userMainId}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -1577,6 +1689,7 @@ export const getSubscriptionData = (userId, token, subscriptionId) => {
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -1775,6 +1888,7 @@ export const pendingPaymentReservationList = (page, records, hotelId) => {
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -2477,6 +2591,7 @@ export const gettingCommissionPaidReservations = (page, records, hotelId) => {
 			method: "GET",
 			headers: {
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -2806,6 +2921,10 @@ export const gettingAdminDashboardFigures = (hotelId, params = {}) => {
 		`${process.env.REACT_APP_API_URL}/admin-dashboard-reports/${hotelId}${queryString}`,
 		{
 			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
 		},
 	)
 		.then((response) => {
@@ -2897,6 +3016,7 @@ export const getReservationsByDay = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -2929,6 +3049,7 @@ export const getCheckinsByDay = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -2959,6 +3080,7 @@ export const getCheckoutsByDay = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -2989,6 +3111,7 @@ export const getReservationsByDayByHotelName = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3021,6 +3144,7 @@ export const getReservationsByBookingStatus = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3053,6 +3177,7 @@ export const getReservationsByHotelNames = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3086,6 +3211,7 @@ export const getTopHotelsByReservations = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3117,6 +3243,7 @@ export const getSpecificListOfReservations = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3151,6 +3278,7 @@ export const getPaidBreakdownReportHotel = (
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3171,6 +3299,7 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 			headers: {
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
 			},
 		},
 	)
@@ -3205,7 +3334,9 @@ export const currencyConversion = (amounts) => {
 
 const API = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
 const authHeaders = (token) =>
-	token ? { Authorization: `Bearer ${token}` } : {};
+	withHotelManagementSourceViewHeader(
+		token ? { Authorization: `Bearer ${token}` } : {}
+	);
 
 /** Owner PayPal client token for Card Fields / Buttons */
 export async function getOwnerPayPalClientToken({

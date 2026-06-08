@@ -105,6 +105,14 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 		setDisplayName(e.target.value);
 	};
 
+	const quickRepliesForMessage = (msg = {}) =>
+		Array.isArray(msg.quickReplies)
+			? msg.quickReplies
+					.map((reply) => String(reply?.label || "").trim())
+					.filter(Boolean)
+					.slice(0, 4)
+			: [];
+
 	useEffect(() => {
 		const handleTyping = (data) => {
 			if (data.caseId === chat._id && data.name !== displayName) {
@@ -165,14 +173,26 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 				</>
 			)}
 			<ChatMessages>
-				{messages.map((msg, index) => (
+				{messages.map((msg, index) => {
+					const quickReplies = quickRepliesForMessage(msg);
+					return (
 					<Message key={index}>
 						<strong>{msg.messageBy.customerName}:</strong> {msg.message}
+						{quickReplies.length > 0 && (
+							<QuickReplyPreview>
+								{quickReplies.map((label) => (
+									<QuickReplyChip key={label} type='button' disabled>
+										{label}
+									</QuickReplyChip>
+								))}
+							</QuickReplyPreview>
+						)}
 						<div>
 							<small>{new Date(msg.date).toLocaleString()}</small>
 						</div>
 					</Message>
-				))}
+					);
+				})}
 				{typingStatus && <TypingStatus>{typingStatus}</TypingStatus>}
 			</ChatMessages>
 			{!isHistory && caseStatus === "open" && (
@@ -231,6 +251,27 @@ const Message = styled.div`
 	border-radius: 8px;
 	background-color: var(--background-light);
 	margin-bottom: 10px;
+`;
+
+const QuickReplyPreview = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+`;
+
+const QuickReplyChip = styled.button`
+	max-width: 100%;
+	padding: 4px 9px;
+	border: 1px solid #b9d7ef;
+	border-radius: 8px;
+	background: #f5fbff;
+	color: #123b5d;
+	font-size: 0.8rem;
+	font-weight: 800;
+	line-height: 1.25;
+	cursor: default;
+	opacity: 1;
 `;
 
 const StatusSelect = styled(Select)`

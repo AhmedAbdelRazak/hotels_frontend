@@ -1,3 +1,33 @@
+import { isJwtExpired } from "../auth";
+
+const isHotelManagementRoutePath = () =>
+	typeof window !== "undefined" &&
+	String(window.location?.pathname || "").startsWith("/hotel-management");
+
+const withHotelManagementSourceViewHeader = (headers = {}) => ({
+	...headers,
+	...(isHotelManagementRoutePath()
+		? { "X-Reservation-Source-View": "hotel-management" }
+		: {}),
+});
+
+const getStoredAuthHeaders = () => {
+	try {
+		if (typeof window === "undefined") return {};
+		const raw = localStorage.getItem("jwt");
+		const parsed = raw ? JSON.parse(raw) : null;
+		if (parsed?.token && isJwtExpired(parsed.token)) {
+			localStorage.removeItem("jwt");
+			return withHotelManagementSourceViewHeader();
+		}
+		return withHotelManagementSourceViewHeader(
+			parsed?.token ? { Authorization: `Bearer ${parsed.token}` } : {}
+		);
+	} catch (err) {
+		return withHotelManagementSourceViewHeader();
+	}
+};
+
 export const hotelAccount = (userId, token, accountId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
@@ -26,6 +56,7 @@ export const getAggregatedReservations = (month, hotelIds) => {
 				// content type?
 				"Content-Type": "application/json",
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		}
 	)
@@ -44,6 +75,7 @@ export const getReservationToDate = (hotelIds, date) => {
 				// content type?
 				"Content-Type": "application/json",
 				Accept: "application/json",
+				...getStoredAuthHeaders(),
 			},
 		}
 	)
