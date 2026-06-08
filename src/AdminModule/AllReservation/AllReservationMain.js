@@ -311,7 +311,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	/** Fetch hotels list (uses getUser._id + token) */
 	const adminAllHotelDetails = useCallback(() => {
 		if (!getUser?._id || !token) return;
-		gettingHotelDetailsForAdminAll(getUser._id, token)
+		gettingHotelDetailsForAdminAll(getUser._id, token, "summary=true")
 			.then((data) => {
 				const hotels = extractHotels(data.hotels);
 				const sorted = [...hotels].filter(Boolean).sort((a, b) =>

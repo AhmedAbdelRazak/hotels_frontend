@@ -94,7 +94,11 @@ const HelperSideDrawer = ({
 
 	const getAllHotels = useCallback(async () => {
 		try {
-			const data = await gettingHotelDetailsForAdminAll(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(
+				user._id,
+				token,
+				"summary=true"
+			);
 			if (data && !data.error) {
 				const sortedHotels = data.hotels.sort((a, b) =>
 					a.hotelName.localeCompare(b.hotelName)

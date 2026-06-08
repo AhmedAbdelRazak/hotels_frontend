@@ -93,7 +93,7 @@ const IntegratorMain = ({ chosenLanguage }) => {
 	const adminAllHotelDetails = useCallback(() => {
 		if (!user?._id || !token) return;
 
-		gettingHotelDetailsForAdminAll(user._id, token)
+		gettingHotelDetailsForAdminAll(user._id, token, "summary=true")
 			.then((data) => {
 				const hotels = extractHotels(data.hotels);
 
