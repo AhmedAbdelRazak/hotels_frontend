@@ -56,6 +56,10 @@ import { isConfiguredSuperAdminUser } from "../../AdminModule/utils/superUsers";
 const TABS = ["active", "history", "start"];
 const MAX_CLIENT_ATTACHMENT_SIZE = 6 * 1024 * 1024;
 const POLL_MS = 25000;
+const isMobileKeyboardViewport = () =>
+	typeof window !== "undefined" &&
+	(window.innerWidth <= 768 ||
+		window.matchMedia?.("(pointer: coarse)")?.matches);
 const CHAT_EMOJI = {
 	header: "\u{1F4AC}",
 	active: "\u{1F7E2}",
@@ -864,7 +868,14 @@ const B2BChatMain = () => {
 
 	const handleComposerKeyDown = (event) => {
 		if (event.key !== "Enter" || event.nativeEvent?.isComposing) return;
-		if (event.ctrlKey || event.metaKey) return;
+		if (
+			event.shiftKey ||
+			event.ctrlKey ||
+			event.metaKey ||
+			isMobileKeyboardViewport()
+		) {
+			return;
+		}
 		event.preventDefault();
 		handleSend();
 	};
@@ -1153,6 +1164,7 @@ const B2BChatMain = () => {
 													onKeyDown={handleComposerKeyDown}
 													onPaste={handlePaste}
 													autoSize={{ minRows: 2, maxRows: 5 }}
+													enterKeyHint={isMobileKeyboardViewport() ? "enter" : "send"}
 													placeholder={labels.messagePlaceholder}
 												/>
 												{!!attachments.length && (

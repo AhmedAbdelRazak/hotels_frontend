@@ -26,6 +26,10 @@ const { Option } = Select;
 
 const RTL_LANGUAGE_PATTERN = /(arabic|urdu|\bar\b|\bur\b|العربية|اردو)/i;
 const RTL_SCRIPT_PATTERN = /[\u0590-\u08FF]/;
+const isMobileKeyboardViewport = () =>
+	typeof window !== "undefined" &&
+	(window.innerWidth <= 768 ||
+		window.matchMedia?.("(pointer: coarse)")?.matches);
 
 const CHAT_DETAIL_LABELS = {
 	ltr: {
@@ -233,7 +237,7 @@ const ChatDetail = ({
 	// For mobile "back" arrow logic
 	const history = useHistory();
 	const location = useLocation();
-	const isMobile = window.innerWidth <= 768;
+	const isMobile = isMobileKeyboardViewport();
 	const queryParams = new URLSearchParams(location.search);
 	const caseIdParam = queryParams.get("caseId") || queryParams.get("id");
 	const firstConversation = getFirstConversation(chat);
@@ -397,7 +401,12 @@ const ChatDetail = ({
 	};
 
 	const handleKeyPress = (e) => {
-		if (e.key === "Enter" && !e.shiftKey) {
+		if (
+			e.key === "Enter" &&
+			!e.shiftKey &&
+			!e.nativeEvent?.isComposing &&
+			!isMobile
+		) {
 			e.preventDefault();
 			handleSendMessage();
 		}
@@ -883,6 +892,7 @@ const ChatDetail = ({
 						onKeyDown={handleKeyPress}
 						onBlur={handleInputBlur}
 						autoSize={{ minRows: 1, maxRows: 6 }}
+						enterKeyHint={isMobile ? "enter" : "send"}
 						disabled={manualReplyLocked}
 						style={{
 							textAlign: chatIsRtl ? "right" : "left",

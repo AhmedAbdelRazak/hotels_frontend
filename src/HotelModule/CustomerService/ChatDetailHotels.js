@@ -8,6 +8,10 @@ import EmojiPicker from "emoji-picker-react";
 import { SmileOutlined, UploadOutlined } from "@ant-design/icons";
 
 const { Option } = Select;
+const isMobileKeyboardViewport = () =>
+	typeof window !== "undefined" &&
+	(window.innerWidth <= 768 ||
+		window.matchMedia?.("(pointer: coarse)")?.matches);
 
 const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 	const { user, token } = isAuthenticated();
@@ -54,6 +58,18 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 
 	const handleInputBlur = () => {
 		socket.emit("stopTyping", { name: displayName, caseId: chat._id });
+	};
+
+	const handleKeyPress = (e) => {
+		if (
+			e.key === "Enter" &&
+			!e.shiftKey &&
+			!e.nativeEvent?.isComposing &&
+			!isMobileKeyboardViewport()
+		) {
+			e.preventDefault();
+			handleSendMessage();
+		}
 	};
 
 	const handleSendMessage = async () => {
@@ -197,12 +213,14 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 			</ChatMessages>
 			{!isHistory && caseStatus === "open" && (
 				<ChatInputContainer>
-					<Input
+					<Input.TextArea
 						placeholder='Type your message...'
 						value={newMessage}
 						onChange={handleInputChange}
 						onBlur={handleInputBlur}
-						onPressEnter={handleSendMessage}
+						onKeyDown={handleKeyPress}
+						autoSize={{ minRows: 1, maxRows: 5 }}
+						enterKeyHint={isMobileKeyboardViewport() ? "enter" : "send"}
 					/>
 					<SmileOutlined onClick={() => setShowEmojiPicker(!showEmojiPicker)} />
 					{showEmojiPicker && (
@@ -284,7 +302,8 @@ const ChatInputContainer = styled.div`
 	align-items: center;
 	gap: 5px;
 
-	input {
+	input,
+	textarea {
 		flex-grow: 1;
 	}
 
