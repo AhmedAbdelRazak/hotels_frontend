@@ -2151,3 +2151,31 @@ Future TODO Backlog - Added 2026-05-26
   - src/AdminModule/AllReservation/MoreDetails.js shows the original source to platform admin / SUPER ADMIN viewers inside the reservation workflow/source area.
   - src/AdminModule/AllReservation/EnhancedContentTable.js shows a small "Original" source line only when the immutable source differs from the editable main source.
   - The existing Booking Source filter uses backend options that include both top-level booking_source and customer_details.booking_source, so admins can filter by the original OTA source after the main source has been changed.
+
+2026-06-08 Final Reservation Policy Audit And Verification Notes
+- Scope reviewed in this pass:
+  - Hotel-management reservation-history visibility cutoff is backend-owned; React should consume returned rows and must not try to show pre-April-1-2026 rows for hotel-side users.
+  - /hotel-management views must always present AI Chat reservations as Jannat Employee because the hotel-management API clients send X-Reservation-Source-View: hotel-management on that route.
+  - /admin views use the AdminModule API client without the hotel-management source-view header, so platform admins and SUPER ADMIN users can identify AI Chat reservations where allowed.
+  - Existing booking_source is not editable from hotel-management UI in any meaningful way; backend remains the final authority and rejects/strips unauthorized source changes.
+  - Direct "Revert to pending" actions are hidden and guarded unless isSuperAdminUser(user) passes.
+  - OTA original source displays only to admin-route platform admin / SUPER ADMIN viewers when customer_details.booking_source exists.
+  - AI support quickReplies render as read-only audit chips in admin/hotel support detail screens; guest quick-reply sending remains the public widget responsibility.
+- Frontend files to protect:
+  - src/HotelModule/apiAdmin.js attaches auth/preview headers to legacy hotel-management reservation/report calls and adds X-Reservation-Source-View only on /hotel-management paths.
+  - src/OwnerContent/apiOwner.js does the same for owner reservation aggregation/date endpoints used by hotel-management.
+  - src/AdminModule/apiAdmin.js must not add the hotel-management source-view header for /admin all-reservations.
+  - src/AdminModule/AllReservation/MoreDetails.js handles privileged source display, OTA original source display, SUPER ADMIN-only reversion controls, and admin reservation workflow actions.
+  - src/AdminModule/AllReservation/EnhancedContentTable.js displays the editable main booking source plus the immutable Original source line when they differ.
+  - src/HotelModule/ReservationsFolder/ReservationDetail.js and src/HotelModule/NewReservation/PendingConfirmationReport.js keep direct pending reversion hidden for non-SUPER users.
+  - src/AdminModule/CustomerService/ChatDetail.js and src/HotelModule/CustomerService/ChatDetailHotels.js render stored AI quickReplies for staff audit.
+- Maintenance requirements:
+  - Add auth headers to new hotel-management reservation/report reads so the backend can recognize SUPER ADMIN/platform bypass users; missing auth intentionally receives the April 1, 2026 cutoff.
+  - Never add X-Reservation-Source-View to AdminModule platform-admin calls.
+  - Do not add a React-only workaround for AI Chat source masking or historical cutoff; the backend response is the source of truth.
+  - If a new admin reservation table or filter is added, include customer_booking_source / customer_details.booking_source as the immutable original OTA source when the backend returns it.
+  - Keep "Revert to pending" UI gated by configured SUPER ADMIN logic even if other admin roles can edit reservation details.
+- Verification performed locally:
+  - npm run build completed successfully.
+  - npm test -- --watchAll=false reports no test files in this frontend repo; rerun with --passWithNoTests for a green no-tests smoke check.
+  - git diff --check should remain clean apart from normal Windows LF-to-CRLF warnings.
