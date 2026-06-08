@@ -2201,3 +2201,13 @@ Future TODO Backlog - Added 2026-05-26
   - https://xhotelpro.com/socket.io/?EIO=4&transport=polling returned 200.
 - Chatbot UX note:
   - The backend production .env was tuned to use a visible but shorter human-like cadence, so the AI bot should feel responsive without instant robotic replies.
+
+2026-06-08 B2C AI Reservation Date-Update Frontend Contract
+- Backend-owned behavior:
+  - The chatbot can now complete simple existing-reservation date changes after backend availability validation. Frontend support screens should treat the resulting AI messages like normal saved conversation turns.
+  - Successful AI date updates return the reservation to the internal Pending Confirmation workflow while guest copy remains calm/confirmed and includes reservation details and payment links.
+  - If the requested dates are unavailable, backend AI may send selectable close-date or alternative-room quickReplies. Public guest chat is responsible for sending the clicked quick-reply value back as a normal guest message.
+- Staff/support UI expectations:
+  - Admin and hotel support detail screens should keep rendering stored AI quickReplies as read-only audit chips under AI messages, including date-update option buttons.
+  - Do not add frontend-only reservation update logic or availability guessing. Date updates, payment/detail links, pending-confirmation state, notifications, and inventory checks are backend-owned.
+  - /support-cases/:id/seen-by-admin may return 200 alreadySeen=true when all messages are already seen; the UI should treat this as success, not as an error state.
