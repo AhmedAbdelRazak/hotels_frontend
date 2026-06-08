@@ -111,6 +111,7 @@ Role Expectations In The Frontend
   - Keep the internal roleDescription as systemadmin for compatibility; user-facing labels should say Hotel System Admin.
 - Hotel manager / hotelmanager
   - Hotel-management access for assigned hotel scope, including operations, settings, staff, reservations, housekeeping, and reports where authorized.
+  - Scoped role 2000 accounts must receive the same overall side-menu entries as roleDescription hotelmanager even if the stored roleDescription is missing; backend scope still limits them to assigned hotels.
 - Reception / role 3000 or reception
   - New reservation and reservation-list workflows for assigned hotels.
 - Finance / role 6000 or finance

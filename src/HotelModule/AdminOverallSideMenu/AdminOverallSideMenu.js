@@ -179,11 +179,16 @@ const canViewOverallKey = (user = {}, key = "") => {
 
 	if (["overall-summary"].includes(key)) {
 		return (
+			[2000, 3000, 4000, 5000, 6000, 8000].some((role) =>
+				hasRole(user, role)
+			) ||
 			[
 				"hotelmanager",
+				"reception",
 				"finance",
 				"reservationemployee",
 				"housekeepingmanager",
+				"housekeeping",
 			].some((role) => hasDescription(user, role)) ||
 			isOrderTakingScope(user)
 		);
@@ -191,7 +196,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 
 	if (["overall-new-reservation"].includes(key)) {
 		return (
-			[3000, 7000, 8000].some((role) => hasRole(user, role)) ||
+			[2000, 3000, 7000, 8000].some((role) => hasRole(user, role)) ||
 			["hotelmanager", "reception", "ordertaker", "reservationemployee"].some(
 				(role) => hasDescription(user, role)
 			) ||
@@ -201,7 +206,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 
 	if (["overall-reservation-list"].includes(key)) {
 		return (
-			[3000, 6000, 7000, 8000].some((role) => hasRole(user, role)) ||
+			[2000, 3000, 6000, 7000, 8000].some((role) => hasRole(user, role)) ||
 			[
 				"hotelmanager",
 				"reception",
@@ -219,7 +224,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 		].includes(key)
 	) {
 		return (
-			[6000, 8000].some((role) => hasRole(user, role)) ||
+			[2000, 6000, 8000].some((role) => hasRole(user, role)) ||
 			["hotelmanager", "finance", "reservationemployee"].some(
 				(role) => hasDescription(user, role)
 			) ||
@@ -229,7 +234,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 
 	if (key === "overall-housekeeping") {
 		return (
-			[4000, 5000].some((role) => hasRole(user, role)) ||
+			[2000, 4000, 5000].some((role) => hasRole(user, role)) ||
 			["hotelmanager", "housekeepingmanager", "housekeeping"].some((role) =>
 				hasDescription(user, role)
 			)
@@ -244,7 +249,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 		].includes(key)
 	) {
 		return (
-			hasRole(user, 6000) ||
+			[2000, 6000].some((role) => hasRole(user, role)) ||
 			["hotelmanager", "finance"].some((role) => hasDescription(user, role)) ||
 			isOrderTakingScope(user)
 		);
@@ -252,7 +257,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 
 	if (key === "overall-hotel-map") {
 		return (
-			[3000, 6000, 8000].some((role) =>
+			[2000, 3000, 6000, 8000].some((role) =>
 				hasRole(user, role)
 			) ||
 			[
@@ -265,8 +270,11 @@ const canViewOverallKey = (user = {}, key = "") => {
 	}
 
 	if (key === "overall-settings") {
-		return hasRole(user, 8000) || ["hotelmanager", "reservationemployee"].some((role) =>
-			hasDescription(user, role)
+		return (
+			[2000, 8000].some((role) => hasRole(user, role)) ||
+			["hotelmanager", "reservationemployee"].some((role) =>
+				hasDescription(user, role)
+			)
 		);
 	}
 
