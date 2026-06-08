@@ -25,6 +25,10 @@ export const isAiOrSystemSupportMessage = (message = {}) => {
 };
 
 export const supportCaseAdminUnreadMessages = (supportCase = {}, actorId = "") => {
+	if (Number.isFinite(Number(supportCase.adminUnreadCount))) {
+		return Number(supportCase.adminUnreadCount);
+	}
+
 	const normalizedActorId = normalizeSupportChatId(actorId);
 	const conversation = Array.isArray(supportCase.conversation)
 		? supportCase.conversation

@@ -7,6 +7,7 @@ import {
 	getEscalatedClientSupportCases,
 	getAiTrainingChats,
 	getFilteredSupportCasesClients,
+	getSupportCaseById,
 	markAllMessagesAsSeenByAdmin,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
@@ -78,6 +79,7 @@ const ActiveClientsSupportCases = ({
 }) => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
+	const [selectedCaseLoading, setSelectedCaseLoading] = useState(false);
 	const [unseenCount, setUnseenCount] = useState(0);
 	const [learningModalOpen, setLearningModalOpen] = useState(false);
 	const [learningTab, setLearningTab] = useState("upload");
@@ -202,14 +204,25 @@ const ActiveClientsSupportCases = ({
 	const sortSupportCases = useCallback(
 		(cases) => {
 			return [...cases].sort((a, b) => {
+				const latestCaseDate = (supportCase) => {
+					if (supportCase.latestConversationAt) {
+						return supportCase.latestConversationAt;
+					}
+					const conversation = Array.isArray(supportCase.conversation)
+						? supportCase.conversation
+						: [];
+					return (
+						conversation
+							.filter((msg) => msg.messageBy?.userId !== user._id)
+							.slice(-1)[0]?.date ||
+						supportCase.updatedAt ||
+						supportCase.createdAt
+					);
+				};
 				const latestA =
-					a.conversation
-						.filter((msg) => msg.messageBy.userId !== user._id)
-						.slice(-1)[0]?.date || a.createdAt;
+					latestCaseDate(a) || a.createdAt;
 				const latestB =
-					b.conversation
-						.filter((msg) => msg.messageBy.userId !== user._id)
-						.slice(-1)[0]?.date || b.createdAt;
+					latestCaseDate(b) || b.createdAt;
 				return new Date(latestB) - new Date(latestA); // Descending
 			});
 		},
@@ -295,6 +308,27 @@ const ActiveClientsSupportCases = ({
 		sortSupportCases,
 		caseBelongsToMode,
 	]);
+
+	const loadSupportCaseDetails = useCallback(
+		async (caseObj) => {
+			if (!caseObj?._id) return null;
+			setSelectedCaseLoading(true);
+			try {
+				const data = await getSupportCaseById(caseObj._id, token);
+				if (data?.error || !data?._id) {
+					toast.error("Failed to load support case");
+					return caseObj;
+				}
+				return data;
+			} catch (error) {
+				toast.error("Failed to load support case");
+				return caseObj;
+			} finally {
+				setSelectedCaseLoading(false);
+			}
+		},
+		[token]
+	);
 
 	/* ------------------- SETUP / SOCKET LISTENERS ------------------- */
 	useEffect(() => {
@@ -422,6 +456,7 @@ const ActiveClientsSupportCases = ({
 			});
 			const markSeen = (supportCase) => ({
 				...supportCase,
+				adminUnreadCount: 0,
 				conversation: Array.isArray(supportCase.conversation)
 					? supportCase.conversation.map((message) => ({
 							...message,
@@ -447,6 +482,8 @@ const ActiveClientsSupportCases = ({
 	const handleCaseSelection = async (item) => {
 		if (!item?._id) return;
 		syncCaseIdToUrl(item._id);
+		const fullCase = await loadSupportCaseDetails(item);
+		const caseForChat = fullCase || item;
 
 		// On large screens => local selection, side by side
 		if (!isMobile) {
@@ -454,11 +491,12 @@ const ActiveClientsSupportCases = ({
 			if (selectedCase && selectedCase._id) {
 				socket.emit("leaveRoom", { caseId: selectedCase._id });
 			}
-			setSelectedCase(item);
-			await markCaseAsSeen(item);
+			setSelectedCase(caseForChat);
+			await markCaseAsSeen(caseForChat);
 		} else {
 			// On small screens the URL drives the full-screen chat view.
-			await markCaseAsSeen(item);
+			setSelectedCase(caseForChat);
+			await markCaseAsSeen(caseForChat);
 		}
 	};
 
@@ -495,14 +533,49 @@ const ActiveClientsSupportCases = ({
 			socket.emit("leaveRoom", { caseId: selectedCase._id });
 		}
 		setSelectedCase(foundCase);
-		markCaseAsSeen(foundCase);
-	}, [caseIdParam, isMobile, markCaseAsSeen, selectedCase?._id, supportCases]);
+		let cancelled = false;
+		loadSupportCaseDetails(foundCase).then((fullCase) => {
+			if (cancelled) return;
+			const caseForChat = fullCase || foundCase;
+			setSelectedCase(caseForChat);
+			markCaseAsSeen(caseForChat);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		caseIdParam,
+		isMobile,
+		loadSupportCaseDetails,
+		markCaseAsSeen,
+		selectedCase?._id,
+		supportCases,
+	]);
 
 	useEffect(() => {
 		if (!isMobile || !caseIdParam || !supportCases.length) return;
 		const foundCase = supportCases.find((item) => item._id === caseIdParam);
-		if (foundCase) markCaseAsSeen(foundCase);
-	}, [caseIdParam, isMobile, markCaseAsSeen, supportCases]);
+		if (!foundCase) return;
+		if (selectedCase?._id === foundCase._id) return;
+		setSelectedCase(foundCase);
+		let cancelled = false;
+		loadSupportCaseDetails(foundCase).then((fullCase) => {
+			if (cancelled) return;
+			const caseForChat = fullCase || foundCase;
+			setSelectedCase(caseForChat);
+			markCaseAsSeen(caseForChat);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		caseIdParam,
+		isMobile,
+		loadSupportCaseDetails,
+		markCaseAsSeen,
+		selectedCase?._id,
+		supportCases,
+	]);
 
 	useEffect(() => {
 		const params = new URLSearchParams(location.search);
@@ -598,19 +671,23 @@ const ActiveClientsSupportCases = ({
 		// If we have a caseId in the URL, show chat in full screen
 		if (caseIdParam) {
 			const foundCase = supportCases.find((c) => c._id === caseIdParam);
-			if (!foundCase) {
+			const visibleCase =
+				selectedCase?._id === caseIdParam ? selectedCase : foundCase;
+			if (!visibleCase) {
 				return <div>Loading case...</div>; // or fetch single case if needed
 			}
 
 			return (
 				<ActiveClientsSupportCasesWrapperMobile>
-					<ChatDetail
-						chat={foundCase}
-						fetchChats={fetchSupportCases}
-						selectedCase={foundCase}
-						setSelectedCase={setSelectedCase}
-						setSupportCases={setSupportCases}
-					/>
+					<Spin spinning={selectedCaseLoading}>
+						<ChatDetail
+							chat={visibleCase}
+							fetchChats={fetchSupportCases}
+							selectedCase={visibleCase}
+							setSelectedCase={setSelectedCase}
+							setSupportCases={setSupportCases}
+						/>
+					</Spin>
 				</ActiveClientsSupportCasesWrapperMobile>
 			);
 		} else {
@@ -759,13 +836,15 @@ const ActiveClientsSupportCases = ({
 
 				{selectedCase && (
 					<ChatDetailWrapper>
-						<ChatDetail
-							chat={selectedCase}
-							fetchChats={fetchSupportCases}
-							selectedCase={selectedCase}
-							setSelectedCase={setSelectedCase}
-							setSupportCases={setSupportCases}
-						/>
+						<Spin spinning={selectedCaseLoading}>
+							<ChatDetail
+								chat={selectedCase}
+								fetchChats={fetchSupportCases}
+								selectedCase={selectedCase}
+								setSelectedCase={setSelectedCase}
+								setSupportCases={setSupportCases}
+							/>
+						</Spin>
 					</ChatDetailWrapper>
 				)}
 			</MainContentWrapper>
