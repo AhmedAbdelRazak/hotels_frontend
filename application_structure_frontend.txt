@@ -2206,8 +2206,21 @@ Future TODO Backlog - Added 2026-05-26
 - Backend-owned behavior:
   - The chatbot can now complete simple existing-reservation date changes after backend availability validation. Frontend support screens should treat the resulting AI messages like normal saved conversation turns.
   - Successful AI date updates return the reservation to the internal Pending Confirmation workflow while guest copy remains calm/confirmed and includes reservation details and payment links.
-  - If the requested dates are unavailable, backend AI may send selectable close-date or alternative-room quickReplies. Public guest chat is responsible for sending the clicked quick-reply value back as a normal guest message.
+ - If the requested dates are unavailable, backend AI may send selectable close-date or alternative-room quickReplies. Public guest chat is responsible for sending the clicked quick-reply value back as a normal guest message.
 - Staff/support UI expectations:
   - Admin and hotel support detail screens should keep rendering stored AI quickReplies as read-only audit chips under AI messages, including date-update option buttons.
   - Do not add frontend-only reservation update logic or availability guessing. Date updates, payment/detail links, pending-confirmation state, notifications, and inventory checks are backend-owned.
   - /support-cases/:id/seen-by-admin may return 200 alreadySeen=true when all messages are already seen; the UI should treat this as success, not as an error state.
+
+2026-06-08 Strict Hotel-Scoped B2C AI Chat Frontend Contract
+- Rule:
+  - A hotel support chatbot is scoped to the active hotel only.
+  - The public widget, admin customer-service view, and hotel customer-service view should not expect cross-hotel recommendations from a hotel-attached B2C support case.
+  - If the guest asks about other hotels from a hotel-attached chat, the backend AI should answer that it can help with the current hotel only and offer same-hotel room/date support.
+- UI behavior:
+  - Quick replies for unavailable booking/update requests should be treated as same-hotel close-date or same-hotel alternative-room choices unless the support case has no active hotel context.
+  - Staff audit chips may display those quick replies exactly as saved, but frontend code must not generate other-hotel recommendation buttons for an active hotel chat.
+  - Keep public hotel recommendation UI separate from hotel-scoped support cases; platform/global recommendation flows can exist only when the backend has no active hotel context for the chat.
+- Backend-owned enforcement:
+  - The backend prompt/routing layer blocks active hotel chats from listing, linking, comparing, or implying knowledge of other hotels.
+  - Frontend changes should not attempt to bypass that by constructing public hotel URLs from support-case messages.
