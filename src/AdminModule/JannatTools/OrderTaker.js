@@ -235,7 +235,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	const getAllHotels = useCallback(async () => {
 		if (!effectiveUserId || !token) return;
 		try {
-			const data = await gettingHotelDetailsForAdminAll(effectiveUserId, token);
+			const data = await gettingHotelDetailsForAdminAll(
+				effectiveUserId,
+				token,
+				"view=order-taker",
+			);
 			if (data && !data.error) {
 				// Only keep active hotels
 				const activeHotels = (data.hotels || []).filter(
