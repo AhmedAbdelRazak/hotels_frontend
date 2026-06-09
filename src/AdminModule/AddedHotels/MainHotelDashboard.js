@@ -472,8 +472,8 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 		languageToggle(chosenLanguage === "English" ? "Arabic" : "English");
 
 	/* ───── fetch list (server‑side pagination + search + filters) ───── */
-	const fetchHotels = useCallback(() => {
-		setLoading(true);
+	const fetchHotels = useCallback(({ silent = false } = {}) => {
+		if (!silent) setLoading(true);
 
 		const qs = new URLSearchParams({
 			page,
@@ -494,7 +494,9 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 				});
 			})
 			.catch((e) => message.error(e.message || "Error"))
-			.finally(() => setLoading(false));
+			.finally(() => {
+				if (!silent) setLoading(false);
+			});
 	}, [
 		admin._id,
 		token,
@@ -544,8 +546,29 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 				return updateAdminHotelActivation(hotel._id, admin._id, token, payload)
 					.then((r) => {
 						if (r?.error) throw new Error(r.error);
+						setHotels((currentHotels) =>
+							currentHotels.map((item) =>
+								item?._id === hotel?._id
+									? {
+											...item,
+											activateHotel:
+												typeof r.activateHotel === "boolean"
+													? r.activateHotel
+													: value
+													  ? true
+													  : item.activateHotel,
+											xHotelProActive:
+												typeof r.xHotelProActive === "boolean"
+													? r.xHotelProActive
+													: value,
+											fromPage: r.fromPage || item.fromPage,
+											updatedAt: r.updatedAt || item.updatedAt,
+									  }
+									: item
+							)
+						);
 						message.success(L.saved);
-						fetchHotels();
+						fetchHotels({ silent: true });
 					})
 					.catch((e) => message.error(e.message || "Error"));
 			},
