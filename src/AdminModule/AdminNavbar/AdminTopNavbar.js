@@ -344,6 +344,27 @@ const latestSupportCaseDate = (supportCase = {}) => {
 	);
 };
 
+const adminNotificationTime = (item = {}) => {
+	const value =
+		item.notificationDate ||
+		item.lastAt ||
+		item.updatedAt ||
+		item.booked_at ||
+		item.createdAt ||
+		item.taskDate ||
+		item.checkin_date ||
+		"";
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+};
+
+const sortAdminNotificationsNewestFirst = (items = []) =>
+	(Array.isArray(items) ? [...items] : []).sort((a, b) => {
+		const timeDiff = adminNotificationTime(b) - adminNotificationTime(a);
+		if (timeDiff) return timeDiff;
+		return String(b?._id || "").localeCompare(String(a?._id || ""));
+	});
+
 const supportCaseUnseenCount = (supportCase = {}, actorId = "") => {
 	return supportCaseAdminUnreadMessages(supportCase, actorId);
 };
@@ -691,7 +712,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 					notificationFeedTotalRef.current = nextTotal;
 					setHotelNotificationFeed({
 						total: nextTotal,
-						data: Array.isArray(hotelFeed?.data) ? hotelFeed.data : [],
+						data: sortAdminNotificationsNewestFirst(
+							Array.isArray(hotelFeed?.data) ? hotelFeed.data : []
+						).slice(0, 12),
 					});
 				} else {
 					notificationFeedReadyRef.current = false;

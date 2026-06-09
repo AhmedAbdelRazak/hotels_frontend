@@ -618,6 +618,27 @@ const housekeepingTaskLabel = (task = {}) => {
 	return task.customTask || task.task_comment || "Housekeeping task";
 };
 
+const notificationItemTime = (item = {}) => {
+	const value =
+		item.notificationDate ||
+		item.lastAt ||
+		item.updatedAt ||
+		item.taskDate ||
+		item.booked_at ||
+		item.createdAt ||
+		item.checkin_date ||
+		"";
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+};
+
+const sortNotificationItemsNewestFirst = (items = []) =>
+	(Array.isArray(items) ? [...items] : []).sort((a, b) => {
+		const timeDiff = notificationItemTime(b) - notificationItemTime(a);
+		if (timeDiff) return timeDiff;
+		return String(b?._id || "").localeCompare(String(a?._id || ""));
+	});
+
 const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 	const [roomTypesDropdown, setRoomTypesDropdown] = useState(false);
@@ -979,6 +1000,7 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 								hotelId: notificationHotelId,
 								includeFinished: "false",
 								status: "active",
+								limit: 8,
 						  })
 						: Promise.resolve([]),
 				]);
@@ -1005,6 +1027,8 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						hotelName: taskHotel.hotelName || task.hotelName || "",
 						taskLabel: housekeepingTaskLabel(task),
 						task_status: task.task_status || "",
+						notificationDate:
+							task.updatedAt || task.taskDate || task.createdAt || "",
 						taskDate: task.taskDate || task.createdAt,
 						confirmation_number: task.confirmation_number || "",
 						pendingReasons: ["housekeeping_assigned"],
@@ -1014,7 +1038,10 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 					total:
 						Number(pendingData?.total || reservationItems.length || 0) +
 						housekeepingTasks.length,
-					data: [...housekeepingItems, ...reservationItems].slice(0, 8),
+					data: sortNotificationItemsNewestFirst([
+						...housekeepingItems,
+						...reservationItems,
+					]).slice(0, 8),
 				};
 				const nextTotal = Number(nextFeed.total || 0);
 				const previousTotal = Number(notificationFeedTotalRef.current || 0);
