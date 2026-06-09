@@ -74,6 +74,8 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 	const [allHotels, setAllHotels] = useState([]);
 	const [hotelsLoading, setHotelsLoading] = useState(false);
 	const [hotelsLoaded, setHotelsLoaded] = useState(false);
+	const [pricingLoading, setPricingLoading] = useState(false);
+	const [pricingLoaded, setPricingLoaded] = useState(false);
 	const [checkInDate, setCheckInDate] = useState(null);
 	const [checkOutDate, setCheckOutDate] = useState(null);
 	const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
@@ -85,7 +87,17 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 
 	const { user, token } = isAuthenticated() || {};
 
-	// Fetch active hotel pricing only when the calculator actually needs it.
+	const normalizeActiveHotels = useCallback((hotels = []) => {
+		const activeHotels = (hotels || []).filter(
+			(hotel) =>
+				hotel.activateHotel === true && hotel.xHotelProActive !== false
+		);
+		return activeHotels.sort((a, b) =>
+			(a?.hotelName || "").localeCompare(b?.hotelName || "")
+		);
+	}, []);
+
+	// Fetch only room/hotel options after dates are selected.
 	const getAllHotels = useCallback(async () => {
 		if (!user?._id || !token || hotelsLoading || hotelsLoaded) return;
 		setHotelsLoading(true);
@@ -93,20 +105,10 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 			const data = await gettingHotelDetailsForAdminAll(
 				user._id,
 				token,
-				"view=calculator&status=active"
+				"view=calculator-options&status=active"
 			);
 			if (data && !data.error) {
-				// Only keep hotels that are activateHotel === true
-				const activeHotels = (data.hotels || []).filter(
-					(hotel) =>
-						hotel.activateHotel === true && hotel.xHotelProActive !== false
-				);
-				// Sort them by hotelName
-				const sortedHotels = activeHotels.sort((a, b) =>
-					(a?.hotelName || "").localeCompare(b?.hotelName || "")
-				);
-
-				setAllHotels(sortedHotels);
+				setAllHotels(normalizeActiveHotels(data.hotels || []));
 				setHotelsLoaded(true);
 			} else {
 				message.error("Failed to fetch hotels.");
@@ -118,7 +120,47 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 		} finally {
 			setHotelsLoading(false);
 		}
-	}, [hotelsLoaded, hotelsLoading, user?._id, token]);
+	}, [
+		hotelsLoaded,
+		hotelsLoading,
+		normalizeActiveHotels,
+		user?._id,
+		token,
+	]);
+
+	const getPricingHotels = useCallback(async () => {
+		if (!user?._id || !token) return [];
+		if (pricingLoaded) return allHotels;
+		if (pricingLoading) return [];
+		setPricingLoading(true);
+		try {
+			const data = await gettingHotelDetailsForAdminAll(
+				user._id,
+				token,
+				"view=calculator&status=active"
+			);
+			if (data && !data.error) {
+				const sortedHotels = normalizeActiveHotels(data.hotels || []);
+				setAllHotels(sortedHotels);
+				setHotelsLoaded(true);
+				setPricingLoaded(true);
+				return sortedHotels;
+			}
+			message.error("Failed to fetch hotel pricing.");
+		} catch (error) {
+			console.error("Error fetching hotel pricing:", error);
+		} finally {
+			setPricingLoading(false);
+		}
+		return [];
+	}, [
+		allHotels,
+		normalizeActiveHotels,
+		pricingLoaded,
+		pricingLoading,
+		user?._id,
+		token,
+	]);
 
 	useEffect(() => {
 		if (checkInDate && checkOutDate) {
@@ -262,13 +304,14 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 	);
 
 	// If user clicks "Show Details"
-	const handleShowDetails = () => {
+	const handleShowDetails = async () => {
 		if (!checkInDate || !checkOutDate || !selectedDisplayName) {
 			message.error(TXT.fillFields);
 			return;
 		}
 
-		const hotel = allHotels.find((h) => h._id === selectedHotel);
+		const hotelsForPricing = pricingLoaded ? allHotels : await getPricingHotels();
+		const hotel = hotelsForPricing.find((h) => h._id === selectedHotel);
 		if (!hotel) {
 			message.error(TXT.invalidHotel);
 			return;
@@ -435,7 +478,12 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 					</div>
 				)}
 				{selectedDisplayName && (
-					<Button type='primary' onClick={handleShowDetails}>
+					<Button
+						type='primary'
+						onClick={handleShowDetails}
+						loading={pricingLoading}
+						disabled={pricingLoading}
+					>
 						{TXT.showDetails}
 					</Button>
 				)}
