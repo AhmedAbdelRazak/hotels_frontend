@@ -281,6 +281,8 @@ const pendingStatusOptions = (labels) => [
 	{ value: "rejected", label: labels.rejected },
 ];
 
+const DEFAULT_PENDING_STATUS_FILTER = ["Pending Confirmation"];
+
 const pageFromSearch = (search = "") =>
 	Math.max(parseInt(new URLSearchParams(search || "").get("page"), 10) || 1, 1);
 
@@ -349,7 +351,7 @@ const OverallPendingReservations = ({
 	const [filters, setFilters] = useState({
 		search: "",
 		hotelId: [],
-		status: [],
+		status: rejectedOnly ? [] : DEFAULT_PENDING_STATUS_FILTER,
 		dateBy: "createdAt",
 		dateFrom: "",
 		dateTo: "",

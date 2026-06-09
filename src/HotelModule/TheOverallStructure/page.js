@@ -42,9 +42,15 @@ const OverallStructurePage = ({
 
 	const renderView = () => {
 		if (activeView === "pending-reservations")
-			return <OverallPendingReservations {...props} />;
+			return <OverallPendingReservations key='pending-reservations' {...props} />;
 		if (activeView === "rejected-reservations")
-			return <OverallPendingReservations {...props} rejectedOnly />;
+			return (
+				<OverallPendingReservations
+					key='rejected-reservations'
+					{...props}
+					rejectedOnly
+				/>
+			);
 		if (activeView === "new-reservation")
 			return <NewReservationOverall {...props} />;
 		if (
