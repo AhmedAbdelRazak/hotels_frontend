@@ -60,6 +60,11 @@ const splitRoomKey = (key = "") => {
 	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
 };
 const normalizeId = (value) => String(value?._id || value?.id || value || "").trim();
+const priceVariantRowKey = (row = {}) => {
+	const dataId = normalizeId(row.priceVariantDataId);
+	const itemId = normalizeId(row.priceVariantItemId);
+	return dataId && itemId ? `${dataId}::${itemId}` : "";
+};
 const normalizeAgentCommercialModel = (value = "") => {
 	const normalized = String(value || "").trim().toLowerCase();
 	return ["wallet_inventory", "commission_only", "mixed"].includes(normalized)
@@ -244,7 +249,10 @@ const ZReservationForm2 = ({
 	const [selectedRoomIndex, setSelectedRoomIndex] = useState(null);
 	const [updatedRoomCount, setUpdatedRoomCount] = useState(1);
 	const [totalDistribute, setTotalDistribute] = useState("");
+	const [selectedAgentPriceVariantKey, setSelectedAgentPriceVariantKey] =
+		useState("");
 	const roomSelectionRef = useRef(null);
+	const agentVariantSelectionRef = useRef("");
 
 	const selectedKeys = useMemo(
 		() =>
@@ -304,6 +312,78 @@ const ZReservationForm2 = ({
 		[hotelDetails?.roomCountDetails]
 	);
 
+	const agentPriceVariantOptions = useMemo(() => {
+		if (!limitedOrderTakerAccount || !user?._id) return [];
+		const byKey = new Map();
+		(Array.isArray(hotelDetails?.roomCountDetails)
+			? hotelDetails.roomCountDetails
+			: []
+		).forEach((detail) => {
+			(Array.isArray(detail.agentPricingRate) ? detail.agentPricingRate : [])
+				.filter((row) => normalizeId(row.agentId) === normalizeId(user._id))
+				.forEach((row) => {
+					const key = priceVariantRowKey(row);
+					if (!key || byKey.has(key)) return;
+					const name =
+						chosenLanguage === "Arabic"
+							? row.priceVariantNameOtherLanguage || row.priceVariantName
+							: row.priceVariantName || row.priceVariantNameOtherLanguage;
+					byKey.set(key, {
+						value: key,
+						label: name || "Assigned pricing variant",
+					});
+				});
+		});
+		return [...byKey.values()].sort((left, right) =>
+			String(left.label || "").localeCompare(String(right.label || ""))
+		);
+	}, [
+		chosenLanguage,
+		hotelDetails?.roomCountDetails,
+		limitedOrderTakerAccount,
+		user?._id,
+	]);
+
+	useEffect(() => {
+		if (!limitedOrderTakerAccount) {
+			if (selectedAgentPriceVariantKey) setSelectedAgentPriceVariantKey("");
+			return;
+		}
+		if (!agentPriceVariantOptions.length) {
+			if (selectedAgentPriceVariantKey) setSelectedAgentPriceVariantKey("");
+			return;
+		}
+		const selectedExists = agentPriceVariantOptions.some(
+			(option) => option.value === selectedAgentPriceVariantKey
+		);
+		if (!selectedExists) {
+			setSelectedAgentPriceVariantKey(agentPriceVariantOptions[0].value);
+		}
+	}, [
+		agentPriceVariantOptions,
+		limitedOrderTakerAccount,
+		selectedAgentPriceVariantKey,
+	]);
+
+	useEffect(() => {
+		const previous = agentVariantSelectionRef.current;
+		agentVariantSelectionRef.current = selectedAgentPriceVariantKey;
+		if (
+			!limitedOrderTakerAccount ||
+			!previous ||
+			previous === selectedAgentPriceVariantKey
+		) {
+			return;
+		}
+		setPickedRoomsType([]);
+		setPickedRoomPricing?.([]);
+	}, [
+		limitedOrderTakerAccount,
+		selectedAgentPriceVariantKey,
+		setPickedRoomPricing,
+		setPickedRoomsType,
+	]);
+
 	const getEffectivePricingRate = useCallback(
 		(detail = {}) => {
 			const hotelRows = Array.isArray(detail.pricingRate)
@@ -316,9 +396,18 @@ const ZReservationForm2 = ({
 						(row) => normalizeId(row.agentId) === normalizeId(user._id)
 				  )
 				: [];
-			return agentRows;
+			if (!agentPriceVariantOptions.length) return agentRows;
+			if (!selectedAgentPriceVariantKey) return [];
+			return agentRows.filter(
+				(row) => priceVariantRowKey(row) === selectedAgentPriceVariantKey
+			);
 		},
-		[limitedOrderTakerAccount, user?._id]
+		[
+			agentPriceVariantOptions.length,
+			limitedOrderTakerAccount,
+			selectedAgentPriceVariantKey,
+			user?._id,
+		]
 	);
 
 	const getMissingAssignedPricingDates = useCallback(
@@ -1501,6 +1590,30 @@ const ZReservationForm2 = ({
 											onChange={(e) => setBookingComment(e.target.value)}
 										/>
 									</div>
+									{limitedOrderTakerAccount &&
+									agentPriceVariantOptions.length > 0 ? (
+										<div className='col col-span-2 agent-price-variant-field'>
+											<Label>
+												{chosenLanguage === "Arabic"
+													? "\u062a\u0646\u0648\u064a\u0639\u0629 \u0627\u0644\u0633\u0639\u0631"
+													: "Pricing Variant"}
+											</Label>
+											<Select
+												className='ant-field'
+												value={selectedAgentPriceVariantKey || undefined}
+												onChange={setSelectedAgentPriceVariantKey}
+												options={agentPriceVariantOptions}
+												placeholder={
+													chosenLanguage === "Arabic"
+														? "\u0627\u062e\u062a\u0631 \u062a\u0646\u0648\u064a\u0639\u0629 \u0627\u0644\u0633\u0639\u0631"
+														: "Choose pricing variant"
+												}
+												style={{ width: "100%" }}
+												getPopupContainer={() => document.body}
+												popupStyle={{ zIndex: Z_TOP + 6 }}
+											/>
+										</div>
+									) : null}
 								</div>
 								{limitedOrderTakerAccount ? (
 									<AgentCommissionPanel>
@@ -2407,6 +2520,9 @@ const Block = styled.div`
 	.comment-field {
 		grid-column: 4 / span 6;
 	}
+	.agent-price-variant-field {
+		grid-column: 4 / span 6;
+	}
 	@media (max-width: 1200px) {
 		.col {
 			grid-column: span 6;
@@ -2433,6 +2549,9 @@ const Block = styled.div`
 		}
 
 		.col-span-2 {
+			grid-column: span 12;
+		}
+		.agent-price-variant-field {
 			grid-column: span 12;
 		}
 	}

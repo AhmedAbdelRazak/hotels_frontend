@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Button,
 	Form,
@@ -105,6 +105,11 @@ const TEXT = {
 		customAgentCalendar: "No, customize calendar",
 		assignVariantHint:
 			"Assign saved price variants to agents. Hotels are limited to the selected variants.",
+		assignedAgentHotels: "Agent hotels",
+		derivedAgentHotelsHint:
+			"Hotels are taken from the selected agents' assigned hotel accounts.",
+		noDerivedAgentHotels:
+			"Select agents with hotels matching the chosen price variants.",
 		customAgentCalendarHint:
 			"Create a custom agent calendar with manual price and commission values.",
 		priceVariants: "Price variants",
@@ -191,6 +196,12 @@ const TEXT = {
 			"\u0644\u0627\u060c \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u062a\u0642\u0648\u064a\u0645",
 		assignVariantHint:
 			"\u0639\u064a\u0651\u0646 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0645\u062d\u0641\u0648\u0638\u0629 \u0644\u0644\u0648\u0643\u0644\u0627\u0621. \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u062a\u0638\u0647\u0631 \u062d\u0633\u0628 \u0627\u0644\u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062d\u062f\u062f\u0629.",
+		assignedAgentHotels:
+			"\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0648\u0643\u064a\u0644",
+		derivedAgentHotelsHint:
+			"\u064a\u062a\u0645 \u0623\u062e\u0630 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0645\u0646 \u0627\u0644\u0641\u0646\u0627\u062f\u0642 \u0627\u0644\u0645\u0639\u064a\u0646\u0629 \u0641\u064a \u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0648\u0643\u0644\u0627\u0621 \u0627\u0644\u0645\u062d\u062f\u062f\u064a\u0646.",
+		noDerivedAgentHotels:
+			"\u0627\u062e\u062a\u0631 \u0648\u0643\u0644\u0627\u0621 \u0644\u062f\u064a\u0647\u0645 \u0641\u0646\u0627\u062f\u0642 \u062a\u0637\u0627\u0628\u0642 \u062a\u0646\u0648\u064a\u0639\u0627\u062a \u0627\u0644\u0633\u0639\u0631.",
 		customAgentCalendarHint:
 			"\u0623\u0646\u0634\u0626 \u062a\u0642\u0648\u064a\u0645\u0627\u064b \u0645\u062e\u0635\u0635\u0627\u064b \u0644\u0644\u0648\u0643\u064a\u0644 \u0628\u0633\u0639\u0631 \u0648\u0639\u0645\u0648\u0644\u0629 \u064a\u062f\u0648\u064a\u0629.",
 		priceVariants:
@@ -640,6 +651,11 @@ const OverallCalendarPricingModal = ({
 				: [],
 		[watchedAgentPriceVariantKeys]
 	);
+	const watchedAgentIds = Form.useWatch("agentIds", agentsForm);
+	const selectedAgentIds = useMemo(
+		() => (Array.isArray(watchedAgentIds) ? watchedAgentIds : []),
+		[watchedAgentIds]
+	);
 	const selectedStatus = Form.useWatch("status", activeForm) || "open";
 	const selectedCalendarType = Form.useWatch("calendarType", activeForm) || "hijri";
 	const selectedPeriodMode = Form.useWatch("periodMode", activeForm) || "months";
@@ -674,19 +690,6 @@ const OverallCalendarPricingModal = ({
 				};
 			})
 	);
-
-	const filteredAgentOptions = agents
-		.filter((agent) => {
-			if (!selectedHotelIds.length) return false;
-			const scoped = new Set((agent.hotelIds || []).map(normalizeId));
-			return selectedHotelIds.some((hotelId) => scoped.has(normalizeId(hotelId)));
-		})
-		.map((agent) => ({
-			value: normalizeId(agent._id),
-			label: `${titleCase(agent.name)}${
-				agent.companyName ? ` - ${titleCase(agent.companyName)}` : ""
-			}`,
-		}));
 
 	const priceVariantOptions = useMemo(() => {
 		return (Array.isArray(priceVariantData) ? priceVariantData : [])
@@ -738,6 +741,76 @@ const OverallCalendarPricingModal = ({
 		);
 		return hotelOptions.filter((hotel) => hotelSet.has(normalizeId(hotel.value)));
 	}, [hotelOptions, selectedAgentPriceVariantOptions]);
+	const variantAgentFilterHotelIds = useMemo(
+		() => agentVariantHotelOptions.map((option) => normalizeId(option.value)),
+		[agentVariantHotelOptions]
+	);
+	const agentFilterHotelIds =
+		selectedAgentPricingMode === "variants"
+			? variantAgentFilterHotelIds
+			: selectedHotelIds;
+	const filteredAgentOptions = useMemo(
+		() =>
+			agents
+				.filter((agent) => {
+					if (!agentFilterHotelIds.length) return false;
+					const scoped = new Set((agent.hotelIds || []).map(normalizeId));
+					return agentFilterHotelIds.some((hotelId) =>
+						scoped.has(normalizeId(hotelId))
+					);
+				})
+				.map((agent) => ({
+					value: normalizeId(agent._id),
+					label: `${titleCase(agent.name)}${
+						agent.companyName ? ` - ${titleCase(agent.companyName)}` : ""
+					}`,
+				})),
+		[agentFilterHotelIds, agents]
+	);
+	const deriveAgentVariantHotelIds = useCallback((
+		agentIds = selectedAgentIds,
+		variantKeys = selectedAgentPriceVariantKeys
+	) => {
+		const selectedVariantOptions = priceVariantOptions.filter((option) =>
+			(Array.isArray(variantKeys) ? variantKeys : []).includes(option.value)
+		);
+		const variantHotelIds = new Set(
+			selectedVariantOptions.flatMap((option) =>
+				(option.record?.hotelIds || []).map(normalizeId)
+			)
+		);
+		const agentIdSet = new Set((Array.isArray(agentIds) ? agentIds : []).map(normalizeId));
+		const agentHotelIds = new Set();
+		agents.forEach((agent) => {
+			if (!agentIdSet.has(normalizeId(agent._id))) return;
+			(agent.hotelIds || []).forEach((hotelId) => {
+				const normalizedHotelId = normalizeId(hotelId);
+				if (variantHotelIds.has(normalizedHotelId)) {
+					agentHotelIds.add(normalizedHotelId);
+				}
+			});
+		});
+		return hotelOptions
+			.map((option) => normalizeId(option.value))
+			.filter((hotelId) => agentHotelIds.has(hotelId));
+	}, [
+		agents,
+		hotelOptions,
+		priceVariantOptions,
+		selectedAgentIds,
+		selectedAgentPriceVariantKeys,
+	]);
+	const selectedAgentVariantHotelIds = useMemo(
+		() => deriveAgentVariantHotelIds(),
+		[deriveAgentVariantHotelIds]
+	);
+	const selectedAgentVariantHotelOptions = useMemo(
+		() =>
+			hotelOptions.filter((option) =>
+				selectedAgentVariantHotelIds.includes(normalizeId(option.value))
+			),
+		[hotelOptions, selectedAgentVariantHotelIds]
+	);
 
 	const existingGeneralPricingGroups = useMemo(
 		() =>
@@ -855,22 +928,28 @@ const OverallCalendarPricingModal = ({
 		) {
 			return;
 		}
-		const validHotelIds = new Set(agentVariantHotelOptions.map((option) => option.value));
-		const currentHotelIds = agentsForm.getFieldValue("hotelIds") || [];
-		const nextHotelIds = currentHotelIds.filter((hotelId) =>
-			validHotelIds.has(normalizeId(hotelId))
+		const validHotelIds = new Set(
+			agentVariantHotelOptions.map((option) => normalizeId(option.value))
 		);
+		const currentHotelIds = agentsForm.getFieldValue("hotelIds") || [];
 		const currentAgentIds = agentsForm.getFieldValue("agentIds") || [];
 		const nextAgentIds = currentAgentIds.filter((agentId) => {
 			const agent = agents.find(
 				(item) => normalizeId(item._id) === normalizeId(agentId)
 			);
 			const scoped = new Set((agent?.hotelIds || []).map(normalizeId));
-			return nextHotelIds.some((hotelId) => scoped.has(normalizeId(hotelId)));
+			return [...validHotelIds].some((hotelId) => scoped.has(normalizeId(hotelId)));
 		});
+		const nextHotelIds = deriveAgentVariantHotelIds(
+			nextAgentIds,
+			selectedAgentPriceVariantKeys
+		);
+		const listsMatch = (left = [], right = []) =>
+			left.length === right.length &&
+			left.every((item, index) => normalizeId(item) === normalizeId(right[index]));
 		if (
-			nextHotelIds.length !== currentHotelIds.length ||
-			nextAgentIds.length !== currentAgentIds.length
+			!listsMatch(nextHotelIds, currentHotelIds) ||
+			!listsMatch(nextAgentIds, currentAgentIds)
 		) {
 			agentsForm.setFieldsValue({
 				hotelIds: nextHotelIds,
@@ -885,9 +964,12 @@ const OverallCalendarPricingModal = ({
 		agentVariantHotelOptions,
 		agents,
 		agentsForm,
+		deriveAgentVariantHotelIds,
 		normalizedActiveTab,
 		open,
+		selectedAgentIds,
 		selectedAgentPricingMode,
+		selectedAgentPriceVariantKeys,
 	]);
 
 	const syncHotelDependentFields = (form, hotelIds = [], mode = MODAL_TAB_GENERAL) => {
@@ -1244,7 +1326,6 @@ const OverallCalendarPricingModal = ({
 			values = await agentsForm.validateFields([
 				"agentPricingMode",
 				"priceVariantItemKeys",
-				"hotelIds",
 				"agentIds",
 			]);
 		} catch (error) {
@@ -1264,6 +1345,14 @@ const OverallCalendarPricingModal = ({
 			}
 			return;
 		}
+		const derivedHotelIds = deriveAgentVariantHotelIds(
+			values.agentIds || [],
+			values.priceVariantItemKeys || []
+		);
+		if (!derivedHotelIds.length) {
+			message.error(labels.noDerivedAgentHotels);
+			return;
+		}
 		setSaving(true);
 		try {
 			const data = await saveOverallCalendarPricing(
@@ -1275,7 +1364,7 @@ const OverallCalendarPricingModal = ({
 					priceVariantSelections: (values.priceVariantItemKeys || []).map(
 						parsePriceVariantKey
 					),
-					hotelIds: values.hotelIds || [],
+					hotelIds: derivedHotelIds,
 					agentIds: values.agentIds || [],
 				},
 				buildOwnerParams(ownerId)
@@ -1463,39 +1552,6 @@ const OverallCalendarPricingModal = ({
 								/>
 							</Form.Item>
 							<Form.Item
-								name='hotelIds'
-								label={labels.hotels}
-								rules={[
-									{
-										required: true,
-										type: "array",
-										min: 1,
-										message: labels.required,
-									},
-								]}
-							>
-								<Select
-									showSearch
-									mode='multiple'
-									maxTagCount='responsive'
-									allowClear
-									loading={loading}
-									disabled={!selectedAgentPriceVariantKeys.length}
-									placeholder={
-										selectedAgentPriceVariantKeys.length
-											? labels.chooseHotels
-											: labels.noVariantHotels
-									}
-									options={visibleHotelOptions}
-									optionFilterProp='label'
-									popupStyle={selectPopupStyle}
-									popupClassName={selectPopupClassName}
-									onChange={(hotelIds) =>
-										syncHotelDependentFields(form, hotelIds, mode)
-									}
-								/>
-							</Form.Item>
-							<Form.Item
 								name='agentIds'
 								label={labels.agents}
 								rules={[
@@ -1512,15 +1568,42 @@ const OverallCalendarPricingModal = ({
 									mode='multiple'
 									maxTagCount='responsive'
 									allowClear
-									disabled={!selectedHotelIds.length}
-									placeholder={labels.chooseAgents}
+									disabled={!selectedAgentPriceVariantKeys.length}
+									placeholder={
+										selectedAgentPriceVariantKeys.length
+											? labels.chooseAgents
+											: labels.noVariantHotels
+									}
 									options={filteredAgentOptions}
 									optionFilterProp='label'
 									popupStyle={selectPopupStyle}
 									popupClassName={selectPopupClassName}
-									onChange={() => setPreview(null)}
+									onChange={(agentIds) => {
+										agentsForm.setFieldsValue({
+											hotelIds: deriveAgentVariantHotelIds(
+												agentIds,
+												selectedAgentPriceVariantKeys
+											),
+										});
+										setPreview(null);
+									}}
 								/>
 							</Form.Item>
+							<DerivedAgentHotelsPanel>
+								<strong>{labels.assignedAgentHotels}</strong>
+								<span>{labels.derivedAgentHotelsHint}</span>
+								<div>
+									{selectedAgentVariantHotelOptions.length ? (
+										selectedAgentVariantHotelOptions.map((option) => (
+											<Tag key={option.value} color='blue'>
+												{option.label}
+											</Tag>
+										))
+									) : (
+										<Tag>{labels.noDerivedAgentHotels}</Tag>
+									)}
+								</div>
+							</DerivedAgentHotelsPanel>
 						</FormGrid>
 						<ActionRow>
 							<Button
@@ -2416,6 +2499,38 @@ const FormGrid = styled.div`
 
 	@media (max-width: 980px) {
 		grid-template-columns: 1fr;
+	}
+`;
+
+const DerivedAgentHotelsPanel = styled.div`
+	min-height: 72px;
+	border: 1px solid rgba(20, 86, 140, 0.16);
+	border-radius: 8px;
+	padding: 10px 12px;
+	background: #f8fbff;
+
+	strong,
+	span {
+		display: block;
+	}
+
+	strong {
+		color: #123b63;
+		font-weight: 800;
+		margin-bottom: 3px;
+	}
+
+	span {
+		color: #5f7188;
+		font-size: 0.82rem;
+		margin-bottom: 8px;
+		line-height: 1.4;
+	}
+
+	.ant-tag {
+		margin-bottom: 4px;
+		white-space: normal;
+		line-height: 1.45;
 	}
 `;
 
