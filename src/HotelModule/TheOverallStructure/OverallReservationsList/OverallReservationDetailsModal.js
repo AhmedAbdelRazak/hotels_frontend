@@ -18,6 +18,11 @@ const findReservationByKey = (reservations = [], key = "") =>
 			String(reservation?.confirmation_number || "") === String(key || "")
 	);
 
+const hasHotelRoomDetails = (hotel = {}) =>
+	hotel &&
+	typeof hotel === "object" &&
+	Array.isArray(hotel.roomCountDetails);
+
 const normalizeOwnerId = (reservation = {}, fallbackOwnerId = "") =>
 	normalizeId(
 		reservation.hotelOwnerId ||
@@ -95,7 +100,11 @@ const OverallReservationDetailsModal = ({
 		const reservationId = params.get("reservationId");
 		if (!reservationId || selectedReservation) return;
 		const matched = findReservationByKey(reservations, reservationId);
-		if (matched) setSelectedReservation(matched);
+		if (matched) {
+			setSelectedReservation(matched);
+		} else {
+			setSelectedReservation({ _id: reservationId });
+		}
 	}, [
 		location.search,
 		reservations,
@@ -115,26 +124,46 @@ const OverallReservationDetailsModal = ({
 		const selectedOwnerId = normalizeOwnerId(selectedReservation, ownerId);
 		setLoading(true);
 
-		Promise.all([
-			selectedReservation._id
-				? singlePreReservationById(selectedReservation._id).catch(() => null)
-				: Promise.resolve(null),
-			hotelId ? getHotelById(hotelId).catch(() => null) : Promise.resolve(null),
-		])
-			.then(([freshReservation, freshHotel]) => {
+		const loadDetails = async () => {
+			const freshReservation = selectedReservation._id
+				? await singlePreReservationById(selectedReservation._id, {
+						view: "details",
+				  }).catch(() => null)
+				: null;
+			const usableReservation =
+				freshReservation && !freshReservation.error && !freshReservation.message
+					? freshReservation
+					: {};
+			const reservationHotel =
+				hasHotelRoomDetails(usableReservation.hotelId) && usableReservation.hotelId;
+			const selectedHotel =
+				hasHotelRoomDetails(selectedReservation.hotelId) &&
+				selectedReservation.hotelId;
+			const fallbackHotelId =
+				normalizeId(usableReservation.hotelId) ||
+				normalizeId(selectedReservation.hotelId);
+			const freshHotel =
+				reservationHotel ||
+				selectedHotel ||
+				(fallbackHotelId
+					? await getHotelById(fallbackHotelId, {
+							view: "reservation-details",
+					  }).catch(() => null)
+					: null);
+			return { freshReservation: usableReservation, freshHotel };
+		};
+
+		loadDetails()
+			.then(({ freshReservation, freshHotel }) => {
 				if (!isMounted) return;
-				const usableReservation =
-					freshReservation && !freshReservation.error && !freshReservation.message
-						? freshReservation
-						: {};
 				const normalizedReservation = normalizeReservationForDetail(
-					usableReservation,
+					freshReservation,
 					selectedReservation,
 					selectedOwnerId
 				);
 				const normalizedHotel =
 					normalizeHotelDetails(freshHotel, selectedOwnerId) ||
-					normalizeHotelDetails(usableReservation.hotelId, selectedOwnerId) ||
+					normalizeHotelDetails(freshReservation.hotelId, selectedOwnerId) ||
 					normalizeHotelDetails(
 						{
 							_id: hotelId,

@@ -1210,9 +1210,12 @@ export const singlePreReservation = (reservationNumber, hotelId, belongsTo) => {
 		.catch((err) => console.log(err));
 };
 
-export const singlePreReservationById = (reservationId) => {
+export const singlePreReservationById = (reservationId, options = {}) => {
+	const query = new URLSearchParams();
+	if (options.view) query.set("view", options.view);
+	const suffix = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}`,
+		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}${suffix}`,
 		{
 			method: "GET",
 			headers: {
