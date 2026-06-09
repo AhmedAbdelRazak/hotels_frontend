@@ -238,12 +238,12 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			const data = await gettingHotelDetailsForAdminAll(
 				effectiveUserId,
 				token,
-				"view=order-taker",
+				"view=order-taker&status=active",
 			);
 			if (data && !data.error) {
 				// Only keep active hotels
 				const activeHotels = (data.hotels || []).filter(
-					(h) => h.activateHotel === true,
+					(h) => h.activateHotel === true && h.xHotelProActive !== false,
 				);
 				// Sort by name
 				const sortedHotels = activeHotels.sort((a, b) =>
