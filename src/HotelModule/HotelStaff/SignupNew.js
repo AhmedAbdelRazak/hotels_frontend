@@ -50,6 +50,12 @@ const roleOptions = [
 		ar: "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 	},
 	{
+		value: "humanresource",
+		role: 9000,
+		en: "Human Resource",
+		ar: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
+	},
+	{
 		value: "housekeepingmanager",
 		role: 4000,
 		en: "Housekeeping Manager",
@@ -86,6 +92,7 @@ const getDefaultAccessForRole = (roleDescription) => {
 	if (roleDescription === "finance") return ["dashboard", "finance", "reports"];
 	if (roleDescription === "reservationemployee")
 		return ["reservations", "newReservation", "settings"];
+	if (roleDescription === "humanresource") return ["hotelAccounts"];
 	if (roleDescription === "housekeepingmanager")
 		return ["dashboard", "housekeeping"];
 	if (roleDescription === "housekeeping") return ["housekeeping"];

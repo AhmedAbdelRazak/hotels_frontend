@@ -18,6 +18,11 @@ const roleOptions = [
 		ar: "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 	},
 	{
+		value: "humanresource",
+		en: "Human Resource",
+		ar: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
+	},
+	{
 		value: "housekeepingmanager",
 		en: "Housekeeping Manager",
 		ar: "مدير النظافة",

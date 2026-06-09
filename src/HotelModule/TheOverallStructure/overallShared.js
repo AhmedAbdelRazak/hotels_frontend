@@ -245,6 +245,7 @@ export const overallCommonText = {
 		housekeepingRole: "Housekeeping",
 		reception: "Reception",
 		finance: "Finance",
+		humanResource: "Human Resource",
 		rolePrefix: "Role",
 		sar: "SAR",
 		noHotelsFound: "No hotels found.",
@@ -430,6 +431,10 @@ export const overallCommonText = {
 	},
 };
 
+Object.assign(overallCommonText.ar, {
+	humanResource: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
+});
+
 export const getOverallText = (chosenLanguage) =>
 	overallCommonText[isArabicLanguage(chosenLanguage) ? "ar" : "en"];
 
@@ -444,6 +449,7 @@ export const roleLabel = (account = {}, chosenLanguage) => {
 	if (description === "housekeeping") return text.housekeepingRole;
 	if (description === "reception") return text.reception;
 	if (description === "finance") return text.finance;
+	if (description === "humanresource") return text.humanResource;
 	if (description) return titleCase(description);
 	if (Number(account.role) === 10000) return text.systemAdmin;
 	if (Number(account.role) === 2000) return text.ownerRole;

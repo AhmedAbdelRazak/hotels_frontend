@@ -38,6 +38,7 @@ const HOTEL_ROLES = [
 	{ value: "hotelmanager", label: "Hotel Manager" },
 	{ value: "reception", label: "Reception" },
 	{ value: "reservationemployee", label: "Reservation Employee" },
+	{ value: "humanresource", label: "Human Resource" },
 	{ value: "finance", label: "Finance" },
 	{ value: "ordertaker", label: "External Agent" },
 	{ value: "housekeepingmanager", label: "Housekeeping Manager" },
@@ -53,6 +54,7 @@ const HOTEL_ACCESS = [
 	{ value: "reports", label: "Reports" },
 	{ value: "finance", label: "Finance" },
 	{ value: "housekeeping", label: "Housekeeping" },
+	{ value: "hotelAccounts", label: "Hotel Management Accounts" },
 	{ value: "settings", label: "Settings" },
 ];
 
@@ -93,6 +95,7 @@ const HOTEL_ROLE_NUMBER_TO_VALUE = {
 	6000: "finance",
 	7000: "ordertaker",
 	8000: "reservationemployee",
+	9000: "humanresource",
 };
 
 const PLATFORM_ROLE_VALUES = new Set(PLATFORM_ROLES.map((role) => role.value));
@@ -104,6 +107,7 @@ const ROLE_LABELS = {
 		hotelmanager: "Hotel Manager",
 		reception: "Reception",
 		reservationemployee: "Reservation Employee",
+		humanresource: "Human Resource",
 		finance: "Finance",
 		ordertaker: "External Agent",
 		housekeepingmanager: "Housekeeping Manager",
@@ -125,6 +129,7 @@ const ROLE_LABELS = {
 		hotelmanager: "\u0645\u062f\u064a\u0631 \u0627\u0644\u0641\u0646\u062f\u0642",
 		reception: "\u0627\u0644\u0627\u0633\u062a\u0642\u0628\u0627\u0644",
 		reservationemployee: "\u0645\u0648\u0638\u0641 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		humanresource: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
 		finance: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
 		ordertaker: "\u0648\u0643\u064a\u0644 \u062e\u0627\u0631\u062c\u064a",
 		housekeepingmanager: "\u0645\u062f\u064a\u0631 \u0627\u0644\u0646\u0638\u0627\u0641\u0629",
@@ -153,6 +158,7 @@ const ACCESS_LABELS = {
 		reports: "Reports",
 		finance: "Finance",
 		housekeeping: "Housekeeping",
+		hotelaccounts: "Hotel Management Accounts",
 		settings: "Settings",
 		admindashboard: "Admin Dashboard",
 		customerservice: "Customer Service",
@@ -175,6 +181,7 @@ const ACCESS_LABELS = {
 		reports: "\u0627\u0644\u062a\u0642\u0627\u0631\u064a\u0631",
 		finance: "\u0627\u0644\u0645\u0627\u0644\u064a\u0629",
 		housekeeping: "\u0627\u0644\u0646\u0638\u0627\u0641\u0629",
+		hotelaccounts: "\u062d\u0633\u0627\u0628\u0627\u062a \u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		settings: "\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a",
 		admindashboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645",
 		customerservice: "\u062e\u062f\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",

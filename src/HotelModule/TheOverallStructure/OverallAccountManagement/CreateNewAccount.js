@@ -39,6 +39,12 @@ const roleOptions = [
 		ar: "مسؤول الحجوزات",
 	},
 	{
+		value: "humanresource",
+		role: 9000,
+		en: "Human Resource",
+		ar: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
+	},
+	{
 		value: "housekeepingmanager",
 		role: 4000,
 		en: "Housekeeping Manager",
@@ -55,6 +61,11 @@ const CREATE_FLOW_LINK = "link";
 const staffRoleOptions = roleOptions.filter((option) => option.value !== "ordertaker");
 
 const accessOptions = [
+	{
+		value: "hotelAccounts",
+		en: "Hotel Management Accounts",
+		ar: "\u062d\u0633\u0627\u0628\u0627\u062a \u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	},
 	{ value: "overall", en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	{ value: "dashboard", en: "Dashboard", ar: "لوحة التحكم" },
 	{ value: "reservations", en: "Reservations", ar: "الحجوزات" },
@@ -255,6 +266,7 @@ const defaultAccessForRole = (role) => {
 	}
 	if (role === "finance") return ["dashboard", "reservations", "reports", "finance"];
 	if (role === "reservationemployee") return ["reservations", "newReservation", "settings"];
+	if (role === "humanresource") return ["hotelAccounts"];
 	if (role === "housekeepingmanager") return ["dashboard", "housekeeping"];
 	if (role === "housekeeping") return ["housekeeping"];
 	if (role === "ordertaker") return ["newReservation", "ownReservations"];

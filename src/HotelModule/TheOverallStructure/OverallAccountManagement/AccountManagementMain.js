@@ -73,6 +73,7 @@ const EMPLOYEE_ROLE_VALUES = [
 	"reception",
 	"finance",
 	"reservationemployee",
+	"humanresource",
 	"housekeepingmanager",
 	"housekeeping",
 ];
@@ -96,6 +97,10 @@ const isExternalAgentAccount = (account = {}) => {
 };
 
 const ACCESS_TEXT = {
+	hotelAccounts: {
+		en: "Hotel Management Accounts",
+		ar: "\u062d\u0633\u0627\u0628\u0627\u062a \u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	},
 	overall: { en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	dashboard: { en: "Dashboard", ar: "لوحة التحكم" },
 	reservations: { en: "Reservations", ar: "الحجوزات" },
@@ -326,6 +331,7 @@ const AccountManagementMain = ({
 		{ value: "reception", label: labels.reception },
 		{ value: "finance", label: labels.finance },
 		{ value: "reservationemployee", label: labels.reservationsOfficer },
+		{ value: "humanresource", label: labels.humanResource },
 		{ value: "housekeepingmanager", label: labels.housekeepingManager },
 		{ value: "housekeeping", label: labels.housekeepingRole },
 		{ value: "ordertaker", label: labels.externalAgent },

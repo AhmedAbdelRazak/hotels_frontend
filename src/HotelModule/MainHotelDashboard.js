@@ -1343,7 +1343,7 @@ const isScopedRoleDashboardUser = (user = {}) => {
 		user.hotelIdsOwner.length > 0;
 	const hasScopedRole =
 		roleNumbers.some((role) =>
-			[2000, 3000, 4000, 5000, 6000, 7000, 8000].includes(role)
+			[2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000].includes(role)
 		) ||
 		roleDescriptions.some((role) =>
 			[
@@ -1354,6 +1354,7 @@ const isScopedRoleDashboardUser = (user = {}) => {
 				"finance",
 				"ordertaker",
 				"reservationemployee",
+				"humanresource",
 			].includes(role)
 		);
 	const hasHotelScope =
@@ -1392,6 +1393,8 @@ const getPrimaryScopedRole = (user = {}) => {
 	if (hasRole(6000) || hasRoleDescription("finance")) return "finance";
 	if (hasRole(8000) || hasRoleDescription("reservationemployee"))
 		return "reservationemployee";
+	if (hasRole(9000) || hasRoleDescription("humanresource"))
+		return "humanresource";
 	if (hasRole(7000) || hasRoleDescription("ordertaker")) return "ordertaker";
 	return "user";
 };
@@ -1437,6 +1440,9 @@ const getScopedRouteForRole = (roleKey, ownerId, hotelId, action = "primary") =>
 			: action === "reservations"
 			  ? `/hotel-management/new-reservation/${ownerId}/${hotelId}?list=&page=1`
 			  : `/hotel-management/financials/${ownerId}/${hotelId}`;
+	}
+	if (roleKey === "humanresource") {
+		return `/hotel-management/main-dashboard?ownerId=${ownerId}&overall=create-account&page=1&range=custom`;
 	}
 
 	if (action === "reservations") {
@@ -2716,6 +2722,12 @@ const MainHotelDashboard = () => {
 export default MainHotelDashboard;
 
 const accountRoleOptions = [
+	{
+		value: "humanresource",
+		role: 9000,
+		en: "Human Resource",
+		ar: "\u0627\u0644\u0645\u0648\u0627\u0631\u062f \u0627\u0644\u0628\u0634\u0631\u064a\u0629",
+	},
 	{ value: "systemadmin", role: 10000, en: "Hotel System Admin", ar: "مسؤول نظام الفندق" },
 	{ value: "hotelmanager", role: 2000, en: "Hotel Manager", ar: "مدير الفندق" },
 	{ value: "reception", role: 3000, en: "Front Desk Reception", ar: "موظف الاستقبال" },
@@ -2742,6 +2754,11 @@ const accountRoleOptions = [
 ];
 
 const accountAccessOptions = [
+	{
+		value: "hotelAccounts",
+		en: "Hotel Management Accounts",
+		ar: "\u062d\u0633\u0627\u0628\u0627\u062a \u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
+	},
 	{ value: "overall", en: "Overall Dashboard", ar: "لوحة التحكم العامة" },
 	{ value: "dashboard", en: "Dashboard", ar: "لوحة التحكم" },
 	{ value: "reservations", en: "Reservations", ar: "الحجوزات" },
@@ -2756,6 +2773,7 @@ const accountAccessOptions = [
 const getAccountRoleOption = (roleDescription, role) =>
 	accountRoleOptions.find((option) => option.value === roleDescription) ||
 	accountRoleOptions.find((option) => option.role === Number(role)) ||
+	accountRoleOptions.find((option) => option.value === "reception") ||
 	accountRoleOptions[0];
 
 const getDefaultAccess = (roleDescription) => {
@@ -2769,6 +2787,7 @@ const getDefaultAccess = (roleDescription) => {
 		return ["dashboard", "reservations", "reports", "finance"];
 	if (roleDescription === "reservationemployee")
 		return ["reservations", "newReservation", "settings"];
+	if (roleDescription === "humanresource") return ["hotelAccounts"];
 	if (roleDescription === "housekeepingmanager")
 		return ["dashboard", "housekeeping"];
 	if (roleDescription === "housekeeping") return ["housekeeping"];

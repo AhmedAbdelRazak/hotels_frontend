@@ -157,6 +157,17 @@ const isOwnerLike = (user = {}) =>
 	(hasRole(user, 2000) && !user.belongsToId) ||
 	isSystemAdmin(user);
 
+const hasHotelAccountsAccess = (user = {}) => {
+	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
+	const descriptions = roleDescriptions(user).map(normalizeRoleKey);
+	return (
+		hasRole(user, 9000) ||
+		descriptions.includes("humanresource") ||
+		descriptions.includes("hotelmanager") ||
+		accessTo.includes("hotelAccounts")
+	);
+};
+
 const isPureOrderTakingScope = (user = {}) => {
 	const descriptions = roleDescriptions(user).map(normalizeRoleKey);
 	const broaderRoles = [1000, 2000, 3000, 6000, 8000, 10000].some((role) =>
@@ -286,7 +297,7 @@ const canViewOverallKey = (user = {}, key = "") => {
 			"overall-update-account",
 		].includes(key)
 	) {
-		return false;
+		return hasHotelAccountsAccess(user);
 	}
 
 	return false;
