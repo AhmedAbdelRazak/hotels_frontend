@@ -194,6 +194,30 @@ export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
+export const updateAdminHotelActivation = (
+	hotelId,
+	userId,
+	token,
+	payload = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/admin/hotel-details/${hotelId}/activation/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((res) => res.json())
+		.catch((err) => ({
+			error: err?.message || "Could not update hotel activation.",
+		}));
+
 const buildQuery = (params = {}) => {
 	const searchParams = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {

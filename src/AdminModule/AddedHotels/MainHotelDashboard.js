@@ -49,7 +49,10 @@ import {
 	startDashboardPreview,
 } from "../../auth";
 import { updateHotelDetails } from "../../HotelModule/apiAdmin";
-import { gettingHotelDetailsForAdmin } from "../apiAdmin";
+import {
+	gettingHotelDetailsForAdmin,
+	updateAdminHotelActivation,
+} from "../apiAdmin";
 import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 import { STEP_MODAL_REGISTRY_ADMIN } from "../utils/hotel-setup-modals-admin";
@@ -535,9 +538,10 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 			onOk: () => {
 				const payload = {
 					xHotelProActive: value,
-					fromPage: "XHotelProActivation",
+					...(value ? { activateHotel: true } : {}),
+					fromPage: "AdminDashboardActivation",
 				};
-				return updateHotelDetails(hotel._id, admin._id, token, payload)
+				return updateAdminHotelActivation(hotel._id, admin._id, token, payload)
 					.then((r) => {
 						if (r?.error) throw new Error(r.error);
 						message.success(L.saved);
@@ -848,7 +852,7 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 			render: (v) => <BoolIcon val={v} />,
 		},
 		{
-			title: L.xHotelProActivation || L.activateCol,
+			title: L.activateCol,
 			dataIndex: "xHotelProActive",
 			key: "xHotelProActivationAction",
 			width: W.action,
@@ -860,15 +864,17 @@ const MainHotelDashboardAdmin = ({ viewportFit = false }) => {
 					r.locationDone &&
 					r.dataDone
 				);
+				const ownerActive = r.activateHotel === true;
 				const platformActive = r.xHotelProActive !== false;
+				const publicActive = ownerActive && platformActive;
 				return (
 					<Tooltip title={canActivate ? "" : "Finish steps 1‑5 first"}>
-							<StatusSelect
-								$viewportFit={viewportFit}
-								value={platformActive}
-								onChange={(v) => handleActivationChange(r, v)}
-								disabled={!canActivate && !platformActive}
-							>
+						<StatusSelect
+							$viewportFit={viewportFit}
+							value={publicActive}
+							onChange={(v) => handleActivationChange(r, v)}
+							disabled={!canActivate && !publicActive}
+						>
 							<Option value={true}>{L.activate}</Option>
 							<Option value={false}>{L.deactivate}</Option>
 						</StatusSelect>
