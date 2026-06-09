@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import styled from "styled-components";
-import { message, DatePicker, Select, Button, Collapse } from "antd";
+import { message, DatePicker, Select, Button, Collapse, Spin } from "antd";
 import { isAuthenticated } from "../../auth";
 import { gettingHotelDetailsForAdminAll } from "../apiAdmin";
 import dayjs from "dayjs";
@@ -72,6 +72,8 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 	const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
 
 	const [allHotels, setAllHotels] = useState([]);
+	const [hotelsLoading, setHotelsLoading] = useState(false);
+	const [hotelsLoaded, setHotelsLoaded] = useState(false);
 	const [checkInDate, setCheckInDate] = useState(null);
 	const [checkOutDate, setCheckOutDate] = useState(null);
 	const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
@@ -83,39 +85,72 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 
 	const { user, token } = isAuthenticated() || {};
 
-	// Fetch all hotels
+	// Fetch active hotel pricing only when the calculator actually needs it.
 	const getAllHotels = useCallback(async () => {
-		if (!user?._id || !token) return;
+		if (!user?._id || !token || hotelsLoading || hotelsLoaded) return;
+		setHotelsLoading(true);
 		try {
-			const data = await gettingHotelDetailsForAdminAll(user._id, token);
+			const data = await gettingHotelDetailsForAdminAll(
+				user._id,
+				token,
+				"view=calculator&status=active"
+			);
 			if (data && !data.error) {
 				// Only keep hotels that are activateHotel === true
-				const activeHotels =
-					data.hotels &&
-					data.hotels.filter((hotel) => hotel.activateHotel === true);
+				const activeHotels = (data.hotels || []).filter(
+					(hotel) =>
+						hotel.activateHotel === true && hotel.xHotelProActive !== false
+				);
 				// Sort them by hotelName
 				const sortedHotels = activeHotels.sort((a, b) =>
-					a.hotelName.localeCompare(b.hotelName)
+					(a?.hotelName || "").localeCompare(b?.hotelName || "")
 				);
 
 				setAllHotels(sortedHotels);
+				setHotelsLoaded(true);
 			} else {
 				message.error("Failed to fetch hotels.");
+				setHotelsLoaded(true);
 			}
 		} catch (error) {
 			console.error("Error fetching hotels:", error);
+			setHotelsLoaded(true);
+		} finally {
+			setHotelsLoading(false);
 		}
-	}, [user?._id, token]);
+	}, [hotelsLoaded, hotelsLoading, user?._id, token]);
 
 	useEffect(() => {
-		getAllHotels();
-	}, [getAllHotels]);
+		if (checkInDate && checkOutDate) {
+			getAllHotels();
+		}
+	}, [checkInDate, checkOutDate, getAllHotels]);
+
+	const roomTypes = useMemo(
+		() =>
+			[
+				...new Set(
+					allHotels.flatMap((hotel) =>
+						(Array.isArray(hotel.roomCountDetails)
+							? hotel.roomCountDetails
+							: []
+						)
+							.map((room) => room.roomType)
+							.filter(Boolean)
+					)
+				),
+			].sort((a, b) => String(a).localeCompare(String(b))),
+		[allHotels]
+	);
 
 	// Filter hotels by selected room types
 	useEffect(() => {
 		if (selectedRoomTypes.length > 0) {
 			const filtered = allHotels.filter((hotel) =>
-				hotel.roomCountDetails.some((room) =>
+				(Array.isArray(hotel.roomCountDetails)
+					? hotel.roomCountDetails
+					: []
+				).some((room) =>
 					selectedRoomTypes.includes(room.roomType)
 				)
 			);
@@ -130,7 +165,10 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 		if (selectedHotel) {
 			const hotel = allHotels.find((h) => h._id === selectedHotel);
 			if (hotel) {
-				const roomOptions = hotel.roomCountDetails
+				const roomOptions = (Array.isArray(hotel.roomCountDetails)
+					? hotel.roomCountDetails
+					: []
+				)
 					.filter((room) => selectedRoomTypes.includes(room.roomType))
 					.map((room) => `${room.displayName} | ${room.roomType}`);
 				setDisplayNames(roomOptions);
@@ -236,7 +274,10 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 			return;
 		}
 
-		const room = hotel.roomCountDetails.find(
+		const room = (Array.isArray(hotel.roomCountDetails)
+			? hotel.roomCountDetails
+			: []
+		).find(
 			(r) => `${r.displayName} | ${r.roomType}` === selectedDisplayName
 		);
 		if (!room) {
@@ -250,7 +291,7 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 			room.pricingRate || [],
 			checkInDate,
 			checkOutDate,
-			parseFloat(room.price.basePrice),
+			parseFloat(room.price?.basePrice),
 			parseFloat(room.defaultCost),
 			parseFloat(room.roomCommission ?? hotel.commission ?? 10)
 		);
@@ -334,17 +375,24 @@ const ReservationCalculator = ({ chosenLanguage }) => {
 						<label>{TXT.roomTypes}</label>
 						<Select
 							mode='multiple'
-							placeholder={TXT.roomTypesPlaceholder}
+							placeholder={
+								hotelsLoaded
+									? TXT.roomTypesPlaceholder
+									: "Loading hotel pricing..."
+							}
 							style={{ width: "100%" }}
+							loading={hotelsLoading || !hotelsLoaded}
+							disabled={hotelsLoading || !hotelsLoaded || !roomTypes.length}
+							notFoundContent={
+								hotelsLoading || !hotelsLoaded ? (
+									<Spin size='small' />
+								) : (
+									"No active hotel pricing found"
+								)
+							}
 							onChange={(value) => setSelectedRoomTypes(value)}
 						>
-							{[
-								...new Set(
-									allHotels.flatMap((hotel) =>
-										hotel.roomCountDetails.map((room) => room.roomType)
-									)
-								),
-							].map((roomType) => (
+							{roomTypes.map((roomType) => (
 								<Option key={roomType} value={roomType}>
 									{roomType}
 								</Option>
