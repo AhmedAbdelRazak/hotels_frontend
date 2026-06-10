@@ -6,7 +6,11 @@ import ImageCardHomeMainBanner from "./ImageCardHomeMainBanner";
 import Resizer from "react-image-file-resizer";
 import { isAuthenticated } from "../../auth";
 
-const ZHomePageBanners = ({ addThumbnail, setAddThumbnail }) => {
+const ZHomePageBanners = ({
+	addThumbnail,
+	setAddThumbnail,
+	title = "Home Page Main Banners",
+}) => {
 	const { user, token } = isAuthenticated();
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
@@ -109,7 +113,7 @@ const ZHomePageBanners = ({ addThumbnail, setAddThumbnail }) => {
 					className='mt-1 mb-3 text-center'
 					style={{ color: "#009ef7", fontWeight: "bold" }}
 				>
-					Home Page Main Banners
+					{title}
 				</h3>
 				<ImageCardHomeMainBanner
 					uploadFrom='BasicProduct'

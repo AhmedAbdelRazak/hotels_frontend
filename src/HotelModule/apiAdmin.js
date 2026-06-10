@@ -154,6 +154,37 @@ export const hotelAccount = (userId, token, accountId) => {
 		.catch((err) => console.log(err));
 };
 
+export const getZadWebsiteRecord = () => {
+	return fetch(`${process.env.REACT_APP_API_URL}/zad-website-document`, {
+		method: "GET",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+		},
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const saveZadWebsiteRecord = (documentId, userId, payload = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/zad-website/${
+			documentId || "new"
+		}/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 const attachReservationActor = (
 	reservation = {},
 	{ includePreviewAudit = true } = {}

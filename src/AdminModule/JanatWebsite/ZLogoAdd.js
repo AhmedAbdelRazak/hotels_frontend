@@ -10,7 +10,7 @@ import { cloudinaryUpload1 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ImageCard from "./ImageCard";
 
-const ZLogoAdd = ({ addThumbnail, setAddThumbnail }) => {
+const ZLogoAdd = ({ addThumbnail, setAddThumbnail, title = "Add Janat Logo" }) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState("");
 
@@ -99,7 +99,7 @@ const ZLogoAdd = ({ addThumbnail, setAddThumbnail }) => {
 						style={{ color: "#009ef7", fontWeight: "bold" }}
 						className='mt-1 mb-3 text-center'
 					>
-						Add Janat Logo
+						{title}
 					</h3>
 					<div className=''>{FileUploadThumbnail()}</div>
 				</div>

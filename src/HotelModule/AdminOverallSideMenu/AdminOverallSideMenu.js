@@ -17,6 +17,7 @@ import {
 	LogoutOutlined,
 	MenuFoldOutlined,
 	MenuUnfoldOutlined,
+	PictureOutlined,
 	PlusCircleOutlined,
 	SafetyCertificateOutlined,
 	SettingOutlined,
@@ -61,6 +62,7 @@ const SIDE_MENU_TEXT = {
 		createNewAccount: "Create New Account",
 		activateAccounts: "Activate Accounts",
 		updateExistingAccount: "Update Existing Account",
+		zadWebsite: "ZAD Website",
 		overallSettings: "Overall Settings",
 		signout: "Signout",
 		closeMenu: "Close mobile side menu",
@@ -81,6 +83,7 @@ const SIDE_MENU_TEXT = {
 		createNewAccount: "إنشاء حساب جديد",
 		activateAccounts: "تفعيل الحسابات",
 		updateExistingAccount: "تحديث حساب موجود",
+		zadWebsite: "ZAD Website",
 		overallSettings: "الإعدادات العامة",
 		signout: "تسجيل الخروج",
 		closeMenu: "إغلاق القائمة الجانبية",
@@ -104,6 +107,7 @@ const SIDE_MENU_AR_TEXT = {
 	createNewAccount: "إنشاء حساب جديد",
 	activateAccounts: "تفعيل الحسابات",
 	updateExistingAccount: "تحديث حساب موجود",
+	zadWebsite: "ZAD Website",
 	overallSettings: "الإعدادات العامة",
 	signout: "تسجيل الخروج",
 	closeMenu: "إغلاق القائمة الجانبية",
@@ -152,6 +156,9 @@ const isSystemAdmin = (user = {}) =>
 	hasDescription(user, "systemadmin") ||
 	hasDescription(user, "system admin");
 
+const isZadWebsiteManager = (user = {}) =>
+	String(user?.email || "").trim().toLowerCase() === "mrgamal@xhoteltest.com";
+
 const isOwnerLike = (user = {}) =>
 	isSuperAdminUser(user) ||
 	(hasRole(user, 2000) && !user.belongsToId) ||
@@ -186,6 +193,7 @@ const isPureOrderTakingScope = (user = {}) => {
 
 const canViewOverallKey = (user = {}, key = "") => {
 	if (["overall-dashboard", "signout"].includes(key)) return true;
+	if (key === "overall-zad-website") return isZadWebsiteManager(user);
 	if (isOwnerLike(user)) return true;
 
 	if (["overall-summary"].includes(key)) {
@@ -591,6 +599,14 @@ const AdminOverallSideMenu = ({
 				),
 			], null, "overall-menu-section"),
 			getItem(
+				menuLink("zad-website", text.zadWebsite),
+				"overall-zad-website",
+				<PictureOutlined />,
+				null,
+				null,
+				"overall-menu-row"
+			),
+			getItem(
 				menuLink("settings", text.overallSettings),
 				"overall-settings",
 				<SettingOutlined />,
@@ -653,6 +669,7 @@ const AdminOverallSideMenu = ({
 			"financial-report": "overall-financial-report",
 			"financial-actions": "overall-financial-actions",
 			"wallet-management": "overall-wallet-management",
+			"zad-website": "overall-zad-website",
 			settings: "overall-settings",
 		};
 		return map[overall] || "overall-dashboard";

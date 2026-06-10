@@ -10,7 +10,11 @@ import { cloudinaryUpload1 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ImageCardContactUs from "./ImageCardContactUs";
 
-const ZContactusBannerAdd = ({ addThumbnail, setAddThumbnail }) => {
+const ZContactusBannerAdd = ({
+	addThumbnail,
+	setAddThumbnail,
+	title = "Contact Us Banner",
+}) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState("");
 
@@ -99,7 +103,7 @@ const ZContactusBannerAdd = ({ addThumbnail, setAddThumbnail }) => {
 						style={{ color: "#009ef7", fontWeight: "bold" }}
 						className='mt-1 mb-3 text-center'
 					>
-						Contact Us Banner
+						{title}
 					</h3>
 					<div className=''>{FileUploadThumbnail()}</div>
 				</div>

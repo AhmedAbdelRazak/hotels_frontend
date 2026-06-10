@@ -10,7 +10,11 @@ import { cloudinaryUpload1 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import ImageCardHomeSecBanner from "./ImageCardHomeSecBanner";
 
-const ZHomePageBanner3 = ({ addThumbnail, setAddThumbnail }) => {
+const ZHomePageBanner3 = ({
+	addThumbnail,
+	setAddThumbnail,
+	title = "Home Page Second Section Banner Before Footer",
+}) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState("");
 
@@ -99,7 +103,7 @@ const ZHomePageBanner3 = ({ addThumbnail, setAddThumbnail }) => {
 						style={{ color: "#009ef7", fontWeight: "bold" }}
 						className='mt-1 mb-3 text-center'
 					>
-						Home Page Second Section Banner Before Footer
+						{title}
 					</h3>
 					<div className=''>{FileUploadThumbnail()}</div>
 				</div>

@@ -44,6 +44,9 @@ const UpdateExistingAccount = lazy(() =>
 const OverallSettingsMain = lazy(() =>
 	import("./OverallSettings/OverallSettingsMain")
 );
+const ZadWebsiteManager = lazy(() =>
+	import("./ZadWebsite/ZadWebsiteManager")
+);
 
 const getOverallPopupContainer = (triggerNode) =>
 	triggerNode?.parentElement ||
@@ -104,6 +107,7 @@ const OverallStructurePage = ({
 			return <ActivateAccounts {...props} />;
 		if (activeView === "update-account")
 			return <UpdateExistingAccount {...props} />;
+		if (activeView === "zad-website") return <ZadWebsiteManager {...props} />;
 		if (activeView === "settings") return <OverallSettingsMain {...props} />;
 
 		return <OverallSummaryMain {...props} />;

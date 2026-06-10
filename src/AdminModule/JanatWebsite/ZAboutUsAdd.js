@@ -24,6 +24,7 @@ const ZAboutUsAdd = ({
 	setAboutUsEnglish,
 	aboutUsArabic,
 	setAboutUsArabic,
+	title = "About Us Banner and Descriptions",
 }) => {
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
@@ -128,7 +129,7 @@ const ZAboutUsAdd = ({
 					style={{ color: "#009ef7", fontWeight: "bold" }}
 					className='mt-1 mb-3 text-center'
 				>
-					About Us Banner and Descriptions
+					{title}
 				</h3>
 				<div>{FileUploadThumbnail()}</div>
 				<div className='form-group mt-4'>
