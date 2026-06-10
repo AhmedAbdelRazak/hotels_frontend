@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-06-06
+Audited: 2026-06-10
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -2244,3 +2244,42 @@ Future TODO Backlog - Added 2026-05-26
   - System transfer messages should remain visible in admin/hotel customer-service transcripts so employees can understand why the agent name changed.
   - Stored quickReplies remain read-only audit chips, including hotel connect choices, Confirm / Something is wrong, date-update options, and optional email Skip.
   - Hijri guest date ranges may be displayed in AI messages with both Hijri and Gregorian/Miladi dates; staff views should not hide or rewrite those lines.
+
+2026-06-10 Overall Settings Dashboard Load Performance
+- Frontend commits:
+  - dd9f4c5 speeds up initial /hotel-management/main-dashboard loading.
+  - 1d011bf lazy-loads the overall dashboard settings modules.
+- Files:
+  - src/HotelModule/MainHotelDashboard.js
+  - src/HotelModule/TheOverallStructure/page.js
+  - src/HotelModule/TheOverallStructure/OverallSettings/OverallSettingsMain.js
+- Behavior:
+  - The main hotel-management dashboard should not eagerly load heavy settings/calendar modules when the user is not viewing overall=settings.
+  - Overall settings screens are code-split/lazy-loaded so calendars and settings submodules are fetched only when needed.
+  - Keep the first dashboard paint focused on the active route and lightweight shell. Avoid top-level imports that pull calendar/pricing/settings code into every main-dashboard visit.
+  - If future settings tabs add heavy calendar, room-pricing, modal, or table dependencies, load them behind the active tab/route instead of importing them into the main shell.
+- Maintenance requirements:
+  - Preserve lazy boundaries in page.js and OverallSettingsMain.js when refactoring settings.
+  - Do not reintroduce eager imports of OverallSettings calendar/pricing modules in MainHotelDashboard.js.
+  - After settings-dashboard performance changes, verify /hotel-management/main-dashboard both with overall=settings and with non-settings pages.
+
+2026-06-10 B2C AI Chat Frontend Contract After Latency And Typo Work
+- Backend-owned behavior:
+  - The AI assistant now targets a human-feeling 3.2-4.8 second reply window for normal hotel AI replies and emits typing at the start of planning.
+  - The frontend/public chat widget should display typing events immediately when received and should not add its own silent delay before showing the typing state.
+  - Jannat Booking concierge handoff can intentionally take longer than normal replies; treat the transfer as the same support case changing scope into hotel support.
+- Staff/support UI expectations:
+  - Admin and hotel customer-service chat views should continue rendering saved AI quickReplies as read-only audit chips. This includes Proceed/decline, Confirm / Something is wrong, hotel-connect choices, date-update options, and optional email Skip.
+  - Optional email Skip may be saved in the conversation and should be visible as part of the audit trail; the backend proceeds to confirmation/review without requiring an email.
+  - Reservation detail prompts may contain separate rows for full name, nationality, phone, and guest counts. Staff views should preserve message line breaks and not collapse them into one line.
+  - The backend can parse guest counts flexibly, including "3 persons" as adults with children defaulting to 0. Frontend should not require a separate "0 children" UI validation for public AI chat.
+  - Hijri and Gregorian/Miladi date lines may appear together in AI messages and should be displayed exactly as stored.
+- Scope and unsupported questions:
+  - Hotel-attached chat remains hotel-scoped. The frontend must not generate other-hotel recommendation buttons for a hotel support case.
+  - If the backend redirects a generic unsupported question to support@jannatbooking.com, staff views should treat it as a normal AI message, not an escalation by itself unless escalationStatus is active.
+- Date typo handling:
+  - Typo-tolerant date parsing is backend-owned. The frontend should send guest text as written and should not attempt to normalize Hijri/Gregorian month typos before sending.
+  - If the backend cannot confidently parse an ambiguous typo, the AI should clarify through the conversation rather than the frontend guessing.
+- Production note:
+  - The backend typo/latency/reservation-safety work was deployed through d257a26 with hotels-backend restarted under PM2.
+  - The frontend performance work was deployed through 1d011bf with hotels-frontend rebuilt/restarted during the production sync.
