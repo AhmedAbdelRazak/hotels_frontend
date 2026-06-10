@@ -575,16 +575,16 @@ const ManagerMainHotelDashboard = () => {
 
 	/* fetch hotels owned by this admin */
 	const fetchHotels = useCallback(() => {
-		if (isSingleHotelUser || !userId || !dashboardOwnerId) return;
+		if (overallView || isSingleHotelUser || !userId || !dashboardOwnerId) return;
 		hotelAccount(userId, token, dashboardOwnerId).then((d) => {
 			if (!d?.error) setUserData(d);
 		});
-	}, [dashboardOwnerId, isSingleHotelUser, token, userId]);
+	}, [dashboardOwnerId, isSingleHotelUser, overallView, token, userId]);
 
 	useEffect(fetchHotels, [fetchHotels]);
 
 	const fetchExecutiveSummary = useCallback(() => {
-		if (isSingleHotelUser || !dashboardOwnerId || !token) return;
+		if (overallView || isSingleHotelUser || !dashboardOwnerId || !token) return;
 		setExecutiveLoading(true);
 		getManagerExecutiveSummary(dashboardOwnerId, token, {
 			range: executiveSummaryRange,
@@ -603,6 +603,7 @@ const ManagerMainHotelDashboard = () => {
 		executiveSummaryDateBy,
 		executiveSummaryRange,
 		isSingleHotelUser,
+		overallView,
 		token,
 	]);
 
@@ -1859,6 +1860,11 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 	};
 
 	useEffect(() => {
+		if (overallView) {
+			setHotels([]);
+			setLoading(false);
+			return;
+		}
 		if (!assignedHotelIds.length) {
 			setHotels([]);
 			return;
@@ -1903,11 +1909,12 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		return () => {
 			isMounted = false;
 		};
-	}, [assignedHotelKey, user, assignedHotelIds]);
+	}, [assignedHotelKey, user, assignedHotelIds, overallView]);
 
 	useEffect(() => {
-		if (!hotels.length || !user?._id) {
+		if (overallView || !hotels.length || !user?._id) {
 			setSummaries({});
+			setSummaryLoading(false);
 			return;
 		}
 		let isMounted = true;
@@ -1931,10 +1938,16 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		return () => {
 			isMounted = false;
 		};
-	}, [hotels, isOrderTakerOnly, today, user?._id]);
+	}, [hotels, isOrderTakerOnly, overallView, today, user?._id]);
 
 	useEffect(() => {
-		if (!hotels.length || !user?._id || !token || roleKey !== "ordertaker") {
+		if (
+			overallView ||
+			!hotels.length ||
+			!user?._id ||
+			!token ||
+			roleKey !== "ordertaker"
+		) {
 			setWalletSummaries({});
 			setTodoSummaries({});
 			return;
@@ -1971,7 +1984,7 @@ const ScopedUserMainDashboard = ({ user, token }) => {
 		return () => {
 			isMounted = false;
 		};
-	}, [hotels, roleKey, token, user?._id]);
+	}, [hotels, overallView, roleKey, token, user?._id]);
 
 	const orderedHotels = useMemo(() => {
 		if (!selectedHotelId) return hotels;
