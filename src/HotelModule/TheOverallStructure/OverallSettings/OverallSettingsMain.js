@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import {
 	CalendarOutlined,
 	DatabaseOutlined,
@@ -8,9 +8,6 @@ import {
 import { useHistory, useLocation } from "react-router-dom";
 import styled, { keyframes } from "styled-components";
 import { getOverallSettings } from "../../apiAdmin";
-import OverallCalendarPricingModal from "./OverallCalendarPricingModal";
-import OverallPriceVariantModal from "./OverallPriceVariantModal";
-import OverallRoomManagerModal from "./OverallRoomManagerModal";
 import {
 	buildOwnerParams,
 	EmptyState,
@@ -68,6 +65,14 @@ const normalizeRoomManagerTab = (value) =>
 const normalizeCalendarPricingTab = () => "general";
 const normalizePriceVariantTab = (value) =>
 	["update", "agents"].includes(value) ? value : "add";
+
+const OverallCalendarPricingModal = lazy(() =>
+	import("./OverallCalendarPricingModal")
+);
+const OverallPriceVariantModal = lazy(() =>
+	import("./OverallPriceVariantModal")
+);
+const OverallRoomManagerModal = lazy(() => import("./OverallRoomManagerModal"));
 
 const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const isRTL = chosenLanguage === "Arabic";
@@ -256,39 +261,47 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 					<span>{labels.calendarAction}</span>
 				</SettingsActionButton>
 			</SettingsActions>
-			<OverallRoomManagerModal
-				open={roomModalOpen}
-				onClose={closeRoomManager}
-				activeTab={roomManagerTab}
-				onTabChange={handleRoomManagerTabChange}
-				userId={userId}
-				token={token}
-				ownerId={ownerId}
-				chosenLanguage={chosenLanguage}
-				onSaved={loadSettings}
-			/>
-			<OverallPriceVariantModal
-				open={priceVariantModalOpen}
-				onClose={closeRoomManager}
-				userId={userId}
-				token={token}
-				ownerId={ownerId}
-				chosenLanguage={chosenLanguage}
-				activeTab={priceVariantTab}
-				onTabChange={handlePriceVariantTabChange}
-				onSaved={loadSettings}
-			/>
-			<OverallCalendarPricingModal
-				open={calendarPricingModalOpen}
-				onClose={closeRoomManager}
-				activeTab={calendarPricingTab}
-				onTabChange={handleCalendarPricingTabChange}
-				userId={userId}
-				token={token}
-				ownerId={ownerId}
-				chosenLanguage={chosenLanguage}
-				onSaved={loadSettings}
-			/>
+			<Suspense fallback={null}>
+				{roomModalOpen && (
+					<OverallRoomManagerModal
+						open={roomModalOpen}
+						onClose={closeRoomManager}
+						activeTab={roomManagerTab}
+						onTabChange={handleRoomManagerTabChange}
+						userId={userId}
+						token={token}
+						ownerId={ownerId}
+						chosenLanguage={chosenLanguage}
+						onSaved={loadSettings}
+					/>
+				)}
+				{priceVariantModalOpen && (
+					<OverallPriceVariantModal
+						open={priceVariantModalOpen}
+						onClose={closeRoomManager}
+						userId={userId}
+						token={token}
+						ownerId={ownerId}
+						chosenLanguage={chosenLanguage}
+						activeTab={priceVariantTab}
+						onTabChange={handlePriceVariantTabChange}
+						onSaved={loadSettings}
+					/>
+				)}
+				{calendarPricingModalOpen && (
+					<OverallCalendarPricingModal
+						open={calendarPricingModalOpen}
+						onClose={closeRoomManager}
+						activeTab={calendarPricingTab}
+						onTabChange={handleCalendarPricingTabChange}
+						userId={userId}
+						token={token}
+						ownerId={ownerId}
+						chosenLanguage={chosenLanguage}
+						onSaved={loadSettings}
+					/>
+				)}
+			</Suspense>
 			{!loading && !rows.length ? (
 				<EmptyState>{labels.noHotelsFound}</EmptyState>
 			) : (

@@ -1,20 +1,49 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { ConfigProvider } from "antd";
 import styled from "styled-components";
-import OverallSummaryMain from "./OverallSummary/OverallSummaryMain";
-import OverallReservationMain from "./OverallReservationsList/OverallReservationMain";
-import NewReservationOverall from "./OverallReservationsList/NewReservationOverall";
-import OverallPendingReservations from "./OverallReservationsList/OverallPendingReservations";
-import OverallHouseKeeping from "./OverallHouseKeeping/OverallHouseKeeping";
-import OverallHotelMapMain from "./OverallHotelMap/OverallHotelMapMain";
-import OverallFinancialReport from "./OverallFinancials/OverallFinancialReport";
-import OverallFinancialActions from "./OverallFinancials/OverallFinancialActions";
-import OverallWalletManagement from "./OverallFinancials/OverallWalletManagement";
-import AccountManagementMain from "./OverallAccountManagement/AccountManagementMain";
-import CreateNewAccount from "./OverallAccountManagement/CreateNewAccount";
-import ActivateAccounts from "./OverallAccountManagement/ActivateAccounts";
-import UpdateExistingAccount from "./OverallAccountManagement/UpdateExistingAccount";
-import OverallSettingsMain from "./OverallSettings/OverallSettingsMain";
+
+const OverallSummaryMain = lazy(() =>
+	import("./OverallSummary/OverallSummaryMain")
+);
+const OverallReservationMain = lazy(() =>
+	import("./OverallReservationsList/OverallReservationMain")
+);
+const NewReservationOverall = lazy(() =>
+	import("./OverallReservationsList/NewReservationOverall")
+);
+const OverallPendingReservations = lazy(() =>
+	import("./OverallReservationsList/OverallPendingReservations")
+);
+const OverallHouseKeeping = lazy(() =>
+	import("./OverallHouseKeeping/OverallHouseKeeping")
+);
+const OverallHotelMapMain = lazy(() =>
+	import("./OverallHotelMap/OverallHotelMapMain")
+);
+const OverallFinancialReport = lazy(() =>
+	import("./OverallFinancials/OverallFinancialReport")
+);
+const OverallFinancialActions = lazy(() =>
+	import("./OverallFinancials/OverallFinancialActions")
+);
+const OverallWalletManagement = lazy(() =>
+	import("./OverallFinancials/OverallWalletManagement")
+);
+const AccountManagementMain = lazy(() =>
+	import("./OverallAccountManagement/AccountManagementMain")
+);
+const CreateNewAccount = lazy(() =>
+	import("./OverallAccountManagement/CreateNewAccount")
+);
+const ActivateAccounts = lazy(() =>
+	import("./OverallAccountManagement/ActivateAccounts")
+);
+const UpdateExistingAccount = lazy(() =>
+	import("./OverallAccountManagement/UpdateExistingAccount")
+);
+const OverallSettingsMain = lazy(() =>
+	import("./OverallSettings/OverallSettingsMain")
+);
 
 const getOverallPopupContainer = (triggerNode) =>
 	triggerNode?.parentElement ||
@@ -85,7 +114,9 @@ const OverallStructurePage = ({
 			direction={isRTL ? "rtl" : "ltr"}
 			getPopupContainer={getOverallPopupContainer}
 		>
-			<OverallAntdScope $isRTL={isRTL}>{renderView()}</OverallAntdScope>
+			<OverallAntdScope $isRTL={isRTL}>
+				<Suspense fallback={<OverallLoading />}>{renderView()}</Suspense>
+			</OverallAntdScope>
 		</ConfigProvider>
 	);
 };
@@ -116,4 +147,8 @@ const OverallAntdScope = styled.div`
 		direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 		text-align: ${(props) => (props.$isRTL ? "right" : "left")};
 	}
+`;
+
+const OverallLoading = styled.div`
+	min-height: 220px;
 `;
