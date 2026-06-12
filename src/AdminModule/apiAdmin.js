@@ -2551,6 +2551,51 @@ export const getPaidBreakdownReportAdmin = (
 		});
 };
 
+const buildAdminUrlSearch = (params = {}) => {
+	const query = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (Array.isArray(value)) {
+			const selected = value.filter(
+				(item) => item !== undefined && item !== null && item !== "",
+			);
+			if (selected.length) query.set(key, selected.join(","));
+			return;
+		}
+		if (value !== undefined && value !== null && value !== "") {
+			query.set(key, value);
+		}
+	});
+	const queryString = query.toString();
+	return queryString ? `?${queryString}` : "";
+};
+
+const overallAdminHeaders = (token = "") => ({
+	Accept: "application/json",
+	"Content-Type": "application/json",
+	...getStoredActiveAuthHeaders(),
+	...authHeaders(token),
+});
+
+export const getOverallProfitReport = (userId, token, params = {}) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/profit-report/${userId}${buildAdminUrlSearch(
+			params,
+		)}`,
+		{
+			method: "GET",
+			headers: overallAdminHeaders(token),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => {
+			console.error("Error fetching overall profit report:", err);
+			return { reservations: [], total: 0, error: "Could not load profit report" };
+		});
+};
+
+export const exportOverallProfitReport = (userId, token, params = {}) =>
+	getOverallProfitReport(userId, token, { ...params, exportAll: "true" });
+
 export const getHotelOccupancyCalendar = (
 	userId,
 	token,

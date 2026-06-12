@@ -10,9 +10,15 @@ import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
+import ProfitReportAdmin from "./ProfitReportAdmin";
 import { isSuperAdminUser } from "../utils/superUsers";
 
-const VALID_REPORT_TABS = ["reservations", "inventory", "paid-overview"];
+const VALID_REPORT_TABS = ["reservations", "inventory", "paid-overview", "Profit"];
+const normalizeReportTab = (tab) => {
+	const normalized = String(tab || "").trim();
+	if (normalized.toLowerCase() === "profit") return "Profit";
+	return VALID_REPORT_TABS.includes(normalized) ? normalized : "reservations";
+};
 
 const HOTEL_REPORTS_TEXT = {
 	en: {
@@ -24,6 +30,7 @@ const HOTEL_REPORTS_TEXT = {
 		reservations: "Reservations Overview",
 		inventory: "Hotels Inventory",
 		paidOverview: "Paid Reservations Overview",
+		profit: "Profit",
 	},
 	ar: {
 		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
@@ -39,6 +46,7 @@ const HOTEL_REPORTS_TEXT = {
 			"\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		paidOverview:
 			"\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
+		profit: "\u0627\u0644\u0631\u0628\u062d",
 	},
 };
 
@@ -167,18 +175,18 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 
 	/* ------------------ 5) Tabs in URL ------------------ */
 	const handleTabChange = (tab) => {
-		if (!VALID_REPORT_TABS.includes(tab)) return;
-		setActiveTab(tab);
+		const nextTab = normalizeReportTab(tab);
+		setActiveTab(nextTab);
 		history.push({
 			pathname: location.pathname,
-			search: `?tab=${tab}`,
+			search: `?tab=${nextTab}`,
 		});
 	};
 
 	useEffect(() => {
 		const queryParams = new URLSearchParams(location.search);
 		const tab = queryParams.get("tab");
-		const nextTab = VALID_REPORT_TABS.includes(tab) ? tab : "reservations";
+		const nextTab = normalizeReportTab(tab);
 
 		if (activeTab !== nextTab) {
 			setActiveTab(nextTab);
@@ -196,6 +204,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		{ key: "reservations", label: L.reservations },
 		{ key: "inventory", label: L.inventory },
 		{ key: "paid-overview", label: L.paidOverview },
+		{ key: "Profit", label: L.profit },
 	];
 
 	return (
@@ -289,6 +298,13 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 								<div className='report-section'>
 									<h3 className='report-heading'>{L.paidOverview}</h3>
 									<PaidReportAdmin />
+								</div>
+							)}
+
+							{activeTab === "Profit" && (
+								<div className='report-section'>
+									<h3 className='report-heading'>{L.profit}</h3>
+									<ProfitReportAdmin />
 								</div>
 							)}
 						</div>
