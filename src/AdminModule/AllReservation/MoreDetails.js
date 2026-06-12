@@ -748,6 +748,8 @@ const AR_LABELS = {
 		"\u0628\u0639\u062f \u0645\u0635\u0627\u0631\u064a\u0641 OTA",
 	platformProfit:
 		"\u0631\u0628\u062d \u0627\u0644\u0645\u0646\u0635\u0629",
+	platformProfitWithCommission:
+		"\u0631\u0628\u062d \u0627\u0644\u0645\u0646\u0635\u0629 + \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 	taxesAndFees:
 		"\u0627\u0644\u0636\u0631\u0627\u0626\u0628 \u0648\u0627\u0644\u0631\u0633\u0648\u0645",
 	commission:
@@ -4985,10 +4987,29 @@ const ReservationDetail = ({
 			return total + dayCommission * count;
 		}, 0);
 	}, [reservation?.pickedRoomsType, normalizeNumber]);
+	const explicitCommissionAmount = useMemo(() => {
+		const possibleAmounts = [
+			reservation?.commission,
+			reservation?.financial_cycle?.commissionAmount,
+			reservation?.commissionData?.amount,
+			reservation?.commissionData?.commissionAmount,
+			reservation?.commissionData?.commissionValue,
+		];
+		for (const amount of possibleAmounts) {
+			const parsedAmount = normalizeNumber(amount, 0);
+			if (parsedAmount > 0) return parsedAmount;
+		}
+		return 0;
+	}, [
+		normalizeNumber,
+		reservation?.commission,
+		reservation?.commissionData?.amount,
+		reservation?.commissionData?.commissionAmount,
+		reservation?.commissionData?.commissionValue,
+		reservation?.financial_cycle?.commissionAmount,
+	]);
 	const commissionAmount = normalizeNumber(
-		reservation?.commission ||
-			reservation?.financial_cycle?.commissionAmount ||
-			roomCommissionEstimate,
+		explicitCommissionAmount || roomCommissionEstimate,
 		0,
 	);
 	const pmsCollectedAmount = useMemo(() => {
@@ -6566,14 +6587,19 @@ const ReservationDetail = ({
 			pricingBreakdownByDay.platformMarginTotal,
 			netAfterExpenses - hotelVisibleAmount,
 		);
+		const commissionToInclude =
+			explicitCommissionAmount > 0 ? explicitCommissionAmount : 0;
 
 		return {
 			show: true,
 			hotelVisibleAmount,
 			netAfterExpenses,
 			profit,
+			includesCommission: commissionToInclude > 0,
+			profitWithCommission: profit + commissionToInclude,
 		};
 	}, [
+		explicitCommissionAmount,
 		normalizeNumber,
 		pricingBreakdownByDay.netTotal,
 		pricingBreakdownByDay.otaExpenseTotal,
@@ -10218,11 +10244,19 @@ const ReservationDetail = ({
 													<div className='payment-total-card profit'>
 														<span>
 															{chosenLanguage === "Arabic"
-																? AR_LABELS.platformProfit
-																: "Platform Profit"}
+																? otaPricingSummary.includesCommission
+																	? AR_LABELS.platformProfitWithCommission
+																	: AR_LABELS.platformProfit
+																: otaPricingSummary.includesCommission
+																  ? "Platform Profit + Commission"
+																  : "Platform Profit"}
 														</span>
 														<strong className='detail-value-ltr'>
-															{formatMoney(otaPricingSummary.profit)}{" "}
+															{formatMoney(
+																otaPricingSummary.includesCommission
+																	? otaPricingSummary.profitWithCommission
+																	: otaPricingSummary.profit,
+															)}{" "}
 															{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 														</strong>
 													</div>
