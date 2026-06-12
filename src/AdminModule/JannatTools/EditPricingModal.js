@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
@@ -261,18 +261,25 @@ const EditPricingModal = ({
 		net: null,
 	});
 	const [commissionDraft, setCommissionDraft] = useState(null);
+	const wasVisibleRef = useRef(false);
 
 	useEffect(() => {
-		if (visible) {
-			const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
-			setEditableData(normalizedRows);
-			setDistributionTotals(summarizePricingRows(normalizedRows));
-			setCommissionDraft(
-				showCommissionAmount && hasNumericInput(commissionAmount)
-					? roundMoney(commissionAmount)
-					: null,
-			);
+		if (!visible) {
+			wasVisibleRef.current = false;
+			return;
 		}
+
+		if (wasVisibleRef.current) return;
+		wasVisibleRef.current = true;
+
+		const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
+		setEditableData(normalizedRows);
+		setDistributionTotals(summarizePricingRows(normalizedRows));
+		setCommissionDraft(
+			showCommissionAmount && hasNumericInput(commissionAmount)
+				? roundMoney(commissionAmount)
+				: null,
+		);
 	}, [visible, pricingByDay, commissionAmount, showCommissionAmount]);
 
 	const totals = useMemo(
@@ -291,11 +298,14 @@ const EditPricingModal = ({
 		[editableData],
 	);
 
-	const commitRows = (rows) => {
+	const commitRows = (rows, { syncParent = false } = {}) => {
 		const normalizedRows = rows.map(normalizePricingRow);
 		setEditableData(normalizedRows);
 		setDistributionTotals(summarizePricingRows(normalizedRows));
-		onUpdate(normalizedRows);
+		if (syncParent) {
+			onUpdate(normalizedRows);
+		}
+		return normalizedRows;
 	};
 
 	const handleInputChange = (val, rowIndex, field) => {
@@ -392,9 +402,6 @@ const EditPricingModal = ({
 	const handleCommissionInput = (value) => {
 		const nextValue = hasNumericInput(value) ? value : null;
 		setCommissionDraft(nextValue);
-		onCommissionChange(
-			hasNumericInput(nextValue) ? roundMoney(nextValue) : null,
-		);
 	};
 
 	const handleInherit = () => {
@@ -434,7 +441,7 @@ const EditPricingModal = ({
 				hasNumericInput(commissionDraft) ? roundMoney(commissionDraft) : null,
 			);
 		}
-		commitRows(editableData);
+		commitRows(editableData, { syncParent: true });
 		message.success(t.applied, 5);
 		onClose();
 	};
@@ -662,7 +669,8 @@ const EditPricingModal = ({
 				.edit-pricing-modal .pricing-distribution-actions {
 					flex: 0 0 126px;
 					display: flex;
-					align-items: center;
+					align-items: flex-start;
+					padding-top: 10px;
 				}
 
 				.edit-pricing-modal .pricing-distribution-action {

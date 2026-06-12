@@ -1,6 +1,6 @@
 /** @format */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import { Button, Input, Modal, Spin, Tooltip, message } from "antd";
@@ -433,9 +433,19 @@ const OtaPricingModal = ({
 		net: "",
 	});
 	const [commissionValue, setCommissionValue] = useState("");
+	const initializedReservationIdRef = useRef("");
 
 	useEffect(() => {
-		if (!open || !reservation) return;
+		if (!open) {
+			initializedReservationIdRef.current = "";
+			return;
+		}
+		if (!reservation) return;
+		const reservationKey =
+			reservation?._id || reservation?.confirmation_number || "current";
+		if (initializedReservationIdRef.current === reservationKey) return;
+		initializedReservationIdRef.current = reservationKey;
+
 		const savedClientTotal = savedClientTotalForReservation(reservation);
 		const savedRootTotal = savedRootTotalForReservation(reservation);
 		const savedNetTotal = savedNetTotalForReservation(reservation);

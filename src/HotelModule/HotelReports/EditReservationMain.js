@@ -677,13 +677,16 @@ const EditReservationMain = ({
 		setIsModalVisible(false);
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		const updated = selectedRooms.map((room, i) =>
-			i === editingRoomIndex
-				? { ...room, pricingByDay: updatedPricingByDay }
-				: room
-		);
-		setSelectedRooms(updated);
-		setTimeout(() => calculateTotals(updated), 0);
+		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setSelectedRooms((currentRooms) => {
+			const updated = currentRooms.map((room, i) =>
+				i === editingRoomIndex
+					? { ...room, pricingByDay: updatedPricingByDay }
+					: room
+			);
+			setTimeout(() => calculateTotals(updated), 0);
+			return updated;
+		});
 	};
 
 	// Clear All

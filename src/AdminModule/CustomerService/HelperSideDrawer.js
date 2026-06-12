@@ -75,20 +75,16 @@ const HelperSideDrawer = ({
 	};
 
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		// Update the specific room's pricingByDay
-		const updatedRooms = selectedRooms.map((room, index) =>
-			index === editingRoomIndex
-				? { ...room, pricingByDay: updatedPricingByDay }
-				: room
-		);
-
-		// Update state with the modified rooms
-		setSelectedRooms(updatedRooms);
-
-		// Recalculate totals after the state is updated
-		calculateTotals(updatedRooms);
-
-		// Close the modal
+		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setSelectedRooms((currentRooms) => {
+			const updatedRooms = currentRooms.map((room, index) =>
+				index === editingRoomIndex
+					? { ...room, pricingByDay: updatedPricingByDay }
+					: room
+			);
+			calculateTotals(updatedRooms);
+			return updatedRooms;
+		});
 		closeModal();
 	};
 

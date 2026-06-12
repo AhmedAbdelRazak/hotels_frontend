@@ -1092,21 +1092,22 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			newCommRate = safeParseFloat(firstDay.commissionRate, 10);
 		}
 
-		// 4. Update the correct room
-		const updated = selectedRooms.map((room, i) =>
-			i === editingRoomIndex
-				? {
-						...room,
-						pricingByDay: updatedPricingByDay,
-						manualTotal: sumWithComm > 0 ? sumWithComm : null,
-						averageRootToTotalRatio: ratio > 0 ? ratio : 0,
-						commissionRate: newCommRate,
-						priceVariantSelection: "",
-						priceVariantLabel: "",
-				  }
-				: room,
+		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setSelectedRooms((currentRooms) =>
+			currentRooms.map((room, i) =>
+				i === editingRoomIndex
+					? {
+							...room,
+							pricingByDay: updatedPricingByDay,
+							manualTotal: sumWithComm > 0 ? sumWithComm : null,
+							averageRootToTotalRatio: ratio > 0 ? ratio : 0,
+							commissionRate: newCommRate,
+							priceVariantSelection: "",
+							priceVariantLabel: "",
+					  }
+					: room,
+			)
 		);
-		setSelectedRooms(updated);
 	};
 
 	// Clear all fields

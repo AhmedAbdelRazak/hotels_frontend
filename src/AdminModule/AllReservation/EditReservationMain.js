@@ -886,12 +886,14 @@ const EditReservationMain = ({
 		setIsModalVisible(false);
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		const updated = selectedRooms.map((room, i) =>
-			i === editingRoomIndex
-				? { ...room, pricingByDay: updatedPricingByDay }
-				: room
+		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setSelectedRooms((currentRooms) =>
+			currentRooms.map((room, i) =>
+				i === editingRoomIndex
+					? { ...room, pricingByDay: updatedPricingByDay }
+					: room
+			)
 		);
-		setSelectedRooms(updated);
 	};
 
 	// ------------- Hotel change (Relocation) -------------
