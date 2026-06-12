@@ -61,9 +61,8 @@ const TEXT = {
 		clientPaid: "Client paid / total",
 		hotelTotal: "Amount to hotel",
 		commission: "Commission",
-		platformMargin: "Platform margin",
 		otaExpense: "OTA expenses",
-		profitMargin: "Profit margin",
+		totalProfit: "Total Profit",
 		profitRate: "Profit rate",
 		bookingSourceBreakdown: "Profit by booking source",
 		profitTimeline: "Profit timeline",
@@ -109,11 +108,9 @@ const TEXT = {
 		hotelTotal:
 			"\u0627\u0644\u0645\u0628\u0644\u063a \u0644\u0644\u0641\u0646\u062f\u0642",
 		commission: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629",
-		platformMargin:
-			"\u0647\u0627\u0645\u0634 \u0627\u0644\u0645\u0646\u0635\u0629",
 		otaExpense:
 			"\u0645\u0635\u0627\u0631\u064a\u0641 \u0627\u0644\u0645\u0646\u0635\u0627\u062a",
-		profitMargin: "\u0647\u0627\u0645\u0634 \u0627\u0644\u0631\u0628\u062d",
+		totalProfit: "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0631\u0628\u062d",
 		profitRate: "\u0646\u0633\u0628\u0629 \u0627\u0644\u0631\u0628\u062d",
 		bookingSourceBreakdown:
 			"\u0627\u0644\u0631\u0628\u062d \u062d\u0633\u0628 \u0627\u0644\u0645\u0635\u062f\u0631",
@@ -216,9 +213,8 @@ const buildExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 			[labels.clientPaid]: safeNumber(metrics.clientTotal),
 			[labels.hotelTotal]: safeNumber(metrics.hotelTotal),
 			[labels.commission]: safeNumber(metrics.commission),
-			[labels.platformMargin]: safeNumber(metrics.platformMargin),
 			[labels.otaExpense]: safeNumber(metrics.otaExpense),
-			[labels.profitMargin]: safeNumber(metrics.profitMargin),
+			[labels.totalProfit]: safeNumber(metrics.profitMargin),
 			[labels.profitRate]: safeNumber(metrics.profitRate),
 		};
 	});
@@ -238,7 +234,6 @@ const downloadProfitWorkbook = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 		{ wch: 18 },
 		{ wch: 18 },
 		{ wch: 14 },
-		{ wch: 16 },
 		{ wch: 16 },
 		{ wch: 16 },
 		{ wch: 13 },
@@ -448,15 +443,8 @@ const ProfitReportAdmin = () => {
 			icon: <DollarCircleOutlined />,
 		},
 		{
-			key: "platform",
-			label: labels.platformMargin,
-			value: moneyText(scorecards.platformMargin, labels),
-			tone: "green",
-			icon: <DollarCircleOutlined />,
-		},
-		{
 			key: "profit",
-			label: labels.profitMargin,
+			label: labels.totalProfit,
 			value: moneyText(scorecards.profitMargin, labels),
 			tone: safeNumber(scorecards.profitMargin) < 0 ? "red" : "emerald",
 			icon: <DollarCircleOutlined />,
@@ -468,13 +456,6 @@ const ProfitReportAdmin = () => {
 			tone: "indigo",
 			icon: <BarChartOutlined />,
 		},
-		{
-			key: "ota",
-			label: labels.otaExpense,
-			value: moneyText(scorecards.otaExpense, labels),
-			tone: "rose",
-			icon: <DollarCircleOutlined />,
-		},
 	];
 
 	const activeTimeline = Array.isArray(report.timeline?.[filters.granularity])
@@ -484,48 +465,103 @@ const ProfitReportAdmin = () => {
 	const timelineOptions = {
 		chart: {
 			id: "admin-profit-timeline",
-			toolbar: { show: false },
+			toolbar: {
+				show: true,
+				tools: {
+					download: false,
+					selection: true,
+					zoom: true,
+					zoomin: true,
+					zoomout: true,
+					pan: true,
+					reset: true,
+				},
+			},
+			zoom: { enabled: true },
 			fontFamily: isArabic
 				? '"Droid Arabic Kufi", "Tajawal", Arial, sans-serif'
 				: '"Inter", "Segoe UI", Arial, sans-serif',
 		},
-		colors: ["#059669", "#2563eb", "#475569", "#f59e0b"],
-		dataLabels: { enabled: false },
-		stroke: { curve: "smooth", width: [3, 2, 2, 2] },
-		fill: { opacity: [0.18, 0.08, 0.08, 0.08] },
-		grid: { borderColor: "#e2e8f0" },
+		colors: ["#0f8b5f", "#d97706", "#b91c1c"],
+		dataLabels: {
+			enabled: activeTimeline.length <= 10,
+			formatter: (value) => formatMoney(value),
+			background: {
+				enabled: true,
+				borderRadius: 4,
+				opacity: 0.86,
+			},
+			style: {
+				fontSize: "10px",
+				fontWeight: 900,
+			},
+		},
+		markers: {
+			size: 4,
+			strokeWidth: 2,
+			hover: { size: 7 },
+		},
+		stroke: { curve: "smooth", width: [4, 3, 3] },
+		grid: {
+			borderColor: "#d9e7f5",
+			strokeDashArray: 3,
+			padding: { left: 10, right: 18, bottom: 10 },
+		},
 		xaxis: {
 			categories: timelineCategories,
-			labels: { rotate: -35, trim: true },
+			title: {
+				text: granularityOptions(labels).find(
+					(item) => item.value === filters.granularity,
+				)?.label,
+				style: { fontWeight: 950, color: "#334155" },
+			},
+			labels: {
+				rotate: activeTimeline.length > 8 ? -35 : 0,
+				trim: true,
+				hideOverlappingLabels: false,
+				style: { colors: "#334155", fontWeight: 850 },
+			},
+			axisBorder: { color: "#9db7d4" },
+			axisTicks: { color: "#9db7d4" },
 		},
 		yaxis: {
+			title: {
+				text: labels.totalProfit,
+				style: { fontWeight: 950, color: "#334155" },
+			},
+			forceNiceScale: true,
 			labels: {
 				formatter: (value) => formatMoney(value),
+				style: { colors: "#334155", fontWeight: 850 },
 			},
 		},
 		tooltip: {
+			shared: true,
+			intersect: false,
+			x: { show: true },
 			y: {
 				formatter: (value) => moneyText(value, labels),
 			},
 		},
-		legend: { position: "top", horizontalAlign: isArabic ? "right" : "left" },
+		legend: {
+			position: "top",
+			horizontalAlign: isArabic ? "right" : "left",
+			fontWeight: 850,
+			markers: { radius: 4 },
+		},
 	};
 	const timelineSeries = [
 		{
-			name: labels.profitMargin,
+			name: labels.totalProfit,
 			data: activeTimeline.map((row) => safeNumber(row.profitMargin)),
-		},
-		{
-			name: labels.clientPaid,
-			data: activeTimeline.map((row) => safeNumber(row.clientTotal)),
-		},
-		{
-			name: labels.hotelTotal,
-			data: activeTimeline.map((row) => safeNumber(row.hotelTotal)),
 		},
 		{
 			name: labels.commission,
 			data: activeTimeline.map((row) => safeNumber(row.commission)),
+		},
+		{
+			name: labels.otaExpense,
+			data: activeTimeline.map((row) => safeNumber(row.otaExpense)),
 		},
 	];
 
@@ -533,6 +569,10 @@ const ProfitReportAdmin = () => {
 		? report.bookingSources
 		: []
 	).slice(0, 14);
+	const sourceChartHeight = Math.max(
+		360,
+		Math.min(560, bookingSourceRows.length * 62 + 145),
+	);
 	const sourceOptions = {
 		chart: {
 			id: "admin-profit-booking-source",
@@ -549,13 +589,50 @@ const ProfitReportAdmin = () => {
 			},
 		},
 		colors: ["#0f766e"],
-		dataLabels: { enabled: false },
-		grid: { borderColor: "#e2e8f0" },
+		dataLabels: {
+			enabled: true,
+			formatter: (value) => moneyText(value, labels),
+			textAnchor: isArabic ? "end" : "start",
+			offsetX: isArabic ? -8 : 8,
+			style: {
+				colors: ["#0f172a"],
+				fontSize: "10px",
+				fontWeight: 950,
+			},
+			background: {
+				enabled: true,
+				foreColor: "#0f172a",
+				borderRadius: 4,
+				opacity: 0.9,
+			},
+		},
+		grid: {
+			borderColor: "#d9e7f5",
+			strokeDashArray: 3,
+			padding: { left: 8, right: 24 },
+		},
 		xaxis: {
 			categories: bookingSourceRows.map((row) => row.source || "Unknown"),
-			labels: { formatter: (value) => formatMoney(value) },
+			title: {
+				text: labels.totalProfit,
+				style: { fontWeight: 950, color: "#334155" },
+			},
+			labels: {
+				formatter: (value) => formatMoney(value),
+				style: { colors: "#334155", fontWeight: 850 },
+			},
+			axisBorder: { color: "#9db7d4" },
+			axisTicks: { color: "#9db7d4" },
+		},
+		yaxis: {
+			labels: {
+				minWidth: 105,
+				maxWidth: 170,
+				style: { colors: "#334155", fontWeight: 900 },
+			},
 		},
 		tooltip: {
+			x: { show: true },
 			y: {
 				formatter: (value) => moneyText(value, labels),
 			},
@@ -563,7 +640,7 @@ const ProfitReportAdmin = () => {
 	};
 	const sourceSeries = [
 		{
-			name: labels.profitMargin,
+			name: labels.totalProfit,
 			data: bookingSourceRows.map((row) => safeNumber(row.profitMargin)),
 		},
 	];
@@ -718,19 +795,6 @@ const ProfitReportAdmin = () => {
 				moneyText(profitMetricsForReservation(row).commission, labels),
 		},
 		{
-			title: labels.profitMargin,
-			width: 150,
-			align: "center",
-			render: (_value, row) => {
-				const value = profitMetricsForReservation(row).profitMargin;
-				return (
-					<ProfitValue $negative={safeNumber(value) < 0}>
-						{moneyText(value, labels)}
-					</ProfitValue>
-				);
-			},
-		},
-		{
 			title: labels.profitRate,
 			width: 120,
 			align: "center",
@@ -741,6 +805,20 @@ const ProfitReportAdmin = () => {
 					{formatPercent(profitMetricsForReservation(row).profitRate)}
 				</ProfitValue>
 			),
+		},
+		{
+			title: labels.totalProfit,
+			width: 150,
+			align: "center",
+			fixed: "right",
+			render: (_value, row) => {
+				const value = profitMetricsForReservation(row).profitMargin;
+				return (
+					<ProfitValue $negative={safeNumber(value) < 0}>
+						{moneyText(value, labels)}
+					</ProfitValue>
+				);
+			},
 		},
 		{
 			title: labels.details,
@@ -833,7 +911,12 @@ const ProfitReportAdmin = () => {
 			<Spin spinning={loading}>
 				<ScoreGrid>
 					{scorecardItems.map((card) => (
-						<ScoreTile key={card.key} className={`tone-${card.tone}`}>
+						<ScoreTile
+							key={card.key}
+							$tone={card.tone}
+							role='group'
+							aria-label={`${card.label}: ${card.value}`}
+						>
 							<span className='score-icon'>{card.icon}</span>
 							<span className='score-label'>{card.label}</span>
 							<strong>{card.value}</strong>
@@ -852,7 +935,7 @@ const ProfitReportAdmin = () => {
 								options={timelineOptions}
 								series={timelineSeries}
 								type='area'
-								height={340}
+								height={460}
 							/>
 						) : (
 							<EmptyBlock>{labels.noData}</EmptyBlock>
@@ -868,7 +951,7 @@ const ProfitReportAdmin = () => {
 								options={sourceOptions}
 								series={sourceSeries}
 								type='bar'
-								height={340}
+								height={sourceChartHeight}
 							/>
 						) : (
 							<EmptyBlock>{labels.noData}</EmptyBlock>
@@ -991,107 +1074,152 @@ const FiltersBar = styled.div`
 	}
 `;
 
+const scoreTone = {
+	blue: {
+		accent: "#2d5d91",
+		bg: "linear-gradient(135deg, #f7fbff 0%, #e8f3ff 100%)",
+		text: "#102033",
+	},
+	cyan: {
+		accent: "#0891b2",
+		bg: "linear-gradient(135deg, #ecfeff 0%, #dcf3ff 100%)",
+		text: "#083344",
+	},
+	slate: {
+		accent: "#475569",
+		bg: "linear-gradient(135deg, #f8fafc 0%, #e8eef5 100%)",
+		text: "#1f2937",
+	},
+	amber: {
+		accent: "#d97706",
+		bg: "linear-gradient(135deg, #fff8e7 0%, #ffe7b5 100%)",
+		text: "#4c3000",
+	},
+	emerald: {
+		accent: "#0f8b5f",
+		bg: "linear-gradient(135deg, #ecfdf5 0%, #d8f7e4 100%)",
+		text: "#064e3b",
+	},
+	red: {
+		accent: "#b91c1c",
+		bg: "linear-gradient(135deg, #fff5f5 0%, #ffe1e6 100%)",
+		text: "#5f1212",
+	},
+	indigo: {
+		accent: "#7c3aed",
+		bg: "linear-gradient(135deg, #fffaff 0%, #efe3ff 100%)",
+		text: "#3b1248",
+	},
+};
+
+const scoreToneFor = (toneKey = "blue") => scoreTone[toneKey] || scoreTone.blue;
+
 const ScoreGrid = styled.section`
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+	gap: 12px;
+	margin: 2px 0 4px;
+	padding: 12px;
+	border: 1px solid #d7e9fb;
+	border-radius: 10px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.96)),
+		linear-gradient(135deg, rgba(45, 93, 145, 0.1), rgba(141, 76, 157, 0.09));
+	box-shadow: 0 10px 28px rgba(16, 32, 51, 0.08);
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
 
-	@media (max-width: 1160px) {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+	@media (max-width: 1180px) {
+		grid-template-columns: repeat(6, minmax(174px, 1fr));
 	}
 
-	@media (max-width: 620px) {
-		grid-template-columns: 1fr;
+	@media (max-width: 640px) {
+		gap: 10px;
+		padding: 10px;
 	}
 `;
 
 const ScoreTile = styled.div`
+	position: relative;
 	min-width: 0;
-	min-height: 108px;
+	min-height: 124px;
 	display: grid;
-	grid-template-columns: auto 1fr;
+	grid-template-columns: 30px minmax(0, 1fr);
+	grid-template-rows: auto 1fr auto;
 	grid-template-areas:
 		"icon label"
+		"spacer spacer"
 		"value value";
 	align-items: center;
-	gap: 8px 10px;
+	text-align: start;
+	gap: 8px;
 	padding: 12px;
-	border: 1px solid #d6e3f3;
+	border: 1px solid rgba(191, 219, 254, 0.95);
 	border-radius: 8px;
-	background: #ffffff;
-	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+	background: ${(props) => scoreToneFor(props.$tone).bg};
+	box-shadow: 0 8px 18px rgba(16, 32, 51, 0.08);
+	color: ${(props) => scoreToneFor(props.$tone).text};
+	overflow: hidden;
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset-inline-end: -28px;
+		inset-block-start: -28px;
+		width: 82px;
+		height: 82px;
+		border-radius: 999px;
+		background: ${(props) => `${scoreToneFor(props.$tone).accent}18`};
+	}
 
 	.score-icon {
+		position: relative;
+		z-index: 1;
 		grid-area: icon;
-		width: 32px;
-		height: 32px;
+		width: 30px;
+		height: 30px;
+		flex: 0 0 30px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		border-radius: 8px;
-		background: #e0f2fe;
-		color: #075985;
+		background: ${(props) => scoreToneFor(props.$tone).accent};
+		color: #ffffff;
+		box-shadow: inset 0 1px rgba(255, 255, 255, 0.24);
 	}
 
 	.score-label {
+		position: relative;
+		z-index: 1;
 		grid-area: label;
-		color: #475569;
-		font-size: 0.76rem;
-		font-weight: 900;
+		min-width: 0;
+		color: inherit;
+		font-size: 0.8rem;
+		font-weight: 950;
 		line-height: 1.25;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	strong {
+		position: relative;
+		z-index: 1;
 		grid-area: value;
 		min-width: 0;
-		color: #0f172a;
-		font-size: clamp(1.05rem, 2.1vw, 1.38rem);
+		color: inherit;
+		font-size: clamp(1.25rem, 1.55vw, 1.78rem);
 		font-weight: 950;
-		line-height: 1.15;
+		line-height: 1.08;
+		letter-spacing: 0;
 		overflow-wrap: anywhere;
-	}
-
-	&.tone-green .score-icon,
-	&.tone-emerald .score-icon {
-		background: #dcfce7;
-		color: #166534;
-	}
-
-	&.tone-amber .score-icon {
-		background: #fef3c7;
-		color: #92400e;
-	}
-
-	&.tone-rose .score-icon,
-	&.tone-red .score-icon {
-		background: #ffe4e6;
-		color: #9f1239;
-	}
-
-	&.tone-indigo .score-icon {
-		background: #e0e7ff;
-		color: #3730a3;
-	}
-
-	&.tone-slate .score-icon {
-		background: #e2e8f0;
-		color: #334155;
-	}
-
-	&.tone-cyan .score-icon {
-		background: #cffafe;
-		color: #155e75;
 	}
 `;
 
 const ChartsGrid = styled.section`
 	display: grid;
-	grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.85fr);
+	grid-template-columns: minmax(0, 1fr);
 	gap: 12px;
-
-	@media (max-width: 1100px) {
-		grid-template-columns: 1fr;
-	}
 `;
 
 const ChartPanel = styled.section`
