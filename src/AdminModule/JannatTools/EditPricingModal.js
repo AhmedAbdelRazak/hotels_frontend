@@ -35,6 +35,7 @@ const TEXT = {
 		applied:
 			"Pricing was applied in the editor. Click Submit/Update Reservation to save it permanently.",
 		distribute: "Distribute",
+		distributeAll: "Distribute totals",
 		moreDetails: "More details",
 		enterPlaceholder: (label) => `Enter ${label.toLowerCase()}`,
 		invalidAmount: (label) => `Please enter a valid ${label.toLowerCase()}.`,
@@ -56,6 +57,7 @@ const TEXT = {
 			client: "Client/Main Total",
 			root: "Root Total",
 			net: "Net After Expenses Total",
+			commission: "Commission Amount",
 		},
 		help: {
 			clientPrice:
@@ -74,6 +76,8 @@ const TEXT = {
 				"Distributes the total amount provided by hotel ownership/management. Hotel management sees this total only for admin-priced reservations.",
 			netTotal:
 				"Distributes the total after OTA or other expenses. OTA/Other Expense is calculated as Client/Main Total minus this value.",
+			commissionAmount:
+				"General reservation commission saved separately from nightly room pricing.",
 		},
 	},
 	ar: {
@@ -227,26 +231,49 @@ const distributeMoney = (total, count) => {
 
 const EDIT_PRICING_MODAL_Z = 19020;
 
-const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
+const EditPricingModal = ({
+	visible,
+	onClose,
+	pricingByDay,
+	onUpdate,
+	showCommissionAmount = false,
+	commissionAmount = null,
+	onCommissionChange = () => {},
+}) => {
 	const { chosenLanguage } = useCartContext();
 	const auth = isAuthenticated() || {};
 	const canViewPlatformProfit = isSuperAdminUser(auth?.user);
 	const isArabic = chosenLanguage === "Arabic";
 	const t = TEXT[isArabic ? "ar" : "en"];
+	const distributeAllLabel = t.distributeAll || t.distribute;
+	const commissionLabel =
+		t.distribution.commission ||
+		(isArabic ? "\u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629" : "Commission Amount");
+	const commissionHelp =
+		t.help.commissionAmount ||
+		(isArabic
+			? "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0639\u0627\u0645\u0629 \u0644\u0644\u062d\u062c\u0632. \u064a\u062a\u0645 \u062d\u0641\u0638\u0647\u0627 \u0645\u0646\u0641\u0635\u0644\u0629 \u0639\u0646 \u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0644\u064a\u0627\u0644\u064a."
+			: "General reservation commission saved separately from nightly room pricing.");
 	const [editableData, setEditableData] = useState([]);
 	const [distributionTotals, setDistributionTotals] = useState({
 		client: null,
 		root: null,
 		net: null,
 	});
+	const [commissionDraft, setCommissionDraft] = useState(null);
 
 	useEffect(() => {
 		if (visible) {
 			const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
 			setEditableData(normalizedRows);
 			setDistributionTotals(summarizePricingRows(normalizedRows));
+			setCommissionDraft(
+				showCommissionAmount && hasNumericInput(commissionAmount)
+					? roundMoney(commissionAmount)
+					: null,
+			);
 		}
-	}, [visible, pricingByDay]);
+	}, [visible, pricingByDay, commissionAmount, showCommissionAmount]);
 
 	const totals = useMemo(
 		() =>
@@ -305,19 +332,9 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 		setDistributionTotals((current) => ({ ...current, [key]: value }));
 	};
 
-	const handleDistributeTotal = (key, field, label) => {
-		const total = safeParseFloat(distributionTotals[key], 0);
-		if (total <= 0) {
-			message.error(t.invalidAmount(label));
-			return;
-		}
-		if (!editableData.length) {
-			message.error(t.noDays);
-			return;
-		}
-
+	const buildDistributedRows = (rows, field, total) => {
 		const shares = distributeMoney(total, editableData.length);
-		const nextRows = editableData.map((row, index) => {
+		return rows.map((row, index) => {
 			const hadNoExpense =
 				Math.abs(
 					safeParseFloat(row.clientPrice, 0) -
@@ -342,8 +359,42 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 
 			return nextRow;
 		});
+	};
+
+	const handleDistributeTotals = () => {
+		if (!editableData.length) {
+			message.error(t.noDays);
+			return;
+		}
+
+		for (const control of distributionControls) {
+			const rawTotal = distributionTotals[control.key];
+			const total = safeParseFloat(rawTotal, NaN);
+			if (!hasNumericInput(rawTotal) || total < 0) {
+				message.error(t.invalidAmount(control.label));
+				return;
+			}
+		}
+
+		let nextRows = editableData;
+		distributionControls.forEach((control) => {
+			nextRows = buildDistributedRows(
+				nextRows,
+				control.field,
+				safeParseFloat(distributionTotals[control.key], 0),
+			);
+		});
+
 		commitRows(nextRows);
-		message.success(t.distributed(label));
+		message.success(distributeAllLabel);
+	};
+
+	const handleCommissionInput = (value) => {
+		const nextValue = hasNumericInput(value) ? value : null;
+		setCommissionDraft(nextValue);
+		onCommissionChange(
+			hasNumericInput(nextValue) ? roundMoney(nextValue) : null,
+		);
 	};
 
 	const handleInherit = () => {
@@ -378,6 +429,11 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			return;
 		}
 
+		if (showCommissionAmount) {
+			onCommissionChange(
+				hasNumericInput(commissionDraft) ? roundMoney(commissionDraft) : null,
+			);
+		}
 		commitRows(editableData);
 		message.success(t.applied, 5);
 		onClose();
@@ -550,14 +606,22 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 
 				.edit-pricing-modal .pricing-distribution-stack {
 					display: flex;
-					flex-direction: column;
+					align-items: stretch;
 					gap: 10px;
 					margin-bottom: 16px;
 				}
 
+				.edit-pricing-modal .pricing-distribution-fields {
+					flex: 1 1 auto;
+					min-width: 0;
+					display: flex;
+					flex-direction: column;
+					gap: 10px;
+				}
+
 				.edit-pricing-modal .pricing-distribution-row {
 					display: grid;
-					grid-template-columns: minmax(210px, 320px) minmax(180px, 1fr) auto;
+					grid-template-columns: minmax(210px, 320px) minmax(180px, 1fr);
 					align-items: center;
 					gap: 10px;
 					padding: 10px;
@@ -595,8 +659,16 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 					width: 100%;
 				}
 
+				.edit-pricing-modal .pricing-distribution-actions {
+					flex: 0 0 126px;
+					display: flex;
+					align-items: center;
+				}
+
 				.edit-pricing-modal .pricing-distribution-action {
-					min-width: 116px;
+					width: 100%;
+					min-width: 126px;
+					white-space: normal;
 				}
 
 				@media (max-width: 760px) {
@@ -610,9 +682,17 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 						padding: 14px;
 					}
 
+					.edit-pricing-modal .pricing-distribution-stack {
+						flex-direction: column;
+					}
+
 					.edit-pricing-modal .pricing-distribution-row {
 						grid-template-columns: 1fr;
 						align-items: stretch;
+					}
+
+					.edit-pricing-modal .pricing-distribution-actions {
+						flex-basis: auto;
 					}
 
 					.edit-pricing-modal .pricing-distribution-action {
@@ -633,36 +713,51 @@ const EditPricingModal = ({ visible, onClose, pricingByDay, onUpdate }) => {
 			`}</style>
 
 			<div className='pricing-distribution-stack'>
-				{distributionControls.map((control) => (
-					<div key={control.key} className='pricing-distribution-row'>
-						<div className='pricing-distribution-label'>
-							<span>{control.label}</span>
-							<HelpIcon title={control.help} ariaLabel={t.moreDetails} />
+				<div className='pricing-distribution-fields'>
+					{distributionControls.map((control) => (
+						<div key={control.key} className='pricing-distribution-row'>
+							<div className='pricing-distribution-label'>
+								<span>{control.label}</span>
+								<HelpIcon title={control.help} ariaLabel={t.moreDetails} />
+							</div>
+							<InputNumber
+								placeholder={t.enterPlaceholder(control.label)}
+								value={distributionTotals[control.key]}
+								min={0}
+								step={0.01}
+								precision={2}
+								className='pricing-distribution-input'
+								onChange={(val) => handleDistributionInput(control.key, val)}
+							/>
 						</div>
-						<InputNumber
-							placeholder={t.enterPlaceholder(control.label)}
-							value={distributionTotals[control.key]}
-							min={0}
-							step={0.01}
-							precision={2}
-							className='pricing-distribution-input'
-							onChange={(val) => handleDistributionInput(control.key, val)}
-						/>
-						<Button
-							type='dashed'
-							className='pricing-distribution-action'
-							onClick={() =>
-								handleDistributeTotal(
-									control.key,
-									control.field,
-									control.label,
-								)
-							}
-						>
-							{t.distribute}
-						</Button>
-					</div>
-				))}
+					))}
+					{showCommissionAmount ? (
+						<div className='pricing-distribution-row'>
+							<div className='pricing-distribution-label'>
+								<span>{commissionLabel}</span>
+								<HelpIcon title={commissionHelp} ariaLabel={t.moreDetails} />
+							</div>
+							<InputNumber
+								placeholder={t.enterPlaceholder(commissionLabel)}
+								value={commissionDraft}
+								min={0}
+								step={0.01}
+								precision={2}
+								className='pricing-distribution-input'
+								onChange={handleCommissionInput}
+							/>
+						</div>
+					) : null}
+				</div>
+				<div className='pricing-distribution-actions'>
+					<Button
+						type='dashed'
+						className='pricing-distribution-action'
+						onClick={handleDistributeTotals}
+					>
+						{distributeAllLabel}
+					</Button>
+				</div>
 			</div>
 
 			<Table

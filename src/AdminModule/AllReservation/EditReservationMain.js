@@ -1675,6 +1675,17 @@ const EditReservationMain = ({
 				pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
 				onUpdate={handlePricingUpdate}
 				roomDetails={selectedRooms[editingRoomIndex]}
+				showCommissionAmount={isSuperUser}
+				commissionAmount={
+					hasCommissionOverride ? commissionOverride : totalCommission
+				}
+				onCommissionChange={(value) =>
+					setCommissionOverride(
+						value === null || value === undefined || value === ""
+							? null
+							: Number(safeParseFloat(value, 0).toFixed(2)),
+					)
+				}
 			/>
 
 			{/* Details Modal */}
