@@ -723,6 +723,7 @@ const ProfitReportAdmin = () => {
 		loadReport();
 	};
 
+	const actionFixedSide = isArabic ? "left" : "right";
 	const columns = [
 		{
 			title: "#",
@@ -795,22 +796,10 @@ const ProfitReportAdmin = () => {
 				moneyText(profitMetricsForReservation(row).commission, labels),
 		},
 		{
-			title: labels.profitRate,
-			width: 120,
-			align: "center",
-			render: (_value, row) => (
-				<ProfitValue
-					$negative={safeNumber(profitMetricsForReservation(row).profitRate) < 0}
-				>
-					{formatPercent(profitMetricsForReservation(row).profitRate)}
-				</ProfitValue>
-			),
-		},
-		{
 			title: labels.totalProfit,
 			width: 150,
 			align: "center",
-			fixed: "right",
+			fixed: actionFixedSide,
 			render: (_value, row) => {
 				const value = profitMetricsForReservation(row).profitMargin;
 				return (
@@ -822,15 +811,18 @@ const ProfitReportAdmin = () => {
 		},
 		{
 			title: labels.details,
-			width: 130,
+			width: 160,
 			align: "center",
-			fixed: "right",
+			fixed: actionFixedSide,
+			className: "profit-details-action-cell",
 			render: (_value, row) => (
 				<Button
 					type='primary'
 					size='small'
 					icon={<EyeOutlined />}
 					onClick={() => loadDetails(row)}
+					className='profit-details-button'
+					aria-label={labels.showDetails}
 				>
 					{labels.showDetails}
 				</Button>
@@ -965,7 +957,7 @@ const ProfitReportAdmin = () => {
 						columns={columns}
 						dataSource={Array.isArray(report.reservations) ? report.reservations : []}
 						pagination={false}
-						scroll={{ x: 1680 }}
+						scroll={{ x: 1950 }}
 						size='small'
 						locale={{ emptyText: labels.noData }}
 						className='profit-report-table'
@@ -1297,8 +1289,24 @@ const TableShell = styled.div`
 		vertical-align: middle;
 	}
 
+	.ant-table-cell-fix-left,
 	.ant-table-cell-fix-right {
 		background: #ffffff;
+		z-index: 3;
+		box-shadow: 0 0 0 1px rgba(213, 226, 240, 0.75);
+	}
+
+	.profit-details-action-cell {
+		min-width: 150px;
+	}
+
+	.profit-details-button {
+		min-width: 118px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 5px;
+		white-space: nowrap;
 	}
 `;
 

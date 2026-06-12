@@ -285,8 +285,12 @@ const normalizeInventoryCalendarType = (value = "") =>
 		? String(value || "").toLowerCase()
 		: "";
 
-const normalizeInventoryDate = (value = "") =>
-	/^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
+const normalizeInventoryDate = (value = "") => {
+	const raw = String(value || "").trim();
+	if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+	const parsed = dayjs(raw);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
+};
 
 const normalizeInventoryNumber = (value, fallback, limits = {}) => {
 	const parsed = Number(value);
@@ -310,6 +314,23 @@ const csvList = (value = "") =>
 		.split(",")
 		.map((item) => item.trim())
 		.filter(Boolean);
+
+const inventoryDateRangeFromQuery = (query, shouldHonorQueryPeriod) => {
+	if (!shouldHonorQueryPeriod) return { start: "", end: "" };
+	const inventoryStart = normalizeInventoryDate(
+		query.get(INVENTORY_QUERY_KEYS.start),
+	);
+	const inventoryEnd = normalizeInventoryDate(
+		query.get(INVENTORY_QUERY_KEYS.end),
+	);
+	const sharedStart = normalizeInventoryDate(query.get("dateFrom"));
+	const sharedEnd = normalizeInventoryDate(query.get("dateTo"));
+	const selectedMonths = csvList(query.get("invMonths"));
+	if (selectedMonths.length > 1 && sharedStart && sharedEnd) {
+		return { start: sharedStart, end: sharedEnd };
+	}
+	return { start: inventoryStart, end: inventoryEnd };
+};
 
 const supportsHijriCalendar = () =>
 	typeof moment?.fn?.iMonth === "function" &&
@@ -3304,12 +3325,12 @@ export const ExecutiveInventoryReport = ({
 					query.get(INVENTORY_QUERY_KEYS.calendarType),
 			  ) || "hijri"
 			: "hijri";
-		const queryStart = shouldHonorQueryPeriod
-			? normalizeInventoryDate(query.get(INVENTORY_QUERY_KEYS.start))
-			: "";
-		const queryEnd = shouldHonorQueryPeriod
-			? normalizeInventoryDate(query.get(INVENTORY_QUERY_KEYS.end))
-			: "";
+		const queryRange = inventoryDateRangeFromQuery(
+			query,
+			shouldHonorQueryPeriod,
+		);
+		const queryStart = queryRange.start;
+		const queryEnd = queryRange.end;
 		const selected = monthSelectionFromRange(calendarType, queryStart);
 		const month =
 			calendarType === "hijri"
@@ -3330,9 +3351,7 @@ export const ExecutiveInventoryReport = ({
 					: defaultHijri.year
 				: selected.year;
 		const range =
-			calendarType === "hijri"
-				? inventoryMonthRange(calendarType, month, year)
-				: queryStart && queryEnd
+			queryStart && queryEnd
 				? { start: queryStart, end: queryEnd }
 				: inventoryMonthRange(calendarType, month, year);
 		return {
@@ -3351,6 +3370,7 @@ export const ExecutiveInventoryReport = ({
 		(next = {}) => {
 			const nextQuery = new URLSearchParams(location.search || "");
 			nextQuery.set("summaryTab", "inventory");
+			nextQuery.delete("invMonths");
 			const setOrDelete = (key, value) => {
 				if (value === undefined || value === null || value === "") {
 					nextQuery.delete(key);
@@ -3409,12 +3429,12 @@ export const ExecutiveInventoryReport = ({
 				  previous.calendarType ||
 				  "hijri"
 				: "hijri";
-			const queryStart = normalizeInventoryDate(
-				shouldHonorQueryPeriod ? query.get(INVENTORY_QUERY_KEYS.start) : "",
+			const queryRange = inventoryDateRangeFromQuery(
+				query,
+				shouldHonorQueryPeriod,
 			);
-			const queryEnd = normalizeInventoryDate(
-				shouldHonorQueryPeriod ? query.get(INVENTORY_QUERY_KEYS.end) : "",
-			);
+			const queryStart = queryRange.start;
+			const queryEnd = queryRange.end;
 			const selected = monthSelectionFromRange(calendarType, queryStart);
 			const month =
 				calendarType === "hijri"
@@ -3435,9 +3455,7 @@ export const ExecutiveInventoryReport = ({
 						: defaultHijri.year
 					: selected.year;
 			const range =
-				calendarType === "hijri"
-					? inventoryMonthRange(calendarType, month, year)
-					: queryStart && queryEnd
+				queryStart && queryEnd
 					? { start: queryStart, end: queryEnd }
 					: inventoryMonthRange(calendarType, month, year);
 			const next = {
@@ -3524,12 +3542,12 @@ export const ExecutiveInventoryReport = ({
 				hijriMonth: calendarType === "hijri" ? hijriMonth : undefined,
 				hijriYear: calendarType === "hijri" ? hijriYear : undefined,
 				start:
-					monthRange?.start ||
 					normalizeInventoryDate(next.start) ||
+					monthRange?.start ||
 					inventoryFilter.start,
 				end:
-					monthRange?.end ||
 					normalizeInventoryDate(next.end) ||
+					monthRange?.end ||
 					inventoryFilter.end,
 				includeCancelled: !!next.includeCancelled,
 				paymentStatuses: Array.isArray(next.paymentStatuses)

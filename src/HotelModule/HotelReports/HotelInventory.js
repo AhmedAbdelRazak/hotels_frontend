@@ -313,7 +313,10 @@ const HotelInventory = ({
 					"\u062a\u0641\u0627\u0635\u064a\u0644\u0020\u0627\u0644\u064a\u0648\u0645",
 				hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 				capacity: "\u0627\u0644\u0633\u0639\u0629",
+				booked: "\u0645\u062d\u062c\u0648\u0632",
 				occupied: "\u0645\u0634\u063a\u0648\u0644",
+				availableShort: "\u0645\u062a\u0627\u062d",
+				overbooked: "\u062d\u062c\u0632\u0020\u0632\u0627\u0626\u062f",
 				noReservations:
 					"\u0644\u0627\u0020\u062a\u0648\u062c\u062f\u0020\u062d\u062c\u0648\u0632\u0627\u062a\u002e",
 				prev: "\u0627\u0644\u0633\u0627\u0628\u0642",
@@ -393,7 +396,10 @@ const HotelInventory = ({
 			dayDetails: "Day Details",
 			hotel: "Hotel",
 			capacity: "Capacity",
+			booked: "Booked",
 			occupied: "Occupied",
+			availableShort: "Avail",
+			overbooked: "Overbooked",
 			noReservations: "No reservations found.",
 			prev: "Prev",
 			next: "Next",
@@ -451,6 +457,13 @@ const HotelInventory = ({
 	const totalRooms = Number(
 		summary.totalRooms ?? summary.totalPhysicalRooms ?? 0,
 	);
+	const bookedRoomNights = Number(
+		summary.bookedRoomNights ?? summary.occupiedRoomNights ?? 0,
+	);
+	const occupiedRoomNights = Number(summary.occupiedRoomNights || 0);
+	const showBookedRoomNights =
+		Number.isFinite(bookedRoomNights) &&
+		Math.abs(bookedRoomNights - occupiedRoomNights) > 0;
 
 	const notifyFilterChange = useCallback(
 		(overrides = {}) => {
@@ -1004,6 +1017,11 @@ const HotelInventory = ({
 						<SummaryCard>
 							<span>{labels.occupiedRoomNights}</span>
 							<strong>{formatInt(summary.occupiedRoomNights)}</strong>
+							{showBookedRoomNights && (
+								<small>
+									{labels.booked}: {formatInt(bookedRoomNights)}
+								</small>
+							)}
 						</SummaryCard>
 						<SummaryCard>
 							<span>{labels.occupancyRate}</span>
@@ -1075,8 +1093,28 @@ const HotelInventory = ({
 										{roomTypes.map((rt) => {
 											const cell = day.rooms?.[rt.key] || {};
 											const capacity = Number(cell.capacity) || 0;
-											const occupied = Number(cell.occupied) || 0;
-											const rate = Number(cell.occupancyRate) || 0;
+											const booked = Number(cell.booked ?? cell.occupied) || 0;
+											const occupied =
+												typeof cell.occupied === "number"
+													? Number(cell.occupied)
+													: Math.min(booked, capacity);
+											const available =
+												typeof cell.available === "number"
+													? Number(cell.available)
+													: Math.max(capacity - occupied, 0);
+											const rate =
+												typeof cell.occupancyRate === "number"
+													? Number(cell.occupancyRate)
+													: capacity > 0
+													? occupied / capacity
+													: 0;
+											const overbooked =
+												Boolean(cell.overbooked) ||
+												(capacity > 0 && booked > capacity);
+											const overage =
+												typeof cell.overage === "number"
+													? Number(cell.overage)
+													: Math.max(booked - capacity, 0);
 											return (
 												<td key={rt.key}>
 													<CellButton
@@ -1084,16 +1122,16 @@ const HotelInventory = ({
 														style={{
 															background: heatBackground(
 																rate,
-																cell.overbooked,
+																overbooked,
 															),
 															color: getReadableText(rate),
 															borderColor: heatBorder(
 																rate,
-																cell.overbooked,
+																overbooked,
 															),
 															boxShadow: heatShadow(
 																rate,
-																cell.overbooked,
+																overbooked,
 															),
 														}}
 													>
@@ -1103,38 +1141,77 @@ const HotelInventory = ({
 															</span>
 														)}
 														<div className='cell-main'>
-															{formatInt(occupied)}/{formatInt(capacity)}
+															<span>
+																{formatInt(booked)}/{formatInt(capacity)}
+															</span>
+															{overbooked && overage > 0 && (
+																<span className='over-pill'>
+																	+{formatInt(overage)}
+																</span>
+															)}
 														</div>
 														<div className='cell-sub'>
-															{capacity > 0
-																? `${(rate * 100).toFixed(0)}%`
-																: labels.notAvailable}
+															<span>
+																{labels.availableShort} {formatInt(available)}
+															</span>
+															<span>
+																{capacity > 0
+																	? `${(rate * 100).toFixed(0)}%`
+																	: labels.notAvailable}
+															</span>
 														</div>
 													</CellButton>
 												</td>
 											);
 										})}
 										{(() => {
+											const totalBooked = Number(
+												day.totals?.booked ?? day.totals?.occupied ?? 0,
+											);
 											const totalOccupied = Number(day.totals?.occupied || 0);
 											const totalCapacity = Number(day.totals?.capacity || 0);
+											const totalAvailable =
+												typeof day.totals?.available === "number"
+													? Number(day.totals.available)
+													: Math.max(totalCapacity - totalOccupied, 0);
 											const totalRate =
-												totalCapacity > 0 ? totalOccupied / totalCapacity : 0;
+												typeof day.totals?.occupancyRate === "number"
+													? Number(day.totals.occupancyRate)
+													: totalCapacity > 0
+													? totalOccupied / totalCapacity
+													: 0;
+											const totalOverbooked =
+												Boolean(day.totals?.overbooked) ||
+												(totalCapacity > 0 && totalBooked > totalCapacity);
 											return (
 												<td>
 													<TotalButton
 														type='button'
 														onClick={() => openTotalDetails(day.date)}
 														style={{
-															background: heatBackground(totalRate),
-															borderColor: heatBorder(totalRate),
-															boxShadow: heatShadow(totalRate),
+															background: heatBackground(
+																totalRate,
+																totalOverbooked,
+															),
+															borderColor: heatBorder(
+																totalRate,
+																totalOverbooked,
+															),
+															boxShadow: heatShadow(
+																totalRate,
+																totalOverbooked,
+															),
 															color: getReadableText(totalRate),
 														}}
 													>
 														<div className='total-cell'>
 															<span className='total-main'>
-																{formatInt(totalOccupied)}/
+																{formatInt(totalBooked)}/
 																{formatInt(totalCapacity)}
+															</span>
+															<span className='total-available'>
+																{labels.availableShort}{" "}
+																{formatInt(totalAvailable)}
 															</span>
 															<span
 																className='total-rate'
@@ -1188,10 +1265,22 @@ const HotelInventory = ({
 								<strong>{labels.capacity}</strong>
 								<span>{formatInt(dayDetails.capacity || 0)}</span>
 							</div>
+							{typeof dayDetails.booked === "number" && (
+								<div>
+									<strong>{labels.booked}</strong>
+									<span>{formatInt(dayDetails.booked || 0)}</span>
+								</div>
+							)}
 							<div>
 								<strong>{labels.occupied}</strong>
 								<span>{formatInt(dayDetails.occupied || 0)}</span>
 							</div>
+							{typeof dayDetails.available === "number" && (
+								<div>
+									<strong>{labels.availableShort}</strong>
+									<span>{formatInt(dayDetails.available || 0)}</span>
+								</div>
+							)}
 						</DetailHeader>
 						<ExportRow $rtl={modalDir === "rtl"}>
 							<Button
@@ -1700,6 +1789,13 @@ const SummaryCard = styled.div`
 		color: #0f1e3d;
 	}
 
+	small {
+		color: #5c6b80;
+		font-size: 0.72rem;
+		font-weight: 800;
+		line-height: 1.25;
+	}
+
 	@media (max-width: 520px) {
 		padding: 10px;
 
@@ -1843,6 +1939,12 @@ const TableWrapper = styled.div`
 		opacity: 0.9;
 	}
 
+	.total-available {
+		font-size: 0.68rem;
+		font-weight: 900;
+		opacity: 0.82;
+	}
+
 	@media (max-width: 520px) {
 		border-radius: 8px;
 		max-height: 70vh;
@@ -1918,6 +2020,11 @@ const CellButton = styled.button`
 		font-size: 0.85rem;
 		position: relative;
 		z-index: 1;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 5px;
+		line-height: 1.1;
 	}
 
 	.cell-sub {
@@ -1926,6 +2033,23 @@ const CellButton = styled.button`
 		position: relative;
 		z-index: 1;
 		font-weight: 800;
+		display: flex;
+		justify-content: center;
+		gap: 6px;
+		line-height: 1.15;
+		flex-wrap: wrap;
+	}
+
+	.over-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		padding: 1px 5px;
+		background: rgba(127, 29, 29, 0.92);
+		color: #ffffff;
+		font-size: 0.58rem;
+		font-weight: 900;
 	}
 `;
 

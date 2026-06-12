@@ -422,6 +422,8 @@ Frontend Critical Workflows To Protect
   - The include/exclude cancelled toggle must align with backend data.
   - Inventory tables should have centered headers and cells, wrapped headers where needed, refined blue/red occupancy colors, and no emojis.
   - Inventory query state must be stable. Avoid useEffect dependencies that alternate invHMonth, invStart, and invEnd and cause repeated API calls.
+  - Shared URLs with invMonths containing multiple selected months should honor dateFrom/dateTo as the displayed inventory range instead of shrinking back to only invHMonth. User filter changes clear invMonths and then preserve the currently displayed invStart/invEnd.
+  - Inventory cells display booked/capacity, available count, capped occupancy percentage, and an overbooking pill when booked exceeds physical capacity.
 - Paid reservations overview
   - The hotel-name breakdown table appears first.
   - The remaining paid-reservation tables and charts stay below it.
@@ -1239,6 +1241,14 @@ Future TODO Backlog - Added 2026-05-26
   - Reservation status now uses the same pill/tone approach as the hotel-management route instead of full-cell background colors.
   - Long hotel, guest, source, confirmation, payment, and date values use tooltip-backed ellipsis behavior so the table can fit the desktop page cleanly while staying horizontally scrollable on smaller screens.
   - The admin table has copied local helpers/styles rather than reusing the hotel-management component, preserving separation between platform-admin and hotel-management UI.
+
+2026-06-12 Admin Profit Report Table Columns
+- Admin Profit tab:
+  - Route: /admin/overall-hotel-reports?tab=Profit.
+  - src/AdminModule/HotelsReport/ProfitReportAdmin.js keeps the row-level table focused on operational values: guest, dates, hotel, source, client total, hotel total, commission, Total Profit, and Details.
+  - Total Profit and Details are fixed to the action side of the table: right in English/LTR and left in Arabic/RTL, so they remain visible instead of being pushed out of the horizontal scroll viewport.
+  - The visible table intentionally removes the Profit Rate column to preserve room for Total Profit and Details. Profit Rate remains available in scorecards/charts/export.
+  - Details opens the admin MoreDetails modal in place, matching the all-reservations inspection workflow.
 
 2026-05-29 Admin Reservation Scorecard Redesign
 - Admin all-reservations scorecards:
