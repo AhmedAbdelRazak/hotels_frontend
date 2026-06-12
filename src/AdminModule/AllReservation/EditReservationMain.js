@@ -193,6 +193,7 @@ const EditReservationMain = ({
 	const [hotelCost, setHotelCost] = useState(0);
 	const [totalAmount, setTotalAmount] = useState(0);
 	const [totalCommission, setTotalCommission] = useState(0);
+	const [commissionOverride, setCommissionOverride] = useState(null);
 	const [numberOfNights, setNumberOfNights] = useState(0);
 	const [oneNightCost, setOneNightCost] = useState(0);
 
@@ -220,6 +221,10 @@ const EditReservationMain = ({
 	const { user, token } = isAuthenticated();
 	const isSuperUser = SUPER_USER_IDS.includes(user?._id);
 	const isArabic = chosenLanguage === "Arabic";
+	const hasCommissionOverride =
+		commissionOverride !== null &&
+		commissionOverride !== undefined &&
+		commissionOverride !== "";
 	const apiErrorMessage = (
 		response,
 		englishFallback = "Error updating reservation.",
@@ -372,6 +377,13 @@ const EditReservationMain = ({
 		setAdults(reservation.adults || 1);
 		setChildren(reservation.children || 0);
 		setBookingSource(reservation.booking_source || "Jannat Employee");
+		setCommissionOverride(
+			reservation.commission !== null &&
+				reservation.commission !== undefined &&
+				reservation.commission !== ""
+				? safeParseFloat(reservation.commission, 0)
+				: null
+		);
 		setConfirmationNumber2(
 			reservation.customer_details?.confirmation_number2 || ""
 		);
@@ -932,6 +944,7 @@ const EditReservationMain = ({
 		setHotelCost(0);
 		setTotalAmount(0);
 		setTotalCommission(0);
+		setCommissionOverride(null);
 		setNumberOfNights(0);
 		setOneNightCost(0);
 		setDefaultDeposit(0);
@@ -944,6 +957,7 @@ const EditReservationMain = ({
 
 	// ---------------- Submit ----------------
 	const handleSubmit = async () => {
+		if (isLoading) return;
 		if (
 			!name ||
 			!email ||
@@ -1059,7 +1073,10 @@ const EditReservationMain = ({
 			total_amount: totalAmount,
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
-			commission: totalCommission,
+			commission:
+				isSuperUser && hasCommissionOverride
+					? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
+					: totalCommission,
 			commissionPaid:
 				reservation.commissionPaid ??
 				reservation.payment_details?.commissionPaid ??
@@ -1112,29 +1129,9 @@ const EditReservationMain = ({
 						? "\u062a\u0645 \u062a\u0635\u062d\u064a\u062d \u0627\u0644\u062d\u062c\u0632 \u0648\u0625\u0639\u0627\u062f\u062a\u0647 \u0644\u0644\u0645\u0631\u0627\u062c\u0639\u0629"
 						: "\u062a\u0645 \u062d\u0641\u0638 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u062c\u0632"
 				);
-				const savedConfirmation =
-					mergedReservation.confirmation_number ||
-					reservation.confirmation_number ||
-					"";
 				setReservation(mergedReservation);
 				onReservationUpdated(mergedReservation);
 				message.success({ content: savedTitle, duration: 6 });
-				Modal.success({
-					title: savedTitle,
-					content: successMessage(
-						correctionResubmitted
-							? `Confirmation ${savedConfirmation || "N/A"} is now saved and back in Pending Confirmation for hotel review.`
-							: `Confirmation ${savedConfirmation || "N/A"} is now updated across the reservation details and lists.`,
-						correctionResubmitted
-							? `\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f ${
-									savedConfirmation || "N/A"
-							  } \u062a\u0645 \u062d\u0641\u0638\u0647 \u0648\u0625\u0639\u0627\u062f\u062a\u0647 \u0625\u0644\u0649 \u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0641\u0646\u062f\u0642.`
-							: `\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f ${
-									savedConfirmation || "N/A"
-							  } \u062a\u0645 \u062a\u062d\u062f\u064a\u062b\u0647 \u0641\u064a \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644 \u0648\u0627\u0644\u0642\u0648\u0627\u0626\u0645.`
-					),
-					centered: true,
-				});
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error(apiErrorMessage(response));
@@ -1597,6 +1594,23 @@ const EditReservationMain = ({
 						<Descriptions.Item label='Total Commission'>
 							{totalCommission.toFixed(2)} SAR
 						</Descriptions.Item>
+						{isSuperUser && (
+							<Descriptions.Item label='General Commission (SUPER Admin)'>
+								<InputNumber
+									min={0}
+									step={0.01}
+									precision={2}
+									value={commissionOverride}
+									placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
+									onChange={setCommissionOverride}
+									disabled={isLoading}
+									style={{ width: "100%" }}
+								/>
+								<div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>
+									Leave blank to save the calculated commission.
+								</div>
+							</Descriptions.Item>
+						)}
 						<Descriptions.Item label='Cost of One Night (First Night)'>
 							{oneNightCost.toFixed(2)} SAR
 						</Descriptions.Item>

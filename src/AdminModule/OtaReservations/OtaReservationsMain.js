@@ -45,9 +45,12 @@ const OTA_PRICING_TEXT = {
 		cancel: "Cancel",
 		save: "Save",
 		distribute: "Distribute",
+		distributeAll: "Distribute totals",
 		savedTotalPlaceholder: "Saved total to distribute",
 		enterTotalPlaceholder: "Enter total to distribute",
+		generalCommissionPlaceholder: "Enter general commission",
 		noDailyPricing: "No daily pricing rows were found.",
+		noDistributionValues: "Enter at least one total to distribute.",
 		context: {
 			confirmationNumber: "Confirmation Number",
 			otaConfirmationNumber: "OTA confirmation number",
@@ -59,6 +62,7 @@ const OTA_PRICING_TEXT = {
 			totalClientPrice: "Total client price",
 			totalBaseHotelPrice: "Total base hotel price",
 			netAfterOtaExpenses: "Net after OTA expenses",
+			generalCommission: "General commission",
 			date: "Date",
 			mainClientPrice: "Main client price",
 			baseHotelPrice: "Base hotel price",
@@ -75,6 +79,8 @@ const OTA_PRICING_TEXT = {
 				"The total amount the hotel should see and confirm. This is the hotel-visible root/base total.",
 			netAfterOtaExpenses:
 				"The remaining total after OTA or other platform expenses are deducted from the client total.",
+			generalCommission:
+				"Separate PMS commission saved on the reservation. This does not distribute into nightly room prices.",
 			mainClientPrice:
 				"The nightly OTA/client-facing amount for this date.",
 			baseHotelPrice:
@@ -171,6 +177,14 @@ const savedRootTotalForReservation = (reservation = {}) => {
 const savedNetTotalForReservation = (reservation = {}) => {
 	const value = firstExplicitNumber(
 		reservation?.adminPricing?.netAfterExpensesTotal
+	);
+	return value !== null ? round2(value) : 0;
+};
+
+const savedCommissionForReservation = (reservation = {}) => {
+	const value = firstExplicitNumber(
+		reservation?.commission,
+		reservation?.adminPricing?.commissionAmount
 	);
 	return value !== null ? round2(value) : 0;
 };
@@ -418,12 +432,14 @@ const OtaPricingModal = ({
 		root: "",
 		net: "",
 	});
+	const [commissionValue, setCommissionValue] = useState("");
 
 	useEffect(() => {
 		if (!open || !reservation) return;
 		const savedClientTotal = savedClientTotalForReservation(reservation);
 		const savedRootTotal = savedRootTotalForReservation(reservation);
 		const savedNetTotal = savedNetTotalForReservation(reservation);
+		const savedCommission = savedCommissionForReservation(reservation);
 		let nextRooms = normalizeRoomsForEdit(reservation);
 		const currentClientTotal = round2(summarizeRooms(nextRooms).clientTotal);
 		if (
@@ -438,6 +454,7 @@ const OtaPricingModal = ({
 			root: savedRootTotal > 0 ? money(savedRootTotal) : "",
 			net: savedNetTotal > 0 ? money(savedNetTotal) : "",
 		});
+		setCommissionValue(savedCommission > 0 ? money(savedCommission) : "");
 	}, [open, reservation]);
 
 	const totals = useMemo(() => {
@@ -476,28 +493,43 @@ const OtaPricingModal = ({
 		);
 	};
 
-	const distributeTotal = (field) => {
-		const total = numberValue(distributeValues[field]);
-		if (!total || !flatDays.length) return;
+	const distributeAllTotals = () => {
+		const activeTotals = ["client", "root", "net"]
+			.map((field) => ({ field, total: numberValue(distributeValues[field]) }))
+			.filter((item) => item.total > 0);
+		if (!activeTotals.length) {
+			message.warning(t.noDistributionValues || "Enter at least one total to distribute.");
+			return;
+		}
+		if (!flatDays.length) return;
 		const weightedNights = flatDays.reduce(
 			(sum, item) => sum + roomCount(item.room),
 			0
 		);
-		const perRoomNight = weightedNights > 0 ? round2(total / weightedNights) : 0;
+		const sharesByField = activeTotals.reduce((acc, item) => {
+			acc[item.field] =
+				weightedNights > 0 ? round2(item.total / weightedNights) : 0;
+			return acc;
+		}, {});
 		setRooms((previous) =>
 			previous.map((room) => ({
 				...room,
 				pricingByDay: (room.pricingByDay || []).map((day) => {
-					if (field === "client") {
-						return recalcDay(day, { clientPrice: perRoomNight });
+					const patch = {};
+					if (sharesByField.client !== undefined) {
+						patch.clientPrice = sharesByField.client;
 					}
-					if (field === "root") {
-						return recalcDay(day, { rootPrice: perRoomNight });
+					if (sharesByField.root !== undefined) {
+						patch.rootPrice = sharesByField.root;
 					}
-					return recalcDay(day, { netAfterExpenses: perRoomNight });
+					if (sharesByField.net !== undefined) {
+						patch.netAfterExpenses = sharesByField.net;
+					}
+					return recalcDay(day, patch);
 				}),
 			}))
 		);
+		message.success(t.distributeAll || t.distribute);
 	};
 
 	const handleSave = () => {
@@ -507,6 +539,7 @@ const OtaPricingModal = ({
 			total_rooms: totals.totalRooms,
 			total_amount: totals.clientTotal,
 			sub_total: totals.rootTotal,
+			commission: round2(commissionValue),
 			adminPricing: {
 				mode: "ota_review",
 				clientTotal: totals.clientTotal,
@@ -514,6 +547,7 @@ const OtaPricingModal = ({
 				netAfterExpensesTotal: totals.netAfterExpensesTotal,
 				otaExpenseTotal: totals.otaExpenseTotal,
 				platformMarginTotal: totals.platformMarginTotal,
+				commissionAmount: round2(commissionValue),
 			},
 		};
 		onSave(payload);
@@ -585,73 +619,92 @@ const OtaPricingModal = ({
 						<small>{checkoutDate.hijri}</small>
 					</PricingContextItem>
 				</PricingContextGrid>
-				<PricingSummaryRows>
-					<PricingSummaryRow>
-						<strong>
-							<PricingHelpLabel
-								label={t.labels.totalClientPrice}
-								help={t.help.totalClientPrice}
+				<PricingSummaryRows $isArabic={isArabic}>
+					<div className='pricing-summary-fields'>
+						<PricingSummaryRow>
+							<strong>
+								<PricingHelpLabel
+									label={t.labels.totalClientPrice}
+									help={t.help.totalClientPrice}
+								/>
+							</strong>
+							<Input value={money(totals.clientTotal)} readOnly />
+							<Input
+								placeholder={t.savedTotalPlaceholder}
+								value={distributeValues.client}
+								onChange={(event) =>
+									setDistributeValues((prev) => ({
+										...prev,
+										client: event.target.value,
+									}))
+								}
 							/>
-						</strong>
-						<Input value={money(totals.clientTotal)} readOnly />
-						<Input
-							placeholder={t.savedTotalPlaceholder}
-							value={distributeValues.client}
-							onChange={(event) =>
-								setDistributeValues((prev) => ({
-									...prev,
-									client: event.target.value,
-								}))
-							}
-						/>
-						<Button onClick={() => distributeTotal("client")}>
-							{t.distribute}
-						</Button>
-					</PricingSummaryRow>
-					<PricingSummaryRow>
-						<strong>
-							<PricingHelpLabel
-								label={t.labels.totalBaseHotelPrice}
-								help={t.help.totalBaseHotelPrice}
+						</PricingSummaryRow>
+						<PricingSummaryRow>
+							<strong>
+								<PricingHelpLabel
+									label={t.labels.totalBaseHotelPrice}
+									help={t.help.totalBaseHotelPrice}
+								/>
+							</strong>
+							<Input value={money(totals.rootTotal)} readOnly />
+							<Input
+								placeholder={t.enterTotalPlaceholder}
+								value={distributeValues.root}
+								onChange={(event) =>
+									setDistributeValues((prev) => ({
+										...prev,
+										root: event.target.value,
+									}))
+								}
 							/>
-						</strong>
-						<Input value={money(totals.rootTotal)} readOnly />
-						<Input
-							placeholder={t.enterTotalPlaceholder}
-							value={distributeValues.root}
-							onChange={(event) =>
-								setDistributeValues((prev) => ({
-									...prev,
-									root: event.target.value,
-								}))
-							}
-						/>
-						<Button onClick={() => distributeTotal("root")}>
-							{t.distribute}
-						</Button>
-					</PricingSummaryRow>
-					<PricingSummaryRow>
-						<strong>
-							<PricingHelpLabel
-								label={t.labels.netAfterOtaExpenses}
-								help={t.help.netAfterOtaExpenses}
+						</PricingSummaryRow>
+						<PricingSummaryRow>
+							<strong>
+								<PricingHelpLabel
+									label={t.labels.netAfterOtaExpenses}
+									help={t.help.netAfterOtaExpenses}
+								/>
+							</strong>
+							<Input value={money(totals.netAfterExpensesTotal)} readOnly />
+							<Input
+								placeholder={t.enterTotalPlaceholder}
+								value={distributeValues.net}
+								onChange={(event) =>
+									setDistributeValues((prev) => ({
+										...prev,
+										net: event.target.value,
+									}))
+								}
 							/>
-						</strong>
-						<Input value={money(totals.netAfterExpensesTotal)} readOnly />
-						<Input
-							placeholder={t.enterTotalPlaceholder}
-							value={distributeValues.net}
-							onChange={(event) =>
-								setDistributeValues((prev) => ({
-									...prev,
-									net: event.target.value,
-								}))
-							}
-						/>
-						<Button onClick={() => distributeTotal("net")}>
-							{t.distribute}
-						</Button>
-					</PricingSummaryRow>
+						</PricingSummaryRow>
+						<PricingSummaryRow>
+							<strong>
+								<PricingHelpLabel
+									label={t.labels.generalCommission || "General commission"}
+									help={
+										t.help.generalCommission ||
+										"Separate PMS commission saved on the reservation."
+									}
+								/>
+							</strong>
+							<Input value={money(commissionValue)} readOnly />
+							<Input
+								placeholder={
+									t.generalCommissionPlaceholder || "Enter general commission"
+								}
+								value={commissionValue}
+								onChange={(event) => setCommissionValue(event.target.value)}
+							/>
+						</PricingSummaryRow>
+					</div>
+					<Button
+						type='primary'
+						className='pricing-distribute-all'
+						onClick={distributeAllTotals}
+					>
+						{t.distributeAll || t.distribute}
+					</Button>
 				</PricingSummaryRows>
 
 				<PricingTableWrap>
@@ -1497,12 +1550,35 @@ const PricingContextItem = styled.div`
 
 const PricingSummaryRows = styled.div`
 	display: grid;
+	grid-template-columns: ${(props) =>
+		props.$isArabic ? "132px minmax(0, 1fr)" : "minmax(0, 1fr) 132px"};
+	grid-template-areas: ${(props) =>
+		props.$isArabic ? "'action fields'" : "'fields action'"};
 	gap: 10px;
+
+	.pricing-summary-fields {
+		grid-area: fields;
+		display: grid;
+		gap: 10px;
+		min-width: 0;
+	}
+
+	.pricing-distribute-all {
+		grid-area: action;
+		align-self: stretch;
+		min-height: 48px;
+		white-space: normal;
+	}
+
+	@media (max-width: 760px) {
+		grid-template-columns: 1fr;
+		grid-template-areas: "fields" "action";
+	}
 `;
 
 const PricingSummaryRow = styled.div`
 	display: grid;
-	grid-template-columns: minmax(190px, 240px) minmax(140px, 1fr) minmax(220px, 1.4fr) 120px;
+	grid-template-columns: minmax(190px, 240px) minmax(140px, 1fr) minmax(220px, 1.4fr);
 	gap: 10px;
 	align-items: center;
 	padding: 10px;

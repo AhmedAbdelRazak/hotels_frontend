@@ -6003,8 +6003,12 @@ const ReservationDetail = ({
 		);
 		setEditModalDirty(false);
 		if (updatedReservation) {
+			if (typeof setReservation === "function") {
+				setReservation(updatedReservation);
+			}
 			onReservationUpdated(updatedReservation);
 		}
+		setIsModalVisible2(false);
 	};
 
 	const handleStatusModalOpen = () => {

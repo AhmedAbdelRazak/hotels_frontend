@@ -45,6 +45,7 @@ const EditReservationMain = ({
 	setReservation,
 	chosenLanguage,
 	hotelDetails,
+	onReservationSaved = () => {},
 }) => {
 	// Existing states
 	const [selectedRooms, setSelectedRooms] = useState([
@@ -728,6 +729,7 @@ const EditReservationMain = ({
 
 	// Submit
 	const handleSubmit = async () => {
+		if (isLoading) return;
 		if (
 			!name ||
 			!email ||
@@ -887,7 +889,15 @@ const EditReservationMain = ({
 					)
 				);
 				setReservationCreated(true);
-				setReservation(response.reservation);
+				const incoming = response?.reservation || response || {};
+				const mergedReservation = {
+					...reservation,
+					...incoming,
+					hotelId: incoming.hotelId || reservation.hotelId,
+					belongsTo: incoming.belongsTo || reservation.belongsTo,
+				};
+				setReservation(mergedReservation);
+				onReservationSaved(mergedReservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
 				message.error(apiErrorMessage(response));
