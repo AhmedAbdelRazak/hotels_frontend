@@ -4818,6 +4818,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const amountDue = assumePaidInFull
 		? 0
 		: Math.max(totalAmountValue - totalPaid, 0);
+	const hasMeaningfulAmountDue = amountDue >= 1;
 	const displayedTotalPaid = assumePaidInFull ? totalAmountValue : totalPaid;
 	const breakdownRemainingAmount = Math.max(
 		totalAmountValue - breakdownTotalsFromReservation.total,
@@ -5235,7 +5236,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				label:
 					chosenLanguage === "Arabic" ? AR_LABELS.amountDue : "Amount due",
 				value: amountDue,
-				tone: amountDue > 0 ? "negative" : "positive",
+				tone: hasMeaningfulAmountDue ? "negative" : "positive",
 			},
 			{
 				label:
@@ -5250,6 +5251,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		chosenLanguage,
 		commissionAmount,
 		displayedTotalPaid,
+		hasMeaningfulAmountDue,
 		isAgentReservationPreview,
 		normalizeNumber,
 		totalAmountValue,
@@ -9605,7 +9607,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 										<div
 											className={`payment-total-card due ${
-												amountDue > 0 ? "is-due" : ""
+												hasMeaningfulAmountDue ? "is-due" : ""
 											}`}
 										>
 											<span>
