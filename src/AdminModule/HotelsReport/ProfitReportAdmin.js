@@ -723,20 +723,51 @@ const ProfitReportAdmin = () => {
 		loadReport();
 	};
 
-	const actionFixedSide = isArabic ? "left" : "right";
-	const columns = [
-		{
-			title: "#",
-			width: 58,
-			render: (_value, _row, index) => (page - 1) * PAGE_SIZE + index + 1,
+	const rowNumberColumn = {
+		title: "#",
+		width: 58,
+		render: (_value, _row, index) => (page - 1) * PAGE_SIZE + index + 1,
+	};
+	const guestColumn = {
+		title: labels.fullName,
+		width: 190,
+		render: (_value, row) => (
+			<DetailText value={fullNameForReservation(row)} max={26} />
+		),
+	};
+	const totalProfitColumn = {
+		title: labels.totalProfit,
+		width: 150,
+		align: "center",
+		className: "profit-total-column",
+		render: (_value, row) => {
+			const value = profitMetricsForReservation(row).profitMargin;
+			return (
+				<ProfitValue $negative={safeNumber(value) < 0}>
+					{moneyText(value, labels)}
+				</ProfitValue>
+			);
 		},
-		{
-			title: labels.fullName,
-			width: 190,
-			render: (_value, row) => (
-				<DetailText value={fullNameForReservation(row)} max={26} />
-			),
-		},
+	};
+	const detailsColumn = {
+		title: labels.details,
+		width: 150,
+		align: "center",
+		className: "profit-details-action-cell",
+		render: (_value, row) => (
+			<Button
+				type='primary'
+				size='small'
+				icon={<EyeOutlined />}
+				onClick={() => loadDetails(row)}
+				className='profit-details-button'
+				aria-label={labels.showDetails}
+			>
+				{labels.showDetails}
+			</Button>
+		),
+	};
+	const reportColumns = [
 		{
 			title: dateByLabel,
 			width: 130,
@@ -795,40 +826,22 @@ const ProfitReportAdmin = () => {
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).commission, labels),
 		},
-		{
-			title: labels.totalProfit,
-			width: 150,
-			align: "center",
-			fixed: actionFixedSide,
-			render: (_value, row) => {
-				const value = profitMetricsForReservation(row).profitMargin;
-				return (
-					<ProfitValue $negative={safeNumber(value) < 0}>
-						{moneyText(value, labels)}
-					</ProfitValue>
-				);
-			},
-		},
-		{
-			title: labels.details,
-			width: 160,
-			align: "center",
-			fixed: actionFixedSide,
-			className: "profit-details-action-cell",
-			render: (_value, row) => (
-				<Button
-					type='primary'
-					size='small'
-					icon={<EyeOutlined />}
-					onClick={() => loadDetails(row)}
-					className='profit-details-button'
-					aria-label={labels.showDetails}
-				>
-					{labels.showDetails}
-				</Button>
-			),
-		},
 	];
+	const columns = isArabic
+		? [
+				rowNumberColumn,
+				guestColumn,
+				totalProfitColumn,
+				detailsColumn,
+				...reportColumns,
+		  ]
+		: [
+				rowNumberColumn,
+				guestColumn,
+				...reportColumns,
+				totalProfitColumn,
+				detailsColumn,
+		  ];
 
 	return (
 		<ProfitReportWrapper dir={isArabic ? "rtl" : "ltr"} $isRTL={isArabic}>
@@ -957,7 +970,7 @@ const ProfitReportAdmin = () => {
 						columns={columns}
 						dataSource={Array.isArray(report.reservations) ? report.reservations : []}
 						pagination={false}
-						scroll={{ x: 1950 }}
+						scroll={{ x: 1900 }}
 						size='small'
 						locale={{ emptyText: labels.noData }}
 						className='profit-report-table'

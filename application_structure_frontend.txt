@@ -1246,7 +1246,7 @@ Future TODO Backlog - Added 2026-05-26
 - Admin Profit tab:
   - Route: /admin/overall-hotel-reports?tab=Profit.
   - src/AdminModule/HotelsReport/ProfitReportAdmin.js keeps the row-level table focused on operational values: guest, dates, hotel, source, client total, hotel total, commission, Total Profit, and Details.
-  - Total Profit and Details are fixed to the action side of the table: right in English/LTR and left in Arabic/RTL, so they remain visible instead of being pushed out of the horizontal scroll viewport.
+  - Total Profit and Details must be visible without scrolling in Arabic/RTL. The RTL table places them directly after the guest name near the row-number side instead of relying on AntD fixed columns, because fixed columns can disappear at the scroll edge in this report shell.
   - The visible table intentionally removes the Profit Rate column to preserve room for Total Profit and Details. Profit Rate remains available in scorecards/charts/export.
   - Details opens the admin MoreDetails modal in place, matching the all-reservations inspection workflow.
 
