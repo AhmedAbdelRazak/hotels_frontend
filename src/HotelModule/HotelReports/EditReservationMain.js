@@ -270,7 +270,20 @@ const EditReservationMain = ({
 			if (hotel) {
 				setSelectedHotel(hotel);
 
-				const mappedRooms = reservation.pickedRoomsType.map((room) => ({
+				const pricingRows = Array.isArray(reservation.pickedRoomsPricing)
+					? reservation.pickedRoomsPricing
+					: [];
+				const regularRows = Array.isArray(reservation.pickedRoomsType)
+					? reservation.pickedRoomsType
+					: [];
+				const sourceRows =
+					reservation?.adminPricingVisibility?.rootOnlyForHotelManagement &&
+					pricingRows.length
+						? pricingRows
+						: regularRows.length
+						? regularRows
+						: pricingRows;
+				const mappedRooms = sourceRows.map((room) => ({
 					roomType: room.room_type || "",
 					displayName: room.displayName || room.display_name || "",
 					count: room.count || 1,

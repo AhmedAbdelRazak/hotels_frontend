@@ -90,6 +90,53 @@ const resolveAdminPricingDay = (day = {}) => {
 	};
 };
 
+const summarizeAdminPricingRooms = (rooms = []) =>
+	(Array.isArray(rooms) ? rooms : []).reduce(
+		(totals, room) => {
+			const count = Math.max(1, Number(room?.count || 1) || 1);
+			(Array.isArray(room?.pricingByDay) ? room.pricingByDay : []).forEach(
+				(day) => {
+					const clientPrice = roundMoney(
+						day.clientPrice ??
+							day.mainPrice ??
+							day.totalPriceWithCommission ??
+							day.price,
+					);
+					const rootPrice = roundMoney(
+						day.rootPrice ?? day.totalPriceWithoutCommission,
+					);
+					const netAfterExpenses = roundMoney(
+						day.netAfterExpenses ??
+							day.netAfterOtaExpenses ??
+							clientPrice - safeParseFloat(day.otaExpenseAmount, 0),
+					);
+					totals.clientTotal = roundMoney(
+						totals.clientTotal + clientPrice * count,
+					);
+					totals.rootTotal = roundMoney(totals.rootTotal + rootPrice * count);
+					totals.netAfterExpensesTotal = roundMoney(
+						totals.netAfterExpensesTotal + netAfterExpenses * count,
+					);
+					totals.otaExpenseTotal = roundMoney(
+						totals.otaExpenseTotal + (clientPrice - netAfterExpenses) * count,
+					);
+					totals.platformMarginTotal = roundMoney(
+						totals.platformMarginTotal +
+							(netAfterExpenses - rootPrice) * count,
+					);
+				},
+			);
+			return totals;
+		},
+		{
+			clientTotal: 0,
+			rootTotal: 0,
+			netAfterExpensesTotal: 0,
+			otaExpenseTotal: 0,
+			platformMarginTotal: 0,
+		},
+	);
+
 const normalizeRoomLabel = (value) => String(value || "").trim().toLowerCase();
 const availabilityKey = (roomType, displayName) =>
 	`${normalizeRoomLabel(displayName)}|${normalizeRoomLabel(roomType)}`;
@@ -417,7 +464,20 @@ const EditReservationMain = ({
 		const hotel = allHotels.find((h) => normalizeId(h) === reservationHotelId);
 		if (hotel) {
 			setSelectedHotel(hotel);
-			const mappedRooms = (reservation.pickedRoomsType || []).map((room) => ({
+			const pricingRows = Array.isArray(reservation.pickedRoomsPricing)
+				? reservation.pickedRoomsPricing
+				: [];
+			const regularRows = Array.isArray(reservation.pickedRoomsType)
+				? reservation.pickedRoomsType
+				: [];
+			const sourceRows =
+				reservation?.adminPricingVisibility?.rootOnlyForHotelManagement &&
+				pricingRows.length
+					? pricingRows
+					: regularRows.length
+					? regularRows
+					: pricingRows;
+			const mappedRooms = sourceRows.map((room) => ({
 				roomType: room.room_type || "",
 				displayName: room.displayName || room.display_name || "",
 				count: room.count || 1,
@@ -1023,6 +1083,7 @@ const EditReservationMain = ({
 				};
 			})
 		);
+		const adminPricingTotals = summarizeAdminPricingRooms(pickedRoomsType);
 
 		// Client-side relocate suffix (server also handles/overrides)
 		let updatedConfirmationNumber = reservation.confirmation_number;
@@ -1072,7 +1133,14 @@ const EditReservationMain = ({
 			days_of_residence: numberOfNights,
 			booking_source: bookingSource || "Jannat Employee",
 			pickedRoomsType,
+			pickedRoomsPricing: pickedRoomsType,
 			total_amount: totalAmount,
+			sub_total: adminPricingTotals.rootTotal,
+			adminPricing: {
+				...(reservation?.adminPricing || {}),
+				mode: reservation?.adminPricing?.mode || "admin_three_price",
+				...adminPricingTotals,
+			},
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
 			commission:
