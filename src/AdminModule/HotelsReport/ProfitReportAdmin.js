@@ -66,7 +66,7 @@ const TEXT = {
 		otaExpense: "OTA expenses",
 		totalProfit: "Total Profit",
 		profitRate: "Profit rate",
-		bookingSourceBreakdown: "Profit by booking source",
+		bookingSourceBreakdown: "Profit by original booking source",
 		profitTimeline: "Profit timeline",
 		fullName: "Full name",
 		reportDate: "Report date",
@@ -115,7 +115,7 @@ const TEXT = {
 		totalProfit: "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0631\u0628\u062d",
 		profitRate: "\u0646\u0633\u0628\u0629 \u0627\u0644\u0631\u0628\u062d",
 		bookingSourceBreakdown:
-			"\u0627\u0644\u0631\u0628\u062d \u062d\u0633\u0628 \u0627\u0644\u0645\u0635\u062f\u0631",
+			"\u0627\u0644\u0631\u0628\u062d \u062d\u0633\u0628 \u0627\u0644\u0645\u0635\u062f\u0631 \u0627\u0644\u0623\u0635\u0644\u064a",
 		profitTimeline:
 			"\u0627\u0644\u0631\u0628\u062d \u062d\u0633\u0628 \u0627\u0644\u0648\u0642\u062a",
 		fullName: "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644",
@@ -572,8 +572,8 @@ const ProfitReportAdmin = () => {
 		: []
 	).slice(0, 14);
 	const sourceChartHeight = Math.max(
-		360,
-		Math.min(560, bookingSourceRows.length * 62 + 145),
+		300,
+		Math.min(460, bookingSourceRows.length * 50 + 135),
 	);
 	const sourceOptions = {
 		chart: {
@@ -587,31 +587,38 @@ const ProfitReportAdmin = () => {
 			bar: {
 				horizontal: true,
 				borderRadius: 3,
-				barHeight: "62%",
+				barHeight: "42%",
+				dataLabels: {
+					position: "right",
+				},
 			},
 		},
 		colors: ["#0f766e"],
 		dataLabels: {
 			enabled: true,
 			formatter: (value) => moneyText(value, labels),
-			textAnchor: isArabic ? "end" : "start",
-			offsetX: isArabic ? -8 : 8,
+			textAnchor: "middle",
+			offsetX: isArabic ? -14 : 14,
 			style: {
 				colors: ["#0f172a"],
-				fontSize: "10px",
+				fontSize: "11px",
 				fontWeight: 950,
 			},
 			background: {
 				enabled: true,
 				foreColor: "#0f172a",
 				borderRadius: 4,
-				opacity: 0.9,
+				padding: 4,
+				opacity: 0.96,
+				borderWidth: 1,
+				borderColor: "#0f766e",
+				dropShadow: { enabled: false },
 			},
 		},
 		grid: {
 			borderColor: "#d9e7f5",
 			strokeDashArray: 3,
-			padding: { left: 8, right: 24 },
+			padding: { left: 12, right: 48 },
 		},
 		xaxis: {
 			categories: bookingSourceRows.map((row) => row.source || "Unknown"),
@@ -1053,6 +1060,20 @@ const ProfitReportWrapper = styled.div`
 	.ant-btn {
 		font-weight: 850;
 		border-radius: 7px;
+	}
+
+	> *,
+	.ant-spin-nested-loading,
+	.ant-spin-container {
+		min-width: 0;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+
+	.ant-spin-nested-loading,
+	.ant-spin-container {
+		width: 100%;
+		overflow: hidden;
 	}
 
 	.profit-details-modal .ant-modal-body {
