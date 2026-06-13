@@ -37,7 +37,7 @@ import {
 
 const DEFAULT_PROFIT_FROM = "2026-05-01";
 const PAGE_SIZE = 25;
-const TABLE_SCROLL_X = 1468;
+const TABLE_SCROLL_X = 1180;
 
 const TEXT = {
 	en: {
@@ -726,21 +726,21 @@ const ProfitReportAdmin = () => {
 
 	const rowNumberColumn = {
 		title: "#",
-		width: 44,
+		width: 34,
 		align: "center",
 		render: (_value, _row, index) => (page - 1) * PAGE_SIZE + index + 1,
 	};
 	const guestColumn = {
 		title: labels.fullName,
-		width: 142,
+		width: 112,
 		ellipsis: true,
 		render: (_value, row) => (
-			<DetailText value={fullNameForReservation(row)} max={20} />
+			<DetailText value={fullNameForReservation(row)} max={15} />
 		),
 	};
 	const totalProfitColumn = {
 		title: labels.totalProfit,
-		width: 128,
+		width: 104,
 		align: "center",
 		className: "profit-total-column",
 		render: (_value, row) => {
@@ -754,7 +754,7 @@ const ProfitReportAdmin = () => {
 	};
 	const detailsColumn = {
 		title: labels.details,
-		width: 126,
+		width: 104,
 		align: "center",
 		className: "profit-details-action-cell",
 		render: (_value, row) => (
@@ -773,65 +773,65 @@ const ProfitReportAdmin = () => {
 	const reportColumns = [
 		{
 			title: dateByLabel,
-			width: 108,
+			width: 88,
 			align: "center",
 			render: (_value, row) =>
 				formatDate(profitMetricsForReservation(row).reportDate),
 		},
 		{
 			title: labels.confirmation,
-			width: 126,
+			width: 104,
 			align: "center",
 			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={row.confirmation_number || ""} max={16} />
+				<DetailText value={row.confirmation_number || ""} max={12} />
 			),
 		},
 		{
 			title: labels.checkIn,
-			width: 92,
+			width: 78,
 			align: "center",
 			render: (_value, row) => formatDate(row.checkin_date),
 		},
 		{
 			title: labels.checkOut,
-			width: 98,
+			width: 82,
 			align: "center",
 			render: (_value, row) => formatDate(row.checkout_date),
 		},
 		{
 			title: labels.hotel,
-			width: 160,
+			width: 122,
 			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={hotelNameForReservation(row)} max={22} />
+				<DetailText value={hotelNameForReservation(row)} max={16} />
 			),
 		},
 		{
 			title: labels.source,
-			width: 108,
+			width: 78,
 			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={row.booking_source || ""} max={13} />
+				<DetailText value={row.booking_source || ""} max={10} />
 			),
 		},
 		{
 			title: labels.clientPaid,
-			width: 116,
+			width: 98,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).clientTotal, labels),
 		},
 		{
 			title: labels.hotelTotal,
-			width: 116,
+			width: 98,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).hotelTotal, labels),
 		},
 		{
 			title: labels.commission,
-			width: 102,
+			width: 78,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).commission, labels),
@@ -1289,7 +1289,7 @@ const TableShell = styled.div`
 	overflow: hidden;
 
 	.profit-report-table .ant-table {
-		font-size: 0.72rem;
+		font-size: 0.68rem;
 	}
 
 	.profit-report-table .ant-table-thead > tr > th {
@@ -1297,16 +1297,16 @@ const TableShell = styled.div`
 		color: #fff;
 		text-align: center;
 		font-weight: 950;
-		white-space: nowrap;
-		padding: 8px 4px !important;
-		line-height: 1.2;
+		white-space: normal;
+		padding: 7px 3px !important;
+		line-height: 1.25;
 	}
 
 	.profit-report-table .ant-table-tbody > tr > td {
 		font-weight: 760;
 		color: #1f2937;
 		vertical-align: middle;
-		padding: 8px 4px !important;
+		padding: 8px 3px !important;
 		text-align: center;
 	}
 
@@ -1327,17 +1327,17 @@ const TableShell = styled.div`
 	}
 
 	.profit-details-action-cell {
-		min-width: 126px;
+		min-width: 104px;
 	}
 
 	.profit-details-button {
-		min-width: 104px;
+		min-width: 94px;
 		height: 25px;
-		padding-inline: 8px;
+		padding-inline: 6px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 5px;
+		gap: 4px;
 		white-space: nowrap;
 	}
 `;
@@ -1346,9 +1346,9 @@ const ProfitValue = styled.span`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 88px;
+	min-width: 80px;
 	min-height: 27px;
-	padding: 3px 7px;
+	padding: 3px 5px;
 	border-radius: 6px;
 	background: ${(props) => (props.$negative ? "#fee2e2" : "#dcfce7")};
 	color: ${(props) => (props.$negative ? "#b91c1c" : "#166534")};
