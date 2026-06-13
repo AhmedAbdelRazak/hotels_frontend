@@ -40,6 +40,7 @@ import {
 	normalizePaymentMethod,
 	paymentMethodOptionsWithCurrent,
 } from "../../utils/paymentMethods";
+import { isSuperAdminUser } from "../../../AdminModule/utils/superUsers";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -179,6 +180,8 @@ export const EditReservationMain = ({
 	const successMessage = (english, arabic) => (isArabic ? arabic : english);
 
 	const { user } = isAuthenticated();
+	const basicEditRestrictionsActive =
+		basicEditOnly && !isSuperAdminUser(user);
 	const hotelIdValue =
 		reservation?.hotelId?._id ||
 		reservation?.hotelId ||
@@ -276,7 +279,7 @@ export const EditReservationMain = ({
 	);
 
 	const formatBlockedRoomMessage = useCallback(
-		(roomLabel, blockedDates, forAgent = basicEditOnly) => {
+		(roomLabel, blockedDates, forAgent = basicEditRestrictionsActive) => {
 			const datesText = summarizeDateList(blockedDates, 6);
 			if (chosenLanguage === "Arabic") {
 				return forAgent
@@ -287,7 +290,7 @@ export const EditReservationMain = ({
 				? `${roomLabel} is blocked on the hotel calendar for ${datesText}. Agents cannot book this room on those dates.`
 				: `Warning: ${roomLabel} is blocked on the hotel calendar for ${datesText}.`;
 		},
-		[basicEditOnly, chosenLanguage],
+		[basicEditRestrictionsActive, chosenLanguage],
 	);
 
 	const commissionForRoom = useCallback(
@@ -1185,14 +1188,14 @@ export const EditReservationMain = ({
 				availableCount !== null && Number.isFinite(availableCount) && availableCount <= 0;
 
 			if (blockedDates.length > 0) {
-				if (basicEditOnly) {
+				if (basicEditRestrictionsActive) {
 					toast.error(formatBlockedRoomMessage(roomLabel, blockedDates, true));
 					return;
 				}
 				toast.warn(formatBlockedRoomMessage(roomLabel, blockedDates, false));
 			}
 
-			if (inventoryBlocked && basicEditOnly) {
+			if (inventoryBlocked && basicEditRestrictionsActive) {
 				toast.error(
 					chosenLanguage === "Arabic"
 						? "\u0644\u0627 \u062a\u0648\u062c\u062f \u063a\u0631\u0641 \u0645\u062a\u0627\u062d\u0629 \u0645\u0646 \u0647\u0630\u0627 \u0627\u0644\u0646\u0648\u0639 \u0641\u064a \u0627\u0644\u062a\u0648\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u062d\u062f\u062f\u0629."
@@ -1496,9 +1499,9 @@ export const EditReservationMain = ({
 			const message = formatBlockedRoomMessage(
 				roomLabel,
 				issue.blockedDates,
-				basicEditOnly,
+				basicEditRestrictionsActive,
 			);
-			if (basicEditOnly) {
+			if (basicEditRestrictionsActive) {
 				toast.error(message);
 				return;
 			}
@@ -1509,7 +1512,7 @@ export const EditReservationMain = ({
 			"هل أنت متأكد أنك تريد تحديث هذا الحجز؟"
 		);
 		if (window.confirm(confirmationMessage)) {
-			if (basicEditOnly) {
+			if (basicEditRestrictionsActive) {
 				const updateData = {
 					customer_details: reservation.customer_details || {},
 					checkin_date: reservation.checkin_date,
@@ -2309,7 +2312,7 @@ export const EditReservationMain = ({
 											: "Booking Source"}
 									</Label>
 									<select
-										disabled={basicEditOnly}
+										disabled={basicEditRestrictionsActive}
 										onChange={(e) =>
 											setReservation({
 												...reservation,
@@ -2340,7 +2343,7 @@ export const EditReservationMain = ({
 									</select>
 								</div>
 
-								{!basicEditOnly &&
+								{!basicEditRestrictionsActive &&
 								reservation.booking_source &&
 								reservation.booking_source !== "manual" ? (
 									<div className='col'>
@@ -2367,7 +2370,7 @@ export const EditReservationMain = ({
 										{chosenLanguage === "Arabic" ? "الدفع" : "Payment"}
 									</Label>
 									<select
-										disabled={basicEditOnly}
+										disabled={basicEditRestrictionsActive}
 										onChange={(e) =>
 											setReservation({
 												...reservation,
@@ -2441,7 +2444,7 @@ export const EditReservationMain = ({
 									/>
 								</div>
 
-								{!basicEditOnly ? (
+								{!basicEditRestrictionsActive ? (
 									<div className='col'>
 									<Label>
 										{chosenLanguage === "Arabic"
@@ -2479,7 +2482,7 @@ export const EditReservationMain = ({
 						</Block>
 
 						<Block>
-							<RoomManagementRow $single={basicEditOnly}>
+							<RoomManagementRow $single={basicEditRestrictionsActive}>
 								<div>
 									<Label>
 										{chosenLanguage === "Arabic"
@@ -2518,7 +2521,7 @@ export const EditReservationMain = ({
 												Array.isArray(option.blockedDates) &&
 												option.blockedDates.length > 0;
 											const disabledForAgent =
-												basicEditOnly &&
+												basicEditRestrictionsActive &&
 												!active &&
 												(inventoryBlocked || calendarBlocked);
 											const label = `${option.label} (${option.roomType})`;
@@ -2567,7 +2570,7 @@ export const EditReservationMain = ({
 											  } selected`}
 									</RoomManagementHint>
 								</div>
-								{!basicEditOnly ? (
+								{!basicEditRestrictionsActive ? (
 									<div>
 										<Label>
 											{chosenLanguage === "Arabic"
@@ -2656,7 +2659,7 @@ export const EditReservationMain = ({
 
 					</Left>
 
-					{!basicEditOnly ? (
+					{!basicEditRestrictionsActive ? (
 					<Right>
 						<h4 className='headline'>
 							{chosenLanguage === "Arabic"
@@ -2762,7 +2765,7 @@ export const EditReservationMain = ({
 												{formatBlockedRoomMessage(
 													roomLabel,
 													issue.blockedDates,
-													basicEditOnly,
+													basicEditRestrictionsActive,
 												)}
 											</div>
 										);

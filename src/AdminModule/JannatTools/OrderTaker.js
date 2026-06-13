@@ -111,13 +111,27 @@ const resolveAdminPricingDay = (day = {}) => {
 };
 
 const normalizeRoomLabel = (value) => String(value || "").trim();
+const JANNAT_EMPLOYEE_SOURCE = "Jannat Employee";
+const normalizeEmployeeBookingSource = (value) => {
+	const source = String(value || "").trim();
+	const key = source.toLowerCase();
+	if (!source || key === "manual" || key === "manual reservation") {
+		return JANNAT_EMPLOYEE_SOURCE;
+	}
+	return source;
+};
 
 /** Treat as "external" if NOT 'manual' and NOT 'Jannat Employee' */
 const isExternalSource = (src) => {
 	const s = String(src || "")
 		.trim()
 		.toLowerCase();
-	return !!s && s !== "manual" && s !== "jannat employee";
+	return (
+		!!s &&
+		s !== "manual" &&
+		s !== "manual reservation" &&
+		s !== "jannat employee"
+	);
 };
 
 const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
@@ -168,7 +182,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	const [phone, setPhone] = useState("");
 
 	// NEW: Booking Source & External Confirmation #
-	const [bookingSource, setBookingSource] = useState("Jannat Employee");
+	const [bookingSource, setBookingSource] = useState(JANNAT_EMPLOYEE_SOURCE);
 	const [confirmationNumber, setConfirmationNumber] = useState("");
 
 	// NEW: Payment Status & Amount
@@ -1133,7 +1147,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		setPhone("");
 		setNickName("");
 
-		setBookingSource("Jannat Employee");
+		setBookingSource(JANNAT_EMPLOYEE_SOURCE);
 		setConfirmationNumber("");
 
 		setPaymentStatus("not paid");
@@ -1561,6 +1575,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			onsite_paid_amount = 0;
 		}
 
+		const resolvedBookingSource = normalizeEmployeeBookingSource(bookingSource);
+
 		// --- Compose request payload ---
 		const reservationData = {
 			userId: effectiveUserId,
@@ -1587,9 +1603,9 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
 			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
 			days_of_residence: numberOfNights,
-			booking_source: bookingSource || "Jannat Employee",
+			booking_source: resolvedBookingSource,
 			// external confirmation number goes to the canonical field if external source
-			confirmation_number: isExternalSource(bookingSource)
+			confirmation_number: isExternalSource(resolvedBookingSource)
 				? String(confirmationNumber || "").trim()
 				: "",
 			pickedRoomsType,
@@ -1941,13 +1957,16 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						<Form.Item label='Booking Source' required>
 							<Select
 								style={{ zIndex: 1000 }}
-								value={bookingSource}
-								onChange={(val) => setBookingSource(val)}
+								value={normalizeEmployeeBookingSource(bookingSource)}
+								onChange={(val) =>
+									setBookingSource(normalizeEmployeeBookingSource(val))
+								}
 								placeholder='Select booking source'
 							>
-								<Option value='Jannat Employee'>Jannat Employee</Option>
+								<Option value={JANNAT_EMPLOYEE_SOURCE}>
+									{JANNAT_EMPLOYEE_SOURCE}
+								</Option>
 								<Option value='affiliate'>Affiliate</Option>
-								<Option value='manual'>Manual Reservation</Option>
 								<Option value='booking.com'>Booking.com</Option>
 								<Option value='trivago'>Trivago</Option>
 								<Option value='expedia'>Expedia</Option>

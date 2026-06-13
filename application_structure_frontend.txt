@@ -2317,3 +2317,16 @@ Future TODO Backlog - Added 2026-05-26
   - Opening a saved URL with summaryTab=inventory, invCal=hijri, invHYear, invHMonth, and a stale dateTo should still load the selected inventory month.
   - Changing the inventory month should update invStart/invEnd in the URL to the month boundary.
   - The range shown in the disabled RangePicker should match the selected inventory month, not the broader overall summary period.
+
+2026-06-13 Super Admin Reservation Update And Jannat Tools Source Guard
+- Files:
+  - src/HotelModule/ReservationsFolder/EditWholeReservation/EditReservationMain.js
+  - src/AdminModule/JannatTools/OrderTaker.js
+- Shared edit form behavior:
+  - basicEditOnly is now applied through basicEditRestrictionsActive = basicEditOnly && !isSuperAdminUser(user).
+  - Configured super admins should not be blocked by order-taker calendar/inventory client guards if this shared form is opened from an admin context.
+  - Regular hotel-management/order-taker users still get the same disabled fields, blocked-date toasts, and reduced save payload.
+- Jannat Tools reservation creation:
+  - The Booking Source control defaults/resets to Jannat Employee.
+  - Manual Reservation is not shown as a selectable source in /admin/jannatbooking-tools?tab=reservations.
+  - The posted payload normalizes blank/manual/Manual Reservation to Jannat Employee before sending to the backend.
