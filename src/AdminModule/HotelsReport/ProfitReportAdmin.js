@@ -730,9 +730,9 @@ const ProfitReportAdmin = () => {
 	};
 	const guestColumn = {
 		title: labels.fullName,
-		width: 190,
+		width: 160,
 		render: (_value, row) => (
-			<DetailText value={fullNameForReservation(row)} max={26} />
+			<DetailText value={fullNameForReservation(row)} max={22} />
 		),
 	};
 	const totalProfitColumn = {
@@ -800,9 +800,9 @@ const ProfitReportAdmin = () => {
 		},
 		{
 			title: labels.source,
-			width: 150,
+			width: 120,
 			render: (_value, row) => (
-				<DetailText value={row.booking_source || ""} max={20} />
+				<DetailText value={row.booking_source || ""} max={14} />
 			),
 		},
 		{
@@ -970,7 +970,7 @@ const ProfitReportAdmin = () => {
 						columns={columns}
 						dataSource={Array.isArray(report.reservations) ? report.reservations : []}
 						pagination={false}
-						scroll={{ x: 1900 }}
+						scroll={{ x: 1800 }}
 						size='small'
 						locale={{ emptyText: labels.noData }}
 						className='profit-report-table'
