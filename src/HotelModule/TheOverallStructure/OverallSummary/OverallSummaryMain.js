@@ -333,18 +333,24 @@ const summaryReportFilterFromQuery = (query, tab) => {
 	const monthValues = parseSummaryList(
 		query.get("invMonths") || query.get("reportMonths") || query.get("invHMonth")
 	);
+	const inventoryMonthRange =
+		tab === "inventory" && monthValues.length
+			? monthRangeFromSelection(calendarType, monthValues, year)
+			: {};
 	const reservationDefaults = shouldApplyReservationDateDefaults(tab, query)
 		? defaultReservationDateRange()
 		: {};
 	const queryDateFrom =
-		query.get("dateFrom") ||
-		query.get("invStart") ||
+		inventoryMonthRange.dateFrom ||
+		(tab === "inventory" ? query.get("invStart") : query.get("dateFrom")) ||
+		(tab === "inventory" ? query.get("dateFrom") : query.get("invStart")) ||
 		reservationDefaults.dateFrom ||
 		overviewDefaults.dateFrom ||
 		"";
 	const queryDateTo =
-		query.get("dateTo") ||
-		query.get("invEnd") ||
+		inventoryMonthRange.dateTo ||
+		(tab === "inventory" ? query.get("invEnd") : query.get("dateTo")) ||
+		(tab === "inventory" ? query.get("dateTo") : query.get("invEnd")) ||
 		reservationDefaults.dateTo ||
 		overviewDefaults.dateTo ||
 		"";
@@ -685,15 +691,25 @@ const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) =>
 			query.set("hotelId", hotelIds.join(","));
 			query.set("invHotel", hotelIds.join(","));
 		}
-		if (nextFilters.dateFrom) {
-			query.set("dateFrom", nextFilters.dateFrom);
-			query.set("invStart", nextFilters.dateFrom);
-		}
-		if (nextFilters.dateTo) {
-			query.set("dateTo", nextFilters.dateTo);
-			query.set("invEnd", nextFilters.dateTo);
-		}
 		const hasMonthSelection = Boolean(nextFilters.reportMonths?.length);
+		const inventoryRange =
+			tab === "inventory" && hasMonthSelection
+				? monthRangeFromSelection(
+						nextFilters.calendarType || defaultSummaryCalendarType(tab),
+						nextFilters.reportMonths,
+						nextFilters.reportYear
+				  )
+				: {};
+		const queryDateFrom = inventoryRange.dateFrom || nextFilters.dateFrom;
+		const queryDateTo = inventoryRange.dateTo || nextFilters.dateTo;
+		if (queryDateFrom) {
+			query.set("dateFrom", queryDateFrom);
+			query.set("invStart", queryDateFrom);
+		}
+		if (queryDateTo) {
+			query.set("dateTo", queryDateTo);
+			query.set("invEnd", queryDateTo);
+		}
 		const defaultCalendar = defaultSummaryCalendarType(tab);
 		if (
 			nextFilters.calendarType &&
@@ -719,7 +735,7 @@ const OverallSummaryMain = ({ userId, user, token, ownerId, chosenLanguage }) =>
 		}
 		query.set(
 			"range",
-			nextFilters.dateFrom || nextFilters.dateTo ? "custom" : "all"
+			queryDateFrom || queryDateTo ? "custom" : "all"
 		);
 
 		const search = query.toString();

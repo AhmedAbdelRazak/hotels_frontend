@@ -315,8 +315,32 @@ const csvList = (value = "") =>
 		.map((item) => item.trim())
 		.filter(Boolean);
 
+const inventoryMonthSelectionRangeFromQuery = (query) => {
+	const monthValues = csvList(
+		query.get("invMonths") || query.get("reportMonths") || query.get("invHMonth"),
+	)
+		.map((item) => Number(item))
+		.filter((month) => Number.isInteger(month) && month >= 0 && month <= 11);
+	if (!monthValues.length) return null;
+	const year = Number(query.get("invHYear") || query.get("reportYear"));
+	if (!Number.isInteger(year)) return null;
+	const calendarType =
+		normalizeInventoryCalendarType(query.get(INVENTORY_QUERY_KEYS.calendarType)) ||
+		"hijri";
+	const ranges = monthValues
+		.map((month) => inventoryMonthRange(calendarType, month, year))
+		.filter((range) => range.start && range.end);
+	if (!ranges.length) return null;
+	return {
+		start: ranges[0].start,
+		end: ranges[ranges.length - 1].end,
+	};
+};
+
 const inventoryDateRangeFromQuery = (query, shouldHonorQueryPeriod) => {
 	if (!shouldHonorQueryPeriod) return { start: "", end: "" };
+	const selectedMonthRange = inventoryMonthSelectionRangeFromQuery(query);
+	if (selectedMonthRange) return selectedMonthRange;
 	const inventoryStart = normalizeInventoryDate(
 		query.get(INVENTORY_QUERY_KEYS.start),
 	);

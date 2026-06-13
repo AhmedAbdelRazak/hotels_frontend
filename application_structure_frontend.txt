@@ -2301,3 +2301,19 @@ Future TODO Backlog - Added 2026-05-26
 - Production note:
   - The backend typo/latency/reservation-safety work was deployed through d257a26 with hotels-backend restarted under PM2.
   - The frontend performance work was deployed through 1d011bf with hotels-frontend rebuilt/restarted during the production sync.
+
+2026-06-13 Hotel-Management Inventory Month Range Contract
+- Route:
+  - /hotel-management/main-dashboard?overall=summary&summaryTab=inventory
+- Files:
+  - src/HotelModule/TheOverallStructure/OverallSummary/OverallSummaryMain.js
+  - src/HotelModule/TheOverallStructure/OverallSummary/ExecutiveReports.js
+  - src/HotelModule/HotelReports/HotelInventory.js
+- Behavior:
+  - When inventory is filtered by Hijri/Gregorian month, the frontend derives invStart/invEnd from the selected inventory month and year.
+  - A parent summary dateTo/dateFrom value must not stretch a single selected inventory month. For example, invHYear=1447&invHMonth=8 should resolve to 2026-02-18 through 2026-03-19.
+  - The HotelInventory component remains the display and drill-down surface; backend owns the historical occupancy math and live availability rules.
+- Regression checks:
+  - Opening a saved URL with summaryTab=inventory, invCal=hijri, invHYear, invHMonth, and a stale dateTo should still load the selected inventory month.
+  - Changing the inventory month should update invStart/invEnd in the URL to the month boundary.
+  - The range shown in the disabled RangePicker should match the selected inventory month, not the broader overall summary period.
