@@ -260,6 +260,7 @@ const EditReservationMain = ({
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
+	const [hasExplicitPricingEdits, setHasExplicitPricingEdits] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
@@ -424,6 +425,7 @@ const EditReservationMain = ({
 		setAdults(reservation.adults || 1);
 		setChildren(reservation.children || 0);
 		setBookingSource(reservation.booking_source || "Jannat Employee");
+		setHasExplicitPricingEdits(false);
 		setCommissionOverride(
 			reservation.commission !== null &&
 				reservation.commission !== undefined &&
@@ -947,6 +949,7 @@ const EditReservationMain = ({
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
 		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setHasExplicitPricingEdits(true);
 		setSelectedRooms((currentRooms) =>
 			currentRooms.map((room, i) =>
 				i === editingRoomIndex
@@ -1141,6 +1144,7 @@ const EditReservationMain = ({
 				mode: reservation?.adminPricing?.mode || "admin_three_price",
 				...adminPricingTotals,
 			},
+			__adminPricingUpdateIntent: hasExplicitPricingEdits,
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
 			commission:
@@ -1200,6 +1204,7 @@ const EditReservationMain = ({
 						: "\u062a\u0645 \u062d\u0641\u0638 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u062c\u0632"
 				);
 				setReservation(mergedReservation);
+				setHasExplicitPricingEdits(false);
 				onReservationUpdated(mergedReservation);
 				message.success({ content: savedTitle, duration: 6 });
 				window.scrollTo({ top: 0, behavior: "smooth" });

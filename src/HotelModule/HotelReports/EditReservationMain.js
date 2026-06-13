@@ -84,6 +84,7 @@ const EditReservationMain = ({
 	const [editingRoomIndex, setEditingRoomIndex] = useState(null);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
+	const [hasExplicitPricingEdits, setHasExplicitPricingEdits] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
@@ -237,6 +238,7 @@ const EditReservationMain = ({
 			setNationality(reservation.customer_details?.nationality || "");
 			setAdults(reservation.adults || 1);
 			setChildren(reservation.children || 0);
+			setHasExplicitPricingEdits(false);
 			setCheckInDate(
 				reservation.checkin_date ? dayjs(reservation.checkin_date) : null
 			);
@@ -691,6 +693,7 @@ const EditReservationMain = ({
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
 		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
+		setHasExplicitPricingEdits(true);
 		setSelectedRooms((currentRooms) => {
 			const updated = currentRooms.map((room, i) =>
 				i === editingRoomIndex
@@ -866,7 +869,9 @@ const EditReservationMain = ({
 				? reservation.booking_source
 				: "Jannat Employee",
 			pickedRoomsType,
+			pickedRoomsPricing: pickedRoomsType,
 			total_amount: totalAmount,
+			__adminPricingUpdateIntent: hasExplicitPricingEdits,
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
 			commission: totalCommission,
@@ -913,6 +918,7 @@ const EditReservationMain = ({
 					belongsTo: incoming.belongsTo || reservation.belongsTo,
 				};
 				setReservation(mergedReservation);
+				setHasExplicitPricingEdits(false);
 				onReservationSaved(mergedReservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {
