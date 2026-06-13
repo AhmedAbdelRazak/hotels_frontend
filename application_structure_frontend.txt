@@ -1250,6 +1250,8 @@ Future TODO Backlog - Added 2026-05-26
   - Full Name and Source columns are intentionally narrow and must keep tooltip-backed ellipsis behavior so long guest/source values do not consume the whole report table.
   - The visible table intentionally removes the Profit Rate column to preserve room for Total Profit and Details. Profit Rate remains available in scorecards/charts/export.
   - Details opens the admin MoreDetails modal in place, matching the all-reservations inspection workflow.
+  - The scorecard strip must fit inside the report shell without RTL horizontal clipping. It wraps to three columns on narrower desktop screens and one column on phones.
+  - The MoreDetails parent modal in this report must not force a high z-index. MoreDetails owns the higher child-modal stack for Edit Reservation, pricing, receipt, status, and confirmation dialogs, so forcing the parent above that stack can trap child modals behind the parent. Keep the Profit wrapper wide instead of raising its z-index.
 
 2026-05-29 Admin Reservation Scorecard Redesign
 - Admin all-reservations scorecards:

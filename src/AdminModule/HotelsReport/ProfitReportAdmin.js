@@ -37,6 +37,7 @@ import {
 
 const DEFAULT_PROFIT_FROM = "2026-05-01";
 const PAGE_SIZE = 25;
+const TABLE_SCROLL_X = 1468;
 
 const TEXT = {
 	en: {
@@ -725,19 +726,21 @@ const ProfitReportAdmin = () => {
 
 	const rowNumberColumn = {
 		title: "#",
-		width: 58,
+		width: 44,
+		align: "center",
 		render: (_value, _row, index) => (page - 1) * PAGE_SIZE + index + 1,
 	};
 	const guestColumn = {
 		title: labels.fullName,
-		width: 160,
+		width: 142,
+		ellipsis: true,
 		render: (_value, row) => (
-			<DetailText value={fullNameForReservation(row)} max={22} />
+			<DetailText value={fullNameForReservation(row)} max={20} />
 		),
 	};
 	const totalProfitColumn = {
 		title: labels.totalProfit,
-		width: 150,
+		width: 128,
 		align: "center",
 		className: "profit-total-column",
 		render: (_value, row) => {
@@ -751,7 +754,7 @@ const ProfitReportAdmin = () => {
 	};
 	const detailsColumn = {
 		title: labels.details,
-		width: 150,
+		width: 126,
 		align: "center",
 		className: "profit-details-action-cell",
 		render: (_value, row) => (
@@ -770,58 +773,65 @@ const ProfitReportAdmin = () => {
 	const reportColumns = [
 		{
 			title: dateByLabel,
-			width: 130,
+			width: 108,
+			align: "center",
 			render: (_value, row) =>
 				formatDate(profitMetricsForReservation(row).reportDate),
 		},
 		{
 			title: labels.confirmation,
-			width: 165,
+			width: 126,
+			align: "center",
+			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={row.confirmation_number || ""} max={20} />
+				<DetailText value={row.confirmation_number || ""} max={16} />
 			),
 		},
 		{
 			title: labels.checkIn,
-			width: 120,
+			width: 92,
+			align: "center",
 			render: (_value, row) => formatDate(row.checkin_date),
 		},
 		{
 			title: labels.checkOut,
-			width: 120,
+			width: 98,
+			align: "center",
 			render: (_value, row) => formatDate(row.checkout_date),
 		},
 		{
 			title: labels.hotel,
-			width: 220,
+			width: 160,
+			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={hotelNameForReservation(row)} max={30} />
+				<DetailText value={hotelNameForReservation(row)} max={22} />
 			),
 		},
 		{
 			title: labels.source,
-			width: 120,
+			width: 108,
+			ellipsis: true,
 			render: (_value, row) => (
-				<DetailText value={row.booking_source || ""} max={14} />
+				<DetailText value={row.booking_source || ""} max={13} />
 			),
 		},
 		{
 			title: labels.clientPaid,
-			width: 150,
+			width: 116,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).clientTotal, labels),
 		},
 		{
 			title: labels.hotelTotal,
-			width: 150,
+			width: 116,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).hotelTotal, labels),
 		},
 		{
 			title: labels.commission,
-			width: 130,
+			width: 102,
 			align: "center",
 			render: (_value, row) =>
 				moneyText(profitMetricsForReservation(row).commission, labels),
@@ -970,7 +980,7 @@ const ProfitReportAdmin = () => {
 						columns={columns}
 						dataSource={Array.isArray(report.reservations) ? report.reservations : []}
 						pagination={false}
-						scroll={{ x: 1800 }}
+						scroll={{ x: TABLE_SCROLL_X }}
 						size='small'
 						locale={{ emptyText: labels.noData }}
 						className='profit-report-table'
@@ -995,10 +1005,9 @@ const ProfitReportAdmin = () => {
 				open={detailsOpen}
 				onCancel={closeDetails}
 				footer={null}
-				width='min(94vw, 1380px)'
-				style={{ top: "3%" }}
+				width='min(98vw, 1600px)'
+				style={{ top: "2%" }}
 				destroyOnClose
-				zIndex={25000}
 				className={isArabic ? "profit-details-modal is-rtl" : "profit-details-modal"}
 			>
 				{detailsLoading ? (
@@ -1025,8 +1034,10 @@ export default ProfitReportAdmin;
 const ProfitReportWrapper = styled.div`
 	width: 100%;
 	min-width: 0;
+	max-width: 100%;
 	display: grid;
 	gap: 14px;
+	overflow-x: clip;
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
 	font-family: ${(props) =>
 		props.$isRTL
@@ -1121,24 +1132,24 @@ const scoreToneFor = (toneKey = "blue") => scoreTone[toneKey] || scoreTone.blue;
 
 const ScoreGrid = styled.section`
 	display: grid;
-	grid-template-columns: repeat(6, minmax(0, 1fr));
-	gap: 12px;
+	grid-template-columns: repeat(6, minmax(132px, 1fr));
+	gap: 10px;
 	margin: 2px 0 4px;
-	padding: 12px;
+	padding: 10px;
 	border: 1px solid #d7e9fb;
 	border-radius: 10px;
 	background:
 		linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.96)),
 		linear-gradient(135deg, rgba(45, 93, 145, 0.1), rgba(141, 76, 157, 0.09));
 	box-shadow: 0 10px 28px rgba(16, 32, 51, 0.08);
-	overflow-x: auto;
-	-webkit-overflow-scrolling: touch;
+	overflow: visible;
 
-	@media (max-width: 1180px) {
-		grid-template-columns: repeat(6, minmax(174px, 1fr));
+	@media (max-width: 1380px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 
 	@media (max-width: 640px) {
+		grid-template-columns: 1fr;
 		gap: 10px;
 		padding: 10px;
 	}
@@ -1147,7 +1158,7 @@ const ScoreGrid = styled.section`
 const ScoreTile = styled.div`
 	position: relative;
 	min-width: 0;
-	min-height: 124px;
+	min-height: 104px;
 	display: grid;
 	grid-template-columns: 30px minmax(0, 1fr);
 	grid-template-rows: auto 1fr auto;
@@ -1157,8 +1168,8 @@ const ScoreTile = styled.div`
 		"value value";
 	align-items: center;
 	text-align: start;
-	gap: 8px;
-	padding: 12px;
+	gap: 7px;
+	padding: 10px;
 	border: 1px solid rgba(191, 219, 254, 0.95);
 	border-radius: 8px;
 	background: ${(props) => scoreToneFor(props.$tone).bg};
@@ -1213,7 +1224,7 @@ const ScoreTile = styled.div`
 		grid-area: value;
 		min-width: 0;
 		color: inherit;
-		font-size: clamp(1.25rem, 1.55vw, 1.78rem);
+		font-size: clamp(1.05rem, 1.22vw, 1.48rem);
 		font-weight: 950;
 		line-height: 1.08;
 		letter-spacing: 0;
@@ -1229,6 +1240,8 @@ const ChartsGrid = styled.section`
 
 const ChartPanel = styled.section`
 	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 	border: 1px solid #d5e2f0;
 	border-radius: 8px;
 	background: #ffffff;
@@ -1276,7 +1289,7 @@ const TableShell = styled.div`
 	overflow: hidden;
 
 	.profit-report-table .ant-table {
-		font-size: 0.74rem;
+		font-size: 0.72rem;
 	}
 
 	.profit-report-table .ant-table-thead > tr > th {
@@ -1285,12 +1298,16 @@ const TableShell = styled.div`
 		text-align: center;
 		font-weight: 950;
 		white-space: nowrap;
+		padding: 8px 4px !important;
+		line-height: 1.2;
 	}
 
 	.profit-report-table .ant-table-tbody > tr > td {
 		font-weight: 760;
 		color: #1f2937;
 		vertical-align: middle;
+		padding: 8px 4px !important;
+		text-align: center;
 	}
 
 	.profit-table-text {
@@ -1310,11 +1327,13 @@ const TableShell = styled.div`
 	}
 
 	.profit-details-action-cell {
-		min-width: 150px;
+		min-width: 126px;
 	}
 
 	.profit-details-button {
-		min-width: 118px;
+		min-width: 104px;
+		height: 25px;
+		padding-inline: 8px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -1327,9 +1346,9 @@ const ProfitValue = styled.span`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 92px;
-	min-height: 28px;
-	padding: 4px 8px;
+	min-width: 88px;
+	min-height: 27px;
+	padding: 3px 7px;
 	border-radius: 6px;
 	background: ${(props) => (props.$negative ? "#fee2e2" : "#dcfce7")};
 	color: ${(props) => (props.$negative ? "#b91c1c" : "#166534")};
