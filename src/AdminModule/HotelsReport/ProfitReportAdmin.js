@@ -38,6 +38,7 @@ import {
 const DEFAULT_PROFIT_FROM = "2026-05-01";
 const PAGE_SIZE = 25;
 const TABLE_SCROLL_X = 1180;
+const PROFIT_DETAILS_MODAL_Z_INDEX = 14000;
 
 const TEXT = {
 	en: {
@@ -854,7 +855,11 @@ const ProfitReportAdmin = () => {
 		  ];
 
 	return (
-		<ProfitReportWrapper dir={isArabic ? "rtl" : "ltr"} $isRTL={isArabic}>
+		<ProfitReportWrapper
+			className='profit-report-wrapper'
+			dir={isArabic ? "rtl" : "ltr"}
+			$isRTL={isArabic}
+		>
 			<FiltersBar>
 				<Select
 					value={filters.hotelId}
@@ -1008,6 +1013,7 @@ const ProfitReportAdmin = () => {
 				width='min(98vw, 1600px)'
 				style={{ top: "2%" }}
 				destroyOnClose
+				zIndex={PROFIT_DETAILS_MODAL_Z_INDEX}
 				className={isArabic ? "profit-details-modal is-rtl" : "profit-details-modal"}
 			>
 				{detailsLoading ? (
