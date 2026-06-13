@@ -1251,6 +1251,7 @@ Future TODO Backlog - Added 2026-05-26
   - The visible table intentionally removes the Profit Rate column to preserve room for Total Profit and Details. Profit Rate remains available in scorecards/charts/export.
   - Details opens the admin MoreDetails modal in place, matching the all-reservations inspection workflow.
   - The scorecard strip must fit inside the report shell without RTL horizontal clipping. It wraps to three columns on narrower desktop screens and one column on phones.
+  - The Profit report wrapper is clamped against --admin-sidebar-width so Arabic desktop views with the right-side admin sidebar do not hide the left edge of scorecards, charts, or table columns.
   - The Profit table column budget is intentionally compact so the complete table fits the visible admin content area on desktop even when the right-side Arabic admin sidebar is open. Keep table labels centered, allow header wrapping, and preserve ellipsis/title behavior for long guest, hotel, source, and confirmation values.
   - The MoreDetails parent modal in this report must not force a high z-index. MoreDetails owns the higher child-modal stack for Edit Reservation, pricing, receipt, status, and confirmation dialogs, so forcing the parent above that stack can trap child modals behind the parent. Keep the Profit wrapper wide instead of raising its z-index.
 

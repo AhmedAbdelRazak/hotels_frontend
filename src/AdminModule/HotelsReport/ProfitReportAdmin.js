@@ -1032,7 +1032,7 @@ const ProfitReportAdmin = () => {
 export default ProfitReportAdmin;
 
 const ProfitReportWrapper = styled.div`
-	width: 100%;
+	width: min(100%, calc(100vw - var(--admin-sidebar-width, 285px) - 72px));
 	min-width: 0;
 	max-width: 100%;
 	display: grid;
