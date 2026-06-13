@@ -598,21 +598,21 @@ const ProfitReportAdmin = () => {
 			enabled: true,
 			formatter: (value) => moneyText(value, labels),
 			textAnchor: "middle",
-			offsetX: isArabic ? -14 : 14,
+			offsetX: -28,
 			style: {
-				colors: ["#0f172a"],
+				colors: ["#ffffff"],
 				fontSize: "11px",
 				fontWeight: 950,
 			},
-			background: {
+			dropShadow: {
 				enabled: true,
-				foreColor: "#0f172a",
-				borderRadius: 4,
-				padding: 4,
-				opacity: 0.96,
-				borderWidth: 1,
-				borderColor: "#0f766e",
-				dropShadow: { enabled: false },
+				top: 1,
+				left: 1,
+				blur: 1,
+				opacity: 0.45,
+			},
+			background: {
+				enabled: false,
 			},
 		},
 		grid: {

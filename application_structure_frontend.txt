@@ -1256,7 +1256,7 @@ Future TODO Backlog - Added 2026-05-26
   - The Profit table column budget is intentionally compact so the complete table fits the visible admin content area on desktop even when the right-side Arabic admin sidebar is open. Keep table labels centered, allow header wrapping, and preserve ellipsis/title behavior for long guest, hotel, source, and confirmation values.
   - The MoreDetails parent modal in this report uses a controlled mid-level z-index so it sits above the fixed admin top navbar but below the MoreDetails child-modal stack. MoreDetails owns the higher child-modal stack for Edit Reservation, pricing, receipt, status, and confirmation dialogs, so do not raise the Profit parent above those child modals.
   - Source values shown in the table, export, and source chart come from the backend's original source field for the Profit report, which prefers customer_details.booking_source over the editable booking_source.
-  - The booking-source chart uses slim horizontal bars and readable value badges at the bar end; avoid dark in-bar data label backgrounds that look like unexplained spots.
+  - The booking-source chart uses slim horizontal bars and readable white value labels near the bar end; avoid dark in-bar data label backgrounds that look like unexplained spots.
 
 2026-05-29 Admin Reservation Scorecard Redesign
 - Admin all-reservations scorecards:
