@@ -58,6 +58,20 @@ const safeParseFloat = (val, fallback = 0) => {
 
 const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
 
+const dateOnlyKey = (value) => {
+	if (!value) return "";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+		return value.slice(0, 10);
+	}
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
+};
+
+const datePickerValue = (value) => {
+	const key = dateOnlyKey(value);
+	return key ? dayjs(key) : null;
+};
+
 const resolveAdminPricingDay = (day = {}) => {
 	const clientPrice = roundMoney(
 		day.clientPrice ??
@@ -261,6 +275,7 @@ const EditReservationMain = ({
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [hasExplicitPricingEdits, setHasExplicitPricingEdits] = useState(false);
+	const [hasExplicitDateEdits, setHasExplicitDateEdits] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
@@ -426,6 +441,7 @@ const EditReservationMain = ({
 		setChildren(reservation.children || 0);
 		setBookingSource(reservation.booking_source || "Jannat Employee");
 		setHasExplicitPricingEdits(false);
+		setHasExplicitDateEdits(false);
 		setCommissionOverride(
 			reservation.commission !== null &&
 				reservation.commission !== undefined &&
@@ -436,12 +452,8 @@ const EditReservationMain = ({
 		setConfirmationNumber2(
 			reservation.customer_details?.confirmation_number2 || ""
 		);
-		setCheckInDate(
-			reservation.checkin_date ? dayjs(reservation.checkin_date) : null
-		);
-		setCheckOutDate(
-			reservation.checkout_date ? dayjs(reservation.checkout_date) : null
-		);
+		setCheckInDate(datePickerValue(reservation.checkin_date));
+		setCheckOutDate(datePickerValue(reservation.checkout_date));
 		setComment(reservation.comment || "");
 
 		if (reservation.advancePayment) {
@@ -816,11 +828,12 @@ const EditReservationMain = ({
 
 	// ---------------- Date handlers ----------------
 	const handleCheckInDateChange = (value) => {
+		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckInDate(null);
 			return;
 		}
-		const newDate = dayjs(value);
+		const newDate = datePickerValue(value);
 		if (checkInDate && checkOutDate) {
 			const oldNights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
 			if (oldNights > 0) {
@@ -833,11 +846,12 @@ const EditReservationMain = ({
 	};
 
 	const handleCheckOutDateChange = (value) => {
+		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckOutDate(null);
 			return;
 		}
-		setCheckOutDate(dayjs(value));
+		setCheckOutDate(datePickerValue(value));
 	};
 
 	// Allow selecting any past or future date when editing
@@ -1133,6 +1147,7 @@ const EditReservationMain = ({
 			children,
 			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
 			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
+			__reservationDateUpdateIntent: hasExplicitDateEdits,
 			days_of_residence: numberOfNights,
 			booking_source: bookingSource || "Jannat Employee",
 			pickedRoomsType,
@@ -1205,6 +1220,7 @@ const EditReservationMain = ({
 				);
 				setReservation(mergedReservation);
 				setHasExplicitPricingEdits(false);
+				setHasExplicitDateEdits(false);
 				onReservationUpdated(mergedReservation);
 				message.success({ content: savedTitle, duration: 6 });
 				window.scrollTo({ top: 0, behavior: "smooth" });

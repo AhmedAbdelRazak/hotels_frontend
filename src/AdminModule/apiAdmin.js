@@ -1399,6 +1399,34 @@ export const releaseOtaReservationToHotel = (
 		}));
 };
 
+export const revertOtaReservationToPlatformReview = (
+	reservationId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/revert-platform-review/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error:
+				err?.message ||
+				"Could not return reservation to platform review",
+		}));
+};
+
 export const distinctBookingSources = (userId, token) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/distinct-booking-sources/${userId}`,

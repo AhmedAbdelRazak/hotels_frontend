@@ -60,6 +60,11 @@ const dateOnlyKey = (value) => {
 	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
 };
 
+const datePickerValue = (value) => {
+	const key = dateOnlyKey(value);
+	return key ? dayjs(key) : null;
+};
+
 const buildStayDateKeysForCalendar = (startDate, endDate) => {
 	const start = moment(startDate).startOf("day");
 	const endExclusive = moment(endDate).startOf("day");
@@ -306,22 +311,12 @@ export const EditReservationMain = ({
 	);
 
 	const formatDate = useCallback((date) => {
-		if (!date) return "";
-
-		const d = new Date(date);
-		let month = "" + (d.getMonth() + 1);
-		let day = "" + d.getDate();
-		let year = d.getFullYear();
-
-		if (month.length < 2) month = "0" + month;
-		if (day.length < 2) day = "0" + day;
-
-		return [year, month, day].join("-");
+		return dateOnlyKey(date);
 	}, []);
 
 	const normalizeDate = useCallback((value) => {
 		if (!value) return null;
-		const parsed = moment(value);
+		const parsed = moment(dateOnlyKey(value), "YYYY-MM-DD", true);
 		return parsed.isValid() ? parsed.startOf("day") : null;
 	}, []);
 
@@ -945,15 +940,15 @@ export const EditReservationMain = ({
 	];
 
 	const onStartDateChange = (value) => {
-		const dateAtMidnight = value ? value.startOf("day") : null;
+		const dateAtMidnight = datePickerValue(value);
 		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
 			const currentStart = currentReservation.checkin_date
-				? dayjs(currentReservation.checkin_date).startOf("day")
+				? datePickerValue(currentReservation.checkin_date)
 				: null;
 			const currentEnd = currentReservation.checkout_date
-				? dayjs(currentReservation.checkout_date).startOf("day")
+				? datePickerValue(currentReservation.checkout_date)
 				: null;
 			let nightsCount = 0;
 			if (currentStart && currentEnd) {
@@ -972,9 +967,9 @@ export const EditReservationMain = ({
 
 			return {
 				...currentReservation,
-				checkin_date: dateAtMidnight ? dateAtMidnight.toISOString() : null,
+				checkin_date: dateAtMidnight ? dateAtMidnight.format("YYYY-MM-DD") : null,
 				checkout_date: nextCheckout
-					? nextCheckout.toISOString()
+					? nextCheckout.format("YYYY-MM-DD")
 					: currentReservation.checkout_date,
 				days_of_residence:
 					dateAtMidnight && nextCheckout
@@ -985,12 +980,12 @@ export const EditReservationMain = ({
 	};
 
 	const onEndDateChange = (date) => {
-		const adjustedDate = date ? date.startOf("day") : null;
+		const adjustedDate = datePickerValue(date);
 		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
 			const start = currentReservation.checkin_date
-				? dayjs(currentReservation.checkin_date).startOf("day")
+				? datePickerValue(currentReservation.checkin_date)
 				: null;
 
 			// Calculate the difference in days
@@ -999,7 +994,7 @@ export const EditReservationMain = ({
 
 			return {
 				...currentReservation,
-				checkout_date: adjustedDate ? adjustedDate.toISOString() : null, // Store as ISO string or null if no date
+				checkout_date: adjustedDate ? adjustedDate.format("YYYY-MM-DD") : null,
 				days_of_residence: duration >= 0 ? duration : 0,
 			};
 		});
@@ -1009,7 +1004,7 @@ export const EditReservationMain = ({
 		if (!reservation.checkin_date) return false;
 		if (!current) return false;
 		return current.isBefore(
-			dayjs(reservation.checkin_date).startOf("day"),
+			datePickerValue(reservation.checkin_date),
 			"day",
 		);
 	};
@@ -1517,6 +1512,7 @@ export const EditReservationMain = ({
 					customer_details: reservation.customer_details || {},
 					checkin_date: reservation.checkin_date,
 					checkout_date: reservation.checkout_date,
+					__reservationDateUpdateIntent: hasDateEdits,
 					days_of_residence: reservation.days_of_residence,
 					total_guests: reservation.total_guests,
 					adults: reservation.adults,
@@ -1588,6 +1584,12 @@ export const EditReservationMain = ({
 
 			if (hasRoomLineEdits || hasDateEdits) {
 				Object.assign(updateData, buildRoomPricingUpdatePayload());
+				if (hasDateEdits) {
+					updateData.__reservationDateUpdateIntent = true;
+				} else {
+					delete updateData.checkin_date;
+					delete updateData.checkout_date;
+				}
 			} else {
 				delete updateData.pickedRoomsType;
 				delete updateData.pickedRoomsPricing;
@@ -1596,6 +1598,8 @@ export const EditReservationMain = ({
 				delete updateData.total_amount;
 				delete updateData.sub_total;
 				delete updateData.commission;
+				delete updateData.checkin_date;
+				delete updateData.checkout_date;
 			}
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
@@ -2245,7 +2249,7 @@ export const EditReservationMain = ({
 									{reservation.checkin_date ? (
 										<small className='pill-inline'>
 											<CalendarOutlined />{" "}
-											{dayjs(reservation.checkin_date).format("YYYY-MM-DD")}
+											{dateOnlyKey(reservation.checkin_date)}
 										</small>
 									) : null}
 								</Label>
@@ -2257,7 +2261,7 @@ export const EditReservationMain = ({
 									format='YYYY-MM-DD'
 									value={
 										reservation.checkin_date
-											? dayjs(reservation.checkin_date)
+											? datePickerValue(reservation.checkin_date)
 											: null
 									}
 									onChange={onStartDateChange}
@@ -2277,7 +2281,7 @@ export const EditReservationMain = ({
 									{reservation.checkout_date ? (
 										<small className='pill-inline'>
 											<CalendarOutlined />{" "}
-											{dayjs(reservation.checkout_date).format("YYYY-MM-DD")}
+											{dateOnlyKey(reservation.checkout_date)}
 										</small>
 									) : null}
 								</Label>
@@ -2289,7 +2293,7 @@ export const EditReservationMain = ({
 									format='YYYY-MM-DD'
 									value={
 										reservation.checkout_date
-											? dayjs(reservation.checkout_date)
+											? datePickerValue(reservation.checkout_date)
 											: null
 									}
 									onChange={onEndDateChange}
@@ -2674,7 +2678,7 @@ export const EditReservationMain = ({
 								</span>
 								<div className='pill'>
 									{reservation.checkin_date
-										? moment(reservation.checkin_date).format("YYYY-MM-DD")
+										? dateOnlyKey(reservation.checkin_date)
 										: "-"}
 								</div>
 							</div>
@@ -2684,7 +2688,7 @@ export const EditReservationMain = ({
 								</span>
 								<div className='pill'>
 									{reservation.checkout_date
-										? moment(reservation.checkout_date).format("YYYY-MM-DD")
+										? dateOnlyKey(reservation.checkout_date)
 										: "-"}
 								</div>
 							</div>

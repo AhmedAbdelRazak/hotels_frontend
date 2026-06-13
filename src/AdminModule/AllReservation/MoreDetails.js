@@ -41,6 +41,7 @@ import {
 } from "../../HotelModule/apiAdmin";
 import {
 	getSingleInboundEmailAudit,
+	revertOtaReservationToPlatformReview,
 	sendReservationConfirmationSMSManualAdmin,
 	sendReservationPaymentLinkSMSManualAdmin,
 	updateSingleReservation,
@@ -784,6 +785,8 @@ const AR_LABELS = {
 		"\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
 	revertToPending:
 		"\u0625\u0631\u062c\u0627\u0639 \u0644\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+	returnToPlatformReview:
+		"\u0625\u0631\u062c\u0627\u0639 \u0642\u0628\u0644 \u0627\u0644\u0625\u0635\u062f\u0627\u0631 \u0644\u0644\u0641\u0646\u062f\u0642",
 	confirmationReason:
 		"\u0633\u0628\u0628 \u0627\u0644\u0642\u0628\u0648\u0644",
 	rejectionReason:
@@ -5185,6 +5188,10 @@ const ReservationDetail = ({
 		String(reservation?.reservation_status || reservation?.state || "")
 			.trim()
 			.toLowerCase() === "ota platform review";
+	const canReturnToPlatformReview =
+		isConfiguredSuperAdmin &&
+		!!reservation?.otaPlatformReview &&
+		!isPendingOtaPlatformReviewReservation;
 	const pendingDecisionReason =
 		reservation?.pendingConfirmation?.rejectionReason ||
 		reservation?.pendingConfirmation?.confirmationReason ||
@@ -5606,6 +5613,90 @@ const ReservationDetail = ({
 				}),
 		});
 	}, [canRevertPendingDecision, chosenLanguage, updatePendingDecision]);
+	const openReturnToPlatformReviewModal = useCallback(() => {
+		if (!canReturnToPlatformReview) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "\u064a\u0645\u0643\u0646 \u0644\u0644\u0645\u0634\u0631\u0641 \u0627\u0644\u0623\u0639\u0644\u0649 \u0641\u0642\u0637 \u0625\u0631\u062c\u0627\u0639 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0646\u0635\u0629."
+					: "Only the configured SUPER ADMIN can return this reservation to platform review.",
+			);
+			return;
+		}
+		let returnReason = "";
+		Modal.confirm({
+			...confirmModalProps(),
+			title:
+				chosenLanguage === "Arabic"
+					? AR_LABELS.returnToPlatformReview
+					: "Return before hotel release",
+			content: (
+				<div className='pending-decision-modal'>
+					<p>
+						{chosenLanguage === "Arabic"
+							? "\u0633\u064a\u062a\u0645 \u0625\u0631\u062c\u0627\u0639 \u0627\u0644\u062d\u062c\u0632 \u0625\u0644\u0649 \u062d\u0627\u0644\u0629 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0646\u0635\u0629 \u0648\u0644\u0646 \u064a\u0638\u0647\u0631 \u0643\u062d\u062c\u0632 \u0645\u0635\u062f\u0631 \u0644\u0644\u0641\u0646\u062f\u0642."
+							: "This will return the reservation to platform review so it is no longer treated as released to the hotel."}
+					</p>
+					<Input.TextArea
+						rows={3}
+						placeholder={
+							chosenLanguage === "Arabic"
+								? AR_LABELS.optionalReason
+								: "Optional reason"
+						}
+						onChange={(event) => {
+							returnReason = event.target.value;
+						}}
+					/>
+				</div>
+			),
+			okText:
+				chosenLanguage === "Arabic"
+					? AR_LABELS.returnToPlatformReview
+					: "Return",
+			cancelText: chosenLanguage === "Arabic" ? "\u0625\u0644\u063a\u0627\u0621" : "Cancel",
+			centered: true,
+			onOk: async () => {
+				setPendingDecisionLoading(true);
+				try {
+					const response = await revertOtaReservationToPlatformReview(
+						reservation._id,
+						user._id,
+						token,
+						{ reason: returnReason },
+					);
+					if (!response || response.error || response.success === false) {
+						const message =
+							response?.message ||
+							response?.error ||
+							"Could not return reservation to platform review.";
+						toast.error(message);
+						return Promise.reject(new Error(message));
+					}
+					const updated = response?.data || response?.reservation || response;
+					if (updated?._id) {
+						setReservation(updated);
+						onReservationUpdated(updated);
+					}
+					toast.success(
+						chosenLanguage === "Arabic"
+							? "\u062a\u0645 \u0625\u0631\u062c\u0627\u0639 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0646\u0635\u0629."
+							: "Reservation was returned to platform review.",
+					);
+					return updated;
+				} finally {
+					setPendingDecisionLoading(false);
+				}
+			},
+		});
+	}, [
+		canReturnToPlatformReview,
+		chosenLanguage,
+		onReservationUpdated,
+		reservation?._id,
+		setReservation,
+		token,
+		user?._id,
+	]);
 	const reservationCycleRows = useMemo(() => {
 		const rows = [];
 		const pushRow = ({ at, title, by, detail }) => {
@@ -6145,7 +6236,8 @@ const ReservationDetail = ({
 				const diffTime = Math.abs(newCheckoutDate - startDate);
 				const daysOfResidence = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-				updateData.checkout_date = newCheckoutDate.toISOString();
+				updateData.checkout_date = moment(newCheckoutDate).format("YYYY-MM-DD");
+				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
@@ -6191,7 +6283,8 @@ const ReservationDetail = ({
 				const diffTime = Math.abs(newCheckoutDate - startDate);
 				const daysOfResidence = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-				updateData.checkout_date = newCheckoutDate.toISOString();
+				updateData.checkout_date = moment(newCheckoutDate).format("YYYY-MM-DD");
+				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
 				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
@@ -9647,6 +9740,18 @@ const ReservationDetail = ({
 														: "Revert to pending"}
 												</button>
 											) : null}
+											{canReturnToPlatformReview ? (
+												<button
+													className='workflow-action pending'
+													type='button'
+													disabled={pendingDecisionLoading}
+													onClick={openReturnToPlatformReviewModal}
+												>
+													{chosenLanguage === "Arabic"
+														? AR_LABELS.returnToPlatformReview
+														: "Return before hotel release"}
+												</button>
+											) : null}
 											<button
 												className='workflow-action cancel'
 												type='button'
@@ -9860,6 +9965,18 @@ const ReservationDetail = ({
 																{chosenLanguage === "Arabic"
 																	? AR_LABELS.revertToPending
 																	: "Revert to pending"}
+															</button>
+														) : null}
+														{canReturnToPlatformReview ? (
+															<button
+																className='payment-preview-action pending'
+																type='button'
+																disabled={pendingDecisionLoading}
+																onClick={openReturnToPlatformReviewModal}
+															>
+																{chosenLanguage === "Arabic"
+																	? AR_LABELS.returnToPlatformReview
+																	: "Return before hotel release"}
 															</button>
 														) : null}
 														<button

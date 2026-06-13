@@ -30,6 +30,18 @@ const safeParseFloat = (val, fallback = 0) => {
 	const parsed = parseFloat(val);
 	return isNaN(parsed) ? fallback : parsed;
 };
+const dateOnlyKey = (value) => {
+	if (!value) return "";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+		return value.slice(0, 10);
+	}
+	const parsed = dayjs(value);
+	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
+};
+const datePickerValue = (value) => {
+	const key = dateOnlyKey(value);
+	return key ? dayjs(key) : null;
+};
 const normalizeId = (value) => {
 	if (!value) return "";
 	if (typeof value === "object") return String(value._id || value.id || "");
@@ -85,6 +97,7 @@ const EditReservationMain = ({
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [hasExplicitPricingEdits, setHasExplicitPricingEdits] = useState(false);
+	const [hasExplicitDateEdits, setHasExplicitDateEdits] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
@@ -239,12 +252,9 @@ const EditReservationMain = ({
 			setAdults(reservation.adults || 1);
 			setChildren(reservation.children || 0);
 			setHasExplicitPricingEdits(false);
-			setCheckInDate(
-				reservation.checkin_date ? dayjs(reservation.checkin_date) : null
-			);
-			setCheckOutDate(
-				reservation.checkout_date ? dayjs(reservation.checkout_date) : null
-			);
+			setHasExplicitDateEdits(false);
+			setCheckInDate(datePickerValue(reservation.checkin_date));
+			setCheckOutDate(datePickerValue(reservation.checkout_date));
 			setComment(reservation.comment || "");
 
 			// Pre-populate the advancePayment radio selection
@@ -604,11 +614,12 @@ const EditReservationMain = ({
 	 * If user had both from & to, we shift the "To date" so the nights remain the same.
 	 */
 	const handleCheckInDateChange = (value) => {
+		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckInDate(null);
 			return;
 		}
-		const newDate = dayjs(value);
+		const newDate = datePickerValue(value);
 		// If we already have an old from date & to date, preserve the difference in nights
 		if (checkInDate && checkOutDate) {
 			const oldNights = dayjs(checkOutDate).diff(dayjs(checkInDate), "day");
@@ -627,11 +638,12 @@ const EditReservationMain = ({
 	 * If user picks a new "To date," we just set it. If it's blank => null.
 	 */
 	const handleCheckOutDateChange = (value) => {
+		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckOutDate(null);
 			return;
 		}
-		const newDate = dayjs(value);
+		const newDate = datePickerValue(value);
 		setCheckOutDate(newDate);
 	};
 
@@ -864,6 +876,7 @@ const EditReservationMain = ({
 			children,
 			checkin_date: checkInDate.format("YYYY-MM-DD"),
 			checkout_date: checkOutDate.format("YYYY-MM-DD"),
+			__reservationDateUpdateIntent: hasExplicitDateEdits,
 			days_of_residence: numberOfNights,
 			booking_source: reservation.booking_source
 				? reservation.booking_source
@@ -919,6 +932,7 @@ const EditReservationMain = ({
 				};
 				setReservation(mergedReservation);
 				setHasExplicitPricingEdits(false);
+				setHasExplicitDateEdits(false);
 				onReservationSaved(mergedReservation);
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			} else {

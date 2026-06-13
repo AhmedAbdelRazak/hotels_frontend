@@ -164,7 +164,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				const diffTime = Math.abs(newCheckoutDate - startDate);
 				const daysOfResidence = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-				updateData.checkout_date = newCheckoutDate.toISOString();
+				updateData.checkout_date = moment(newCheckoutDate).format("YYYY-MM-DD");
+				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
 				// Calculate the new total amount
@@ -209,7 +210,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				const diffTime = Math.abs(newCheckoutDate - startDate);
 				const daysOfResidence = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-				updateData.checkout_date = newCheckoutDate.toISOString();
+				updateData.checkout_date = moment(newCheckoutDate).format("YYYY-MM-DD");
+				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
 				// Calculate the new total amount

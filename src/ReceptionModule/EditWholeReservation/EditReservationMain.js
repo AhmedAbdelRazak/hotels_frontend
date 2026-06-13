@@ -28,6 +28,7 @@ export const EditReservationMain = ({
 	const [updatedRoomPrice, setUpdatedRoomPrice] = useState(0);
 	const [roomsSummary, setRoomsSummary] = useState("");
 	const [roomInventory, setRoomInventory] = useState("");
+	const [hasDateEdits, setHasDateEdits] = useState(false);
 
 	const { user } = isAuthenticated();
 	const isArabic = chosenLanguage === "Arabic";
@@ -126,22 +127,25 @@ export const EditReservationMain = ({
 
 	const onStartDateChange = (value) => {
 		// Convert 'value' to a Date object at midnight to disregard time
-		const dateAtMidnight = value ? value.clone().startOf("day").toDate() : null;
+		const dateAtMidnight = value ? value.clone().startOf("day") : null;
+		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
 			const end = currentReservation.checkout_date
-				? moment(currentReservation.checkout_date).startOf("day").toDate()
+				? moment(currentReservation.checkout_date).startOf("day")
 				: null;
 
 			// Calculate the difference in days only if there's both checkin and checkout dates
 			const duration =
 				dateAtMidnight && end
-					? moment(end).diff(moment(dateAtMidnight), "days")
+					? end.diff(dateAtMidnight, "days")
 					: 0;
 
 			return {
 				...currentReservation,
-				checkin_date: dateAtMidnight ? dateAtMidnight.toISOString() : null,
+				checkin_date: dateAtMidnight
+					? dateAtMidnight.format("YYYY-MM-DD")
+					: null,
 				// Update days_of_residence only if both dates are present and the duration is non-negative
 				days_of_residence:
 					end && dateAtMidnight && duration >= 0
@@ -153,22 +157,25 @@ export const EditReservationMain = ({
 
 	const onEndDateChange = (date) => {
 		// Convert 'date' to a Date object at midnight to disregard time
-		const adjustedDate = date ? date.clone().startOf("day").toDate() : null;
+		const adjustedDate = date ? date.clone().startOf("day") : null;
+		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
 			const start = currentReservation.checkin_date
-				? moment(currentReservation.checkin_date).startOf("day").toDate()
+				? moment(currentReservation.checkin_date).startOf("day")
 				: null;
 
 			// Calculate the difference in days
 			const duration =
 				start && adjustedDate
-					? moment(adjustedDate).diff(moment(start), "days")
+					? adjustedDate.diff(start, "days")
 					: 0;
 
 			return {
 				...currentReservation,
-				checkout_date: adjustedDate ? adjustedDate.toISOString() : null, // Store as ISO string or null if no date
+				checkout_date: adjustedDate
+					? adjustedDate.format("YYYY-MM-DD")
+					: null,
 				days_of_residence: duration >= 0 ? duration : 0,
 			};
 		});
@@ -320,6 +327,7 @@ export const EditReservationMain = ({
 					calculateTotalAmountPerDay() * Number(calculateNightsOfResidence()),
 				hotelName: hotelDetails.hotelName,
 				sendEmail: sendEmail,
+				__reservationDateUpdateIntent: hasDateEdits,
 			};
 
 			updateSingleReservation(reservation._id, updateData).then((response) => {
@@ -343,6 +351,7 @@ export const EditReservationMain = ({
 
 					// Update local state or re-fetch reservation data if necessary
 					setReservation(response.reservation);
+					setHasDateEdits(false);
 				}
 			});
 		}
