@@ -1,14 +1,29 @@
 // client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import styled, { createGlobalStyle } from "styled-components";
-import { Tooltip, Modal, Button, Input, message } from "antd";
+import { Tooltip, Modal, Button, Input, message, Checkbox } from "antd";
 import { CalendarOutlined, SyncOutlined } from "@ant-design/icons";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { useHistory, useLocation } from "react-router-dom";
-import { prepareOtaReservationSyncJob } from "../apiAdmin";
+import {
+	prepareOtaReservationSyncJob,
+	readOtaReservationSyncJob,
+	runOtaReservationSyncCollector,
+} from "../apiAdmin";
+
+const OTA_SYNC_RUNNING_STATUSES = new Set(["queued", "running"]);
+const OTA_SYNC_BUCKET_LABELS = [
+	{ key: "newReservations", label: "New candidates" },
+	{ key: "matchedExisting", label: "Matched existing" },
+	{ key: "statusChanged", label: "Status changes" },
+	{ key: "conflicts", label: "Conflicts" },
+	{ key: "needsReview", label: "Needs review" },
+	{ key: "paymentOrVccAvailable", label: "Payment/VCC signals" },
+	{ key: "appliedWrites", label: "Applied writes" },
+];
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -331,7 +346,9 @@ const EnhancedContentTable = ({
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [otaSyncPreparing, setOtaSyncPreparing] = useState(false);
+	const [otaSyncRunning, setOtaSyncRunning] = useState(false);
 	const [otaSyncJob, setOtaSyncJob] = useState(null);
+	const [otaSyncSelectedHotelIds, setOtaSyncSelectedHotelIds] = useState([]);
 
 	const updateQueryParams = (updates) => {
 		const params = new URLSearchParams(location.search);
@@ -508,7 +525,7 @@ const EnhancedContentTable = ({
 		Modal.confirm({
 			title: "Prepare OTA reservation sync?",
 			content:
-				"This creates a read-only sync preview job for every active hotel. Provider: Expedia. No reservation writes will be performed.",
+				"This creates a read-only sync preview job for every OTA-mapped hotel. Provider: Expedia. No reservation writes will be performed.",
 			okText: "Prepare Sync",
 			cancelText: "Cancel",
 			centered: true,
@@ -528,6 +545,11 @@ const EnhancedContentTable = ({
 						);
 					}
 					setOtaSyncJob(response.job);
+					setOtaSyncSelectedHotelIds(
+						(response.job.targetHotels || [])
+							.map((hotel) => String(hotel.hotelId || ""))
+							.filter(Boolean),
+					);
 					message.success("OTA reservation sync preview was prepared.");
 					return response.job;
 				} finally {
@@ -536,6 +558,73 @@ const EnhancedContentTable = ({
 			},
 		});
 	};
+
+	const handleRunOtaCollector = async () => {
+		if (!currentUserId || !otaSyncJob?._id) {
+			message.error("Missing OTA sync job context.");
+			return;
+		}
+		const availableHotelIds = new Set(
+			(otaSyncJob.targetHotels || [])
+				.map((hotel) => String(hotel.hotelId || ""))
+				.filter(Boolean),
+		);
+		const selectedHotelIds = otaSyncSelectedHotelIds.filter((hotelId) =>
+			availableHotelIds.has(String(hotelId)),
+		);
+		if (!selectedHotelIds.length) {
+			message.error("Please select at least one hotel to sync.");
+			return;
+		}
+		setOtaSyncRunning(true);
+		try {
+			const response = await runOtaReservationSyncCollector(
+				currentUserId,
+				otaSyncJob._id,
+				{ selectedHotelIds },
+			);
+			if (!response || response.ok === false || !response.job) {
+				message.error(
+					response?.error || "Could not run OTA reservation sync collector.",
+				);
+				return;
+			}
+			setOtaSyncJob(response.job);
+			message.success(
+				response.alreadyRunning
+					? "OTA collector is already running."
+					: "OTA read-only collector started.",
+			);
+		} finally {
+			setOtaSyncRunning(false);
+		}
+	};
+
+	useEffect(() => {
+		const jobId = otaSyncJob?._id;
+		const status = String(otaSyncJob?.status || "").toLowerCase();
+		if (
+			!currentUserId ||
+			!jobId ||
+			!OTA_SYNC_RUNNING_STATUSES.has(status)
+		) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		const refreshJob = async () => {
+			const response = await readOtaReservationSyncJob(currentUserId, jobId);
+			if (!cancelled && response?.ok !== false && response?.job) {
+				setOtaSyncJob(response.job);
+			}
+		};
+		const timer = window.setInterval(refreshJob, 2500);
+		refreshJob();
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [currentUserId, otaSyncJob?._id, otaSyncJob?.status]);
 
 	// ------------------ Render ------------------
 	const safePageSize = Number(pageSize) > 0 ? Number(pageSize) : 1;
@@ -583,6 +672,44 @@ const EnhancedContentTable = ({
 				sar: "SAR",
 				noReservationsFound: "No reservations found",
 		  };
+	const otaSyncTargetHotels = otaSyncJob?.targetHotels || [];
+	const otaSyncSelectedSet = new Set(
+		otaSyncSelectedHotelIds.map((hotelId) => String(hotelId)),
+	);
+	const otaSyncStatus = String(otaSyncJob?.status || "").toLowerCase();
+	const otaSyncCollectorActive =
+		OTA_SYNC_RUNNING_STATUSES.has(otaSyncStatus);
+	const otaSyncMissingCredentials =
+		Boolean(otaSyncJob?.credentialSummary?.missing?.length) ||
+		otaSyncStatus === "needs_credentials";
+	const otaSyncSelectedCount = otaSyncTargetHotels.filter((hotel) =>
+		otaSyncSelectedSet.has(String(hotel.hotelId || "")),
+	).length;
+	const canRunOtaCollector =
+		Boolean(otaSyncJob?._id) &&
+		Boolean(currentUserId) &&
+		otaSyncSelectedCount > 0 &&
+		!otaSyncCollectorActive &&
+		!otaSyncMissingCredentials;
+	const otaSyncSummary = otaSyncJob?.resultSummary || {};
+	const otaSyncCollectorState = otaSyncJob?.collectorState || {};
+	const toggleOtaSyncHotel = (hotelId, checked) => {
+		const normalized = String(hotelId || "");
+		setOtaSyncSelectedHotelIds((prev) => {
+			const next = new Set(prev.map((id) => String(id)));
+			if (checked) next.add(normalized);
+			else next.delete(normalized);
+			return Array.from(next);
+		});
+	};
+	const selectAllOtaSyncHotels = () => {
+		setOtaSyncSelectedHotelIds(
+			otaSyncTargetHotels
+				.map((hotel) => String(hotel.hotelId || ""))
+				.filter(Boolean),
+		);
+	};
+	const clearOtaSyncHotels = () => setOtaSyncSelectedHotelIds([]);
 	const sortArrow = (field) => {
 		if (sortConfig.sortField !== field) return "";
 		return sortConfig.direction === "asc" ? "^" : "v";
@@ -1043,6 +1170,16 @@ const EnhancedContentTable = ({
 				open={!!otaSyncJob}
 				onCancel={() => setOtaSyncJob(null)}
 				footer={[
+					<Button
+						key='run'
+						type='primary'
+						icon={<SyncOutlined />}
+						loading={otaSyncRunning || otaSyncCollectorActive}
+						disabled={!canRunOtaCollector}
+						onClick={handleRunOtaCollector}
+					>
+						{otaSyncCollectorActive ? "Running Collector" : "Run Read-only Collector"}
+					</Button>,
 					<Button key='close' type='primary' onClick={() => setOtaSyncJob(null)}>
 						Close
 					</Button>,
@@ -1068,7 +1205,7 @@ const EnhancedContentTable = ({
 							<div>
 								<span>Hotels</span>
 								<strong dir='ltr'>
-									{otaSyncJob.hotelCount} target
+									{otaSyncSelectedCount} selected / {otaSyncJob.hotelCount} target
 									{otaSyncJob.collectorPlan?.activeHotelCount
 										? ` / ${otaSyncJob.collectorPlan.activeHotelCount} active PMS`
 										: ""}
@@ -1085,6 +1222,36 @@ const EnhancedContentTable = ({
 							{otaSyncJob.collectorPlan?.nextStep ||
 								"Run the supervised read-only collector, then review the preview buckets before applying anything."}
 						</SyncNotice>
+						{otaSyncCollectorState?.status ? (
+							<SyncState dir='ltr'>
+								<strong>{otaSyncCollectorState.status}</strong>
+								{otaSyncCollectorState.currentHotelName ? (
+									<span>
+										Hotel {otaSyncCollectorState.currentHotelIndex || ""} of{" "}
+										{otaSyncCollectorState.selectedHotelCount ||
+											otaSyncSelectedCount ||
+											otaSyncJob.hotelCount}
+										: {otaSyncCollectorState.currentHotelName}
+									</span>
+								) : null}
+								{otaSyncCollectorState.message ? (
+									<span>{otaSyncCollectorState.message}</span>
+								) : null}
+								{otaSyncCollectorState.error ? (
+									<span>{otaSyncCollectorState.error}</span>
+								) : null}
+							</SyncState>
+						) : null}
+						{Object.keys(otaSyncSummary || {}).length ? (
+							<SyncSummaryGrid dir='ltr'>
+								{OTA_SYNC_BUCKET_LABELS.map((bucket) => (
+									<div key={bucket.key}>
+										<span>{bucket.label}</span>
+										<strong>{Number(otaSyncSummary[bucket.key] || 0)}</strong>
+									</div>
+								))}
+							</SyncSummaryGrid>
+						) : null}
 						{otaSyncJob.credentialSummary?.missing?.length ? (
 							<SyncWarning dir='ltr'>
 								Missing server env:{" "}
@@ -1098,17 +1265,50 @@ const EnhancedContentTable = ({
 								))}
 							</SyncWarningList>
 						) : null}
+						<SyncSelectionToolbar dir='ltr'>
+							<strong>
+								Select hotels to sync: {otaSyncSelectedCount} of{" "}
+								{otaSyncTargetHotels.length}
+							</strong>
+							<div>
+								<Button
+									size='small'
+									onClick={selectAllOtaSyncHotels}
+									disabled={otaSyncCollectorActive}
+								>
+									Select All
+								</Button>
+								<Button
+									size='small'
+									onClick={clearOtaSyncHotels}
+									disabled={otaSyncCollectorActive}
+								>
+									Clear
+								</Button>
+							</div>
+						</SyncSelectionToolbar>
 						<SyncHotelList>
-							{(otaSyncJob.targetHotels || []).map((hotel) => (
+							{otaSyncTargetHotels.map((hotel) => (
 								<li key={hotel.hotelId}>
-									<strong>{hotel.hotelName}</strong>
-									<span>
-										{(hotel.aliases || [])
-											.map((alias) => alias.name)
-											.filter(Boolean)
-											.slice(0, 5)
-											.join(" / ")}
-									</span>
+									<SyncHotelCheckbox
+										checked={otaSyncSelectedSet.has(String(hotel.hotelId || ""))}
+										disabled={otaSyncCollectorActive}
+										onChange={(event) =>
+											toggleOtaSyncHotel(
+												hotel.hotelId,
+												event.target.checked,
+											)
+										}
+									>
+										<strong>{hotel.hotelName}</strong>
+										<span>
+											{(hotel.aliases || [])
+												.map((alias) => alias.name)
+												.filter(Boolean)
+												.slice(0, 5)
+												.join(" / ")}
+										</span>
+									</SyncHotelCheckbox>
 								</li>
 							))}
 						</SyncHotelList>
@@ -1645,6 +1845,56 @@ const SyncNotice = styled.div`
 	text-align: left;
 `;
 
+const SyncState = styled.div`
+	border: 1px solid #cbd5e1;
+	background: #f8fafc;
+	color: #123232;
+	border-radius: 6px;
+	padding: 9px 12px;
+	text-align: left;
+
+	strong,
+	span {
+		display: block;
+	}
+
+	span {
+		color: #475569;
+		font-size: 12px;
+		margin-top: 2px;
+	}
+`;
+
+const SyncSummaryGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+
+	div {
+		border: 1px solid #dbeafe;
+		border-radius: 6px;
+		background: #eff6ff;
+		padding: 8px 10px;
+	}
+
+	span {
+		display: block;
+		color: #475569;
+		font-size: 12px;
+	}
+
+	strong {
+		display: block;
+		color: #0f172a;
+		font-size: 16px;
+		margin-top: 2px;
+	}
+
+	@media (max-width: 640px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+`;
+
 const SyncWarning = styled.div`
 	border: 1px solid #facc15;
 	background: #fefce8;
@@ -1670,6 +1920,28 @@ const SyncWarningList = styled.ul`
 	}
 `;
 
+const SyncSelectionToolbar = styled.div`
+	align-items: center;
+	display: flex;
+	gap: 10px;
+	justify-content: space-between;
+
+	strong {
+		color: #123232;
+		font-weight: 800;
+	}
+
+	div {
+		display: flex;
+		gap: 8px;
+	}
+
+	@media (max-width: 560px) {
+		align-items: stretch;
+		flex-direction: column;
+	}
+`;
+
 const SyncHotelList = styled.ul`
 	list-style: none;
 	padding: 0;
@@ -1683,7 +1955,7 @@ const SyncHotelList = styled.ul`
 	li {
 		border: 1px solid #e2e8f0;
 		border-radius: 6px;
-		padding: 9px 11px;
+		padding: 0;
 		background: #ffffff;
 	}
 
@@ -1696,5 +1968,22 @@ const SyncHotelList = styled.ul`
 		color: #64748b;
 		font-size: 12px;
 		margin-top: 2px;
+	}
+`;
+
+const SyncHotelCheckbox = styled(Checkbox)`
+	align-items: flex-start;
+	display: flex;
+	gap: 9px;
+	padding: 9px 11px;
+	width: 100%;
+
+	.ant-checkbox {
+		margin-top: 2px;
+	}
+
+	.ant-checkbox + span {
+		min-width: 0;
+		width: 100%;
 	}
 `;

@@ -1396,6 +1396,82 @@ export const prepareExpediaReservationSyncJob = (
 		token,
 	);
 
+export const readOtaReservationSyncJob = (userId, jobId, token = "") => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservation-sync/jobs/${userId}/${jobId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					ok: false,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not load OTA reservation sync job.",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			ok: false,
+			error: err?.message || "Could not load OTA reservation sync job.",
+		}));
+};
+
+export const runOtaReservationSyncCollector = (
+	userId,
+	jobId,
+	payload = {},
+	token = "",
+) => {
+	const bodyPayload = typeof payload === "string" ? {} : payload || {};
+	const authToken = typeof payload === "string" ? payload : token;
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservation-sync/jobs/${userId}/${jobId}/run`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...authHeaders(authToken),
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(bodyPayload),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					ok: false,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not run OTA reservation sync collector.",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			ok: false,
+			error: err?.message || "Could not run OTA reservation sync collector.",
+		}));
+};
+
+export const readExpediaReservationSyncJob = readOtaReservationSyncJob;
+export const runExpediaReservationSyncCollector =
+	runOtaReservationSyncCollector;
+
 export const updateOtaReservationPricing = (
 	reservationId,
 	userId,
