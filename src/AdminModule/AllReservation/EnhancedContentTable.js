@@ -1067,7 +1067,7 @@ const EnhancedContentTable = ({
 							</div>
 							<div>
 								<span>Hotels</span>
-								<strong>
+								<strong dir='ltr'>
 									{otaSyncJob.hotelCount}
 									{otaSyncJob.collectorPlan?.activeHotelCount &&
 									otaSyncJob.collectorPlan.activeHotelCount !==
@@ -1083,18 +1083,18 @@ const EnhancedContentTable = ({
 								</strong>
 							</div>
 						</SyncJobGrid>
-						<SyncNotice>
+						<SyncNotice dir='ltr'>
 							{otaSyncJob.collectorPlan?.nextStep ||
 								"Run the supervised read-only collector, then review the preview buckets before applying anything."}
 						</SyncNotice>
 						{otaSyncJob.credentialSummary?.missing?.length ? (
-							<SyncWarning>
+							<SyncWarning dir='ltr'>
 								Missing server env:{" "}
 								{otaSyncJob.credentialSummary.missing.join(", ")}
 							</SyncWarning>
 						) : null}
 						{otaSyncJob.collectorPlan?.warnings?.length ? (
-							<SyncWarningList>
+							<SyncWarningList dir='ltr'>
 								{otaSyncJob.collectorPlan.warnings.map((warning, index) => (
 									<li key={`${warning}-${index}`}>{warning}</li>
 								))}
@@ -1644,6 +1644,7 @@ const SyncNotice = styled.div`
 	border-radius: 6px;
 	padding: 10px 12px;
 	font-weight: 600;
+	text-align: left;
 `;
 
 const SyncWarning = styled.div`
@@ -1653,6 +1654,7 @@ const SyncWarning = styled.div`
 	border-radius: 6px;
 	padding: 10px 12px;
 	font-weight: 600;
+	text-align: left;
 `;
 
 const SyncWarningList = styled.ul`
@@ -1663,6 +1665,7 @@ const SyncWarningList = styled.ul`
 	padding: 10px 12px 10px 28px;
 	margin: 0;
 	font-weight: 600;
+	text-align: left;
 
 	li + li {
 		margin-top: 6px;
