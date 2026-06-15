@@ -1348,13 +1348,13 @@ export const getOtaReservationsForAdmin = (
 		}));
 };
 
-export const prepareExpediaReservationSyncJob = (
+export const prepareOtaReservationSyncJob = (
 	userId,
 	payload = {},
 	token = "",
 ) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/admin/expedia-reservation-sync/jobs/${userId}/prepare`,
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservation-sync/jobs/${userId}/prepare`,
 		{
 			method: "POST",
 			headers: {
@@ -1374,16 +1374,27 @@ export const prepareExpediaReservationSyncJob = (
 					error:
 						data?.error ||
 						data?.message ||
-						"Could not prepare Expedia reservation sync job.",
+						"Could not prepare OTA reservation sync job.",
 				};
 			}
 			return data;
 		})
 		.catch((err) => ({
 			ok: false,
-			error: err?.message || "Could not prepare Expedia reservation sync job.",
+			error: err?.message || "Could not prepare OTA reservation sync job.",
 		}));
 };
+
+export const prepareExpediaReservationSyncJob = (
+	userId,
+	payload = {},
+	token = "",
+) =>
+	prepareOtaReservationSyncJob(
+		userId,
+		{ ...payload, provider: payload.provider || "expedia" },
+		token,
+	);
 
 export const updateOtaReservationPricing = (
 	reservationId,

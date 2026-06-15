@@ -8,7 +8,7 @@ import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { useHistory, useLocation } from "react-router-dom";
-import { prepareExpediaReservationSyncJob } from "../apiAdmin";
+import { prepareOtaReservationSyncJob } from "../apiAdmin";
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -330,8 +330,8 @@ const EnhancedContentTable = ({
 	// ------------------ Modal for "View Details" ------------------
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
-	const [expediaSyncPreparing, setExpediaSyncPreparing] = useState(false);
-	const [expediaSyncJob, setExpediaSyncJob] = useState(null);
+	const [otaSyncPreparing, setOtaSyncPreparing] = useState(false);
+	const [otaSyncJob, setOtaSyncJob] = useState(null);
 
 	const updateQueryParams = (updates) => {
 		const params = new URLSearchParams(location.search);
@@ -498,39 +498,40 @@ const EnhancedContentTable = ({
 		setDateModalOpen(false);
 	};
 
-	const canPrepareExpediaSync = fromPage === "AllReservations" && currentUserId;
-	const handlePrepareExpediaSync = () => {
+	const canPrepareOtaSync = fromPage === "AllReservations" && currentUserId;
+	const handlePrepareOtaSync = () => {
 		if (!currentUserId) {
 			message.error("Missing admin user context.");
 			return;
 		}
 
 		Modal.confirm({
-			title: "Prepare Expedia reservation sync?",
+			title: "Prepare OTA reservation sync?",
 			content:
-				"This creates a read-only sync preview job for every active hotel. No reservation writes will be performed.",
+				"This creates a read-only sync preview job for every active hotel. Provider: Expedia. No reservation writes will be performed.",
 			okText: "Prepare Sync",
 			cancelText: "Cancel",
 			centered: true,
 			onOk: async () => {
-				setExpediaSyncPreparing(true);
+				setOtaSyncPreparing(true);
 				try {
-					const response = await prepareExpediaReservationSyncJob(currentUserId, {
+					const response = await prepareOtaReservationSyncJob(currentUserId, {
+						provider: "expedia",
 						source: "admin_all_reservations",
 					});
 					if (!response || response.ok === false || !response.job) {
 						message.error(
-							response?.error || "Could not prepare Expedia reservation sync.",
+							response?.error || "Could not prepare OTA reservation sync.",
 						);
 						return Promise.reject(
-							new Error(response?.error || "expedia_sync_prepare_failed"),
+							new Error(response?.error || "ota_sync_prepare_failed"),
 						);
 					}
-					setExpediaSyncJob(response.job);
-					message.success("Expedia reservation sync preview was prepared.");
+					setOtaSyncJob(response.job);
+					message.success("OTA reservation sync preview was prepared.");
 					return response.job;
 				} finally {
-					setExpediaSyncPreparing(false);
+					setOtaSyncPreparing(false);
 				}
 			},
 		});
@@ -764,14 +765,14 @@ const EnhancedContentTable = ({
 					data={sortedData}
 					allHotelDetailsAdmin={allHotelDetailsAdmin}
 				/>
-				{canPrepareExpediaSync ? (
+				{canPrepareOtaSync ? (
 					<SyncReservationsButton
 						type='primary'
 						icon={<SyncOutlined />}
-						loading={expediaSyncPreparing}
-						onClick={handlePrepareExpediaSync}
+						loading={otaSyncPreparing}
+						onClick={handlePrepareOtaSync}
 					>
-						Synchronize Reservations
+						Synchronize OTA Reservations
 					</SyncReservationsButton>
 				) : null}
 			</AdminActionsRow>
@@ -1038,51 +1039,55 @@ const EnhancedContentTable = ({
 			/>
 
 			<Modal
-				title='Expedia Reservation Sync'
-				open={!!expediaSyncJob}
-				onCancel={() => setExpediaSyncJob(null)}
+				title='OTA Reservation Sync'
+				open={!!otaSyncJob}
+				onCancel={() => setOtaSyncJob(null)}
 				footer={[
-					<Button key='close' type='primary' onClick={() => setExpediaSyncJob(null)}>
+					<Button key='close' type='primary' onClick={() => setOtaSyncJob(null)}>
 						Close
 					</Button>,
 				]}
 				width={760}
 				centered
 			>
-				{expediaSyncJob ? (
+				{otaSyncJob ? (
 					<SyncJobPanel>
 						<SyncJobGrid>
 							<div>
+								<span>Provider</span>
+								<strong>{otaSyncJob.collectorPlan?.providerLabel || "Expedia"}</strong>
+							</div>
+							<div>
 								<span>Job</span>
-								<strong>{expediaSyncJob.jobNumber}</strong>
+								<strong dir='ltr'>{otaSyncJob.jobNumber}</strong>
 							</div>
 							<div>
 								<span>Status</span>
-								<strong>{expediaSyncJob.status}</strong>
+								<strong>{otaSyncJob.status}</strong>
 							</div>
 							<div>
 								<span>Hotels</span>
-								<strong>{expediaSyncJob.hotelCount}</strong>
+								<strong>{otaSyncJob.hotelCount}</strong>
 							</div>
 							<div>
 								<span>Range</span>
-								<strong>
-									{expediaSyncJob.dateFrom} to {expediaSyncJob.dateTo}
+								<strong dir='ltr'>
+									{otaSyncJob.dateFrom} to {otaSyncJob.dateTo}
 								</strong>
 							</div>
 						</SyncJobGrid>
 						<SyncNotice>
-							{expediaSyncJob.collectorPlan?.nextStep ||
+							{otaSyncJob.collectorPlan?.nextStep ||
 								"Run the supervised read-only collector, then review the preview buckets before applying anything."}
 						</SyncNotice>
-						{expediaSyncJob.credentialSummary?.missing?.length ? (
+						{otaSyncJob.credentialSummary?.missing?.length ? (
 							<SyncWarning>
 								Missing server env:{" "}
-								{expediaSyncJob.credentialSummary.missing.join(", ")}
+								{otaSyncJob.credentialSummary.missing.join(", ")}
 							</SyncWarning>
 						) : null}
 						<SyncHotelList>
-							{(expediaSyncJob.targetHotels || []).map((hotel) => (
+							{(otaSyncJob.targetHotels || []).map((hotel) => (
 								<li key={hotel.hotelId}>
 									<strong>{hotel.hotelName}</strong>
 									<span>
