@@ -2,6 +2,30 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Operational Notes
+
+### OTA Reservation Sync
+
+- The on-demand OTA Reservation Sync UI starts from `/admin/all-reservations`.
+- The workflow is OTA-general, with Expedia wired first through the backend
+  `/api/admin/ota-reservation-sync/*` endpoints.
+- The user prepares a read-only job, selects hotels with checkboxes, runs the
+  supervised collector, enters Expedia MFA when requested, reviews preview
+  buckets, and then clicks Save Safe Writes.
+- Existing reservation pricing, commission, payment, finance, and nightly
+  admin-managed pricing rows must not be overwritten by sync. Existing rows may
+  receive only safe terminal status updates such as cancelled/no-show.
+- New OTA-created reservations should display PMS-facing amounts in SAR:
+  client/main total, hotel base/root total, net after OTA expenses, OTA expense,
+  platform margin, and General commission.
+- Shared pricing UI files to protect:
+  - `src/AdminModule/AllReservation/EnhancedContentTable.js`
+  - `src/AdminModule/AllReservation/EditReservationMain.js`
+  - `src/AdminModule/JannatTools/EditPricingModal.js`
+  - `src/AdminModule/OtaReservations/OtaReservationsMain.js`
+- Backend runbook:
+  `../hotels_backend/docs/ota-reservation-sync-expedia-2026-06-15.md`
+
 ## Available Scripts
 
 In the project directory, you can run:

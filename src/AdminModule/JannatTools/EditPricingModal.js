@@ -322,7 +322,7 @@ const EditPricingModal = ({
 				nextRow.price = val;
 				nextRow.mainPrice = val;
 				nextRow.totalPriceWithCommission = val;
-				nextRow.totalPriceWithoutCommission = val;
+				nextRow.totalPriceWithoutCommission = nextRow.rootPrice;
 				if (hadNoExpense) {
 					nextRow.netAfterExpenses = val;
 					nextRow.netAfterOtaExpenses = val;
@@ -356,7 +356,7 @@ const EditPricingModal = ({
 				nextRow.price = shares[index];
 				nextRow.mainPrice = shares[index];
 				nextRow.totalPriceWithCommission = shares[index];
-				nextRow.totalPriceWithoutCommission = shares[index];
+				nextRow.totalPriceWithoutCommission = nextRow.rootPrice;
 				if (hadNoExpense) {
 					nextRow.netAfterExpenses = shares[index];
 					nextRow.netAfterOtaExpenses = shares[index];
@@ -413,8 +413,8 @@ const EditPricingModal = ({
 			mainPrice: first.clientPrice,
 			price: first.clientPrice,
 			totalPriceWithCommission: first.clientPrice,
-			totalPriceWithoutCommission: first.clientPrice,
 			rootPrice: first.rootPrice,
+			totalPriceWithoutCommission: first.rootPrice,
 			netAfterExpenses: first.netAfterExpenses,
 			netAfterOtaExpenses: first.netAfterExpenses,
 			commissionRate: first.commissionRate,

@@ -1,5 +1,5 @@
 JANNATBOOKING FRONTEND APPLICATION STRUCTURE
-Audited: 2026-06-10
+Audited: 2026-06-15
 
 Purpose
 This file is a compact frontend reference for future development. It documents the React application layout, route map, role-gated screens, major modules, API clients, and safe-change instructions for the hotel-management and admin experiences.
@@ -54,6 +54,7 @@ Main Route Map In src/App.js
   - /admin/customer-service
   - /admin/el-integrator
   - /admin/all-reservations
+  - /admin/ota-reservations
   - /admin/jannatbooking-tools
   - /admin/new-hotel
   - /admin/add-owner-account
@@ -135,6 +136,8 @@ AdminModule Structure
 - src/AdminModule/AllReservation/
   - Admin reservation management, VCC/payment-related flows, and reservation operation tools.
   - EnhancedContentTable opens /admin/all-reservations reservationId details in the admin-owned MoreDetails component, which is based on the modern ReservationDetail layout while keeping platform-admin-only payment, OTA, PDF, and operations controls in one screen.
+  - EnhancedContentTable also owns the on-demand OTA Reservation Sync modal on /admin/all-reservations. The workflow prepares a read-only OTA sync job, lets the SUPER Admin select target hotels with checkboxes, runs the supervised single-browser collector, accepts Expedia MFA codes when needed, shows preview buckets, and applies only Save Safe Writes after confirmation.
+  - The OTA sync modal must stay wide, centered above the admin top navbar, and its confirmation dialogs must use a higher z-index than the parent modal so Save Safe Writes confirmation is never hidden behind the sync panel.
 - src/AdminModule/CustomerService/
   - Support-case lists, conversations, and admin support workflow.
 - src/AdminModule/Financials/
@@ -150,6 +153,7 @@ AdminModule Structure
   - Admin operational tools.
   - 2026-06-04 OrderTaker.js creates reservations through /api/new-reservation-client-employee. Backend saves these as hotel Pending Confirmation, and the success toast must tell the admin the reservation was created and sent to the hotel pending confirmation.
   - Admin users may tell guests the reservation is confirmed/created, but the hotel team still has to confirm it internally. Do not add public-facing "pending hotel confirmation" copy to this admin-created guest flow unless the business rule changes.
+  - EditPricingModal.js is the shared admin pricing breakdown editor used by admin all-reservations and OTA review flows. For admin-managed/OTA rows, it must keep client/main price, root/base price, net after OTA expenses, OTA expense, platform margin, and General commission as separate concepts. totalPriceWithoutCommission must follow rootPrice, not client/main price.
 - src/AdminModule/NewHotels/
   - New hotel/property onboarding screens.
 - src/AdminModule/Payment/
@@ -2330,3 +2334,32 @@ Future TODO Backlog - Added 2026-05-26
   - The Booking Source control defaults/resets to Jannat Employee.
   - Manual Reservation is not shown as a selectable source in /admin/jannatbooking-tools?tab=reservations.
   - The posted payload normalizes blank/manual/Manual Reservation to Jannat Employee before sending to the backend.
+
+2026-06-15 OTA Reservation Sync UI And Pricing Preservation
+- Routes:
+  - /admin/all-reservations
+  - /admin/ota-reservations
+  - /admin/ota-reservations?pricingReservationId=<reservationId>
+- Files:
+  - src/AdminModule/AllReservation/EnhancedContentTable.js
+  - src/AdminModule/AllReservation/EditReservationMain.js
+  - src/AdminModule/JannatTools/EditPricingModal.js
+  - src/AdminModule/OtaReservations/OtaReservationsMain.js
+  - src/AdminModule/apiAdmin.js
+- OTA Reservation Sync modal:
+  - The modal is started from /admin/all-reservations and is OTA-general in language, with Expedia as the first provider.
+  - The frontend prepares a backend job, displays target hotels and Expedia property count, lets the user select hotels with checkboxes, runs the supervised read-only collector, accepts MFA code input, shows preview buckets, and exposes Save Safe Writes only when the backend reports safe writes.
+  - The hotel count is backend/job-driven and must not be hardcoded. Expedia property count is displayed only after the collector discovers properties after login.
+  - Save Safe Writes confirms that it can create new Expedia reservations and apply cancelled/no-show status changes, while existing reservation pricing, payment breakdowns, commission, and finance fields are not overwritten.
+  - The parent sync modal uses zIndex 30050 and confirm dialogs use zIndex 30180. Keep this layering if the admin navbar or details modal z-index changes.
+- OTA pricing page:
+  - /admin/ota-reservations must remain fast and consume the optimized backend list endpoint.
+  - The Change pricing modal supports deep links through pricingReservationId and shows the number of booked nights in the context/header area.
+  - New Expedia-created reservations should prefill client/main total, hotel base/root total, net after OTA expenses, OTA expenses, and General commission in SAR.
+- Shared pricing editor invariant:
+  - For admin-managed/OTA rows, totalPriceWithoutCommission must equal rootPrice. It must not be overwritten by client/main price when the user edits a client price, distributes client total, or copies first-row values.
+  - General commission defaults to 10% of the hotel base/root total for new OTA sync reservations.
+  - Existing admin-managed reservations opened from /admin/all-reservations must preserve saved pricing and saved explicit commission during ordinary reservation edits. Only an intentional pricing modal save should replace the split.
+- Existing reservation reference:
+  - Reservation id 6a2af2c06f49b37157452ab4 / confirmation 7183544960 should continue to show the saved split from MoreDetails: client total 766.08, hotel/root total 490.00, net after OTA expenses 563.00, OTA expense 203.08, platform margin 73.00, and General commission 70.00.
+  - Opening Edit Pricing for that reservation must prefill the same values and saving unrelated fields must not mutate nightly pricing rows.

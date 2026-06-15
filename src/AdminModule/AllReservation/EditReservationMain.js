@@ -172,6 +172,35 @@ const normalizeCommissionPercent = (raw) => {
 	return r;
 };
 
+const hasExplicitMoneyInput = (value) =>
+	value !== null &&
+	value !== undefined &&
+	value !== "" &&
+	Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
+
+const firstExplicitMoney = (...values) => {
+	for (const value of values) {
+		if (hasExplicitMoneyInput(value)) return roundMoney(value);
+	}
+	return null;
+};
+
+const isAdminManagedPricingReservation = (reservation = {}) => {
+	const pricingMode = String(reservation?.adminPricing?.mode || "").toLowerCase();
+	return (
+		reservation?.adminPricingVisibility?.rootOnlyForHotelManagement === true ||
+		/(ota|admin_three_price|platform)/i.test(pricingMode)
+	);
+};
+
+const savedCommissionForReservation = (reservation = {}) =>
+	firstExplicitMoney(
+		reservation?.commission,
+		reservation?.adminPricing?.commissionAmount,
+		reservation?.financial_cycle?.commissionAmount,
+		reservation?.financial_cycle?.commissionValue
+	);
+
 /** Resolve daily "price" with your requested fallback chain */
 const resolveDailyPrice = (matchedRate, basePrice, defaultCost) => {
 	const cp = safeParseFloat(matchedRate?.price, NaN);
@@ -288,6 +317,14 @@ const EditReservationMain = ({
 		commissionOverride !== null &&
 		commissionOverride !== undefined &&
 		commissionOverride !== "";
+	const adminManagedPricing = useMemo(
+		() => isAdminManagedPricingReservation(reservation),
+		[reservation]
+	);
+	const savedReservationCommission = useMemo(
+		() => savedCommissionForReservation(reservation),
+		[reservation]
+	);
 	const apiErrorMessage = (
 		response,
 		englishFallback = "Error updating reservation.",
@@ -605,7 +642,7 @@ const EditReservationMain = ({
 					safeParseFloat(day.price) +
 					safeParseFloat(day.rootPrice) *
 						(safeParseFloat(day.commissionRate) / 100),
-				totalPriceWithoutCommission: safeParseFloat(day.price),
+				totalPriceWithoutCommission: safeParseFloat(day.rootPrice),
 			}));
 		},
 		[calculatePricingByDay]
@@ -769,14 +806,19 @@ const EditReservationMain = ({
 				return room;
 			});
 
+			const effectiveCommission =
+				adminManagedPricing && savedReservationCommission !== null
+					? savedReservationCommission
+					: Number(sumCommission.toFixed(2));
+
 			setSelectedRooms(updated);
 			setHotelCost(Number(sumHotelCost.toFixed(2)));
 			setTotalAmount(Number(sumGrandTotal.toFixed(2)));
-			setTotalCommission(Number(sumCommission.toFixed(2)));
+			setTotalCommission(effectiveCommission);
 			setOneNightCost(Number(sumOneNightCost.toFixed(2)));
 			setNumberOfNights(nights);
 
-			const deposit = sumCommission + sumOneNightCost;
+			const deposit = effectiveCommission + sumOneNightCost;
 			setDefaultDeposit(Number(deposit.toFixed(2)));
 		},
 		[
@@ -784,6 +826,8 @@ const EditReservationMain = ({
 			checkOutDate,
 			selectedRooms,
 			selectedHotel,
+			adminManagedPricing,
+			savedReservationCommission,
 			getMatchedRoom,
 			buildPricingForRoom,
 			buildPricingFromCurrentNightly,
@@ -1122,6 +1166,12 @@ const EditReservationMain = ({
 			(selectedHotel.belongsTo && selectedHotel.belongsTo._id) ||
 			selectedHotel.belongsTo ||
 			"";
+		const commissionToSave =
+			isSuperUser && hasCommissionOverride
+				? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
+				: adminManagedPricing && savedReservationCommission !== null
+				? savedReservationCommission
+				: totalCommission;
 
 		const reservationData = {
 			userId: user ? user._id : null,
@@ -1158,14 +1208,12 @@ const EditReservationMain = ({
 				...(reservation?.adminPricing || {}),
 				mode: reservation?.adminPricing?.mode || "admin_three_price",
 				...adminPricingTotals,
+				commissionAmount: commissionToSave,
 			},
 			__adminPricingUpdateIntent: hasExplicitPricingEdits,
 			payment: reservation.payment || "not paid",
 			paid_amount: reservation.paid_amount || 0,
-			commission:
-				isSuperUser && hasCommissionOverride
-					? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
-					: totalCommission,
+			commission: commissionToSave,
 			commissionPaid:
 				reservation.commissionPaid ??
 				reservation.payment_details?.commissionPaid ??
