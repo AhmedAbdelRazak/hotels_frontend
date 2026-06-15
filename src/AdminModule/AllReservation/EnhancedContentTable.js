@@ -1169,6 +1169,8 @@ const EnhancedContentTable = ({
 				title='OTA Reservation Sync'
 				open={!!otaSyncJob}
 				onCancel={() => setOtaSyncJob(null)}
+				rootClassName='ota-reservation-sync-modal-root'
+				wrapClassName='ota-reservation-sync-modal-wrap'
 				footer={[
 					<Button
 						key='run'
@@ -1184,8 +1186,14 @@ const EnhancedContentTable = ({
 						Close
 					</Button>,
 				]}
-				width={760}
+				width='min(96vw, 1180px)'
+				zIndex={30050}
 				centered
+				styles={{
+					mask: { zIndex: 30049 },
+					content: { maxHeight: "calc(100vh - 32px)" },
+					body: { maxHeight: "calc(100vh - 150px)", overflowY: "auto" },
+				}}
 			>
 				{otaSyncJob ? (
 					<SyncJobPanel>
@@ -1323,6 +1331,20 @@ export default EnhancedContentTable;
 
 /* ------------------ STYLES ------------------ */
 const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
+	.ota-reservation-sync-modal-root,
+	.ota-reservation-sync-modal-root .ant-modal-mask,
+	.ota-reservation-sync-modal-root .ant-modal-wrap {
+		z-index: 30050 !important;
+	}
+
+	.ota-reservation-sync-modal-root .ant-modal-mask {
+		z-index: 30049 !important;
+	}
+
+	.ota-reservation-sync-modal-wrap .ant-modal {
+		max-width: calc(100vw - 24px);
+	}
+
 	.admin-reservation-details-modal {
 		max-width: min(98vw, 1720px);
 	}
@@ -1811,7 +1833,7 @@ const SyncJobPanel = styled.div`
 
 const SyncJobGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 10px;
 
 	div {
@@ -1832,6 +1854,14 @@ const SyncJobGrid = styled.div`
 		display: block;
 		color: #123232;
 		word-break: break-word;
+	}
+
+	@media (max-width: 780px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
 	}
 `;
 
@@ -1867,7 +1897,7 @@ const SyncState = styled.div`
 
 const SyncSummaryGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 8px;
 
 	div {
@@ -1946,10 +1976,10 @@ const SyncHotelList = styled.ul`
 	list-style: none;
 	padding: 0;
 	margin: 0;
-	max-height: 260px;
+	max-height: min(38vh, 360px);
 	overflow: auto;
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
 
 	li {
@@ -1968,6 +1998,10 @@ const SyncHotelList = styled.ul`
 		color: #64748b;
 		font-size: 12px;
 		margin-top: 2px;
+	}
+
+	@media (max-width: 760px) {
+		grid-template-columns: 1fr;
 	}
 `;
 
