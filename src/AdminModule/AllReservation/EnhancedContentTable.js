@@ -1,13 +1,14 @@
 // client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import styled, { createGlobalStyle } from "styled-components";
-import { Tooltip, Modal, Button, Input } from "antd";
-import { CalendarOutlined } from "@ant-design/icons";
+import { Tooltip, Modal, Button, Input, message } from "antd";
+import { CalendarOutlined, SyncOutlined } from "@ant-design/icons";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { useHistory, useLocation } from "react-router-dom";
+import { prepareExpediaReservationSyncJob } from "../apiAdmin";
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -329,6 +330,8 @@ const EnhancedContentTable = ({
 	// ------------------ Modal for "View Details" ------------------
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [expediaSyncPreparing, setExpediaSyncPreparing] = useState(false);
+	const [expediaSyncJob, setExpediaSyncJob] = useState(null);
 
 	const updateQueryParams = (updates) => {
 		const params = new URLSearchParams(location.search);
@@ -493,6 +496,44 @@ const EnhancedContentTable = ({
 	const clearDateFilter = () => {
 		onClearDateFilter && onClearDateFilter();
 		setDateModalOpen(false);
+	};
+
+	const canPrepareExpediaSync = fromPage === "AllReservations" && currentUserId;
+	const handlePrepareExpediaSync = () => {
+		if (!currentUserId) {
+			message.error("Missing admin user context.");
+			return;
+		}
+
+		Modal.confirm({
+			title: "Prepare Expedia reservation sync?",
+			content:
+				"This creates a read-only sync preview job for every active hotel. No reservation writes will be performed.",
+			okText: "Prepare Sync",
+			cancelText: "Cancel",
+			centered: true,
+			onOk: async () => {
+				setExpediaSyncPreparing(true);
+				try {
+					const response = await prepareExpediaReservationSyncJob(currentUserId, {
+						source: "admin_all_reservations",
+					});
+					if (!response || response.ok === false || !response.job) {
+						message.error(
+							response?.error || "Could not prepare Expedia reservation sync.",
+						);
+						return Promise.reject(
+							new Error(response?.error || "expedia_sync_prepare_failed"),
+						);
+					}
+					setExpediaSyncJob(response.job);
+					message.success("Expedia reservation sync preview was prepared.");
+					return response.job;
+				} finally {
+					setExpediaSyncPreparing(false);
+				}
+			},
+		});
 	};
 
 	// ------------------ Render ------------------
@@ -718,11 +759,22 @@ const EnhancedContentTable = ({
 				</FilterButtonContainer>
 			)}
 
-			{/* Export Button */}
-			<ExportToExcelButton
-				data={sortedData}
-				allHotelDetailsAdmin={allHotelDetailsAdmin}
-			/>
+			<AdminActionsRow>
+				<ExportToExcelButton
+					data={sortedData}
+					allHotelDetailsAdmin={allHotelDetailsAdmin}
+				/>
+				{canPrepareExpediaSync ? (
+					<SyncReservationsButton
+						type='primary'
+						icon={<SyncOutlined />}
+						loading={expediaSyncPreparing}
+						onClick={handlePrepareExpediaSync}
+					>
+						Synchronize Reservations
+					</SyncReservationsButton>
+				) : null}
+			</AdminActionsRow>
 
 			{/* Search Box */}
 			{fromPage === "reports" ? null : (
@@ -984,6 +1036,68 @@ const EnhancedContentTable = ({
 				initialFrom={dateFilter?.from || ""}
 				initialTo={dateFilter?.to || ""}
 			/>
+
+			<Modal
+				title='Expedia Reservation Sync'
+				open={!!expediaSyncJob}
+				onCancel={() => setExpediaSyncJob(null)}
+				footer={[
+					<Button key='close' type='primary' onClick={() => setExpediaSyncJob(null)}>
+						Close
+					</Button>,
+				]}
+				width={760}
+				centered
+			>
+				{expediaSyncJob ? (
+					<SyncJobPanel>
+						<SyncJobGrid>
+							<div>
+								<span>Job</span>
+								<strong>{expediaSyncJob.jobNumber}</strong>
+							</div>
+							<div>
+								<span>Status</span>
+								<strong>{expediaSyncJob.status}</strong>
+							</div>
+							<div>
+								<span>Hotels</span>
+								<strong>{expediaSyncJob.hotelCount}</strong>
+							</div>
+							<div>
+								<span>Range</span>
+								<strong>
+									{expediaSyncJob.dateFrom} to {expediaSyncJob.dateTo}
+								</strong>
+							</div>
+						</SyncJobGrid>
+						<SyncNotice>
+							{expediaSyncJob.collectorPlan?.nextStep ||
+								"Run the supervised read-only collector, then review the preview buckets before applying anything."}
+						</SyncNotice>
+						{expediaSyncJob.credentialSummary?.missing?.length ? (
+							<SyncWarning>
+								Missing server env:{" "}
+								{expediaSyncJob.credentialSummary.missing.join(", ")}
+							</SyncWarning>
+						) : null}
+						<SyncHotelList>
+							{(expediaSyncJob.targetHotels || []).map((hotel) => (
+								<li key={hotel.hotelId}>
+									<strong>{hotel.hotelName}</strong>
+									<span>
+										{(hotel.aliases || [])
+											.map((alias) => alias.name)
+											.filter(Boolean)
+											.slice(0, 5)
+											.join(" / ")}
+									</span>
+								</li>
+							))}
+						</SyncHotelList>
+					</SyncJobPanel>
+				) : null}
+			</Modal>
 		</ContentTableWrapper>
 	);
 };
@@ -1046,6 +1160,26 @@ const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
 
 const ContentTableWrapper = styled.div`
 	padding: 20px;
+`;
+
+const AdminActionsRow = styled.div`
+	margin: 10px 0 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+`;
+
+const SyncReservationsButton = styled(Button)`
+	background: #0f766e;
+	border-color: #0f766e;
+	font-weight: 700;
+
+	&:hover,
+	&:focus {
+		background: #115e59 !important;
+		border-color: #115e59 !important;
+	}
 `;
 
 const ReservedByFilterContainer = styled.div`
@@ -1449,5 +1583,84 @@ const PaginationWrapper = styled.div`
 	margin-top: 16px;
 	button {
 		margin-right: 8px;
+	}
+`;
+
+const SyncJobPanel = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+`;
+
+const SyncJobGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+
+	div {
+		border: 1px solid #d7e5e2;
+		border-radius: 6px;
+		padding: 10px 12px;
+		background: #f8fbfa;
+	}
+
+	span {
+		display: block;
+		font-size: 12px;
+		color: #64748b;
+		margin-bottom: 3px;
+	}
+
+	strong {
+		display: block;
+		color: #123232;
+		word-break: break-word;
+	}
+`;
+
+const SyncNotice = styled.div`
+	border: 1px solid #b7ddd5;
+	background: #ecfdf8;
+	color: #12564e;
+	border-radius: 6px;
+	padding: 10px 12px;
+	font-weight: 600;
+`;
+
+const SyncWarning = styled.div`
+	border: 1px solid #facc15;
+	background: #fefce8;
+	color: #854d0e;
+	border-radius: 6px;
+	padding: 10px 12px;
+	font-weight: 600;
+`;
+
+const SyncHotelList = styled.ul`
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	max-height: 260px;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	li {
+		border: 1px solid #e2e8f0;
+		border-radius: 6px;
+		padding: 9px 11px;
+		background: #ffffff;
+	}
+
+	strong,
+	span {
+		display: block;
+	}
+
+	span {
+		color: #64748b;
+		font-size: 12px;
+		margin-top: 2px;
 	}
 `;

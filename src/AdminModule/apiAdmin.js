@@ -1348,6 +1348,43 @@ export const getOtaReservationsForAdmin = (
 		}));
 };
 
+export const prepareExpediaReservationSyncJob = (
+	userId,
+	payload = {},
+	token = "",
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/expedia-reservation-sync/jobs/${userId}/prepare`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					ok: false,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not prepare Expedia reservation sync job.",
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			ok: false,
+			error: err?.message || "Could not prepare Expedia reservation sync job.",
+		}));
+};
+
 export const updateOtaReservationPricing = (
 	reservationId,
 	userId,
