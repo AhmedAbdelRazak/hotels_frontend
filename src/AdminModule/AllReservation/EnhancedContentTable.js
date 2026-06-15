@@ -9,6 +9,7 @@ import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { useHistory, useLocation } from "react-router-dom";
 import {
+	applyOtaReservationSyncJob,
 	prepareOtaReservationSyncJob,
 	readOtaReservationSyncJob,
 	runOtaReservationSyncCollector,
@@ -353,6 +354,7 @@ const EnhancedContentTable = ({
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [otaSyncPreparing, setOtaSyncPreparing] = useState(false);
 	const [otaSyncRunning, setOtaSyncRunning] = useState(false);
+	const [otaSyncApplying, setOtaSyncApplying] = useState(false);
 	const [otaSyncMfaSubmitting, setOtaSyncMfaSubmitting] = useState(false);
 	const [otaSyncMfaCode, setOtaSyncMfaCode] = useState("");
 	const [otaSyncJob, setOtaSyncJob] = useState(null);
@@ -537,6 +539,9 @@ const EnhancedContentTable = ({
 			okText: "Prepare Sync",
 			cancelText: "Cancel",
 			centered: true,
+			zIndex: 30180,
+			rootClassName: "ota-reservation-sync-confirm-root",
+			className: "ota-reservation-sync-confirm-modal",
 			onOk: async () => {
 				setOtaSyncPreparing(true);
 				try {
@@ -640,6 +645,65 @@ const EnhancedContentTable = ({
 		}
 	};
 
+	const handleApplyOtaSync = () => {
+		if (!currentUserId || !otaSyncJob?._id) {
+			message.error("Missing OTA sync job context.");
+			return;
+		}
+		const status = String(otaSyncJob.status || "").toLowerCase();
+		if (status !== "preview_ready") {
+			message.error("Run the read-only collector and wait for preview_ready first.");
+			return;
+		}
+		const summary = otaSyncJob.resultSummary || {};
+		const newCount = Number(summary.newReservations || 0);
+		const statusCount = Number(summary.statusChanged || 0);
+		const safeWriteCount = newCount + statusCount;
+		if (!safeWriteCount) {
+			message.info("There are no safe OTA sync writes to save.");
+			return;
+		}
+
+		Modal.confirm({
+			title: "Save safe OTA sync writes?",
+			content: `This will create up to ${newCount} new Expedia reservation(s) and apply ${statusCount} cancelled/no-show status change(s). Existing reservation pricing, payment breakdowns, commission, and finance fields will not be overwritten.`,
+			okText: "Save Safe Writes",
+			cancelText: "Cancel",
+			centered: true,
+			zIndex: 30180,
+			rootClassName: "ota-reservation-sync-confirm-root",
+			className: "ota-reservation-sync-confirm-modal",
+			onOk: async () => {
+				setOtaSyncApplying(true);
+				try {
+					const response = await applyOtaReservationSyncJob(
+						currentUserId,
+						otaSyncJob._id,
+						{ source: "admin_all_reservations" },
+					);
+					if (!response || response.ok === false || !response.job) {
+						if (response?.job) setOtaSyncJob(response.job);
+						message.error(
+							response?.error || "Could not save OTA reservation sync writes.",
+						);
+						return Promise.reject(
+							new Error(response?.error || "ota_sync_apply_failed"),
+						);
+					}
+					setOtaSyncJob(response.job);
+					const applySummary =
+						response.summary || response.job.applyResults?.summary || {};
+					message.success(
+						`Saved ${Number(applySummary.appliedWrites || 0)} OTA sync write(s).`,
+					);
+					return response.job;
+				} finally {
+					setOtaSyncApplying(false);
+				}
+			},
+		});
+	};
+
 	useEffect(() => {
 		const jobId = otaSyncJob?._id;
 		const status = String(otaSyncJob?.status || "").toLowerCase();
@@ -730,10 +794,22 @@ const EnhancedContentTable = ({
 		Boolean(currentUserId) &&
 		otaSyncSelectedCount > 0 &&
 		!otaSyncCollectorActive &&
+		!otaSyncApplying &&
 		!otaSyncMissingCredentials;
 	const otaSyncSummary = otaSyncJob?.resultSummary || {};
+	const otaSyncNewCount = Number(otaSyncSummary.newReservations || 0);
+	const otaSyncStatusChangeCount = Number(otaSyncSummary.statusChanged || 0);
+	const otaSyncSafeWriteCount = otaSyncNewCount + otaSyncStatusChangeCount;
+	const canApplyOtaSync =
+		Boolean(otaSyncJob?._id) &&
+		Boolean(currentUserId) &&
+		otaSyncStatus === "preview_ready" &&
+		otaSyncSafeWriteCount > 0 &&
+		!otaSyncCollectorActive &&
+		!otaSyncApplying;
 	const otaSyncCollectorState = otaSyncJob?.collectorState || {};
 	const otaSyncArtifacts = otaSyncJob?.collectorArtifacts || {};
+	const otaSyncApplySummary = otaSyncJob?.applyResults?.summary || null;
 	const otaSyncNeedsMfa = otaSyncStatus === "needs_mfa";
 	const otaSyncExpediaPropertyCount =
 		typeof otaSyncArtifacts.propertyCount === "number"
@@ -1219,11 +1295,20 @@ const EnhancedContentTable = ({
 				wrapClassName='ota-reservation-sync-modal-wrap'
 				footer={[
 					<Button
+						key='apply'
+						type='primary'
+						loading={otaSyncApplying}
+						disabled={!canApplyOtaSync}
+						onClick={handleApplyOtaSync}
+					>
+						Save Safe Writes
+					</Button>,
+					<Button
 						key='run'
 						type='primary'
 						icon={<SyncOutlined />}
 						loading={otaSyncRunning || otaSyncCollectorActive}
-						disabled={!canRunOtaCollector}
+						disabled={!canRunOtaCollector || otaSyncApplying}
 						onClick={handleRunOtaCollector}
 					>
 						{otaSyncCollectorActive ? "Running Collector" : "Run Read-only Collector"}
@@ -1339,6 +1424,17 @@ const EnhancedContentTable = ({
 								))}
 							</SyncSummaryGrid>
 						) : null}
+						{otaSyncApplySummary ? (
+							<SyncState dir='ltr'>
+								<strong>apply summary</strong>
+								<span>
+									created {Number(otaSyncApplySummary.created || 0)} / status{" "}
+									{Number(otaSyncApplySummary.statusUpdated || 0)} / needs review{" "}
+									{Number(otaSyncApplySummary.needsReview || 0)} / failed{" "}
+									{Number(otaSyncApplySummary.failed || 0)}
+								</span>
+							</SyncState>
+						) : null}
 						{otaSyncJob.credentialSummary?.missing?.length ? (
 							<SyncWarning dir='ltr'>
 								Missing server env:{" "}
@@ -1361,14 +1457,14 @@ const EnhancedContentTable = ({
 								<Button
 									size='small'
 									onClick={selectAllOtaSyncHotels}
-									disabled={otaSyncCollectorActive}
+									disabled={otaSyncCollectorActive || otaSyncApplying}
 								>
 									Select All
 								</Button>
 								<Button
 									size='small'
 									onClick={clearOtaSyncHotels}
-									disabled={otaSyncCollectorActive}
+									disabled={otaSyncCollectorActive || otaSyncApplying}
 								>
 									Clear
 								</Button>
@@ -1379,7 +1475,7 @@ const EnhancedContentTable = ({
 								<li key={hotel.hotelId}>
 									<SyncHotelCheckbox
 										checked={otaSyncSelectedSet.has(String(hotel.hotelId || ""))}
-										disabled={otaSyncCollectorActive}
+										disabled={otaSyncCollectorActive || otaSyncApplying}
 										onChange={(event) =>
 											toggleOtaSyncHotel(
 												hotel.hotelId,
@@ -1422,6 +1518,16 @@ const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
 
 	.ota-reservation-sync-modal-wrap .ant-modal {
 		max-width: calc(100vw - 24px);
+	}
+
+	.ota-reservation-sync-confirm-root,
+	.ota-reservation-sync-confirm-root .ant-modal-mask,
+	.ota-reservation-sync-confirm-root .ant-modal-wrap {
+		z-index: 30180 !important;
+	}
+
+	.ota-reservation-sync-confirm-root .ant-modal-mask {
+		z-index: 30179 !important;
 	}
 
 	.admin-reservation-details-modal {

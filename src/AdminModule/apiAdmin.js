@@ -1348,6 +1348,26 @@ export const getOtaReservationsForAdmin = (
 		}));
 };
 
+export const getAdminReservationById = (reservationId, token = "") => {
+	const query = new URLSearchParams({ view: "details" });
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}?${query.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load reservation details",
+		}));
+};
+
 export const prepareOtaReservationSyncJob = (
 	userId,
 	payload = {},
@@ -1503,7 +1523,46 @@ export const submitOtaReservationSyncMfaCode = (
 		})
 		.catch((err) => ({
 			ok: false,
-			error: err?.message || "Could not submit Expedia verification code.",
+		error: err?.message || "Could not submit Expedia verification code.",
+	}));
+};
+
+export const applyOtaReservationSyncJob = (
+	userId,
+	jobId,
+	payload = {},
+	token = "",
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservation-sync/jobs/${userId}/${jobId}/apply`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload || {}),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					ok: false,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not save OTA reservation sync writes.",
+					job: data?.job,
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			ok: false,
+			error: err?.message || "Could not save OTA reservation sync writes.",
 		}));
 };
 
@@ -1512,6 +1571,7 @@ export const runExpediaReservationSyncCollector =
 	runOtaReservationSyncCollector;
 export const submitExpediaReservationSyncMfaCode =
 	submitOtaReservationSyncMfaCode;
+export const applyExpediaReservationSyncJob = applyOtaReservationSyncJob;
 
 export const updateOtaReservationPricing = (
 	reservationId,

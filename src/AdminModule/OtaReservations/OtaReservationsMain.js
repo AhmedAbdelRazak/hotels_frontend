@@ -21,6 +21,7 @@ import {
 	formatSaudiHijriDate,
 } from "../../utils/saudiDates";
 import {
+	getAdminReservationById,
 	getOtaReservationsForAdmin,
 	readUserId,
 	releaseOtaReservationToHotel,
@@ -381,6 +382,36 @@ const formatModalDatePair = (value, language = "English") => ({
 const isReleaseReady = (reservation = {}) =>
 	Boolean(reservation?.hotel_base_price_ready) &&
 	numberValue(reservation?.hotel_visible_amount) > 0;
+
+const mergeReservationDetailsForModal = (details = {}, listRow = {}) => {
+	const customerDetails = details?.customer_details || {};
+	const hotelDetails = details?.hotelId || listRow?.hotelId || {};
+	return {
+		...listRow,
+		...details,
+		hotelId: hotelDetails,
+		belongsTo: details?.belongsTo || listRow?.belongsTo,
+		hotel_name:
+			listRow?.hotel_name || hotelDetails?.hotelName || details?.hotel_name || "",
+		customer_name:
+			customerDetails.name || listRow?.customer_name || details?.customer_name || "",
+		customer_phone:
+			customerDetails.phone ||
+			listRow?.customer_phone ||
+			details?.customer_phone ||
+			"",
+		customer_nick:
+			customerDetails.nickName ||
+			listRow?.customer_nick ||
+			details?.customer_nick ||
+			"",
+		confirmation_number2:
+			customerDetails.confirmation_number2 ||
+			listRow?.confirmation_number2 ||
+			details?.confirmation_number2 ||
+			"",
+	};
+};
 
 const releaseBlockedMessage = (reservation = {}) =>
 	reservation?.hotel_base_price_issue ||
@@ -853,6 +884,8 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const [collapsed, setCollapsed] = useState(false);
 	const [getUser, setGetUser] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [detailsLoading, setDetailsLoading] = useState(false);
+	const [detailsReservation, setDetailsReservation] = useState(null);
 	const [savingPricing, setSavingPricing] = useState(false);
 	const [releasing, setReleasing] = useState(false);
 	const [dataState, setDataState] = useState({
@@ -950,9 +983,12 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const selectedReleaseReservation = reservations.find(
 		(reservation) => getReservationKey(reservation) === releaseReservationId
 	);
-	const selectedDetailsReservation = reservations.find(
+	const selectedDetailsListRow = reservations.find(
 		(reservation) => getReservationKey(reservation) === detailsReservationId
 	);
+	const selectedDetailsReservation = detailsReservation
+		? mergeReservationDetailsForModal(detailsReservation, selectedDetailsListRow)
+		: null;
 	const totalPages = Math.max(
 		Math.ceil(Number(dataState.totalDocuments || 0) / pageSize),
 		1
@@ -971,11 +1007,49 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const closeRelease = () => replaceQuery({ releaseReservationId: "" });
 	const openDetails = (reservation) =>
 		replaceQuery({ reservationId: getReservationKey(reservation) });
-	const closeDetails = () => replaceQuery({ reservationId: "" });
+	const closeDetails = () => {
+		setDetailsReservation(null);
+		replaceQuery({ reservationId: "" });
+	};
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!detailsReservationId) {
+			setDetailsReservation(null);
+			setDetailsLoading(false);
+			return () => {
+				cancelled = true;
+			};
+		}
+		if (!token) return () => {
+			cancelled = true;
+		};
+		setDetailsLoading(true);
+		setDetailsReservation(null);
+		getAdminReservationById(detailsReservationId, token).then((response) => {
+			if (cancelled) return;
+			setDetailsLoading(false);
+			if (response?._id) {
+				setDetailsReservation(response);
+				return;
+			}
+			message.error(
+				response?.message || response?.error || "Could not load reservation details"
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [detailsReservationId, token]);
 
 	const handleReservationUpdated = (updated) => {
 		if (!updated) return;
 		const updatedKey = getReservationKey(updated);
+		setDetailsReservation((previous) =>
+			previous && getReservationKey(previous) === updatedKey
+				? { ...previous, ...updated }
+				: previous
+		);
 		setDataState((previous) => ({
 			...previous,
 			data: (previous.data || []).map((reservation) =>
@@ -1231,7 +1305,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 			/>
 
 			<Modal
-				open={!!detailsReservationId && !!selectedDetailsReservation}
+				open={!!detailsReservationId}
 				onCancel={closeDetails}
 				width='min(98vw, 1720px)'
 				centered
@@ -1252,7 +1326,11 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 					},
 				}}
 			>
-				{selectedDetailsReservation ? (
+				{detailsLoading ? (
+					<LoadingBlock>
+						<Spin />
+					</LoadingBlock>
+				) : selectedDetailsReservation ? (
 					<MoreDetails
 						key={getReservationKey(selectedDetailsReservation)}
 						selectedReservation={selectedDetailsReservation}
@@ -1261,7 +1339,12 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 						setReservation={handleReservationUpdated}
 						onReservationUpdated={handleReservationUpdated}
 					/>
-				) : null}
+				) : (
+					<BasePriceWarning>
+						<strong>Reservation details could not be loaded.</strong>
+						<span>Please close this modal and try again.</span>
+					</BasePriceWarning>
+				)}
 			</Modal>
 
 			<Modal
