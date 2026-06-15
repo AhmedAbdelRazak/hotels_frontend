@@ -1068,11 +1068,9 @@ const EnhancedContentTable = ({
 							<div>
 								<span>Hotels</span>
 								<strong dir='ltr'>
-									{otaSyncJob.hotelCount}
-									{otaSyncJob.collectorPlan?.activeHotelCount &&
-									otaSyncJob.collectorPlan.activeHotelCount !==
-										otaSyncJob.hotelCount
-										? ` of ${otaSyncJob.collectorPlan.activeHotelCount}`
+									{otaSyncJob.hotelCount} target
+									{otaSyncJob.collectorPlan?.activeHotelCount
+										? ` / ${otaSyncJob.collectorPlan.activeHotelCount} active PMS`
 										: ""}
 								</strong>
 							</div>
