@@ -1468,9 +1468,50 @@ export const runOtaReservationSyncCollector = (
 		}));
 };
 
+export const submitOtaReservationSyncMfaCode = (
+	userId,
+	jobId,
+	payload = {},
+	token = "",
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservation-sync/jobs/${userId}/${jobId}/mfa`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...authHeaders(token),
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload || {}),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					ok: false,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not submit Expedia verification code.",
+					job: data?.job,
+				};
+			}
+			return data;
+		})
+		.catch((err) => ({
+			ok: false,
+			error: err?.message || "Could not submit Expedia verification code.",
+		}));
+};
+
 export const readExpediaReservationSyncJob = readOtaReservationSyncJob;
 export const runExpediaReservationSyncCollector =
 	runOtaReservationSyncCollector;
+export const submitExpediaReservationSyncMfaCode =
+	submitOtaReservationSyncMfaCode;
 
 export const updateOtaReservationPricing = (
 	reservationId,

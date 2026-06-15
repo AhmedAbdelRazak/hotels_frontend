@@ -12,9 +12,14 @@ import {
 	prepareOtaReservationSyncJob,
 	readOtaReservationSyncJob,
 	runOtaReservationSyncCollector,
+	submitOtaReservationSyncMfaCode,
 } from "../apiAdmin";
 
-const OTA_SYNC_RUNNING_STATUSES = new Set(["queued", "running"]);
+const OTA_SYNC_RUNNING_STATUSES = new Set([
+	"queued",
+	"running",
+	"needs_mfa",
+]);
 const OTA_SYNC_BUCKET_LABELS = [
 	{ key: "newReservations", label: "New candidates" },
 	{ key: "matchedExisting", label: "Matched existing" },
@@ -347,6 +352,8 @@ const EnhancedContentTable = ({
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [otaSyncPreparing, setOtaSyncPreparing] = useState(false);
 	const [otaSyncRunning, setOtaSyncRunning] = useState(false);
+	const [otaSyncMfaSubmitting, setOtaSyncMfaSubmitting] = useState(false);
+	const [otaSyncMfaCode, setOtaSyncMfaCode] = useState("");
 	const [otaSyncJob, setOtaSyncJob] = useState(null);
 	const [otaSyncSelectedHotelIds, setOtaSyncSelectedHotelIds] = useState([]);
 
@@ -600,6 +607,38 @@ const EnhancedContentTable = ({
 		}
 	};
 
+	const handleSubmitOtaMfaCode = async () => {
+		if (!currentUserId || !otaSyncJob?._id) {
+			message.error("Missing OTA sync job context.");
+			return;
+		}
+		const code = otaSyncMfaCode.trim();
+		if (!code) {
+			message.error("Enter the Expedia verification code.");
+			return;
+		}
+		setOtaSyncMfaSubmitting(true);
+		try {
+			const response = await submitOtaReservationSyncMfaCode(
+				currentUserId,
+				otaSyncJob._id,
+				{ code },
+			);
+			if (!response || response.ok === false) {
+				if (response?.job) setOtaSyncJob(response.job);
+				message.error(
+					response?.error || "Could not submit Expedia verification code.",
+				);
+				return;
+			}
+			setOtaSyncMfaCode("");
+			if (response.job) setOtaSyncJob(response.job);
+			message.success("Expedia verification code submitted.");
+		} finally {
+			setOtaSyncMfaSubmitting(false);
+		}
+	};
+
 	useEffect(() => {
 		const jobId = otaSyncJob?._id;
 		const status = String(otaSyncJob?.status || "").toLowerCase();
@@ -693,6 +732,12 @@ const EnhancedContentTable = ({
 		!otaSyncMissingCredentials;
 	const otaSyncSummary = otaSyncJob?.resultSummary || {};
 	const otaSyncCollectorState = otaSyncJob?.collectorState || {};
+	const otaSyncArtifacts = otaSyncJob?.collectorArtifacts || {};
+	const otaSyncNeedsMfa = otaSyncStatus === "needs_mfa";
+	const otaSyncExpediaPropertyCount =
+		typeof otaSyncArtifacts.propertyCount === "number"
+			? otaSyncArtifacts.propertyCount
+			: null;
 	const toggleOtaSyncHotel = (hotelId, checked) => {
 		const normalized = String(hotelId || "");
 		setOtaSyncSelectedHotelIds((prev) => {
@@ -1220,6 +1265,14 @@ const EnhancedContentTable = ({
 								</strong>
 							</div>
 							<div>
+								<span>Expedia Properties</span>
+								<strong dir='ltr'>
+									{otaSyncExpediaPropertyCount === null
+										? "after login"
+										: otaSyncExpediaPropertyCount}
+								</strong>
+							</div>
+							<div>
 								<span>Range</span>
 								<strong dir='ltr'>
 									{otaSyncJob.dateFrom} to {otaSyncJob.dateTo}
@@ -1249,6 +1302,31 @@ const EnhancedContentTable = ({
 									<span>{otaSyncCollectorState.error}</span>
 								) : null}
 							</SyncState>
+						) : null}
+						{otaSyncNeedsMfa ? (
+							<SyncMfaBox dir='ltr'>
+								<strong>Expedia verification code</strong>
+								<div>
+									<Input
+										value={otaSyncMfaCode}
+										onChange={(event) =>
+											setOtaSyncMfaCode(event.target.value)
+										}
+										onPressEnter={handleSubmitOtaMfaCode}
+										placeholder='Enter MFA code'
+										autoComplete='one-time-code'
+										inputMode='numeric'
+										maxLength={16}
+									/>
+									<Button
+										type='primary'
+										loading={otaSyncMfaSubmitting}
+										onClick={handleSubmitOtaMfaCode}
+									>
+										Submit Code
+									</Button>
+								</div>
+							</SyncMfaBox>
 						) : null}
 						{Object.keys(otaSyncSummary || {}).length ? (
 							<SyncSummaryGrid dir='ltr'>
@@ -1892,6 +1970,32 @@ const SyncState = styled.div`
 		color: #475569;
 		font-size: 12px;
 		margin-top: 2px;
+	}
+`;
+
+const SyncMfaBox = styled.div`
+	border: 1px solid #bfdbfe;
+	background: #eff6ff;
+	border-radius: 6px;
+	padding: 10px 12px;
+
+	strong {
+		display: block;
+		color: #123232;
+		font-weight: 850;
+		margin-bottom: 8px;
+	}
+
+	div {
+		display: grid;
+		grid-template-columns: minmax(160px, 1fr) auto;
+		gap: 8px;
+	}
+
+	@media (max-width: 560px) {
+		div {
+			grid-template-columns: 1fr;
+		}
 	}
 `;
 
