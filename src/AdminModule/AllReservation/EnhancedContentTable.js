@@ -1067,7 +1067,14 @@ const EnhancedContentTable = ({
 							</div>
 							<div>
 								<span>Hotels</span>
-								<strong>{otaSyncJob.hotelCount}</strong>
+								<strong>
+									{otaSyncJob.hotelCount}
+									{otaSyncJob.collectorPlan?.activeHotelCount &&
+									otaSyncJob.collectorPlan.activeHotelCount !==
+										otaSyncJob.hotelCount
+										? ` of ${otaSyncJob.collectorPlan.activeHotelCount}`
+										: ""}
+								</strong>
 							</div>
 							<div>
 								<span>Range</span>
@@ -1085,6 +1092,13 @@ const EnhancedContentTable = ({
 								Missing server env:{" "}
 								{otaSyncJob.credentialSummary.missing.join(", ")}
 							</SyncWarning>
+						) : null}
+						{otaSyncJob.collectorPlan?.warnings?.length ? (
+							<SyncWarningList>
+								{otaSyncJob.collectorPlan.warnings.map((warning, index) => (
+									<li key={`${warning}-${index}`}>{warning}</li>
+								))}
+							</SyncWarningList>
 						) : null}
 						<SyncHotelList>
 							{(otaSyncJob.targetHotels || []).map((hotel) => (
@@ -1639,6 +1653,20 @@ const SyncWarning = styled.div`
 	border-radius: 6px;
 	padding: 10px 12px;
 	font-weight: 600;
+`;
+
+const SyncWarningList = styled.ul`
+	border: 1px solid #facc15;
+	background: #fefce8;
+	color: #854d0e;
+	border-radius: 6px;
+	padding: 10px 12px 10px 28px;
+	margin: 0;
+	font-weight: 600;
+
+	li + li {
+		margin-top: 6px;
+	}
 `;
 
 const SyncHotelList = styled.ul`
