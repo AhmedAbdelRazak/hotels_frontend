@@ -52,11 +52,26 @@ const resolvePopupContainer = (triggerNode) => {
 
 /** --------------------- Utils --------------------- */
 const safeParseFloat = (val, fallback = 0) => {
-	const n = parseFloat(val);
+	const n = parseFloat(String(val ?? "").replace(/,/g, "").trim());
 	return Number.isFinite(n) ? n : fallback;
 };
 
 const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
+
+const normalizeRoomCount = (count) => Math.max(1, Number(count || 1) || 1);
+
+const hasExplicitMoneyInput = (value) =>
+	value !== null &&
+	value !== undefined &&
+	value !== "" &&
+	Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
+
+const firstExplicitMoney = (...values) => {
+	for (const value of values) {
+		if (hasExplicitMoneyInput(value)) return roundMoney(value);
+	}
+	return null;
+};
 
 const dateOnlyKey = (value) => {
 	if (!value) return "";
@@ -74,19 +89,41 @@ const datePickerValue = (value) => {
 
 const resolveAdminPricingDay = (day = {}) => {
 	const clientPrice = roundMoney(
-		day.clientPrice ??
-			day.mainPrice ??
-			day.totalPriceWithCommission ??
+		firstExplicitMoney(
+			day.clientPrice,
+			day.mainPrice,
+			day.totalPriceWithCommission,
 			day.price,
+		) ?? 0,
 	);
-	const rootPrice = roundMoney(day.rootPrice ?? day.totalPriceWithoutCommission);
+	const rootPrice = firstExplicitMoney(
+		day.rootPrice,
+		day.totalPriceWithoutCommission,
+	) ?? 0;
+	const explicitNet = firstExplicitMoney(
+		day.netAfterExpenses,
+		day.netAfterOtaExpenses,
+		day.netAfterOtherExpenses,
+	);
+	const explicitExpense = firstExplicitMoney(
+		day.otaExpenseAmount,
+		day.otherExpenseAmount,
+		day.expenseAmount,
+	);
 	const netAfterExpenses = roundMoney(
-		day.netAfterExpenses ??
-			day.netAfterOtaExpenses ??
-			(clientPrice - safeParseFloat(day.otaExpenseAmount, 0)),
+		explicitNet !== null
+			? explicitNet
+			: explicitExpense !== null
+			? clientPrice - explicitExpense
+			: clientPrice - safeParseFloat(day.otaExpenseAmount, 0),
 	);
-	const otaExpenseAmount = roundMoney(clientPrice - netAfterExpenses);
-	const platformMargin = roundMoney(netAfterExpenses - rootPrice);
+	const otaExpenseAmount =
+		explicitExpense !== null
+			? explicitExpense
+			: roundMoney(clientPrice - netAfterExpenses);
+	const platformMargin =
+		firstExplicitMoney(day.platformMargin, day.platformMarginAmount) ??
+		roundMoney(netAfterExpenses - rootPrice);
 
 	return {
 		date: day.date,
@@ -111,18 +148,33 @@ const summarizeAdminPricingRooms = (rooms = []) =>
 			(Array.isArray(room?.pricingByDay) ? room.pricingByDay : []).forEach(
 				(day) => {
 					const clientPrice = roundMoney(
-						day.clientPrice ??
-							day.mainPrice ??
-							day.totalPriceWithCommission ??
-							day.price,
+						firstExplicitMoney(
+							day.clientPrice,
+							day.mainPrice,
+							day.totalPriceWithCommission,
+							day.price
+						) ?? 0
 					);
 					const rootPrice = roundMoney(
-						day.rootPrice ?? day.totalPriceWithoutCommission,
+						firstExplicitMoney(day.rootPrice, day.totalPriceWithoutCommission) ??
+							0
+					);
+					const explicitNet = firstExplicitMoney(
+						day.netAfterExpenses,
+						day.netAfterOtaExpenses,
+						day.netAfterOtherExpenses
+					);
+					const explicitExpense = firstExplicitMoney(
+						day.otaExpenseAmount,
+						day.otherExpenseAmount,
+						day.expenseAmount
 					);
 					const netAfterExpenses = roundMoney(
-						day.netAfterExpenses ??
-							day.netAfterOtaExpenses ??
-							clientPrice - safeParseFloat(day.otaExpenseAmount, 0),
+						explicitNet !== null
+							? explicitNet
+							: explicitExpense !== null
+							? clientPrice - explicitExpense
+							: clientPrice - safeParseFloat(day.otaExpenseAmount, 0)
 					);
 					totals.clientTotal = roundMoney(
 						totals.clientTotal + clientPrice * count,
@@ -172,19 +224,6 @@ const normalizeCommissionPercent = (raw) => {
 	return r;
 };
 
-const hasExplicitMoneyInput = (value) =>
-	value !== null &&
-	value !== undefined &&
-	value !== "" &&
-	Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
-
-const firstExplicitMoney = (...values) => {
-	for (const value of values) {
-		if (hasExplicitMoneyInput(value)) return roundMoney(value);
-	}
-	return null;
-};
-
 const isAdminManagedPricingReservation = (reservation = {}) => {
 	const pricingMode = String(reservation?.adminPricing?.mode || "").toLowerCase();
 	return (
@@ -200,6 +239,182 @@ const savedCommissionForReservation = (reservation = {}) =>
 		reservation?.financial_cycle?.commissionAmount,
 		reservation?.financial_cycle?.commissionValue
 	);
+
+const createCentAllocator = (total, unitCount) => {
+	const units = Math.max(0, Number(unitCount || 0));
+	if (!units) return null;
+	const totalCents = Math.round(safeParseFloat(total, 0) * 100);
+	const baseCents = Math.trunc(totalCents / units);
+	let remainder = totalCents - baseCents * units;
+
+	return (count = 1) => {
+		const rowUnits = normalizeRoomCount(count);
+		let rowCents = 0;
+		for (let i = 0; i < rowUnits; i += 1) {
+			let cents = baseCents;
+			if (remainder > 0) {
+				cents += 1;
+				remainder -= 1;
+			} else if (remainder < 0) {
+				cents -= 1;
+				remainder += 1;
+			}
+			rowCents += cents;
+		}
+		return roundMoney(rowCents / rowUnits / 100);
+	};
+};
+
+const buildMissingMoneyAllocator = (rooms, total, pickExplicitValue) => {
+	const totalValue = firstExplicitMoney(total);
+	if (totalValue === null) return null;
+
+	let explicitTotal = 0;
+	let missingUnits = 0;
+	rooms.forEach((room) => {
+		const count = normalizeRoomCount(room?.count);
+		(Array.isArray(room?.pricingByDay) ? room.pricingByDay : []).forEach(
+			(day) => {
+				const value = pickExplicitValue(day);
+				if (value === null) {
+					missingUnits += count;
+				} else {
+					explicitTotal += value * count;
+				}
+			}
+		);
+	});
+
+	if (!missingUnits) return null;
+	const remaining = roundMoney(totalValue - explicitTotal);
+	if (remaining < 0 && Math.abs(remaining) > 0.01) return null;
+	return createCentAllocator(Math.max(0, remaining), missingUnits);
+};
+
+const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
+	const rawRooms = (Array.isArray(sourceRows) ? sourceRows : []).map((room) => ({
+		...room,
+		count: normalizeRoomCount(room?.count),
+		pricingByDay: Array.isArray(room?.pricingByDay) ? room.pricingByDay : [],
+	}));
+
+	const adminPricing = reservation?.adminPricing || {};
+	const pickClient = (day = {}) =>
+		firstExplicitMoney(
+			day.clientPrice,
+			day.mainPrice,
+			day.totalPriceWithCommission,
+			day.price
+		);
+	const pickRoot = (day = {}) =>
+		firstExplicitMoney(day.rootPrice, day.totalPriceWithoutCommission);
+	const pickNet = (day = {}) =>
+		firstExplicitMoney(
+			day.netAfterExpenses,
+			day.netAfterOtaExpenses,
+			day.netAfterOtherExpenses
+		);
+	const pickExpense = (day = {}) =>
+		firstExplicitMoney(
+			day.otaExpenseAmount,
+			day.otherExpenseAmount,
+			day.expenseAmount
+		);
+
+	const clientAllocator = buildMissingMoneyAllocator(
+		rawRooms,
+		firstExplicitMoney(adminPricing.clientTotal, reservation?.total_amount),
+		pickClient
+	);
+	const rootAllocator = buildMissingMoneyAllocator(
+		rawRooms,
+		firstExplicitMoney(adminPricing.rootTotal, reservation?.sub_total),
+		pickRoot
+	);
+	const netAllocator = buildMissingMoneyAllocator(
+		rawRooms,
+		adminPricing.netAfterExpensesTotal,
+		pickNet
+	);
+	const expenseAllocator = buildMissingMoneyAllocator(
+		rawRooms,
+		adminPricing.otaExpenseTotal,
+		pickExpense
+	);
+
+	return rawRooms.map((room) => {
+		const count = normalizeRoomCount(room?.count);
+		const pricingByDay = room.pricingByDay.map((day = {}) => {
+			const explicitClient = pickClient(day);
+			const explicitRoot = pickRoot(day);
+			const explicitNet = pickNet(day);
+			const explicitExpense = pickExpense(day);
+			const clientPrice =
+				explicitClient ??
+				clientAllocator?.(count) ??
+				firstExplicitMoney(room?.chosenPrice) ??
+				0;
+			const rootPrice = explicitRoot ?? rootAllocator?.(count) ?? 0;
+			const allocatedNet =
+				explicitNet === null ? netAllocator?.(count) : undefined;
+			const allocatedExpense =
+				explicitExpense === null &&
+				explicitNet === null &&
+				allocatedNet === undefined
+					? expenseAllocator?.(count)
+					: undefined;
+			const netAfterExpenses = roundMoney(
+				explicitNet ??
+					allocatedNet ??
+					(explicitExpense !== null
+						? clientPrice - explicitExpense
+						: allocatedExpense !== undefined && allocatedExpense !== null
+						? clientPrice - allocatedExpense
+						: rootPrice)
+			);
+			const otaExpenseAmount =
+				explicitExpense !== null
+					? explicitExpense
+					: roundMoney(clientPrice - netAfterExpenses);
+			const platformMargin =
+				firstExplicitMoney(day.platformMargin, day.platformMarginAmount) ??
+				roundMoney(netAfterExpenses - rootPrice);
+
+			return {
+				...day,
+				date: dateOnlyKey(day.date) || day.date,
+				price: clientPrice,
+				clientPrice,
+				mainPrice: clientPrice,
+				rootPrice,
+				commissionRate: safeParseFloat(day.commissionRate, 0),
+				totalPriceWithCommission: clientPrice,
+				totalPriceWithoutCommission: rootPrice,
+				netAfterExpenses,
+				netAfterOtaExpenses: netAfterExpenses,
+				otaExpenseAmount,
+				platformMargin,
+			};
+		});
+		const averageClient =
+			pricingByDay.length > 0
+				? roundMoney(
+						pricingByDay.reduce(
+							(total, day) => total + safeParseFloat(day.clientPrice, 0),
+							0
+						) / pricingByDay.length
+				  )
+				: firstExplicitMoney(room?.chosenPrice) ?? 0;
+
+		return {
+			roomType: room.roomType || room.room_type || "",
+			displayName: room.displayName || room.display_name || "",
+			count,
+			chosenPrice: firstExplicitMoney(room.chosenPrice, averageClient) ?? 0,
+			pricingByDay,
+		};
+	});
+};
 
 /** Resolve daily "price" with your requested fallback chain */
 const resolveDailyPrice = (matchedRate, basePrice, defaultCost) => {
@@ -522,19 +737,20 @@ const EditReservationMain = ({
 				? reservation.pickedRoomsType
 				: [];
 			const sourceRows =
-				reservation?.adminPricingVisibility?.rootOnlyForHotelManagement &&
-				pricingRows.length
+				adminManagedPricing && pricingRows.length
 					? pricingRows
 					: regularRows.length
 					? regularRows
 					: pricingRows;
-			const mappedRooms = sourceRows.map((room) => ({
-				roomType: room.room_type || "",
-				displayName: room.displayName || room.display_name || "",
-				count: room.count || 1,
-				chosenPrice: safeParseFloat(room.chosenPrice, 0),
-				pricingByDay: room.pricingByDay || [],
-			}));
+			const mappedRooms = adminManagedPricing
+				? normalizeSavedAdminPricingRooms(sourceRows, reservation)
+				: sourceRows.map((room) => ({
+						roomType: room.room_type || "",
+						displayName: room.displayName || room.display_name || "",
+						count: normalizeRoomCount(room.count),
+						chosenPrice: safeParseFloat(room.chosenPrice, 0),
+						pricingByDay: room.pricingByDay || [],
+				  }));
 			setSelectedRooms(
 				mappedRooms.length
 					? mappedRooms
@@ -543,7 +759,7 @@ const EditReservationMain = ({
 		} else {
 			setSelectedHotel(null);
 		}
-	}, [reservation, allHotels]);
+	}, [reservation, allHotels, adminManagedPricing]);
 
 	const availabilityByRoomKey = useMemo(() => {
 		const map = new Map();
@@ -734,6 +950,55 @@ const EditReservationMain = ({
 				startDate.add(index, "day").format("YYYY-MM-DD")
 			);
 
+			const hasSavedAdminPricingRows =
+				adminManagedPricing &&
+				!hasExplicitDateEdits &&
+				rooms.some(
+					(room) =>
+						Array.isArray(room?.pricingByDay) && room.pricingByDay.length > 0
+				);
+			if (hasSavedAdminPricingRows) {
+				const updated = normalizeSavedAdminPricingRooms(rooms, reservation);
+				const adminPricingTotals = summarizeAdminPricingRooms(updated);
+				const oneNightRootCost = updated.reduce((sum, room) => {
+					const firstDay = Array.isArray(room?.pricingByDay)
+						? room.pricingByDay[0]
+						: null;
+					return (
+						sum +
+						safeParseFloat(firstDay?.rootPrice, 0) *
+							normalizeRoomCount(room?.count)
+					);
+				}, 0);
+				const rowNightCount = updated.reduce(
+					(max, room) =>
+						Math.max(
+							max,
+							Array.isArray(room?.pricingByDay)
+								? room.pricingByDay.length
+								: 0
+						),
+					0
+				);
+				const resolvedNights =
+					Number(reservation?.days_of_residence || 0) || rowNightCount || nights;
+				const effectiveCommission =
+					savedReservationCommission !== null ? savedReservationCommission : 0;
+
+				if (JSON.stringify(updated) !== JSON.stringify(rooms)) {
+					setSelectedRooms(updated);
+				}
+				setHotelCost(adminPricingTotals.rootTotal);
+				setTotalAmount(adminPricingTotals.clientTotal);
+				setTotalCommission(effectiveCommission);
+				setOneNightCost(Number(oneNightRootCost.toFixed(2)));
+				setNumberOfNights(resolvedNights);
+				setDefaultDeposit(
+					Number((effectiveCommission + oneNightRootCost).toFixed(2))
+				);
+				return;
+			}
+
 			let sumHotelCost = 0;
 			let sumGrandTotal = 0;
 			let sumCommission = 0;
@@ -827,6 +1092,8 @@ const EditReservationMain = ({
 			selectedRooms,
 			selectedHotel,
 			adminManagedPricing,
+			hasExplicitDateEdits,
+			reservation,
 			savedReservationCommission,
 			getMatchedRoom,
 			buildPricingForRoom,
@@ -1814,6 +2081,12 @@ const EditReservationMain = ({
 				pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
 				onUpdate={handlePricingUpdate}
 				roomDetails={selectedRooms[editingRoomIndex]}
+				nightCount={
+					numberOfNights ||
+					selectedRooms[editingRoomIndex]?.pricingByDay?.length ||
+					reservation?.days_of_residence ||
+					0
+				}
 				showCommissionAmount={isSuperUser}
 				commissionAmount={
 					hasCommissionOverride ? commissionOverride : totalCommission

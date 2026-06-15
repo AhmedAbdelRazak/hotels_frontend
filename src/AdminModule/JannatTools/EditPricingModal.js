@@ -6,7 +6,7 @@ import { isAuthenticated } from "../../auth";
 import { isSuperAdminUser } from "../utils/superUsers";
 
 const safeParseFloat = (val, fallback = 0) => {
-	const parsed = parseFloat(val);
+	const parsed = parseFloat(String(val ?? "").replace(/,/g, "").trim());
 	return Number.isFinite(parsed) ? parsed : fallback;
 };
 
@@ -29,6 +29,7 @@ const formatMoney = (value) => Number(value || 0).toFixed(2);
 const TEXT = {
 	en: {
 		title: "Edit Pricing Breakdown",
+		nightsLabel: (count) => `${count} ${count === 1 ? "night" : "nights"}`,
 		cancel: "Cancel",
 		inherit: "Inherit First Row Values",
 		save: "Apply Pricing",
@@ -84,6 +85,8 @@ const TEXT = {
 		applied:
 			"\u062a\u0645 \u062a\u0637\u0628\u064a\u0642 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u062f\u0627\u062e\u0644 \u0646\u0645\u0648\u0630\u062c \u0627\u0644\u062d\u062c\u0632. \u0627\u0636\u063a\u0637 \u062d\u0641\u0638/\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062d\u062c\u0632 \u0644\u062a\u062b\u0628\u064a\u062a\u0647\u0627.",
 		title: "تعديل تفاصيل الأسعار",
+		nightsLabel: (count) =>
+			`${count} ${count === 1 ? "\u0644\u064a\u0644\u0629" : "\u0644\u064a\u0627\u0644"}`,
 		cancel: "إلغاء",
 		inherit: "نسخ قيم أول يوم",
 		save: "حفظ",
@@ -236,6 +239,7 @@ const EditPricingModal = ({
 	onClose,
 	pricingByDay,
 	onUpdate,
+	nightCount = null,
 	showCommissionAmount = false,
 	commissionAmount = null,
 	onCommissionChange = () => {},
@@ -297,6 +301,11 @@ const EditPricingModal = ({
 			),
 		[editableData],
 	);
+	const resolvedNightCount = useMemo(() => {
+		const fromProp = Number(nightCount || 0);
+		if (Number.isFinite(fromProp) && fromProp > 0) return Math.round(fromProp);
+		return editableData.length;
+	}, [nightCount, editableData.length]);
 
 	const commitRows = (rows, { syncParent = false } = {}) => {
 		const normalizedRows = rows.map(normalizePricingRow);
@@ -569,7 +578,19 @@ const EditPricingModal = ({
 
 	return (
 		<Modal
-			title={<span dir={isArabic ? "rtl" : "ltr"}>{t.title}</span>}
+			title={
+				<span
+					className='pricing-modal-title'
+					dir={isArabic ? "rtl" : "ltr"}
+				>
+					<span>{t.title}</span>
+					{resolvedNightCount > 0 ? (
+						<span className='pricing-night-count'>
+							{t.nightsLabel(resolvedNightCount)}
+						</span>
+					) : null}
+				</span>
+			}
 			open={visible}
 			onCancel={onClose}
 			width='min(96vw, 1480px)'
@@ -603,6 +624,27 @@ const EditPricingModal = ({
 			<style>{`
 				.edit-pricing-modal .pricing-modal-body {
 					direction: ltr;
+				}
+
+				.edit-pricing-modal .pricing-modal-title {
+					display: inline-flex;
+					align-items: center;
+					gap: 10px;
+					flex-wrap: wrap;
+				}
+
+				.edit-pricing-modal .pricing-night-count {
+					display: inline-flex;
+					align-items: center;
+					min-height: 24px;
+					padding: 2px 10px;
+					border: 1px solid #b7dec9;
+					border-radius: 999px;
+					background: #eefaf3;
+					color: #0f5132;
+					font-size: 12px;
+					font-weight: 700;
+					line-height: 1.2;
 				}
 
 				.edit-pricing-modal .pricing-modal-body.is-arabic {
