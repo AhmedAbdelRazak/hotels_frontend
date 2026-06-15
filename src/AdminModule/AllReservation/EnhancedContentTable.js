@@ -22,6 +22,7 @@ const OTA_SYNC_RUNNING_STATUSES = new Set([
 ]);
 const OTA_SYNC_BUCKET_LABELS = [
 	{ key: "newReservations", label: "New candidates" },
+	{ key: "skippedCancelled", label: "Skipped cancelled" },
 	{ key: "matchedExisting", label: "Matched existing" },
 	{ key: "statusChanged", label: "Status changes" },
 	{ key: "conflicts", label: "Conflicts" },
