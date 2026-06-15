@@ -58,6 +58,7 @@ const OTA_PRICING_TEXT = {
 			hotelName: "Hotel Name",
 			checkIn: "Check in",
 			checkOut: "Check out",
+			nights: "Nights",
 		},
 		labels: {
 			totalClientPrice: "Total client price",
@@ -110,6 +111,7 @@ const OTA_PRICING_TEXT = {
 			hotelName: "اسم الفندق",
 			checkIn: "تاريخ الوصول",
 			checkOut: "تاريخ المغادرة",
+			nights: "\u0627\u0644\u0644\u064a\u0627\u0644\u064a",
 		},
 		labels: {
 			totalClientPrice: "إجمالي سعر العميل",
@@ -209,6 +211,33 @@ const dateKey = (value) => {
 	}
 	const parsed = new Date(value);
 	return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+};
+
+const stayNightsForReservation = (reservation = {}) => {
+	const explicit = Number(reservation.days_of_residence || 0);
+	if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+	const roomLists = [reservation.pickedRoomsType, reservation.pickedRoomsPricing].filter(
+		Array.isArray
+	);
+	const pricingDays = Math.max(
+		0,
+		...roomLists.flatMap((rooms) =>
+			rooms.map((room) =>
+				Array.isArray(room?.pricingByDay) ? room.pricingByDay.length : 0
+			)
+		)
+	);
+	if (pricingDays > 0) return pricingDays;
+	const checkin = dateKey(reservation.checkin_date);
+	const checkout = dateKey(reservation.checkout_date);
+	if (!checkin || !checkout) return 0;
+	const [inYear, inMonth, inDay] = checkin.split("-").map(Number);
+	const [outYear, outMonth, outDay] = checkout.split("-").map(Number);
+	const diff =
+		(Date.UTC(outYear, outMonth - 1, outDay) -
+			Date.UTC(inYear, inMonth - 1, inDay)) /
+		86400000;
+	return Number.isFinite(diff) && diff > 0 ? Math.round(diff) : 0;
 };
 
 const normalizeDay = (day = {}) => {
@@ -480,7 +509,9 @@ const OtaPricingModal = ({
 		const savedClientTotal = savedClientTotalForReservation(reservation);
 		const savedRootTotal = savedRootTotalForReservation(reservation);
 		const savedNetTotal = savedNetTotalForReservation(reservation);
-		const savedCommission = savedCommissionForReservation(reservation);
+		const savedCommission =
+			savedCommissionForReservation(reservation) ||
+			(savedRootTotal > 0 ? round2(savedRootTotal * 0.1) : 0);
 		let nextRooms = normalizeRoomsForEdit(reservation);
 		const currentClientTotal = round2(summarizeRooms(nextRooms).clientTotal);
 		if (
@@ -602,6 +633,7 @@ const OtaPricingModal = ({
 		reservation?.checkout_date,
 		chosenLanguage
 	);
+	const stayNights = stayNightsForReservation(reservation);
 
 	return (
 		<Modal
@@ -658,6 +690,10 @@ const OtaPricingModal = ({
 						<span>{t.context.checkOut}</span>
 						<strong>{checkoutDate.gregorian}</strong>
 						<small>{checkoutDate.hijri}</small>
+					</PricingContextItem>
+					<PricingContextItem>
+						<span>{t.context.nights}</span>
+						<strong>{stayNights || "-"}</strong>
 					</PricingContextItem>
 				</PricingContextGrid>
 				<PricingSummaryRows $isArabic={isArabic}>
@@ -1594,7 +1630,7 @@ const PricingModalContent = styled.div`
 
 const PricingContextGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(6, minmax(0, 1fr));
 	gap: 8px;
 	padding: 10px;
 	border: 1px solid #e2e8f0;

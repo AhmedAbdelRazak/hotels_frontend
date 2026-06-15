@@ -651,8 +651,8 @@ const EnhancedContentTable = ({
 			return;
 		}
 		const status = String(otaSyncJob.status || "").toLowerCase();
-		if (status !== "preview_ready") {
-			message.error("Run the read-only collector and wait for preview_ready first.");
+		if (!["preview_ready", "apply_needs_review"].includes(status)) {
+			message.error("Run the read-only collector and wait for a safe preview first.");
 			return;
 		}
 		const summary = otaSyncJob.resultSummary || {};
@@ -800,10 +800,13 @@ const EnhancedContentTable = ({
 	const otaSyncNewCount = Number(otaSyncSummary.newReservations || 0);
 	const otaSyncStatusChangeCount = Number(otaSyncSummary.statusChanged || 0);
 	const otaSyncSafeWriteCount = otaSyncNewCount + otaSyncStatusChangeCount;
+	const otaSyncApplyRetryable = ["preview_ready", "apply_needs_review"].includes(
+		otaSyncStatus,
+	);
 	const canApplyOtaSync =
 		Boolean(otaSyncJob?._id) &&
 		Boolean(currentUserId) &&
-		otaSyncStatus === "preview_ready" &&
+		otaSyncApplyRetryable &&
 		otaSyncSafeWriteCount > 0 &&
 		!otaSyncCollectorActive &&
 		!otaSyncApplying;
