@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
@@ -265,16 +265,9 @@ const EditPricingModal = ({
 		net: null,
 	});
 	const [commissionDraft, setCommissionDraft] = useState(null);
-	const wasVisibleRef = useRef(false);
 
 	useEffect(() => {
-		if (!visible) {
-			wasVisibleRef.current = false;
-			return;
-		}
-
-		if (wasVisibleRef.current) return;
-		wasVisibleRef.current = true;
+		if (!visible) return;
 
 		const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
 		setEditableData(normalizedRows);

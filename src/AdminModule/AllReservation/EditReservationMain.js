@@ -240,14 +240,18 @@ const savedCommissionForReservation = (reservation = {}) =>
 		reservation?.financial_cycle?.commissionValue
 	);
 
-const createCentAllocator = (total, unitCount) => {
+const createCentAllocator = (
+	total,
+	unitCount,
+	{ forceOverride = false } = {}
+) => {
 	const units = Math.max(0, Number(unitCount || 0));
 	if (!units) return null;
 	const totalCents = Math.round(safeParseFloat(total, 0) * 100);
 	const baseCents = Math.trunc(totalCents / units);
 	let remainder = totalCents - baseCents * units;
 
-	return (count = 1) => {
+	const allocator = (count = 1) => {
 		const rowUnits = normalizeRoomCount(count);
 		let rowCents = 0;
 		for (let i = 0; i < rowUnits; i += 1) {
@@ -263,18 +267,27 @@ const createCentAllocator = (total, unitCount) => {
 		}
 		return roundMoney(rowCents / rowUnits / 100);
 	};
+	allocator.forceOverride = forceOverride;
+	return allocator;
 };
 
-const buildMissingMoneyAllocator = (rooms, total, pickExplicitValue) => {
+const buildMissingMoneyAllocator = (
+	rooms,
+	total,
+	pickExplicitValue,
+	{ overrideWhenMismatch = false } = {}
+) => {
 	const totalValue = firstExplicitMoney(total);
 	if (totalValue === null) return null;
 
 	let explicitTotal = 0;
 	let missingUnits = 0;
+	let totalUnits = 0;
 	rooms.forEach((room) => {
 		const count = normalizeRoomCount(room?.count);
 		(Array.isArray(room?.pricingByDay) ? room.pricingByDay : []).forEach(
 			(day) => {
+				totalUnits += count;
 				const value = pickExplicitValue(day);
 				if (value === null) {
 					missingUnits += count;
@@ -285,9 +298,19 @@ const buildMissingMoneyAllocator = (rooms, total, pickExplicitValue) => {
 		);
 	});
 
-	if (!missingUnits) return null;
+	const hasMismatch = Math.abs(roundMoney(explicitTotal) - totalValue) > 0.01;
+	if (!missingUnits) {
+		return overrideWhenMismatch && totalUnits && hasMismatch
+			? createCentAllocator(totalValue, totalUnits, { forceOverride: true })
+			: null;
+	}
+
 	const remaining = roundMoney(totalValue - explicitTotal);
-	if (remaining < 0 && Math.abs(remaining) > 0.01) return null;
+	if (remaining < 0 && Math.abs(remaining) > 0.01) {
+		return overrideWhenMismatch && totalUnits
+			? createCentAllocator(totalValue, totalUnits, { forceOverride: true })
+			: null;
+	}
 	return createCentAllocator(Math.max(0, remaining), missingUnits);
 };
 
@@ -324,17 +347,20 @@ const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
 	const clientAllocator = buildMissingMoneyAllocator(
 		rawRooms,
 		firstExplicitMoney(adminPricing.clientTotal, reservation?.total_amount),
-		pickClient
+		pickClient,
+		{ overrideWhenMismatch: true }
 	);
 	const rootAllocator = buildMissingMoneyAllocator(
 		rawRooms,
 		firstExplicitMoney(adminPricing.rootTotal, reservation?.sub_total),
-		pickRoot
+		pickRoot,
+		{ overrideWhenMismatch: true }
 	);
 	const netAllocator = buildMissingMoneyAllocator(
 		rawRooms,
 		adminPricing.netAfterExpensesTotal,
-		pickNet
+		pickNet,
+		{ overrideWhenMismatch: true }
 	);
 	const expenseAllocator = buildMissingMoneyAllocator(
 		rawRooms,
@@ -349,14 +375,27 @@ const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
 			const explicitRoot = pickRoot(day);
 			const explicitNet = pickNet(day);
 			const explicitExpense = pickExpense(day);
-			const clientPrice =
-				explicitClient ??
-				clientAllocator?.(count) ??
-				firstExplicitMoney(room?.chosenPrice) ??
-				0;
-			const rootPrice = explicitRoot ?? rootAllocator?.(count) ?? 0;
+			const allocatedClient =
+				clientAllocator?.forceOverride || explicitClient === null
+					? clientAllocator?.(count)
+					: undefined;
+			const clientPrice = clientAllocator?.forceOverride
+				? allocatedClient ?? 0
+				: explicitClient ??
+				  allocatedClient ??
+				  firstExplicitMoney(room?.chosenPrice) ??
+				  0;
+			const allocatedRoot =
+				rootAllocator?.forceOverride || explicitRoot === null
+					? rootAllocator?.(count)
+					: undefined;
+			const rootPrice = rootAllocator?.forceOverride
+				? allocatedRoot ?? 0
+				: explicitRoot ?? allocatedRoot ?? 0;
 			const allocatedNet =
-				explicitNet === null ? netAllocator?.(count) : undefined;
+				netAllocator?.forceOverride || explicitNet === null
+					? netAllocator?.(count)
+					: undefined;
 			const allocatedExpense =
 				explicitExpense === null &&
 				explicitNet === null &&
@@ -364,13 +403,15 @@ const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
 					? expenseAllocator?.(count)
 					: undefined;
 			const netAfterExpenses = roundMoney(
-				explicitNet ??
-					allocatedNet ??
-					(explicitExpense !== null
-						? clientPrice - explicitExpense
-						: allocatedExpense !== undefined && allocatedExpense !== null
-						? clientPrice - allocatedExpense
-						: rootPrice)
+				netAllocator?.forceOverride
+					? allocatedNet ?? rootPrice
+					: explicitNet ??
+							allocatedNet ??
+							(explicitExpense !== null
+								? clientPrice - explicitExpense
+								: allocatedExpense !== undefined && allocatedExpense !== null
+								? clientPrice - allocatedExpense
+								: rootPrice)
 			);
 			const otaExpenseAmount =
 				explicitExpense !== null
