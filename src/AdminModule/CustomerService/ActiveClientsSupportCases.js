@@ -24,6 +24,39 @@ import { NotificationContext } from "./NotificationContext";
 
 const { TextArea } = Input;
 
+const caseHotelName = (item = {}) =>
+	item.hotelId && item.hotelId._id !== "674cf8997e3780f1f838d458"
+		? item.hotelId.hotelName
+		: "Jannat Booking";
+
+const caseSourceLabel = (item = {}, isArabic = false) => {
+	const source = String(item.sourcePage || item.sourceWebsite || "").toLowerCase();
+	if (!source) return "";
+	if (source.includes("contact_page")) {
+		return isArabic ? "نموذج التواصل" : "Contact page";
+	}
+	if (source.includes("support_widget")) {
+		return isArabic ? "المحادثة" : "Chat widget";
+	}
+	if (source.includes("checkout")) {
+		return isArabic ? "إتمام الحجز" : "Checkout";
+	}
+	return isArabic ? "موقع جنات" : "Jannat site";
+};
+
+const caseTopicText = (item = {}) =>
+	item.caseTopic ||
+	item.caseSubject ||
+	item.conversationPreview?.inquiryAbout ||
+	item.conversation?.[0]?.inquiryAbout ||
+	"Support request";
+
+const caseContactText = (item = {}) =>
+	item.clientProfile?.contact ||
+	item.clientContact ||
+	item.conversationPreview?.messageBy?.customerEmail ||
+	"";
+
 const AI_LEARNING_TEXT = {
 	en: {
 		button: "Teach Your AI Chat",
@@ -735,11 +768,22 @@ const ActiveClientsSupportCases = ({
 										paddingRight: hasUnseen ? 48 : undefined,
 									}}
 								>
-									{item.hotelId &&
-									item.hotelId._id !== "674cf8997e3780f1f838d458"
-										? item.hotelId.hotelName
-										: "Jannat Booking"}{" "}
-									- <strong>{item.displayName1}</strong>
+									<ClientCaseListItem>
+										<div className='case-title-row'>
+											<strong dir='auto'>{item.displayName1}</strong>
+											{caseSourceLabel(item, isArabic) && (
+												<Tag color='blue'>{caseSourceLabel(item, isArabic)}</Tag>
+											)}
+										</div>
+										<div className='case-subtitle' dir='auto'>
+											{caseHotelName(item)} • {caseTopicText(item)}
+										</div>
+										{caseContactText(item) && (
+											<div className='case-contact' dir='auto'>
+												{caseContactText(item)}
+											</div>
+										)}
+									</ClientCaseListItem>
 									{isEscalatedItem && (
 										<EscalationPill>{escalatedLabel}</EscalationPill>
 									)}
@@ -810,11 +854,22 @@ const ActiveClientsSupportCases = ({
 										paddingRight: hasUnseenMessages ? 48 : undefined,
 									}}
 								>
-									{item.hotelId &&
-									item.hotelId._id !== "674cf8997e3780f1f838d458"
-										? item.hotelId.hotelName
-										: "Jannat Booking"}{" "}
-									- <strong>{item.displayName1}</strong>
+									<ClientCaseListItem>
+										<div className='case-title-row'>
+											<strong dir='auto'>{item.displayName1}</strong>
+											{caseSourceLabel(item, isArabic) && (
+												<Tag color='blue'>{caseSourceLabel(item, isArabic)}</Tag>
+											)}
+										</div>
+										<div className='case-subtitle' dir='auto'>
+											{caseHotelName(item)} • {caseTopicText(item)}
+										</div>
+										{caseContactText(item) && (
+											<div className='case-contact' dir='auto'>
+												{caseContactText(item)}
+											</div>
+										)}
+									</ClientCaseListItem>
 									{isEscalatedItem && (
 										<EscalationPill>{escalatedLabel}</EscalationPill>
 									)}
@@ -900,6 +955,43 @@ const TrainingChatItem = styled.div`
 		gap: 6px;
 		color: #6a7f91;
 		font-size: 0.85rem;
+	}
+`;
+
+const ClientCaseListItem = styled.div`
+	min-width: 0;
+	display: grid;
+	gap: 4px;
+	text-transform: none;
+
+	.case-title-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+	}
+
+	.case-title-row strong {
+		color: #102033;
+		font-weight: 900;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.case-subtitle,
+	.case-contact {
+		color: #557086;
+		font-size: 0.78rem;
+		line-height: 1.35;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.case-contact {
+		color: #0b6b55;
+		font-weight: 800;
 	}
 `;
 

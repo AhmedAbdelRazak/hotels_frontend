@@ -51,6 +51,57 @@ import html2canvas from "html2canvas";
 import "jspdf-autotable";
 import { relocationArray1 } from "./ReservationAssets";
 
+const PAYMENT_LINK_LANGUAGE_OPTIONS = [
+	{ value: "en", label: "English" },
+	{ value: "ar", label: "Arabic" },
+];
+
+const PAYMENT_LINK_CURRENCY_OPTIONS = [
+	{ value: "sar", label: "SAR - Saudi Riyal" },
+	{ value: "jod", label: "JOD - Jordanian Dinar" },
+	{ value: "dzd", label: "DZD - Algerian Dinar" },
+	{ value: "egp", label: "EGP - Egyptian Pound" },
+	{ value: "pkr", label: "PKR - Pakistani Rupee" },
+	{ value: "inr", label: "INR - Indian Rupee" },
+	{ value: "myr", label: "MYR - Malaysian Ringgit" },
+	{ value: "idr", label: "IDR - Indonesian Rupiah" },
+	{ value: "gbp", label: "GBP - British Pound" },
+	{ value: "usd", label: "USD - US Dollar" },
+	{ value: "eur", label: "EUR - Euro" },
+];
+
+const normalizePaymentLinkLanguage = (value = "en") =>
+	PAYMENT_LINK_LANGUAGE_OPTIONS.some((option) => option.value === value)
+		? value
+		: "en";
+
+const normalizePaymentLinkCurrency = (value = "sar") =>
+	PAYMENT_LINK_CURRENCY_OPTIONS.some((option) => option.value === value)
+		? value
+		: "sar";
+
+const buildPublicPaymentLink = ({
+	reservation,
+	language = "en",
+	currency = "sar",
+}) => {
+	const reservationId = reservation?._id || "";
+	const confirmation =
+		reservation?.confirmation_number ||
+		reservation?.customer_details?.confirmation_number ||
+		reservationId;
+	const baseUrl = String(
+		process.env.REACT_APP_MAIN_URL_JANNAT || "https://www.jannatbooking.com",
+	).replace(/\/+$/, "");
+	const params = new URLSearchParams({
+		lang: normalizePaymentLinkLanguage(language),
+		currency: normalizePaymentLinkCurrency(currency),
+	});
+	return `${baseUrl}/client-payment/${encodeURIComponent(
+		reservationId,
+	)}/${encodeURIComponent(confirmation)}?${params.toString()}`;
+};
+
 const getAccountRoleNumbers = (account = {}) =>
 	[
 		Number(account?.role),
@@ -4166,6 +4217,121 @@ const PaymentBreakdownNote = styled.div`
 	font-weight: 600;
 `;
 
+const PaymentLinkModalBody = styled.div`
+	display: grid;
+	gap: 18px;
+
+	.payment-link-modal-head {
+		border-radius: 12px;
+		background: linear-gradient(135deg, #eefaf7 0%, #f8fbff 100%);
+		border: 1px solid #cfe5fb;
+		padding: 16px;
+		text-align: left;
+	}
+
+	.payment-link-modal-head span {
+		color: #058a64;
+		font-size: 0.78rem;
+		font-weight: 900;
+		text-transform: uppercase;
+	}
+
+	.payment-link-modal-head h3 {
+		margin: 5px 0 7px;
+		color: #102033;
+		font-weight: 950;
+	}
+
+	.payment-link-modal-head p {
+		margin: 0;
+		color: #64748b;
+		font-size: 0.92rem;
+		font-weight: 700;
+		line-height: 1.6;
+	}
+
+	.payment-link-options-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.payment-link-options-grid label {
+		display: grid;
+		gap: 7px;
+		color: #334155;
+		font-weight: 900;
+		text-align: left;
+	}
+
+	.payment-link-preview {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 10px;
+		align-items: center;
+		border: 1px solid #dbeafe;
+		border-radius: 12px;
+		background: #f8fafc;
+		padding: 12px;
+		text-align: left;
+	}
+
+	.payment-link-preview strong {
+		color: #0f172a;
+		font-weight: 950;
+	}
+
+	.payment-link-preview code {
+		grid-column: 1 / -1;
+		display: block;
+		border-radius: 8px;
+		background: #ffffff;
+		color: #0b5ed7;
+		font-size: 0.9rem;
+		font-weight: 850;
+		padding: 12px;
+		white-space: normal;
+		word-break: break-all;
+	}
+
+	.payment-link-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 10px;
+	}
+
+	.payment-link-preview button,
+	.payment-link-actions button {
+		border: 1px solid #0d6efd;
+		border-radius: 8px;
+		background: #0d6efd;
+		color: #ffffff;
+		font-weight: 900;
+		min-height: 38px;
+		padding: 7px 14px;
+	}
+
+	.payment-link-actions button:first-child {
+		background: #058a64;
+		border-color: #058a64;
+	}
+
+	@media (max-width: 680px) {
+		.payment-link-options-grid,
+		.payment-link-preview {
+			grid-template-columns: 1fr;
+		}
+
+		.payment-link-actions {
+			flex-direction: column;
+		}
+
+		.payment-link-actions button {
+			width: 100%;
+		}
+	}
+`;
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const normalizeDigits = (value) => String(value || "").replace(/\D/g, "");
 const formatPhoneForDisplay = (raw) => {
@@ -4412,6 +4578,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	// eslint-disable-next-line
 	const [selectedStatus, setSelectedStatus] = useState("");
 	const [linkGenerate, setLinkGenerated] = useState("");
+	const [paymentLinkLanguage, setPaymentLinkLanguage] = useState("en");
+	const [paymentLinkCurrency, setPaymentLinkCurrency] = useState("sar");
 
 	const { chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
@@ -4560,6 +4728,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		if (!paymentLinkEmailModalOpen) return;
 		setPaymentLinkEmailValue(reservation?.customer_details?.email || "");
 	}, [paymentLinkEmailModalOpen, reservation?.customer_details?.email]);
+
+	useEffect(() => {
+		setLinkGenerated("");
+		setPaymentLinkLanguage("en");
+		setPaymentLinkCurrency("sar");
+	}, [reservation?._id, reservation?.confirmation_number]);
 
 	useEffect(() => {
 		if (!confirmationEmailModalOpen) return;
@@ -5792,6 +5966,52 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		window.location.href = `/hotel-management/new-reservation/${belongsToId}/${hotelId}?${params.toString()}`;
 	}, [hotelDetails, reservation]);
 
+	const createPaymentLink = useCallback(
+		(overrides = {}) =>
+			buildPublicPaymentLink({
+				reservation,
+				language: overrides.language || paymentLinkLanguage,
+				currency: overrides.currency || paymentLinkCurrency,
+			}),
+		[reservation, paymentLinkCurrency, paymentLinkLanguage],
+	);
+
+	const refreshPaymentLink = useCallback(
+		(overrides = {}) => {
+			const nextLink = createPaymentLink(overrides);
+			setLinkGenerated(nextLink);
+			return nextLink;
+		},
+		[createPaymentLink],
+	);
+
+	const openPaymentLinkModal = useCallback(() => {
+		refreshPaymentLink();
+		setLinkModalVisible(true);
+	}, [refreshPaymentLink]);
+
+	const handlePaymentLinkLanguageChange = (value) => {
+		const nextLanguage = normalizePaymentLinkLanguage(value);
+		setPaymentLinkLanguage(nextLanguage);
+		refreshPaymentLink({ language: nextLanguage });
+	};
+
+	const handlePaymentLinkCurrencyChange = (value) => {
+		const nextCurrency = normalizePaymentLinkCurrency(value);
+		setPaymentLinkCurrency(nextCurrency);
+		refreshPaymentLink({ currency: nextCurrency });
+	};
+
+	const copyPaymentLink = async () => {
+		const nextLink = linkGenerate || refreshPaymentLink();
+		try {
+			await navigator.clipboard.writeText(nextLink);
+			toast.success("Payment link copied.");
+		} catch (_error) {
+			toast.info("Select and copy the payment link manually.");
+		}
+	};
+
 	const buildPaymentLinkPayload = () => ({
 		guestName: reservation?.customer_details?.name || "",
 		hotelName: hotelDetails?.hotelName || "",
@@ -5799,6 +6019,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		totalAmount: reservation?.total_amount,
 		paidAmount: reservation?.paid_amount,
 		currency: reservation?.currency || "SAR",
+		linkLanguage: paymentLinkLanguage,
+		linkCurrency: paymentLinkCurrency,
 		checkinDate: reservation?.checkin_date,
 		checkoutDate: reservation?.checkout_date,
 	});
@@ -6861,31 +7083,67 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					<Modal
 						open={linkModalVisible}
 						onCancel={() => setLinkModalVisible(false)}
-						onOk={() => setLinkModalVisible(false)}
+						footer={null}
 						style={{
 							textAlign: chosenLanguage === "Arabic" ? "center" : "",
 						}}
 						width={"70%"}
 						{...childModalProps()}
 					>
-						<h3>Payment Link:</h3>
-						<div
-							style={{
-								marginTop: "50px",
-								marginBottom: "50px",
-								fontSize: "1rem",
-								cursor: "pointer",
-								textAlign: "center",
-								fontWeight: "bold",
-								textDecoration: "underline",
-								color: "darkblue",
-							}}
-							onClick={() =>
-								window.open(linkGenerate, "_blank", "noopener,noreferrer")
-							}
-						>
-							{linkGenerate}
-						</div>
+						<PaymentLinkModalBody>
+							<div className='payment-link-modal-head'>
+								<span>Guest payment link</span>
+								<h3>Choose link language and currency</h3>
+								<p>
+									Default is English and SAR. The reservation ledger stays in SAR;
+									this only controls the guest-facing page language and display currency.
+								</p>
+							</div>
+							<div className='payment-link-options-grid'>
+								<label>
+									<span>Link language</span>
+									<Select
+										value={paymentLinkLanguage}
+										onChange={handlePaymentLinkLanguageChange}
+										options={PAYMENT_LINK_LANGUAGE_OPTIONS}
+									/>
+								</label>
+								<label>
+									<span>Display currency</span>
+									<Select
+										value={paymentLinkCurrency}
+										onChange={handlePaymentLinkCurrencyChange}
+										options={PAYMENT_LINK_CURRENCY_OPTIONS}
+										showSearch
+										optionFilterProp='label'
+									/>
+								</label>
+							</div>
+							<div className='payment-link-preview'>
+								<strong>Payment Link</strong>
+								<button
+									type='button'
+									onClick={() =>
+										window.open(
+											linkGenerate || createPaymentLink(),
+											"_blank",
+											"noopener,noreferrer",
+										)
+									}
+								>
+									Open
+								</button>
+								<code>{linkGenerate || createPaymentLink()}</code>
+							</div>
+							<div className='payment-link-actions'>
+								<button type='button' onClick={copyPaymentLink}>
+									Copy Link
+								</button>
+								<button type='button' onClick={() => setLinkModalVisible(false)}>
+									Done
+								</button>
+							</div>
+						</PaymentLinkModalBody>
 					</Modal>
 
 					<Modal
@@ -7954,27 +8212,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												background: "darkred",
 												border: "1px darkred solid",
 											}}
-											onClick={() => {
-												if (chosenLanguage === "Arabic") {
-													setLinkGenerated(
-														`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
-													);
-													return;
-												}
-												setLinkGenerated(
-													`${
-														process.env.REACT_APP_MAIN_URL_JANNAT
-													}/client-payment/${reservation._id}/${
-														reservation._id
-													}/${reservation._id}/${
-														hotelDetails.hotelName
-													}/roomTypes/${reservation._id}/${
-														reservation._id
-													}/${reservation.days_of_residence}/${Number(
-														reservation.total_amount,
-													).toFixed(2)}`,
-												);
-											}}
+											onClick={openPaymentLinkModal}
 										>
 											{chosenLanguage === "Arabic" ? AR_LABELS.generatePaymentLink : "Generate Payment Link"}
 										</button>
@@ -8139,27 +8377,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														background: "darkred",
 														border: "1px darkred solid",
 													}}
-													onClick={() => {
-														if (chosenLanguage === "Arabic") {
-															setLinkGenerated(
-																`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
-															);
-															return;
-														}
-														setLinkGenerated(
-															`${
-																process.env.REACT_APP_MAIN_URL_JANNAT
-															}/client-payment/${reservation._id}/${
-																reservation._id
-															}/${reservation._id}/${
-																hotelDetails.hotelName
-															}/roomTypes/${reservation._id}/${
-																reservation._id
-															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount,
-															).toFixed(2)}`,
-														);
-													}}
+													onClick={openPaymentLinkModal}
 												>
 													{chosenLanguage === "Arabic" ? AR_LABELS.generatePaymentLink : "Generate Payment Link"}
 												</button>
@@ -8270,11 +8488,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														background: "darkred",
 														border: "1px darkred solid",
 													}}
-													onClick={() => {
-														setLinkGenerated(
-															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`,
-														);
-													}}
+													onClick={openPaymentLinkModal}
 												>
 													Generate Payment Link
 												</button>
@@ -8322,21 +8536,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 														background: "darkred",
 														border: "1px darkred solid",
 													}}
-													onClick={() => {
-														setLinkGenerated(
-															`${
-																process.env.REACT_APP_MAIN_URL_JANNAT
-															}/client-payment/${reservation._id}/${
-																reservation._id
-															}/${reservation._id}/${
-																hotelDetails.hotelName
-															}/roomTypes/${reservation._id}/${
-																reservation._id
-															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount,
-															).toFixed(2)}`,
-														);
-													}}
+													onClick={openPaymentLinkModal}
 												>
 													Generate Payment Link
 												</button>

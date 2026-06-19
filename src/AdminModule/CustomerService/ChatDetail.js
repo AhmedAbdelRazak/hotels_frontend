@@ -64,6 +64,7 @@ const CHAT_DETAIL_LABELS = {
 		clientContact: "Email / Phone",
 		sameClientChats: "Chats With Same Contact",
 		currentHotel: "Hotel",
+		source: "Source",
 		noClientContact: "Not saved yet",
 	},
 	rtl: {
@@ -97,6 +98,7 @@ const CHAT_DETAIL_LABELS = {
 		sameClientChats:
 			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0628\u0646\u0641\u0633 \u0627\u0644\u062a\u0648\u0627\u0635\u0644",
 		currentHotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
+		source: "\u0627\u0644\u0645\u0635\u062f\u0631",
 		noClientContact:
 			"\u0644\u0645 \u064a\u062a\u0645 \u062d\u0641\u0638\u0647 \u0628\u0639\u062f",
 	},
@@ -206,6 +208,21 @@ const firstGuestMessage = (chat = {}) =>
 const isJannatBookingCase = (chat = {}) =>
 	String(chat?.hotelId?._id || chat?.hotelId || "") === "674cf8997e3780f1f838d458";
 
+const supportSourceLabel = (chat = {}, isRtl = false) => {
+	const source = String(chat.sourcePage || chat.sourceWebsite || "").toLowerCase();
+	if (!source) return "";
+	if (source.includes("contact_page")) {
+		return isRtl ? "\u0646\u0645\u0648\u0630\u062c \u0627\u0644\u062a\u0648\u0627\u0635\u0644" : "Contact page";
+	}
+	if (source.includes("support_widget")) {
+		return isRtl ? "\u0627\u0644\u0645\u062d\u0627\u062f\u062b\u0629" : "Chat widget";
+	}
+	if (source.includes("checkout")) {
+		return isRtl ? "\u0625\u062a\u0645\u0627\u0645 \u0627\u0644\u062d\u062c\u0632" : "Checkout";
+	}
+	return isRtl ? "\u0645\u0648\u0642\u0639 \u062c\u0646\u0627\u062a" : "Jannat site";
+};
+
 const ChatDetail = ({
 	chat,
 	isHistory,
@@ -266,6 +283,7 @@ const ChatDetail = ({
 	const sameClientChats = Number(
 		clientProfile.totalChatsWithSameContact || 1
 	);
+	const supportSource = supportSourceLabel(chat, chatIsRtl);
 	const inquiryAbout = cleanDisplayText(
 		chat.caseTopic ||
 			chat.caseSubject ||
@@ -727,6 +745,12 @@ const ChatDetail = ({
 						<span>{chatLabels.currentHotel}</span>
 						<strong dir='auto'>{hotelName}</strong>
 					</DetailItem>
+					{supportSource && (
+						<DetailItem>
+							<span>{chatLabels.source}</span>
+							<strong dir='auto'>{supportSource}</strong>
+						</DetailItem>
+					)}
 				</ClientDetailsCard>
 			)}
 
