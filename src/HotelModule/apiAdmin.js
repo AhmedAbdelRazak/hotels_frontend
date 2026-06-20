@@ -135,9 +135,13 @@ const localizeApiError = (
 	};
 };
 
-export const hotelAccount = (userId, token, accountId) => {
+export const hotelAccount = (userId, token, accountId, options = {}) => {
+	const query = new URLSearchParams();
+	if (options.view) query.set("view", options.view);
+	if (options.summary) query.set("view", "dashboard-hotels");
+	const suffix = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}`,
+		`${process.env.REACT_APP_API_URL}/account-data/${accountId}/${userId}${suffix}`,
 		{
 			method: "GET",
 			headers: {
@@ -348,6 +352,27 @@ export const getManagerExecutiveSummary = (userId, token, params = {}) => {
 	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/hotel-details/executive-summary/${userId}${queryString}`,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredAuthHeaders(),
+			},
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getManagerDashboardStatsBulk = (userId, token, params = {}) => {
+	const query = new URLSearchParams();
+	if (params.range) query.append("range", params.range);
+	if (params.dateBy) query.append("dateBy", params.dateBy);
+	const queryString = query.toString() ? `?${query.toString()}` : "";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-details/stats/bulk/${userId}${queryString}`,
 		{
 			method: "GET",
 			headers: {

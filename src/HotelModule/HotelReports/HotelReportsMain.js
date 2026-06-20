@@ -1,10 +1,8 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
-import { readUserId } from "../apiAdmin";
-import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelInventory from "./HotelInventory";
 import PaidReportHotel from "./PaidReportHotel";
@@ -17,9 +15,7 @@ const HotelReportsMain = () => {
 		getStoredMenuCollapsed();
 	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [activeTab, setActiveTab] = useState("reservations");
-	const [getUser, setGetUser] = useState("");
 	const { chosenLanguage } = useCartContext();
-	const { user, token } = isAuthenticated();
 	const location = useLocation();
 	const history = useHistory();
 	const isArabic = chosenLanguage === "Arabic";
@@ -38,28 +34,14 @@ const HotelReportsMain = () => {
 				: "Paid Reservations Overview",
 	};
 
-	/* ------------------ 1) Fetch User Details ------------------ */
-	const gettingUserId = useCallback(() => {
-		readUserId(user._id, token).then((data) => {
-			if (data && data.error) {
-				console.error(data.error);
-			} else {
-				setGetUser(data);
-			}
-		});
-	}, [user._id, token]);
-
 	/* -----------------------------------------------------------
-     3) Initial setup: fetch user, handle small-screen collapses,
-        check localStorage for "ReportsVerified"
+     3) Initial setup: handle small-screen collapses
   ----------------------------------------------------------- */
 	useEffect(() => {
-		gettingUserId();
-
 		if (!hasStoredCollapsed && window.innerWidth <= 1000) {
 			setCollapsed(true);
 		}
-	}, [gettingUserId, hasStoredCollapsed]);
+	}, [hasStoredCollapsed]);
 
 	/* -----------------------------------------------------------
      5) Handle Tab Changes (push query param to URL)
@@ -140,7 +122,6 @@ const HotelReportsMain = () => {
 							<div>
 								<h3>{labels.reservations}</h3>
 								<ReservationsOverview
-									getUser={getUser}
 									chosenLanguage={chosenLanguage}
 								/>
 							</div>

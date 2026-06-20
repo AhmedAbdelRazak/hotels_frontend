@@ -11,7 +11,6 @@ import ZReservationForm from "./ZReservationForm";
 import {
 	createNewReservation,
 	getHotelRooms,
-	hotelAccount,
 	getHotelReservationsCurrent,
 	getHotelReservationsRange,
 	getListOfRoomSummary,
@@ -159,7 +158,7 @@ const NewReservationMain = ({
 	const [pickedRoomPricing, setPickedRoomPricing] = useState([]); // flattened like OrderTaker
 	const [allReservations, setAllReservations] = useState([]);
 	const [todaysCheckins, setTodaysCheckins] = useState(null);
-	const [values, setValues] = useState("");
+	const [values] = useState("");
 	const [pickedRoomsType, setPickedRoomsType] = useState([]); // UI summary lines
 	const [total_amount, setTotal_Amount] = useState(0);
 	// eslint-disable-next-line
@@ -434,99 +433,89 @@ const NewReservationMain = ({
 		if (!user?._id || !token || !effectiveHotelId || !effectiveOwnerId) {
 			return;
 		}
-		hotelAccount(user._id, token, user._id).then((data) => {
-			if (data && data.error) {
-				console.log(data.error);
-			} else {
-				setValues(data);
+		const endDate = new Date();
+		const startDate = new Date();
+		startDate.setDate(endDate.getDate());
+		const heatMapStartDate = formatDate(startDate);
 
-				const endDate = new Date();
-				const startDate = new Date();
-				startDate.setDate(endDate.getDate());
-				const heatMapStartDate = formatDate(startDate);
+		endDate.setDate(endDate.getDate() + 60);
+		const heatMapEndDate = formatDate(endDate);
 
-				endDate.setDate(endDate.getDate() + 60);
-				const heatMapEndDate = formatDate(endDate);
+		setStart_date_Map(moment(heatMapStartDate));
+		setEnd_date_Map(moment(heatMapEndDate));
 
-				setStart_date_Map(moment(heatMapStartDate));
-				setEnd_date_Map(moment(heatMapEndDate));
+		const hotelId = effectiveHotelId;
+		const belongsToId = effectiveOwnerId;
+		const rangeStart = start_date ? formatDate(start_date) : "";
+		const rangeEnd = end_date ? formatDate(end_date) : "";
 
-				const selectedHotelLS = selectedHotelLocalStorage;
-				if (!selectedHotelLS || !selectedHotelLS._id) {
-					console.log("No hotel selected");
-					return;
-				}
-				const hotelId = effectiveHotelId;
-
-				getHotelById(hotelId).then((data2) => {
-					if (data2 && data2.error) {
-						console.log(data2.error);
-					} else {
-						if (data && data.name && data._id && data2) {
-							const belongsToId = effectiveOwnerId;
-
-							if (heatMapStartDate && heatMapEndDate) {
-								getHotelReservationsCurrent(hotelId, belongsToId).then(
-									(data3) => {
-										if (data3 && data3.error) {
-											console.log(data3.error);
-										} else {
-											setAllReservationsHeatMap(
-												Array.isArray(data3) ? data3 : [],
-											);
-										}
-									},
-								);
-
-								getTodaysCheckins(hotelId, belongsToId).then((todayData) => {
-									if (todayData && todayData.error) {
-										console.log(todayData.error);
-										setTodaysCheckins([]);
-									} else {
-										setTodaysCheckins(
-											Array.isArray(todayData) ? todayData : [],
-										);
-									}
-								});
-							}
-
-							const rangeStart = start_date ? formatDate(start_date) : "";
-							const rangeEnd = end_date ? formatDate(end_date) : "";
-							if (rangeStart && rangeEnd) {
-								getHotelReservationsRange(
-									hotelId,
-									belongsToId,
-									rangeStart,
-									rangeEnd,
-								).then((data4) => {
-									if (data4 && data4.error) {
-										console.log(data4.error);
-									} else {
-										setAllReservations(Array.isArray(data4) ? data4 : []);
-									}
-								});
-							} else {
-								setAllReservations([]);
-							}
-
-							if (!hotelDetails || hotelDetails._id !== data2._id) {
-								setHotelDetails(data2);
-							}
-
-							if (!hotelRooms || hotelRooms.length === 0) {
-								getHotelRooms(hotelId, belongsToId).then((data3) => {
-									if (data3 && data3.error) {
-										console.log(data3.error);
-									} else {
-										setHotelRooms(data3);
-									}
-								});
-							}
-						}
+		Promise.all([
+			getHotelById(hotelId, { view: "reservation-workspace" }),
+			getHotelRooms(hotelId, belongsToId),
+			heatMapStartDate && heatMapEndDate
+				? getHotelReservationsCurrent(hotelId, belongsToId)
+				: Promise.resolve([]),
+			heatMapStartDate && heatMapEndDate
+				? getTodaysCheckins(hotelId, belongsToId)
+				: Promise.resolve([]),
+			rangeStart && rangeEnd
+				? getHotelReservationsRange(hotelId, belongsToId, rangeStart, rangeEnd)
+				: Promise.resolve([]),
+		]).then(
+			([
+				hotelData,
+				roomsData,
+				heatMapReservations,
+				todayData,
+				rangeReservations,
+			]) => {
+				if (hotelData && hotelData.error) {
+					console.log(hotelData.error);
+				} else if (hotelData && hotelData._id) {
+					if (!hotelDetails || hotelDetails._id !== hotelData._id) {
+						setHotelDetails(hotelData);
 					}
-				});
-			}
-		});
+				}
+
+				if (roomsData && roomsData.error) {
+					console.log(roomsData.error);
+				} else {
+					const rooms = Array.isArray(roomsData) ? roomsData : [];
+					setHotelRooms((previousRooms) =>
+						Array.isArray(previousRooms) && previousRooms.length > 0
+							? previousRooms
+							: rooms
+					);
+				}
+
+				if (heatMapReservations && heatMapReservations.error) {
+					console.log(heatMapReservations.error);
+				} else {
+					setAllReservationsHeatMap(
+						Array.isArray(heatMapReservations) ? heatMapReservations : [],
+					);
+				}
+
+				if (todayData && todayData.error) {
+					console.log(todayData.error);
+					setTodaysCheckins([]);
+				} else {
+					setTodaysCheckins(Array.isArray(todayData) ? todayData : []);
+				}
+
+				if (rangeStart && rangeEnd) {
+					if (rangeReservations && rangeReservations.error) {
+						console.log(rangeReservations.error);
+					} else {
+						setAllReservations(
+							Array.isArray(rangeReservations) ? rangeReservations : [],
+						);
+					}
+				} else {
+					setAllReservations([]);
+				}
+			},
+		);
 	};
 
 	const gettingOverallRoomsSummary = () => {
@@ -922,8 +911,7 @@ const NewReservationMain = ({
 			);
 		}
 
-		const selectedHotelLS = selectedHotelLocalStorage;
-		if (!selectedHotelLS || !selectedHotelLS._id) {
+		if (!effectiveHotelId || !effectiveOwnerId) {
 			console.log("No hotel selected");
 			return;
 		}
@@ -1139,7 +1127,7 @@ const NewReservationMain = ({
 			});
 		} else {
 			createNewReservation(
-				effectiveOwnerId || selectedHotelLS.belongsTo?._id || user._id,
+				effectiveOwnerId || user._id,
 				hotelDetails._id,
 				token,
 				new_reservation,

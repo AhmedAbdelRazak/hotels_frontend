@@ -9,7 +9,6 @@ import {
 	createRooms,
 	getHotelById,
 	getHotelRooms,
-	hotelAccount,
 	updateHotelDetails,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
@@ -68,7 +67,7 @@ const HotelSettingsMain = () => {
 		getStoredMenuCollapsed();
 	const [collapsed, setCollapsed] = useState(initialCollapsed);
 	const [hotelDetails, setHotelDetails] = useState("");
-	const [values, setValues] = useState("");
+	const [values] = useState("");
 	const { languageToggle, chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated();
 	const [activeTab, setActiveTab] = useState("HotelDetails");
@@ -344,61 +343,49 @@ const HotelSettingsMain = () => {
 			getSettingsOwnerId();
 		const selectedHotelId = normalizeId(selectedHotel?._id) || routeHotelId;
 
-		// Fetching user account details
-		hotelAccount(user._id, token, ownerId).then((data) => {
-			if (data && data.error) {
-				console.log(data.error, "Error rendering");
-			} else {
-				setValues(data);
+		Promise.all([
+			getHotelById(selectedHotelId, { view: "management" }),
+			getHotelRooms(selectedHotelId, ownerId),
+		]).then(([hotelData, roomsData]) => {
+			if (hotelData && hotelData.error) {
+				console.log(hotelData.error, "Error rendering");
+			} else if (hotelData && hotelData._id) {
+				setHotelDetails(hotelData);
+				setHotelPhotos(
+					hotelData.hotelPhotos && hotelData.hotelPhotos.length > 0
+						? hotelData.hotelPhotos
+						: []
+				);
+				setPricingData(
+					hotelData.pricingCalendar && hotelData.pricingCalendar.length > 0
+						? hotelData.pricingCalendar
+						: []
+				);
+			}
 
-				// Fetching hotel details by hotelId
-				getHotelById(selectedHotelId).then((data2) => {
-					if (data2 && data2.error) {
-						console.log(data2.error, "Error rendering");
-					} else {
-						if (data && data.name && data._id && data2 && data2._id) {
-							setHotelDetails(data2);
+			if (roomsData && roomsData.error) {
+				console.log(roomsData.error);
+				return;
+			}
 
-							// Other state updates...
-							setHotelPhotos(
-								data2.hotelPhotos && data2.hotelPhotos.length > 0
-									? data2.hotelPhotos
-									: []
-							);
+			const rooms = Array.isArray(roomsData) ? roomsData : [];
+			if (rooms.length > 0) {
+				setRoomsAlreadyExists(true);
+			}
+			setHotelRooms((previousRooms) =>
+				Array.isArray(previousRooms) && previousRooms.length > 0
+					? previousRooms
+					: rooms
+			);
 
-							setPricingData(
-								data2.pricingCalendar && data2.pricingCalendar.length > 0
-									? data2.pricingCalendar
-									: []
-							);
-
-							// Fetching hotel rooms
-							getHotelRooms(data2._id, ownerId).then((data4) => {
-								if (data4 && data4.error) {
-									console.log(data4.error);
-								} else {
-									if (data4.length > 0) {
-										setRoomsAlreadyExists(true);
-									}
-									if (hotelRooms.length === 0) {
-										setHotelRooms(data4);
-									}
-
-									if (clickedFloor && modalVisible) {
-										// Aggregate room types for the clicked floor
-										const aggregatedRoomData = aggregateRoomDataForFloor(
-											clickedFloor,
-											data4
-										);
-										setFloorDetails({
-											...defaultHotelDetails,
-											roomCountDetails: aggregatedRoomData,
-										});
-									}
-								}
-							});
-						}
-					}
+			if (clickedFloor && modalVisible) {
+				const aggregatedRoomData = aggregateRoomDataForFloor(
+					clickedFloor,
+					rooms
+				);
+				setFloorDetails({
+					...defaultHotelDetails,
+					roomCountDetails: aggregatedRoomData,
 				});
 			}
 		});

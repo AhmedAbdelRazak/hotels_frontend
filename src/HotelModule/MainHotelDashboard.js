@@ -37,10 +37,10 @@ import {
 	getHotelDashboardIncompleteReservations,
 	getHotelDashboardOpenReservations,
 	getHotelMainDashboardStats,
+	getManagerDashboardStatsBulk,
 	getAgentWalletSummary,
 	getAgentTodoList,
 	getManagerExecutiveIncompleteReservations,
-	getManagerExecutiveSummary,
 	getReservationSummary,
 	hotelAccount,
 	updateOwnerProfile,
@@ -172,6 +172,7 @@ Object.assign(WORDS.en, {
 	summaryToday: "Today",
 	summaryYesterday: "Yesterday",
 	summaryLast7Days: "Last 7 Days",
+	summaryLast90Days: "Last 90 Days",
 	summaryAll: "All",
 	summaryDateBy: "Date",
 	createdAt: "Created At",
@@ -221,6 +222,7 @@ Object.assign(WORDS.ar, {
 WORDS.ar.summaryToday = "اليوم";
 WORDS.ar.summaryYesterday = "أمس";
 WORDS.ar.summaryLast7Days = "آخر 7 أيام";
+WORDS.ar.summaryLast90Days = "آخر 90 يوم";
 WORDS.ar.summaryAll = "الكل";
 WORDS.ar.summaryDateBy = "التاريخ";
 WORDS.ar.createdAt = "تاريخ الإنشاء";
@@ -423,8 +425,9 @@ const ManagerMainHotelDashboard = () => {
 		useState([]);
 	const [financialsVisible, setFinancialsVisible] = useState(false);
 	const [executiveSummary, setExecutiveSummary] = useState(null);
+	const [hotelStatsById, setHotelStatsById] = useState({});
 	const [executiveLoading, setExecutiveLoading] = useState(false);
-	const [executiveSummaryRange, setExecutiveSummaryRange] = useState("all");
+	const [executiveSummaryRange, setExecutiveSummaryRange] = useState("last90");
 	const [executiveSummaryDateBy, setExecutiveSummaryDateBy] =
 		useState("createdAt");
 	const [executiveIncompleteVisible, setExecutiveIncompleteVisible] =
@@ -446,6 +449,7 @@ const ManagerMainHotelDashboard = () => {
 			{ value: "today", label: TXT.summaryToday },
 			{ value: "yesterday", label: TXT.summaryYesterday },
 			{ value: "last7", label: TXT.summaryLast7Days },
+			{ value: "last90", label: TXT.summaryLast90Days },
 			{ value: "all", label: TXT.summaryAll },
 		],
 		[TXT]
@@ -576,7 +580,9 @@ const ManagerMainHotelDashboard = () => {
 	/* fetch hotels owned by this admin */
 	const fetchHotels = useCallback(() => {
 		if (overallView || isSingleHotelUser || !userId || !dashboardOwnerId) return;
-		hotelAccount(userId, token, dashboardOwnerId).then((d) => {
+		hotelAccount(userId, token, dashboardOwnerId, {
+			view: "dashboard-hotels",
+		}).then((d) => {
 			if (!d?.error) setUserData(d);
 		});
 	}, [dashboardOwnerId, isSingleHotelUser, overallView, token, userId]);
@@ -584,18 +590,35 @@ const ManagerMainHotelDashboard = () => {
 	useEffect(fetchHotels, [fetchHotels]);
 
 	const fetchExecutiveSummary = useCallback(() => {
-		if (overallView || isSingleHotelUser || !dashboardOwnerId || !token) return;
+		if (overallView || isSingleHotelUser || !dashboardOwnerId || !token) {
+			setHotelStatsById({});
+			return;
+		}
 		setExecutiveLoading(true);
-		getManagerExecutiveSummary(dashboardOwnerId, token, {
+		getManagerDashboardStatsBulk(dashboardOwnerId, token, {
 			range: executiveSummaryRange,
 			dateBy: executiveSummaryDateBy,
 		})
 			.then((data) => {
 				if (!data || data.error) {
 					setExecutiveSummary(null);
+					setHotelStatsById({});
 					return;
 				}
-				setExecutiveSummary(data);
+				setExecutiveSummary(data.summary || data);
+				if (data.hotelStatsById && typeof data.hotelStatsById === "object") {
+					setHotelStatsById(data.hotelStatsById);
+				} else if (Array.isArray(data.hotels)) {
+					setHotelStatsById(
+						Object.fromEntries(
+							data.hotels
+								.filter((item) => item?.hotelId)
+								.map((item) => [String(item.hotelId), item])
+						)
+					);
+				} else {
+					setHotelStatsById({});
+				}
 			})
 			.finally(() => setExecutiveLoading(false));
 	}, [
@@ -1020,6 +1043,7 @@ const ManagerMainHotelDashboard = () => {
 							clearDashboardModalQuery={clearDashboardModalQuery}
 							statsRange={executiveSummaryRange}
 							statsDateBy={executiveSummaryDateBy}
+							preloadedStats={hotelStatsById?.[String(h._id)] || null}
 						/>
 					))
 				) : (
@@ -4736,8 +4760,9 @@ const HotelCard = memo(
 		onStepClick,
 		updateDashboardQuery,
 		clearDashboardModalQuery,
-		statsRange = "all",
+		statsRange = "last90",
 		statsDateBy = "createdAt",
+		preloadedStats = null,
 	}) => {
 		const location = useLocation();
 		const isActive = !!hotel.activateHotel;
@@ -4816,6 +4841,12 @@ const HotelCard = memo(
 		useEffect(() => {
 			let mounted = true;
 			if (!hotel?._id || !adminId || !token) return undefined;
+			if (preloadedStats && preloadedStats.hotelId) {
+				setHotelStats(preloadedStats);
+				return () => {
+					mounted = false;
+				};
+			}
 
 			setHotelStats(null);
 			getHotelMainDashboardStats(hotel._id, adminId, token, {
@@ -4829,7 +4860,7 @@ const HotelCard = memo(
 			return () => {
 				mounted = false;
 			};
-		}, [adminId, hotel?._id, statsDateBy, statsRange, token]);
+		}, [adminId, hotel?._id, preloadedStats, statsDateBy, statsRange, token]);
 
 		const loadOpenReservations = useCallback(
 			(page = openListPage, overrides = {}) => {
@@ -4955,15 +4986,20 @@ const HotelCard = memo(
 		}, [loadOpenReservations, openListPage, openListVisible]);
 
 		/* progress flags */
-		const photosDone = !!hotel?.hotelPhotos?.length;
-		const roomsDone = !!hotel?.roomCountDetails?.length;
+		const photosDone =
+			Number(hotel?.hotelPhotosCount || 0) > 0 || !!hotel?.hotelPhotos?.length;
+		const roomsDone =
+			Number(hotel?.roomCountDetailsCount || 0) > 0 ||
+			!!hotel?.roomCountDetails?.length;
 		const locationDone =
 			Array.isArray(hotel?.location?.coordinates) &&
 			hotel.location.coordinates[0] !== 0 &&
 			hotel.location.coordinates[1] !== 0;
 		const dataDone =
 			hotel?.aboutHotel || hotel?.aboutHotelArabic || hotel?.overallRoomsCount;
-		const bankDone = !!hotel?.paymentSettings?.length;
+		const bankDone =
+			Number(hotel?.paymentSettingsCount || 0) > 0 ||
+			!!hotel?.paymentSettings?.length;
 
 		const stepsDone = [
 			true,

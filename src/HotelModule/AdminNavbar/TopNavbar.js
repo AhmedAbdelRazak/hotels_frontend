@@ -1281,7 +1281,9 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				(isOwnerManager ? user._id : user.belongsToId || user._id);
 
 			if (ownerIdForAccount && token) {
-				const accountData = await hotelAccount(user._id, token, ownerIdForAccount);
+				const accountData = await hotelAccount(user._id, token, ownerIdForAccount, {
+					view: "dashboard-hotels",
+				});
 				if (!accountData?.error && Array.isArray(accountData?.hotelIdsOwner)) {
 					loadedHotels = accountData.hotelIdsOwner;
 				}
