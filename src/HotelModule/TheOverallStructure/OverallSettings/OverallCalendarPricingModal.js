@@ -461,6 +461,85 @@ const parseRoomKey = (key = "") => {
 	return { hotelId, roomId };
 };
 
+const calendarDateKey = (value) =>
+	String(value?.calendarDate || value?.date || value?.pricingDate || value || "")
+		.slice(0, 10)
+		.trim();
+
+const normalizeCalendarRows = (rows = []) =>
+	(Array.isArray(rows) ? rows : [])
+		.map((row) => ({
+			...row,
+			calendarDate: calendarDateKey(row),
+		}))
+		.filter((row) => row.calendarDate)
+		.sort((left, right) =>
+			left.calendarDate === right.calendarDate
+				? String(left.agentId || "").localeCompare(String(right.agentId || ""))
+				: left.calendarDate.localeCompare(right.calendarDate)
+		);
+
+const mergeCalendarPricingRows = (existingRows = [], update = {}) => {
+	const replaceDates = new Set(
+		(Array.isArray(update.replaceDates) ? update.replaceDates : [])
+			.map(calendarDateKey)
+			.filter(Boolean)
+	);
+	const incomingRows = normalizeCalendarRows(update.rows);
+	if (!replaceDates.size && !incomingRows.length) {
+		return normalizeCalendarRows(existingRows);
+	}
+	const incomingAgentIds = new Set(
+		(Array.isArray(update.agentIds) ? update.agentIds : [])
+			.map(normalizeId)
+			.filter(Boolean)
+	);
+	const field =
+		update.field ||
+		(update.scope === "agents" ? "agentPricingRate" : "pricingRate");
+	const keptRows = normalizeCalendarRows(existingRows).filter((row) => {
+		const sameDate = replaceDates.has(calendarDateKey(row));
+		if (!sameDate) return true;
+		if (field !== "agentPricingRate" || !incomingAgentIds.size) return false;
+		return !incomingAgentIds.has(normalizeId(row.agentId));
+	});
+	return normalizeCalendarRows([...keptRows, ...incomingRows]);
+};
+
+const applyCalendarPricingUpdates = (hotels = [], updates = []) => {
+	if (!Array.isArray(updates) || !updates.length) return hotels;
+	const updatesByRoomKey = updates.reduce((acc, update) => {
+		const hotelId = normalizeId(update?.hotelId);
+		const roomId = normalizeId(update?.roomId);
+		if (!hotelId || !roomId) return acc;
+		const key = makeRoomKey(hotelId, roomId);
+		acc.set(key, [...(acc.get(key) || []), update]);
+		return acc;
+	}, new Map());
+	return (Array.isArray(hotels) ? hotels : []).map((hotel) => {
+		const hotelId = normalizeId(hotel._id);
+		const rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+		let hotelChanged = false;
+		const nextRooms = rooms.map((room) => {
+			const roomUpdates = updatesByRoomKey.get(
+				makeRoomKey(hotelId, normalizeId(room._id))
+			);
+			if (!roomUpdates?.length) return room;
+			hotelChanged = true;
+			return roomUpdates.reduce((nextRoom, update) => {
+				const field =
+					update.field ||
+					(update.scope === "agents" ? "agentPricingRate" : "pricingRate");
+				return {
+					...nextRoom,
+					[field]: mergeCalendarPricingRows(nextRoom[field], update),
+				};
+			}, room);
+		});
+		return hotelChanged ? { ...hotel, rooms: nextRooms } : hotel;
+	});
+};
+
 const parsePriceVariantKey = (key = "") => {
 	const [priceVariantDataId, priceVariantItemId] = String(key || "").split("::");
 	return {
@@ -1296,13 +1375,25 @@ const OverallCalendarPricingModal = ({
 	const finishEditingCell = () => setEditingCell(null);
 
 	const applySaveResponse = (data) => {
-		if (Array.isArray(data?.updatedHotels)) {
-			const updatedById = new Map(
-				data.updatedHotels.map((hotel) => [normalizeId(hotel._id), hotel])
-			);
-			setHotels((current) =>
-				current.map((hotel) => updatedById.get(normalizeId(hotel._id)) || hotel)
-			);
+		const compactUpdates = Array.isArray(data?.calendarPricingUpdates)
+			? data.calendarPricingUpdates
+			: [];
+		const fullHotelUpdates = Array.isArray(data?.updatedHotels)
+			? data.updatedHotels
+			: [];
+		if (compactUpdates.length || fullHotelUpdates.length) {
+			setHotels((current) => {
+				let nextHotels = applyCalendarPricingUpdates(current, compactUpdates);
+				if (fullHotelUpdates.length) {
+					const updatedById = new Map(
+						fullHotelUpdates.map((hotel) => [normalizeId(hotel._id), hotel])
+					);
+					nextHotels = nextHotels.map(
+						(hotel) => updatedById.get(normalizeId(hotel._id)) || hotel
+					);
+				}
+				return nextHotels;
+			});
 		}
 		const savedVariantList = Array.isArray(data?.priceVariantDataList)
 			? data.priceVariantDataList
