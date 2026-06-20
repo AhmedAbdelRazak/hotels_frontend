@@ -90,6 +90,8 @@ export const defaultHotelDetails = {
 	},
 	hotelRating: 3.5,
 	parkingLot: true,
+	hasBusService: false,
+	busDetails: "",
 };
 
 export const defaultUserValues = {

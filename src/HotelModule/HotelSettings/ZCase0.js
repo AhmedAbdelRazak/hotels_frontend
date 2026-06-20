@@ -55,6 +55,24 @@ const ZCase0 = ({
 			? "\u0627\u062d\u062c\u0632 \u0627\u0644\u0622\u0646 \u0648\u0627\u062f\u0641\u0639 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642"
 			: "Reserve Now, Pay Later",
 	};
+	const busText = {
+		checkbox: isArabic
+			? "\u0647\u0644 \u064a\u0648\u0641\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u062e\u062f\u0645\u0629 \u0628\u0627\u0635 \u0644\u0644\u062d\u0631\u0645\u061f"
+			: "Does the hotel provide bus service to Al Haram?",
+		detailsLabel: isArabic
+			? "\u062a\u0641\u0627\u0635\u064a\u0644 \u062e\u062f\u0645\u0629 \u0627\u0644\u0628\u0627\u0635"
+			: "Bus Service Details",
+		detailsPlaceholder: isArabic
+			? "\u0627\u0643\u062a\u0628 \u0646\u0642\u0637\u0629 \u0627\u0644\u0627\u0646\u0637\u0644\u0627\u0642\u060c \u0627\u0644\u0645\u062d\u0637\u0627\u062a\u060c \u0627\u0644\u062c\u062f\u0648\u0644\u060c \u0648\u0647\u0644 \u0627\u0644\u062e\u062f\u0645\u0629 \u0645\u062c\u0627\u0646\u064a\u0629 \u0623\u0648 \u0645\u062f\u0641\u0648\u0639\u0629."
+			: "Add pickup point, stations, schedule, and whether it is free or paid.",
+		helper: isArabic
+			? "\u0633\u064a\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0627\u0644\u0630\u0643\u064a \u0647\u0630\u0647 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644 \u0643\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0645\u0624\u0643\u062f\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642."
+			: "The AI assistant will use these details as confirmed hotel information.",
+		noBusHint: isArabic
+			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u0648\u0636\u062d \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0644\u0627 \u064a\u0648\u0641\u0631 \u0628\u0627\u0635\u0627 \u062e\u0627\u0635\u0627 \u0648\u0623\u0646 \u0627\u0644\u0628\u0627\u0635\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0625\u0644\u0649 \u0627\u0644\u062d\u0631\u0645."
+			: "When disabled, the AI assistant will say the hotel does not offer a private bus and that public buses are available nearby to Al Haram.",
+	};
+	const hasBusService = hotelDetails.hasBusService === true;
 
 	const handleLoad = () => {
 		if (window.google && window.google.maps && window.google.maps.Geocoder) {
@@ -239,6 +257,14 @@ const ZCase0 = ({
 		}));
 	};
 
+	const handleBusServiceChange = (checked) => {
+		setHotelDetails((prevDetails) => ({
+			...prevDetails,
+			hasBusService: checked,
+			busDetails: checked ? prevDetails.busDetails || "" : "",
+		}));
+	};
+
 	return (
 		<ZCase0Wrapper
 			isArabic={chosenLanguage === "Arabic"}
@@ -360,6 +386,38 @@ const ZCase0 = ({
 						</Form.Item>
 					</div>
 				</div>
+
+				<BusServiceBlock $isArabic={isArabic}>
+					<Form.Item name='hasBusService' valuePropName='checked'>
+						<Checkbox
+							checked={hasBusService}
+							onChange={(e) => handleBusServiceChange(e.target.checked)}
+						>
+							{busText.checkbox}
+						</Checkbox>
+					</Form.Item>
+
+					{hasBusService ? (
+						<Form.Item name='busDetails' label={busText.detailsLabel}>
+							<TextArea
+								rows={3}
+								value={hotelDetails.busDetails || ""}
+								placeholder={busText.detailsPlaceholder}
+								onChange={(e) => {
+									const value = e.target.value;
+									setHotelDetails((prevDetails) => ({
+										...prevDetails,
+										busDetails: value,
+									}));
+								}}
+							/>
+						</Form.Item>
+					) : (
+						<BusServiceHint>{busText.noBusHint}</BusServiceHint>
+					)}
+
+					{hasBusService && <BusServiceHint>{busText.helper}</BusServiceHint>}
+				</BusServiceBlock>
 
 				<div
 					dir='ltr'
@@ -551,6 +609,34 @@ const ZCase0 = ({
 export default ZCase0;
 
 const ZCase0Wrapper = styled.div``;
+
+const BusServiceBlock = styled.div`
+	background: #f8fbff;
+	border: 1px solid #dbe8f6;
+	border-radius: 8px;
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	margin: 4px 0 18px;
+	padding: 14px 16px;
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	.ant-form-item {
+		margin-bottom: 10px;
+	}
+
+	.ant-checkbox-wrapper {
+		font-weight: 700;
+	}
+
+	textarea {
+		min-height: 92px;
+	}
+`;
+
+const BusServiceHint = styled.div`
+	color: #526173;
+	font-size: 0.92rem;
+	line-height: 1.5;
+`;
 
 const GuestPaymentSwitchRow = styled.div`
 	align-items: center;

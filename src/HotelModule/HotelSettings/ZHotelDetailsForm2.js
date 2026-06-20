@@ -127,6 +127,8 @@ const ZHotelDetailsForm2 = ({
 	useEffect(() => {
 		form.setFieldsValue({
 			parkingLot: hotelDetails.parkingLot ? "1" : "0",
+			hasBusService: hotelDetails.hasBusService === true,
+			busDetails: hotelDetails.busDetails || "",
 			hotelFloors: hotelDetails.hotelFloors,
 		});
 	}, [form, hotelDetails]);
