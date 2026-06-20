@@ -2152,6 +2152,71 @@ const overallHeaders = (token = "") => ({
 	...(token ? { Authorization: `Bearer ${token}` } : {}),
 });
 
+const OVERALL_OPTIONS_CACHE_TTL_MS = 30000;
+const overallOptionsCache = new Map();
+
+const overallOptionsCacheKey = (scope = "", userId = "", params = {}) =>
+	`${scope}:${normalizeAuthId(userId)}:${buildOverallQuery(params)}`;
+
+const clearOverallOptionsCache = () => {
+	overallOptionsCache.clear();
+};
+
+const getCachedOverallOptions = ({
+	scope = "",
+	userId = "",
+	token = "",
+	params = {},
+	url = "",
+	errorMessage = "Could not load options",
+}) => {
+	const key = overallOptionsCacheKey(scope, userId, params);
+	const cached = overallOptionsCache.get(key);
+	const now = Date.now();
+	if (cached?.data && now - cached.fetchedAt < OVERALL_OPTIONS_CACHE_TTL_MS) {
+		return Promise.resolve(cached.data);
+	}
+	if (cached?.promise) return cached.promise;
+
+	const promise = fetch(url, {
+		method: "GET",
+		headers: overallHeaders(token),
+	})
+		.then((response) => response.json())
+		.then((data) => {
+			if (!data?.error) {
+				overallOptionsCache.set(key, {
+					data,
+					fetchedAt: Date.now(),
+				});
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || errorMessage,
+		}))
+		.finally(() => {
+			const latest = overallOptionsCache.get(key);
+			if (latest?.promise === promise) {
+				if (latest.data) {
+					overallOptionsCache.set(key, {
+						data: latest.data,
+						fetchedAt: latest.fetchedAt,
+					});
+				} else {
+					overallOptionsCache.delete(key);
+				}
+			}
+		});
+
+	overallOptionsCache.set(key, {
+		data: cached?.data,
+		fetchedAt: cached?.fetchedAt || 0,
+		promise,
+	});
+	return promise;
+};
+
 export const getOverallSummary = (userId, token, params = {}) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/overall-dashboard/summary/${userId}${buildOverallQuery(
@@ -2483,17 +2548,16 @@ export const getOverallSettings = (userId, token, params = {}) => {
 };
 
 export const getOverallRoomManagerOptions = (userId, token, params = {}) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-room-manager/${userId}${buildOverallQuery(
+	return getCachedOverallOptions({
+		scope: "room-manager",
+		userId,
+		token,
+		params,
+		url: `${process.env.REACT_APP_API_URL}/overall-dashboard/settings-room-manager/${userId}${buildOverallQuery(
 			params
 		)}`,
-		{
-			method: "GET",
-			headers: overallHeaders(token),
-		}
-	)
-		.then((response) => response.json())
-		.catch((err) => ({ error: err?.message || "Could not load rooms" }));
+		errorMessage: "Could not load rooms",
+	});
 };
 
 export const saveOverallRoomManagerRoom = (
@@ -2520,25 +2584,23 @@ export const saveOverallRoomManagerRoom = (
 					error: data?.error || data?.message || "Could not save room",
 				};
 			}
+			clearOverallOptionsCache();
 			return data;
 		})
 		.catch((err) => ({ error: err?.message || "Could not save room" }));
 };
 
 export const getOverallCalendarPricingOptions = (userId, token, params = {}) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-calendar-pricing/${userId}${buildOverallQuery(
+	return getCachedOverallOptions({
+		scope: "calendar-pricing",
+		userId,
+		token,
+		params,
+		url: `${process.env.REACT_APP_API_URL}/overall-dashboard/settings-calendar-pricing/${userId}${buildOverallQuery(
 			params
 		)}`,
-		{
-			method: "GET",
-			headers: overallHeaders(token),
-		}
-	)
-		.then((response) => response.json())
-		.catch((err) => ({
-			error: err?.message || "Could not load calendar pricing",
-		}));
+		errorMessage: "Could not load calendar pricing",
+	});
 };
 
 export const saveOverallCalendarPricing = (
@@ -2565,6 +2627,7 @@ export const saveOverallCalendarPricing = (
 					error: data?.error || data?.message || "Could not save calendar pricing",
 				};
 			}
+			clearOverallOptionsCache();
 			return data;
 		})
 		.catch((err) => ({
@@ -2577,19 +2640,16 @@ export const getOverallPriceVariantOptions = (
 	token,
 	params = {}
 ) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+	return getCachedOverallOptions({
+		scope: "price-variants",
+		userId,
+		token,
+		params,
+		url: `${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
 			params
 		)}`,
-		{
-			method: "GET",
-			headers: overallHeaders(token),
-		}
-	)
-		.then((response) => response.json())
-		.catch((err) => ({
-			error: err?.message || "Could not load price variants",
-		}));
+		errorMessage: "Could not load price variants",
+	});
 };
 
 export const getOverallPriceVariantsOptions = (
@@ -2597,19 +2657,16 @@ export const getOverallPriceVariantsOptions = (
 	token,
 	params = {}
 ) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
+	return getCachedOverallOptions({
+		scope: "price-variants",
+		userId,
+		token,
+		params,
+		url: `${process.env.REACT_APP_API_URL}/overall-dashboard/settings-price-variants/${userId}${buildOverallQuery(
 			params
 		)}`,
-		{
-			method: "GET",
-			headers: overallHeaders(token),
-		}
-	)
-		.then((response) => response.json())
-		.catch((err) => ({
-			error: err?.message || "Could not load price variants",
-		}));
+		errorMessage: "Could not load price variants",
+	});
 };
 
 export const saveOverallPriceVariant = (
@@ -2639,6 +2696,7 @@ export const saveOverallPriceVariant = (
 						"Could not save price variants",
 				};
 			}
+			clearOverallOptionsCache();
 			return data;
 		})
 		.catch((err) => ({
@@ -2729,6 +2787,7 @@ export const saveOverallPriceVariants = (
 					error: data?.error || data?.message || "Could not save price variants",
 				};
 			}
+			clearOverallOptionsCache();
 			return data;
 		})
 		.catch((err) => ({
