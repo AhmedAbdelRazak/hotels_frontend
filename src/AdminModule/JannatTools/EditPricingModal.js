@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
@@ -259,6 +259,7 @@ const EditPricingModal = ({
 			? "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0639\u0627\u0645\u0629 \u0644\u0644\u062d\u062c\u0632. \u064a\u062a\u0645 \u062d\u0641\u0638\u0647\u0627 \u0645\u0646\u0641\u0635\u0644\u0629 \u0639\u0646 \u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0644\u064a\u0627\u0644\u064a."
 			: "General reservation commission saved separately from nightly room pricing.");
 	const [editableData, setEditableData] = useState([]);
+	const editableDataRef = useRef([]);
 	const [distributionTotals, setDistributionTotals] = useState({
 		client: null,
 		root: null,
@@ -270,6 +271,7 @@ const EditPricingModal = ({
 		if (!visible) return;
 
 		const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
+		editableDataRef.current = normalizedRows;
 		setEditableData(normalizedRows);
 		setDistributionTotals(summarizePricingRows(normalizedRows));
 		setCommissionDraft(
@@ -302,6 +304,7 @@ const EditPricingModal = ({
 
 	const commitRows = (rows, { syncParent = false } = {}) => {
 		const normalizedRows = rows.map(normalizePricingRow);
+		editableDataRef.current = normalizedRows;
 		setEditableData(normalizedRows);
 		setDistributionTotals(summarizePricingRows(normalizedRows));
 		if (syncParent) {
@@ -427,7 +430,10 @@ const EditPricingModal = ({
 	};
 
 	const handleSave = () => {
-		const invalidNetRow = editableData.find(
+		const rowsToSave = editableDataRef.current.length
+			? editableDataRef.current
+			: editableData;
+		const invalidNetRow = rowsToSave.find(
 			(row) =>
 				safeParseFloat(row.netAfterExpenses, 0) -
 					safeParseFloat(row.clientPrice, 0) >
@@ -443,7 +449,7 @@ const EditPricingModal = ({
 				hasNumericInput(commissionDraft) ? roundMoney(commissionDraft) : null,
 			);
 		}
-		commitRows(editableData, { syncParent: true });
+		commitRows(rowsToSave, { syncParent: true });
 		message.success(t.applied, 5);
 		onClose();
 	};

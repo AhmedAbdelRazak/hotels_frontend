@@ -994,6 +994,7 @@ const EditReservationMain = ({
 			const hasSavedAdminPricingRows =
 				adminManagedPricing &&
 				!hasExplicitDateEdits &&
+				!hasExplicitPricingEdits &&
 				rooms.some(
 					(room) =>
 						Array.isArray(room?.pricingByDay) && room.pricingByDay.length > 0
@@ -1134,6 +1135,7 @@ const EditReservationMain = ({
 			selectedHotel,
 			adminManagedPricing,
 			hasExplicitDateEdits,
+			hasExplicitPricingEdits,
 			reservation,
 			savedReservationCommission,
 			getMatchedRoom,
