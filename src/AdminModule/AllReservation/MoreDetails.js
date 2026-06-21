@@ -4593,8 +4593,8 @@ const getPaymentBreakdownTotals = (breakdown, normalizer) =>
 	);
 
 const ReservationDetail = ({
-	reservation,
-	setReservation,
+	reservation: reservationProp,
+	setReservation: setParentReservation,
 	hotelDetails,
 	onReservationUpdated = () => {},
 }) => {
@@ -4602,6 +4602,29 @@ const ReservationDetail = ({
 	const alDawleyaPdfRef = useRef(null);
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
+	const [localReservation, setLocalReservation] = useState(reservationProp);
+	const reservation = useMemo(
+		() => localReservation || reservationProp || {},
+		[localReservation, reservationProp],
+	);
+	const setReservation = useCallback(
+		(nextReservation) => {
+			setLocalReservation((previous) => {
+				const resolved =
+					typeof nextReservation === "function"
+						? nextReservation(previous)
+						: nextReservation;
+				return resolved || previous;
+			});
+			if (typeof setParentReservation === "function") {
+				setParentReservation(nextReservation);
+			}
+		},
+		[setParentReservation],
+	);
+	useEffect(() => {
+		setLocalReservation(reservationProp);
+	}, [reservationProp]);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [isModalVisible3, setIsModalVisible3] = useState(false); // Receipt (ReceiptPDF)
