@@ -72,7 +72,25 @@ const ZCase0 = ({
 			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u0648\u0636\u062d \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0644\u0627 \u064a\u0648\u0641\u0631 \u0628\u0627\u0635\u0627 \u062e\u0627\u0635\u0627 \u0648\u0623\u0646 \u0627\u0644\u0628\u0627\u0635\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0625\u0644\u0649 \u0627\u0644\u062d\u0631\u0645."
 			: "When disabled, the AI assistant will say the hotel does not offer a private bus and that public buses are available nearby to Al Haram.",
 	};
+	const nusukText = {
+		checkbox: isArabic
+			? "\u0647\u0644 \u0627\u0644\u0641\u0646\u062f\u0642 \u0645\u062f\u0631\u062c \u0628\u0646\u0633\u0643\u061f"
+			: "Is the hotel listed on Nusuk?",
+		detailsLabel: isArabic
+			? "\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0646\u0633\u0643"
+			: "Nusuk Notes",
+		detailsPlaceholder: isArabic
+			? "\u0623\u0636\u0641 \u0623\u064a \u062a\u0641\u0627\u0635\u064a\u0644 \u0645\u0647\u0645\u0629 \u0639\u0646 \u0638\u0647\u0648\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u0641\u064a \u0645\u0646\u0635\u0629 \u0646\u0633\u0643 \u0623\u0648 \u062a\u0639\u0644\u064a\u0645\u0627\u062a \u0627\u0644\u062d\u062c\u0632 \u0645\u0646 \u062e\u0644\u0627\u0644\u0647\u0627."
+			: "Add any important notes about the hotel's Nusuk listing or booking guidance through Nusuk.",
+		helper: isArabic
+			? "\u0633\u064a\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0627\u0644\u0630\u0643\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0644\u0644\u0625\u062c\u0627\u0628\u0629 \u0628\u062b\u0642\u0629 \u0639\u0646 \u0623\u0633\u0626\u0644\u0629 \u0646\u0633\u0643."
+			: "The AI assistant will use these notes to answer Nusuk questions confidently.",
+		noNusukHint: isArabic
+			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u062c\u064a\u0628 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u063a\u064a\u0631 \u0645\u062f\u0631\u062c \u062d\u0627\u0644\u064a\u0627 \u0641\u064a \u0646\u0633\u0643."
+			: "When disabled, the AI assistant will say the hotel is not currently listed on Nusuk.",
+	};
 	const hasBusService = hotelDetails.hasBusService === true;
+	const isNusuk = hotelDetails.isNusuk === true;
 
 	const handleLoad = () => {
 		if (window.google && window.google.maps && window.google.maps.Geocoder) {
@@ -265,6 +283,14 @@ const ZCase0 = ({
 		}));
 	};
 
+	const handleNusukChange = (checked) => {
+		setHotelDetails((prevDetails) => ({
+			...prevDetails,
+			isNusuk: checked,
+			isNusukText: checked ? prevDetails.isNusukText || "" : "",
+		}));
+	};
+
 	return (
 		<ZCase0Wrapper
 			isArabic={chosenLanguage === "Arabic"}
@@ -388,35 +414,75 @@ const ZCase0 = ({
 				</div>
 
 				<BusServiceBlock $isArabic={isArabic}>
-					<Form.Item name='hasBusService' valuePropName='checked'>
-						<Checkbox
-							checked={hasBusService}
-							onChange={(e) => handleBusServiceChange(e.target.checked)}
-						>
-							{busText.checkbox}
-						</Checkbox>
-					</Form.Item>
-
-					{hasBusService ? (
-						<Form.Item name='busDetails' label={busText.detailsLabel}>
-							<TextArea
-								rows={3}
-								value={hotelDetails.busDetails || ""}
-								placeholder={busText.detailsPlaceholder}
-								onChange={(e) => {
-									const value = e.target.value;
-									setHotelDetails((prevDetails) => ({
-										...prevDetails,
-										busDetails: value,
-									}));
-								}}
-							/>
+					<ServiceCheckboxRow $isArabic={isArabic}>
+						<Form.Item name='hasBusService' valuePropName='checked'>
+							<Checkbox
+								checked={hasBusService}
+								onChange={(e) => handleBusServiceChange(e.target.checked)}
+							>
+								{busText.checkbox}
+							</Checkbox>
 						</Form.Item>
-					) : (
-						<BusServiceHint>{busText.noBusHint}</BusServiceHint>
-					)}
 
-					{hasBusService && <BusServiceHint>{busText.helper}</BusServiceHint>}
+						<Form.Item name='isNusuk' valuePropName='checked'>
+							<Checkbox
+								checked={isNusuk}
+								onChange={(e) => handleNusukChange(e.target.checked)}
+							>
+								{nusukText.checkbox}
+							</Checkbox>
+						</Form.Item>
+					</ServiceCheckboxRow>
+
+					<ServiceDetailsGrid>
+						<ServiceDetailsItem>
+							{hasBusService ? (
+								<>
+									<Form.Item name='busDetails' label={busText.detailsLabel}>
+										<TextArea
+											rows={3}
+											value={hotelDetails.busDetails || ""}
+											placeholder={busText.detailsPlaceholder}
+											onChange={(e) => {
+												const value = e.target.value;
+												setHotelDetails((prevDetails) => ({
+													...prevDetails,
+													busDetails: value,
+												}));
+											}}
+										/>
+									</Form.Item>
+									<BusServiceHint>{busText.helper}</BusServiceHint>
+								</>
+							) : (
+								<BusServiceHint>{busText.noBusHint}</BusServiceHint>
+							)}
+						</ServiceDetailsItem>
+
+						<ServiceDetailsItem>
+							{isNusuk ? (
+								<>
+									<Form.Item name='isNusukText' label={nusukText.detailsLabel}>
+										<TextArea
+											rows={3}
+											value={hotelDetails.isNusukText || ""}
+											placeholder={nusukText.detailsPlaceholder}
+											onChange={(e) => {
+												const value = e.target.value;
+												setHotelDetails((prevDetails) => ({
+													...prevDetails,
+													isNusukText: value,
+												}));
+											}}
+										/>
+									</Form.Item>
+									<BusServiceHint>{nusukText.helper}</BusServiceHint>
+								</>
+							) : (
+								<BusServiceHint>{nusukText.noNusukHint}</BusServiceHint>
+							)}
+						</ServiceDetailsItem>
+					</ServiceDetailsGrid>
 				</BusServiceBlock>
 
 				<div
@@ -630,6 +696,29 @@ const BusServiceBlock = styled.div`
 	textarea {
 		min-height: 92px;
 	}
+`;
+
+const ServiceCheckboxRow = styled.div`
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 28px;
+	justify-content: ${(props) => (props.$isArabic ? "flex-end" : "flex-start")};
+	margin-bottom: 12px;
+
+	.ant-form-item {
+		margin-bottom: 0;
+	}
+`;
+
+const ServiceDetailsGrid = styled.div`
+	display: grid;
+	gap: 12px 16px;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+`;
+
+const ServiceDetailsItem = styled.div`
+	min-width: 0;
 `;
 
 const BusServiceHint = styled.div`

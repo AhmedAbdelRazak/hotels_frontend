@@ -92,6 +92,8 @@ export const defaultHotelDetails = {
 	parkingLot: true,
 	hasBusService: false,
 	busDetails: "",
+	isNusuk: false,
+	isNusukText: "",
 };
 
 export const defaultUserValues = {

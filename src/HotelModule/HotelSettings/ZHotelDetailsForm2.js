@@ -129,6 +129,8 @@ const ZHotelDetailsForm2 = ({
 			parkingLot: hotelDetails.parkingLot ? "1" : "0",
 			hasBusService: hotelDetails.hasBusService === true,
 			busDetails: hotelDetails.busDetails || "",
+			isNusuk: hotelDetails.isNusuk === true,
+			isNusukText: hotelDetails.isNusukText || "",
 			hotelFloors: hotelDetails.hotelFloors,
 		});
 	}, [form, hotelDetails]);
