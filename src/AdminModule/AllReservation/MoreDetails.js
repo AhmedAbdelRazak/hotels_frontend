@@ -285,6 +285,22 @@ const buildReservationStatusOptions = (
 		}
 	};
 
+	if (forceAllCoreStatuses) {
+		addOption({
+			value: "Pending Confirmation",
+			label: "Pending Confirmation",
+		});
+		addOption({
+			value: "Pending Finance Review",
+			label: "Pending Finance Review",
+		});
+		addOption({
+			value: "Pending Agent Commission Approval",
+			label: "Pending Agent Commission Approval",
+		});
+		addOption({ value: "Finance Rejected", label: "Finance Rejected" });
+	}
+
 	if (forceAllCoreStatuses || currentStatus === "inhouse") {
 		addOption({ value: "inhouse", label: "InHouse" });
 	}
@@ -2554,6 +2570,50 @@ const ContentSection = styled.div`
 		grid-column: auto;
 		margin-top: 0;
 		min-height: 58px;
+	}
+
+	.platform-review-inline-action {
+		align-items: center;
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 10px;
+		display: grid;
+		gap: 5px;
+		grid-column: 1 / -1;
+		justify-items: center;
+		margin-top: 5px;
+		padding: 8px 10px;
+		text-align: center;
+	}
+
+	.platform-review-inline-action.legacy {
+		margin: 10px auto 0;
+		max-width: 420px;
+	}
+
+	.platform-review-inline-action button {
+		background: #f59e0b;
+		border: 0;
+		border-radius: 8px;
+		color: #ffffff;
+		cursor: pointer;
+		font-size: 0.84rem;
+		font-weight: 950;
+		min-height: 36px;
+		padding: 7px 12px;
+		width: min(100%, 320px);
+	}
+
+	.platform-review-inline-action button:disabled {
+		cursor: not-allowed;
+		opacity: 0.65;
+	}
+
+	.platform-review-inline-action small {
+		color: #92400e;
+		font-size: 0.74rem;
+		font-weight: 850;
+		line-height: 1.35;
 	}
 
 	.guest-room-actions-block {
@@ -6445,6 +6505,7 @@ const ReservationDetail = ({
 		if (window.confirm(confirmationMessage)) {
 			const updateData = {
 				reservation_status: selectedStatus,
+				state: selectedStatus,
 				hotelName: hotelDetails.hotelName,
 				adminAllReservationsStatusUpdate: true,
 				adminAllReservationsSuperAdminForceStatus: isConfiguredSuperAdmin,
@@ -6494,6 +6555,7 @@ const ReservationDetail = ({
 		if (window.confirm(confirmationMessage)) {
 			const updateData = {
 				reservation_status: selectedStatus,
+				state: selectedStatus,
 				adminAllReservationsStatusUpdate: true,
 				adminAllReservationsSuperAdminForceStatus: isConfiguredSuperAdmin,
 				requestingUserId: user?._id,
@@ -9469,6 +9531,24 @@ const ReservationDetail = ({
 											</span>
 										</div>
 									)}
+									{canReturnToPlatformReview ? (
+										<div className='platform-review-inline-action'>
+											<button
+												type='button'
+												disabled={pendingDecisionLoading}
+												onClick={openReturnToPlatformReviewModal}
+											>
+												{chosenLanguage === "Arabic"
+													? AR_LABELS.returnToPlatformReview
+													: "Return before hotel release"}
+											</button>
+											<small>
+												{chosenLanguage === "Arabic"
+													? "\u0625\u062e\u0641\u0627\u0621 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u062d\u062a\u0649 \u062a\u062a\u0645 \u0645\u0631\u0627\u062c\u0639\u062a\u0647 \u0645\u0646 \u0627\u0644\u0645\u0646\u0635\u0629"
+													: "Hide from hotel until platform review releases it again"}
+											</small>
+										</div>
+									) : null}
 									<div className='guest-room-actions-block'>
 										<div className='middle-room-stack'>
 											<div className='detail-item wide'>
@@ -9700,6 +9780,24 @@ const ReservationDetail = ({
 										Guest Doesn't Have A Car!
 									</div>
 								)}
+								{canReturnToPlatformReview ? (
+									<div className='platform-review-inline-action legacy'>
+										<button
+											type='button'
+											disabled={pendingDecisionLoading}
+											onClick={openReturnToPlatformReviewModal}
+										>
+											{chosenLanguage === "Arabic"
+												? AR_LABELS.returnToPlatformReview
+												: "Return before hotel release"}
+										</button>
+										<small>
+											{chosenLanguage === "Arabic"
+												? "\u0625\u062e\u0641\u0627\u0621 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u062d\u062a\u0649 \u062a\u062a\u0645 \u0645\u0631\u0627\u062c\u0639\u062a\u0647 \u0645\u0646 \u0627\u0644\u0645\u0646\u0635\u0629"
+												: "Hide from hotel until platform review releases it again"}
+										</small>
+									</div>
+								) : null}
 							</ContentSection>
 
 							{/* MIDDLE COLUMN */}

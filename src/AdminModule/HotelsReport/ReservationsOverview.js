@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import {
 	message,
 	Spin,
@@ -868,6 +868,7 @@ const ReservationsOverview = () => {
 
 	return (
 		<ReservationsOverviewWrapper>
+			<ReservationsOverviewModalGlobalStyle />
 			{loading ? (
 				<Spin tip='Loading Reports...' size='large' />
 			) : (
@@ -1468,12 +1469,20 @@ const ReservationsOverview = () => {
 			{/* ===================== MODAL ===================== */}
 			<Modal
 				className='custom-reservations-modal'
+				rootClassName='reports-reservations-modal-root'
+				wrapClassName='reports-reservations-modal-wrap'
 				title='Detailed Reservations List'
 				open={modalVisible}
 				onCancel={() => setModalVisible(false)}
 				footer={null}
 				width='85%'
 				style={{ top: "3%", left: "7%" }}
+				getContainer={() => document.body}
+				zIndex={10000}
+				styles={{
+					mask: { zIndex: 9999 },
+					body: { maxHeight: "82vh", overflowY: "auto" },
+				}}
 			>
 				{modalLoading ? (
 					<Spin tip='Loading...' />
@@ -1576,8 +1585,22 @@ const ReservationsOverviewWrapper = styled.div`
 			flex-direction: column;
 		}
 	}
-	.custom-reservations-modal .ant-modal {
+`;
+
+const ReservationsOverviewModalGlobalStyle = createGlobalStyle`
+	.reports-reservations-modal-root .ant-modal-mask {
 		z-index: 9999 !important;
+	}
+
+	.reports-reservations-modal-root .ant-modal-wrap,
+	.reports-reservations-modal-wrap,
+	.reports-reservations-modal-root .ant-modal {
+		z-index: 10000 !important;
+	}
+
+	.reports-reservations-modal-root .ant-modal-content {
+		position: relative;
+		z-index: 10001 !important;
 	}
 `;
 

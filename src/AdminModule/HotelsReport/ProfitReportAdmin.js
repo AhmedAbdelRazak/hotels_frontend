@@ -259,6 +259,37 @@ const DetailText = ({ value, max = 24 }) => {
 	);
 };
 
+class ProfitChartBoundary extends React.Component {
+	constructor(props) {
+		super(props);
+		this.state = { hasError: false };
+	}
+
+	static getDerivedStateFromError() {
+		return { hasError: true };
+	}
+
+	componentDidCatch(error) {
+		console.error("Profit chart failed to render:", error);
+	}
+
+	componentDidUpdate(previousProps) {
+		if (
+			this.state.hasError &&
+			previousProps.resetKey !== this.props.resetKey
+		) {
+			this.setState({ hasError: false });
+		}
+	}
+
+	render() {
+		if (this.state.hasError) {
+			return this.props.fallback || null;
+		}
+		return this.props.children;
+	}
+}
+
 const ProfitReportAdmin = () => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
@@ -460,9 +491,10 @@ const ProfitReportAdmin = () => {
 		},
 	];
 
-	const activeTimeline = Array.isArray(report.timeline?.[filters.granularity])
+	const activeTimelineSource = Array.isArray(report.timeline?.[filters.granularity])
 		? report.timeline[filters.granularity]
 		: [];
+	const activeTimeline = activeTimelineSource.slice(-120);
 	const timelineCategories = activeTimeline.map((row) => row.groupKey);
 	const timelineOptions = {
 		chart: {
@@ -653,6 +685,7 @@ const ProfitReportAdmin = () => {
 			data: bookingSourceRows.map((row) => safeNumber(row.profitMargin)),
 		},
 	];
+	const chartResetKey = `${filters.granularity}-${activeTimeline.length}-${bookingSourceRows.length}-${filters.hotelId || "all"}`;
 
 	const loadDetails = useCallback(
 		async (reservation) => {
@@ -958,12 +991,17 @@ const ProfitReportAdmin = () => {
 							<span>{granularityOptions(labels).find((item) => item.value === filters.granularity)?.label}</span>
 						</header>
 						{activeTimeline.length ? (
-							<Chart
-								options={timelineOptions}
-								series={timelineSeries}
-								type='area'
-								height={460}
-							/>
+							<ProfitChartBoundary
+								resetKey={`timeline-${chartResetKey}`}
+								fallback={<EmptyBlock>{labels.noData}</EmptyBlock>}
+							>
+								<Chart
+									options={timelineOptions}
+									series={timelineSeries}
+									type='area'
+									height={460}
+								/>
+							</ProfitChartBoundary>
 						) : (
 							<EmptyBlock>{labels.noData}</EmptyBlock>
 						)}
@@ -974,12 +1012,17 @@ const ProfitReportAdmin = () => {
 							<h4>{labels.bookingSourceBreakdown}</h4>
 						</header>
 						{bookingSourceRows.length ? (
-							<Chart
-								options={sourceOptions}
-								series={sourceSeries}
-								type='bar'
-								height={sourceChartHeight}
-							/>
+							<ProfitChartBoundary
+								resetKey={`source-${chartResetKey}`}
+								fallback={<EmptyBlock>{labels.noData}</EmptyBlock>}
+							>
+								<Chart
+									options={sourceOptions}
+									series={sourceSeries}
+									type='bar'
+									height={sourceChartHeight}
+								/>
+							</ProfitChartBoundary>
 						) : (
 							<EmptyBlock>{labels.noData}</EmptyBlock>
 						)}
@@ -1021,6 +1064,17 @@ const ProfitReportAdmin = () => {
 				style={{ top: "2%" }}
 				destroyOnClose
 				zIndex={PROFIT_DETAILS_MODAL_Z_INDEX}
+				getContainer={() => document.body}
+				rootClassName='profit-details-modal-root'
+				wrapClassName='profit-details-modal-wrap'
+				styles={{
+					mask: { zIndex: PROFIT_DETAILS_MODAL_Z_INDEX - 1 },
+					content: {
+						position: "relative",
+						zIndex: PROFIT_DETAILS_MODAL_Z_INDEX + 1,
+					},
+					body: { maxHeight: "90vh", overflowY: "auto", padding: 0 },
+				}}
 				className={isArabic ? "profit-details-modal is-rtl" : "profit-details-modal"}
 			>
 				{detailsLoading ? (

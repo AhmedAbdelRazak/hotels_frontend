@@ -1249,10 +1249,11 @@ const EnhancedContentTable = ({
 				wrapClassName='admin-reservation-details-wrap'
 				footer={null}
 				destroyOnClose
-				zIndex={12000}
+				getContainer={() => document.body}
+				zIndex={16000}
 				styles={{
 					mask: {
-						zIndex: 11999,
+						zIndex: 15999,
 					},
 					header: {
 						display: "none",
@@ -1531,6 +1532,23 @@ const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
 
 	.ota-reservation-sync-confirm-root .ant-modal-mask {
 		z-index: 30179 !important;
+	}
+
+	.admin-reservation-details-layer .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.64) !important;
+		backdrop-filter: blur(2px);
+		z-index: 15999 !important;
+	}
+
+	.admin-reservation-details-layer .ant-modal-wrap,
+	.admin-reservation-details-wrap,
+	.admin-reservation-details-layer .ant-modal {
+		z-index: 16000 !important;
+	}
+
+	.admin-reservation-details-layer .ant-modal-content {
+		position: relative;
+		z-index: 16001 !important;
 	}
 
 	.admin-reservation-details-modal {

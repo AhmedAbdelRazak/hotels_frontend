@@ -2049,7 +2049,10 @@ const EditReservationMain = ({
 									precision={2}
 									value={commissionOverride}
 									placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
-									onChange={setCommissionOverride}
+									onChange={(value) => {
+										setHasExplicitPricingEdits(true);
+										setCommissionOverride(value);
+									}}
 									disabled={isLoading}
 									style={{ width: "100%" }}
 								/>
@@ -2132,13 +2135,14 @@ const EditReservationMain = ({
 				commissionAmount={
 					hasCommissionOverride ? commissionOverride : totalCommission
 				}
-				onCommissionChange={(value) =>
+				onCommissionChange={(value) => {
+					setHasExplicitPricingEdits(true);
 					setCommissionOverride(
 						value === null || value === undefined || value === ""
 							? null
 							: Number(safeParseFloat(value, 0).toFixed(2)),
-					)
-				}
+					);
+				}}
 			/>
 
 			{/* Details Modal */}
