@@ -65,9 +65,6 @@ const ZCase0 = ({
 		detailsPlaceholder: isArabic
 			? "\u0627\u0643\u062a\u0628 \u0646\u0642\u0637\u0629 \u0627\u0644\u0627\u0646\u0637\u0644\u0627\u0642\u060c \u0627\u0644\u0645\u062d\u0637\u0627\u062a\u060c \u0627\u0644\u062c\u062f\u0648\u0644\u060c \u0648\u0647\u0644 \u0627\u0644\u062e\u062f\u0645\u0629 \u0645\u062c\u0627\u0646\u064a\u0629 \u0623\u0648 \u0645\u062f\u0641\u0648\u0639\u0629."
 			: "Add pickup point, stations, schedule, and whether it is free or paid.",
-		helper: isArabic
-			? "\u0633\u064a\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0627\u0644\u0630\u0643\u064a \u0647\u0630\u0647 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644 \u0643\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0645\u0624\u0643\u062f\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642."
-			: "The AI assistant will use these details as confirmed hotel information.",
 		noBusHint: isArabic
 			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u0648\u0636\u062d \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0644\u0627 \u064a\u0648\u0641\u0631 \u0628\u0627\u0635\u0627 \u062e\u0627\u0635\u0627 \u0648\u0623\u0646 \u0627\u0644\u0628\u0627\u0635\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0625\u0644\u0649 \u0627\u0644\u062d\u0631\u0645."
 			: "When disabled, the AI assistant will say the hotel does not offer a private bus and that public buses are available nearby to Al Haram.",
@@ -82,9 +79,6 @@ const ZCase0 = ({
 		detailsPlaceholder: isArabic
 			? "\u0623\u0636\u0641 \u0623\u064a \u062a\u0641\u0627\u0635\u064a\u0644 \u0645\u0647\u0645\u0629 \u0639\u0646 \u0638\u0647\u0648\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u0641\u064a \u0645\u0646\u0635\u0629 \u0646\u0633\u0643 \u0623\u0648 \u062a\u0639\u0644\u064a\u0645\u0627\u062a \u0627\u0644\u062d\u062c\u0632 \u0645\u0646 \u062e\u0644\u0627\u0644\u0647\u0627."
 			: "Add any important notes about the hotel's Nusuk listing or booking guidance through Nusuk.",
-		helper: isArabic
-			? "\u0633\u064a\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0627\u0644\u0630\u0643\u064a \u0647\u0630\u0647 \u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0644\u0644\u0625\u062c\u0627\u0628\u0629 \u0628\u062b\u0642\u0629 \u0639\u0646 \u0623\u0633\u0626\u0644\u0629 \u0646\u0633\u0643."
-			: "The AI assistant will use these notes to answer Nusuk questions confidently.",
 		noNusukHint: isArabic
 			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u062c\u064a\u0628 \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u063a\u064a\u0631 \u0645\u062f\u0631\u062c \u062d\u0627\u0644\u064a\u0627 \u0641\u064a \u0646\u0633\u0643."
 			: "When disabled, the AI assistant will say the hotel is not currently listed on Nusuk.",
@@ -452,7 +446,6 @@ const ZCase0 = ({
 											}}
 										/>
 									</Form.Item>
-									<BusServiceHint>{busText.helper}</BusServiceHint>
 								</>
 							) : (
 								<BusServiceHint>{busText.noBusHint}</BusServiceHint>
@@ -476,7 +469,6 @@ const ZCase0 = ({
 											}}
 										/>
 									</Form.Item>
-									<BusServiceHint>{nusukText.helper}</BusServiceHint>
 								</>
 							) : (
 								<BusServiceHint>{nusukText.noNusukHint}</BusServiceHint>
@@ -700,14 +692,26 @@ const BusServiceBlock = styled.div`
 
 const ServiceCheckboxRow = styled.div`
 	align-items: center;
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px 28px;
-	justify-content: ${(props) => (props.$isArabic ? "flex-end" : "flex-start")};
+	display: grid;
+	gap: 12px 24px;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	margin-bottom: 12px;
+	width: 100%;
 
 	.ant-form-item {
 		margin-bottom: 0;
+		min-width: 0;
+	}
+
+	.ant-checkbox-wrapper {
+		align-items: center;
+		display: flex;
+		line-height: 1.35;
+		width: 100%;
+	}
+
+	@media (max-width: 767px) {
+		grid-template-columns: 1fr;
 	}
 `;
 
