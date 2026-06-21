@@ -6934,6 +6934,20 @@ const ReservationDetail = ({
 		};
 		const adminPricingMode = String(adminPricing?.mode || "").toLowerCase();
 		const hasSafeSummary = safeSummary?.show === true;
+		const hasAdminPricingTotals =
+			firstPositiveMoney(
+				adminPricing.rootTotal,
+				adminPricing.netAfterExpensesTotal,
+				adminPricing.otaExpenseTotal,
+				adminPricing.platformMarginTotal,
+				pricingBreakdownByDay.rootTotal,
+			) > 0;
+		const preferAdminPricingTotals =
+			hasAdminPricingTotals &&
+			(/(ota|admin_three_price|platform)/i.test(adminPricingMode) ||
+				!!reservation?.adminPricingVisibility?.rootOnlyForHotelManagement ||
+				!!reservation?.supplierData?.otaCreatedFromEmail ||
+				!!reservation?.supplierData?.otaProvider);
 		const hasAdminOtaAmounts =
 			firstPositiveMoney(
 				safeSummary.otaExpenseTotal,
@@ -6965,29 +6979,63 @@ const ReservationDetail = ({
 		}
 
 		const hotelVisibleAmount = firstPositiveMoney(
-			safeSummary.hotelVisibleAmount,
-			safeSummary.hotel_visible_amount,
-			adminPricing.rootTotal,
-			reservation?.hotel_visible_amount,
-			pricingBreakdownByDay.rootTotal,
-			reservation?.sub_total,
-			totalAmountValue,
+			...(preferAdminPricingTotals
+				? [
+						adminPricing.rootTotal,
+						pricingBreakdownByDay.rootTotal,
+						reservation?.sub_total,
+						safeSummary.hotelVisibleAmount,
+						safeSummary.hotel_visible_amount,
+						reservation?.hotel_visible_amount,
+						totalAmountValue,
+				  ]
+				: [
+						safeSummary.hotelVisibleAmount,
+						safeSummary.hotel_visible_amount,
+						adminPricing.rootTotal,
+						reservation?.hotel_visible_amount,
+						pricingBreakdownByDay.rootTotal,
+						reservation?.sub_total,
+						totalAmountValue,
+				  ]),
 		);
 		const netAfterExpenses = firstPositiveMoney(
-			safeSummary.netAfterExpenses,
-			safeSummary.netAfterOtaExpenses,
-			safeSummary.totalAfterOtaExpenses,
-			adminPricing.netAfterExpensesTotal,
-			pricingBreakdownByDay.netTotal,
-			totalAmountValue - firstMoney(adminPricing.otaExpenseTotal),
-			totalAmountValue,
+			...(preferAdminPricingTotals
+				? [
+						adminPricing.netAfterExpensesTotal,
+						pricingBreakdownByDay.netTotal,
+						safeSummary.netAfterExpenses,
+						safeSummary.netAfterOtaExpenses,
+						safeSummary.totalAfterOtaExpenses,
+						totalAmountValue - firstMoney(adminPricing.otaExpenseTotal),
+						totalAmountValue,
+				  ]
+				: [
+						safeSummary.netAfterExpenses,
+						safeSummary.netAfterOtaExpenses,
+						safeSummary.totalAfterOtaExpenses,
+						adminPricing.netAfterExpensesTotal,
+						pricingBreakdownByDay.netTotal,
+						totalAmountValue - firstMoney(adminPricing.otaExpenseTotal),
+						totalAmountValue,
+				  ]),
 		);
 		const profit = firstMoney(
-			safeSummary.platformProfit,
-			safeSummary.profit,
-			adminPricing.platformMarginTotal,
-			pricingBreakdownByDay.platformMarginTotal,
-			netAfterExpenses - hotelVisibleAmount,
+			...(preferAdminPricingTotals
+				? [
+						adminPricing.platformMarginTotal,
+						pricingBreakdownByDay.platformMarginTotal,
+						safeSummary.platformProfit,
+						safeSummary.profit,
+						netAfterExpenses - hotelVisibleAmount,
+				  ]
+				: [
+						safeSummary.platformProfit,
+						safeSummary.profit,
+						adminPricing.platformMarginTotal,
+						pricingBreakdownByDay.platformMarginTotal,
+						netAfterExpenses - hotelVisibleAmount,
+				  ]),
 		);
 		const commissionToInclude =
 			explicitCommissionAmount > 0 ? explicitCommissionAmount : 0;
