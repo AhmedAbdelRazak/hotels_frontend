@@ -20,6 +20,7 @@ import { defaultHotelDetails } from "../../AdminModule/NewHotels/Assets";
 import ZUpdateRoomCount from "./ZUpdateRoomCount";
 import ZSuccessfulUpdate from "./ZSuccessfulUpdate";
 import PaymentSettings from "./PaymentSettings";
+import HotelPolicySettings from "./HotelPolicySettings";
 import { getStoredMenuCollapsed } from "../utils/menuState";
 
 const roomTypeColors = {
@@ -245,6 +246,13 @@ const HotelSettingsMain = () => {
 			search.includes("paymentsettings")
 		) {
 			setActiveTab("PaymentSettings");
+		} else if (
+			tabParam === "policies" ||
+			tabParam === "policysettings" ||
+			search.includes("policies") ||
+			search.includes("policysettings")
+		) {
+			setActiveTab("PolicySettings");
 		} else {
 			setActiveTab("HotelDetails");
 		}
@@ -441,7 +449,9 @@ const HotelSettingsMain = () => {
 
 		// If fromPage is "paymentSettings", use the passed-in updatedDetails; otherwise, merge from the existing state
 		const detailsToUpdate =
-			fromPage === "paymentSettings"
+			fromPage === "PolicySettings"
+				? { hotelPolicyQA: updatedDetailsParam?.hotelPolicyQA || [], fromPage }
+				: fromPage === "paymentSettings"
 				? { ...updatedDetailsParam, fromPage }
 				: { ...hotelDetails, fromPage };
 
@@ -462,6 +472,11 @@ const HotelSettingsMain = () => {
 					// otherwise, update with the merged details.
 					if (fromPage === "paymentSettings") {
 						setHotelDetails(updatedDetailsParam);
+					} else if (fromPage === "PolicySettings") {
+						setHotelDetails((previousDetails) => ({
+							...previousDetails,
+							hotelPolicyQA: updatedDetailsParam?.hotelPolicyQA || [],
+						}));
 					} else {
 						setHotelDetails(detailsToUpdate);
 					}
@@ -721,6 +736,17 @@ const HotelSettingsMain = () => {
 									? "إعدادات الدفع"
 									: "Payment Settings"}
 							</Tab>
+
+							<Tab
+								$isActive={activeTab === "PolicySettings"}
+								onClick={() => {
+									goToSettingsTab("PolicySettings", "?activeTab=policies");
+								}}
+							>
+								{chosenLanguage === "Arabic"
+									? "\u0627\u0644\u0633\u064a\u0627\u0633\u0627\u062a \u0648\u0627\u0644\u0634\u0631\u0648\u0637"
+									: "Policies & Terms"}
+							</Tab>
 						</div>
 					</TabsShell>
 
@@ -840,6 +866,17 @@ const HotelSettingsMain = () => {
 								/>
 							</>
 						) : null}
+
+						{activeTab === "PolicySettings" &&
+						hotelDetails &&
+						hotelDetails.hotelName ? (
+							<HotelPolicySettings
+								setHotelDetails={setHotelDetails}
+								hotelDetails={hotelDetails}
+								submittingHotelDetails={hotelDetailsUpdate}
+								chosenLanguage={chosenLanguage}
+							/>
+						) : null}
 					</div>
 				</div>
 			</div>
@@ -890,7 +927,6 @@ const HotelSettingsMainWrapper = styled.div`
 		}
 	}
 `;
-
 const TabsShell = styled.div`
 	background: #e3f2fd;
 	border: 1px solid #cfe5fb;

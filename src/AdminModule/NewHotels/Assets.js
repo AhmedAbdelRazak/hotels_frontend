@@ -94,6 +94,18 @@ export const defaultHotelDetails = {
 	busDetails: "",
 	isNusuk: false,
 	isNusukText: "",
+	hotelPolicyQA: [
+		{
+			key: "cancellation_refund",
+			category: "Cancellation and refunds",
+			question: "What is the cancellation and refund policy?",
+			answer:
+				"Cancellation is free with a full refund when requested 14 days or more before check-in. When requested less than 14 days but more than 3 days before check-in, cancellation can still be processed; the hotel keeps one night only and the remaining amount is refunded. Within 3 days or less before check-in, the reservation is non-cancellable and non-refundable under the general policy.",
+			mandatory: true,
+			active: true,
+			sortOrder: 10,
+		},
+	],
 };
 
 export const defaultUserValues = {
