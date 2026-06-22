@@ -1348,6 +1348,27 @@ export const getOtaReservationsForAdmin = (
 		}));
 };
 
+export const getOtaAssignableHotels = (userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/hotels/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not load hotels",
+			hotels: [],
+		}));
+};
+
 export const getAdminReservationById = (reservationId, token = "") => {
 	const query = new URLSearchParams({ view: "details" });
 	return fetch(
@@ -1596,6 +1617,32 @@ export const updateOtaReservationPricing = (
 		.catch((err) => ({
 			success: false,
 			error: err?.message || "Could not update OTA reservation pricing",
+		}));
+};
+
+export const assignOtaReservationHotel = (
+	reservationId,
+	userId,
+	token,
+	payload = {},
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/hotel/${userId}`,
+		{
+			method: "PUT",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not assign hotel",
 		}));
 };
 

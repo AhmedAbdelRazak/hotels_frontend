@@ -2363,3 +2363,27 @@ Future TODO Backlog - Added 2026-05-26
 - Existing reservation reference:
   - Reservation id 6a2af2c06f49b37157452ab4 / confirmation 7183544960 should continue to show the saved split from MoreDetails: client total 766.08, hotel/root total 490.00, net after OTA expenses 563.00, OTA expense 203.08, platform margin 73.00, and General commission 70.00.
   - Opening Edit Pricing for that reservation must prefill the same values and saving unrelated fields must not mutate nightly pricing rows.
+
+2026-06-21 OTA Reservations Hotel Assignment UI
+- Routes:
+  - /admin/ota-reservations
+- Files:
+  - src/AdminModule/OtaReservations/OtaReservationsMain.js
+  - src/AdminModule/apiAdmin.js
+- Behavior:
+  - The OTA queue table displays the OTA confirmation number as the visible
+    confirmation. The PMS confirmation remains available as tooltip/internal
+    context.
+  - The hotel column is clickable. Assigned rows show the assigned PMS hotel;
+    unassigned rows show Assign hotel and may show the OTA hotel hint underneath.
+  - Clicking the hotel column opens a small modal with a searchable Ant Design
+    Select of backend-scoped hotels from
+    GET /api/admin/ota-reservations/hotels/:userId.
+  - Saving the modal calls
+    PUT /api/admin/ota-reservations/:reservationId/hotel/:userId and refreshes
+    the row without releasing it.
+  - Release To Hotel remains disabled until the backend reports both a valid
+    hotel assignment and saved OTA base/root pricing.
+  - Keep this UI lightweight. Do not add a second workflow around assignment;
+    hotel assignment and pricing review are the two deliberate steps before
+    release.

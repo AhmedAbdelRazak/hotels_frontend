@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
-import { Button, Input, Modal, Spin, Tooltip, message } from "antd";
+import { Button, Input, Modal, Select, Spin, Tooltip, message } from "antd";
 import {
 	CheckCircleOutlined,
 	EditOutlined,
@@ -21,7 +21,9 @@ import {
 	formatSaudiHijriDate,
 } from "../../utils/saudiDates";
 import {
+	assignOtaReservationHotel,
 	getAdminReservationById,
+	getOtaAssignableHotels,
 	getOtaReservationsForAdmin,
 	readUserId,
 	releaseOtaReservationToHotel,
@@ -408,7 +410,14 @@ const formatModalDatePair = (value, language = "English") => ({
 	}),
 });
 
+const assignedHotelIdForReservation = (reservation = {}) =>
+	String(reservation?.hotelId?._id || reservation?.hotelId || "").trim();
+
+const hasAssignedHotel = (reservation = {}) =>
+	Boolean(assignedHotelIdForReservation(reservation));
+
 const isReleaseReady = (reservation = {}) =>
+	hasAssignedHotel(reservation) &&
 	Boolean(reservation?.hotel_base_price_ready) &&
 	numberValue(reservation?.hotel_visible_amount) > 0;
 
@@ -443,8 +452,10 @@ const mergeReservationDetailsForModal = (details = {}, listRow = {}) => {
 };
 
 const releaseBlockedMessage = (reservation = {}) =>
-	reservation?.hotel_base_price_issue ||
-	"Save Total base hotel price in Change pricing before releasing this reservation.";
+	!hasAssignedHotel(reservation)
+		? "Assign a hotel before releasing this OTA reservation to the hotel."
+		: reservation?.hotel_base_price_issue ||
+		  "Save Total base hotel price in Change pricing before releasing this reservation.";
 
 const hasPlatformAdminRole = (user = {}) =>
 	[
@@ -924,6 +935,11 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const [detailsReservation, setDetailsReservation] = useState(null);
 	const [savingPricing, setSavingPricing] = useState(false);
 	const [releasing, setReleasing] = useState(false);
+	const [assigningHotel, setAssigningHotel] = useState(false);
+	const [hotelsLoading, setHotelsLoading] = useState(false);
+	const [assignableHotels, setAssignableHotels] = useState([]);
+	const [hotelAssignReservation, setHotelAssignReservation] = useState(null);
+	const [selectedAssignHotelId, setSelectedAssignHotelId] = useState("");
 	const [dataState, setDataState] = useState({
 		data: [],
 		totalDocuments: 0,
@@ -1025,6 +1041,19 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const selectedDetailsReservation = detailsReservation
 		? mergeReservationDetailsForModal(detailsReservation, selectedDetailsListRow)
 		: null;
+	const hotelOptions = useMemo(
+		() =>
+			(assignableHotels || []).map((hotel) => {
+				const otherName = hotel.hotelNameOtherLanguage
+					? ` - ${hotel.hotelNameOtherLanguage}`
+					: "";
+				return {
+					value: hotel._id,
+					label: `${hotel.hotelName || "Unnamed hotel"}${otherName}`,
+				};
+			}),
+		[assignableHotels]
+	);
 	const totalPages = Math.max(
 		Math.ceil(Number(dataState.totalDocuments || 0) / pageSize),
 		1
@@ -1046,6 +1075,28 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const closeDetails = () => {
 		setDetailsReservation(null);
 		replaceQuery({ reservationId: "" });
+	};
+
+	const loadAssignableHotels = useCallback(async () => {
+		if (!getUser?._id || !token || !hasOtaAccess) return;
+		setHotelsLoading(true);
+		const response = await getOtaAssignableHotels(getUser._id, token);
+		setHotelsLoading(false);
+		if (response?.success) {
+			setAssignableHotels(Array.isArray(response.hotels) ? response.hotels : []);
+			return;
+		}
+		message.error(response?.message || response?.error || "Could not load hotels");
+	}, [getUser?._id, hasOtaAccess, token]);
+
+	const openHotelAssignment = (reservation) => {
+		setHotelAssignReservation(reservation);
+		setSelectedAssignHotelId(assignedHotelIdForReservation(reservation));
+		if (!assignableHotels.length) loadAssignableHotels();
+	};
+	const closeHotelAssignment = () => {
+		setHotelAssignReservation(null);
+		setSelectedAssignHotelId("");
 	};
 
 	useEffect(() => {
@@ -1139,6 +1190,30 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 		}
 		message.success("OTA reservation was released to the hotel.");
 		closeRelease();
+		loadReservations({ silent: true });
+	};
+
+	const handleAssignHotel = async () => {
+		if (!hotelAssignReservation || !getUser?._id) return;
+		if (!selectedAssignHotelId) {
+			message.warning("Choose a hotel before saving.");
+			return;
+		}
+		setAssigningHotel(true);
+		const response = await assignOtaReservationHotel(
+			getReservationKey(hotelAssignReservation),
+			getUser._id,
+			token,
+			{ hotelId: selectedAssignHotelId }
+		);
+		setAssigningHotel(false);
+		if (!response?.success) {
+			message.error(response?.message || response?.error || "Hotel assignment failed");
+			return;
+		}
+		handleReservationUpdated(response.data);
+		message.success("Hotel was assigned to the OTA reservation.");
+		closeHotelAssignment();
 		loadReservations({ silent: true });
 	};
 
@@ -1244,15 +1319,52 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 									</thead>
 									<tbody>
 										{reservations.length ? (
-											reservations.map((reservation, index) => (
-												<tr key={getReservationKey(reservation)}>
+											reservations.map((reservation, index) => {
+												const assignedHotelName =
+													reservation.hotel_name ||
+													reservation.hotelId?.hotelName ||
+													"";
+												const otaHotelHint =
+													reservation.ota_hotel_name ||
+													reservation.supplierData?.otaHotelName ||
+													"";
+												const hotelTooltip = assignedHotelName
+													? otaHotelHint
+														? `${assignedHotelName} | OTA: ${otaHotelHint}`
+														: assignedHotelName
+													: otaHotelHint
+													? `OTA hint: ${otaHotelHint}`
+													: "Assign hotel";
+												return (
+													<tr key={getReservationKey(reservation)}>
 													<td>{(currentPage - 1) * pageSize + index + 1}</td>
 													<td>
-														<Tooltip title={reservation.hotel_name}>
-															<span className='truncate'>{reservation.hotel_name || "-"}</span>
+														<Tooltip title={hotelTooltip}>
+															<HotelAssignButton
+																type='button'
+																className={assignedHotelName ? "" : "missing"}
+																onClick={() => openHotelAssignment(reservation)}
+															>
+																<span className='truncate'>
+																	{assignedHotelName || "Assign hotel"}
+																</span>
+																{!assignedHotelName && otaHotelHint ? (
+																	<small className='truncate'>OTA: {otaHotelHint}</small>
+																) : null}
+															</HotelAssignButton>
 														</Tooltip>
 													</td>
-													<td>{reservation.confirmation_number || "-"}</td>
+													<td>
+														<Tooltip
+															title={
+																reservation.confirmation_number
+																	? `PMS: ${reservation.confirmation_number}`
+																	: ""
+															}
+														>
+															<span>{otaConfirmationNumberForReservation(reservation)}</span>
+														</Tooltip>
+													</td>
 													<td>
 														<Tooltip title={reservation.customer_name}>
 															<span className='truncate'>{reservation.customer_name || "-"}</span>
@@ -1293,12 +1405,13 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 																disabled={!isReleaseReady(reservation)}
 																onClick={() => openRelease(reservation)}
 															>
-															<CheckCircleOutlined /> Release To Hotel
+																<CheckCircleOutlined /> Release To Hotel
 															</ReleaseButton>
 														</Tooltip>
 													</td>
-												</tr>
-											))
+													</tr>
+												);
+											})
 										) : (
 											<tr>
 												<td colSpan='15'>No pending OTA reservations.</td>
@@ -1381,6 +1494,57 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 						<span>Please close this modal and try again.</span>
 					</BasePriceWarning>
 				)}
+			</Modal>
+
+			<Modal
+				open={!!hotelAssignReservation}
+				onCancel={closeHotelAssignment}
+				title='Assign hotel'
+				okText='Save hotel'
+				cancelText='Cancel'
+				confirmLoading={assigningHotel}
+				okButtonProps={{
+					disabled: !selectedAssignHotelId,
+				}}
+				onOk={handleAssignHotel}
+				centered
+				destroyOnClose
+			>
+				<HotelAssignmentModalBody>
+					<label htmlFor='ota-hotel-assignment-select'>Hotel</label>
+					<Select
+						id='ota-hotel-assignment-select'
+						showSearch
+						allowClear
+						value={selectedAssignHotelId || undefined}
+						placeholder='Search and choose a hotel'
+						loading={hotelsLoading}
+						options={hotelOptions}
+						optionFilterProp='label'
+						filterOption={(input, option) =>
+							String(option?.label || "")
+								.toLowerCase()
+								.includes(String(input || "").toLowerCase())
+						}
+						onDropdownVisibleChange={(open) => {
+							if (open && !assignableHotels.length && !hotelsLoading) {
+								loadAssignableHotels();
+							}
+						}}
+						onChange={(value) => setSelectedAssignHotelId(value || "")}
+						notFoundContent={hotelsLoading ? <Spin size='small' /> : "No hotels found"}
+					/>
+					{hotelAssignReservation?.ota_hotel_name ||
+					hotelAssignReservation?.supplierData?.otaHotelName ? (
+						<p>
+							OTA hotel hint:{" "}
+							<strong>
+								{hotelAssignReservation?.ota_hotel_name ||
+									hotelAssignReservation?.supplierData?.otaHotelName}
+							</strong>
+						</p>
+					) : null}
+				</HotelAssignmentModalBody>
 			</Modal>
 
 			<Modal
@@ -1586,6 +1750,29 @@ const ActionButton = styled.button`
 	gap: 5px;
 `;
 
+const HotelAssignButton = styled.button`
+	border: 0;
+	background: transparent;
+	color: #0f172a;
+	font-weight: 800;
+	cursor: pointer;
+	display: inline-grid;
+	gap: 2px;
+	max-width: 190px;
+	padding: 0;
+	text-align: start;
+
+	&.missing {
+		color: #b45309;
+	}
+
+	small {
+		color: #64748b;
+		font-size: 11px;
+		font-weight: 700;
+	}
+`;
+
 const ReleaseButton = styled(ActionButton)`
 	color: #047857;
 
@@ -1601,6 +1788,27 @@ const PaginationRow = styled.div`
 	justify-content: center;
 	gap: 12px;
 	margin-top: 16px;
+`;
+
+const HotelAssignmentModalBody = styled.div`
+	display: grid;
+	gap: 10px;
+
+	label {
+		font-size: 13px;
+		font-weight: 800;
+		color: #102033;
+	}
+
+	.ant-select {
+		width: 100%;
+	}
+
+	p {
+		margin: 4px 0 0;
+		color: #475569;
+		font-size: 13px;
+	}
 `;
 
 const PricingModalContent = styled.div`
