@@ -190,6 +190,7 @@ const HotelPolicySettings = ({
 	chosenLanguage,
 }) => {
 	const isArabic = chosenLanguage === "Arabic";
+	const autoDirectionProps = { dir: "auto", className: "policy-text-input" };
 	const labels = {
 		title: isArabic ? "سياسات وشروط الفندق" : "Hotel Policies And Terms",
 		subtitle: isArabic
@@ -323,6 +324,7 @@ const HotelPolicySettings = ({
 							<Field>
 								<label>{labels.category}</label>
 								<Input
+									{...autoDirectionProps}
 									value={row.category || ""}
 									onChange={(event) =>
 										updateRow(row.key, { category: event.target.value })
@@ -332,6 +334,7 @@ const HotelPolicySettings = ({
 							<Field>
 								<label>{labels.question}</label>
 								<Input
+									{...autoDirectionProps}
 									value={row.question || ""}
 									onChange={(event) =>
 										updateRow(row.key, { question: event.target.value })
@@ -346,6 +349,7 @@ const HotelPolicySettings = ({
 								{row.mandatory ? <RequiredMark>*</RequiredMark> : null}
 							</label>
 							<TextArea
+								{...autoDirectionProps}
 								rows={4}
 								value={row.answer || ""}
 								onChange={(event) =>
@@ -369,6 +373,7 @@ const PolicyShell = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
+	text-align: start;
 
 	.ant-alert {
 		border-radius: 8px;
@@ -380,6 +385,7 @@ const HeaderRow = styled.div`
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
+	text-align: start;
 
 	h3 {
 		font-size: 22px;
@@ -427,6 +433,7 @@ const RowTop = styled.div`
 
 const FieldGrid = styled.div`
 	display: grid;
+	direction: inherit;
 	gap: 12px;
 	grid-template-columns: minmax(180px, 0.5fr) minmax(260px, 1fr);
 
@@ -440,11 +447,21 @@ const Field = styled.div`
 	flex-direction: column;
 	gap: 6px;
 	margin-bottom: 12px;
+	min-width: 0;
 
 	label {
+		align-self: stretch;
 		color: #243b53;
 		font-size: 13px;
 		font-weight: 700;
+		line-height: 1.35;
+		padding-inline: 2px;
+		text-align: start;
+	}
+
+	.policy-text-input {
+		text-align: start;
+		unicode-bidi: plaintext;
 	}
 `;
 

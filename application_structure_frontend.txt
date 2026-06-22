@@ -2387,3 +2387,26 @@ Future TODO Backlog - Added 2026-05-26
   - Keep this UI lightweight. Do not add a second workflow around assignment;
     hotel assignment and pricing review are the two deliberate steps before
     release.
+
+2026-06-22 Hotel Policy Settings Tab
+- Route:
+  - /hotel-management/settings/:userId/:hotelId?activeTab=policies
+- Files:
+  - src/HotelModule/HotelSettings/HotelSettingsMain.js
+  - src/HotelModule/HotelSettings/HotelPolicySettings.js
+  - src/AdminModule/NewHotels/Assets.js
+- Behavior:
+  - Hotel settings now includes a Policies & Terms tab for hotel-specific
+    policy Q&A used by the AI assistant.
+  - The cancellation/refund row is mandatory and defaults to the platform-wide
+    policy: 14+ days before check-in is full refund, 4-13 days keeps one night
+    and refunds the remainder, and 3 days or less is non-refundable.
+  - Optional rows are shown as suggested Q&A, but empty optional answers are not
+    used by the assistant.
+- RTL/LTR UI rule:
+  - The page shell follows the selected dashboard language, but individual
+    policy text inputs use `dir="auto"` and start alignment. This is important:
+    a hotel manager may use the Arabic dashboard while entering English policy
+    text, or use English dashboard while entering Arabic terms.
+  - Do not force all policy field values to RTL just because the surrounding
+    UI is Arabic; punctuation and question marks become visually wrong.
