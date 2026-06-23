@@ -66,6 +66,20 @@ const CHAT_DETAIL_LABELS = {
 		currentHotel: "Hotel",
 		source: "Source",
 		noClientContact: "Not saved yet",
+		aiMonitor: "AI Monitor",
+		aiHealthy: "Healthy",
+		aiWatch: "Watch",
+		aiSlow: "Slow",
+		aiPaused: "AI paused",
+		aiResponder: "Responder",
+		avgReply: "Avg reply",
+		maxReply: "Max reply",
+		lastReply: "Last reply",
+		waiting: "Waiting",
+		guestTurns: "Guest turns",
+		unanswered: "Unanswered",
+		duplicateAi: "Duplicate AI",
+		noAiRepliesYet: "No AI replies yet",
 	},
 	rtl: {
 		back: "رجوع",
@@ -101,6 +115,21 @@ const CHAT_DETAIL_LABELS = {
 		source: "\u0627\u0644\u0645\u0635\u062f\u0631",
 		noClientContact:
 			"\u0644\u0645 \u064a\u062a\u0645 \u062d\u0641\u0638\u0647 \u0628\u0639\u062f",
+		aiMonitor: "\u0645\u0631\u0627\u0642\u0628\u0629 \u0627\u0644\u0630\u0643\u0627\u0621",
+		aiHealthy: "\u0633\u0644\u064a\u0645",
+		aiWatch: "\u062a\u062d\u062a \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629",
+		aiSlow: "\u0628\u0637\u064a\u0621",
+		aiPaused: "\u0645\u062a\u0648\u0642\u0641",
+		aiResponder: "\u0627\u0644\u0645\u0648\u0638\u0641\u0629",
+		avgReply: "\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0631\u062f",
+		maxReply: "\u0623\u0637\u0648\u0644 \u0631\u062f",
+		lastReply: "\u0622\u062e\u0631 \u0631\u062f",
+		waiting: "\u0627\u0644\u0627\u0646\u062a\u0638\u0627\u0631",
+		guestTurns: "\u0631\u0633\u0627\u0626\u0644 \u0627\u0644\u0636\u064a\u0641",
+		unanswered: "\u0628\u0644\u0627 \u0631\u062f",
+		duplicateAi: "\u062a\u0643\u0631\u0627\u0631 \u0627\u0644\u0630\u0643\u0627\u0621",
+		noAiRepliesYet:
+			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0631\u062f\u0648\u062f \u062d\u062a\u0649 \u0627\u0644\u0622\u0646",
 	},
 };
 
@@ -186,6 +215,118 @@ const supportContacts = new Set([
 	"guest@jannatbooking.com",
 ]);
 
+const aiReplyContacts = new Set([
+	"support@jannatbooking.com",
+	"management@xhotelpro.com",
+	"noreply@jannatbooking.com",
+]);
+
+const messageTimestamp = (message = {}) => {
+	const time = message?.date ? new Date(message.date).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+};
+
+const isAiSupportMessage = (message = {}) => {
+	const contact = cleanDisplayText(
+		message?.messageBy?.customerEmail,
+		""
+	).toLowerCase();
+	return (
+		message?.isAi === true ||
+		message?.isSystem === true ||
+		aiReplyContacts.has(contact) ||
+		String(message?.messageBy?.userId || "") === "jannat-ai-support"
+	);
+};
+
+const isGuestSupportMessage = (message = {}) =>
+	Boolean(message?.message) && !isAiSupportMessage(message);
+
+const formatMonitorDuration = (ms) => {
+	const value = Number(ms || 0);
+	if (!Number.isFinite(value) || value <= 0) return "-";
+	const seconds = Math.round(value / 1000);
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	const remainder = seconds % 60;
+	return `${minutes}m ${remainder}s`;
+};
+
+const aiReplyDelayForIndex = (conversation = [], index = -1) => {
+	const message = conversation[index];
+	if (!isAiSupportMessage(message)) return null;
+	const aiTime = messageTimestamp(message);
+	if (!aiTime) return null;
+	let guestTime = 0;
+	for (let i = index - 1; i >= 0; i -= 1) {
+		const previous = conversation[i];
+		if (isAiSupportMessage(previous)) break;
+		if (isGuestSupportMessage(previous)) {
+			const time = messageTimestamp(previous);
+			if (time) guestTime = time;
+		}
+	}
+	return guestTime && aiTime >= guestTime ? aiTime - guestTime : null;
+};
+
+const buildAiMonitor = (conversation = [], chat = {}, nowMs = Date.now()) => {
+	const delays = [];
+	let guestTurns = 0;
+	let answeredTurns = 0;
+	let duplicateAiTurns = 0;
+	let pendingGuestAt = 0;
+	let previousKind = "";
+
+	(conversation || []).forEach((entry) => {
+		if (!entry?.message) return;
+		if (isGuestSupportMessage(entry)) {
+			if (previousKind !== "guest") {
+				guestTurns += 1;
+				pendingGuestAt = messageTimestamp(entry);
+			}
+			previousKind = "guest";
+			return;
+		}
+		if (isAiSupportMessage(entry)) {
+			if (previousKind === "ai") duplicateAiTurns += 1;
+			const aiTime = messageTimestamp(entry);
+			if (pendingGuestAt && aiTime >= pendingGuestAt) {
+				delays.push(aiTime - pendingGuestAt);
+				answeredTurns += 1;
+				pendingGuestAt = 0;
+			}
+			previousKind = "ai";
+		}
+	});
+
+	const currentWaitMs = pendingGuestAt ? Math.max(0, nowMs - pendingGuestAt) : 0;
+	const avgMs = delays.length
+		? delays.reduce((sum, value) => sum + value, 0) / delays.length
+		: 0;
+	const maxMs = delays.length ? Math.max(...delays) : 0;
+	const lastMs = delays.length ? delays[delays.length - 1] : 0;
+	let status = "healthy";
+	if (currentWaitMs > 20000 || maxMs > 45000 || duplicateAiTurns > 0) {
+		status = "slow";
+	} else if (currentWaitMs > 12000 || avgMs > 12000 || maxMs > 25000) {
+		status = "watch";
+	}
+
+	return {
+		status,
+		responder: chat.aiResponderName || chat.supporterName || "AI",
+		guestTurns,
+		answeredTurns,
+		unansweredTurns: pendingGuestAt ? 1 : 0,
+		duplicateAiTurns,
+		currentWaitMs,
+		avgMs,
+		maxMs,
+		lastMs,
+		hasReplies: delays.length > 0,
+	};
+};
+
 const firstGuestMessage = (chat = {}) =>
 	Array.isArray(chat.conversation)
 		? chat.conversation.find((entry) => {
@@ -250,6 +391,7 @@ const ChatDetail = ({
 	);
 	const [drawerVisible, setDrawerVisible] = useState(false);
 	const messagesEndRef = useRef(null);
+	const [monitorNow, setMonitorNow] = useState(Date.now());
 
 	// For mobile "back" arrow logic
 	const history = useHistory();
@@ -300,6 +442,13 @@ const ChatDetail = ({
 	const showEscalationControls =
 		showAiControls && escalationStatus === "active";
 	const manualReplyLocked = showAiControls && aiEnabled;
+	const aiMonitor = buildAiMonitor(messages, chat, monitorNow);
+
+	useEffect(() => {
+		if (!isClientCase) return undefined;
+		const timer = setInterval(() => setMonitorNow(Date.now()), 2000);
+		return () => clearInterval(timer);
+	}, [isClientCase, chat._id]);
 
 	// Scroll to the bottom function
 	const scrollToBottom = () => {
@@ -796,6 +945,63 @@ const ChatDetail = ({
 				</AiControlRow>
 			)}
 
+			{isClientCase && (
+				<AiMonitorPanel $isRtl={chatIsRtl} $status={aiMonitor.status}>
+					<AiMonitorHeader $isRtl={chatIsRtl}>
+						<strong>{chatLabels.aiMonitor}</strong>
+						<MonitorStatus $status={aiEnabled ? aiMonitor.status : "paused"}>
+							{!aiEnabled
+								? chatLabels.aiPaused
+								: aiMonitor.status === "slow"
+								? chatLabels.aiSlow
+								: aiMonitor.status === "watch"
+								? chatLabels.aiWatch
+								: chatLabels.aiHealthy}
+						</MonitorStatus>
+					</AiMonitorHeader>
+					<MonitorGrid>
+						<MonitorMetric>
+							<span>{chatLabels.aiResponder}</span>
+							<strong dir='auto'>{aiMonitor.responder}</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.avgReply}</span>
+							<strong>
+								{aiMonitor.hasReplies
+									? formatMonitorDuration(aiMonitor.avgMs)
+									: chatLabels.noAiRepliesYet}
+							</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.maxReply}</span>
+							<strong>{formatMonitorDuration(aiMonitor.maxMs)}</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.lastReply}</span>
+							<strong>{formatMonitorDuration(aiMonitor.lastMs)}</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.waiting}</span>
+							<strong>{formatMonitorDuration(aiMonitor.currentWaitMs)}</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.guestTurns}</span>
+							<strong>
+								{aiMonitor.answeredTurns}/{aiMonitor.guestTurns}
+							</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.unanswered}</span>
+							<strong>{aiMonitor.unansweredTurns}</strong>
+						</MonitorMetric>
+						<MonitorMetric>
+							<span>{chatLabels.duplicateAi}</span>
+							<strong>{aiMonitor.duplicateAiTurns}</strong>
+						</MonitorMetric>
+					</MonitorGrid>
+				</AiMonitorPanel>
+			)}
+
 			{showEscalationControls && (
 				<EscalationRow $isRtl={chatIsRtl}>
 					<div>
@@ -855,6 +1061,13 @@ const ChatDetail = ({
 							? "تعذر عرض هذا النص بسبب مشكلة في الترميز."
 							: "This text could not be displayed because of an encoding issue."
 					);
+					const aiReplyDelay = aiReplyDelayForIndex(messages, index);
+					const aiReplyDelayTone =
+						aiReplyDelay > 20000
+							? "slow"
+							: aiReplyDelay > 12000
+							? "watch"
+							: "healthy";
 					return (
 						<Message
 							key={index}
@@ -881,6 +1094,11 @@ const ChatDetail = ({
 							</MessageText>
 							<MessageMeta $isRtl={messageRtl}>
 								<small>{new Date(msg.date).toLocaleString()}</small>
+								{aiReplyDelay !== null && (
+									<ReplyDelayBadge $tone={aiReplyDelayTone}>
+										{formatMonitorDuration(aiReplyDelay)}
+									</ReplyDelayBadge>
+								)}
 								{isAdminMessage && (
 									<DeleteOutlined
 										style={{
@@ -1094,6 +1312,101 @@ const AiActions = styled.div`
 	}
 `;
 
+const AiMonitorPanel = styled.div`
+	padding: 10px 12px;
+	margin: -6px 0 14px;
+	border: 1px solid
+		${(props) =>
+			props.$status === "slow"
+				? "#f2a6a6"
+				: props.$status === "watch"
+				? "#e8cb75"
+				: "#b9d7ef"};
+	border-radius: 8px;
+	background: ${(props) =>
+		props.$status === "slow"
+			? "#fff6f6"
+			: props.$status === "watch"
+			? "#fffbea"
+			: "#f7fbff"};
+	text-align: ${(props) => (props.$isRtl ? "right" : "left")};
+`;
+
+const AiMonitorHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-direction: ${(props) => (props.$isRtl ? "row-reverse" : "row")};
+	gap: 8px;
+	margin-bottom: 8px;
+`;
+
+const MonitorStatus = styled.span`
+	display: inline-flex;
+	align-items: center;
+	min-height: 24px;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$status === "paused"
+			? "#eef1f4"
+			: props.$status === "slow"
+			? "#fbe1e1"
+			: props.$status === "watch"
+			? "#fff0bd"
+			: "#dff5e8"};
+	color: ${(props) =>
+		props.$status === "paused"
+			? "#53606b"
+			: props.$status === "slow"
+			? "#9b1c1c"
+			: props.$status === "watch"
+			? "#765100"
+			: "#11613b"};
+	font-size: 0.78rem;
+	font-weight: 900;
+	line-height: 1.2;
+`;
+
+const MonitorGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 7px;
+
+	@media (max-width: 1000px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const MonitorMetric = styled.div`
+	min-width: 0;
+	padding: 7px 8px;
+	border: 1px solid #e3edf6;
+	border-radius: 6px;
+	background: #ffffff;
+
+	span {
+		display: block;
+		color: #607284;
+		font-size: 0.7rem;
+		font-weight: 850;
+		line-height: 1.2;
+		margin-bottom: 2px;
+	}
+
+	strong {
+		display: block;
+		color: #153d5d;
+		font-size: 0.84rem;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+	}
+`;
+
 const EscalationRow = styled.div`
 	display: flex;
 	align-items: center;
@@ -1219,6 +1532,29 @@ const MessageMeta = styled.div`
 	gap: 10px;
 	margin-top: 4px;
 	direction: ${(props) => (props.$isRtl ? "rtl" : "ltr")};
+`;
+
+const ReplyDelayBadge = styled.span`
+	display: inline-flex;
+	align-items: center;
+	min-height: 20px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$tone === "slow"
+			? "#fbe1e1"
+			: props.$tone === "watch"
+			? "#fff0bd"
+			: "#dff5e8"};
+	color: ${(props) =>
+		props.$tone === "slow"
+			? "#9b1c1c"
+			: props.$tone === "watch"
+			? "#765100"
+			: "#11613b"};
+	font-size: 0.72rem;
+	font-weight: 900;
+	line-height: 1.2;
 `;
 
 const StatusSelect = styled(Select)`

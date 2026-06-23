@@ -26,6 +26,17 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 - Backend runbook:
   `../hotels_backend/docs/ota-reservation-sync-expedia-2026-06-15.md`
 
+### Admin Customer-Service AI Monitor
+
+- The AI support monitor lives inside the existing selected case detail at
+  `/admin/customer-service?...&caseId=...`; do not create a separate monitoring
+  route unless the owner explicitly asks for one.
+- The monitor is intentionally compact: responder, average/max/last reply time,
+  current unanswered wait, answered guest turns, duplicate AI turns, and
+  per-message delay badges.
+- Backend runbook:
+  `../hotels_backend/docs/chatbot-admin-monitor-and-latency-2026-06-23.md`
+
 ## Available Scripts
 
 In the project directory, you can run:
