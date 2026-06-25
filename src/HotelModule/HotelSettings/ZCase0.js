@@ -748,8 +748,8 @@ const BusServiceBlock = styled.div`
 const ServiceCheckboxRow = styled.div`
 	align-items: center;
 	display: grid;
-	gap: 12px 24px;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px 16px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	margin-bottom: 12px;
 	width: 100%;
 
@@ -763,6 +763,10 @@ const ServiceCheckboxRow = styled.div`
 		display: flex;
 		line-height: 1.35;
 		width: 100%;
+	}
+
+	@media (max-width: 991px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	@media (max-width: 767px) {
