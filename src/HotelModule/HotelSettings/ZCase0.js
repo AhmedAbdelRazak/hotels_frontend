@@ -69,6 +69,20 @@ const ZCase0 = ({
 			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u0648\u0636\u062d \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0644\u0627 \u064a\u0648\u0641\u0631 \u0628\u0627\u0635\u0627 \u062e\u0627\u0635\u0627 \u0648\u0623\u0646 \u0627\u0644\u0628\u0627\u0635\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0627\u0644\u0641\u0646\u062f\u0642 \u0625\u0644\u0649 \u0627\u0644\u062d\u0631\u0645."
 			: "When disabled, the AI assistant will say the hotel does not offer a private bus and that public buses are available nearby to Al Haram.",
 	};
+	const mealsText = {
+		checkbox: isArabic
+			? "\u0647\u0644 \u064a\u0648\u0641\u0631 \u0627\u0644\u0641\u0646\u062f\u0642 \u0648\u062c\u0628\u0627\u062a \u0623\u0648 \u0625\u0641\u0637\u0627\u0631 \u0644\u0644\u0636\u064a\u0648\u0641\u061f"
+			: "Does the hotel provide meals or breakfast for guests?",
+		detailsLabel: isArabic
+			? "\u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u0648\u062c\u0628\u0627\u062a \u0648\u0627\u0644\u0625\u0641\u0637\u0627\u0631"
+			: "Meals / Breakfast Details",
+		detailsPlaceholder: isArabic
+			? "\u0623\u0636\u0641 \u0645\u0627 \u0647\u0648 \u0645\u0634\u0645\u0648\u0644\u060c \u0645\u0648\u0627\u0639\u064a\u062f \u0627\u0644\u0648\u062c\u0628\u0627\u062a\u060c \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u0628\u0648\u0641\u064a\u0647 \u0623\u0648 \u0627\u0644\u0645\u0637\u0639\u0645\u060c \u0648\u0647\u0644 \u0647\u064a \u0645\u062c\u0627\u0646\u064a\u0629 \u0623\u0648 \u0645\u062f\u0641\u0648\u0639\u0629."
+			: "Add what is included, meal times, buffet or restaurant notes, and whether meals are free or paid.",
+		noMealsHint: isArabic
+			? "\u0639\u0646\u062f \u0639\u062f\u0645 \u062a\u0641\u0639\u064a\u0644\u0647\u0627\u060c \u0633\u064a\u0648\u0636\u062d \u0627\u0644\u0645\u0633\u0627\u0639\u062f \u0623\u0646 \u0627\u0644\u0648\u062c\u0628\u0627\u062a \u062f\u0627\u062e\u0644 \u0627\u0644\u0641\u0646\u062f\u0642 \u063a\u064a\u0631 \u0645\u0624\u0643\u062f\u0629 \u062d\u0627\u0644\u064a\u0627."
+			: "When disabled, the AI assistant will say in-hotel meals are not currently provided or confirmed.",
+	};
 	const nusukText = {
 		checkbox: isArabic
 			? "\u0647\u0644 \u0627\u0644\u0641\u0646\u062f\u0642 \u0645\u062f\u0631\u062c \u0628\u0646\u0633\u0643\u061f"
@@ -84,6 +98,7 @@ const ZCase0 = ({
 			: "When disabled, the AI assistant will say the hotel is not currently listed on Nusuk.",
 	};
 	const hasBusService = hotelDetails.hasBusService === true;
+	const hasMealsService = hotelDetails.hasMealsService === true;
 	const isNusuk = hotelDetails.isNusuk === true;
 
 	const handleLoad = () => {
@@ -277,6 +292,14 @@ const ZCase0 = ({
 		}));
 	};
 
+	const handleMealsServiceChange = (checked) => {
+		setHotelDetails((prevDetails) => ({
+			...prevDetails,
+			hasMealsService: checked,
+			mealsDetails: checked ? prevDetails.mealsDetails || "" : "",
+		}));
+	};
+
 	const handleNusukChange = (checked) => {
 		setHotelDetails((prevDetails) => ({
 			...prevDetails,
@@ -426,6 +449,15 @@ const ZCase0 = ({
 								{nusukText.checkbox}
 							</Checkbox>
 						</Form.Item>
+
+						<Form.Item name='hasMealsService' valuePropName='checked'>
+							<Checkbox
+								checked={hasMealsService}
+								onChange={(e) => handleMealsServiceChange(e.target.checked)}
+							>
+								{mealsText.checkbox}
+							</Checkbox>
+						</Form.Item>
 					</ServiceCheckboxRow>
 
 					<ServiceDetailsGrid>
@@ -449,6 +481,29 @@ const ZCase0 = ({
 								</>
 							) : (
 								<BusServiceHint>{busText.noBusHint}</BusServiceHint>
+							)}
+						</ServiceDetailsItem>
+
+						<ServiceDetailsItem>
+							{hasMealsService ? (
+								<>
+									<Form.Item name='mealsDetails' label={mealsText.detailsLabel}>
+										<TextArea
+											rows={3}
+											value={hotelDetails.mealsDetails || ""}
+											placeholder={mealsText.detailsPlaceholder}
+											onChange={(e) => {
+												const value = e.target.value;
+												setHotelDetails((prevDetails) => ({
+													...prevDetails,
+													mealsDetails: value,
+												}));
+											}}
+										/>
+									</Form.Item>
+								</>
+							) : (
+								<BusServiceHint>{mealsText.noMealsHint}</BusServiceHint>
 							)}
 						</ServiceDetailsItem>
 
