@@ -210,6 +210,8 @@ const getDashboardRoleDescriptions = (user = {}) => [
 const isPreviewOwnerLike = (user = {}) => {
 	const roleNumbers = getDashboardRoleNumbers(user);
 	const roleDescriptions = getDashboardRoleDescriptions(user);
+	const userId = normalizeId(user._id);
+	const belongsToId = normalizeId(user.belongsToId);
 	const hasRole = (role) => roleNumbers.includes(Number(role));
 	const hasRoleDescription = (description) =>
 		roleDescriptions.includes(String(description || "").toLowerCase());
@@ -218,7 +220,7 @@ const isPreviewOwnerLike = (user = {}) => {
 		hasRole(10000) ||
 		hasRoleDescription("systemadmin") ||
 		hasRoleDescription("system admin") ||
-		(hasRole(2000) && !normalizeId(user.belongsToId))
+		(hasRole(2000) && (!belongsToId || (userId && belongsToId === userId)))
 	);
 };
 

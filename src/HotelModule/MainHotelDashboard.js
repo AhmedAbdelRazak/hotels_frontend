@@ -514,7 +514,13 @@ const ManagerMainHotelDashboard = () => {
 	}, [overallAccountsModalHotels, overallView, userData?.hotelIdsOwner]);
 	const assignedHotelId = user?.hotelIdWork || "";
 	const assignedOwnerId = user?.belongsToId || "";
-	const isSingleHotelUser = Boolean(assignedHotelId && assignedOwnerId);
+	const assignedOwnerIdNormalized = normalizeDashboardId(assignedOwnerId);
+	const isSelfOwnedOwnerAccount =
+		getDashboardRoleNumbers(user).includes(2000) &&
+		(!assignedOwnerIdNormalized || assignedOwnerIdNormalized === userId);
+	const isSingleHotelUser = Boolean(
+		assignedHotelId && assignedOwnerId && !isSelfOwnedOwnerAccount
+	);
 
 	const updateDashboardQuery = useCallback(
 		(updates = {}) => {
@@ -1361,11 +1367,13 @@ const isLimitedOrderTakerDashboardUser = (user = {}) => {
 const isScopedRoleDashboardUser = (user = {}) => {
 	const roleNumbers = getDashboardRoleNumbers(user);
 	const roleDescriptions = getDashboardRoleDescriptions(user);
+	const userId = normalizeDashboardId(user._id);
+	const belongsToId = normalizeDashboardId(user.belongsToId);
 	const isOwnerManager =
 		roleNumbers.includes(2000) &&
-		!normalizeDashboardId(user.belongsToId) &&
-		Array.isArray(user.hotelIdsOwner) &&
-		user.hotelIdsOwner.length > 0;
+		(!belongsToId || (userId && belongsToId === userId)) &&
+		((Array.isArray(user.hotelIdsOwner) && user.hotelIdsOwner.length > 0) ||
+			(userId && belongsToId === userId));
 	const hasScopedRole =
 		roleNumbers.some((role) =>
 			[2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000].includes(role)

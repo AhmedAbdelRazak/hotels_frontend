@@ -141,6 +141,9 @@ const normalizeRoleKey = (value = "") =>
 		.toLowerCase()
 		.replace(/[\s_-]+/g, "");
 
+const normalizeMenuId = (value) =>
+	String(value?._id || value?.id || value || "").trim();
+
 const isOrderTakingScope = (user = {}) => {
 	const descriptions = roleDescriptions(user).map(normalizeRoleKey);
 	const accessTo = Array.isArray(user.accessTo) ? user.accessTo : [];
@@ -161,7 +164,9 @@ const isZadWebsiteManager = (user = {}) =>
 
 const isOwnerLike = (user = {}) =>
 	isSuperAdminUser(user) ||
-	(hasRole(user, 2000) && !user.belongsToId) ||
+	(hasRole(user, 2000) &&
+		(!normalizeMenuId(user.belongsToId) ||
+			normalizeMenuId(user.belongsToId) === normalizeMenuId(user._id))) ||
 	isSystemAdmin(user);
 
 const hasHotelAccountsAccess = (user = {}) => {
