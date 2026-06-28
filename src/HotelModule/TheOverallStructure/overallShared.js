@@ -524,6 +524,37 @@ export const pageRowNumber = (
 export const buildOwnerParams = (ownerId = "") =>
 	ownerId ? { ownerId } : {};
 
+export const overallSettingsRoute = (ownerId = "", options = {}) => {
+	const params = new URLSearchParams();
+	const owner = normalizeId(ownerId);
+	const modal = String(options.modal || "");
+	const allowedModal = ["rooms", "calendar", "price-variants"].includes(modal)
+		? modal
+		: "";
+	if (owner) params.set("ownerId", owner);
+	params.set("overall", "settings");
+	params.set("page", "1");
+	if (allowedModal) {
+		params.set("settingsModal", allowedModal);
+		if (allowedModal === "rooms") {
+			params.set(
+				"settingsRoomTab",
+				options.tab === "update" ? "update" : "add"
+			);
+		}
+		if (allowedModal === "calendar") {
+			params.set("settingsCalendarTab", "general");
+		}
+		if (allowedModal === "price-variants") {
+			params.set(
+				"settingsPriceVariantTab",
+				["update", "agents"].includes(options.tab) ? options.tab : "add"
+			);
+		}
+	}
+	return `/hotel-management/main-dashboard?${params.toString()}`;
+};
+
 export const singleHotelRoute = (ownerId = "", hotelId = "", section = "dashboard") => {
 	const owner = normalizeId(ownerId);
 	const hotel = normalizeId(hotelId);

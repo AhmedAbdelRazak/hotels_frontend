@@ -57,6 +57,7 @@ import AddHotelForm from "./AddHotelForm";
 import EditHotelForm from "./EditHotelForm";
 import { STEP_MODAL_REGISTRY_ADMIN } from "../utils/hotel-setup-modals-admin";
 import { isSuperAdminUser } from "../utils/superUsers";
+import { overallSettingsRoute } from "../../HotelModule/TheOverallStructure/overallShared";
 
 const { Option } = Select;
 
@@ -393,34 +394,8 @@ const PMS_DIAGRAM_HOTSPOTS = [
 	{ key: "roles", label: "Main roles", x: 11.2, y: 82.3, w: 76.7, h: 14.2 },
 ];
 
-const formatRouteDate = (date) => {
-	const parsed = date instanceof Date ? date : new Date(date);
-	if (Number.isNaN(parsed.getTime())) return "";
-	const year = parsed.getFullYear();
-	const month = String(parsed.getMonth() + 1).padStart(2, "0");
-	const day = String(parsed.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
-};
-
-const overallHotelManagementRouteForOwner = (ownerId = "") => {
-	const end = new Date();
-	const start = new Date(end);
-	start.setDate(start.getDate() - 60);
-	const dateFrom = formatRouteDate(start);
-	const dateTo = formatRouteDate(end);
-	const params = new URLSearchParams({
-		ownerId,
-		overall: "summary",
-		page: "1",
-		dateFrom,
-		invStart: dateFrom,
-		dateTo,
-		invEnd: dateTo,
-		dateBy: "createdAt",
-		range: "custom",
-	});
-	return `/hotel-management/main-dashboard?${params.toString()}`;
-};
+const overallHotelManagementRouteForOwner = (ownerId = "") =>
+	overallSettingsRoute(ownerId);
 
 const normalizeDashboardId = (value) =>
 	String(value?._id || value?.id || value || "").trim();

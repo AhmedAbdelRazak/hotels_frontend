@@ -189,6 +189,8 @@ HotelModule Structure
     - financial-report, actions, wallet-management -> OverallFinancials components.
     - account-management, create-account, activate-accounts, update-account -> OverallAccountManagement components.
     - settings -> OverallSettings/OverallSettingsMain.
+  - Owner-level settings entry points should use /hotel-management/main-dashboard?ownerId=<ownerId>&overall=settings&page=1 instead of carrying summary, reservation, inventory, or map query params into settings.
+  - Overall settings modal deep links are supported for settingsModal=rooms with settingsRoomTab=add/update, settingsModal=calendar with settingsCalendarTab=general, and settingsModal=price-variants with settingsPriceVariantTab=add/update/agents. Unsupported settings tabs normalize with one replace and should not loop.
 - src/HotelModule/TheOverallStructure/OverallAccountManagement/ActivateAccounts.js
   - Overall activation view for pending/inactive scoped accounts. It must not be limited to Hotel System Admin accounts; signed-up agents and employees appear here for authorized managers/admins.
   - Hotel System Admin rows use the overall system-admin update endpoint. Agent/staff rows use the hotel-staff update endpoint with the account's assigned hotel scope so agent approval status, approved hotel ids, realtime notifications, and audit tracking stay in sync.

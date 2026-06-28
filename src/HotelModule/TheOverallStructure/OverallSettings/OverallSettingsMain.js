@@ -66,6 +66,91 @@ const normalizeCalendarPricingTab = () => "general";
 const normalizePriceVariantTab = (value) =>
 	["update", "agents"].includes(value) ? value : "add";
 
+const SETTINGS_STALE_QUERY_KEYS = [
+	"modal",
+	"hotelId",
+	"mapHotelId",
+	"mapOwnerId",
+	"reservationId",
+	"step",
+	"summaryTab",
+	"listPage",
+	"listSearch",
+	"dateFrom",
+	"dateTo",
+	"dateBy",
+	"sortBy",
+	"tab",
+	"reservationTab",
+	"agentId",
+	"transactionId",
+	"walletTab",
+	"startDate",
+	"endDate",
+	"actionType",
+	"invCal",
+	"invHMonth",
+	"invHYear",
+	"invStart",
+	"invEnd",
+	"invHotel",
+	"range",
+];
+
+const normalizeSettingsSearch = (search = "", ownerId = "") => {
+	const nextQuery = new URLSearchParams(search || "");
+	SETTINGS_STALE_QUERY_KEYS.forEach((key) => nextQuery.delete(key));
+	if (ownerId) nextQuery.set("ownerId", ownerId);
+	nextQuery.set("overall", "settings");
+	nextQuery.set("page", "1");
+
+	const modal = nextQuery.get(ROOM_MANAGER_MODAL_PARAM);
+	const validModal = [
+		ROOM_MANAGER_MODAL_VALUE,
+		CALENDAR_PRICING_MODAL_VALUE,
+		PRICE_VARIANTS_MODAL_VALUE,
+	].includes(modal)
+		? modal
+		: "";
+
+	if (!validModal) {
+		nextQuery.delete(ROOM_MANAGER_MODAL_PARAM);
+		nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
+		nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+		nextQuery.delete(PRICE_VARIANTS_TAB_PARAM);
+		return nextQuery.toString();
+	}
+
+	nextQuery.set(ROOM_MANAGER_MODAL_PARAM, validModal);
+	if (validModal === ROOM_MANAGER_MODAL_VALUE) {
+		nextQuery.set(
+			ROOM_MANAGER_TAB_PARAM,
+			normalizeRoomManagerTab(nextQuery.get(ROOM_MANAGER_TAB_PARAM))
+		);
+		nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+		nextQuery.delete(PRICE_VARIANTS_TAB_PARAM);
+		return nextQuery.toString();
+	}
+
+	if (validModal === CALENDAR_PRICING_MODAL_VALUE) {
+		nextQuery.set(
+			CALENDAR_PRICING_TAB_PARAM,
+			normalizeCalendarPricingTab(nextQuery.get(CALENDAR_PRICING_TAB_PARAM))
+		);
+		nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
+		nextQuery.delete(PRICE_VARIANTS_TAB_PARAM);
+		return nextQuery.toString();
+	}
+
+	nextQuery.set(
+		PRICE_VARIANTS_TAB_PARAM,
+		normalizePriceVariantTab(nextQuery.get(PRICE_VARIANTS_TAB_PARAM))
+	);
+	nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
+	nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+	return nextQuery.toString();
+};
+
 const OverallCalendarPricingModal = lazy(() =>
 	import("./OverallCalendarPricingModal")
 );
@@ -100,6 +185,16 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 	const [loading, setLoading] = useState(false);
 	const [rows, setRows] = useState([]);
 
+	useEffect(() => {
+		const normalizedSearch = normalizeSettingsSearch(location.search, ownerId);
+		const nextSearch = normalizedSearch ? `?${normalizedSearch}` : "";
+		if (nextSearch === (location.search || "")) return;
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch,
+		});
+	}, [history, location.pathname, location.search, ownerId]);
+
 	const loadSettings = useCallback(() => {
 		if (!userId || !token) return;
 		setLoading(true);
@@ -116,11 +211,13 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 
 	const openRoomManager = useCallback(
 		(nextTab = "add", { replace = false } = {}) => {
-			const nextQuery = new URLSearchParams(location.search || "");
-			nextQuery.set("overall", "settings");
-			if (!nextQuery.get("page")) nextQuery.set("page", "1");
+			const nextQuery = new URLSearchParams(
+				normalizeSettingsSearch(location.search, ownerId)
+			);
 			nextQuery.set(ROOM_MANAGER_MODAL_PARAM, ROOM_MANAGER_MODAL_VALUE);
 			nextQuery.set(ROOM_MANAGER_TAB_PARAM, normalizeRoomManagerTab(nextTab));
+			nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
+			nextQuery.delete(PRICE_VARIANTS_TAB_PARAM);
 			const nextLocation = {
 				pathname: location.pathname,
 				search: `?${nextQuery.toString()}`,
@@ -128,14 +225,14 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			if (replace) history.replace(nextLocation);
 			else history.push(nextLocation);
 		},
-		[history, location.pathname, location.search]
+		[history, location.pathname, location.search, ownerId]
 	);
 
 	const openCalendarPricing = useCallback(
 		(nextTab = "general", { replace = false } = {}) => {
-			const nextQuery = new URLSearchParams(location.search || "");
-			nextQuery.set("overall", "settings");
-			if (!nextQuery.get("page")) nextQuery.set("page", "1");
+			const nextQuery = new URLSearchParams(
+				normalizeSettingsSearch(location.search, ownerId)
+			);
 			nextQuery.set(ROOM_MANAGER_MODAL_PARAM, CALENDAR_PRICING_MODAL_VALUE);
 			nextQuery.set(
 				CALENDAR_PRICING_TAB_PARAM,
@@ -149,14 +246,14 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			if (replace) history.replace(nextLocation);
 			else history.push(nextLocation);
 		},
-		[history, location.pathname, location.search]
+		[history, location.pathname, location.search, ownerId]
 	);
 
 	const openPriceVariant = useCallback(
 		(nextTab = "add", { replace = false } = {}) => {
-			const nextQuery = new URLSearchParams(location.search || "");
-			nextQuery.set("overall", "settings");
-			if (!nextQuery.get("page")) nextQuery.set("page", "1");
+			const nextQuery = new URLSearchParams(
+				normalizeSettingsSearch(location.search, ownerId)
+			);
 			nextQuery.set(ROOM_MANAGER_MODAL_PARAM, PRICE_VARIANTS_MODAL_VALUE);
 			nextQuery.set(PRICE_VARIANTS_TAB_PARAM, normalizePriceVariantTab(nextTab));
 			nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
@@ -168,11 +265,13 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			if (replace) history.replace(nextLocation);
 			else history.push(nextLocation);
 		},
-		[history, location.pathname, location.search]
+		[history, location.pathname, location.search, ownerId]
 	);
 
 	const closeRoomManager = useCallback(() => {
-		const nextQuery = new URLSearchParams(location.search || "");
+		const nextQuery = new URLSearchParams(
+			normalizeSettingsSearch(location.search, ownerId)
+		);
 		nextQuery.delete(ROOM_MANAGER_MODAL_PARAM);
 		nextQuery.delete(ROOM_MANAGER_TAB_PARAM);
 		nextQuery.delete(CALENDAR_PRICING_TAB_PARAM);
@@ -182,7 +281,7 @@ const OverallSettingsMain = ({ userId, token, ownerId, chosenLanguage }) => {
 			pathname: location.pathname,
 			search: nextSearch ? `?${nextSearch}` : "",
 		});
-	}, [history, location.pathname, location.search]);
+	}, [history, location.pathname, location.search, ownerId]);
 
 	const handleRoomManagerTabChange = useCallback(
 		(nextTab) => openRoomManager(nextTab, { replace: true }),
