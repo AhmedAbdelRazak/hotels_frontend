@@ -522,7 +522,9 @@ const HotelSettingsMain = () => {
 					console.log("Hotel details updated successfully:", response);
 					// If updating paymentSettings, update state with the passed-in updatedDetailsParam
 					// otherwise, update with the merged details.
-					if (fromPage === "paymentSettings") {
+					if (response?._id) {
+						setHotelDetails(response);
+					} else if (fromPage === "paymentSettings") {
 						setHotelDetails(updatedDetailsParam);
 					} else if (fromPage === "PolicySettings") {
 						setHotelDetails((previousDetails) => ({
