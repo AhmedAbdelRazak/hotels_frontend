@@ -28,6 +28,7 @@ import moment from "moment-hijri";
 import styled, { createGlobalStyle } from "styled-components";
 import {
 	getOverallCalendarPricingOptions,
+	getOverallCalendarPricingRoomRows,
 	saveOverallCalendarPricing,
 } from "../../apiAdmin";
 import {
@@ -119,6 +120,7 @@ const TEXT = {
 		existingPricing: "Saved main pricing",
 		noExistingPricing: "No main calendar pricing has been saved yet.",
 		editPricing: "Edit",
+		loadingPricing: "Loading...",
 		selectedPricing: "Selected for update",
 		openDays: "open",
 		blockedDays: "closed",
@@ -217,6 +219,8 @@ const TEXT = {
 		noExistingPricing:
 			"\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0633\u0639\u064a\u0631 \u0631\u0626\u064a\u0633\u064a \u0645\u062d\u0641\u0648\u0638 \u0628\u0639\u062f.",
 		editPricing: "\u062a\u0639\u062f\u064a\u0644",
+		loadingPricing:
+			"\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0645\u064a\u0644...",
 		selectedPricing:
 			"\u0645\u062d\u062f\u062f \u0644\u0644\u062a\u062d\u062f\u064a\u062b",
 		openDays: "\u0645\u0641\u062a\u0648\u062d",
@@ -687,6 +691,8 @@ const OverallCalendarPricingModal = ({
 	const [hotels, setHotels] = useState([]);
 	const [agents, setAgents] = useState([]);
 	const [priceVariantData, setPriceVariantData] = useState([]);
+	const [pricingGroups, setPricingGroups] = useState([]);
+	const [pricingRowsLoadingKey, setPricingRowsLoadingKey] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [preview, setPreview] = useState(null);
@@ -891,7 +897,7 @@ const OverallCalendarPricingModal = ({
 		[hotelOptions, selectedAgentVariantHotelIds]
 	);
 
-	const existingGeneralPricingGroups = useMemo(
+	const hotelGeneralPricingGroups = useMemo(
 		() =>
 			(Array.isArray(hotels) ? hotels : []).flatMap((hotel) =>
 				(Array.isArray(hotel.rooms) ? hotel.rooms : [])
@@ -963,6 +969,72 @@ const OverallCalendarPricingModal = ({
 		[hotels, isArabic]
 	);
 
+	const existingGeneralPricingGroups = useMemo(() => {
+		const groupsByKey = new Map();
+		(Array.isArray(pricingGroups) ? pricingGroups : []).forEach((group) => {
+			const hotelId = normalizeId(group.hotelId);
+			const roomId = normalizeId(group.roomId);
+			const key = group.key || makeRoomKey(hotelId, roomId);
+			if (!hotelId || !roomId || !key) return;
+			const hotel = hotels.find(
+				(item) => normalizeId(item._id) === hotelId
+			);
+			const room = (Array.isArray(hotel?.rooms) ? hotel.rooms : []).find(
+				(item) => normalizeId(item._id) === roomId
+			);
+			const displayName = room
+				? isArabic
+					? room.displayName_OtherLanguage || room.displayName
+					: room.displayName || room.displayName_OtherLanguage
+				: group.roomDisplayName || group.displayName || "";
+			const actualRoomTypeLabel = room
+				? roomTypeLabel(room, isArabic)
+				: group.roomTypeLabel || group.roomType || "";
+			groupsByKey.set(key, {
+				...group,
+				key,
+				hotelId,
+				roomId,
+				roomKey: key,
+				hotelName: titleCase(hotel?.hotelName || group.hotelName || ""),
+				roomType: room?.roomType || group.roomType || "",
+				roomForGender: room?.roomForGender || group.roomForGender || "",
+				roomTypeLabel: actualRoomTypeLabel,
+				roomDisplayName:
+					displayName ||
+					group.roomDisplayName ||
+					room?.displayName ||
+					room?.roomType ||
+					"",
+				basePrice: Number(room?.basePrice ?? group.basePrice ?? 0),
+				defaultCost: Number(room?.defaultCost ?? group.defaultCost ?? 0),
+				label:
+					group.label ||
+					`${titleCase(hotel?.hotelName || group.hotelName || "")} - ${
+						actualRoomTypeLabel || group.roomType || ""
+					}${displayName ? ` - ${displayName}` : ""}`,
+				rows: Array.isArray(group.rows) ? group.rows : undefined,
+			});
+		});
+		hotelGeneralPricingGroups.forEach((group) => {
+			groupsByKey.set(group.key, {
+				...(groupsByKey.get(group.key) || {}),
+				...group,
+			});
+		});
+		return [...groupsByKey.values()]
+			.filter((group) => Number(group.totalDays || 0) > 0)
+			.sort((left, right) =>
+				left.hotelName === right.hotelName
+					? String(left.roomDisplayName || "").localeCompare(
+							String(right.roomDisplayName || "")
+					  )
+					: String(left.hotelName || "").localeCompare(
+							String(right.hotelName || "")
+					  )
+			);
+	}, [hotelGeneralPricingGroups, hotels, isArabic, pricingGroups]);
+
 	const selectedGeneralPricingGroup =
 		existingGeneralPricingGroups.find(
 			(group) => group.key === editingGeneralPricingKey
@@ -981,6 +1053,9 @@ const OverallCalendarPricingModal = ({
 				setAgents(Array.isArray(data?.agents) ? data.agents : []);
 				setPriceVariantData(
 					Array.isArray(data?.priceVariantData) ? data.priceVariantData : []
+				);
+				setPricingGroups(
+					Array.isArray(data?.pricingGroups) ? data.pricingGroups : []
 				);
 			})
 			.finally(() => setLoading(false));
@@ -1262,28 +1337,123 @@ const OverallCalendarPricingModal = ({
 		return nextPreview;
 	};
 
-	const selectGeneralPricingForUpdate = (group) => {
+	const withRowsForGeneralPricingGroup = async (group) => {
+		if (!group) return null;
+		if (Array.isArray(group.rows) && group.rows.length) return group;
+		const key = group.key || makeRoomKey(group.hotelId, group.roomId);
+		setPricingRowsLoadingKey(key);
+		try {
+			const data = await getOverallCalendarPricingRoomRows(userId, token, {
+				...buildOwnerParams(ownerId),
+				hotelId: group.hotelId,
+				roomId: group.roomId,
+			});
+			if (data?.error) {
+				message.error(data.error);
+				return null;
+			}
+			const rows = normalizeCalendarRows(data?.room?.pricingRate).map((row) => {
+				const blocked =
+					row?.blocked === true ||
+					row?.status === "blocked" ||
+					String(row?.color || "").toLowerCase() === "black";
+				return {
+					...row,
+					status: blocked ? "blocked" : "open",
+					blocked,
+					sellingPrice: blocked
+						? 0
+						: Number(row?.sellingPrice ?? row?.price ?? 0),
+					commissionPercent: blocked
+						? 0
+						: Number(row?.commissionPercent || 0),
+				};
+			});
+			const openRows = rows.filter((row) => !row.blocked);
+			const representativeRow = openRows[0] || rows[0] || {};
+			const detailedGroup = {
+				...group,
+				...(data?.group || {}),
+				key,
+				hotelId: normalizeId(group.hotelId || data?.hotelId),
+				roomId: normalizeId(group.roomId || data?.roomId),
+				roomKey: key,
+				rows,
+				startDate: rows[0]?.calendarDate || group.startDate || "",
+				endDate:
+					rows[rows.length - 1]?.calendarDate || group.endDate || "",
+				totalDays: rows.length || group.totalDays || 0,
+				openCount: openRows.length,
+				blockedCount: rows.length - openRows.length,
+				firstPrice: Number(
+					representativeRow.sellingPrice ?? group.firstPrice ?? 0
+				),
+				firstCommission: Number(
+					representativeRow.commissionPercent ?? group.firstCommission ?? 0
+				),
+				firstStatus: representativeRow.blocked
+					? "blocked"
+					: group.firstStatus || "open",
+			};
+			setPricingGroups((current) => {
+				const next = new Map(
+					(Array.isArray(current) ? current : []).map((item) => [
+						item.key ||
+							makeRoomKey(normalizeId(item.hotelId), normalizeId(item.roomId)),
+						item,
+					])
+				);
+				next.set(key, detailedGroup);
+				return [...next.values()];
+			});
+			setHotels((current) =>
+				(Array.isArray(current) ? current : []).map((hotel) => {
+					if (normalizeId(hotel._id) !== normalizeId(detailedGroup.hotelId)) {
+						return hotel;
+					}
+					const rooms = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+					return {
+						...hotel,
+						rooms: rooms.map((room) =>
+							normalizeId(room._id) === normalizeId(detailedGroup.roomId)
+								? { ...room, pricingRate: rows }
+								: room
+						),
+					};
+				})
+			);
+			return detailedGroup;
+		} finally {
+			setPricingRowsLoadingKey("");
+		}
+	};
+
+	const selectGeneralPricingForUpdate = async (group) => {
 		if (!group) return;
+		const detailedGroup = await withRowsForGeneralPricingGroup(group);
+		if (!detailedGroup?.rows?.length) return;
 		const values = {
 			...defaultValues(),
-			hotelIds: [group.hotelId],
-			roomSelections: [group.roomKey],
+			hotelIds: [detailedGroup.hotelId],
+			roomSelections: [detailedGroup.roomKey],
 			calendarType: "hijri",
 			periodMode: "custom",
-			startDate: group.startDate,
-			endDate: group.endDate,
-			status: group.firstStatus || "open",
+			startDate: detailedGroup.startDate,
+			endDate: detailedGroup.endDate,
+			status: detailedGroup.firstStatus || "open",
 			sellingPrice:
-				group.firstStatus === "blocked" ? null : Number(group.firstPrice || 0),
+				detailedGroup.firstStatus === "blocked"
+					? null
+					: Number(detailedGroup.firstPrice || 0),
 			commissionPercent:
-				group.firstStatus === "blocked"
+				detailedGroup.firstStatus === "blocked"
 					? 0
-					: Number(group.firstCommission || 0),
+					: Number(detailedGroup.firstCommission || 0),
 		};
 		setGeneralPricingTab(GENERAL_PRICING_TAB_UPDATE);
-		setEditingGeneralPricingKey(group.key);
+		setEditingGeneralPricingKey(detailedGroup.key);
 		generalForm.setFieldsValue(values);
-		previewFromGeneralPricingGroup(group, values);
+		previewFromGeneralPricingGroup(detailedGroup, values);
 	};
 
 	const openPricingPreview = (mode, operation) => {
@@ -1965,6 +2135,9 @@ const OverallCalendarPricingModal = ({
 								className={
 									group.key === editingGeneralPricingKey ? "selected" : ""
 								}
+								disabled={Boolean(
+									pricingRowsLoadingKey && pricingRowsLoadingKey !== group.key
+								)}
 								onClick={() => selectGeneralPricingForUpdate(group)}
 							>
 								<span className='card-top'>
@@ -1989,7 +2162,10 @@ const OverallCalendarPricingModal = ({
 									<span>{Number(group.firstPrice || 0).toFixed(2)}</span>
 								</span>
 								<span className='edit-chip'>
-									<EditOutlined /> {labels.editPricing}
+									<EditOutlined />{" "}
+									{pricingRowsLoadingKey === group.key
+										? labels.loadingPricing
+										: labels.editPricing}
 								</span>
 							</button>
 						))}

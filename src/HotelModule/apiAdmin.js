@@ -1552,6 +1552,7 @@ export const getHotelById = (hotelId, options = {}) => {
 	const query = new URLSearchParams();
 	if (options.view) query.set("view", options.view);
 	if (options.summary) query.set("view", "summary");
+	if (options.includePricingRows) query.set("includePricingRows", "true");
 	const suffix = query.toString() ? `?${query.toString()}` : "";
 	return fetch(`${process.env.REACT_APP_API_URL}/hotel-details/${hotelId}${suffix}`, {
 		method: "GET",
@@ -2626,6 +2627,26 @@ export const getOverallCalendarPricingOptions = (userId, token, params = {}) => 
 		)}`,
 		errorMessage: "Could not load calendar pricing",
 	});
+};
+
+export const getOverallCalendarPricingRoomRows = (
+	userId,
+	token,
+	params = {}
+) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/overall-dashboard/settings-calendar-pricing/${userId}/room-rows${buildOverallQuery(
+			params
+		)}`,
+		{
+			method: "GET",
+			headers: overallHeaders(token),
+		}
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			error: err?.message || "Could not load room pricing rows",
+		}));
 };
 
 export const saveOverallCalendarPricing = (

@@ -343,6 +343,11 @@ const HotelSettingsMain = () => {
 
 	const gettingHotelData = () => {
 		const selectedHotel = readSelectedHotel();
+		const settingsParams = new URLSearchParams(location.search || "");
+		const includePricingRows =
+			String(settingsParams.get("activeTab") || "").toLowerCase() ===
+				"roomcount" &&
+			Number(settingsParams.get("currentStep") || currentStep || 1) >= 3;
 		const ownerId =
 			(Number(user?.role) === 2000 && !user?.belongsToId
 				? normalizeId(user?._id)
@@ -352,13 +357,26 @@ const HotelSettingsMain = () => {
 		const selectedHotelId = normalizeId(selectedHotel?._id) || routeHotelId;
 
 		Promise.all([
-			getHotelById(selectedHotelId, { view: "management" }),
+			getHotelById(selectedHotelId, {
+				view: "management",
+				includePricingRows,
+			}),
 			getHotelRooms(selectedHotelId, ownerId),
 		]).then(([hotelData, roomsData]) => {
 			if (hotelData && hotelData.error) {
 				console.log(hotelData.error, "Error rendering");
 			} else if (hotelData && hotelData._id) {
-				setHotelDetails(hotelData);
+				setHotelDetails(
+					includePricingRows || !Array.isArray(hotelData.roomCountDetails)
+						? hotelData
+						: {
+								...hotelData,
+								roomCountDetails: hotelData.roomCountDetails.map((room) => ({
+									...room,
+									pricingRowsOmitted: true,
+								})),
+						  }
+				);
 				setHotelPhotos(
 					hotelData.hotelPhotos && hotelData.hotelPhotos.length > 0
 						? hotelData.hotelPhotos
@@ -441,6 +459,40 @@ const HotelSettingsMain = () => {
 		gettingHotelData();
 		// eslint-disable-next-line
 	}, [clickedFloor]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(location.search || "");
+		const isRoomPricingStep =
+			String(params.get("activeTab") || "").toLowerCase() === "roomcount" &&
+			Number(params.get("currentStep") || currentStep || 1) >= 3;
+		if (!isRoomPricingStep || !selectedRoomType) return;
+		const roomNeedsPricingRows = Array.isArray(hotelDetails?.roomCountDetails)
+			? hotelDetails.roomCountDetails.some(
+					(room) => {
+						if (normalizeId(room?._id) !== normalizeId(selectedRoomType)) {
+							return false;
+						}
+						return (
+							room?.pricingRowsOmitted === true ||
+							!Array.isArray(room?.pricingRate)
+						);
+					}
+			  )
+			: false;
+		if (!roomNeedsPricingRows) return;
+		const selectedHotel = readSelectedHotel();
+		const selectedHotelId = normalizeId(selectedHotel?._id) || routeHotelId;
+		if (!selectedHotelId) return;
+		getHotelById(selectedHotelId, {
+			view: "management",
+			includePricingRows: true,
+		}).then((hotelData) => {
+			if (hotelData && hotelData._id && !hotelData.error) {
+				setHotelDetails(hotelData);
+			}
+		});
+		// eslint-disable-next-line
+	}, [location.search, selectedRoomType, currentStep]);
 
 	const hotelDetailsUpdate = (fromPage, updatedDetailsParam) => {
 		// Get the currently selected hotel information
