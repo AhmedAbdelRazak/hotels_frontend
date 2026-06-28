@@ -144,6 +144,21 @@ const adminLinks = [
 		access: ["OTAReservations"],
 	},
 	{
+		to: "/admin/overall-hotel-reports",
+		key: "reports",
+		icon: <BarChartOutlined />,
+		access: ["AdminDashboard", "HotelReports"],
+		mobileOnly: true,
+	},
+	{
+		to: "/admin/customer-service?tab=active-client-cases",
+		key: "serviceQuick",
+		labelKey: "service",
+		icon: <MessageOutlined />,
+		access: ["CustomerService"],
+		mobileOnly: true,
+	},
+	{
 		to: "/admin/jannatbooking-tools",
 		key: "tools",
 		icon: <ToolOutlined />,
@@ -1191,7 +1206,12 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 						if (item.key === "service") {
 							return renderChatDropdown(item);
 						}
-						const active = location.pathname === item.to;
+						const itemPathname =
+							typeof item.to === "string"
+								? item.to.split("?")[0]
+								: item.to?.pathname;
+						const label = L[item.labelKey || item.key];
+						const active = Boolean(itemPathname && location.pathname === itemPathname);
 						const badgeCount =
 							item.key === "service" ? chatNotificationCount : 0;
 						return (
@@ -1200,8 +1220,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 								to={item.to}
 								$active={active}
 								$iconOnly={item.iconOnly}
-								title={L[item.key]}
-								aria-label={L[item.key]}
+								$mobileOnly={item.mobileOnly}
+								title={label}
+								aria-label={label}
 							>
 								{item.iconOnly ? (
 									<Badge
@@ -1215,7 +1236,7 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 								) : (
 									item.icon
 								)}
-								{!item.iconOnly && <span>{L[item.key]}</span>}
+								{!item.iconOnly && <span>{label}</span>}
 							</NavLinkButton>
 						);
 					})}
@@ -1649,7 +1670,7 @@ const NavLinkButton = styled(Link)`
 		${(props) =>
 			props.$active ? "rgba(215, 243, 255, 0.82)" : "rgba(255, 255, 255, 0.16)"};
 	border-radius: 5px;
-	display: inline-flex;
+	display: ${(props) => (props.$mobileOnly ? "none" : "inline-flex")};
 	align-items: center;
 	justify-content: center;
 	gap: 7px;
@@ -1696,6 +1717,10 @@ const NavLinkButton = styled(Link)`
 		font-weight: 950;
 		line-height: 17px;
 		box-shadow: 0 0 0 1px rgba(8, 26, 45, 0.8);
+	}
+
+	@media (max-width: 900px) {
+		display: inline-flex;
 	}
 `;
 
