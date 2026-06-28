@@ -64,16 +64,6 @@ const isSystemAdminTopNavUser = (user = {}) => {
 	);
 };
 
-const isOwnerAccountTopNavUser = (user = {}) => {
-	const roles = getUserRoles(user);
-	const userId = normalizeTopNavId(user._id);
-	const belongsToId = normalizeTopNavId(user.belongsToId);
-	return (
-		roles.includes(2000) &&
-		(!belongsToId || (userId && belongsToId === userId))
-	);
-};
-
 const getRespectfulSelfRoleLabel = (user = {}, isArabic = false) => {
 	const roles = getUserRoles(user);
 	const descriptions = getUserRoleDescriptions(user);
@@ -85,7 +75,8 @@ const getRespectfulSelfRoleLabel = (user = {}, isArabic = false) => {
 		allowed.some((description) => descriptions.includes(description));
 	const hasAccess = (...allowed) =>
 		allowed.some((key) => accessTo.includes(String(key || "").toLowerCase()));
-	const isHotelOwner = isOwnerAccountTopNavUser(user);
+	const isHotelOwner =
+		hasRole(2000) && !normalizeTopNavId(user.belongsToId);
 
 	if (
 		isSuperAdminUser(user) ||
@@ -237,7 +228,7 @@ const canMonitorB2BHotelChats = (user = {}) => {
 		hasScopedPlatformB2BAccess(user) ||
 		isSystemAdminTopNavUser(user) ||
 		roles.includes(10000) ||
-		isOwnerAccountTopNavUser(user)
+		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
 	);
 };
 
@@ -318,7 +309,7 @@ const canSeeOwnerWideCalendarHotels = (user = {}) => {
 		roles.includes(1000) ||
 		roles.includes(10000) ||
 		isSystemAdminTopNavUser(user) ||
-		isOwnerAccountTopNavUser(user)
+		(roles.includes(2000) && !normalizeTopNavId(user.belongsToId))
 	);
 };
 
@@ -719,8 +710,8 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 	}, [location.pathname, location.search]);
 
 	const isOwnerManager =
-		isOwnerAccountTopNavUser(user) ||
-		(isSystemAdminTopNavUser(user) && !normalizeTopNavId(user.belongsToId));
+		(user.role === 2000 || isSystemAdminTopNavUser(user)) &&
+		!user.belongsToId;
 	const userId = isOwnerManager
 		? user._id
 		: selectedHotel.belongsTo?._id || selectedHotel.belongsTo || user.belongsToId;
