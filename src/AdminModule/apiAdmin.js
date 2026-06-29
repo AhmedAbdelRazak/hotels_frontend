@@ -546,14 +546,14 @@ export const getAdminHotelNotificationFeed = ({
 	if (limit) query.append("limit", limit);
 	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}${queryString}`,
+		supportCaseFreshUrl(`/reservations/notifications/pending-confirmation/${userId}${queryString}`),
 		{
 			method: "GET",
-			headers: {
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
-			},
+			}),
 			cache: "no-store",
 		},
 	)
@@ -567,14 +567,14 @@ export const getAdminHotelNotificationFeed = ({
 
 export const getAdminSupportNotificationSummary = (userId, token) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/notifications/summary/${userId}`,
+		supportCaseFreshUrl(`/support-cases/notifications/summary/${userId}`),
 		{
 			method: "GET",
-			headers: {
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
-			},
+			}),
 			cache: "no-store",
 		},
 	)
@@ -588,14 +588,14 @@ export const getAdminSupportNotificationSummary = (userId, token) => {
 };
 
 export const getAdminB2BChatUnreadSummary = (userId, token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/b2b-chat/unread/${userId}`, {
+	return fetch(supportCaseFreshUrl(`/b2b-chat/unread/${userId}`), {
 		method: "GET",
-		headers: {
+		headers: supportCaseNoCacheHeaders({
 			Accept: "application/json",
 			"Content-Type": "application/json",
 			...getStoredActiveAuthHeaders(),
 			...authHeaders(token),
-		},
+		}),
 		cache: "no-store",
 	})
 		.then((response) => response.json())
@@ -724,15 +724,29 @@ export const updateSupportCase = (caseId, data, token) => {
 		.catch((err) => console.log(err));
 };
 
+function supportCaseFreshUrl(path) {
+	const separator = path.includes("?") ? "&" : "?";
+	return `${process.env.REACT_APP_API_URL}${path}${separator}_=${Date.now()}`;
+}
+
+function supportCaseNoCacheHeaders(headers = {}) {
+	return {
+		...headers,
+		"Cache-Control": "no-cache",
+		Pragma: "no-cache",
+	};
+}
+
 export const getFilteredSupportCases = (token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/active`, {
+	return fetch(supportCaseFreshUrl("/support-cases/active"), {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			"Content-Type": "application/json",
 			Accept: "application/json",
 			...getStoredActiveAuthHeaders(),
 			...authHeaders(token),
-		},
+		}),
 	})
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -740,15 +754,16 @@ export const getFilteredSupportCases = (token) => {
 
 export const getFilteredSupportCasesClients = (token) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-clients/active`,
+		supportCaseFreshUrl("/support-cases-clients/active"),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -757,15 +772,16 @@ export const getFilteredSupportCasesClients = (token) => {
 
 export const getEscalatedClientSupportCases = (token) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-clients/escalated`,
+		supportCaseFreshUrl("/support-cases-clients/escalated"),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -816,14 +832,15 @@ export const getAiTrainingChats = (token, params = {}) => {
 };
 
 export const getFilteredClosedSupportCases = (token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/closed`, {
+	return fetch(supportCaseFreshUrl("/support-cases/closed"), {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			"Content-Type": "application/json",
 			Accept: "application/json",
 			...getStoredActiveAuthHeaders(),
 			...authHeaders(token),
-		},
+		}),
 	})
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
@@ -837,15 +854,16 @@ export const getFilteredClosedSupportCasesClients = (token, params = {}) => {
 	});
 	const suffix = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/closed/clients${suffix}`,
+		supportCaseFreshUrl(`/support-cases/closed/clients${suffix}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -892,29 +910,31 @@ export const createNewSupportCase = async (data) => {
 };
 
 export const getSupportCases = (status, token) => {
-	const url = `${process.env.REACT_APP_API_URL}/support-cases?status=${status}`;
+	const url = supportCaseFreshUrl(`/support-cases?status=${status}`);
 	return fetch(url, {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			Accept: "application/json",
 			"Content-Type": "application/json",
 			...getStoredActiveAuthHeaders(),
 			...authHeaders(token),
-		},
+		}),
 	})
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 
 export const getSupportCaseById = (caseId, token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/${caseId}`, {
+	return fetch(supportCaseFreshUrl(`/support-cases/${caseId}`), {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			Accept: "application/json",
 			"Content-Type": "application/json",
 			...getStoredActiveAuthHeaders(),
 			...authHeaders(token),
-		},
+		}),
 	})
 		.then((response) => {
 			return response.json();
@@ -960,13 +980,14 @@ export const deleteSpecificMessage = async (caseId, messageId) => {
 // Fetch unseen messages by Super Admin or PMS Owner
 export const getUnseenMessagesCountByAdmin = async (userId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/unseen/count?userId=${userId}`,
+		supportCaseFreshUrl(`/support-cases/unseen/count?userId=${userId}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
 				...getStoredActiveAuthHeaders(),
-			},
+			}),
 		},
 	)
 		.then((response) => {
@@ -983,12 +1004,13 @@ export const getUnseenMessagesCountByAdmin = async (userId) => {
 // Fetch unseen messages by Hotel Owner
 export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/${hotelId}/unseen/hotel-owner`,
+		supportCaseFreshUrl(`/support-cases/${hotelId}/unseen/hotel-owner`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
-			},
+			}),
 		},
 	)
 		.then((response) => {
@@ -1005,12 +1027,13 @@ export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 // Fetch unseen messages by Regular Client
 export const getUnseenMessagesByClient = async (clientId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-client/${clientId}/unseen`,
+		supportCaseFreshUrl(`/support-cases-client/${clientId}/unseen`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
-			},
+			}),
 		},
 	)
 		.then((response) => {

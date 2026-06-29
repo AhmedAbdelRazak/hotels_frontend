@@ -2108,13 +2108,14 @@ export const pendingConfirmationNotificationFeed = ({
 	if (limit) query.append("limit", limit);
 	const queryString = query.toString() ? `?${query.toString()}` : "";
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/reservations/notifications/pending-confirmation/${userId}${queryString}`,
+		supportCaseFreshUrl(`/reservations/notifications/pending-confirmation/${userId}${queryString}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
 				...getStoredAuthHeaders(),
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -2859,16 +2860,30 @@ export const hotelsForAccount = (accountId) => {
 		.catch((err) => console.log(err));
 };
 
+function supportCaseFreshUrl(path) {
+	const separator = path.includes("?") ? "&" : "?";
+	return `${process.env.REACT_APP_API_URL}${path}${separator}_=${Date.now()}`;
+}
+
+function supportCaseNoCacheHeaders(headers = {}) {
+	return {
+		...headers,
+		"Cache-Control": "no-cache",
+		Pragma: "no-cache",
+	};
+}
+
 export const getFilteredSupportCases = (token, hotelId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-hotels/active/${hotelId}`,
+		supportCaseFreshUrl(`/support-cases-hotels/active/${hotelId}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -2877,14 +2892,15 @@ export const getFilteredSupportCases = (token, hotelId) => {
 
 export const getFilteredClosedSupportCases = (token, hotelId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-hotels/closed/${hotelId}`,
+		supportCaseFreshUrl(`/support-cases-hotels/closed/${hotelId}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -2893,14 +2909,15 @@ export const getFilteredClosedSupportCases = (token, hotelId) => {
 
 export const getFilteredClosedSupportCasesClients = (token, hotelId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-hotels-clients/closed/${hotelId}`,
+		supportCaseFreshUrl(`/support-cases-hotels-clients/closed/${hotelId}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				"Content-Type": "application/json",
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
-			},
+			}),
 		},
 	)
 		.then((response) => response.json())
@@ -2929,27 +2946,29 @@ export const createNewSupportCase = async (data) => {
 };
 
 export const getSupportCases = (status, token, hotelId) => {
-	const url = `${process.env.REACT_APP_API_URL}/support-cases?status=${status}`;
+	const url = supportCaseFreshUrl(`/support-cases?status=${status}`);
 	return fetch(url, {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			Accept: "application/json",
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${token}`,
-		},
+		}),
 	})
 		.then((response) => response.json())
 		.catch((err) => console.log(err));
 };
 
 export const getSupportCaseById = (caseId, token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/support-cases/${caseId}`, {
+	return fetch(supportCaseFreshUrl(`/support-cases/${caseId}`), {
 		method: "GET",
-		headers: {
+		cache: "no-store",
+		headers: supportCaseNoCacheHeaders({
 			Accept: "application/json",
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${token}`,
-		},
+		}),
 	})
 		.then((response) => {
 			return response.json();
@@ -2960,12 +2979,13 @@ export const getSupportCaseById = (caseId, token) => {
 // Fetch unseen messages by Super Admin or PMS Owner
 export const getUnseenMessagesCountByAdmin = async (userId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/unseen/count?userId=${userId}`,
+		supportCaseFreshUrl(`/support-cases/unseen/count?userId=${userId}`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
-			},
+			}),
 		},
 	)
 		.then((response) => {
@@ -2982,12 +3002,13 @@ export const getUnseenMessagesCountByAdmin = async (userId) => {
 // Fetch unseen messages by Hotel Owner
 export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases/${hotelId}/unseen/hotel-owner`,
+		supportCaseFreshUrl(`/support-cases/${hotelId}/unseen/hotel-owner`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
-			},
+			}),
 		},
 	)
 		.then((response) => {
@@ -3004,12 +3025,13 @@ export const getUnseenMessagesByHotelOwner = async (hotelId) => {
 // Fetch unseen messages by Regular Client
 export const getUnseenMessagesByClient = async (clientId) => {
 	return fetch(
-		`${process.env.REACT_APP_API_URL}/support-cases-client/${clientId}/unseen`,
+		supportCaseFreshUrl(`/support-cases-client/${clientId}/unseen`),
 		{
 			method: "GET",
-			headers: {
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
 				Accept: "application/json",
-			},
+			}),
 		},
 	)
 		.then((response) => {
