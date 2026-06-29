@@ -193,7 +193,8 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 					const quickReplies = quickRepliesForMessage(msg);
 					return (
 					<Message key={index}>
-						<strong>{msg.messageBy.customerName}:</strong> {msg.message}
+						<MessageSender>{msg.messageBy.customerName}:</MessageSender>
+						<MessageBody>{msg.message}</MessageBody>
 						{quickReplies.length > 0 && (
 							<QuickReplyPreview>
 								{quickReplies.map((label) => (
@@ -271,6 +272,21 @@ const Message = styled.div`
 	margin-bottom: 10px;
 `;
 
+const MessageSender = styled.strong`
+	display: block;
+	margin-bottom: 4px;
+	font-weight: 900;
+	line-height: 1.35;
+`;
+
+const MessageBody = styled.div`
+	display: block;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+`;
+
 const QuickReplyPreview = styled.div`
 	display: flex;
 	flex-wrap: wrap;
@@ -288,6 +304,8 @@ const QuickReplyChip = styled.button`
 	font-size: 0.8rem;
 	font-weight: 800;
 	line-height: 1.25;
+	white-space: normal;
+	overflow-wrap: anywhere;
 	cursor: default;
 	opacity: 1;
 `;

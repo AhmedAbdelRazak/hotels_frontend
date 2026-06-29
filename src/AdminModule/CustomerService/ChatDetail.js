@@ -1500,6 +1500,8 @@ const MessageBody = styled.div`
 	display: block;
 	line-height: 1.55;
 	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	word-break: break-word;
 `;
 
 const QuickReplyPreview = styled.div`
@@ -1520,6 +1522,8 @@ const QuickReplyChip = styled.button`
 	font-size: 0.8rem;
 	font-weight: 800;
 	line-height: 1.25;
+	white-space: normal;
+	overflow-wrap: anywhere;
 	cursor: default;
 	opacity: 1;
 `;
