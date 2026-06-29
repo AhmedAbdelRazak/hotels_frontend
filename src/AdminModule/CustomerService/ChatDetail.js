@@ -269,7 +269,13 @@ const aiReplyDelayForIndex = (conversation = [], index = -1) => {
 	return guestTime && aiTime >= guestTime ? aiTime - guestTime : null;
 };
 
-const buildAiMonitor = (conversation = [], chat = {}, nowMs = Date.now()) => {
+const buildAiMonitor = (
+	conversation = [],
+	chat = {},
+	nowMs = Date.now(),
+	options = {}
+) => {
+	const isLive = options.isLive === true;
 	const delays = [];
 	let guestTurns = 0;
 	let answeredTurns = 0;
@@ -299,17 +305,20 @@ const buildAiMonitor = (conversation = [], chat = {}, nowMs = Date.now()) => {
 		}
 	});
 
-	const currentWaitMs = pendingGuestAt ? Math.max(0, nowMs - pendingGuestAt) : 0;
+	const currentWaitMs =
+		isLive && pendingGuestAt ? Math.max(0, nowMs - pendingGuestAt) : 0;
 	const avgMs = delays.length
 		? delays.reduce((sum, value) => sum + value, 0) / delays.length
 		: 0;
 	const maxMs = delays.length ? Math.max(...delays) : 0;
 	const lastMs = delays.length ? delays[delays.length - 1] : 0;
-	let status = "healthy";
-	if (currentWaitMs > 20000 || maxMs > 45000 || duplicateAiTurns > 0) {
-		status = "slow";
-	} else if (currentWaitMs > 12000 || avgMs > 12000 || maxMs > 25000) {
-		status = "watch";
+	let status = isLive ? "healthy" : "paused";
+	if (isLive) {
+		if (currentWaitMs > 20000 || maxMs > 45000 || duplicateAiTurns > 0) {
+			status = "slow";
+		} else if (currentWaitMs > 12000 || avgMs > 12000 || maxMs > 25000) {
+			status = "watch";
+		}
 	}
 
 	return {
@@ -317,7 +326,7 @@ const buildAiMonitor = (conversation = [], chat = {}, nowMs = Date.now()) => {
 		responder: chat.aiResponderName || chat.supporterName || "AI",
 		guestTurns,
 		answeredTurns,
-		unansweredTurns: pendingGuestAt ? 1 : 0,
+		unansweredTurns: isLive && pendingGuestAt ? 1 : 0,
 		duplicateAiTurns,
 		currentWaitMs,
 		avgMs,
@@ -439,16 +448,31 @@ const ChatDetail = ({
 	);
 	const isClientCase = chat.openedBy === "client";
 	const showAiControls = !isHistory && isClientCase && caseStatus === "open";
+	const aiMonitorLive = showAiControls && aiEnabled;
+	const aiMonitorStatus = aiMonitorLive ? undefined : "paused";
 	const showEscalationControls =
 		showAiControls && escalationStatus === "active";
 	const manualReplyLocked = showAiControls && aiEnabled;
-	const aiMonitor = buildAiMonitor(messages, chat, monitorNow);
+	const aiMonitor = buildAiMonitor(messages, chat, monitorNow, {
+		isLive: aiMonitorLive,
+	});
+	const visibleAiMonitorStatus = aiMonitorStatus || aiMonitor.status;
+	const monitorStatusText =
+		isHistory || caseStatus === "closed"
+			? chatLabels.closed
+			: !aiEnabled
+			? chatLabels.aiPaused
+			: aiMonitor.status === "slow"
+			? chatLabels.aiSlow
+			: aiMonitor.status === "watch"
+			? chatLabels.aiWatch
+			: chatLabels.aiHealthy;
 
 	useEffect(() => {
-		if (!isClientCase) return undefined;
+		if (!aiMonitorLive) return undefined;
 		const timer = setInterval(() => setMonitorNow(Date.now()), 2000);
 		return () => clearInterval(timer);
-	}, [isClientCase, chat._id]);
+	}, [aiMonitorLive, chat._id]);
 
 	// Scroll to the bottom function
 	const scrollToBottom = () => {
@@ -474,6 +498,8 @@ const ChatDetail = ({
 		setCaseStatus(chat.caseStatus);
 		setAiEnabled(Boolean(chat.aiToRespond));
 		setEscalationStatus(chat.escalationStatus || "none");
+
+		if (isHistory || chat.caseStatus === "closed") return undefined;
 
 		// Join the socket room for this chat
 		socket.emit("joinRoom", { caseId: chat._id });
@@ -529,7 +555,7 @@ const ChatDetail = ({
 			socket.off("aiPaused", handleAiPaused);
 			socket.emit("leaveRoom", { caseId: chat._id });
 		};
-	}, [canEditChatDisplayName, chat, chat._id, user._id, user.email, user.name]);
+	}, [canEditChatDisplayName, chat, chat._id, isHistory, user._id, user.email, user.name]);
 
 	// Automatically scroll when messages change
 	useEffect(() => {
@@ -946,17 +972,11 @@ const ChatDetail = ({
 			)}
 
 			{isClientCase && (
-				<AiMonitorPanel $isRtl={chatIsRtl} $status={aiMonitor.status}>
+				<AiMonitorPanel $isRtl={chatIsRtl} $status={visibleAiMonitorStatus}>
 					<AiMonitorHeader $isRtl={chatIsRtl}>
 						<strong>{chatLabels.aiMonitor}</strong>
-						<MonitorStatus $status={aiEnabled ? aiMonitor.status : "paused"}>
-							{!aiEnabled
-								? chatLabels.aiPaused
-								: aiMonitor.status === "slow"
-								? chatLabels.aiSlow
-								: aiMonitor.status === "watch"
-								? chatLabels.aiWatch
-								: chatLabels.aiHealthy}
+						<MonitorStatus $status={visibleAiMonitorStatus}>
+							{monitorStatusText}
 						</MonitorStatus>
 					</AiMonitorHeader>
 					<MonitorGrid>
