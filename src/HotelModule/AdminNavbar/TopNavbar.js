@@ -1004,6 +1004,13 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 						  })
 						: Promise.resolve([]),
 				]);
+				if (pendingData?.error || housekeepingData?.error) {
+					throw new Error(
+						pendingData?.error ||
+							housekeepingData?.error ||
+							"Notification refresh failed"
+					);
+				}
 				const reservationItems =
 					pendingData && !pendingData.error && Array.isArray(pendingData.data)
 						? pendingData.data
@@ -1053,7 +1060,6 @@ const TopNavbar = ({ collapsed, roomCountDetails }) => {
 				setNotificationFeed(nextFeed);
 			} catch (error) {
 				if (!silent) console.error("Failed to load notification feed", error);
-				setNotificationFeed({ total: 0, data: [] });
 			} finally {
 				if (!silent) setNotificationsLoading(false);
 			}

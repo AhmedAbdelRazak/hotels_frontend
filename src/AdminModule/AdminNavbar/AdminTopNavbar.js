@@ -621,6 +621,14 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 					getFilteredSupportCasesClients(token),
 					listAdminB2BChats(user._id, token, { status: "active" }),
 				]);
+				if (
+					!Array.isArray(hotelCases) ||
+					!Array.isArray(clientCases) ||
+					b2bData?.error ||
+					!Array.isArray(b2bData?.chats)
+				) {
+					throw new Error("Chat feed refresh failed");
+				}
 				const hotelRows = (Array.isArray(hotelCases) ? hotelCases : [])
 					.filter((supportCase) => supportCase.caseStatus !== "closed")
 					.map((supportCase) => ({
@@ -715,6 +723,9 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 						token,
 						limit: 12,
 					});
+					if (hotelFeed?.error) {
+						throw new Error(hotelFeed.error);
+					}
 					const nextTotal = Number(hotelFeed?.total || 0);
 					const previousTotal = Number(notificationFeedTotalRef.current || 0);
 					if (
@@ -742,17 +753,23 @@ const AdminTopNavbar = ({ chosenLanguage, languageToggle }) => {
 						getAdminSupportNotificationSummary(user._id, token),
 						getAdminB2BChatUnreadSummary(user._id, token),
 					]);
-					setChatNotificationSummary({
-						supportOpenCases: Number(supportSummary?.openCases || 0),
-						supportUnseenMessages: Number(
-							supportSummary?.unseenMessages || 0
-						),
-						supportEscalatedCases: Number(
-							supportSummary?.activeEscalatedClientCases || 0
-						),
-						b2bActiveChats: Number(b2bSummary?.activeChats || 0),
-						b2bUnreadMessages: Number(b2bSummary?.unreadMessages || 0),
-					});
+					setChatNotificationSummary((previous) => ({
+						supportOpenCases: supportSummary?.error
+							? previous.supportOpenCases
+							: Number(supportSummary?.openCases || 0),
+						supportUnseenMessages: supportSummary?.error
+							? previous.supportUnseenMessages
+							: Number(supportSummary?.unseenMessages || 0),
+						supportEscalatedCases: supportSummary?.error
+							? previous.supportEscalatedCases
+							: Number(supportSummary?.activeEscalatedClientCases || 0),
+						b2bActiveChats: b2bSummary?.error
+							? previous.b2bActiveChats
+							: Number(b2bSummary?.activeChats || 0),
+						b2bUnreadMessages: b2bSummary?.error
+							? previous.b2bUnreadMessages
+							: Number(b2bSummary?.unreadMessages || 0),
+					}));
 				} else {
 					setChatNotificationSummary({
 						supportOpenCases: 0,
