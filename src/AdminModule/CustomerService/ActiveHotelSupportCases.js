@@ -104,27 +104,27 @@ const ActiveHotelSupportCases = () => {
 		const fetchSupportCases = () => {
 			getFilteredSupportCases(token)
 				.then((data) => {
-					if (data?.error) {
-						console.warn("Support case list response error:", data.error);
-					}
-					const openCases = (Array.isArray(data) ? data : []).filter(
-						(chat) => chat.caseStatus !== "closed"
-					);
-					setSupportCases(openCases);
+					if (data.error) {
+						toast.error("Failed to fetch support cases");
+					} else {
+						const openCases = data.filter(
+							(chat) => chat.caseStatus !== "closed"
+						);
+						setSupportCases(openCases);
 
-					// Calculate unseen messages by admin
-					const unseenMessages = openCases.reduce((acc, supportCase) => {
-						const conversation = Array.isArray(supportCase.conversation)
-							? supportCase.conversation
-							: [];
-						return acc + conversation.filter((msg) => !msg.seenByAdmin).length;
-					}, 0);
-					setUnseenCount(unseenMessages);
+						// Calculate unseen messages by admin
+						const unseenMessages = openCases.reduce((acc, supportCase) => {
+							return (
+								acc +
+								supportCase.conversation.filter((msg) => !msg.seenByAdmin)
+									.length
+							);
+						}, 0);
+						setUnseenCount(unseenMessages);
+					}
 				})
-				.catch((error) => {
-					console.warn("Failed to fetch support cases:", error);
-					setSupportCases([]);
-					setUnseenCount(0);
+				.catch(() => {
+					toast.error("Failed to fetch support cases");
 				});
 		};
 
