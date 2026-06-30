@@ -65,7 +65,7 @@ const items = [
 		</>
 	),
 getItem(
-	<Link to='/admin/customer-service'>Customer Service</Link>,
+	<Link to='/admin/customer-service?tab=active-client-cases'>Customer Service</Link>,
 	"sub2",
 	<AreaChartOutlined />
 ),

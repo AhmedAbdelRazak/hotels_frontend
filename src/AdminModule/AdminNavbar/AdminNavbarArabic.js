@@ -165,7 +165,7 @@ const adminArabicItems = [
 		"sub10",
 		<DollarCircleOutlined />
 	),
-	getItem(<Link to='/admin/customer-service'>خدمة العملاء</Link>, "sub2", <AreaChartOutlined />),
+	getItem(<Link to='/admin/customer-service?tab=active-client-cases'>خدمة العملاء</Link>, "sub2", <AreaChartOutlined />),
 	getItem(<Link to='/admin/all-reservations'>حجوزات الفنادق</Link>, "sub4", <ShopOutlined />),
 	getItem(<Link to='/admin/jannatbooking-tools'>أدوات جنات بوكينج</Link>, "sub6", <AreaChartOutlined />),
 	getItem(<Link to='/admin/overall-hotel-reports'>تقارير الفنادق</Link>, "sub7", <TeamOutlined />),
@@ -222,7 +222,7 @@ const adminArabicItemsClean = [
 		"sub10",
 		<DollarCircleOutlined />
 	),
-getItem(<Link to='/admin/customer-service'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
+getItem(<Link to='/admin/customer-service?tab=active-client-cases'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
 getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <ShopOutlined />),
 getItem(<Link to='/admin/ota-reservations'>{AR.otaReservations}</Link>, "sub19", <InboxOutlined />),
 getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),

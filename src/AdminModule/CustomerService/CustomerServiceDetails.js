@@ -63,7 +63,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 	const location = useLocation();
 	const isArabic = chosenLanguage === "Arabic";
 	const L = CUSTOMER_SERVICE_DETAILS_TEXT[isArabic ? "ar" : "en"];
-	const [activeTab, setActiveTab] = useState("active-hotel-cases");
+	const [activeTab, setActiveTab] = useState("active-client-cases");
 
 	// State for case counts
 	const [activeHotelCasesCount, setActiveHotelCasesCount] = useState(0);
@@ -198,7 +198,7 @@ const CustomerServiceDetails = ({ getUser, isSuperAdmin, chosenLanguage }) => {
 	useEffect(() => {
 		const query = new URLSearchParams(location.search);
 		const tab = query.get("tab");
-		const nextTab = validTabKeys.has(tab) ? tab : "active-hotel-cases";
+		const nextTab = validTabKeys.has(tab) ? tab : "active-client-cases";
 
 		if (activeTab !== nextTab) {
 			setActiveTab(nextTab);

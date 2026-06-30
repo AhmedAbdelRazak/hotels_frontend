@@ -178,7 +178,7 @@ const adminLinks = [
 		dropdown: true,
 	},
 	{
-		to: "/admin/customer-service",
+		to: "/admin/customer-service?tab=active-client-cases",
 		key: "service",
 		icon: <MessageOutlined />,
 		access: ["CustomerService"],
