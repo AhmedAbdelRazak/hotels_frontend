@@ -57,10 +57,6 @@ const caseContactText = (item = {}) =>
 	item.conversationPreview?.messageBy?.customerEmail ||
 	"";
 
-const isMissingSupportCaseResponse = (data = {}) =>
-	Number(data?.status) === 404 ||
-	/support case not found/i.test(String(data?.error || ""));
-
 const AI_LEARNING_TEXT = {
 	en: {
 		button: "Teach Your AI Chat",
@@ -383,19 +379,6 @@ const ActiveClientsSupportCases = ({
 			setSelectedCaseLoading(true);
 			try {
 				const data = await getSupportCaseById(caseObj._id, token);
-				if (isMissingSupportCaseResponse(data)) {
-					socket.emit("leaveRoom", { caseId: caseObj._id });
-					setSupportCases((prevCases) =>
-						prevCases.filter((item) => item._id !== caseObj._id)
-					);
-					setSelectedCase((previous) =>
-						previous?._id === caseObj._id ? null : previous
-					);
-					if (caseIdParam && String(caseIdParam) === String(caseObj._id)) {
-						clearCaseIdFromUrl({ replace: true });
-					}
-					return null;
-				}
 				if (data?.error || !data?._id) {
 					toast.error("Failed to load support case");
 					return caseObj;
@@ -408,7 +391,7 @@ const ActiveClientsSupportCases = ({
 				setSelectedCaseLoading(false);
 			}
 		},
-		[caseIdParam, clearCaseIdFromUrl, token]
+		[token]
 	);
 
 	/* ------------------- SETUP / SOCKET LISTENERS ------------------- */
@@ -575,7 +558,6 @@ const ActiveClientsSupportCases = ({
 		if (!item?._id) return;
 		syncCaseIdToUrl(item._id);
 		const fullCase = await loadSupportCaseDetails(item);
-		if (fullCase === null) return;
 		const caseForChat = fullCase || item;
 
 		// On large screens => local selection, side by side
@@ -637,7 +619,6 @@ const ActiveClientsSupportCases = ({
 		let cancelled = false;
 		loadSupportCaseDetails(foundCase).then((fullCase) => {
 			if (cancelled) return;
-			if (fullCase === null) return;
 			const caseForChat = fullCase || foundCase;
 			setSelectedCase(caseForChat);
 			markCaseAsSeen(caseForChat);
@@ -670,7 +651,6 @@ const ActiveClientsSupportCases = ({
 		let cancelled = false;
 		loadSupportCaseDetails(foundCase).then((fullCase) => {
 			if (cancelled) return;
-			if (fullCase === null) return;
 			const caseForChat = fullCase || foundCase;
 			setSelectedCase(caseForChat);
 			markCaseAsSeen(caseForChat);

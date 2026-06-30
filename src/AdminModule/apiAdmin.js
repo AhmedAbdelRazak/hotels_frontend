@@ -936,21 +936,10 @@ export const getSupportCaseById = (caseId, token) => {
 			...authHeaders(token),
 		}),
 	})
-		.then(async (response) => {
-			const data = await response.json().catch(() => ({}));
-			if (!response.ok) {
-				return {
-					...data,
-					error: data?.error || `Failed to load support case (${response.status})`,
-					status: response.status,
-				};
-			}
-			return data;
+		.then((response) => {
+			return response.json();
 		})
-		.catch((err) => ({
-			error: err?.message || "Failed to load support case",
-			status: 0,
-		}));
+		.catch((err) => console.log(err));
 };
 
 export const updateSeenByCustomer = async (caseId) => {
