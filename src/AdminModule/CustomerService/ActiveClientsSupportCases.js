@@ -233,6 +233,26 @@ const ActiveClientsSupportCases = ({
 		[activeTabKey, history, location.pathname, location.search]
 	);
 
+	const clearCaseIdFromUrl = useCallback(
+		({ replace = true } = {}) => {
+			const params = new URLSearchParams(location.search);
+			if (!params.has("caseId") && !params.has("id")) return;
+			params.set("tab", activeTabKey);
+			params.delete("caseId");
+			params.delete("id");
+			const nextLocation = {
+				pathname: location.pathname,
+				search: `?${params.toString()}`,
+			};
+			if (replace) {
+				history.replace(nextLocation);
+			} else {
+				history.push(nextLocation);
+			}
+		},
+		[activeTabKey, history, location.pathname, location.search]
+	);
+
 	/* ------------------- SORT SUPPORT CASES ------------------- */
 	const sortSupportCases = useCallback(
 		(cases) => {
@@ -319,8 +339,16 @@ const ActiveClientsSupportCases = ({
 
 					// Filter out closed
 					const openCases = filteredCases.filter(caseBelongsToMode);
+					const openCaseIds = new Set(openCases.map((item) => item._id));
 
 					setSupportCases(sortSupportCases(openCases));
+					if (selectedCase?._id && !openCaseIds.has(selectedCase._id)) {
+						socket.emit("leaveRoom", { caseId: selectedCase._id });
+						setSelectedCase(null);
+					}
+					if (caseIdParam && !openCaseIds.has(caseIdParam)) {
+						clearCaseIdFromUrl({ replace: true });
+					}
 
 					// Calculate guest/client messages the admin has not opened yet.
 					const unseenMessages = openCases.reduce((acc, supportCase) => {
@@ -340,6 +368,9 @@ const ActiveClientsSupportCases = ({
 		user._id,
 		sortSupportCases,
 		caseBelongsToMode,
+		selectedCase?._id,
+		caseIdParam,
+		clearCaseIdFromUrl,
 	]);
 
 	const loadSupportCaseDetails = useCallback(
@@ -431,6 +462,11 @@ const ActiveClientsSupportCases = ({
 			if (selectedCase?._id === updatedCase._id && belongsHere) {
 				setSelectedCase(updatedCase);
 			}
+			if (selectedCase?._id === updatedCase._id && !belongsHere) {
+				socket.emit("leaveRoom", { caseId: updatedCase._id });
+				setSelectedCase(null);
+				clearCaseIdFromUrl({ replace: true });
+			}
 		};
 
 		// On case closed
@@ -441,8 +477,12 @@ const ActiveClientsSupportCases = ({
 			setSupportCases((prevCases) =>
 				prevCases.filter((c) => c._id !== closedCaseId)
 			);
-			if (selectedCase && selectedCase._id === closedCaseId) {
+			if (selectedCase && String(selectedCase._id) === String(closedCaseId)) {
+				socket.emit("leaveRoom", { caseId: closedCaseId });
 				setSelectedCase(null);
+			}
+			if (caseIdParam && String(caseIdParam) === String(closedCaseId)) {
+				clearCaseIdFromUrl({ replace: true });
 			}
 			fetchSupportCases();
 		};
@@ -467,6 +507,8 @@ const ActiveClientsSupportCases = ({
 	}, [
 		caseBelongsToMode,
 		fetchSupportCases,
+		clearCaseIdFromUrl,
+		caseIdParam,
 		selectedCase,
 		sortSupportCases,
 		soundEnabled,
@@ -561,7 +603,15 @@ const ActiveClientsSupportCases = ({
 	useEffect(() => {
 		if (isMobile || !caseIdParam || !supportCases.length) return;
 		const foundCase = supportCases.find((item) => item._id === caseIdParam);
-		if (!foundCase || selectedCase?._id === foundCase._id) return;
+		if (!foundCase) {
+			if (selectedCase?._id === caseIdParam) {
+				socket.emit("leaveRoom", { caseId: selectedCase._id });
+				setSelectedCase(null);
+			}
+			clearCaseIdFromUrl({ replace: true });
+			return;
+		}
+		if (selectedCase?._id === foundCase._id) return;
 		if (selectedCase?._id) {
 			socket.emit("leaveRoom", { caseId: selectedCase._id });
 		}
@@ -578,6 +628,7 @@ const ActiveClientsSupportCases = ({
 		};
 	}, [
 		caseIdParam,
+		clearCaseIdFromUrl,
 		isMobile,
 		loadSupportCaseDetails,
 		markCaseAsSeen,
@@ -588,7 +639,13 @@ const ActiveClientsSupportCases = ({
 	useEffect(() => {
 		if (!isMobile || !caseIdParam || !supportCases.length) return;
 		const foundCase = supportCases.find((item) => item._id === caseIdParam);
-		if (!foundCase) return;
+		if (!foundCase) {
+			if (selectedCase?._id === caseIdParam) {
+				setSelectedCase(null);
+			}
+			clearCaseIdFromUrl({ replace: true });
+			return;
+		}
 		if (selectedCase?._id === foundCase._id) return;
 		setSelectedCase(foundCase);
 		let cancelled = false;
@@ -603,6 +660,7 @@ const ActiveClientsSupportCases = ({
 		};
 	}, [
 		caseIdParam,
+		clearCaseIdFromUrl,
 		isMobile,
 		loadSupportCaseDetails,
 		markCaseAsSeen,
@@ -704,8 +762,10 @@ const ActiveClientsSupportCases = ({
 		// If we have a caseId in the URL, show chat in full screen
 		if (caseIdParam) {
 			const foundCase = supportCases.find((c) => c._id === caseIdParam);
+			const selectedCaseIsActive =
+				selectedCase?._id === caseIdParam && caseBelongsToMode(selectedCase);
 			const visibleCase =
-				selectedCase?._id === caseIdParam ? selectedCase : foundCase;
+				selectedCaseIsActive ? selectedCase : foundCase;
 			if (!visibleCase) {
 				return <div>Loading case...</div>; // or fetch single case if needed
 			}

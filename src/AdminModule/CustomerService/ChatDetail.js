@@ -620,6 +620,19 @@ const ChatDetail = ({
 		if (Array.isArray(updatedCase.conversation)) {
 			setMessages(updatedCase.conversation);
 		}
+		if (!isHistory && updatedCase.caseStatus === "closed") {
+			if (typeof setSupportCases === "function") {
+				setSupportCases((prev) =>
+					Array.isArray(prev)
+						? prev.filter((item) => item._id !== updatedCase._id)
+						: prev
+				);
+			}
+			if (typeof setSelectedCase === "function") {
+				setSelectedCase(null);
+			}
+			return;
+		}
 		if (typeof setSelectedCase === "function") {
 			setSelectedCase(updatedCase);
 		}
