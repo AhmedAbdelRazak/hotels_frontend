@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { updateSupportCase } from "../../AdminModule/apiAdmin";
+import { updateHotelSupportCase } from "../apiAdmin";
 import { Input, Select, Button as AntdButton, Upload, Form } from "antd";
 import socket from "../../socket";
 import EmojiPicker from "emoji-picker-react";
@@ -12,6 +12,9 @@ const isMobileKeyboardViewport = () =>
 	typeof window !== "undefined" &&
 	(window.innerWidth <= 768 ||
 		window.matchMedia?.("(pointer: coarse)")?.matches);
+
+const chatHotelId = (chat = {}) =>
+	typeof chat.hotelId === "object" ? chat.hotelId?._id : chat.hotelId;
 
 const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 	const { user, token } = isAuthenticated();
@@ -86,7 +89,12 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 		};
 
 		try {
-			await updateSupportCase(chat._id, { conversation: messageData });
+			await updateHotelSupportCase(
+				chat._id,
+				{ conversation: messageData },
+				token,
+				chatHotelId(chat)
+			);
 			socket.emit("sendMessage", messageData);
 			setNewMessage("");
 			socket.emit("stopTyping", { name: displayName, caseId: chat._id });
@@ -98,7 +106,12 @@ const ChatDetailHotels = ({ chat, isHistory, fetchChats }) => {
 
 	const handleChangeStatus = async (value) => {
 		try {
-			await updateSupportCase(chat._id, { caseStatus: value }, token);
+			await updateHotelSupportCase(
+				chat._id,
+				{ caseStatus: value },
+				token,
+				chatHotelId(chat)
+			);
 			setCaseStatus(value);
 			if (value === "closed") {
 				socket.emit("closeCase", chat._id); // Emit only the case ID

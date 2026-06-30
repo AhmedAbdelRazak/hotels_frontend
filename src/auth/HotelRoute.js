@@ -185,10 +185,10 @@ const pathAllowsRole = (pathname = "", user, search = "") => {
 	if (pathname.includes("/hotel-management/settings")) {
 		return hasRole(user, 8000) || hasRoleDescription(user, "reservationemployee");
 	}
-	if (
-		pathname.includes("/hotel-management/reservation-history") ||
-		pathname.includes("/hotel-management/customer-service")
-	) {
+	if (pathname.includes("/hotel-management/customer-service")) {
+		return isScopedHotelUser(user) || hasRole(user, 2000) || isSystemAdminUser(user);
+	}
+	if (pathname.includes("/hotel-management/reservation-history")) {
 		return false;
 	}
 	if (

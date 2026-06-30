@@ -325,7 +325,7 @@ const ActiveHotelSupportCasesHotels = () => {
 					<ChatDetailWrapper>
 						<ChatDetailHotels
 							chat={selectedCase}
-							fetchChats={() => getFilteredSupportCases(token)}
+							fetchChats={() => getFilteredSupportCases(token, selectedHotel)}
 						/>
 					</ChatDetailWrapper>
 				)}

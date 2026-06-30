@@ -2890,6 +2890,54 @@ export const getFilteredSupportCases = (token, hotelId) => {
 		.catch((err) => console.log(err));
 };
 
+export const getFilteredSupportCasesClients = (token, hotelId) => {
+	return fetch(
+		supportCaseFreshUrl(`/support-cases-hotels-clients/active/${hotelId}`),
+		{
+			method: "GET",
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			}),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const getHotelSupportCaseById = (caseId, token, hotelId) => {
+	return fetch(
+		supportCaseFreshUrl(`/support-cases-hotels/detail/${hotelId}/${caseId}`),
+		{
+			method: "GET",
+			cache: "no-store",
+			headers: supportCaseNoCacheHeaders({
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			}),
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
+export const updateHotelSupportCase = (caseId, data, token, hotelId) => {
+	return fetch(`${process.env.REACT_APP_API_URL}/support-cases-hotels/detail/${hotelId}/${caseId}`, {
+		method: "PUT",
+		headers: {
+			Accept: "application/json",
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${token}`,
+		},
+		body: JSON.stringify(data),
+	})
+		.then((response) => response.json())
+		.catch((err) => console.log(err));
+};
+
 export const getFilteredClosedSupportCases = (token, hotelId) => {
 	return fetch(
 		supportCaseFreshUrl(`/support-cases-hotels/closed/${hotelId}`),

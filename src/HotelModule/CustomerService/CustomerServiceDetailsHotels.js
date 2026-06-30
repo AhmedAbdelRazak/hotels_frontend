@@ -9,7 +9,7 @@ import HistoryClientsSupportCasesHotels from "./HistoryClientsSupportCasesHotels
 const CustomerServiceDetailsHotels = () => {
 	const history = useHistory();
 	const location = useLocation();
-	const [activeTab, setActiveTab] = useState("active-hotel-cases");
+	const [activeTab, setActiveTab] = useState("active-client-cases");
 
 	// Function to handle tab change
 	const handleTabChange = (tab) => {
@@ -21,14 +21,25 @@ const CustomerServiceDetailsHotels = () => {
 	useEffect(() => {
 		const query = new URLSearchParams(location.search);
 		const tab = query.get("tab");
-		if (tab) {
-			setActiveTab(tab);
-		}
+		const validTabs = new Set([
+			"active-client-cases",
+			"active-hotel-cases",
+			"history-hotel-cases",
+			"history-client-cases",
+		]);
+		setActiveTab(validTabs.has(tab) ? tab : "active-client-cases");
 	}, [location.search]);
 
 	return (
 		<CustomerServiceDetailsHotelsWrapper>
 			<div className='tab-grid'>
+				<Tab
+					isActive={activeTab === "active-client-cases"}
+					onClick={() => handleTabChange("active-client-cases")}
+				>
+					Active Client Support Cases
+				</Tab>
+
 				<Tab
 					isActive={activeTab === "active-hotel-cases"}
 					onClick={() => handleTabChange("active-hotel-cases")}
