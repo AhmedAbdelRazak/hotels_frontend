@@ -313,56 +313,55 @@ const ActiveClientsSupportCases = ({
 			: getFilteredSupportCasesClients;
 		loadCases(token)
 			.then((data) => {
-				if (data.error) {
-					toast.error("Failed to fetch support cases");
-				} else {
-					let filteredCases = data;
-
-					// ------------------ THIS IS THE KEY PART ------------------ //
-					// Only filter if NOT super admin and user has hotelsToSupport
-					if (!isSuperAdmin) {
-						const userHotelsToSupport =
-							(getUser && getUser.hotelsToSupport) || [];
-						if (userHotelsToSupport.length > 0) {
-							const allowedHotelIds = userHotelsToSupport.map(
-								(hotel) => hotel._id
-							);
-
-							filteredCases = filteredCases.filter((chat) => {
-								// Sometimes chat.hotelId can be an object with _id
-								// or just a string with the hotel's ID
-								const chatHotelId =
-									typeof chat.hotelId === "object"
-										? chat.hotelId._id
-										: chat.hotelId;
-								return allowedHotelIds.includes(chatHotelId);
-							});
-						}
-					}
-					// ---------------------------------------------------------- //
-
-					// Filter out closed
-					const openCases = filteredCases.filter(caseBelongsToMode);
-					const openCaseIds = new Set(openCases.map((item) => item._id));
-
-					setSupportCases(sortSupportCases(openCases));
-					if (selectedCase?._id && !openCaseIds.has(selectedCase._id)) {
-						socket.emit("leaveRoom", { caseId: selectedCase._id });
-						setSelectedCase(null);
-					}
-					if (caseIdParam && !openCaseIds.has(caseIdParam)) {
-						clearCaseIdFromUrl({ replace: true });
-					}
-
-					// Calculate guest/client messages the admin has not opened yet.
-					const unseenMessages = openCases.reduce((acc, supportCase) => {
-						return acc + supportCaseAdminUnreadMessages(supportCase, user._id);
-					}, 0);
-					setUnseenCount(unseenMessages);
+				if (data?.error) {
+					console.warn("Support case list response error:", data.error);
 				}
+				let filteredCases = Array.isArray(data) ? data : [];
+
+				// ------------------ THIS IS THE KEY PART ------------------ //
+				// Only filter if NOT super admin and user has hotelsToSupport
+				if (!isSuperAdmin) {
+					const userHotelsToSupport =
+						(getUser && getUser.hotelsToSupport) || [];
+					if (userHotelsToSupport.length > 0) {
+						const allowedHotelIds = userHotelsToSupport.map(
+							(hotel) => hotel._id
+						);
+
+						filteredCases = filteredCases.filter((chat) => {
+							// Sometimes chat.hotelId can be an object with _id
+							// or just a string with the hotel's ID
+							const chatHotelId =
+								typeof chat.hotelId === "object" ? chat.hotelId._id : chat.hotelId;
+							return allowedHotelIds.includes(chatHotelId);
+						});
+					}
+				}
+				// ---------------------------------------------------------- //
+
+				// Filter out closed
+				const openCases = filteredCases.filter(caseBelongsToMode);
+				const openCaseIds = new Set(openCases.map((item) => item._id));
+
+				setSupportCases(sortSupportCases(openCases));
+				if (selectedCase?._id && !openCaseIds.has(selectedCase._id)) {
+					socket.emit("leaveRoom", { caseId: selectedCase._id });
+					setSelectedCase(null);
+				}
+				if (caseIdParam && !openCaseIds.has(caseIdParam)) {
+					clearCaseIdFromUrl({ replace: true });
+				}
+
+				// Calculate guest/client messages the admin has not opened yet.
+				const unseenMessages = openCases.reduce((acc, supportCase) => {
+					return acc + supportCaseAdminUnreadMessages(supportCase, user._id);
+				}, 0);
+				setUnseenCount(unseenMessages);
 			})
-			.catch(() => {
-				toast.error("Failed to fetch support cases");
+			.catch((error) => {
+				console.warn("Failed to fetch support cases:", error);
+				setSupportCases([]);
+				setUnseenCount(0);
 			});
 	}, [
 		token,
