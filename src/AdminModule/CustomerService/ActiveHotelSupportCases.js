@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import {
 	Button,
@@ -47,6 +47,7 @@ const ActiveHotelSupportCases = () => {
 	const [supportCases, setSupportCases] = useState([]);
 	const [selectedCase, setSelectedCase] = useState(null);
 	const [unseenCount, setUnseenCount] = useState(0);
+	const fetchErrorToastAtRef = useRef(0);
 	const { soundEnabled, playSound } = useContext(NotificationContext);
 
 	// For mobile
@@ -82,6 +83,13 @@ const ActiveHotelSupportCases = () => {
 		}
 	};
 
+	const showFetchErrorToast = (message) => {
+		const now = Date.now();
+		if (now - fetchErrorToastAtRef.current < 30000) return;
+		fetchErrorToastAtRef.current = now;
+		toast.error(message);
+	};
+
 	// Fetch hotel owners when the modal is opened
 	useEffect(() => {
 		if (isModalVisible) {
@@ -105,7 +113,7 @@ const ActiveHotelSupportCases = () => {
 			getFilteredSupportCases(token)
 				.then((data) => {
 					if (data.error) {
-						toast.error("Failed to fetch support cases");
+						showFetchErrorToast("Failed to fetch support cases");
 					} else {
 						const openCases = data.filter(
 							(chat) => chat.caseStatus !== "closed"
@@ -124,7 +132,7 @@ const ActiveHotelSupportCases = () => {
 					}
 				})
 				.catch(() => {
-					toast.error("Failed to fetch support cases");
+					showFetchErrorToast("Failed to fetch support cases");
 				});
 		};
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from "react";
+import React, { useState, useEffect, useCallback, useContext, useRef } from "react";
 import styled from "styled-components";
 import { useLocation, useHistory } from "react-router-dom";
 import { List, Badge, Button, Modal, Tabs, Input, Tag, Empty, Spin } from "antd";
@@ -120,6 +120,7 @@ const ActiveClientsSupportCases = ({
 	const [trainingChats, setTrainingChats] = useState([]);
 	const [learningLoading, setLearningLoading] = useState(false);
 	const [learningSubmitting, setLearningSubmitting] = useState(false);
+	const fetchErrorToastAtRef = useRef(0);
 	const { user, token } = isAuthenticated();
 	const isEscalatedMode = mode === "escalated";
 	const isArabic = chosenLanguage === "Arabic";
@@ -253,6 +254,13 @@ const ActiveClientsSupportCases = ({
 		[activeTabKey, history, location.pathname, location.search]
 	);
 
+	const showFetchErrorToast = useCallback((message) => {
+		const now = Date.now();
+		if (now - fetchErrorToastAtRef.current < 30000) return;
+		fetchErrorToastAtRef.current = now;
+		toast.error(message);
+	}, []);
+
 	/* ------------------- SORT SUPPORT CASES ------------------- */
 	const sortSupportCases = useCallback(
 		(cases) => {
@@ -310,7 +318,7 @@ const ActiveClientsSupportCases = ({
 		loadCases(token)
 			.then((data) => {
 				if (data.error) {
-					toast.error("Failed to fetch support cases");
+					showFetchErrorToast("Failed to fetch support cases");
 				} else {
 					let filteredCases = data;
 
@@ -358,7 +366,7 @@ const ActiveClientsSupportCases = ({
 				}
 			})
 			.catch(() => {
-				toast.error("Failed to fetch support cases");
+				showFetchErrorToast("Failed to fetch support cases");
 			});
 	}, [
 		token,
@@ -371,6 +379,7 @@ const ActiveClientsSupportCases = ({
 		selectedCase?._id,
 		caseIdParam,
 		clearCaseIdFromUrl,
+		showFetchErrorToast,
 	]);
 
 	const loadSupportCaseDetails = useCallback(
@@ -380,12 +389,10 @@ const ActiveClientsSupportCases = ({
 			try {
 				const data = await getSupportCaseById(caseObj._id, token);
 				if (data?.error || !data?._id) {
-					toast.error("Failed to load support case");
 					return caseObj;
 				}
 				return data;
 			} catch (error) {
-				toast.error("Failed to load support case");
 				return caseObj;
 			} finally {
 				setSelectedCaseLoading(false);
