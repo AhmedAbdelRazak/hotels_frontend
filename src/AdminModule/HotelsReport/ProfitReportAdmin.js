@@ -1034,6 +1034,7 @@ const ProfitReportAdmin = () => {
 						rowKey={(row) => row._id || row.confirmation_number}
 						columns={columns}
 						dataSource={Array.isArray(report.reservations) ? report.reservations : []}
+						childrenColumnName='__profitReportChildren'
 						pagination={false}
 						scroll={{ x: TABLE_SCROLL_X }}
 						size='small'
