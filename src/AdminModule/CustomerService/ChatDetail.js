@@ -795,6 +795,32 @@ const ChatDetail = ({
 		setDrawerVisible(false);
 	};
 
+	const normalizeMoneyDisplayText = (value = "") =>
+		String(value || "")
+			.replace(/\b(SAR|AED|USD|EUR|GBP)(?=\d)/gi, (match) => `${match.toUpperCase()} `)
+			.replace(/\b(SAR|AED|USD|EUR|GBP)\s+/gi, (match) => match.toUpperCase())
+			.replace(/(\d)(SAR|AED|USD|EUR|GBP)\b/gi, "$1 $2");
+
+	const renderInlineFormatting = (value = "", keyPrefix = "text") =>
+		normalizeMoneyDisplayText(value)
+			.split(/(\*\*[^*]+\*\*|~~[^~]+~~)/g)
+			.map((part, index) => {
+				const bold = part.match(/^\*\*([^*]+)\*\*$/);
+				const strike = part.match(/^~~([^~]+)~~$/);
+				if (strike) {
+					return (
+						<del key={`${keyPrefix}-strike-${index}`} className='message-price-old'>
+							{strike[1]}
+						</del>
+					);
+				}
+				return bold ? (
+					<strong key={`${keyPrefix}-bold-${index}`}>{bold[1]}</strong>
+				) : (
+					part
+				);
+			});
+
 	const renderMessageWithLinks = (text) => {
 		const safeText = typeof text === "string" ? text : "";
 		if (!safeText) return null;
@@ -809,7 +835,7 @@ const ChatDetail = ({
 						target='_blank'
 						rel='noopener noreferrer'
 					>
-						{markdown[1]}
+						{renderInlineFormatting(markdown[1], `markdown-${index}`)}
 					</a>
 				);
 			}
@@ -818,7 +844,7 @@ const ChatDetail = ({
 					{part}
 				</a>
 			) : (
-				part
+				renderInlineFormatting(part, `part-${index}`)
 			);
 		});
 	};
@@ -1535,6 +1561,27 @@ const MessageBody = styled.div`
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
 	word-break: break-word;
+
+	.message-price-old {
+		position: relative;
+		display: inline-block;
+		color: #7a6f63;
+		text-decoration: none;
+		font-weight: 800;
+		opacity: 0.82;
+		margin-inline: 2px;
+	}
+
+	.message-price-old::after {
+		content: "";
+		position: absolute;
+		left: -3px;
+		right: -3px;
+		top: 52%;
+		border-top: 2px solid #c2410c;
+		transform: rotate(-8deg);
+		transform-origin: center;
+	}
 `;
 
 const QuickReplyPreview = styled.div`
