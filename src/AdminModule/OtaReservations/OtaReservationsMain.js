@@ -42,6 +42,24 @@ const money = (value) => numberValue(value).toFixed(2);
 
 const round2 = (value) => Number(numberValue(value).toFixed(2));
 
+const titleCaseText = (value = "") =>
+	String(value || "")
+		.trim()
+		.split(/\s+/)
+		.map((word) =>
+			word
+				.split(/([-'])/)
+				.map((part) =>
+					/^[-']$/.test(part) || !part
+						? part
+						: `${part.charAt(0).toLocaleUpperCase()}${part
+								.slice(1)
+								.toLocaleLowerCase()}`
+				)
+				.join("")
+		)
+		.join(" ");
+
 const OTA_PRICING_TEXT = {
 	English: {
 		title: "Edit pricing details",
@@ -1058,11 +1076,11 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 		() =>
 			(assignableHotels || []).map((hotel) => {
 				const otherName = hotel.hotelNameOtherLanguage
-					? ` - ${hotel.hotelNameOtherLanguage}`
+					? ` - ${titleCaseText(hotel.hotelNameOtherLanguage)}`
 					: "";
 				return {
 					value: hotel._id,
-					label: `${hotel.hotelName || "Unnamed hotel"}${otherName}`,
+					label: `${titleCaseText(hotel.hotelName) || "Unnamed hotel"}${otherName}`,
 				};
 			}),
 		[assignableHotels]
@@ -1333,20 +1351,23 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 									<tbody>
 										{reservations.length ? (
 											reservations.map((reservation, index) => {
-												const assignedHotelName =
+												const rawAssignedHotelName =
 													reservation.hotel_name ||
 													reservation.hotelId?.hotelName ||
 													"";
+												const assignedHotelName =
+													titleCaseText(rawAssignedHotelName);
 												const otaHotelHint =
 													reservation.ota_hotel_name ||
 													reservation.supplierData?.otaHotelName ||
 													"";
+												const displayOtaHotelHint = titleCaseText(otaHotelHint);
 												const hotelTooltip = assignedHotelName
-													? otaHotelHint
-														? `${assignedHotelName} | OTA: ${otaHotelHint}`
+													? displayOtaHotelHint
+														? `${assignedHotelName} | OTA: ${displayOtaHotelHint}`
 														: assignedHotelName
-													: otaHotelHint
-													? `OTA hint: ${otaHotelHint}`
+													: displayOtaHotelHint
+													? `OTA hint: ${displayOtaHotelHint}`
 													: "Assign hotel";
 												return (
 													<tr key={getReservationKey(reservation)}>
@@ -1362,7 +1383,7 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 																	{assignedHotelName || "Assign hotel"}
 																</span>
 																{!assignedHotelName && otaHotelHint ? (
-																	<small className='truncate'>OTA: {otaHotelHint}</small>
+																	<small className='truncate'>OTA: {displayOtaHotelHint}</small>
 																) : null}
 															</HotelAssignButton>
 														</Tooltip>
