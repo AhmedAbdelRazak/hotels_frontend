@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
 	Modal,
 	Input,
@@ -98,6 +98,7 @@ const UpdatePDF = ({
 	onSave,
 }) => {
 	const [form] = Form.useForm();
+	const didPrefillOpenRef = useRef(false);
 
 	const init = useMemo(() => {
 		const normalizedStatus = normalizePaymentStatus(
@@ -130,7 +131,12 @@ const UpdatePDF = ({
 
 	// Prefill when opening; preset amount by paymentStatus
 	useEffect(() => {
-		if (!open) return;
+		if (!open) {
+			didPrefillOpenRef.current = false;
+			return;
+		}
+		if (didPrefillOpenRef.current) return;
+		didPrefillOpenRef.current = true;
 		form.resetFields();
 		form.setFieldsValue(init);
 

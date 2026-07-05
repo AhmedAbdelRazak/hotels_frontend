@@ -3,6 +3,11 @@ import styled from "styled-components";
 import UpdatePDF from "./UpdatePDF"; // Unified editing modal
 import { updateSingleReservation } from "../apiAdmin";
 
+const dateTimeValue = (value) => {
+	const time = new Date(value || 0).getTime();
+	return Number.isFinite(time) ? time : 0;
+};
+
 /**
  * ReceiptPDF (drop-in)
  * - Click any editable field to open one Update modal.
@@ -19,13 +24,11 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	useEffect(() => {
 		setLocalResv((current) => {
-			if (
-				current?._id === reservation?._id &&
-				current?.updatedAt === reservation?.updatedAt
-			) {
-				return current;
-			}
-			return reservation;
+			if (!reservation) return current || reservation;
+			if (!current || current?._id !== reservation?._id) return reservation;
+			const incomingUpdatedAt = dateTimeValue(reservation?.updatedAt);
+			const currentUpdatedAt = dateTimeValue(current?.updatedAt);
+			return incomingUpdatedAt > currentUpdatedAt ? reservation : current;
 		});
 	}, [reservation]);
 
@@ -40,7 +43,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 			new Date(
 				localResv?.createdAt || reservation?.createdAt || Date.now(),
 			).toLocaleDateString(),
-		[localResv, reservation],
+		[localResv?.createdAt, reservation?.createdAt],
 	);
 
 	const totalAmount = safeNumber(localResv?.total_amount);
@@ -121,13 +124,18 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	// Persist changes
 	const handleSave = async (vals) => {
 		const paymentStatus = (vals.paymentStatus || "").toLowerCase();
+		const currentSupplierBookingNo = resolveSupplierBookingNo(localResv);
 		const supplierBookingNo = String(
 			vals.supplierBookingNo ||
-				resolveSupplierBookingNo(localResv) ||
+				currentSupplierBookingNo ||
 				localResv?.confirmation_number ||
 				"",
 		).trim();
-		const supplierName = String(vals.supplierName || "").trim();
+		const supplierName = String(
+			vals.supplierName || localResv?.supplierData?.supplierName || "",
+		).trim();
+		const sameText = (left, right) =>
+			String(left || "").trim() === String(right || "").trim();
 
 		// Build base update payload
 		const updateData = {
@@ -136,23 +144,52 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				supplierName,
 				suppliedBookingNo: supplierBookingNo,
 			},
-			booking_source: (vals.bookingSource || "").trim(),
-			payment: paymentStatus,
-			customerDetails: {
-				name: (vals.guestName || "").trim(),
-				email: (vals.guestEmail || "").trim(),
-				phone: (vals.guestPhone || "").trim(),
-				passport: (vals.passport || "").trim(),
-				nationality: (vals.nationality || "").trim(),
-				reservedBy: (vals.reservedBy || "").trim(),
-			},
 			// Avoid auto emails from tiny edits; toggle if you like
 			sendEmail: false,
 		};
+		const bookingSource = String(vals.bookingSource || "").trim();
+		if (!sameText(bookingSource, localResv?.booking_source)) {
+			updateData.booking_source = bookingSource;
+		}
+		const paymentChanged = !sameText(paymentStatus, localResv?.payment);
+		if (paymentChanged) {
+			updateData.payment = paymentStatus;
+		}
+		const customerDetails = {};
+		[
+			["name", vals.guestName, localResv?.customer_details?.name],
+			["email", vals.guestEmail, localResv?.customer_details?.email],
+			["phone", vals.guestPhone, localResv?.customer_details?.phone],
+			["passport", vals.passport, localResv?.customer_details?.passport],
+			["nationality", vals.nationality, localResv?.customer_details?.nationality],
+			["reservedBy", vals.reservedBy, localResv?.customer_details?.reservedBy],
+		].forEach(([field, nextValue, currentValue]) => {
+			const normalized = String(nextValue || "").trim();
+			if (!sameText(normalized, currentValue)) {
+				customerDetails[field] = normalized;
+			}
+		});
+		if (Object.keys(customerDetails).length > 0) {
+			updateData.customerDetails = customerDetails;
+		}
 
 		// Apply paid amounts only when money was actually collected.
 		const amount = Number(vals.paidAmount || 0);
+		const paidAmountChanged =
+			paymentStatus === "paid online"
+				? Number(amount || 0) !== rawPaidAmount
+				: paymentStatus === "paid offline"
+				  ? Number(amount || 0) !== paidAmountOffline
+				  : [
+							"credit/ debit",
+							"credit/debit",
+							"credit / debit",
+							"not captured",
+							"not paid",
+				    ].includes(paymentStatus) &&
+				    (rawPaidAmount !== 0 || paidAmountOffline !== 0);
 		if (
+			(paymentChanged || paidAmountChanged) &&
 			(paymentStatus === "paid online" || paymentStatus === "paid offline") &&
 			Number.isFinite(amount) &&
 			amount >= 0
@@ -171,17 +208,20 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				};
 			}
 		} else if (
-			paymentStatus === "credit/ debit" ||
-			paymentStatus === "credit/debit" ||
-			paymentStatus === "credit / debit" ||
-			paymentStatus === "not captured"
+			(paymentChanged || paidAmountChanged) &&
+			[
+				"credit/ debit",
+				"credit/debit",
+				"credit / debit",
+				"not captured",
+			].includes(paymentStatus)
 		) {
 			updateData.paid_amount = 0;
 			updateData.payment_details = {
 				...(localResv?.payment_details || {}),
 				onsite_paid_amount: 0,
 			};
-		} else if (paymentStatus === "not paid") {
+		} else if ((paymentChanged || paidAmountChanged) && paymentStatus === "not paid") {
 			updateData.paid_amount = 0;
 			updateData.payment_details = {
 				...(localResv?.payment_details || {}),
@@ -204,8 +244,12 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 						...(prev?.supplierData || {}),
 						...updateData.supplierData,
 					},
-					booking_source: updateData.booking_source,
-					payment: updateData.payment,
+					booking_source:
+						updateData.booking_source !== undefined
+							? updateData.booking_source
+							: prev?.booking_source,
+					payment:
+						updateData.payment !== undefined ? updateData.payment : prev?.payment,
 					paid_amount:
 						typeof updateData.paid_amount === "number"
 							? updateData.paid_amount
@@ -218,7 +262,7 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 						: prev?.payment_details,
 					customer_details: {
 						...prev?.customer_details,
-						...updateData.customerDetails,
+						...(updateData.customerDetails || {}),
 					},
 				}));
 			}
