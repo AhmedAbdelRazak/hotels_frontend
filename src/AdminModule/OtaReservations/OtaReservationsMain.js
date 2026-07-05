@@ -107,6 +107,8 @@ const OTA_PRICING_TEXT = {
 		savedTotalPlaceholder: "الإجمالي المحفوظ للتوزيع",
 		enterTotalPlaceholder: "أدخل الإجمالي للتوزيع",
 		noDailyPricing: "لا توجد صفوف أسعار يومية لهذا الحجز.",
+		generalCommissionPlaceholder:
+			"\u0623\u062f\u062e\u0644 \u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 		context: {
 			confirmationNumber: "رقم التأكيد",
 			otaConfirmationNumber: "رقم تأكيد OTA",
@@ -119,6 +121,8 @@ const OTA_PRICING_TEXT = {
 			totalClientPrice: "إجمالي سعر العميل",
 			totalBaseHotelPrice: "إجمالي السعر الأساسي للفندق",
 			netAfterOtaExpenses: "الصافي بعد مصاريف OTA",
+			generalCommission:
+				"\u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 			date: "التاريخ",
 			mainClientPrice: "سعر العميل الرئيسي",
 			baseHotelPrice: "السعر الأساسي للفندق",
@@ -135,6 +139,8 @@ const OTA_PRICING_TEXT = {
 				"إجمالي المبلغ الذي يجب أن يراه الفندق ويؤكده. هذا هو السعر الأساسي الظاهر للفندق.",
 			netAfterOtaExpenses:
 				"الإجمالي المتبقي بعد خصم مصاريف OTA أو أي مصاريف منصات أخرى من إجمالي العميل.",
+			generalCommission:
+				"\u0639\u0645\u0648\u0644\u0629 \u0639\u0627\u0645\u0629 \u0645\u0646\u0641\u0635\u0644\u0629 \u062a\u064f\u062d\u0641\u0638 \u0639\u0644\u0649 \u0627\u0644\u062d\u062c\u0632 \u0648\u0644\u0627 \u062a\u064f\u0648\u0632\u0639 \u0639\u0644\u0649 \u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0644\u064a\u0627\u0644\u064a.",
 			mainClientPrice:
 				"السعر الليلي الظاهر للعميل أو منصة OTA لهذا التاريخ.",
 			baseHotelPrice:
@@ -175,7 +181,11 @@ const savedClientTotalForReservation = (reservation = {}) => {
 };
 
 const savedRootTotalForReservation = (reservation = {}) => {
-	const value = firstExplicitNumber(reservation?.adminPricing?.rootTotal);
+	const value = firstExplicitNumber(
+		reservation?.adminPricing?.rootTotal,
+		reservation?.sub_total,
+		reservation?.hotel_visible_amount
+	);
 	return value !== null ? round2(value) : 0;
 };
 
@@ -188,8 +198,11 @@ const savedNetTotalForReservation = (reservation = {}) => {
 
 const savedCommissionForReservation = (reservation = {}) => {
 	const value = firstExplicitNumber(
-		reservation?.commission,
-		reservation?.adminPricing?.commissionAmount
+		reservation?.adminPricing?.commissionAmount,
+		reservation?.financial_cycle?.commissionAmount,
+		reservation?.commissionData?.commissionAmount,
+		reservation?.commissionData?.amount,
+		reservation?.commission
 	);
 	return value !== null ? round2(value) : 0;
 };

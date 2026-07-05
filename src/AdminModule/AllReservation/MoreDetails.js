@@ -6735,6 +6735,19 @@ const ReservationDetail = ({
 
 	const pricingBreakdownByDay = useMemo(() => {
 		const grouped = new Map();
+		const adminPricingMode = String(
+			reservation?.adminPricing?.mode || "",
+		).toLowerCase();
+		const usesManagedPricing =
+			!!reservation?.adminPricingVisibility?.rootOnlyForHotelManagement ||
+			!!reservation?.supplierData?.otaCreatedFromEmail ||
+			!!reservation?.supplierData?.otaProvider ||
+			/(ota|admin_three_price|platform)/i.test(adminPricingMode);
+		const hasExplicitMoney = (value) =>
+			value !== null &&
+			value !== undefined &&
+			value !== "" &&
+			Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
 		(reservation?.pickedRoomsType || []).forEach((room, roomIndex) => {
 			const roomType = formatLeadingCapital(
 				room?.room_type || room?.roomType || "N/A",
@@ -6757,10 +6770,18 @@ const ReservationDetail = ({
 								room?.chosenPrice,
 							0,
 						);
-						const rootPrice = normalizeNumber(
-							day?.rootPrice ?? day?.totalPriceWithoutCommission ?? clientPrice,
-							clientPrice,
-						);
+						const explicitRoot =
+							hasExplicitMoney(day?.rootPrice)
+								? day.rootPrice
+								: hasExplicitMoney(day?.totalPriceWithoutCommission)
+								? day.totalPriceWithoutCommission
+								: null;
+						const rootPrice =
+							explicitRoot !== null
+								? normalizeNumber(explicitRoot, 0)
+								: usesManagedPricing
+								? 0
+								: normalizeNumber(clientPrice, clientPrice);
 						const explicitExpense =
 							day?.otaExpenseAmount ??
 							day?.otherExpenseAmount ??
@@ -6903,7 +6924,10 @@ const ReservationDetail = ({
 		chosenLanguage,
 		daysOfResidence,
 		normalizeNumber,
+		reservation?.adminPricing?.mode,
+		reservation?.adminPricingVisibility,
 		reservation?.pickedRoomsType,
+		reservation?.supplierData,
 	]);
 
 	const otaPricingSummary = useMemo(() => {
@@ -6923,6 +6947,13 @@ const ReservationDetail = ({
 				return normalizeNumber(value, 0);
 			}
 			return 0;
+		};
+		const firstExplicitMoneyOrNull = (...values) => {
+			for (const value of values) {
+				if (!hasExplicitMoney(value)) continue;
+				return normalizeNumber(value, 0);
+			}
+			return null;
 		};
 		const firstPositiveMoney = (...values) => {
 			for (const value of values) {
@@ -6978,27 +7009,26 @@ const ReservationDetail = ({
 			};
 		}
 
-		const hotelVisibleAmount = firstPositiveMoney(
-			...(preferAdminPricingTotals
-				? [
-						adminPricing.rootTotal,
-						pricingBreakdownByDay.rootTotal,
-						reservation?.sub_total,
-						safeSummary.hotelVisibleAmount,
-						safeSummary.hotel_visible_amount,
-						reservation?.hotel_visible_amount,
-						totalAmountValue,
-				  ]
-				: [
-						safeSummary.hotelVisibleAmount,
-						safeSummary.hotel_visible_amount,
-						adminPricing.rootTotal,
-						reservation?.hotel_visible_amount,
-						pricingBreakdownByDay.rootTotal,
-						reservation?.sub_total,
-						totalAmountValue,
-				  ]),
-		);
+		const hotelVisibleAmount = preferAdminPricingTotals
+			? firstExplicitMoneyOrNull(
+					adminPricing.rootTotal,
+					reservation?.sub_total,
+					pricingBreakdownByDay.hasDailyPricing
+						? pricingBreakdownByDay.rootTotal
+						: null,
+					safeSummary.hotelVisibleAmount,
+					safeSummary.hotel_visible_amount,
+					reservation?.hotel_visible_amount,
+			  ) ?? 0
+			: firstPositiveMoney(
+					safeSummary.hotelVisibleAmount,
+					safeSummary.hotel_visible_amount,
+					adminPricing.rootTotal,
+					reservation?.hotel_visible_amount,
+					pricingBreakdownByDay.rootTotal,
+					reservation?.sub_total,
+					totalAmountValue,
+			  );
 		const netAfterExpenses = firstPositiveMoney(
 			...(preferAdminPricingTotals
 				? [
@@ -7051,6 +7081,7 @@ const ReservationDetail = ({
 	}, [
 		explicitCommissionAmount,
 		normalizeNumber,
+		pricingBreakdownByDay.hasDailyPricing,
 		pricingBreakdownByDay.netTotal,
 		pricingBreakdownByDay.otaExpenseTotal,
 		pricingBreakdownByDay.platformMarginTotal,

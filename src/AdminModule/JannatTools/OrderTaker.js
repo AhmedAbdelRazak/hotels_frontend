@@ -47,6 +47,22 @@ const safeParseFloat = (value, fallback = 0) => {
 };
 
 const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
+const hasNumericInput = (value) =>
+	value !== null && value !== undefined && value !== "";
+const firstExplicitMoney = (...values) => {
+	for (const value of values) {
+		if (!hasNumericInput(value)) continue;
+		const parsed = safeParseFloat(value, NaN);
+		if (Number.isFinite(parsed)) return parsed;
+	}
+	return null;
+};
+const normalizeNullableMoney = (value) => {
+	if (!hasNumericInput(value)) return null;
+	const parsed = safeParseFloat(value, NaN);
+	if (!Number.isFinite(parsed)) return null;
+	return roundMoney(Math.max(parsed, 0));
+};
 const normalizeId = (value) => String(value?._id || value?.id || value || "").trim();
 const normalizeMatchText = (value) =>
 	String(value || "")
@@ -84,7 +100,9 @@ const resolveAdminPricingDay = (day = {}) => {
 			day.totalPriceWithCommission ??
 			day.price,
 	);
-	const rootPrice = roundMoney(day.rootPrice);
+	const rootPrice = roundMoney(
+		firstExplicitMoney(day.rootPrice, day.totalPriceWithoutCommission) ?? 0,
+	);
 	const netAfterExpenses = roundMoney(
 		day.netAfterExpenses ??
 			day.netAfterOtaExpenses ??
@@ -101,7 +119,7 @@ const resolveAdminPricingDay = (day = {}) => {
 		rootPrice,
 		commissionRate: safeParseFloat(day.commissionRate, 0),
 		totalPriceWithCommission: clientPrice,
-		totalPriceWithoutCommission: clientPrice,
+		totalPriceWithoutCommission: rootPrice,
 		netAfterExpenses,
 		netAfterOtaExpenses: netAfterExpenses,
 		otaExpenseAmount,
@@ -109,6 +127,68 @@ const resolveAdminPricingDay = (day = {}) => {
 		...pickPricingMetadata(day),
 	};
 };
+
+const summarizeAdminPricingRooms = (rooms = []) =>
+	(Array.isArray(rooms) ? rooms : []).reduce(
+		(totals, room) => {
+			const count = Math.max(1, Number(room?.count || 1) || 1);
+			(Array.isArray(room?.pricingByDay) ? room.pricingByDay : []).forEach(
+				(day) => {
+					const clientPrice = roundMoney(
+						firstExplicitMoney(
+							day.clientPrice,
+							day.mainPrice,
+							day.totalPriceWithCommission,
+							day.price,
+						) ?? 0,
+					);
+					const rootPrice = roundMoney(
+						firstExplicitMoney(day.rootPrice, day.totalPriceWithoutCommission) ??
+							0,
+					);
+					const explicitNet = firstExplicitMoney(
+						day.netAfterExpenses,
+						day.netAfterOtaExpenses,
+						day.netAfterOtherExpenses,
+					);
+					const explicitExpense = firstExplicitMoney(
+						day.otaExpenseAmount,
+						day.otherExpenseAmount,
+						day.expenseAmount,
+					);
+					const netAfterExpenses = roundMoney(
+						explicitNet !== null
+							? explicitNet
+							: explicitExpense !== null
+							? clientPrice - explicitExpense
+							: clientPrice,
+					);
+					totals.clientTotal = roundMoney(
+						totals.clientTotal + clientPrice * count,
+					);
+					totals.rootTotal = roundMoney(totals.rootTotal + rootPrice * count);
+					totals.netAfterExpensesTotal = roundMoney(
+						totals.netAfterExpensesTotal + netAfterExpenses * count,
+					);
+					totals.otaExpenseTotal = roundMoney(
+						totals.otaExpenseTotal + (clientPrice - netAfterExpenses) * count,
+					);
+					totals.platformMarginTotal = roundMoney(
+						totals.platformMarginTotal +
+							(netAfterExpenses - rootPrice) * count,
+					);
+				},
+			);
+			return totals;
+		},
+		{
+			clientTotal: 0,
+			rootTotal: 0,
+			netAfterExpensesTotal: 0,
+			otaExpenseTotal: 0,
+			platformMarginTotal: 0,
+		},
+	);
 
 const normalizeRoomLabel = (value) => String(value || "").trim();
 const JANNAT_EMPLOYEE_SOURCE = "Jannat Employee";
@@ -192,6 +272,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	// Grand Total (including commission):
 	const [totalAmount, setTotalAmount] = useState(0);
 	const [totalCommission, setTotalCommission] = useState(0);
+	const [commissionOverride, setCommissionOverride] = useState(null);
 	const [numberOfNights, setNumberOfNights] = useState(0);
 
 	/** Advance Payment‐related state */
@@ -244,6 +325,14 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	/** --- Submit guard to prevent double clicks --- */
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const submittingRef = useRef(false);
+	const hasCommissionOverride = hasNumericInput(commissionOverride);
+	const effectiveCommission = useMemo(
+		() =>
+			roundMoney(
+				hasCommissionOverride ? commissionOverride : totalCommission,
+			),
+		[hasCommissionOverride, commissionOverride, totalCommission],
+	);
 
 	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
@@ -878,16 +967,12 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				return room;
 			});
 
-			const deposit = sumCommission + sumOneNightCost;
-
 			setSelectedRooms(updatedRooms);
 			setHotelCost(Number(sumHotelCost.toFixed(2)));
 			setTotalAmount(Number(sumGrandTotal.toFixed(2)));
 			setTotalCommission(Number(sumCommission.toFixed(2)));
 			setOneNightCost(Number(sumOneNightCost.toFixed(2)));
 			setNumberOfNights(nights);
-
-			setDefaultDeposit(Number(deposit.toFixed(2)));
 		},
 		[
 			checkInDate,
@@ -927,14 +1012,19 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		calculateTotals,
 	]);
 
+	// Default deposit follows the commission currently being saved.
+	useEffect(() => {
+		setDefaultDeposit(roundMoney(effectiveCommission + oneNightCost));
+	}, [effectiveCommission, oneNightCost]);
+
 	/**
 	 * Update finalDeposit.
-	 * - If a package/offer is active, deposit is exactly the TOTAL COMMISSION.
+	 * - If a package/offer is active, deposit is exactly the effective commission.
 	 * - Otherwise, keep original logic.
 	 */
 	useEffect(() => {
 		if (packageLock.enabled) {
-			setFinalDeposit(totalCommission);
+			setFinalDeposit(effectiveCommission);
 			return;
 		}
 
@@ -956,10 +1046,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		defaultDeposit,
 		totalAmount,
 		packageLock.enabled,
-		totalCommission,
+		effectiveCommission,
 	]);
-
-	/** ------------------------------ Handlers ------------------------------ */
 
 	// Room Type selection
 	const handleRoomSelectionChange = (value, index) => {
@@ -1155,6 +1243,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 		setTotalAmount(0);
 		setTotalCommission(0);
+		setCommissionOverride(null);
 		setNumberOfNights(0);
 		setHotelCost(0);
 		setOneNightCost(0);
@@ -1554,6 +1643,11 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		};
 
 		const pickedRoomsType = transformPickedRooms(selectedRooms);
+		const adminPricingTotals = summarizeAdminPricingRooms(pickedRoomsType);
+		const totalAmountToSave = roundMoney(
+			adminPricingTotals.clientTotal || totalAmount,
+		);
+		const commissionToSave = effectiveCommission;
 
 		// --- Payment mapping for create (ENHANCED to handle 'credit/ debit') ---
 		let paymentField = "not paid";
@@ -1609,14 +1703,21 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				? String(confirmationNumber || "").trim()
 				: "",
 			pickedRoomsType,
+			pickedRoomsPricing: pickedRoomsType,
 			adminPricingVisibility: {
 				rootOnlyForHotelManagement: true,
 				source: "admin_reservation_create",
 			},
-			total_amount: Number(totalAmount.toFixed(2)), // Grand total
+			total_amount: totalAmountToSave, // Grand total
+			sub_total: adminPricingTotals.rootTotal,
+			adminPricing: {
+				mode: "admin_three_price",
+				...adminPricingTotals,
+				commissionAmount: commissionToSave,
+			},
 			payment: paymentField, // now includes 'credit/ debit'
 			paid_amount, // online paid OR authorized amount if 'credit/ debit'
-			commission: Number(totalCommission.toFixed(2)),
+			commission: commissionToSave,
 			commissionPaid: false,
 			createdByUserId: effectiveUserId || "",
 			orderTakeId: effectiveUserId || "",
@@ -2144,7 +2245,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						<div style={{ marginTop: 6 }}>
 							<Text type='secondary'>
 								<LockOutlined /> Package selected: deposit is locked to the
-								total commission ({totalCommission.toFixed(2)} SAR).
+								total commission ({effectiveCommission.toFixed(2)} SAR).
 							</Text>
 						</div>
 					)}
@@ -2179,8 +2280,26 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						<Descriptions.Item label='Total Amount (For the Hotel)'>
 							{hotelCost.toFixed(2)} SAR
 						</Descriptions.Item>
-						<Descriptions.Item label='Total Commission'>
+						<Descriptions.Item label='Calculated Commission'>
 							{totalCommission.toFixed(2)} SAR
+						</Descriptions.Item>
+						<Descriptions.Item label='Commission Amount'>
+							<InputNumber
+								min={0}
+								step={0.01}
+								precision={2}
+								value={commissionOverride}
+								placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
+								onChange={(value) =>
+									setCommissionOverride(normalizeNullableMoney(value))
+								}
+								disabled={isSubmitting}
+								style={{ width: "100%" }}
+							/>
+							<div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>
+								Saved commission: {effectiveCommission.toFixed(2)} SAR. Clear
+								to use the calculated commission.
+							</div>
 						</Descriptions.Item>
 						<Descriptions.Item label='Cost of One Night (First Night)'>
 							{oneNightCost.toFixed(2)} SAR
@@ -2252,6 +2371,17 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				onClose={closeModal}
 				pricingByDay={selectedRooms[editingRoomIndex]?.pricingByDay || []}
 				onUpdate={handlePricingUpdate}
+				roomDetails={selectedRooms[editingRoomIndex]}
+				nightCount={
+					numberOfNights ||
+					selectedRooms[editingRoomIndex]?.pricingByDay?.length ||
+					0
+				}
+				showCommissionAmount
+				commissionAmount={effectiveCommission}
+				onCommissionChange={(value) =>
+					setCommissionOverride(normalizeNullableMoney(value))
+				}
 			/>
 
 			{/* Packages & Offers Modal */}
