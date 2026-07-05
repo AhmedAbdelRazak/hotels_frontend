@@ -176,10 +176,12 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 	/* ------------------ 5) Tabs in URL ------------------ */
 	const handleTabChange = (tab) => {
 		const nextTab = normalizeReportTab(tab);
+		const queryParams = new URLSearchParams(location.search || "");
+		queryParams.set("tab", nextTab);
 		setActiveTab(nextTab);
 		history.push({
 			pathname: location.pathname,
-			search: `?tab=${nextTab}`,
+			search: `?${queryParams.toString()}`,
 		});
 	};
 
@@ -193,9 +195,10 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		}
 
 		if (tab !== nextTab) {
+			queryParams.set("tab", nextTab);
 			history.replace({
 				pathname: location.pathname,
-				search: `?tab=${nextTab}`,
+				search: `?${queryParams.toString()}`,
 			});
 		}
 	}, [activeTab, history, location.pathname, location.search]);

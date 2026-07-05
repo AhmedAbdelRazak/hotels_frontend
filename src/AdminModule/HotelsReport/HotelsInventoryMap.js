@@ -713,6 +713,8 @@ const normalizeDateParam = (value) => {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "";
 	return dayjs(normalized).isValid() ? normalized : "";
 };
+const makeDateRangeLabel = (start, end) =>
+	start && end ? `${start} - ${end}` : "";
 const normalizePositiveInt = (value, fallback, min = 1, max = 9999) => {
 	const parsed = Number.parseInt(String(value || ""), 10);
 	if (!Number.isFinite(parsed)) return fallback;
@@ -817,12 +819,17 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		(initialHijriEndMoment
 			? dayjs(initialHijriEndMoment.toDate()).format("YYYY-MM-DD")
 			: "");
+	const initialExplicitRange =
+		Boolean(initialRangeStartParam) && Boolean(initialRangeEndParam);
 	const initialRangeOverride =
-		initialCalendarType === "hijri" && initialRangeStart && initialRangeEnd
+		initialExplicitRange || (initialCalendarType === "hijri" && initialRangeStart && initialRangeEnd)
 			? {
 					start: initialRangeStart,
 					end: initialRangeEnd,
-					label: `${hijriMonthsEn[initialHijriMonth]} ${initialHijriYear}`,
+					label:
+						initialCalendarType === "hijri"
+							? `${hijriMonthsEn[initialHijriMonth]} ${initialHijriYear}`
+							: makeDateRangeLabel(initialRangeStart, initialRangeEnd),
 			  }
 			: null;
 	const initialMonthValue =
@@ -1141,9 +1148,20 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 	}, [data?.hotel?.hotelName, selectedHotelId, sortedHotels]);
 
 	const monthLabel = useMemo(() => {
-		if (rangeOverride?.label || calendarType === "hijri") {
+		if (rangeOverride?.start && rangeOverride?.end) {
+			if (calendarType !== "hijri") {
+				return `${tableLabels.gregorian}: ${
+					rangeOverride.label ||
+					makeDateRangeLabel(rangeOverride.start, rangeOverride.end)
+				}`;
+			}
 			const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
 			const monthName = months[Number(hijriMonth)] || rangeOverride?.label || "";
+			return `${tableLabels.hijri}: ${monthName} ${hijriYear}`;
+		}
+		if (calendarType === "hijri") {
+			const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
+			const monthName = months[Number(hijriMonth)] || "";
 			return `${tableLabels.hijri}: ${monthName} ${hijriYear}`;
 		}
 		const gregorianLabel = isArabic
@@ -1159,7 +1177,9 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		hijriYear,
 		isArabic,
 		monthValue,
+		rangeOverride?.end,
 		rangeOverride?.label,
+		rangeOverride?.start,
 		tableLabels.gregorian,
 		tableLabels.hijri,
 	]);
@@ -1541,9 +1561,29 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 			prev === nextDetailsReservationId ? prev : nextDetailsReservationId,
 		);
 
-		if (nextCalendarType === "hijri" && supportsHijri) {
-			const dateStart = normalizeDateParam(params.get(QUERY_KEYS.start));
-			const dateEnd = normalizeDateParam(params.get(QUERY_KEYS.end));
+		const dateStart = normalizeDateParam(params.get(QUERY_KEYS.start));
+		const dateEnd = normalizeDateParam(params.get(QUERY_KEYS.end));
+		if (dateStart && dateEnd) {
+			const nextRange = {
+				start: dateStart,
+				end: dateEnd,
+				label:
+					nextCalendarType === "hijri"
+						? `${hijriMonthsEn[nextHijriMonth]} ${nextHijriYear}`
+						: makeDateRangeLabel(dateStart, dateEnd),
+			};
+			setRangeOverride((prev) =>
+				prev?.start === nextRange.start &&
+				prev?.end === nextRange.end &&
+				prev?.label === nextRange.label
+					? prev
+					: nextRange,
+			);
+			setMonthValue((prev) => {
+				const nextMonthDate = dayjs(nextRange.start);
+				return prev?.isSame(nextMonthDate, "day") ? prev : nextMonthDate;
+			});
+		} else if (nextCalendarType === "hijri" && supportsHijri) {
 			const fallbackStart = dayjs(
 				moment()
 					.iYear(nextHijriYear)
@@ -1660,11 +1700,17 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 			setParam(QUERY_KEYS.end, rangeOverride?.end || fallbackHijriEnd);
 			deleteParam(QUERY_KEYS.month);
 		} else {
-			setParam(QUERY_KEYS.month, monthValue?.format("YYYY-MM"));
 			deleteParam(QUERY_KEYS.hijriMonth);
 			deleteParam(QUERY_KEYS.hijriYear);
-			deleteParam(QUERY_KEYS.start);
-			deleteParam(QUERY_KEYS.end);
+			if (rangeOverride?.start && rangeOverride?.end) {
+				setParam(QUERY_KEYS.start, rangeOverride.start);
+				setParam(QUERY_KEYS.end, rangeOverride.end);
+				deleteParam(QUERY_KEYS.month);
+			} else {
+				setParam(QUERY_KEYS.month, monthValue?.format("YYYY-MM"));
+				deleteParam(QUERY_KEYS.start);
+				deleteParam(QUERY_KEYS.end);
+			}
 		}
 		setParam(QUERY_KEYS.includeCancelled, includeCancelled ? "1" : "");
 		setParam(
@@ -2288,16 +2334,27 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 							/>
 							<Button
 								size='small'
-								onClick={() => setMonthValue((m) => m.subtract(1, "month"))}
+								onClick={() => {
+									setRangeOverride(null);
+									setMonthValue((m) => m.subtract(1, "month"));
+								}}
 							>
 								{tableLabels.prev}
 							</Button>
 							<Button
 								size='small'
-								onClick={() => setMonthValue((m) => m.add(1, "month"))}
+								onClick={() => {
+									setRangeOverride(null);
+									setMonthValue((m) => m.add(1, "month"));
+								}}
 							>
 								{tableLabels.next}
 							</Button>
+							{rangeOverride?.start && rangeOverride?.end ? (
+								<div className='muted'>
+									{rangeOverride.start} - {rangeOverride.end}
+								</div>
+							) : null}
 						</div>
 					)}
 				</div>
