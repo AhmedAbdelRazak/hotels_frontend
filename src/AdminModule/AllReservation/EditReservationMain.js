@@ -211,6 +211,10 @@ const normalizeId = (value) => {
 	if (typeof value === "object") return String(value._id || value.id || "");
 	return String(value);
 };
+const cleanString = (value) => String(value ?? "").trim();
+const stringsDiffer = (a, b) => cleanString(a) !== cleanString(b);
+const numbersDiffer = (a, b) => Number(a || 0) !== Number(b || 0);
+const moneyDiffers = (a, b) => Math.abs(roundMoney(a) - roundMoney(b)) > 0.01;
 
 /** Commission to percent:
  * - If <= 0 → fallback 10
@@ -560,6 +564,8 @@ const EditReservationMain = ({
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
 	const [hasExplicitPricingEdits, setHasExplicitPricingEdits] = useState(false);
+	const [hasExplicitCommissionEdit, setHasExplicitCommissionEdit] =
+		useState(false);
 	const [hasExplicitDateEdits, setHasExplicitDateEdits] = useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
@@ -734,6 +740,7 @@ const EditReservationMain = ({
 		setChildren(reservation.children || 0);
 		setBookingSource(reservation.booking_source || "Jannat Employee");
 		setHasExplicitPricingEdits(false);
+		setHasExplicitCommissionEdit(false);
 		setHasExplicitDateEdits(false);
 		setCommissionOverride(
 			reservation.commission !== null &&
@@ -1247,6 +1254,7 @@ const EditReservationMain = ({
 	// ---------------- Room selection ----------------
 	const handleRoomSelectionChange = (value, index) => {
 		const updated = [...selectedRooms];
+		setHasExplicitPricingEdits(true);
 
 		if (!value) {
 			updated[index] = {
@@ -1286,10 +1294,12 @@ const EditReservationMain = ({
 	const handleRoomCountChange = (cnt, index) => {
 		const updated = [...selectedRooms];
 		updated[index] = { ...updated[index], count: cnt };
+		setHasExplicitPricingEdits(true);
 		setSelectedRooms(updated);
 	};
 
 	const addRoomSelection = () => {
+		setHasExplicitPricingEdits(true);
 		setSelectedRooms((prev) => [
 			...prev,
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
@@ -1299,6 +1309,7 @@ const EditReservationMain = ({
 	const removeRoomSelection = (index) => {
 		const updated = [...selectedRooms];
 		updated.splice(index, 1);
+		setHasExplicitPricingEdits(true);
 		setSelectedRooms(
 			updated.length
 				? updated
@@ -1352,6 +1363,7 @@ const EditReservationMain = ({
 			message.info(
 				"Relocation: hotel changed — rooms & pricing reset. Please reselect and confirm."
 			);
+			setHasExplicitPricingEdits(true);
 			resetRoomsForNewHotel();
 		}
 	};
@@ -1378,6 +1390,7 @@ const EditReservationMain = ({
 		setTotalAmount(0);
 		setTotalCommission(0);
 		setCommissionOverride(null);
+		setHasExplicitCommissionEdit(false);
 		setNumberOfNights(0);
 		setOneNightCost(0);
 		setDefaultDeposit(0);
@@ -1456,94 +1469,151 @@ const EditReservationMain = ({
 		);
 		const adminPricingTotals = summarizeAdminPricingRooms(pickedRoomsType);
 
-		// Client-side relocate suffix (server also handles/overrides)
-		let updatedConfirmationNumber = reservation.confirmation_number;
-		if (normalizeId(selectedHotel) !== normalizeId(reservation.hotelId)) {
-			const relocatePattern = /_relocate(\d*)$/;
-			const m = updatedConfirmationNumber.match(relocatePattern);
-			if (m) {
-				const c = m[1] ? parseInt(m[1], 10) + 1 : 2;
-				updatedConfirmationNumber = updatedConfirmationNumber.replace(
-					relocatePattern,
-					`_relocate${c}`
-				);
-			} else {
-				updatedConfirmationNumber += "_relocate";
-			}
-		}
-
 		const belongsToId =
 			(selectedHotel.belongsTo && selectedHotel.belongsTo._id) ||
 			selectedHotel.belongsTo ||
 			"";
+		const hotelChanged =
+			normalizeId(selectedHotel) !== normalizeId(reservation.hotelId);
+		const checkinValue = dayjs(checkInDate).format("YYYY-MM-DD");
+		const checkoutValue = dayjs(checkOutDate).format("YYYY-MM-DD");
+		const dateChanged =
+			dateOnlyKey(checkinValue) !== dateOnlyKey(reservation.checkin_date) ||
+			dateOnlyKey(checkoutValue) !== dateOnlyKey(reservation.checkout_date);
+		const guestCountChanged =
+			numbersDiffer(adults, reservation.adults) ||
+			numbersDiffer(children, reservation.children) ||
+			numbersDiffer(
+				Number(adults || 0) + Number(children || 0),
+				reservation.total_guests
+			);
 		const commissionToSave =
-			isSuperUser && hasCommissionOverride
+			isSuperUser && (hasExplicitCommissionEdit || hasCommissionOverride)
 				? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
 				: adminManagedPricing && savedReservationCommission !== null
 				? savedReservationCommission
 				: totalCommission;
+		const pricingPayloadNeeded = hotelChanged || hasExplicitPricingEdits;
+		const commissionPayloadNeeded =
+			isSuperUser &&
+			hasExplicitCommissionEdit &&
+			moneyDiffers(
+				commissionToSave,
+				savedReservationCommission ?? reservation.commission ?? 0
+			);
+		const advancePaymentPayload = {
+			paymentPercentage:
+				advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
+			finalAdvancePayment: finalDeposit.toFixed(2),
+		};
+		const existingAdvancePayment = reservation.advancePayment || {};
+		const advancePaymentChanged =
+			stringsDiffer(
+				advancePaymentPayload.paymentPercentage,
+				existingAdvancePayment.paymentPercentage || ""
+			) ||
+			moneyDiffers(
+				advancePaymentPayload.finalAdvancePayment,
+				existingAdvancePayment.finalAdvancePayment || 0
+			);
+		const customerDetailsChanged =
+			stringsDiffer(name, reservation.customer_details?.name) ||
+			stringsDiffer(nickName, reservation.customer_details?.nickName) ||
+			stringsDiffer(email, reservation.customer_details?.email) ||
+			stringsDiffer(phone, reservation.customer_details?.phone) ||
+			stringsDiffer(nationality, reservation.customer_details?.nationality) ||
+			stringsDiffer(agentName, reservation.customer_details?.reservedBy) ||
+			stringsDiffer(
+				confirmationNumber2,
+				reservation.customer_details?.confirmation_number2
+			);
+		const bookingSourceChanged = stringsDiffer(
+			bookingSource || "Jannat Employee",
+			reservation.booking_source || "Jannat Employee"
+		);
+		const commentChanged = stringsDiffer(comment, reservation.comment);
 
 		const reservationData = {
 			userId: user ? user._id : null,
-			hotelId: selectedHotel._id,
-			belongsTo: belongsToId,
-			hotel_name: selectedHotel.hotelName || "",
-			customerDetails: {
+		};
+
+		if (hotelChanged) {
+			reservationData.hotelId = selectedHotel._id;
+			reservationData.belongsTo = belongsToId;
+		}
+
+		if (customerDetailsChanged) {
+			reservationData.customerDetails = {
 				name,
 				nickName,
 				email,
 				phone,
-				passport: reservation.customer_details?.passport || "Not Provided",
-				passportExpiry:
-					reservation.customer_details?.passportExpiry || "2027-01-01",
 				nationality,
 				postalCode: reservation.customer_details?.postalCode || "00000",
 				reservedBy: agentName,
 				confirmation_number2: String(confirmationNumber2 || "").trim(),
-			},
-			total_rooms: selectedRooms.reduce((t, r) => t + r.count, 0),
-			total_guests: adults + children,
-			adults,
-			children,
-			checkin_date: dayjs(checkInDate).format("YYYY-MM-DD"),
-			checkout_date: dayjs(checkOutDate).format("YYYY-MM-DD"),
-			__reservationDateUpdateIntent: hasExplicitDateEdits,
-			days_of_residence: numberOfNights,
-			booking_source: bookingSource || "Jannat Employee",
-			pickedRoomsType,
-			pickedRoomsPricing: pickedRoomsType,
-			total_amount: totalAmount,
-			sub_total: adminPricingTotals.rootTotal,
-			adminPricing: {
+			};
+		}
+
+		if (guestCountChanged) {
+			reservationData.total_guests = Number(adults || 0) + Number(children || 0);
+			reservationData.adults = adults;
+			reservationData.children = children;
+		}
+
+		if (dateChanged) {
+			reservationData.checkin_date = checkinValue;
+			reservationData.checkout_date = checkoutValue;
+			reservationData.__reservationDateUpdateIntent = hasExplicitDateEdits;
+			reservationData.days_of_residence = numberOfNights;
+		}
+
+		if (bookingSourceChanged) {
+			reservationData.booking_source = bookingSource || "Jannat Employee";
+		}
+
+		if (commentChanged) {
+			reservationData.comment = comment;
+		}
+
+		if (pricingPayloadNeeded) {
+			reservationData.pickedRoomsType = pickedRoomsType;
+			reservationData.pickedRoomsPricing = pickedRoomsType;
+			reservationData.total_rooms = selectedRooms.reduce(
+				(t, r) => t + r.count,
+				0
+			);
+			reservationData.total_amount = totalAmount;
+			reservationData.sub_total = adminPricingTotals.rootTotal;
+			reservationData.adminPricing = {
 				...(reservation?.adminPricing || {}),
 				mode: reservation?.adminPricing?.mode || "admin_three_price",
 				...adminPricingTotals,
 				commissionAmount: commissionToSave,
-			},
-			__adminPricingUpdateIntent: hasExplicitPricingEdits,
-			payment: reservation.payment || "not paid",
-			paid_amount: reservation.paid_amount || 0,
-			commission: commissionToSave,
-			commissionPaid:
+			};
+			reservationData.__adminPricingUpdateIntent = true;
+			reservationData.commission = commissionToSave;
+			reservationData.advancePayment = advancePaymentPayload;
+		} else if (advancePaymentChanged) {
+			reservationData.advancePayment = advancePaymentPayload;
+		}
+
+		if (commissionPayloadNeeded && !pricingPayloadNeeded) {
+			reservationData.commission = commissionToSave;
+			reservationData.commissionPaid =
 				reservation.commissionPaid ??
 				reservation.payment_details?.commissionPaid ??
-				false,
-			paymentDetails: {
-				cardNumber: reservation.payment_details?.cardNumber || "",
-				cardExpiryDate: reservation.payment_details?.cardExpiryDate || "",
-				cardCVV: reservation.payment_details?.cardCVV || "",
-				cardHolderName: reservation.payment_details?.cardHolderName || "",
-			},
-			sentFrom: "employee",
-			confirmation_number: updatedConfirmationNumber,
-			sendEmail,
-			comment,
-			advancePayment: {
-				paymentPercentage:
-					advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
-				finalAdvancePayment: finalDeposit.toFixed(2),
-			},
-		};
+				false;
+		}
+
+		if (sendEmail) {
+			reservationData.sendEmail = true;
+		}
+
+		if (Object.keys(reservationData).length <= 1) {
+			message.info("No changes to save.");
+			return;
+		}
 
 		try {
 			setIsLoading(true);
@@ -1578,6 +1648,7 @@ const EditReservationMain = ({
 				);
 				setReservation(mergedReservation);
 				setHasExplicitPricingEdits(false);
+				setHasExplicitCommissionEdit(false);
 				setHasExplicitDateEdits(false);
 				onReservationUpdated(mergedReservation);
 				message.success({ content: savedTitle, duration: 6 });
@@ -2052,7 +2123,7 @@ const EditReservationMain = ({
 									value={commissionOverride}
 									placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
 									onChange={(value) => {
-										setHasExplicitPricingEdits(true);
+										setHasExplicitCommissionEdit(true);
 										setCommissionOverride(value);
 									}}
 									disabled={isLoading}
@@ -2142,7 +2213,7 @@ const EditReservationMain = ({
 					(adminManagedPricing && savedReservationCommission !== null)
 				}
 				onCommissionChange={(value) => {
-					setHasExplicitPricingEdits(true);
+					setHasExplicitCommissionEdit(true);
 					setCommissionOverride(
 						value === null || value === undefined || value === ""
 							? null
