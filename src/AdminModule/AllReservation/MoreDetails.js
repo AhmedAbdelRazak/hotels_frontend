@@ -4592,6 +4592,11 @@ const getPaymentBreakdownTotals = (breakdown, normalizer) =>
 		{ total: 0, online: 0, offline: 0 },
 	);
 
+const reservationTimestampValue = (value) => {
+	const time = new Date(value || 0).getTime();
+	return Number.isFinite(time) ? time : 0;
+};
+
 const ReservationDetail = ({
 	reservation: reservationProp,
 	setReservation: setParentReservation,
@@ -4623,7 +4628,17 @@ const ReservationDetail = ({
 		[setParentReservation],
 	);
 	useEffect(() => {
-		setLocalReservation(reservationProp);
+		setLocalReservation((previous) => {
+			if (!reservationProp) return previous || reservationProp;
+			if (!previous || String(previous?._id || "") !== String(reservationProp?._id || "")) {
+				return reservationProp;
+			}
+			const incomingUpdatedAt = reservationTimestampValue(reservationProp?.updatedAt);
+			const currentUpdatedAt = reservationTimestampValue(previous?.updatedAt);
+			return incomingUpdatedAt > currentUpdatedAt
+				? { ...previous, ...reservationProp }
+				: previous;
+		});
 	}, [reservationProp]);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);

@@ -62,6 +62,38 @@ const isSameReservation = (a, b) => {
 	return false;
 };
 
+const reservationStateKey = (reservation = {}) =>
+	JSON.stringify({
+		updatedAt: reservation?.updatedAt || "",
+		adminLastUpdatedAt: reservation?.adminLastUpdatedAt || "",
+		supplierName: reservation?.supplierData?.supplierName || "",
+		suppliedBookingNo: reservation?.supplierData?.suppliedBookingNo || "",
+		bookingSource: reservation?.booking_source || "",
+		payment: reservation?.payment || "",
+		status: reservation?.reservation_status || reservation?.state || "",
+	});
+
+const mergeReservationPreservingRefs = (previous = {}, incoming = {}) => {
+	const merged = { ...previous, ...incoming };
+	if (
+		previous?.hotelId &&
+		(!merged.hotelId ||
+			typeof merged.hotelId !== "object" ||
+			!merged.hotelId.hotelName)
+	) {
+		merged.hotelId = previous.hotelId;
+	}
+	if (
+		previous?.belongsTo &&
+		(!merged.belongsTo ||
+			typeof merged.belongsTo !== "object" ||
+			!merged.belongsTo.name)
+	) {
+		merged.belongsTo = previous.belongsTo;
+	}
+	return merged;
+};
+
 const AdminTableTooltipText = ({ value, max = 20, className = "" }) => {
 	const text =
 		value === null || value === undefined || value === "" ? "-" : String(value);
@@ -382,16 +414,10 @@ const EnhancedContentTable = ({
 			if (!prev || !isSameReservation(prev, updated)) {
 				return prev;
 			}
-			const merged = { ...prev, ...updated };
-			if (
-				prev?.hotelId &&
-				(!merged.hotelId ||
-					typeof merged.hotelId !== "object" ||
-					!merged.hotelId.hotelName)
-			) {
-				merged.hotelId = prev.hotelId;
-			}
-			return merged;
+			const merged = mergeReservationPreservingRefs(prev, updated);
+			return reservationStateKey(prev) === reservationStateKey(merged)
+				? prev
+				: merged;
 		});
 	};
 
@@ -424,7 +450,10 @@ const EnhancedContentTable = ({
 
 		setSelectedReservation((prev) => {
 			if (prev && isSameReservation(prev, match)) {
-				return prev;
+				const merged = mergeReservationPreservingRefs(prev, match);
+				return reservationStateKey(prev) === reservationStateKey(merged)
+					? prev
+					: merged;
 			}
 			return match;
 		});
