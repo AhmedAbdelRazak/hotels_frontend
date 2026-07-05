@@ -223,7 +223,17 @@ const UpdatePDF = ({
 						</Form.Item>
 					</Col>
 					<Col span={12}>
-						<Form.Item label='Supplier Booking No' name='supplierBookingNo'>
+						<Form.Item
+							label='Supplier Booking No'
+							name='supplierBookingNo'
+							rules={[
+								{
+									required: true,
+									whitespace: true,
+									message: "Supplier booking no is required.",
+								},
+							]}
+						>
 							<Input placeholder='Enter supplier booking no' />
 						</Form.Item>
 					</Col>

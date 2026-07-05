@@ -1,4 +1,4 @@
-import React, { forwardRef, useMemo, useState } from "react";
+import React, { forwardRef, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import UpdatePDF from "./UpdatePDF"; // Unified editing modal
 import { updateSingleReservation } from "../apiAdmin";
@@ -16,6 +16,18 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	const [localResv, setLocalResv] = useState(reservation);
 	const [updateOpen, setUpdateOpen] = useState(false);
 	const [saving, setSaving] = useState(false);
+
+	useEffect(() => {
+		setLocalResv((current) => {
+			if (
+				current?._id === reservation?._id &&
+				current?.updatedAt === reservation?.updatedAt
+			) {
+				return current;
+			}
+			return reservation;
+		});
+	}, [reservation]);
 
 	// ---- helpers ----
 	const safeNumber = (value) => {
@@ -72,17 +84,26 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	);
 
 	const openUpdateModal = () => setUpdateOpen(true);
+	const resolveSupplierBookingNo = (resv = {}) =>
+		String(
+			resv?.supplierData?.suppliedBookingNo ||
+				resv?.supplierData?.supplierBookingNo ||
+				resv?.supplierData?.supplierBookingNumber ||
+				resv?.confirmation_number ||
+				"",
+		).trim();
+	const resolveSupplierName = (resv = {}) =>
+		String(
+			resv?.supplierData?.supplierName ||
+				resv?.supplierData?.suppliedBy ||
+				hotelDetails?.belongsTo?.name ||
+				"",
+		).trim();
 
 	// Initial values for the Update modal
 	const modalInitials = {
-		supplierName:
-			(localResv?.supplierData && localResv.supplierData.supplierName) ||
-			hotelDetails?.belongsTo?.name ||
-			"",
-		supplierBookingNo:
-			(localResv?.supplierData && localResv.supplierData.suppliedBookingNo) ||
-			localResv?.confirmation_number ||
-			"",
+		supplierName: resolveSupplierName(localResv),
+		supplierBookingNo: resolveSupplierBookingNo(localResv),
 		bookingNo: localResv?.confirmation_number || "",
 		bookingSource: localResv?.booking_source || "",
 		paymentStatus: (localResv?.payment || "").toLowerCase() || "",
@@ -100,12 +121,20 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	// Persist changes
 	const handleSave = async (vals) => {
 		const paymentStatus = (vals.paymentStatus || "").toLowerCase();
+		const supplierBookingNo = String(
+			vals.supplierBookingNo ||
+				resolveSupplierBookingNo(localResv) ||
+				localResv?.confirmation_number ||
+				"",
+		).trim();
+		const supplierName = String(vals.supplierName || "").trim();
 
 		// Build base update payload
 		const updateData = {
 			supplierData: {
-				supplierName: (vals.supplierName || "").trim(),
-				suppliedBookingNo: (vals.supplierBookingNo || "").trim(),
+				...(localResv?.supplierData || {}),
+				supplierName,
+				suppliedBookingNo: supplierBookingNo,
 			},
 			booking_source: (vals.bookingSource || "").trim(),
 			payment: paymentStatus,
@@ -171,7 +200,10 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				// Merge locally so the PDF reflects changes instantly
 				setLocalResv((prev) => ({
 					...prev,
-					supplierData: updateData.supplierData,
+					supplierData: {
+						...(prev?.supplierData || {}),
+						...updateData.supplierData,
+					},
 					booking_source: updateData.booking_source,
 					payment: updateData.payment,
 					paid_amount:
@@ -232,10 +264,10 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 						<strong>Booking No:</strong>{" "}
 						<Clickable onClick={openUpdateModal}>
 							{localResv?.confirmation_number}
-							{localResv?.supplierData?.suppliedBookingNo &&
-							localResv?.supplierData?.suppliedBookingNo !==
+							{resolveSupplierBookingNo(localResv) &&
+							resolveSupplierBookingNo(localResv) !==
 								localResv?.confirmation_number
-								? ` / ${localResv?.supplierData?.suppliedBookingNo}`
+								? ` / ${resolveSupplierBookingNo(localResv)}`
 								: ""}
 						</Clickable>
 					</div>
@@ -297,18 +329,13 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				<div className='editable-supplier'>
 					<strong>Supplied By:</strong>{" "}
 					<Clickable onClick={openUpdateModal}>
-						{(localResv?.supplierData && localResv.supplierData.supplierName) ||
-							hotelDetails?.belongsTo?.name ||
-							"N/A"}
+						{resolveSupplierName(localResv) || "N/A"}
 					</Clickable>
 				</div>
 				<div>
 					<strong>Supplier Booking No:</strong>{" "}
 					<Clickable onClick={openUpdateModal}>
-						{(localResv?.supplierData &&
-							localResv.supplierData.suppliedBookingNo) ||
-							localResv?.confirmation_number ||
-							"N/A"}
+						{resolveSupplierBookingNo(localResv) || "N/A"}
 					</Clickable>
 				</div>
 			</div>
