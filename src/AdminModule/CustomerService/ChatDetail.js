@@ -801,17 +801,51 @@ const ChatDetail = ({
 			.replace(/\b(SAR|AED|USD|EUR|GBP)\s+/gi, (match) => match.toUpperCase())
 			.replace(/(\d)(SAR|AED|USD|EUR|GBP)\b/gi, "$1 $2");
 
+	const decodeInlineMarkupText = (value = "") =>
+		String(value || "")
+			.replace(/&quot;/g, '"')
+			.replace(/&#39;/g, "'")
+			.replace(/&gt;/g, ">")
+			.replace(/&lt;/g, "<")
+			.replace(/&amp;/g, "&");
+
+	const inlineFormatRegex =
+		/(<s\b[^>]*class=["'][^"']*\bmessage-price-old\b[^>]*>[\s\S]*?<\/s>|<strong\b[^>]*class=["'][^"']*\bmessage-price-new\b[^>]*>[\s\S]*?<\/strong>|<span\b[^>]*class=["'][^"']*\bmessage-price-badge\b[^>]*>[\s\S]*?<\/span>|\*\*[^*]+\*\*|~~[^~]+~~)/gi;
+
 	const renderInlineFormatting = (value = "", keyPrefix = "text") =>
 		normalizeMoneyDisplayText(value)
-			.split(/(\*\*[^*]+\*\*|~~[^~]+~~)/g)
+			.split(inlineFormatRegex)
 			.map((part, index) => {
 				const bold = part.match(/^\*\*([^*]+)\*\*$/);
-				const strike = part.match(/^~~([^~]+)~~$/);
+				const strike =
+					part.match(
+						/^<s\b[^>]*class=["'][^"']*\bmessage-price-old\b[^>]*>([\s\S]*?)<\/s>$/i
+					) || part.match(/^~~([^~]+)~~$/);
+				const newPrice = part.match(
+					/^<strong\b[^>]*class=["'][^"']*\bmessage-price-new\b[^>]*>([\s\S]*?)<\/strong>$/i
+				);
+				const priceBadge = part.match(
+					/^<span\b[^>]*class=["'][^"']*\bmessage-price-badge\b[^>]*>([\s\S]*?)<\/span>$/i
+				);
 				if (strike) {
 					return (
 						<del key={`${keyPrefix}-strike-${index}`} className='message-price-old'>
-							{strike[1]}
+							{decodeInlineMarkupText(strike[1])}
 						</del>
+					);
+				}
+				if (newPrice) {
+					return (
+						<strong key={`${keyPrefix}-new-price-${index}`} className='message-price-new'>
+							{decodeInlineMarkupText(newPrice[1])}
+						</strong>
+					);
+				}
+				if (priceBadge) {
+					return (
+						<span key={`${keyPrefix}-price-badge-${index}`} className='message-price-badge'>
+							{decodeInlineMarkupText(priceBadge[1])}
+						</span>
 					);
 				}
 				return bold ? (
@@ -1565,22 +1599,42 @@ const MessageBody = styled.div`
 	.message-price-old {
 		position: relative;
 		display: inline-block;
-		color: #7a6f63;
-		text-decoration: none;
-		font-weight: 800;
-		opacity: 0.82;
+		color: #b42318;
+		text-decoration: line-through;
+		text-decoration-color: #b42318;
+		text-decoration-thickness: 2px;
+		font-size: 0.92em;
+		font-weight: 950;
 		margin-inline: 2px;
+		white-space: nowrap;
 	}
 
 	.message-price-old::after {
-		content: "";
-		position: absolute;
-		left: -3px;
-		right: -3px;
-		top: 52%;
-		border-top: 2px solid #c2410c;
-		transform: rotate(-8deg);
-		transform-origin: center;
+		content: none;
+	}
+
+	.message-price-new {
+		display: inline-block;
+		color: #15803d;
+		font-weight: 950;
+		margin-inline: 2px;
+		white-space: nowrap;
+	}
+
+	.message-price-badge {
+		display: inline-flex;
+		align-items: center;
+		min-height: 22px;
+		margin-inline: 4px 2px;
+		padding: 1px 7px;
+		border: 1px solid rgba(22, 163, 74, 0.24);
+		border-radius: 999px;
+		background: #ecfdf3;
+		color: #15803d;
+		font-size: 0.82em;
+		font-weight: 900;
+		line-height: 1.35;
+		vertical-align: middle;
 	}
 `;
 
