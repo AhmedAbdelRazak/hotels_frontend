@@ -15,7 +15,7 @@ const dateTimeValue = (value) => {
  * - Validates amounts and updates DB via updateSingleReservation.
  */
 const ReceiptPDF = forwardRef(function ReceiptPDF(
-	{ reservation, hotelDetails },
+	{ reservation, hotelDetails, setReservation, onReservationUpdated },
 	ref,
 ) {
 	const [localResv, setLocalResv] = useState(reservation);
@@ -236,35 +236,50 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 			if (updated && updated._id) {
 				setLocalResv(updated);
+				if (typeof setReservation === "function") {
+					setReservation(updated);
+				}
+				if (typeof onReservationUpdated === "function") {
+					onReservationUpdated(updated);
+				}
 			} else {
 				// Merge locally so the PDF reflects changes instantly
-				setLocalResv((prev) => ({
-					...prev,
-					supplierData: {
-						...(prev?.supplierData || {}),
-						...updateData.supplierData,
-					},
-					booking_source:
-						updateData.booking_source !== undefined
-							? updateData.booking_source
-							: prev?.booking_source,
-					payment:
-						updateData.payment !== undefined ? updateData.payment : prev?.payment,
-					paid_amount:
-						typeof updateData.paid_amount === "number"
-							? updateData.paid_amount
-							: prev?.paid_amount,
-					payment_details: updateData.payment_details
-						? {
-								...(prev?.payment_details || {}),
-								...updateData.payment_details,
-						  }
-						: prev?.payment_details,
-					customer_details: {
-						...prev?.customer_details,
-						...(updateData.customerDetails || {}),
-					},
-				}));
+				setLocalResv((prev) => {
+					const merged = {
+						...prev,
+						supplierData: {
+							...(prev?.supplierData || {}),
+							...updateData.supplierData,
+						},
+						booking_source:
+							updateData.booking_source !== undefined
+								? updateData.booking_source
+								: prev?.booking_source,
+						payment:
+							updateData.payment !== undefined ? updateData.payment : prev?.payment,
+						paid_amount:
+							typeof updateData.paid_amount === "number"
+								? updateData.paid_amount
+								: prev?.paid_amount,
+						payment_details: updateData.payment_details
+							? {
+									...(prev?.payment_details || {}),
+									...updateData.payment_details,
+							  }
+							: prev?.payment_details,
+						customer_details: {
+							...prev?.customer_details,
+							...(updateData.customerDetails || {}),
+						},
+					};
+					if (typeof setReservation === "function") {
+						setReservation(merged);
+					}
+					if (typeof onReservationUpdated === "function") {
+						onReservationUpdated(merged);
+					}
+					return merged;
+				});
 			}
 
 			setUpdateOpen(false);

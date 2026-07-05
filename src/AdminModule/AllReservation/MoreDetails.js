@@ -8826,6 +8826,8 @@ const ReservationDetail = ({
 										ref={pdfRef}
 										reservation={reservation}
 										hotelDetails={hotelDetails}
+										setReservation={setReservation}
+										onReservationUpdated={onReservationUpdated}
 										calculateReservationPeriod={calculateReservationPeriod}
 										getTotalAmountPerDay={getTotalAmountPerDay}
 									/>
