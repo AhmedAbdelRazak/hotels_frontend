@@ -2137,6 +2137,10 @@ const EditReservationMain = ({
 				commissionAmount={
 					hasCommissionOverride ? commissionOverride : totalCommission
 				}
+				commissionAmountIsOverride={
+					hasCommissionOverride ||
+					(adminManagedPricing && savedReservationCommission !== null)
+				}
 				onCommissionChange={(value) => {
 					setHasExplicitPricingEdits(true);
 					setCommissionOverride(

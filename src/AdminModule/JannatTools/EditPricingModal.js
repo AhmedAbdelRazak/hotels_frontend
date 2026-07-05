@@ -242,6 +242,7 @@ const EditPricingModal = ({
 	nightCount = null,
 	showCommissionAmount = false,
 	commissionAmount = null,
+	commissionAmountIsOverride = false,
 	onCommissionChange = () => {},
 }) => {
 	const { chosenLanguage } = useCartContext();
@@ -266,6 +267,7 @@ const EditPricingModal = ({
 		net: null,
 	});
 	const [commissionDraft, setCommissionDraft] = useState(null);
+	const [commissionDraftTouched, setCommissionDraftTouched] = useState(false);
 
 	useEffect(() => {
 		if (!visible) return;
@@ -279,7 +281,14 @@ const EditPricingModal = ({
 				? roundMoney(commissionAmount)
 				: null,
 		);
-	}, [visible, pricingByDay, commissionAmount, showCommissionAmount]);
+		setCommissionDraftTouched(false);
+	}, [
+		visible,
+		pricingByDay,
+		commissionAmount,
+		commissionAmountIsOverride,
+		showCommissionAmount,
+	]);
 
 	const totals = useMemo(
 		() =>
@@ -301,6 +310,14 @@ const EditPricingModal = ({
 		if (Number.isFinite(fromProp) && fromProp > 0) return Math.round(fromProp);
 		return editableData.length;
 	}, [nightCount, editableData.length]);
+	const calculatedCommissionDraft = useMemo(
+		() => roundMoney(Math.max(totals.client - totals.root, 0)),
+		[totals.client, totals.root],
+	);
+	const displayedCommissionDraft =
+		commissionDraftTouched || commissionAmountIsOverride
+			? commissionDraft
+			: calculatedCommissionDraft;
 
 	const commitRows = (rows, { syncParent = false } = {}) => {
 		const normalizedRows = rows.map(normalizePricingRow);
@@ -406,6 +423,7 @@ const EditPricingModal = ({
 
 	const handleCommissionInput = (value) => {
 		const nextValue = hasNumericInput(value) ? value : null;
+		setCommissionDraftTouched(true);
 		setCommissionDraft(nextValue);
 	};
 
@@ -444,7 +462,7 @@ const EditPricingModal = ({
 			return;
 		}
 
-		if (showCommissionAmount) {
+		if (showCommissionAmount && commissionDraftTouched) {
 			onCommissionChange(
 				hasNumericInput(commissionDraft) ? roundMoney(commissionDraft) : null,
 			);
@@ -788,7 +806,7 @@ const EditPricingModal = ({
 							</div>
 							<InputNumber
 								placeholder={t.enterPlaceholder(commissionLabel)}
-								value={commissionDraft}
+								value={displayedCommissionDraft}
 								min={0}
 								step={0.01}
 								precision={2}

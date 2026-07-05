@@ -190,6 +190,15 @@ const summarizeAdminPricingRooms = (rooms = []) =>
 		},
 	);
 
+const calculatedCommissionFromAdminTotals = (totals = {}) =>
+	roundMoney(
+		Math.max(
+			safeParseFloat(totals.clientTotal, 0) -
+				safeParseFloat(totals.rootTotal, 0),
+			0,
+		),
+	);
+
 const normalizeRoomLabel = (value) => String(value || "").trim();
 const JANNAT_EMPLOYEE_SOURCE = "Jannat Employee";
 const normalizeEmployeeBookingSource = (value) => {
@@ -333,6 +342,9 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			),
 		[hasCommissionOverride, commissionOverride, totalCommission],
 	);
+	const handleCommissionOverrideChange = useCallback((value) => {
+		setCommissionOverride(normalizeNullableMoney(value));
+	}, []);
 
 	/** ------------------ Fetch All Hotels ------------------ */
 	const getAllHotels = useCallback(async () => {
@@ -1647,7 +1659,41 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		const totalAmountToSave = roundMoney(
 			adminPricingTotals.clientTotal || totalAmount,
 		);
-		const commissionToSave = effectiveCommission;
+		const calculatedCommissionToSave =
+			calculatedCommissionFromAdminTotals(adminPricingTotals);
+		const commissionToSave = roundMoney(
+			hasCommissionOverride ? commissionOverride : calculatedCommissionToSave,
+		);
+		const oneNightCostToSave = roundMoney(
+			pickedRoomsType.reduce((sum, room) => {
+				const count = Math.max(1, Number(room?.count || 1) || 1);
+				const firstDay = Array.isArray(room?.pricingByDay)
+					? room.pricingByDay[0]
+					: null;
+				return (
+					sum +
+					safeParseFloat(
+						firstDay?.rootPrice ?? firstDay?.totalPriceWithoutCommission,
+						0,
+					) *
+						count
+				);
+			}, 0),
+		);
+		const finalDepositToSave = (() => {
+			if (packageLock.enabled) return commissionToSave;
+			if (advancePaymentOption === "commission_plus_one_day") {
+				return roundMoney(commissionToSave + oneNightCostToSave);
+			}
+			if (advancePaymentOption === "percentage") {
+				const p = safeParseFloat(advancePaymentPercentage, 0);
+				return roundMoney(Math.max(totalAmountToSave * (p / 100), 0));
+			}
+			if (advancePaymentOption === "sar") {
+				return roundMoney(Math.max(safeParseFloat(advancePaymentSAR, 0), 0));
+			}
+			return roundMoney(finalDeposit);
+		})();
 
 		// --- Payment mapping for create (ENHANCED to handle 'credit/ debit') ---
 		let paymentField = "not paid";
@@ -1742,7 +1788,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					packageLock.enabled || advancePaymentOption !== "percentage"
 						? ""
 						: advancePaymentPercentage,
-				finalAdvancePayment: Number(finalDeposit.toFixed(2)).toFixed(2),
+				finalAdvancePayment: Number(finalDepositToSave.toFixed(2)).toFixed(2),
 			},
 		};
 
@@ -2290,9 +2336,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								precision={2}
 								value={commissionOverride}
 								placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
-								onChange={(value) =>
-									setCommissionOverride(normalizeNullableMoney(value))
-								}
+								onChange={handleCommissionOverrideChange}
 								disabled={isSubmitting}
 								style={{ width: "100%" }}
 							/>
@@ -2379,9 +2423,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				}
 				showCommissionAmount
 				commissionAmount={effectiveCommission}
-				onCommissionChange={(value) =>
-					setCommissionOverride(normalizeNullableMoney(value))
-				}
+				commissionAmountIsOverride={hasCommissionOverride}
+				onCommissionChange={handleCommissionOverrideChange}
 			/>
 
 			{/* Packages & Offers Modal */}
