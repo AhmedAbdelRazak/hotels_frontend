@@ -696,6 +696,9 @@ const EnhancedContentTable = ({
 					message.success(
 						`Saved ${Number(applySummary.appliedWrites || 0)} OTA sync write(s).`,
 					);
+					if (Number(applySummary.appliedWrites || 0) > 0) {
+						onReservationUpdated();
+					}
 					return response.job;
 				} finally {
 					setOtaSyncApplying(false);
