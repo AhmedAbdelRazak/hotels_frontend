@@ -235,6 +235,8 @@ const NewReservationMain = ({
 		if (tab === "housingreport") return canConfirmReservations;
 		return true;
 	};
+	const isRoomMapWorkspace =
+		activeTab === "heatmap" || activeTab === "reserveARoom";
 	const orderTakerSnapshot = {
 		_id: user?._id || "",
 		name: user?.name || user?.email || "",
@@ -1236,7 +1238,7 @@ const NewReservationMain = ({
 
 				<div className='otherContentWrapper'>
 					{!embedded && (
-						<TabsShell $wide={activeTab === "list"}>
+						<TabsShell $wide={activeTab === "list" || isRoomMapWorkspace}>
 						<div className='tab-grid'>
 							<Tab
 								$isHidden={!canShowReservationTab("heatmap")}
@@ -1319,7 +1321,7 @@ const NewReservationMain = ({
 					<div
 						className={`container-wrapper ${
 							activeTab === "list" ? "is-reservation-list" : ""
-						}`}
+						} ${isRoomMapWorkspace ? "is-room-map-view" : ""}`}
 					>
 						{activeTab === "reserveARoom" ? (
 							<>
@@ -1624,6 +1626,12 @@ const NewReservationMainWrapper = styled.div`
 		max-width: none;
 		width: 100%;
 		padding-inline: clamp(8px, 1vw, 14px);
+	}
+
+	.container-wrapper.is-room-map-view {
+		max-width: none;
+		width: 100%;
+		padding-inline: clamp(10px, 1vw, 18px);
 	}
 
 	.tab-grid {

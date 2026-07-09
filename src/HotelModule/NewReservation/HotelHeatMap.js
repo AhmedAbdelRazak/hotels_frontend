@@ -757,7 +757,7 @@ const HotelHeatMap = ({
 		showRoomColorLegend && distinctRoomTypesWithColors.length > 0;
 
 	return (
-		<HotelOverviewWrapper $fixIt={fixIt}>
+		<HotelOverviewWrapper $fixIt={fixIt} $showLegend={showLegend}>
 			<div dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}>
 				<HotelMapCards chosenLanguage={chosenLanguage} summary={mapSummary} />
 			</div>
@@ -772,8 +772,8 @@ const HotelHeatMap = ({
 					selectedRoomType={selectedRoomType}
 					selectedFloor={selectedFloor}
 					selectedRoomStatus={selectedRoomStatus}
-					useMobileDrawer={showRoomColorLegend}
-					useRoomMapLayout={showRoomColorLegend}
+					useMobileDrawer={showLegend}
+					useRoomMapLayout={showLegend}
 				/>
 			</div>
 			<div className='canvas-grid'>
@@ -1380,11 +1380,14 @@ const HotelOverviewWrapper = styled.div`
 
 	.canvas-grid {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
-		grid-template-areas: "floors legend";
-		gap: 14px;
+		grid-template-columns: ${({ $showLegend }) =>
+			$showLegend ? "minmax(0, 1fr) minmax(320px, 380px)" : "minmax(0, 1fr)"};
+		grid-template-areas: ${({ $showLegend }) =>
+			$showLegend ? '"floors legend"' : '"floors"'};
+		gap: ${({ $showLegend }) => ($showLegend ? "14px" : "0")};
 		align-items: start;
 		min-width: 0;
+		width: 100%;
 	}
 
 	.floors-area {
@@ -1513,11 +1516,12 @@ const FloorsContainer = styled.div`
 
 const Floor = styled.div`
 	margin: 10px 0;
-	padding: clamp(18px, 2.4vw, 30px);
+	padding: clamp(18px, 2vw, 30px);
 	background: #f8fafc;
 	border: 1px solid #e6edf5;
 	border-radius: 8px;
 	width: 100%;
+	box-sizing: border-box;
 	text-align: center;
 	font-weight: bold;
 	cursor: pointer;
@@ -1540,6 +1544,10 @@ const Floor = styled.div`
 			margin-bottom: 14px !important;
 		}
 	}
+
+	@media (min-width: 1500px) {
+		padding-inline: clamp(30px, 3vw, 54px);
+	}
 `;
 
 const RoomsGrid = styled.div`
@@ -1551,6 +1559,10 @@ const RoomsGrid = styled.div`
 	width: 100%;
 	min-width: 0;
 
+	@media (min-width: 1500px) {
+		gap: 10px;
+	}
+
 	@media (max-width: 560px) {
 		gap: 6px;
 	}
@@ -1561,7 +1573,8 @@ const ParkingLot = styled.div`
 	padding: 40px;
 	background-color: lightgreen;
 	border: 1px solid #ccc;
-	width: 75%;
+	width: 100%;
+	box-sizing: border-box;
 	text-align: center;
 	font-weight: bold;
 
@@ -1574,8 +1587,10 @@ const ParkingLot = styled.div`
 
 const RoomSquare = styled.div`
 	position: relative;
-	width: ${({ $picked }) => ($picked ? "40px" : "35px")};
-	height: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	width: ${({ $picked }) =>
+		$picked ? "clamp(34px, 2vw, 40px)" : "clamp(32px, 1.85vw, 38px)"};
+	height: ${({ $picked }) =>
+		$picked ? "clamp(34px, 2vw, 40px)" : "clamp(32px, 1.85vw, 38px)"};
 	background-color: ${({ $color, $picked }) => ($picked ? "#000" : $color)};
 	border: 1px solid #000;
 	color: ${({ $picked, $reserved }) =>
@@ -1584,7 +1599,10 @@ const RoomSquare = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: ${({ $picked }) => ($picked ? "0.9rem" : "0.7rem")};
+	font-size: ${({ $picked }) =>
+		$picked
+			? "clamp(0.72rem, 0.62vw, 0.9rem)"
+			: "clamp(0.62rem, 0.52vw, 0.76rem)"};
 	cursor: ${({ $clickable }) => ($clickable ? "pointer" : "default")};
 	transform-origin: center;
 	will-change: transform;

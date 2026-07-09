@@ -1712,6 +1712,7 @@ const HotelOverviewWrapper = styled.div`
 		display: grid;
 		grid-template-columns: 1fr;
 		min-width: 0;
+		width: 100%;
 	}
 
 	.colors-grid {
@@ -1733,11 +1734,12 @@ const FloorsContainer = styled.div`
 
 const Floor = styled.div`
 	margin: 10px 0;
-	padding: clamp(18px, 2.4vw, 30px);
+	padding: clamp(18px, 2vw, 30px);
 	background: #f8fafc;
 	border: 1px solid #e6edf5;
 	border-radius: 8px;
 	width: 100%;
+	box-sizing: border-box;
 	text-align: center;
 	font-weight: bold;
 	cursor: pointer;
@@ -1760,6 +1762,10 @@ const Floor = styled.div`
 			margin-bottom: 14px !important;
 		}
 	}
+
+	@media (min-width: 1500px) {
+		padding-inline: clamp(30px, 3vw, 54px);
+	}
 `;
 
 const RoomsGrid = styled.div`
@@ -1771,6 +1777,10 @@ const RoomsGrid = styled.div`
 	width: 100%;
 	min-width: 0;
 
+	@media (min-width: 1500px) {
+		gap: 10px;
+	}
+
 	@media (max-width: 560px) {
 		gap: 6px;
 	}
@@ -1781,7 +1791,8 @@ const ParkingLot = styled.div`
 	padding: 40px;
 	background-color: lightgreen;
 	border: 1px solid #ccc;
-	width: 75%;
+	width: 100%;
+	box-sizing: border-box;
 	text-align: center;
 	font-weight: bold;
 
@@ -1794,8 +1805,10 @@ const ParkingLot = styled.div`
 
 const RoomSquare = styled.div`
 	position: relative;
-	width: ${({ $picked }) => ($picked ? "40px" : "35px")};
-	height: ${({ $picked }) => ($picked ? "40px" : "35px")};
+	width: ${({ $picked }) =>
+		$picked ? "clamp(34px, 2vw, 40px)" : "clamp(32px, 1.85vw, 38px)"};
+	height: ${({ $picked }) =>
+		$picked ? "clamp(34px, 2vw, 40px)" : "clamp(32px, 1.85vw, 38px)"};
 	background: ${({ $color, $picked, $closed }) =>
 		$picked
 			? "#000"
@@ -1812,7 +1825,10 @@ const RoomSquare = styled.div`
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: ${({ $picked }) => ($picked ? "0.9rem" : "0.7rem")};
+	font-size: ${({ $picked }) =>
+		$picked
+			? "clamp(0.72rem, 0.62vw, 0.9rem)"
+			: "clamp(0.62rem, 0.52vw, 0.76rem)"};
 	font-weight: 900;
 	cursor: ${({ $reserved }) => ($reserved ? "not-allowed" : "pointer")};
 	touch-action: manipulation;
