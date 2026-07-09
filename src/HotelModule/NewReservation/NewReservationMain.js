@@ -268,6 +268,17 @@ const NewReservationMain = ({
 		effectiveOwnerId || normalizeReservationId(user?._id);
 	const navigationHotelId =
 		effectiveHotelId || normalizeReservationId(selectedHotelLocalStorage._id);
+	const navigateReservationTab = (tab, search) => {
+		setActiveTab(tab);
+		history.push(
+			`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}${search}`,
+		);
+		if (typeof window !== "undefined") {
+			window.requestAnimationFrame(() => {
+				window.scrollTo({ top: 0, behavior: "smooth" });
+			});
+		}
+	};
 
 	useEffect(() => {
 		if (!selectedHotelOverride?._id) return;
@@ -1238,83 +1249,73 @@ const NewReservationMain = ({
 
 				<div className='otherContentWrapper'>
 					{!embedded && (
-						<TabsShell $wide={activeTab === "list" || isRoomMapWorkspace}>
-						<div className='tab-grid'>
-							<Tab
-								$isHidden={!canShowReservationTab("heatmap")}
-								$isActive={activeTab === "heatmap"}
-								onClick={() => {
-									setActiveTab("heatmap");
-									history.push(
-										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?heatmap`,
-									);
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "خريطة الفندق"
-									: "Hotel Heat Map"}
-							</Tab>
-							<Tab
-								$isHidden={!canShowReservationTab("reserveARoom")}
-								$isActive={activeTab === "reserveARoom"}
-								onClick={() => {
-									setActiveTab("reserveARoom");
-									history.push(
-										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?reserveARoom`,
-									);
-								}}
-							>
-								{chosenLanguage === "Arabic" ? "تسكين الغرف" : "Reserve A Room"}
-							</Tab>
+						<TabsShell
+							$sticky={isRoomMapWorkspace}
+							$wide={activeTab === "list" || isRoomMapWorkspace}
+						>
+							<div className='tab-grid'>
+								<Tab
+									$isHidden={!canShowReservationTab("heatmap")}
+									$isActive={activeTab === "heatmap"}
+									onClick={() => {
+										navigateReservationTab("heatmap", "?heatmap");
+									}}
+								>
+									{chosenLanguage === "Arabic"
+										? "خريطة الفندق"
+										: "Hotel Heat Map"}
+								</Tab>
+								<Tab
+									$isHidden={!canShowReservationTab("reserveARoom")}
+									$isActive={activeTab === "reserveARoom"}
+									onClick={() => {
+										navigateReservationTab("reserveARoom", "?reserveARoom");
+									}}
+								>
+									{chosenLanguage === "Arabic"
+										? "تسكين الغرف"
+										: "Reserve A Room"}
+								</Tab>
 
-							<Tab
-								$isActive={activeTab === "newReservation"}
-								onClick={() => {
-									setActiveTab("newReservation");
-									history.push(
-										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?newReservation`,
-									);
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "حجز جديد"
-									: "New Reservation"}
-							</Tab>
+								<Tab
+									$isActive={activeTab === "newReservation"}
+									onClick={() => {
+										navigateReservationTab("newReservation", "?newReservation");
+									}}
+								>
+									{chosenLanguage === "Arabic"
+										? "حجز جديد"
+										: "New Reservation"}
+								</Tab>
 
-							<Tab
-								$isActive={activeTab === "list"}
-								onClick={() => {
-									setActiveTab("list");
-									history.push(
-										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?list=&page=1`,
-									);
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "قائمة الحجوزات"
-									: "Reservation List"}
-							</Tab>
+								<Tab
+									$isActive={activeTab === "list"}
+									onClick={() => {
+										navigateReservationTab("list", "?list=&page=1");
+									}}
+								>
+									{chosenLanguage === "Arabic"
+										? "قائمة الحجوزات"
+										: "Reservation List"}
+								</Tab>
 
-							<Tab
-								$isHidden={!canShowReservationTab("housingreport")}
-								$isActive={activeTab === "housingreport"}
-								onClick={() => {
-									setActiveTab("housingreport");
-									history.push(
-										`/hotel-management/new-reservation/${navigationOwnerId}/${navigationHotelId}?pendingConfirmation`,
-									);
-								}}
-							>
-								{chosenLanguage === "Arabic"
-									? "تأكيد الحجوزات"
-									: financeOnlyReservationView
-									? "Commission Review"
-									: "Pending Confirmation"}
-								{pendingConfirmationCount > 0 ? (
-									<TabBadge>{pendingConfirmationCount}</TabBadge>
-								) : null}
-							</Tab>
-						</div>
+								<Tab
+									$isHidden={!canShowReservationTab("housingreport")}
+									$isActive={activeTab === "housingreport"}
+									onClick={() => {
+										navigateReservationTab("housingreport", "?pendingConfirmation");
+									}}
+								>
+									{chosenLanguage === "Arabic"
+										? "تأكيد الحجوزات"
+										: financeOnlyReservationView
+										? "Commission Review"
+										: "Pending Confirmation"}
+									{pendingConfirmationCount > 0 ? (
+										<TabBadge>{pendingConfirmationCount}</TabBadge>
+									) : null}
+								</Tab>
+							</div>
 						</TabsShell>
 					)}
 
@@ -1611,7 +1612,7 @@ const NewReservationMainWrapper = styled.div`
 			props.$embedded ? "1" : props.$isArabic ? "1" : "2"};
 		grid-row: 1;
 		min-width: 0;
-		overflow: hidden;
+		overflow: visible;
 		width: 100%;
 	}
 
@@ -1701,10 +1702,14 @@ const TabsShell = styled.div`
 	max-width: ${(props) => (props.$wide ? "none" : "1360px")};
 	padding: 8px;
 	min-width: 0;
+	position: ${(props) => (props.$sticky ? "sticky" : "relative")};
+	top: ${(props) => (props.$sticky ? "76px" : "auto")};
+	z-index: ${(props) => (props.$sticky ? 960 : 20)};
 	width: calc(100% - clamp(16px, 2.8vw, 36px));
 
 	@media (max-width: 560px) {
 		margin: 8px 8px 0;
+		top: ${(props) => (props.$sticky ? "72px" : "auto")};
 		width: auto;
 		padding: 7px;
 	}
