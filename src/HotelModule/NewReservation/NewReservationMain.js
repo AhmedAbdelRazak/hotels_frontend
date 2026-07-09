@@ -1250,6 +1250,8 @@ const NewReservationMain = ({
 				<div className='otherContentWrapper'>
 					{!embedded && (
 						<TabsShell
+							$isArabic={chosenLanguage === "Arabic"}
+							$sidebarCollapsed={collapsed}
 							$sticky={isRoomMapWorkspace}
 							$wide={activeTab === "list" || isRoomMapWorkspace}
 						>
@@ -1318,6 +1320,7 @@ const NewReservationMain = ({
 							</div>
 						</TabsShell>
 					)}
+					{!embedded && isRoomMapWorkspace ? <TabsFixedOffset /> : null}
 
 					<div
 						className={`container-wrapper ${
@@ -1698,20 +1701,46 @@ const TabsShell = styled.div`
 	background: #e3f2fd;
 	border: 1px solid #cfe5fb;
 	border-radius: 8px;
-	margin: 8px auto 0;
+	left: ${(props) =>
+		props.$sticky
+			? props.$isArabic
+				? "clamp(10px, 1vw, 18px)"
+				: `calc(${props.$sidebarCollapsed ? "80px" : "286px"} + clamp(10px, 1vw, 18px))`
+			: "auto"};
+	margin: ${(props) => (props.$sticky ? "0" : "8px auto 0")};
 	max-width: ${(props) => (props.$wide ? "none" : "1360px")};
 	padding: 8px;
 	min-width: 0;
-	position: ${(props) => (props.$sticky ? "sticky" : "relative")};
+	position: ${(props) => (props.$sticky ? "fixed" : "relative")};
+	right: ${(props) =>
+		props.$sticky
+			? props.$isArabic
+				? `calc(${props.$sidebarCollapsed ? "80px" : "286px"} + clamp(10px, 1vw, 18px))`
+				: "clamp(10px, 1vw, 18px)"
+			: "auto"};
 	top: ${(props) => (props.$sticky ? "76px" : "auto")};
 	z-index: ${(props) => (props.$sticky ? 960 : 20)};
-	width: calc(100% - clamp(16px, 2.8vw, 36px));
+	width: ${(props) =>
+		props.$sticky ? "auto" : "calc(100% - clamp(16px, 2.8vw, 36px))"};
+
+	@media (max-width: 1200px) {
+		left: ${(props) => (props.$sticky ? "8px" : "auto")};
+		right: ${(props) => (props.$sticky ? "8px" : "auto")};
+	}
 
 	@media (max-width: 560px) {
-		margin: 8px 8px 0;
+		margin: ${(props) => (props.$sticky ? "0" : "8px 8px 0")};
 		top: ${(props) => (props.$sticky ? "72px" : "auto")};
-		width: auto;
+		width: ${(props) => (props.$sticky ? "auto" : "auto")};
 		padding: 7px;
+	}
+`;
+
+const TabsFixedOffset = styled.div`
+	height: 84px;
+
+	@media (max-width: 560px) {
+		height: 78px;
 	}
 `;
 
