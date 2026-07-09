@@ -180,6 +180,83 @@ const HotelOverviewReservation = ({
 		);
 	};
 
+	const pricingValueFromDay = (day = {}, fallback = 0) => {
+		const candidates = [
+			day.price,
+			day.totalPriceWithCommission,
+			day.sellingPrice,
+			day.totalPriceWithoutCommission,
+			day.rootPrice,
+		]
+			.map((value) => normalizeNumber(value, NaN))
+			.filter((value) => Number.isFinite(value));
+		const positive = candidates.find((value) => value > 0);
+		if (positive !== undefined) return positive;
+		return candidates.length ? candidates[0] : fallback;
+	};
+
+	const pricingRowsHavePositivePrice = (rows = []) =>
+		(Array.isArray(rows) ? rows : []).some(
+			(day) => pricingValueFromDay(day, 0) > 0,
+		);
+
+	const lineNightlyPrice = (line = {}, nightsCount = 1) => {
+		const directNightly = [
+			line.chosenPrice,
+			line.nightlyPrice,
+			line.pricePerNight,
+			line.price_per_night,
+			line.pricePerDay,
+			line.price_per_day,
+			line.price,
+		]
+			.map((value) => normalizeNumber(value, NaN))
+			.find((value) => Number.isFinite(value) && value > 0);
+		if (directNightly !== undefined) return directNightly;
+
+		const rows = Array.isArray(line.pricingByDay) ? line.pricingByDay : [];
+		if (pricingRowsHavePositivePrice(rows)) {
+			const total = rows.reduce(
+				(sum, day) => sum + pricingValueFromDay(day, 0),
+				0,
+			);
+			return total / Math.max(rows.length, 1);
+		}
+
+		const stayTotal = [
+			line.totalPriceWithCommission,
+			line.total_amount,
+			line.totalAmount,
+			line.sub_total,
+		]
+			.map((value) => normalizeNumber(value, NaN))
+			.find((value) => Number.isFinite(value) && value > 0);
+		if (stayTotal !== undefined) {
+			return stayTotal / Math.max(nightsCount, 1);
+		}
+
+		return 0;
+	};
+
+	const reservationFallbackNightlyPrice = (
+		reservation,
+		reservationLines = [],
+		nightsCount = 1,
+	) => {
+		const total = normalizeNumber(
+			reservation?.total_amount ?? reservation?.sub_total ?? total_amount,
+			0,
+		);
+		if (total <= 0) return 0;
+		const roomCountFromLines = (Array.isArray(reservationLines)
+			? reservationLines
+			: []
+		).reduce((sum, line) => sum + Math.max(1, Number(line?.count) || 1), 0);
+		const totalRooms =
+			Number(reservation?.total_rooms) || roomCountFromLines || 1;
+		return total / Math.max(nightsCount, 1) / Math.max(totalRooms, 1);
+	};
+
 	const getLineDisplayName = (line) =>
 		normalizeDisplayName(line?.displayName || line?.display_name);
 
@@ -554,12 +631,7 @@ const HotelOverviewReservation = ({
 		const normalizeReservationPricing = (pricingDays = []) =>
 			pricingDays.map((day) => {
 				const safeDay = day || {};
-				const rawPrice =
-					safeDay.price ??
-					safeDay.totalPriceWithCommission ??
-					safeDay.totalPriceWithoutCommission ??
-					0;
-				const normalizedPrice = normalizeNumber(rawPrice, 0);
+				const normalizedPrice = pricingValueFromDay(safeDay, 0);
 				return {
 					...safeDay,
 					price: normalizedPrice,
@@ -594,6 +666,11 @@ const HotelOverviewReservation = ({
 				  ? searchedReservation.pickedRoomsType
 				  : [];
 			const reservationLines = expandedReservationLines(reservationLinesRaw);
+			const fallbackNightlyPrice = reservationFallbackNightlyPrice(
+				searchedReservation,
+				reservationLinesRaw,
+				nightsCount,
+			);
 			const withPricing = reservationLines.filter(
 				(line) =>
 					Array.isArray(line?.pricingByDay) && line.pricingByDay.length > 0,
@@ -622,19 +699,30 @@ const HotelOverviewReservation = ({
 				pickByIndex(withChosen);
 
 			if (selectedLine) {
+				const selectedRows = Array.isArray(selectedLine.pricingByDay)
+					? normalizeReservationPricing(selectedLine.pricingByDay)
+					: [];
+				const selectedNightlyPrice = lineNightlyPrice(
+					selectedLine,
+					nightsCount,
+				) || fallbackNightlyPrice;
 				if (
-					Array.isArray(selectedLine.pricingByDay) &&
-					selectedLine.pricingByDay.length > 0
+					selectedRows.length > 0 &&
+					(pricingRowsHavePositivePrice(selectedRows) ||
+						selectedNightlyPrice <= 0)
 				) {
-					setPricingByDay(
-						normalizeReservationPricing(selectedLine.pricingByDay),
-					);
+					setPricingByDay(selectedRows);
 					setIsModalVisible(true);
 					return;
 				}
-				if (Number(selectedLine.chosenPrice) > 0 && nightsCount > 0) {
-					const nightlyPrice = normalizeNumber(selectedLine.chosenPrice, 0);
-					setPricingByDay(buildPricingByNightly(nightlyPrice, nightsCount));
+				if (selectedNightlyPrice > 0 && nightsCount > 0) {
+					setPricingByDay(
+						buildPricingByNightly(
+							selectedNightlyPrice,
+							nightsCount,
+							selectedRows[0] || {},
+						),
+					);
 					setIsModalVisible(true);
 					return;
 				}
@@ -650,6 +738,11 @@ const HotelOverviewReservation = ({
 			)
 				? searchedReservation.pickedRoomsType
 				: [];
+			const fallbackNightlyPrice = reservationFallbackNightlyPrice(
+				searchedReservation,
+				pickedRoomsList,
+				nightsCount,
+			);
 			const roomTypeDetails =
 				pickedRoomsList.find(
 					(r) =>
@@ -664,38 +757,30 @@ const HotelOverviewReservation = ({
 			if (
 				roomTypeDetails &&
 				Array.isArray(roomTypeDetails.pricingByDay) &&
-				roomTypeDetails.pricingByDay.length > 0
+				roomTypeDetails.pricingByDay.length > 0 &&
+				(pricingRowsHavePositivePrice(roomTypeDetails.pricingByDay) ||
+					(lineNightlyPrice(roomTypeDetails, nightsCount) ||
+						fallbackNightlyPrice) <= 0)
 			) {
 				setPricingByDay(
 					normalizeReservationPricing(roomTypeDetails.pricingByDay),
 				);
 			} else if (
 				roomTypeDetails &&
-				Number(roomTypeDetails.chosenPrice) > 0 &&
+				(lineNightlyPrice(roomTypeDetails, nightsCount) ||
+					fallbackNightlyPrice) > 0 &&
 				nightsCount > 0
 			) {
-				const nightlyPrice = normalizeNumber(roomTypeDetails.chosenPrice, 0);
+				const nightlyPrice =
+					lineNightlyPrice(roomTypeDetails, nightsCount) ||
+					fallbackNightlyPrice;
 				setPricingByDay(buildPricingByNightly(nightlyPrice, nightsCount));
 			} else if (
 				searchedReservation &&
-				Number(searchedReservation.total_amount) > 0 &&
+				fallbackNightlyPrice > 0 &&
 				nightsCount > 0
 			) {
-				const roomCountFromTypes = Array.isArray(
-					searchedReservation.pickedRoomsType,
-				)
-					? searchedReservation.pickedRoomsType.reduce(
-							(sum, r) => sum + (Number(r.count) || 1),
-							0,
-					  )
-					: 0;
-				const totalRooms =
-					Number(searchedReservation.total_rooms) || roomCountFromTypes || 1;
-				const perNight =
-					normalizeNumber(searchedReservation.total_amount, 0) /
-					nightsCount /
-					totalRooms;
-				setPricingByDay(buildPricingByNightly(perNight, nightsCount));
+				setPricingByDay(buildPricingByNightly(fallbackNightlyPrice, nightsCount));
 			} else {
 				const generated = generatePricingTable(
 					room_type,
