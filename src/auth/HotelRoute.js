@@ -85,10 +85,25 @@ const hasRoleDescription = (user, description) =>
 const hasAnyRoleDescription = (user, descriptions = []) =>
 	descriptions.some((description) => hasRoleDescription(user, description));
 
+const hasAccessKey = (user, key) =>
+	Array.isArray(user?.accessTo) &&
+	user.accessTo
+		.map((item) => String(item || "").toLowerCase())
+		.includes(String(key || "").toLowerCase());
+
 const isSystemAdminUser = (user) =>
 	hasRole(user, 10000) ||
 	hasRoleDescription(user, "systemadmin") ||
 	hasRoleDescription(user, "system admin");
+
+const isScopedManagerUser = (user) =>
+	hasRole(user, 2000) && hasRoleDescription(user, "hotelmanager");
+
+const isBroadSystemAdminUser = (user) =>
+	isSystemAdminUser(user) &&
+	(getSupportedHotelIds(user).length === 0 ||
+		hasAccessKey(user, "overall") ||
+		hasAccessKey(user, "hotelAccounts"));
 
 const isFullReservationAccessUser = (user) =>
 	isSuperAdminUser(user) ||
@@ -143,7 +158,7 @@ const pathAllowsRole = (pathname = "", user, search = "") => {
 		return pathname.includes("/hotel-management/main-dashboard");
 	}
 
-	const isScopedManager = hasRole(user, 2000) && hasRoleDescription(user, "hotelmanager");
+	const isScopedManager = isScopedManagerUser(user);
 
 	if (isSuperAdminUser(user)) return true;
 	if (isSystemAdminUser(user)) {
@@ -290,7 +305,18 @@ const userCanAccessHotel = (user, { hotelId, userId, pathname, search }) => {
 
 	if (isSystemAdminUser(user)) {
 		const supportIds = getSupportedHotelIds(user);
-		return supportIds.includes(urlHotelId);
+		return supportIds.includes(urlHotelId) || isBroadSystemAdminUser(user);
+	}
+
+	if (isScopedManagerUser(user)) {
+		const assignedOwnerId = normalizeId(user.belongsToId);
+		const supportIds = getSupportedHotelIds(user);
+		const ownerMatches =
+			!urlOwnerId || !assignedOwnerId || assignedOwnerId === urlOwnerId;
+		return (
+			ownerMatches &&
+			(supportIds.length === 0 || supportIds.includes(urlHotelId))
+		);
 	}
 
 	if (isScopedHotelUser(user)) {

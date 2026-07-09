@@ -86,6 +86,19 @@ const titleCase = (value) =>
 		.toLowerCase()
 		.replace(/\b\w/g, (char) => char.toUpperCase());
 
+const firstText = (...values) =>
+	values
+		.map((value) => String(value || "").trim())
+		.find((value) => value.length > 0) || "";
+
+const normalizeLookupText = (value) =>
+	normalizeRoomTypeLabel(value)
+		.toLowerCase()
+		.replace(/\brooms\b/g, "room")
+		.replace(/\broom\b/g, "room")
+		.replace(/\s+/g, " ")
+		.trim();
+
 const getRoomTypePreset = (value) => {
 	const token = normalizeRoomTypeLabel(value).toLowerCase();
 	if (!token) return null;
@@ -96,72 +109,167 @@ const getRoomTypePreset = (value) => {
 	return { label: null, beds: 1 };
 };
 
-const getPrimaryRoomData = (reservation) => {
-	const firstPicked = Array.isArray(reservation?.pickedRoomsType)
-		? reservation.pickedRoomsType[0] || {}
-		: {};
-	const firstDetails = Array.isArray(reservation?.roomDetails)
-		? reservation.roomDetails[0] || {}
-		: {};
-
-	const rawRoomType =
-		firstPicked.room_type ||
-		firstPicked.roomType ||
-		firstDetails.room_type ||
-		firstDetails.roomType ||
-		"";
-
-	return {
-		firstPicked,
-		firstDetails,
-		rawRoomType,
-		normalizedRoomType: normalizeRoomTypeLabel(rawRoomType),
-	};
+const roomCountValue = (room = {}) => {
+	const count = Number(room?.count ?? room?.totalRooms ?? room?.total_rooms);
+	return Number.isFinite(count) && count > 0 ? count : 1;
 };
 
-const resolveRoomType = (reservation) => {
-	const { firstPicked, firstDetails, normalizedRoomType } =
-		getPrimaryRoomData(reservation);
-	const roomTypePreset = getRoomTypePreset(normalizedRoomType);
-
-	const english =
-		roomTypePreset?.label ||
-		(normalizedRoomType ? titleCase(normalizedRoomType) : "") ||
-		firstPicked.displayName ||
-		firstDetails.displayName ||
-		"N/A";
-
-	const arabic =
-		firstPicked.room_type_ar ||
-		firstPicked.roomTypeArabic ||
-		firstDetails.room_type_ar ||
-		firstDetails.roomTypeArabic ||
-		roomTypePreset?.label ||
-		(normalizedRoomType ? titleCase(normalizedRoomType) : "") ||
-		firstPicked.displayName_OtherLanguage ||
-		firstDetails.displayName_OtherLanguage ||
-		english;
-
-	return { english, arabic };
-};
-
-const resolveBedCount = (reservation) => {
-	const { normalizedRoomType } = getPrimaryRoomData(reservation);
-	const roomTypePreset = getRoomTypePreset(normalizedRoomType);
-	return roomTypePreset?.beds || 1;
-};
-
-const resolveRoomQuantity = (reservation) => {
-	if (!Array.isArray(reservation?.pickedRoomsType)) {
-		return Math.max(safeNumber(reservation?.total_rooms), 1);
-	}
-
-	const qty = reservation.pickedRoomsType.reduce(
-		(sum, room) => sum + Math.max(safeNumber(room?.count), 0),
-		0,
+const findHotelRoomDefinition = (room = {}, hotelDetails = {}) => {
+	const hotelRooms = Array.isArray(hotelDetails?.roomCountDetails)
+		? hotelDetails.roomCountDetails
+		: [];
+	const roomTypeKey = normalizeLookupText(room?.room_type || room?.roomType);
+	const displayKey = normalizeLookupText(
+		room?.displayName ||
+			room?.display_name ||
+			room?.displayName_OtherLanguage ||
+			room?.room_display_name,
 	);
 
-	return qty > 0 ? qty : Math.max(safeNumber(reservation?.total_rooms), 1);
+	return (
+		hotelRooms.find((candidate = {}) => {
+			const candidateTypeKey = normalizeLookupText(candidate.roomType);
+			const candidateDisplayKey = normalizeLookupText(candidate.displayName);
+			return (
+				roomTypeKey &&
+				candidateTypeKey === roomTypeKey &&
+				(!displayKey || candidateDisplayKey === displayKey)
+			);
+		}) ||
+		hotelRooms.find((candidate = {}) => {
+			const candidateTypeKey = normalizeLookupText(candidate.roomType);
+			return roomTypeKey && candidateTypeKey === roomTypeKey;
+		}) ||
+		null
+	);
+};
+
+const resolveRoomLabel = (room = {}, hotelDetails = {}) => {
+	const roomDefinition = findHotelRoomDefinition(room, hotelDetails);
+	const rawDisplay = firstText(
+		room.displayName,
+		room.display_name,
+		room.room_display_name,
+		roomDefinition?.displayName,
+	);
+	if (rawDisplay) return normalizeRoomTypeLabel(rawDisplay);
+
+	const rawRoomType = firstText(
+		room.room_type,
+		room.roomType,
+		roomDefinition?.roomType,
+	);
+	const preset = getRoomTypePreset(rawRoomType);
+	return preset?.label || (rawRoomType ? titleCase(normalizeRoomTypeLabel(rawRoomType)) : "");
+};
+
+const resolveBedsPerRoom = (room = {}, hotelDetails = {}) => {
+	const roomDefinition = findHotelRoomDefinition(room, hotelDetails);
+	const explicitBeds = [
+		room.bedsCount,
+		room.bedCount,
+		room.beds_count,
+		roomDefinition?.bedsCount,
+	].find((value) => Number(value) > 0);
+	if (explicitBeds) return Number(explicitBeds);
+
+	const bedArray = Array.isArray(room.bedsNumber)
+		? room.bedsNumber
+		: Array.isArray(roomDefinition?.bedsNumber)
+		? roomDefinition.bedsNumber
+		: [];
+	if (bedArray.length > 0) return bedArray.length;
+
+	const preset = getRoomTypePreset(
+		firstText(room.room_type, room.roomType, roomDefinition?.roomType, room.displayName),
+	);
+	return preset?.beds || 1;
+};
+
+const aggregateRoomRows = (rows = []) => {
+	const merged = new Map();
+	rows.forEach((row = {}) => {
+		if (!row.label) return;
+		const key = `${normalizeLookupText(row.label)}|${row.bedsPerRoom}`;
+		if (!merged.has(key)) {
+			merged.set(key, { ...row });
+			return;
+		}
+		merged.get(key).count += row.count;
+	});
+	return Array.from(merged.values());
+};
+
+const buildRoomRowsFromSource = (rooms = [], hotelDetails = {}) =>
+	(Array.isArray(rooms) ? rooms : [])
+		.map((room = {}) => {
+			if (!room || typeof room !== "object") return null;
+			const label = resolveRoomLabel(room, hotelDetails);
+			if (!label) return null;
+			return {
+				label,
+				count: roomCountValue(room),
+				bedsPerRoom: resolveBedsPerRoom(room, hotelDetails),
+			};
+		})
+		.filter(Boolean);
+
+const resolveBookedRoomRows = (reservation = {}, hotelDetails = {}) => {
+	const sourceLists = [
+		reservation?.pickedRoomsType,
+		reservation?.pickedRoomsPricing,
+		reservation?.roomDetails,
+		reservation?.roomId,
+	];
+
+	for (const source of sourceLists) {
+		const rows = aggregateRoomRows(buildRoomRowsFromSource(source, hotelDetails));
+		if (rows.length > 0) return rows;
+	}
+
+	const fallbackCount = Math.max(safeNumber(reservation?.total_rooms), 1);
+	return [{ label: "Room", count: fallbackCount, bedsPerRoom: 1 }];
+};
+
+const resolveRoomQuantity = (roomRows = [], reservation = {}) => {
+	const quantity = roomRows.reduce((sum, row) => sum + Math.max(row.count, 0), 0);
+	return quantity > 0 ? quantity : Math.max(safeNumber(reservation?.total_rooms), 1);
+};
+
+const KNOWN_HOTEL_ARABIC_NAMES = [
+	{
+		test: /\bzad\s*(?:al\s*)?(?:ajyad|agyad)\b/i,
+		arabic: "\u0641\u0646\u062f\u0642 \u0632\u0627\u062f \u0623\u062c\u064a\u0627\u062f",
+	},
+	{
+		test: /\bzad\s*(?:al\s*)?rehab\b/i,
+		arabic: "\u0641\u0646\u062f\u0642 \u0632\u0627\u062f \u0627\u0644\u0631\u062d\u0627\u0628",
+	},
+];
+
+const resolveHotelIdentity = (reservation = {}, hotelDetails = {}) => {
+	const english = firstText(
+		reservation?.hotelId?.hotelName,
+		hotelDetails?.hotelName,
+		reservation?.hotelName,
+		"Hotel",
+	);
+	const knownHotel = KNOWN_HOTEL_ARABIC_NAMES.find((item) =>
+		item.test.test(english),
+	);
+	const arabic =
+		knownHotel?.arabic ||
+		firstText(
+			reservation?.hotelId?.hotelName_OtherLanguage,
+			hotelDetails?.hotelName_OtherLanguage,
+			reservation?.hotelName_OtherLanguage,
+			english,
+		);
+
+	return {
+		english: english.toUpperCase(),
+		arabic,
+	};
 };
 
 const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
@@ -223,21 +331,27 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 		paymentMethodText = "Paid on Platform تم الدفع بالمنصة";
 	}
 
-	const { english: roomTypeLabel } = resolveRoomType(reservation);
-	const bedCount = resolveBedCount(reservation);
-	const roomQuantity = resolveRoomQuantity(reservation);
+	const roomRows = useMemo(
+		() => resolveBookedRoomRows(reservation, hotelDetails),
+		[reservation, hotelDetails],
+	);
+	const roomQuantity = resolveRoomQuantity(roomRows, reservation);
+	const totalBeds = roomRows.reduce(
+		(sum, row) => sum + row.bedsPerRoom * row.count,
+		0,
+	);
+	const bedSummary = `${Math.max(totalBeds, 1)} ${
+		Math.max(totalBeds, 1) === 1 ? "Bed" : "Beds"
+	}`;
 	const guests = Math.max(safeNumber(reservation?.total_guests), 1);
 	const [bookingSourceLineOne, bookingSourceLineTwo] = splitBookingSource(
 		reservation?.booking_source || "Jannat",
 	);
 
-	const hotelNameArabic =
-		hotelDetails?.hotelName_OtherLanguage || "فندق زاد الرحاب";
-	const hotelNameEnglish = String(
-		hotelDetails?.hotelName ||
-			reservation?.hotelId?.hotelName ||
-			"ZAD AL-REHAB",
-	).toUpperCase();
+	const { arabic: hotelNameArabic, english: hotelNameEnglish } = useMemo(
+		() => resolveHotelIdentity(reservation, hotelDetails),
+		[reservation, hotelDetails],
+	);
 	const initialHotelLicense = useMemo(
 		() =>
 			reservation?.supplierData?.hotelLicenseNo ||
@@ -467,14 +581,20 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 						<table className='meta-table'>
 							<tbody>
 								<tr>
-									<td className='left'>
-										{bedCount} {bedCount === 1 ? "Bed" : "Beds"}
-									</td>
+									<td className='left'>{bedSummary}</td>
 									<td
-										className='middle'
+										className='middle room-summary-cell'
 										style={{ textTransform: "capitalize" }}
 									>
-										{roomTypeLabel}
+										{roomRows.map((room, index) => (
+											<div
+												className='room-summary-line'
+												key={`${room.label}-${index}`}
+											>
+												{room.count > 1 ? `${room.count} x ` : ""}
+												{room.label}
+											</div>
+										))}
 									</td>
 									<td className='right'>
 										<div>Room Type</div>
@@ -943,6 +1063,15 @@ const Page = styled.div`
 		font-size: 12px;
 		font-weight: 700;
 		text-align: center;
+	}
+
+	.meta-table .room-summary-cell {
+		text-transform: none !important;
+		line-height: 1.15;
+	}
+
+	.meta-table .room-summary-line + .room-summary-line {
+		margin-top: 2px;
 	}
 
 	.meta-table .right {
