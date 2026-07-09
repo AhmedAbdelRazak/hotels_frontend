@@ -7,6 +7,7 @@ import HotelMapFilters from "./HotelMapFilters";
 import ReservationDetail from "../ReservationsFolder/ReservationDetail";
 import { useHistory, useLocation } from "react-router-dom";
 import { isPendingConfirmationReservation } from "../../utils/reservationStatus";
+import { buildRoomMapFloors, roomIsOnFloor } from "./roomMapFloors";
 
 const getReservationKey = (reservation) => {
 	if (!reservation) return "";
@@ -571,12 +572,18 @@ const HotelHeatMap = ({
 		[getAvailabilityRange, getRoomReservations],
 	);
 
-	const { hotelFloors = 0, parkingLot } = hotelDetails || {};
-	const floors = Array.from(
-		{ length: Number(hotelFloors) || 0 },
-		(_, index) => index + 1,
+	const { parkingLot } = hotelDetails || {};
+	const floors = useMemo(
+		() => buildRoomMapFloors(hotelDetails, safeHotelRooms),
+		[hotelDetails, safeHotelRooms],
 	);
-	const floorsDesc = [...floors].reverse();
+	const floorsDesc = useMemo(() => [...floors].reverse(), [floors]);
+
+	useEffect(() => {
+		if (selectedFloor !== null && !floors.includes(Number(selectedFloor))) {
+			setSelectedFloor(null);
+		}
+	}, [floors, selectedFloor]);
 
 	const filteredRooms = safeHotelRooms.filter((room) => {
 		const roomInfo = getRoomDisplayInfo(room);
@@ -592,7 +599,8 @@ const HotelHeatMap = ({
 			selectedRoomType === null ||
 			roomDisplayKey === selectedKey ||
 			roomTypeKey === selectedKey;
-		const isFloorMatch = selectedFloor === null || room.floor === selectedFloor;
+		const isFloorMatch =
+			selectedFloor === null || roomIsOnFloor(room, selectedFloor);
 		const isRoomStatusMatch =
 			selectedRoomStatus === null ||
 			(selectedRoomStatus === "clean" && room.cleanRoom) ||
@@ -787,7 +795,7 @@ const HotelHeatMap = ({
 										<RoomsGrid>
 											{filteredRooms &&
 												filteredRooms
-													.filter((room) => room.floor === floor)
+													.filter((room) => roomIsOnFloor(room, floor))
 													.map((room, idx) => {
 														const bookingStatus = getRoomBookingStatus(room);
 														const roomInfo = getRoomDisplayInfo(room);
@@ -983,7 +991,7 @@ const HotelHeatMap = ({
 											<RoomsGrid>
 												{filteredRooms &&
 													filteredRooms
-														.filter((room) => room.floor === floor)
+														.filter((room) => roomIsOnFloor(room, floor))
 														.map((room, idx) => {
 															const bookingStatus = getRoomBookingStatus(room);
 															const roomInfo = getRoomDisplayInfo(room);

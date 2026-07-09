@@ -5,6 +5,7 @@ import moment from "moment";
 import { toast } from "react-toastify";
 import HotelMapFilters from "./HotelMapFilters"; // Ensure this path is correct
 import { isPendingConfirmationReservation } from "../../utils/reservationStatus";
+import { buildRoomMapFloors, roomIsOnFloor } from "./roomMapFloors";
 
 const CHECKED_OUT_STATUS_REGEX =
 	/checked[_\s-]?out|checkedout|closed|early[_\s-]?checked[_\s-]?out/i;
@@ -74,6 +75,10 @@ const HotelOverviewReservation = ({
 				.trim()
 				.toLowerCase(),
 		[],
+	);
+	const safeHotelRooms = useMemo(
+		() => (Array.isArray(hotelRooms) ? hotelRooms : []),
+		[hotelRooms],
 	);
 
 	const roomCountDetails = useMemo(
@@ -351,9 +356,18 @@ const HotelOverviewReservation = ({
 		getBookedBedsForRoom,
 	]);
 
-	const { hotelFloors, parkingLot } = hotelDetails;
-	const floors = Array.from({ length: hotelFloors }, (_, index) => index + 1);
-	const floorsDesc = [...floors].reverse(); // Descending order for display on the canvas
+	const { parkingLot } = hotelDetails || {};
+	const floors = useMemo(
+		() => buildRoomMapFloors(hotelDetails, safeHotelRooms),
+		[hotelDetails, safeHotelRooms],
+	);
+	const floorsDesc = useMemo(() => [...floors].reverse(), [floors]);
+
+	useEffect(() => {
+		if (selectedFloor !== null && !floors.includes(Number(selectedFloor))) {
+			setSelectedFloor(null);
+		}
+	}, [floors, selectedFloor]);
 
 	const getRoomWarningFlags = (room) => ({
 		isHandicapped: !!room?.isHandicapped,
@@ -1092,7 +1106,7 @@ const HotelOverviewReservation = ({
 		setSelectedRoomStatus(null);
 	};
 
-	const filteredRooms = hotelRooms.filter((room) => {
+	const filteredRooms = safeHotelRooms.filter((room) => {
 		const roomInfo = getRoomDisplayInfo(room);
 		const isAvailabilityMatch =
 			selectedAvailability === null ||
@@ -1104,7 +1118,8 @@ const HotelOverviewReservation = ({
 			selectedRoomType === null ||
 			normalizeDisplayName(roomInfo.displayName) ===
 				normalizeDisplayName(selectedRoomType);
-		const isFloorMatch = selectedFloor === null || room.floor === selectedFloor;
+		const isFloorMatch =
+			selectedFloor === null || roomIsOnFloor(room, selectedFloor);
 		const isRoomStatusMatch =
 			selectedRoomStatus === null ||
 			(selectedRoomStatus === "clean" && room.cleanRoom) ||
@@ -1188,7 +1203,7 @@ const HotelOverviewReservation = ({
 										<RoomsGrid>
 											{filteredRooms &&
 												filteredRooms
-													.filter((room) => room.floor === floor)
+													.filter((room) => roomIsOnFloor(room, floor))
 													.map((room, idx) => {
 														const roomKey = String(
 															room?._id || room?.room_number || `${floor}-${idx}`,
@@ -1321,7 +1336,7 @@ const HotelOverviewReservation = ({
 											<RoomsGrid>
 												{filteredRooms &&
 													filteredRooms
-														.filter((room) => room.floor === floor)
+														.filter((room) => roomIsOnFloor(room, floor))
 														.map((room, idx) => {
 															const roomKey = String(
 																room?._id || room?.room_number || `${floor}-${idx}`,
