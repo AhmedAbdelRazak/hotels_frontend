@@ -134,6 +134,7 @@ const ZReservationForm = ({
 	const reviewPanelRef = useRef(null);
 	const hotelMapRef = useRef(null);
 	const [mobileMapActionVisible, setMobileMapActionVisible] = useState(false);
+	const [isFixed, setIsFixed] = useState(false);
 
 	const { user } = isAuthenticated();
 
@@ -235,6 +236,25 @@ const ZReservationForm = ({
 			setTotal_Amount,
 		],
 	);
+
+	useEffect(() => {
+		if (!taskeenClicked) {
+			setIsFixed(false);
+			return undefined;
+		}
+
+		const handleScroll = () => {
+			const currentScrollPos = window.pageYOffset;
+			setIsFixed(currentScrollPos > 750);
+		};
+
+		handleScroll();
+		window.addEventListener("scroll", handleScroll, { passive: true });
+
+		return () => {
+			window.removeEventListener("scroll", handleScroll);
+		};
+	}, [taskeenClicked]);
 
 	useEffect(() => {
 		if (
@@ -490,15 +510,20 @@ const ZReservationForm = ({
 			);
 		}
 		setTaskeenClicked(true);
+		const isCompactScreen = window.innerWidth <= 760;
 		setTimeout(() => {
-			const target =
-				hotelMapRef.current || reviewPanelRef.current || taskeenSummaryRef.current;
-			if (!target) return;
-			target.scrollIntoView({
-				behavior: "smooth",
-				block: "start",
-			});
-		}, 180);
+			if (isCompactScreen) {
+				const target =
+					hotelMapRef.current || reviewPanelRef.current || taskeenSummaryRef.current;
+				if (!target) return;
+				target.scrollIntoView({
+					behavior: "smooth",
+					block: "start",
+				});
+				return;
+			}
+			window.scrollTo({ top: 760, behavior: "smooth" });
+		}, isCompactScreen ? 180 : 1000);
 	};
 
 	const handleFileUpload = (uploadFunction) => {
@@ -1355,7 +1380,10 @@ const ZReservationForm = ({
 
 					{customer_details.name && start_date && end_date && taskeenClicked ? (
 						<>
-							<div ref={reviewPanelRef} className='fixed-section'>
+							<div
+								ref={reviewPanelRef}
+								className={isFixed ? "fixed-section visible" : "fixed-section"}
+							>
 								<div className='review-grid'>
 									{customer_details.name &&
 									start_date &&
@@ -1955,7 +1983,7 @@ const ZReservationFormWrapper = styled.div`
 	}
 
 	.hotel-map-section {
-		scroll-margin-top: 152px;
+		scroll-margin-top: 86px;
 	}
 
 	.mobile-map-booking-action {
@@ -1977,17 +2005,25 @@ const ZReservationFormWrapper = styled.div`
 	}
 
 	.fixed-section {
-		position: sticky;
-		top: 144px;
-		width: 100%;
+		position: fixed;
+		top: 70px;
+		left: ${(props) =>
+			props.$arabic ? "0" : props.$sidebarCollapsed ? "80px" : "286px"};
+		right: ${(props) =>
+			props.$arabic ? (props.$sidebarCollapsed ? "80px" : "286px") : "0"};
+		width: auto;
 		background: #eef8ff;
-		border: 1px solid #c8e7ff;
-		border-radius: 8px;
-		z-index: 820;
-		opacity: 1;
-		margin: 12px 0;
-		transition: box-shadow 0.2s ease;
+		border-bottom: 1px solid #c8e7ff;
+		z-index: 850;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.5s ease-in-out;
 		box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+	}
+
+	.visible {
+		opacity: 1;
+		pointer-events: auto;
 	}
 
 	.inner-grid {
@@ -2206,6 +2242,7 @@ const ZReservationFormWrapper = styled.div`
 			background: #eef8ff;
 			box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 			scroll-margin-top: 82px;
+			pointer-events: auto;
 			z-index: auto;
 		}
 
