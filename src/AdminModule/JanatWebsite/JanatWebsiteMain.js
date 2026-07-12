@@ -15,6 +15,7 @@ import { toast } from "react-toastify";
 import ZTermsAndConditions from "./ZTermsAndConditions";
 import ZTermsAndConditionsB2B from "./ZTermsAndConditionsB2B";
 import ZPrivacyPolicy from "./ZPrivacyPolicy";
+import HotelRatingsModeration from "./HotelRatingsModeration";
 import { Modal, Input, Button, message, Switch } from "antd";
 import {
 	ContactsOutlined,
@@ -25,6 +26,7 @@ import {
 	LockOutlined,
 	SaveOutlined,
 	SafetyCertificateOutlined,
+	StarOutlined,
 	EyeInvisibleOutlined,
 	EyeTwoTone,
 } from "@ant-design/icons";
@@ -49,6 +51,7 @@ const TEXT = {
 		hotelTerms: "Hotel Terms",
 		privacy: "Privacy Policy",
 		aiChat: "AI Chat",
+		hotelRatings: "Hotel Ratings",
 		aiChatTitle: "Jannat Booking AI Chat",
 		aiChatEnabled: "AI responder is enabled for B2C website chats.",
 		aiChatDisabled: "AI responder is stopped for B2C website chats.",
@@ -75,6 +78,7 @@ const TEXT = {
 		hotelTerms: "\u0634\u0631\u0648\u0637 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		privacy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
 		aiChat: "\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621",
+		hotelRatings: "\u062a\u0642\u064a\u064a\u0645\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		aiChatTitle:
 			"\u0645\u062d\u0627\u062f\u062b\u0627\u062a \u0627\u0644\u0630\u0643\u0627\u0621 \u0644\u062c\u0646\u0629 \u0628\u0648\u0643\u064a\u0646\u062c",
 		aiChatEnabled:
@@ -106,6 +110,11 @@ const TAB_DEFS = [
 	},
 	{ key: "privacyPolicy", labelKey: "privacy", icon: <LockOutlined /> },
 	{ key: "ai-chat", labelKey: "aiChat", icon: <CustomerServiceOutlined /> },
+	{
+		key: "hotel-rating",
+		labelKey: "hotelRatings",
+		icon: <StarOutlined />,
+	},
 ];
 
 const JanatWebsiteMain = ({ chosenLanguage }) => {
@@ -123,7 +132,12 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 	const [aboutUsBanner, setAboutUsBanner] = useState([]);
 	const [hotelPageBanner, setHotelPageBanner] = useState([]);
 	const [documentId, setDocumentId] = useState(undefined);
-	const [activeTab, setActiveTab] = useState("home"); // New state for tab selection
+	const [activeTab, setActiveTab] = useState(() => {
+		const requestedTab = new URLSearchParams(location.search).get("tab");
+		return TAB_DEFS.some((tab) => tab.key === requestedTab)
+			? requestedTab
+			: "home";
+	});
 	const [aboutUsEnglish, setAboutUsEnglish] = useState("");
 	const [aboutUsArabic, setAboutUsArabic] = useState("");
 	const [privacyPolicy, setPrivacyPolicy] = useState("");
@@ -532,17 +546,27 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 										</AiSwitchRow>
 									</AiSettingsPanel>
 								)}
+
+								{activeTab === "hotel-rating" && (
+									<HotelRatingsModeration
+										chosenLanguage={chosenLanguage}
+										userId={getUser?._id || user?._id}
+										token={token}
+									/>
+								)}
 							</TabPanel>
 
-							<ActionFooter>
-								<Button
-									type='primary'
-									icon={<SaveOutlined />}
-									onClick={submitDocument}
-								>
-									{L.save}
-								</Button>
-							</ActionFooter>
+							{activeTab !== "hotel-rating" && (
+								<ActionFooter>
+									<Button
+										type='primary'
+										icon={<SaveOutlined />}
+										onClick={submitDocument}
+									>
+										{L.save}
+									</Button>
+								</ActionFooter>
+							)}
 						</div>
 					</div>
 				</div>

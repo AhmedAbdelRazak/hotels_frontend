@@ -498,6 +498,139 @@ export const getJanatWebsiteRecord = () => {
 		.catch((err) => console.log(err));
 };
 
+export const createHotelReviewInvitation = (
+	reservationId,
+	userId,
+	token,
+	{ language = "en", replace = false } = {},
+) => {
+	const normalizedLanguage = language === "ar" ? "ar" : "en";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-reviews/invitations/${encodeURIComponent(
+			reservationId,
+		)}/${encodeURIComponent(userId)}`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			body: JSON.stringify({
+				language: normalizedLanguage,
+				replace: replace === true,
+			}),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...localizeApiError(
+						data,
+						"Could not create the guest review link.",
+					),
+					success: false,
+				};
+			}
+			return data;
+		})
+		.catch((error) => ({
+			success: false,
+			error: error?.message || "Could not create the guest review link.",
+		}));
+};
+
+const buildHotelReviewAdminQuery = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		const normalizedValue = String(value).trim();
+		if (!normalizedValue || normalizedValue === "all") return;
+		params.set(key, normalizedValue);
+	});
+	return params.toString();
+};
+
+export const getAdminHotelReviews = (userId, token, filters = {}) => {
+	const query = buildHotelReviewAdminQuery(filters);
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/hotel-reviews/${encodeURIComponent(
+			userId,
+		)}${query ? `?${query}` : ""}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			cache: "no-store",
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...localizeApiError(data, "Could not load hotel reviews."),
+					success: false,
+					reviews: [],
+					pagination: {},
+					summary: {},
+					hotels: [],
+				};
+			}
+			return data;
+		})
+		.catch((error) => ({
+			success: false,
+			error: error?.message || "Could not load hotel reviews.",
+			reviews: [],
+			pagination: {},
+			summary: {},
+			hotels: [],
+		}));
+};
+
+export const updateAdminHotelReviewStatus = (
+	reviewId,
+	userId,
+	token,
+	status,
+) => {
+	const normalizedStatus = status === "inactive" ? "inactive" : "active";
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/hotel-reviews/${encodeURIComponent(
+			reviewId,
+		)}/status/${encodeURIComponent(userId)}`,
+		{
+			method: "PATCH",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			body: JSON.stringify({ status: normalizedStatus }),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...localizeApiError(data, "Could not update the review status."),
+					success: false,
+				};
+			}
+			return data;
+		})
+		.catch((error) => ({
+			success: false,
+			error: error?.message || "Could not update the review status.",
+		}));
+};
+
 export const gettingAllHotelAccounts = (userId, token) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/all-hotel-accounts/${userId}`,

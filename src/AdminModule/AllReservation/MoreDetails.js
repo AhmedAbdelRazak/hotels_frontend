@@ -29,6 +29,7 @@ import {
 	InfoCircleOutlined,
 	MailOutlined,
 	PhoneOutlined,
+	StarOutlined,
 	TeamOutlined,
 	UserOutlined,
 } from "@ant-design/icons";
@@ -40,6 +41,7 @@ import {
 	updatePendingConfirmationReservation,
 } from "../../HotelModule/apiAdmin";
 import {
+	createHotelReviewInvitation,
 	getSingleInboundEmailAudit,
 	revertOtaReservationToPlatformReview,
 	sendReservationConfirmationSMSManualAdmin,
@@ -76,6 +78,93 @@ const PAYMENT_LINK_CURRENCY_OPTIONS = [
 	{ value: "usd", label: "USD - US Dollar" },
 	{ value: "eur", label: "EUR - Euro" },
 ];
+
+const HOTEL_REVIEW_LINK_TEXT = {
+	en: {
+		action: "Guest review link",
+		title: "Guest review link",
+		eyebrow: "Verified reservation invitation",
+		heading: "Invite this guest to rate their stay",
+		helper:
+			"The secure link includes the booking confirmation reference and a one-time opaque invitation so the form can be prefilled; the guest name and room number are never placed in the URL.",
+		language: "Review page language",
+		link: "Secure review link",
+		expires: "Expires",
+		open: "Open link",
+		copy: "Copy link",
+		create: "Create review link",
+		replace: "Replace review link",
+		replacementTitle: "Replace the active review link?",
+		replacementBody:
+			"This immediately invalidates the previous URL. Anyone with the old link will no longer be able to use it.",
+		replacementConfirm: "Replace link",
+		cancel: "Cancel",
+		languageHint:
+			"Changing the language does not create or replace a link. Use the button below when you are ready.",
+		generating: "Creating a secure review link…",
+		generateError: "Could not create the guest review link.",
+		invalidLink: "The server did not return a valid review link.",
+		copied: "Guest review link copied.",
+		copyFallback: "Select and copy the review link manually.",
+	},
+	ar: {
+		action: "\u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0636\u064a\u0641",
+		title: "\u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0636\u064a\u0641",
+		eyebrow: "\u062f\u0639\u0648\u0629 \u0645\u0631\u062a\u0628\u0637\u0629 \u0628\u062d\u062c\u0632 \u0645\u0648\u062b\u0642",
+		heading: "\u0627\u062f\u0639\u064f \u0627\u0644\u0636\u064a\u0641 \u0644\u062a\u0642\u064a\u064a\u0645 \u0625\u0642\u0627\u0645\u062a\u0647",
+		helper:
+			"\u064a\u062a\u0636\u0645\u0646 \u0627\u0644\u0631\u0627\u0628\u0637 \u0645\u0631\u062c\u0639 \u062a\u0623\u0643\u064a\u062f \u0627\u0644\u062d\u062c\u0632 \u0648\u0631\u0645\u0632 \u062f\u0639\u0648\u0629 \u0639\u0634\u0648\u0627\u0626\u064a\u0627 \u0644\u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629 \u0644\u062a\u0639\u0628\u0626\u0629 \u0627\u0644\u0646\u0645\u0648\u0630\u062c\u061b \u0648\u0644\u0627 \u064a\u0648\u0636\u0639 \u0627\u0633\u0645 \u0627\u0644\u0636\u064a\u0641 \u0623\u0648 \u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629 \u0641\u064a \u0627\u0644\u0631\u0627\u0628\u0637.",
+		language: "\u0644\u063a\u0629 \u0635\u0641\u062d\u0629 \u0627\u0644\u062a\u0642\u064a\u064a\u0645",
+		link: "\u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0622\u0645\u0646",
+		expires: "\u064a\u0646\u062a\u0647\u064a",
+		open: "\u0641\u062a\u062d \u0627\u0644\u0631\u0627\u0628\u0637",
+		copy: "\u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637",
+		create: "\u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0642\u064a\u064a\u0645",
+		replace: "\u0627\u0633\u062a\u0628\u062f\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0642\u064a\u064a\u0645",
+		replacementTitle:
+			"\u0647\u0644 \u062a\u0631\u064a\u062f \u0627\u0633\u062a\u0628\u062f\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0646\u0634\u0637\u061f",
+		replacementBody:
+			"\u0633\u064a\u0624\u062f\u064a \u0647\u0630\u0627 \u0625\u0644\u0649 \u0625\u0628\u0637\u0627\u0644 \u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0633\u0627\u0628\u0642 \u0641\u0648\u0631\u0627\u060c \u0648\u0644\u0646 \u064a\u062a\u0645\u0643\u0646 \u0645\u0646 \u0644\u062f\u064a\u0647 \u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0642\u062f\u064a\u0645 \u0645\u0646 \u0627\u0633\u062a\u062e\u062f\u0627\u0645\u0647.",
+		replacementConfirm: "\u0627\u0633\u062a\u0628\u062f\u0627\u0644 \u0627\u0644\u0631\u0627\u0628\u0637",
+		cancel: "\u0625\u0644\u063a\u0627\u0621",
+		languageHint:
+			"\u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u0644\u063a\u0629 \u0644\u0627 \u064a\u0646\u0634\u0626 \u0627\u0644\u0631\u0627\u0628\u0637 \u0648\u0644\u0627 \u064a\u0633\u062a\u0628\u062f\u0644\u0647. \u0627\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0632\u0631 \u0623\u062f\u0646\u0627\u0647 \u0639\u0646\u062f\u0645\u0627 \u062a\u0643\u0648\u0646 \u0645\u0633\u062a\u0639\u062f\u0627.",
+		generating: "\u062c\u0627\u0631\u064a \u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0622\u0645\u0646\u2026",
+		generateError: "\u062a\u0639\u0630\u0631 \u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0636\u064a\u0641.",
+		invalidLink: "\u0644\u0645 \u064a\u0639\u062f \u0627\u0644\u062e\u0627\u062f\u0645 \u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0635\u0627\u0644\u062d\u0627.",
+		copied: "\u062a\u0645 \u0646\u0633\u062e \u0631\u0627\u0628\u0637 \u062a\u0642\u064a\u064a\u0645 \u0627\u0644\u0636\u064a\u0641.",
+		copyFallback: "\u064a\u0631\u062c\u0649 \u062a\u062d\u062f\u064a\u062f \u0631\u0627\u0628\u0637 \u0627\u0644\u062a\u0642\u064a\u064a\u0645 \u0648\u0646\u0633\u062e\u0647 \u064a\u062f\u0648\u064a\u0627.",
+	},
+};
+
+const HOTEL_REVIEW_INVITATION_ACCESS = new Set([
+	"JannatBookingWebsite",
+	"AllReservations",
+	"HotelsReservations",
+]);
+
+const canManageHotelReviewInvitations = (account = {}) =>
+	isSuperAdminUser(account) ||
+	(Array.isArray(account?.accessTo) &&
+		account.accessTo.some((permission) =>
+			HOTEL_REVIEW_INVITATION_ACCESS.has(String(permission || "").trim()),
+		));
+
+const normalizeGeneratedReviewUrl = (value) => {
+	const raw = String(value || "").trim();
+	if (!raw) return "";
+	try {
+		const fallbackBase =
+			process.env.REACT_APP_MAIN_URL_JANNAT ||
+			(typeof window !== "undefined"
+				? window.location.origin
+				: "https://www.jannatbooking.com");
+		const parsed = new URL(raw, fallbackBase);
+		return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
+	} catch (_error) {
+		return "";
+	}
+};
 
 const normalizePaymentLinkLanguage = (value = "en") =>
 	PAYMENT_LINK_LANGUAGE_OPTIONS.some((option) => option.value === value)
@@ -1733,6 +1822,15 @@ const Header = styled.div`
 	.top-aldawleya-button {
 		background: #0a2f63 !important;
 		border-color: #0a2f63 !important;
+	}
+
+	.top-document-actions .top-review-link-button {
+		align-items: center;
+		display: inline-flex;
+		gap: 6px;
+		justify-content: center;
+		background: var(--pms-green) !important;
+		border-color: var(--pms-green) !important;
 	}
 
 	.top-card-title {
@@ -4366,6 +4464,174 @@ const PaymentLinkModalBody = styled.div`
 	}
 `;
 
+const ReviewLinkModalBody = styled.div`
+	display: grid;
+	gap: 16px;
+
+	.review-link-modal-head {
+		padding: 16px;
+		border: 1px solid #b9e4d2;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #ecfdf5, #f8fbff);
+		text-align: start;
+	}
+
+	.review-link-modal-head > span {
+		color: #08724c;
+		font-size: 0.76rem;
+		font-weight: 950;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.review-link-modal-head h3 {
+		margin: 5px 0 7px;
+		color: #102033;
+		font-size: 1.18rem;
+		font-weight: 950;
+		line-height: 1.35;
+	}
+
+	.review-link-modal-head p {
+		margin: 0;
+		color: #536b80;
+		font-size: 0.9rem;
+		font-weight: 650;
+		line-height: 1.58;
+	}
+
+	.review-link-language {
+		display: grid;
+		grid-template-columns: minmax(150px, 0.45fr) minmax(0, 1fr);
+		align-items: center;
+		gap: 12px;
+		color: #334155;
+		font-weight: 900;
+	}
+
+	.review-link-language .ant-select {
+		width: 100%;
+	}
+
+	.review-link-language-hint {
+		margin: -8px 0 0;
+		color: #64748b;
+		font-size: 0.82rem;
+		font-weight: 650;
+		line-height: 1.5;
+		text-align: start;
+	}
+
+	.review-link-loading {
+		display: grid;
+		min-height: 132px;
+		place-items: center;
+		align-content: center;
+		gap: 12px;
+		padding: 18px;
+		border: 1px solid #dbeafe;
+		border-radius: 12px;
+		background: #f8fbff;
+		color: #36546f;
+		text-align: center;
+	}
+
+	.review-link-preview {
+		display: grid;
+		gap: 9px;
+		padding: 13px;
+		border: 1px solid #dbeafe;
+		border-radius: 12px;
+		background: #f8fbff;
+	}
+
+	.review-link-preview-title {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		color: #0f172a;
+		text-align: start;
+	}
+
+	.review-link-preview-title strong {
+		font-weight: 950;
+	}
+
+	.review-link-preview-title small {
+		color: #64748b;
+		font-weight: 750;
+	}
+
+	.review-link-preview textarea {
+		color: #0b5ed7;
+		font-weight: 750;
+		line-height: 1.5;
+		resize: none;
+		word-break: break-all;
+	}
+
+	.review-link-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 9px;
+	}
+
+	.review-link-actions button {
+		min-height: 40px;
+		padding: 7px 14px;
+		border: 1px solid #0d6efd;
+		border-radius: 8px;
+		background: #0d6efd;
+		color: #ffffff;
+		cursor: pointer;
+		font-weight: 900;
+	}
+
+	.review-link-actions button:nth-child(2) {
+		border-color: #058a64;
+		background: #058a64;
+	}
+
+	.review-link-actions button:last-child {
+		border-color: #94a3b8;
+		background: #ffffff;
+		color: #334155;
+	}
+
+	.review-link-actions button:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	.review-link-actions button:not(:disabled):hover,
+	.review-link-actions button:not(:disabled):focus-visible {
+		box-shadow: 0 8px 18px rgba(13, 110, 253, 0.16);
+		outline: 2px solid rgba(13, 110, 253, 0.22);
+		outline-offset: 2px;
+		transform: translateY(-1px);
+	}
+
+	@media (max-width: 620px) {
+		.review-link-language {
+			grid-template-columns: 1fr;
+		}
+
+		.review-link-preview-title {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+
+		.review-link-actions {
+			flex-direction: column;
+		}
+
+		.review-link-actions button {
+			width: 100%;
+		}
+	}
+`;
+
 const OtaAuditCallout = styled.div`
 	background: #f4f9ff;
 	border: 1px solid #b8d4f8;
@@ -4714,10 +4980,21 @@ const ReservationDetail = ({
 	const { chosenLanguage } = useCartContext();
 	const isArabic = chosenLanguage === "Arabic";
 	const financeHelp = FINANCE_CHOICE_HELP[isArabic ? "ar" : "en"];
+	const reviewLinkText = HOTEL_REVIEW_LINK_TEXT[isArabic ? "ar" : "en"];
+	const [reviewLinkModalOpen, setReviewLinkModalOpen] = useState(false);
+	const [reviewLinkLanguage, setReviewLinkLanguage] = useState(
+		isArabic ? "ar" : "en",
+	);
+	const [reviewLinkUrl, setReviewLinkUrl] = useState("");
+	const [reviewLinkExpiresAt, setReviewLinkExpiresAt] = useState("");
+	const [reviewLinkLoading, setReviewLinkLoading] = useState(false);
+	const reviewLinkRequestSequence = useRef(0);
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
 	const isConfiguredSuperAdmin = isSuperAdminUser(user);
+	const canManageReviewInvitations =
+		user?.activeUser !== false && canManageHotelReviewInvitations(user);
 	const supplierData = reservation?.supplierData || {};
 	const configuredSuperAdminId = String(
 		process.env.REACT_APP_SUPER_ADMIN_ID || "",
@@ -4889,6 +5166,22 @@ const ReservationDetail = ({
 		setPaymentLinkLanguage("en");
 		setPaymentLinkCurrency("sar");
 	}, [reservation?._id, reservation?.confirmation_number]);
+
+	useEffect(() => {
+		reviewLinkRequestSequence.current += 1;
+		setReviewLinkModalOpen(false);
+		setReviewLinkLanguage(isArabic ? "ar" : "en");
+		setReviewLinkUrl("");
+		setReviewLinkExpiresAt("");
+		setReviewLinkLoading(false);
+	}, [isArabic, reservation?._id]);
+
+	useEffect(
+		() => () => {
+			reviewLinkRequestSequence.current += 1;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!confirmationEmailModalOpen) return;
@@ -6309,6 +6602,143 @@ const ReservationDetail = ({
 		}
 	};
 
+	const generateReviewLink = useCallback(
+		async (language = reviewLinkLanguage, { replace = false } = {}) => {
+			const reservationId = String(reservation?._id || "").trim();
+			const userId = String(user?._id || "").trim();
+			if (
+				!canManageReviewInvitations ||
+				!reservationId ||
+				!userId ||
+				!token
+			) {
+				toast.error(reviewLinkText.generateError);
+				return { success: false, conflict: false };
+			}
+
+			const requestId = reviewLinkRequestSequence.current + 1;
+			reviewLinkRequestSequence.current = requestId;
+			setReviewLinkLoading(true);
+			try {
+				const response = await createHotelReviewInvitation(
+					reservationId,
+					userId,
+					token,
+					{
+						language: language === "ar" ? "ar" : "en",
+						replace: replace === true,
+					},
+				);
+				if (requestId !== reviewLinkRequestSequence.current) {
+					return { success: false, conflict: false };
+				}
+				if (response?.success === false || response?.error) {
+					if (
+						replace !== true &&
+						response?.code === "ACTIVE_REVIEW_INVITATION_EXISTS"
+					) {
+						return { success: false, conflict: true };
+					}
+					toast.error(response?.error || reviewLinkText.generateError);
+					return { success: false, conflict: false };
+				}
+
+				const nextUrl = normalizeGeneratedReviewUrl(response?.reviewUrl);
+				if (!nextUrl) {
+					toast.error(reviewLinkText.invalidLink);
+					return { success: false, conflict: false };
+				}
+
+				setReviewLinkUrl(nextUrl);
+				setReviewLinkExpiresAt(String(response?.expiresAt || ""));
+				return { success: true, conflict: false, reviewUrl: nextUrl };
+			} catch (_error) {
+				if (requestId === reviewLinkRequestSequence.current) {
+					toast.error(reviewLinkText.generateError);
+				}
+				return { success: false, conflict: false };
+			} finally {
+				if (requestId === reviewLinkRequestSequence.current) {
+					setReviewLinkLoading(false);
+				}
+			}
+		},
+		[
+			canManageReviewInvitations,
+			reservation?._id,
+			reviewLinkLanguage,
+			reviewLinkText.generateError,
+			reviewLinkText.invalidLink,
+			token,
+			user?._id,
+		],
+	);
+
+	const openReviewLinkModal = useCallback(() => {
+		if (!canManageReviewInvitations) return;
+		setReviewLinkModalOpen(true);
+	}, [canManageReviewInvitations]);
+
+	const confirmReviewLinkReplacement = useCallback(
+		(language = reviewLinkLanguage) => {
+			Modal.confirm({
+				...confirmModalProps("guest-review-link-replace-confirm"),
+				title: reviewLinkText.replacementTitle,
+				content: reviewLinkText.replacementBody,
+				okText: reviewLinkText.replacementConfirm,
+				cancelText: reviewLinkText.cancel,
+				okButtonProps: { danger: true },
+				centered: true,
+				onOk: () =>
+					generateReviewLink(language, {
+						replace: true,
+					}),
+			});
+		},
+		[
+			generateReviewLink,
+			reviewLinkLanguage,
+			reviewLinkText.cancel,
+			reviewLinkText.replacementBody,
+			reviewLinkText.replacementConfirm,
+			reviewLinkText.replacementTitle,
+		],
+	);
+
+	const createOrReplaceReviewLink = useCallback(async () => {
+		if (reviewLinkUrl) {
+			confirmReviewLinkReplacement(reviewLinkLanguage);
+			return;
+		}
+		const result = await generateReviewLink(reviewLinkLanguage, {
+			replace: false,
+		});
+		if (result?.conflict) {
+			confirmReviewLinkReplacement(reviewLinkLanguage);
+		}
+	}, [
+		confirmReviewLinkReplacement,
+		generateReviewLink,
+		reviewLinkLanguage,
+		reviewLinkUrl,
+	]);
+
+	const handleReviewLinkLanguageChange = (value) => {
+		const nextLanguage = value === "ar" ? "ar" : "en";
+		setReviewLinkLanguage(nextLanguage);
+	};
+
+	const copyReviewLink = async () => {
+		if (!reviewLinkUrl) return;
+		try {
+			if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+			await navigator.clipboard.writeText(reviewLinkUrl);
+			toast.success(reviewLinkText.copied);
+		} catch (_error) {
+			toast.info(reviewLinkText.copyFallback);
+		}
+	};
+
 	const buildPaymentLinkPayload = () => ({
 		guestName: reservation?.customer_details?.name || "",
 		hotelName: hotelDetails?.hotelName || "",
@@ -7718,6 +8148,100 @@ const ReservationDetail = ({
 								</button>
 							</div>
 						</PaymentLinkModalBody>
+					</Modal>
+
+					<Modal
+						title={reviewLinkText.title}
+						open={reviewLinkModalOpen}
+						onCancel={() => setReviewLinkModalOpen(false)}
+						footer={null}
+						width={680}
+						centered
+						{...childModalProps("guest-review-link-modal")}
+						destroyOnClose
+					>
+						<ReviewLinkModalBody dir={isArabic ? "rtl" : "ltr"}>
+							<div className='review-link-modal-head'>
+								<span>{reviewLinkText.eyebrow}</span>
+								<h3>{reviewLinkText.heading}</h3>
+								<p>{reviewLinkText.helper}</p>
+							</div>
+
+							<label className='review-link-language'>
+								<span>{reviewLinkText.language}</span>
+								<Select
+									value={reviewLinkLanguage}
+									disabled={reviewLinkLoading}
+									onChange={handleReviewLinkLanguageChange}
+									options={[
+										{ value: "en", label: "English" },
+										{ value: "ar", label: "\u0627\u0644\u0639\u0631\u0628\u064a\u0629" },
+									]}
+								/>
+							</label>
+							<p className='review-link-language-hint'>
+								{reviewLinkText.languageHint}
+							</p>
+
+							{reviewLinkLoading ? (
+								<div className='review-link-loading' aria-live='polite'>
+									<Spin />
+									<strong>{reviewLinkText.generating}</strong>
+								</div>
+							) : reviewLinkUrl ? (
+								<div className='review-link-preview'>
+									<div className='review-link-preview-title'>
+										<strong>{reviewLinkText.link}</strong>
+										{reviewLinkExpiresAt ? (
+											<small>
+												{reviewLinkText.expires}:{" "}
+												{reservationDisplayDateTime(reviewLinkExpiresAt)}
+											</small>
+										) : null}
+									</div>
+									<Input.TextArea
+										value={reviewLinkUrl}
+										readOnly
+										autoSize={{ minRows: 2, maxRows: 4 }}
+										aria-label={reviewLinkText.link}
+										dir='ltr'
+										onFocus={(event) => event.target.select()}
+									/>
+								</div>
+							) : null}
+
+							<div className='review-link-actions'>
+								<button
+									type='button'
+									disabled={!reviewLinkUrl || reviewLinkLoading}
+									onClick={() =>
+										window.open(
+											reviewLinkUrl,
+											"_blank",
+											"noopener,noreferrer",
+										)
+									}
+								>
+									{reviewLinkText.open}
+								</button>
+								<button
+									type='button'
+									disabled={!reviewLinkUrl || reviewLinkLoading}
+									onClick={copyReviewLink}
+								>
+									{reviewLinkText.copy}
+								</button>
+								<button
+									type='button'
+									disabled={reviewLinkLoading}
+									onClick={createOrReplaceReviewLink}
+								>
+									{reviewLinkUrl
+										? reviewLinkText.replace
+										: reviewLinkText.create}
+								</button>
+							</div>
+						</ReviewLinkModalBody>
 					</Modal>
 
 					<Modal
@@ -9194,6 +9718,16 @@ const ReservationDetail = ({
 											>
 												Al Dawleya
 											</button>
+											{canManageReviewInvitations ? (
+												<button
+													type='button'
+													className='top-review-link-button'
+													onClick={openReviewLinkModal}
+												>
+													<StarOutlined />
+													{reviewLinkText.action}
+												</button>
+											) : null}
 											{relocationArray1 &&
 												relocationArray1.some(
 													(hotel) =>
