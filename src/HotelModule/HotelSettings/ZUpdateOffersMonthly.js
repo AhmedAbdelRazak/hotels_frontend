@@ -501,7 +501,7 @@ function ZUpdateOffersMonthly({
 							<Form.Item
 								name='offerPrice'
 								// label={isArabic ? "السعر المخفض" : "Offer Price"}
-								label='Offer Price / Night'
+								label='Guest Price / Night'
 								rules={[
 									{ required: true, message: isArabic ? "مطلوب" : "Required" },
 								]}
@@ -518,7 +518,7 @@ function ZUpdateOffersMonthly({
 								// label={
 								// 	isArabic ? "السعر الأصلي (اختياري)" : "Root Price"
 								// }
-								label='Root Price/ Night'
+								label='Internal Root Cost / Night'
 							>
 								<InputNumber
 									min={0}
@@ -561,8 +561,8 @@ function ZUpdateOffersMonthly({
 								<div>{isArabic ? "الاسم" : "Name"}</div>
 								<div>{isArabic ? "من" : "From"}</div>
 								<div>{isArabic ? "إلى" : "To"}</div>
-								<div>{isArabic ? "السعر" : "Price"}</div>
-								<div>{isArabic ? "Root Price" : "Root Price"}</div>
+								<div>{isArabic ? "السعر" : "Guest Price"}</div>
+								<div>{isArabic ? "Root Price" : "Internal Root Cost"}</div>
 								<div style={{ textAlign: "center" }}>
 									{isArabic ? "إجراءات" : "Actions"}
 								</div>
@@ -703,7 +703,7 @@ function ZUpdateOffersMonthly({
 							<Form.Item
 								name='monthPrice'
 								// label={isArabic ? "سعر الشهر" : "Month Price"}
-								label='Month Price / Month'
+								label='Guest Package Total / Month'
 								rules={[
 									{ required: true, message: isArabic ? "مطلوب" : "Required" },
 								]}
@@ -715,7 +715,7 @@ function ZUpdateOffersMonthly({
 								// label={
 								// 	isArabic ? "السعر الأصلي (اختياري)" : "Root Price (optional)"
 								// }
-								label='Root Price/ Month'
+								label='Internal Root Cost / Month'
 							>
 								<InputNumber min={0} style={{ width: "100%" }} />
 							</Form.Item>
@@ -760,8 +760,8 @@ function ZUpdateOffersMonthly({
 								<div>{isArabic ? "إلى" : "To (G)"}</div>
 								<div>{isArabic ? "من (هـ)" : "From (H)"}</div>
 								<div>{isArabic ? "إلى (هـ)" : "To (H)"}</div>
-								<div>{isArabic ? "السعر" : "Price"}</div>
-								<div>{isArabic ? "Root Price" : "Root Price"}</div>
+								<div>{isArabic ? "السعر" : "Guest Package Total"}</div>
+								<div>{isArabic ? "Root Price" : "Internal Root Cost"}</div>
 								<div style={{ textAlign: "center" }}>
 									{isArabic ? "إجراءات" : "Actions"}
 								</div>

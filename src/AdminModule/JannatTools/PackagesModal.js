@@ -143,7 +143,8 @@ const PackagesModal = ({
 	// default count = 1 room
 	const [count, setCount] = useState(1);
 
-	// Compute totals (final = base + root * commission)
+	// The configured offer/month amount is the authoritative guest-facing price.
+	// Root cost and commission remain internal pricing metadata.
 	const totals = useMemo(() => {
 		if (!selectedDeal || !activeRoom || !hotel) return null;
 
@@ -153,8 +154,13 @@ const PackagesModal = ({
 
 		const comm = toCommissionDecimal(activeRoom, hotel);
 		const base = safeNum(selectedDeal.base, 0);
-		const root = safeNum(selectedDeal.root, 0);
-		const final = Math.round((base + root * comm) * 100) / 100;
+		const configuredRoot = safeNum(selectedDeal.root, 0);
+		const final = Math.round(
+			(selectedDeal.type === "offer" ? base * nights : base) * 100
+		) / 100;
+		const root = selectedDeal.type === "offer"
+			? configuredRoot * nights
+			: configuredRoot;
 
 		return {
 			nights,
@@ -174,13 +180,17 @@ const PackagesModal = ({
 		const dates = dateRange(totals.start, totals.end);
 		const rootParts = splitEven(totals.root, dates.length);
 		const finalParts = splitEven(totals.finalTotal, dates.length);
+		const priceParts = splitEven(
+			totals.finalTotal - totals.root * totals.commissionDecimal,
+			dates.length
+		);
 
 		return dates.map((d, i) => {
 			const root = rootParts[i];
 			const total = finalParts[i];
-			// choose “price” = root so editors remain intuitive (final - root is commission)
-			const priceNoCommission = root;
-			const pct = root > 0 ? ((total - root) / root) * 100 : 0;
+			// Preserve the configured commission while keeping the charged total exact.
+			const priceNoCommission = priceParts[i];
+			const pct = totals.commissionDecimal * 100;
 
 			return {
 				date: d,
@@ -277,8 +287,9 @@ const PackagesModal = ({
 						const toStr = end.isValid() ? end.format("DD MMM YYYY") : "—";
 
 						// inline preview so each option shows accurate price at a glance
-						const comm = toCommissionDecimal(activeRoom, hotel);
-						const total = safeNum(d.base, 0) + safeNum(d.root, 0) * comm;
+						const total = d.type === "offer"
+							? safeNum(d.base, 0) * nights
+							: safeNum(d.base, 0);
 
 						// Provide very strong fallbacks for the label:
 						const labelName =
@@ -387,7 +398,7 @@ const PackagesModal = ({
 							<div>
 								<b>Total to be charged:</b> {totals.finalTotal.toFixed(2)} SAR{" "}
 								<span style={{ color: "#666" }}>
-									(package total for one room)
+									(total for one room)
 								</span>
 							</div>
 						}
