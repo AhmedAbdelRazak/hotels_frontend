@@ -92,6 +92,7 @@ const ZUpdateRoomCount = ({
 				<div className='details-content'>
 					{roomDetails ? (
 						<ZUpdateHotelDetailsForm2
+							key={roomDetails?._id || selectedRoomType}
 							existingRoomDetails={roomDetails}
 							hotelDetails={hotelDetails}
 							setHotelDetails={setHotelDetails}

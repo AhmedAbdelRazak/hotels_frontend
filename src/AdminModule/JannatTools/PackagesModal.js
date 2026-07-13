@@ -1,7 +1,11 @@
 // AdminModule/JannatTools/PackagesModal.js
-import React, { useMemo, useState, useEffect } from "react";
-import { Modal, Select, Radio, Tag, InputNumber, Alert } from "antd";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { Modal, Select, Radio, Tag, InputNumber, Alert, message } from "antd";
 import dayjs from "dayjs";
+import {
+	canonicalPackageDateKey,
+	isFixedPackageEligible,
+} from "../../utils/packagePolicy";
 
 const { Option } = Select;
 
@@ -28,24 +32,32 @@ const toCommissionDecimal = (room, hotel) => {
 	return norm(defaultPct) || 0.1;
 };
 
-const normalizeOffer = (o) => ({
+const normalizeOffer = (o, sourceIndex) => ({
 	type: "offer",
-	id: o?._id || o?.id || Math.random().toString(36).slice(2),
+	id:
+		o?._id ||
+		o?.id ||
+		`offer-${canonicalPackageDateKey(o?.offerFrom || o?.from)}-${sourceIndex}`,
 	name: o?.offerName || o?.name || "Special Offer",
-	from: o?.offerFrom || o?.from || o?.validFrom || null,
-	to: o?.offerTo || o?.to || o?.validTo || null,
+	from: canonicalPackageDateKey(o?.offerFrom || o?.from || o?.validFrom),
+	to: canonicalPackageDateKey(o?.offerTo || o?.to || o?.validTo),
 	base: safeNum(o?.offerPrice ?? o?.price),
 	root: safeNum(o?.offerRootPrice ?? o?.rootPrice ?? o?.cost),
 	hFrom: o?.offerFromHijri || o?.fromHijri || "",
 	hTo: o?.offerToHijri || o?.toHijri || "",
 });
 
-const normalizeMonthly = (m) => ({
+const normalizeMonthly = (m, sourceIndex) => ({
 	type: "monthly",
-	id: m?._id || m?.id || Math.random().toString(36).slice(2),
+	id:
+		m?._id ||
+		m?.id ||
+		`monthly-${canonicalPackageDateKey(
+			m?.monthFrom || m?.from,
+		)}-${sourceIndex}`,
 	name: m?.monthName || m?.monthlyName || m?.name || "Monthly",
-	from: m?.monthFrom || m?.from || m?.validFrom || null,
-	to: m?.monthTo || m?.to || m?.validTo || null,
+	from: canonicalPackageDateKey(m?.monthFrom || m?.from || m?.validFrom),
+	to: canonicalPackageDateKey(m?.monthTo || m?.to || m?.validTo),
 	base: safeNum(m?.monthPrice ?? m?.price ?? m?.rate),
 	root: safeNum(m?.monthRootPrice ?? m?.rootPrice ?? m?.cost),
 	hFrom: m?.monthFromHijri || m?.fromHijri || "",
@@ -74,13 +86,6 @@ const splitEven = (total, n) => {
 	return arr;
 };
 
-const hasValidRange = (from, to) => {
-	if (!from || !to) return false;
-	const a = dayjs(from);
-	const b = dayjs(to);
-	return a.isValid() && b.isValid() && b.isAfter(a, "day");
-};
-
 /* ---------------- component ---------------- */
 const PackagesModal = ({
 	open,
@@ -89,7 +94,14 @@ const PackagesModal = ({
 	onApply, // ({room, deal, nights, start, end, count, pricingByDay, totals})
 	initialRoomId = "",
 }) => {
-	const rooms = useMemo(() => hotel?.roomCountDetails || [], [hotel]);
+	const rooms = useMemo(
+		() =>
+			(Array.isArray(hotel?.roomCountDetails)
+				? hotel.roomCountDetails
+				: []
+			).filter((room) => room?.activeRoom === true),
+		[hotel],
+	);
 
 	const roomOptions = useMemo(() => {
 		return rooms.map((r) => ({
@@ -103,8 +115,11 @@ const PackagesModal = ({
 	const [roomId, setRoomId] = useState(
 		initialRoomId || roomOptions[0]?.id || ""
 	);
+	const hotelId = String(hotel?._id || "");
+	const roomOptionsKey = roomOptions.map((room) => String(room.id)).join("|");
+	const previousSelectionContext = useRef({ hotelId: "", key: "" });
 	const activeRoom = useMemo(
-		() => rooms.find((r) => r._id === roomId) || rooms[0],
+		() => rooms.find((r) => r._id === roomId),
 		[rooms, roomId]
 	);
 
@@ -117,7 +132,13 @@ const PackagesModal = ({
 				.map(normalizeOffer)
 				.filter(
 					(o) =>
-						Number.isFinite(o.base) && o.base > 0 && hasValidRange(o.from, o.to)
+						isFixedPackageEligible({
+							type: "offer",
+							from: o.from,
+							to: o.to,
+							total: o.base,
+							rootTotal: o.root,
+						})
 				) || [];
 
 		const monthly =
@@ -125,7 +146,13 @@ const PackagesModal = ({
 				.map(normalizeMonthly)
 				.filter(
 					(m) =>
-						Number.isFinite(m.base) && m.base > 0 && hasValidRange(m.from, m.to)
+						isFixedPackageEligible({
+							type: "monthly",
+							from: m.from,
+							to: m.to,
+							total: m.base,
+							rootTotal: m.root,
+						})
 				) || [];
 
 		return [
@@ -155,12 +182,8 @@ const PackagesModal = ({
 		const comm = toCommissionDecimal(activeRoom, hotel);
 		const base = safeNum(selectedDeal.base, 0);
 		const configuredRoot = safeNum(selectedDeal.root, 0);
-		const final = Math.round(
-			(selectedDeal.type === "offer" ? base * nights : base) * 100
-		) / 100;
-		const root = selectedDeal.type === "offer"
-			? configuredRoot * nights
-			: configuredRoot;
+		const final = Math.round(base * 100) / 100;
+		const root = configuredRoot;
 
 		return {
 			nights,
@@ -203,14 +226,28 @@ const PackagesModal = ({
 		});
 	}, [totals]);
 
-	// if initialRoomId changes after modal open
+	// Reset stale room/deal state when the hotel or its valid active-room set changes.
 	useEffect(() => {
-		if (initialRoomId && initialRoomId !== roomId) {
-			setRoomId(initialRoomId);
-			setSelectedId("");
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [initialRoomId]);
+		const contextKey = `${hotelId}|${roomOptionsKey}|${String(
+			initialRoomId || ""
+		)}`;
+		if (previousSelectionContext.current.key === contextKey) return;
+		const hotelChanged = previousSelectionContext.current.hotelId !== hotelId;
+		const initialIsValid = roomOptions.some(
+			(room) => room.id === initialRoomId
+		);
+		const currentIsValid = roomOptions.some((room) => room.id === roomId);
+		const nextRoomId = initialIsValid
+			? initialRoomId
+			: !hotelChanged && currentIsValid
+			  ? roomId
+			  : roomOptions[0]?.id || "";
+
+		previousSelectionContext.current = { hotelId, key: contextKey };
+		setRoomId(nextRoomId);
+		setSelectedId("");
+		setCount(1);
+	}, [hotelId, initialRoomId, roomId, roomOptions, roomOptionsKey]);
 
 	const okDisabled =
 		!selectedDeal || !totals || pricingByDay.length === 0 || count < 1;
@@ -223,6 +260,21 @@ const PackagesModal = ({
 			okText='OK'
 			onOk={() => {
 				if (okDisabled) return;
+				if (
+					!isFixedPackageEligible({
+						type: selectedDeal.type,
+						from: selectedDeal.from,
+						to: selectedDeal.to,
+						total: selectedDeal.base,
+						rootTotal: selectedDeal.root,
+					})
+				) {
+					setSelectedId("");
+					message.error(
+						"This full package has already started or is no longer valid. Please choose another package.",
+					);
+					return;
+				}
 				onApply({
 					room: activeRoom,
 					deal: selectedDeal,
@@ -270,7 +322,7 @@ const PackagesModal = ({
 
 			{/* Deals list */}
 			<div style={{ fontWeight: 700, margin: "12px 0 6px" }}>
-				Available Packages
+				Available Full Packages
 			</div>
 
 			<Radio.Group
@@ -287,9 +339,7 @@ const PackagesModal = ({
 						const toStr = end.isValid() ? end.format("DD MMM YYYY") : "—";
 
 						// inline preview so each option shows accurate price at a glance
-						const total = d.type === "offer"
-							? safeNum(d.base, 0) * nights
-							: safeNum(d.base, 0);
+						const total = safeNum(d.base, 0);
 
 						// Provide very strong fallbacks for the label:
 						const labelName =
@@ -322,7 +372,7 @@ const PackagesModal = ({
 
 								{/* Middle column: name + date range */}
 								<div style={{ minWidth: 0, lineHeight: 1.25 }}>
-									<div
+								<div
 										style={{
 											display: "flex",
 											alignItems: "center",
@@ -338,7 +388,7 @@ const PackagesModal = ({
 											{labelName}
 										</Tag>
 
-										<Tag>
+									<Tag>
 											<div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
 												<div style={{ fontWeight: 700, color: "#0f1f2e" }}>
 													{total.toFixed(2)} SAR
@@ -347,9 +397,20 @@ const PackagesModal = ({
 													{(total / nights).toFixed(2)} / night
 												</small>
 											</div>
-										</Tag>
-									</div>
+									</Tag>
 								</div>
+								<div
+									style={{
+										marginTop: 6,
+										fontSize: 13,
+										fontWeight: 600,
+										color: "#45515d",
+									}}
+								>
+									{fromStr} &rarr; {toStr} ({nights}{" "}
+									{nights === 1 ? "night" : "nights"})
+								</div>
+							</div>
 
 								{/* Right column: price preview */}
 							</label>

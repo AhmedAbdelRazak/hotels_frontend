@@ -35,6 +35,11 @@ import EditPricingModal from "./EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
 import PackagesModal from "./PackagesModal"; // expects: open, onClose, onApply, hotel
 import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isFixedPackageEligible } from "../../utils/packagePolicy";
+import {
+	buildPackageRoomMetadata,
+	copyPackageRoomMetadata,
+} from "./packageReservation";
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -321,6 +326,10 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		pkgType: "",
 		pkgName: "",
 		roomDisplayName: "",
+		pkgFrom: "",
+		pkgTo: "",
+		pkgTotal: 0,
+		pkgRootTotal: 0,
 	});
 
 	// Keep track of previous values to detect changes
@@ -869,81 +878,89 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 					return room;
 				}
 
-				const oldLength = room.pricingByDay ? room.pricingByDay.length : 0;
-				const lengthMismatch = oldLength !== nights;
-				const variantOption = room.priceVariantSelection
-					? findPriceVariantOption(room, room.priceVariantSelection)
-					: null;
-				if (
-					variantOption &&
-					(forceRecalcFromDb || lengthMismatch || oldLength === 0)
-				) {
-					const variantRows = buildRowsFromPriceVariantOption(
-						variantOption,
-						startDate,
-						endDate,
-					);
-					if (variantRows.length) {
-						room.pricingByDay = variantRows;
-						room.manualTotal = null;
-						room.averageRootToTotalRatio = null;
-						room.commissionRate = 0;
-					}
-				}
-
-				const userWantsManualOverride =
-					!variantOption && room.manualTotal && room.averageRootToTotalRatio;
-
-				if (userWantsManualOverride && (lengthMismatch || forceRecalcFromDb)) {
-					const reDistributed = redistributeManualTotal(
-						room,
-						nights,
-						startDate,
-						endDate,
-					);
-					if (reDistributed && reDistributed.length) {
-						room.pricingByDay = reDistributed;
-					}
-				} else if (!userWantsManualOverride) {
-					if (forceRecalcFromDb || lengthMismatch) {
-						const normalizedRoomType = normalizeRoomLabel(room.roomType);
-						const normalizedDisplay = normalizeRoomLabel(room.displayName);
-						const matched = selectedHotel?.roomCountDetails?.find((r) => {
-							const detailType = normalizeRoomLabel(r.roomType || r.room_type);
-							const detailDisplay = normalizeRoomLabel(
-								r.displayName || r.display_name,
-							);
-
-							if (normalizedDisplay && detailDisplay === normalizedDisplay) {
-								return !normalizedRoomType || detailType === normalizedRoomType;
-							}
-							if (normalizedRoomType && detailType === normalizedRoomType) {
-								return (
-									!normalizedDisplay || detailDisplay === normalizedDisplay
-								);
-							}
-							return false;
-						});
-						if (!matched) {
-							return room;
-						}
-
-						const fallbackCommission = safeParseFloat(
-							matched.roomCommission ?? selectedHotel.commission,
-							10,
-						);
-						const finalCommission =
-							fallbackCommission > 0 ? fallbackCommission : 10;
-
-						const recalculated = calculatePricingByDayWithCommission(
-							matched.pricingRate || [],
+				const packagePricingLocked = room.fromPackagesOffers === true;
+				if (!packagePricingLocked) {
+					const oldLength = room.pricingByDay ? room.pricingByDay.length : 0;
+					const lengthMismatch = oldLength !== nights;
+					const variantOption = room.priceVariantSelection
+						? findPriceVariantOption(room, room.priceVariantSelection)
+						: null;
+					if (
+						variantOption &&
+						(forceRecalcFromDb || lengthMismatch || oldLength === 0)
+					) {
+						const variantRows = buildRowsFromPriceVariantOption(
+							variantOption,
 							startDate,
 							endDate,
-							safeParseFloat(matched.price?.basePrice, 0),
-							safeParseFloat(matched.defaultCost, 0),
-							finalCommission,
 						);
-						room.pricingByDay = recalculated;
+						if (variantRows.length) {
+							room.pricingByDay = variantRows;
+							room.manualTotal = null;
+							room.averageRootToTotalRatio = null;
+							room.commissionRate = 0;
+						}
+					}
+
+					const userWantsManualOverride =
+						!variantOption && room.manualTotal && room.averageRootToTotalRatio;
+
+					if (
+						userWantsManualOverride &&
+						(lengthMismatch || forceRecalcFromDb)
+					) {
+						const reDistributed = redistributeManualTotal(
+							room,
+							nights,
+							startDate,
+							endDate,
+						);
+						if (reDistributed && reDistributed.length) {
+							room.pricingByDay = reDistributed;
+						}
+					} else if (!userWantsManualOverride) {
+						if (forceRecalcFromDb || lengthMismatch) {
+							const normalizedRoomType = normalizeRoomLabel(room.roomType);
+							const normalizedDisplay = normalizeRoomLabel(room.displayName);
+							const matched = selectedHotel?.roomCountDetails?.find((r) => {
+								const detailType = normalizeRoomLabel(
+									r.roomType || r.room_type,
+								);
+								const detailDisplay = normalizeRoomLabel(
+									r.displayName || r.display_name,
+								);
+
+								if (normalizedDisplay && detailDisplay === normalizedDisplay) {
+									return !normalizedRoomType || detailType === normalizedRoomType;
+								}
+								if (normalizedRoomType && detailType === normalizedRoomType) {
+									return (
+										!normalizedDisplay || detailDisplay === normalizedDisplay
+									);
+								}
+								return false;
+							});
+							if (!matched) {
+								return room;
+							}
+
+							const fallbackCommission = safeParseFloat(
+								matched.roomCommission ?? selectedHotel.commission,
+								10,
+							);
+							const finalCommission =
+								fallbackCommission > 0 ? fallbackCommission : 10;
+
+							const recalculated = calculatePricingByDayWithCommission(
+								matched.pricingRate || [],
+								startDate,
+								endDate,
+								safeParseFloat(matched.price?.basePrice, 0),
+								safeParseFloat(matched.defaultCost, 0),
+								finalCommission,
+							);
+							room.pricingByDay = recalculated;
+						}
 					}
 				}
 
@@ -1061,8 +1078,17 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		effectiveCommission,
 	]);
 
+	const blockPackageMutation = () => {
+		if (!packageLock.enabled) return false;
+		message.warning(
+			"Package room, count, dates, and pricing are locked. Clear the package first to make changes.",
+		);
+		return true;
+	};
+
 	// Room Type selection
 	const handleRoomSelectionChange = (value, index) => {
+		if (blockPackageMutation()) return;
 		const updated = [...selectedRooms];
 		if (!value) {
 			updated[index] = {
@@ -1095,12 +1121,14 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Room Count
 	const handleRoomCountChange = (count, index) => {
+		if (blockPackageMutation()) return;
 		const updated = [...selectedRooms];
 		updated[index].count = count;
 		setSelectedRooms(updated);
 	};
 
 	const handlePriceVariantSelectionChange = (value, index) => {
+		if (blockPackageMutation()) return;
 		const updated = [...selectedRooms];
 		const room = updated[index] || {};
 		if (!value) {
@@ -1149,6 +1177,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Add new room
 	const addRoomSelection = () => {
+		if (blockPackageMutation()) return;
 		setSelectedRooms((prev) => [
 			...prev,
 			{
@@ -1165,6 +1194,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Remove room
 	const removeRoomSelection = (index) => {
+		if (blockPackageMutation()) return;
 		const updated = [...selectedRooms];
 		updated.splice(index, 1);
 		setSelectedRooms(updated);
@@ -1172,6 +1202,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// Edit Pricing Modal
 	const openModal = (roomIndex) => {
+		if (blockPackageMutation()) return;
 		setEditingRoomIndex(roomIndex);
 		setIsModalVisible(true);
 	};
@@ -1182,6 +1213,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 
 	// After user edits day‐by‐day pricing, update the store
 	const handlePricingUpdate = (updatedPricingByDay) => {
+		if (blockPackageMutation()) return;
 		// 1. Sum up daily final
 		const sumWithComm = updatedPricingByDay.reduce(
 			(acc, day) => acc + safeParseFloat(day.totalPriceWithCommission),
@@ -1273,6 +1305,10 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			pkgType: "",
 			pkgName: "",
 			roomDisplayName: "",
+			pkgFrom: "",
+			pkgTo: "",
+			pkgTotal: 0,
+			pkgRootTotal: 0,
 		});
 
 		// Reset Agent Name to current employee if identity is known
@@ -1402,24 +1438,28 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 	// ===== Packages & Offers (derived) =====
 	const availablePackagesCount = useMemo(() => {
 		if (!selectedHotel?.roomCountDetails?.length) return 0;
-		const now = new Date();
-		const isActiveOrUpcoming = (from, to) => {
-			const f = from ? new Date(from) : null;
-			const t = to ? new Date(to) : null;
-			if (t && !isNaN(t) && t < now) return false;
-			if (f && !isNaN(f) && f >= now) return true;
-			if (t && !isNaN(t) && t >= now) return true;
-			return false;
-		};
 		let total = 0;
 		selectedHotel.roomCountDetails.forEach((r) => {
+			if (r?.activeRoom !== true) return;
 			const offers =
 				(r.offers || []).filter((o) =>
-					isActiveOrUpcoming(o.offerFrom || o.from, o.offerTo || o.to),
+					isFixedPackageEligible({
+						type: "offer",
+						from: o.offerFrom || o.from,
+						to: o.offerTo || o.to,
+						total: o.offerPrice ?? o.price,
+						rootTotal: o.offerRootPrice ?? o.rootPrice ?? o.cost,
+					}),
 				).length || 0;
 			const months =
 				(r.monthly || []).filter((m) =>
-					isActiveOrUpcoming(m.monthFrom || m.from, m.monthTo || m.to),
+					isFixedPackageEligible({
+						type: "monthly",
+						from: m.monthFrom || m.from,
+						to: m.monthTo || m.to,
+						total: m.monthPrice ?? m.price ?? m.rate,
+						rootTotal: m.monthRootPrice ?? m.rootPrice ?? m.cost,
+					}),
 				).length || 0;
 			total += offers + months;
 		});
@@ -1445,7 +1485,32 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			pkgType: "",
 			pkgName: "",
 			roomDisplayName: "",
+			pkgFrom: "",
+			pkgTo: "",
+			pkgTotal: 0,
+			pkgRootTotal: 0,
 		});
+		setSelectedRooms([
+			{
+				roomType: "",
+				displayName: "",
+				count: 1,
+				pricingByDay: [],
+				commissionRate: 10,
+				priceVariantSelection: "",
+				priceVariantLabel: "",
+			},
+		]);
+		setCheckInDate(null);
+		setCheckOutDate(null);
+		setTotalAmount(0);
+		setTotalCommission(0);
+		setCommissionOverride(null);
+		setHotelCost(0);
+		setOneNightCost(0);
+		setNumberOfNights(0);
+		setEditingRoomIndex(null);
+		setIsModalVisible(false);
 	}, []);
 
 	// When admin confirms a package from the modal
@@ -1459,6 +1524,20 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		pricingByDay,
 	}) => {
 		if (!room || !deal || !pricingByDay?.length) return;
+		if (
+			!isFixedPackageEligible({
+				type: deal.type,
+				from: deal.from,
+				to: deal.to,
+				total: deal.base,
+				rootTotal: deal.root,
+			})
+		) {
+			message.error(
+				"This full package has already started or is no longer valid.",
+			);
+			return;
+		}
 
 		const firstDay = pricingByDay[0] || {};
 		const manualTotal = pricingByDay.reduce(
@@ -1475,6 +1554,17 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 						0,
 				  ) / pricingByDay.length
 				: 0;
+		const authoritativePackageMetadata = buildPackageRoomMetadata({
+			type: deal.type,
+			pkgId: deal.id,
+			roomId: room._id,
+			name: deal.name,
+			totalSar: deal.base,
+			totalRootSar: deal.root,
+			nights,
+			from: deal.from,
+			to: deal.to,
+		});
 
 		setSelectedRooms([
 			{
@@ -1485,6 +1575,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				manualTotal: Number(manualTotal.toFixed(2)),
 				averageRootToTotalRatio: Number(ratio.toFixed(6)),
 				commissionRate: safeParseFloat(firstDay.commissionRate, 10),
+				...authoritativePackageMetadata,
 			},
 		]);
 
@@ -1497,7 +1588,13 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			pkgType: deal.type,
 			pkgName: deal.name,
 			roomDisplayName: room.displayName,
+			pkgFrom: deal.from,
+			pkgTo: deal.to,
+			pkgTotal: deal.base,
+			pkgRootTotal: deal.root,
 		});
+		setEditingRoomIndex(null);
+		setIsModalVisible(false);
 
 		setPackagesOpen(false);
 	};
@@ -1527,6 +1624,21 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 		}
 		if (!dayjs(checkOutDate).isAfter(dayjs(checkInDate), "day")) {
 			abortSubmit("Check-out must be after check-in.");
+			return;
+		}
+		if (
+			packageLock.enabled &&
+			!isFixedPackageEligible({
+				type: packageLock.pkgType,
+				from: packageLock.pkgFrom,
+				to: packageLock.pkgTo,
+				total: packageLock.pkgTotal,
+				rootTotal: packageLock.pkgRootTotal,
+			})
+		) {
+			abortSubmit(
+				"The selected full package has already started or is no longer valid. Please choose another package.",
+			);
 			return;
 		}
 
@@ -1649,6 +1761,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 							(acc, d) => acc + d.rootPrice,
 							0,
 						),
+						...copyPackageRoomMetadata(room),
 					};
 				}),
 			);
@@ -1966,7 +2079,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								placeholder='Select Room Type'
 								value={room.displayName ? room.displayName : undefined}
 								onChange={(v) => handleRoomSelectionChange(v, index)}
-								disabled={!selectedHotel}
+								disabled={!selectedHotel || packageLock.enabled}
 								allowClear
 								optionLabelProp='label'
 							>
@@ -2001,7 +2114,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								value={room.count}
 								onChange={(count) => handleRoomCountChange(count, index)}
 								style={{ width: "100%" }}
-								disabled={!selectedHotel}
+								disabled={!selectedHotel || packageLock.enabled}
 							/>
 						</Form.Item>
 
@@ -2017,7 +2130,8 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 										!selectedHotel ||
 										!checkInDate ||
 										!checkOutDate ||
-										priceVariantLoading
+										priceVariantLoading ||
+										packageLock.enabled
 									}
 									loading={priceVariantLoading}
 									allowClear
@@ -2071,7 +2185,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 										textDecoration: "underline",
 									}}
 									icon={<EditOutlined />}
-									disabled={!selectedHotel}
+									disabled={!selectedHotel || packageLock.enabled}
 								>
 									Edit Pricing
 								</Button>
@@ -2082,7 +2196,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								type='link'
 								danger
 								onClick={() => removeRoomSelection(index)}
-								disabled={!selectedHotel}
+								disabled={!selectedHotel || packageLock.enabled}
 							>
 								Remove
 							</Button>
@@ -2093,7 +2207,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 				<Button
 					type='dashed'
 					onClick={addRoomSelection}
-					disabled={!selectedHotel}
+					disabled={!selectedHotel || packageLock.enabled}
 				>
 					Add Another Room
 				</Button>
@@ -2337,7 +2451,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 								value={commissionOverride}
 								placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
 								onChange={handleCommissionOverrideChange}
-								disabled={isSubmitting}
+								disabled={isSubmitting || packageLock.enabled}
 								style={{ width: "100%" }}
 							/>
 							<div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>

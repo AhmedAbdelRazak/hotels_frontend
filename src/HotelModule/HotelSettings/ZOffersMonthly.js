@@ -1,5 +1,5 @@
 /** @format */
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import styled from "styled-components";
 import {
 	Form,
@@ -15,6 +15,18 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 // Use the hijri-enabled build of moment
 import moment from "moment-hijri";
+import {
+	canonicalPackageDateKey,
+	classifyFixedPackage,
+	getDefaultEligibleGregorianMonth,
+	getGregorianMonthRange,
+	getHijriMonthRange,
+	getSaudiTodayKey,
+	isGregorianMonthEligible,
+	localCalendarDateKey,
+	localDateFromPackageDateKey,
+	partitionFixedPackageRows,
+} from "../../utils/packagePolicy";
 
 const { Option } = Select;
 
@@ -76,6 +88,27 @@ const hijriMonthsAr = [
 	"ذو الحجة",
 ];
 
+const packageRowKey = (prefix, row, sourceIndex) =>
+	`${prefix}-${
+		row?._id ||
+		row?.id ||
+		`${canonicalPackageDateKey(row?.offerFrom || row?.monthFrom)}-${sourceIndex}`
+	}`;
+
+const unavailableStatusLabel = (status, isArabic) => {
+	if (status === "started") return isArabic ? "بدأ بالفعل" : "Already started";
+	if (status === "expired") return isArabic ? "منتهي" : "Expired";
+	if (status === "invalid-price")
+		return isArabic ? "سعر غير صالح" : "Invalid total";
+	if (status === "invalid-root")
+		return isArabic ? "تكلفة داخلية غير صالحة" : "Invalid root total";
+	if (status === "invalid-duration")
+		return isArabic ? "المدة أطول من المسموح" : "Duration exceeds limit";
+	if (status === "too-far")
+		return isArabic ? "تاريخ بعيد جدًا" : "Start year exceeds limit";
+	return isArabic ? "بيانات غير صالحة" : "Invalid dates";
+};
+
 function ZOffersMonthly({
 	mode = "Offers", // "Offers" | "Monthly"
 	chosenLanguage,
@@ -88,6 +121,10 @@ function ZOffersMonthly({
 	const isArabic = chosenLanguage === "Arabic";
 	const monthLabelsGreg = isArabic ? gregorianMonthsAr : gregorianMonthsEn;
 	const monthLabelsHijri = isArabic ? hijriMonthsAr : hijriMonthsEn;
+	const saudiTodayKey = getSaudiTodayKey();
+	const minSelectableDate = localDateFromPackageDateKey(saudiTodayKey);
+	const defaultGregorian = getDefaultEligibleGregorianMonth(saudiTodayKey);
+	const maximumPackageStartYear = Number(saudiTodayKey.slice(0, 4)) + 5;
 
 	// Hijri support guard (true when using moment-hijri)
 	const supportsHijri =
@@ -116,8 +153,35 @@ function ZOffersMonthly({
 		return hotelDetails.roomCountDetails[currentRoomIndex] || null;
 	}, [hotelDetails, currentRoomIndex]);
 
-	const existingOffers = currentRoom?.offers || [];
-	const existingMonthly = currentRoom?.monthly || [];
+	const existingOffers = useMemo(() => currentRoom?.offers || [], [currentRoom]);
+	const existingMonthly = useMemo(
+		() => currentRoom?.monthly || [],
+		[currentRoom],
+	);
+	const offerRows = useMemo(
+		() =>
+			partitionFixedPackageRows(existingOffers, {
+				type: "offer",
+				getFrom: (row) => row.offerFrom,
+				getTo: (row) => row.offerTo,
+				getTotal: (row) => row.offerPrice,
+				getRootTotal: (row) => row.offerRootPrice,
+				todayKey: saudiTodayKey,
+			}),
+		[existingOffers, saudiTodayKey],
+	);
+	const monthlyRows = useMemo(
+		() =>
+			partitionFixedPackageRows(existingMonthly, {
+				type: "monthly",
+				getFrom: (row) => row.monthFrom,
+				getTo: (row) => row.monthTo,
+				getTotal: (row) => row.monthPrice,
+				getRootTotal: (row) => row.monthRootPrice,
+				todayKey: saudiTodayKey,
+			}),
+		[existingMonthly, saudiTodayKey],
+	);
 
 	const ensureRoomEntryAndUpdate = (updater) => {
 		if (!roomType || !displayName) {
@@ -171,31 +235,29 @@ function ZOffersMonthly({
 			);
 			return;
 		}
-		const offerFrom = new Date(
-			start.getFullYear(),
-			start.getMonth(),
-			start.getDate(),
-			0,
-			0,
-			0
+		const offerFrom = localCalendarDateKey(start);
+		const offerTo = localCalendarDateKey(end);
+		const policy = classifyFixedPackage(
+			{
+				type: "offer",
+				from: offerFrom,
+				to: offerTo,
+				total: offerPrice,
+				rootTotal: offerRootPrice,
+			},
+			saudiTodayKey,
 		);
-		const offerTo = new Date(
-			end.getFullYear(),
-			end.getMonth(),
-			end.getDate(),
-			23,
-			59,
-			59
-		);
+		if (!policy.eligible) {
+			message.error(
+				isArabic
+					? "يجب أن يبدأ العرض الكامل اليوم أو في المستقبل، وأن يكون له نطاق وسعر صالحان"
+					: "A full offer must start today or later and have a valid range and positive total.",
+			);
+			return;
+		}
 
 		ensureRoomEntryAndUpdate((room) => {
 			const offers = Array.isArray(room.offers) ? [...room.offers] : [];
-			const existsIdx = offers.findIndex(
-				(o) =>
-					o.offerName === offerName &&
-					new Date(o.offerFrom).toDateString() === offerFrom.toDateString() &&
-					new Date(o.offerTo).toDateString() === offerTo.toDateString()
-			);
 			const record = {
 				offerName,
 				offerFrom,
@@ -206,11 +268,7 @@ function ZOffersMonthly({
 						? Number(offerRootPrice)
 						: undefined,
 			};
-			if (existsIdx > -1) {
-				offers[existsIdx] = record;
-			} else {
-				offers.push(record);
-			}
+			offers.push(record);
 			return { ...room, offers };
 		});
 
@@ -225,14 +283,43 @@ function ZOffersMonthly({
 
 	// ============================ MONTHLY ============================
 	const [calendarType, setCalendarType] = useState("gregorian"); // "gregorian" | "hijri"
-	const [gregMonth, setGregMonth] = useState(new Date().getMonth()); // 0..11
-	const [gregYear, setGregYear] = useState(new Date().getFullYear());
-	const [hijriMonth, setHijriMonth] = useState(
-		supportsHijri ? moment().iMonth() : 0
-	); // 0..11
-	const [hijriYear, setHijriYear] = useState(
-		supportsHijri ? moment().iYear() : new Date().getFullYear()
+	const [gregMonth, setGregMonth] = useState(defaultGregorian.month); // 0..11
+	const [gregYear, setGregYear] = useState(defaultGregorian.year);
+	const defaultHijri = useMemo(() => {
+		if (!supportsHijri) return { month: 0, year: defaultGregorian.year };
+		const selected = moment(saudiTodayKey, "YYYY-MM-DD");
+		if (selected.iDate() > 1) selected.add(1, "iMonth");
+		return { month: selected.iMonth(), year: selected.iYear() };
+	}, [defaultGregorian.year, saudiTodayKey, supportsHijri]);
+	const maximumHijriStartYear = useMemo(
+		() =>
+			moment(`${maximumPackageStartYear}-12-31`, "YYYY-MM-DD").iYear(),
+		[maximumPackageStartYear],
 	);
+	const [hijriMonth, setHijriMonth] = useState(
+		defaultHijri.month
+	); // 0..11
+	const [hijriYear, setHijriYear] = useState(defaultHijri.year);
+
+	useEffect(() => {
+		setOfferRange([null, null]);
+		setCalendarType("gregorian");
+		setGregMonth(defaultGregorian.month);
+		setGregYear(defaultGregorian.year);
+		setHijriMonth(defaultHijri.month);
+		setHijriYear(defaultHijri.year);
+		offersForm.resetFields();
+		monthlyForm.resetFields();
+	}, [
+		roomType,
+		displayName,
+		offersForm,
+		monthlyForm,
+		defaultGregorian.month,
+		defaultGregorian.year,
+		defaultHijri.month,
+		defaultHijri.year,
+	]);
 
 	const onAddMonthly = (values) => {
 		const { monthPrice, monthRootPrice } = values;
@@ -245,24 +332,9 @@ function ZOffersMonthly({
 
 		if (calendarType === "gregorian") {
 			monthName = monthLabelsGreg[gregMonth] + " " + gregYear;
-			const start = new Date(gregYear, gregMonth, 1);
-			const end = new Date(gregYear, gregMonth + 1, 0);
-			monthFrom = new Date(
-				start.getFullYear(),
-				start.getMonth(),
-				start.getDate(),
-				0,
-				0,
-				0
-			);
-			monthTo = new Date(
-				end.getFullYear(),
-				end.getMonth(),
-				end.getDate(),
-				23,
-				59,
-				59
-			);
+			const range = getGregorianMonthRange(gregYear, gregMonth);
+			monthFrom = range.from;
+			monthTo = range.to;
 
 			const hijriStart = moment(monthFrom);
 			const hijriEnd = moment(monthTo);
@@ -280,43 +352,34 @@ function ZOffersMonthly({
 
 			monthName = monthLabelsHijri[hijriMonth] + " " + hijriYear;
 
-			const hStart = moment()
-				.iYear(hijriYear)
-				.iMonth(hijriMonth)
-				.startOf("iMonth");
-			const hEnd = moment().iYear(hijriYear).iMonth(hijriMonth).endOf("iMonth");
+			const range = getHijriMonthRange(hijriYear, hijriMonth);
+			monthFromHijri = range.fromHijri;
+			monthToHijri = range.toHijri;
+			monthFrom = range.from;
+			monthTo = range.to;
+		}
 
-			monthFromHijri = hStart.format("iYYYY-iMM-iDD");
-			monthToHijri = hEnd.format("iYYYY-iMM-iDD");
-
-			monthFrom = hStart.toDate();
-			monthTo = hEnd.toDate();
-			monthFrom = new Date(
-				monthFrom.getFullYear(),
-				monthFrom.getMonth(),
-				monthFrom.getDate(),
-				0,
-				0,
-				0
+		const policy = classifyFixedPackage(
+			{
+				type: "monthly",
+				from: monthFrom,
+				to: monthTo,
+				total: monthPrice,
+				rootTotal: monthRootPrice,
+			},
+			saudiTodayKey,
+		);
+		if (!policy.eligible) {
+			message.error(
+				isArabic
+					? "يجب أن تبدأ الباقة الشهرية الكاملة اليوم أو في المستقبل، وأن يكون سعرها صالحًا"
+					: "A full monthly package must start today or later and have a positive total.",
 			);
-			monthTo = new Date(
-				monthTo.getFullYear(),
-				monthTo.getMonth(),
-				monthTo.getDate(),
-				23,
-				59,
-				59
-			);
+			return;
 		}
 
 		ensureRoomEntryAndUpdate((room) => {
 			const monthly = Array.isArray(room.monthly) ? [...room.monthly] : [];
-			const existsIdx = monthly.findIndex(
-				(m) =>
-					m.monthName === monthName &&
-					new Date(m.monthFrom).toDateString() === monthFrom.toDateString() &&
-					new Date(m.monthTo).toDateString() === monthTo.toDateString()
-			);
 			const record = {
 				monthName,
 				monthFrom,
@@ -329,11 +392,7 @@ function ZOffersMonthly({
 						? Number(monthRootPrice)
 						: undefined,
 			};
-			if (existsIdx > -1) {
-				monthly[existsIdx] = record;
-			} else {
-				monthly.push(record);
-			}
+			monthly.push(record);
 			return { ...room, monthly };
 		});
 
@@ -341,6 +400,75 @@ function ZOffersMonthly({
 		message.success(
 			isArabic ? "تم حفظ التسعير الشهري بنجاح" : "Monthly pricing saved"
 		);
+	};
+
+	const renderOffersTable = (entries, showStatus = false) => (
+		<MiniTable role='table' $columns={showStatus ? 6 : 5}>
+			<div className='thead'>
+				<div>{isArabic ? "الاسم" : "Name"}</div>
+				<div>{isArabic ? "من" : "From"}</div>
+				<div>{isArabic ? "إلى" : "To"}</div>
+				<div>{isArabic ? "إجمالي العرض" : "Guest Offer Total"}</div>
+				<div>{isArabic ? "إجمالي التكلفة" : "Internal Root Total"}</div>
+				{showStatus && <div>{isArabic ? "الحالة" : "Status"}</div>}
+			</div>
+			{entries.map(({ row: offer, sourceIndex, status }) => (
+				<div
+					className='trow'
+					key={packageRowKey("offer", offer, sourceIndex)}
+				>
+					<div>{offer.offerName}</div>
+					<div>{canonicalPackageDateKey(offer.offerFrom) || "-"}</div>
+					<div>{canonicalPackageDateKey(offer.offerTo) || "-"}</div>
+					<div>{offer.offerPrice}</div>
+					<div>{offer.offerRootPrice ?? "-"}</div>
+					{showStatus && (
+						<StatusText>{unavailableStatusLabel(status, isArabic)}</StatusText>
+					)}
+				</div>
+			))}
+		</MiniTable>
+	);
+
+	const renderMonthlyTable = (entries, showStatus = false) => (
+		<MiniTable role='table' $columns={showStatus ? 8 : 7}>
+			<div className='thead'>
+				<div>{isArabic ? "الشهر" : "Month"}</div>
+				<div>{isArabic ? "من" : "From (G)"}</div>
+				<div>{isArabic ? "إلى" : "To (G)"}</div>
+				<div>{isArabic ? "من (هـ)" : "From (H)"}</div>
+				<div>{isArabic ? "إلى (هـ)" : "To (H)"}</div>
+				<div>{isArabic ? "إجمالي الباقة" : "Guest Package Total"}</div>
+				<div>{isArabic ? "إجمالي التكلفة" : "Internal Root Total"}</div>
+				{showStatus && <div>{isArabic ? "الحالة" : "Status"}</div>}
+			</div>
+			{entries.map(({ row: monthly, sourceIndex, status }) => (
+				<div
+					className='trow'
+					key={packageRowKey("monthly", monthly, sourceIndex)}
+				>
+					<div>{monthly.monthName}</div>
+					<div>{canonicalPackageDateKey(monthly.monthFrom) || "-"}</div>
+					<div>{canonicalPackageDateKey(monthly.monthTo) || "-"}</div>
+					<div>{monthly.monthFromHijri || "-"}</div>
+					<div>{monthly.monthToHijri || "-"}</div>
+					<div>{monthly.monthPrice}</div>
+					<div>{monthly.monthRootPrice ?? "-"}</div>
+					{showStatus && (
+						<StatusText>{unavailableStatusLabel(status, isArabic)}</StatusText>
+					)}
+				</div>
+			))}
+		</MiniTable>
+	);
+
+	const isHijriSelectionEligible = (year, month) => {
+		if (!supportsHijri) return false;
+		const range = getHijriMonthRange(year, month);
+		return classifyFixedPackage(
+			{ type: "monthly", from: range.from, to: range.to, total: 1 },
+			saudiTodayKey,
+		).eligible;
 	};
 
 	// --------------------------- UI ---------------------------
@@ -360,7 +488,14 @@ function ZOffersMonthly({
 
 			{mode === "Offers" ? (
 				<section>
-					<SectionTitle>{isArabic ? "العروض" : "Offers"}</SectionTitle>
+					<SectionTitle>
+						{isArabic ? "عروض الباقات الكاملة" : "Fixed Package Offers"}
+					</SectionTitle>
+					<PackageHint>
+						{isArabic
+							? "كل صف عرض كامل مستقل بسعر إجمالي ثابت، ولا يمكن تقصير مدته."
+							: "Each row is one independent full package with a fixed total and cannot be shortened."}
+					</PackageHint>
 
 					{/* component={false} avoids rendering an inner <form> element */}
 					<Form
@@ -392,6 +527,7 @@ function ZOffersMonthly({
 								startDate={offerRange[0]}
 								endDate={offerRange[1]}
 								selectsRange
+								minDate={minSelectableDate}
 								className='w-100'
 								placeholderText={isArabic ? "اختر المدة" : "Select range"}
 							/>
@@ -400,14 +536,13 @@ function ZOffersMonthly({
 						<Columns>
 							<Form.Item
 								name='offerPrice'
-								// label={isArabic ? "السعر المخفض" : "Offer Price"}
-								label='Guest Price / Night'
+								label={isArabic ? "إجمالي العرض للضيف" : "Guest Offer Total"}
 								rules={[
 									{ required: true, message: isArabic ? "مطلوب" : "Required" },
 								]}
 							>
 								<InputNumber
-									min={0}
+									min={0.01}
 									style={{ width: "100%" }}
 									placeholder='0'
 								/>
@@ -415,10 +550,9 @@ function ZOffersMonthly({
 
 							<Form.Item
 								name='offerRootPrice'
-								// label={
-								// 	isArabic ? "السعر الأصلي (اختياري)" : "Root Price (optional)"
-								// }
-								label='Internal Root Cost / Night'
+								label={
+									isArabic ? "إجمالي التكلفة الداخلية" : "Internal Root Total"
+								}
 							>
 								<InputNumber
 									min={0}
@@ -440,35 +574,38 @@ function ZOffersMonthly({
 
 					<Divider />
 
-					<h4>{isArabic ? "العروض الحالية" : "Existing Offers"}</h4>
-					{existingOffers.length === 0 ? (
-						<Muted>{isArabic ? "لا توجد عروض" : "No offers yet"}</Muted>
+					<h4>{isArabic ? "العروض القادمة" : "Upcoming Offers"}</h4>
+					{offerRows.active.length === 0 ? (
+						<Muted>{isArabic ? "لا توجد عروض قادمة" : "No upcoming offers"}</Muted>
 					) : (
-						<MiniTable role='table'>
-							<div className='thead'>
-								<div>{isArabic ? "الاسم" : "Name"}</div>
-								<div>{isArabic ? "من" : "From"}</div>
-								<div>{isArabic ? "إلى" : "To"}</div>
-								<div>{isArabic ? "السعر" : "Guest Price"}</div>
-								<div>{isArabic ? "Root Price" : "Internal Root Cost"}</div>
-							</div>
-							{existingOffers.map((o, i) => (
-								<div className='trow' key={i}>
-									<div>{o.offerName}</div>
-									<div>{new Date(o.offerFrom).toLocaleDateString()}</div>
-									<div>{new Date(o.offerTo).toLocaleDateString()}</div>
-									<div>{o.offerPrice}</div>
-									<div>{o.offerRootPrice ?? "-"}</div>
-								</div>
-							))}
-						</MiniTable>
+						renderOffersTable(offerRows.active)
+					)}
+					{offerRows.history.length > 0 && (
+						<HistoryDetails>
+							<summary>
+								{isArabic
+									? `السجل غير المتاح (${offerRows.history.length})`
+									: `Unavailable history (${offerRows.history.length})`}
+							</summary>
+							<HistoryNote>
+								{isArabic
+									? "هذه العروض منتهية أو بدأت بالفعل ولن تكون قابلة للحجز."
+									: "These offers are expired, already started, or invalid and are never selectable for booking."}
+							</HistoryNote>
+							{renderOffersTable(offerRows.history, true)}
+						</HistoryDetails>
 					)}
 				</section>
 			) : (
 				<section>
 					<SectionTitle>
-						{isArabic ? "التسعير الشهري" : "Monthly Pricing"}
+						{isArabic ? "عروض الباقات الشهرية" : "Monthly Package Offers"}
 					</SectionTitle>
+					<PackageHint>
+						{isArabic
+							? "كل صف باقة شهرية كاملة مستقلة بسعر إجمالي ثابت، ولا يمكن تقصير مدتها."
+							: "Each row is one independent full-month package with a fixed total and cannot be shortened."}
+					</PackageHint>
 
 					<Radio.Group
 						value={calendarType}
@@ -510,7 +647,17 @@ function ZOffersMonthly({
 											onChange={(v) => setGregMonth(Number(v))}
 										>
 											{monthLabelsGreg.map((m, idx) => (
-												<Option key={idx} value={idx}>
+										<Option
+											key={idx}
+											value={idx}
+											disabled={
+												!isGregorianMonthEligible(
+													gregYear,
+													idx,
+													saudiTodayKey,
+												)
+											}
+										>
 													{m}
 												</Option>
 											))}
@@ -519,11 +666,11 @@ function ZOffersMonthly({
 
 									<Form.Item label={isArabic ? "السنة" : "Year"} required>
 										<InputNumber
-											min={1900}
-											max={3000}
+										min={Number(saudiTodayKey.slice(0, 4))}
+										max={maximumPackageStartYear}
 											value={gregYear}
 											onChange={(val) =>
-												setGregYear(Number(val) || new Date().getFullYear())
+											setGregYear(Number(val) || defaultGregorian.year)
 											}
 											style={{ width: "100%" }}
 										/>
@@ -542,7 +689,11 @@ function ZOffersMonthly({
 											onChange={(v) => setHijriMonth(Number(v))}
 										>
 											{monthLabelsHijri.map((m, idx) => (
-												<Option key={idx} value={idx}>
+										<Option
+											key={idx}
+											value={idx}
+											disabled={!isHijriSelectionEligible(hijriYear, idx)}
+										>
 													{m}
 												</Option>
 											))}
@@ -554,15 +705,15 @@ function ZOffersMonthly({
 										required
 									>
 										<InputNumber
-											min={1300}
-											max={1600}
+										min={defaultHijri.year}
+										max={maximumHijriStartYear}
 											value={hijriYear}
 											onChange={(val) =>
 												setHijriYear(
 													Number(val) ||
 														(supportsHijri
-															? moment().iYear()
-															: new Date().getFullYear())
+													? defaultHijri.year
+													: defaultGregorian.year)
 												)
 											}
 											style={{ width: "100%" }}
@@ -575,20 +726,19 @@ function ZOffersMonthly({
 						<Columns>
 							<Form.Item
 								name='monthPrice'
-								label={isArabic ? "سعر الشهر" : "Guest Package Total / Month"}
+								label={isArabic ? "إجمالي الباقة للضيف" : "Guest Package Total"}
 								rules={[
 									{ required: true, message: isArabic ? "مطلوب" : "Required" },
 								]}
 							>
-								<InputNumber min={0} style={{ width: "100%" }} />
+								<InputNumber min={0.01} style={{ width: "100%" }} />
 							</Form.Item>
 
 							<Form.Item
 								name='monthRootPrice'
-								// label={
-								// 	isArabic ? "السعر الأصلي (اختياري)" : "Root Price (optional)"
-								// }
-								label='Internal Root Cost / Month'
+								label={
+									isArabic ? "إجمالي التكلفة الداخلية" : "Internal Root Total"
+								}
 							>
 								<InputNumber min={0} style={{ width: "100%" }} />
 							</Form.Item>
@@ -606,36 +756,28 @@ function ZOffersMonthly({
 
 					<Divider />
 
-					<h4>
-						{isArabic ? "التسعير الشهري الحالي" : "Existing Monthly Pricing"}
-					</h4>
-					{existingMonthly.length === 0 ? (
+					<h4>{isArabic ? "الباقات الشهرية القادمة" : "Upcoming Monthly Packages"}</h4>
+					{monthlyRows.active.length === 0 ? (
 						<Muted>
-							{isArabic ? "لا توجد بيانات" : "No monthly entries yet"}
+							{isArabic ? "لا توجد باقات قادمة" : "No upcoming monthly packages"}
 						</Muted>
 					) : (
-						<MiniTable role='table'>
-							<div className='thead'>
-								<div>{isArabic ? "الشهر" : "Month"}</div>
-								<div>{isArabic ? "من" : "From (G)"}</div>
-								<div>{isArabic ? "إلى" : "To (G)"}</div>
-								<div>{isArabic ? "من (هـ)" : "From (H)"}</div>
-								<div>{isArabic ? "إلى (هـ)" : "To (H)"}</div>
-								<div>{isArabic ? "السعر" : "Guest Package Total"}</div>
-								<div>{isArabic ? "Root" : "Internal Root Cost"}</div>
-							</div>
-							{existingMonthly.map((m, i) => (
-								<div className='trow' key={i}>
-									<div>{m.monthName}</div>
-									<div>{new Date(m.monthFrom).toLocaleDateString()}</div>
-									<div>{new Date(m.monthTo).toLocaleDateString()}</div>
-									<div>{m.monthFromHijri || "-"}</div>
-									<div>{m.monthToHijri || "-"}</div>
-									<div>{m.monthPrice}</div>
-									<div>{m.monthRootPrice ?? "-"}</div>
-								</div>
-							))}
-						</MiniTable>
+						renderMonthlyTable(monthlyRows.active)
+					)}
+					{monthlyRows.history.length > 0 && (
+						<HistoryDetails>
+							<summary>
+								{isArabic
+									? `السجل غير المتاح (${monthlyRows.history.length})`
+									: `Unavailable history (${monthlyRows.history.length})`}
+							</summary>
+							<HistoryNote>
+								{isArabic
+									? "هذه الباقات منتهية أو بدأت بالفعل ولن تكون قابلة للحجز."
+									: "These packages are expired, already started, or invalid and are never selectable for booking."}
+							</HistoryNote>
+							{renderMonthlyTable(monthlyRows.history, true)}
+						</HistoryDetails>
 					)}
 				</section>
 			)}
@@ -659,7 +801,12 @@ const RoomHeader = styled.div`
 const SectionTitle = styled.h3`
 	font-size: 1.2rem;
 	font-weight: 700;
-	margin-bottom: 10px;
+	margin-bottom: 4px;
+`;
+
+const PackageHint = styled.p`
+	margin: 0 0 14px;
+	color: #4f5b67;
 `;
 
 const Columns = styled.div`
@@ -674,12 +821,16 @@ const Columns = styled.div`
 const MiniTable = styled.div`
 	border: 1px solid #ddd;
 	border-radius: 8px;
-	overflow: hidden;
+	overflow-x: auto;
 
 	.thead,
 	.trow {
 		display: grid;
-		grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr 0.7fr 0.7fr;
+		grid-template-columns: repeat(
+			${({ $columns = 5 }) => $columns},
+			minmax(120px, 1fr)
+		);
+		min-width: ${({ $columns = 5 }) => $columns * 130}px;
 		gap: 8px;
 		padding: 8px 10px;
 		align-items: center;
@@ -695,4 +846,25 @@ const MiniTable = styled.div`
 
 const Muted = styled.div`
 	color: #666;
+`;
+
+const HistoryDetails = styled.details`
+	margin-top: 18px;
+
+	summary {
+		cursor: pointer;
+		font-weight: 700;
+		color: #6b4b00;
+		margin-bottom: 8px;
+	}
+`;
+
+const HistoryNote = styled.p`
+	color: #7a5b10;
+	margin: 0 0 10px;
+`;
+
+const StatusText = styled.div`
+	color: #a23b00;
+	font-weight: 600;
 `;
