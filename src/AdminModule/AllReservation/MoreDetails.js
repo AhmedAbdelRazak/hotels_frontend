@@ -1,5 +1,6 @@
 import React, {
 	useEffect,
+	useLayoutEffect,
 	useState,
 	useRef,
 	useMemo,
@@ -56,6 +57,10 @@ import AlDawleya from "./AlDawleya";
 import GuestCardModal from "./GuestCard/GuestCardModal";
 import PaymentTrigger from "./PaymentTrigger";
 import VCCPayment from "./VCCPayment";
+import {
+	mergeReservationPreservingRoomDetails,
+	selectActiveReservation,
+} from "./reservationRoomDetails";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
@@ -4900,37 +4905,120 @@ const ReservationDetail = ({
 	// eslint-disable-next-line
 	const [loading, setLoading] = useState(false);
 	const [localReservation, setLocalReservation] = useState(reservationProp);
+	const reservationRef = useRef(reservationProp);
+	const latestReservationPropRef = useRef(reservationProp);
+	const reservationComponentMountedRef = useRef(true);
+	latestReservationPropRef.current = reservationProp;
+	useLayoutEffect(() => {
+		reservationComponentMountedRef.current = true;
+		return () => {
+			reservationComponentMountedRef.current = false;
+		};
+	}, []);
 	const reservation = useMemo(
 		() => localReservation || reservationProp || {},
 		[localReservation, reservationProp],
 	);
-	const setReservation = useCallback(
-		(nextReservation) => {
-			setLocalReservation((previous) => {
-				const resolved =
-					typeof nextReservation === "function"
-						? nextReservation(previous)
-						: nextReservation;
-				return resolved || previous;
-			});
-			if (typeof setParentReservation === "function") {
-				setParentReservation(nextReservation);
+	const commitReservationUpdate = useCallback(
+		(nextReservation, notifyParent = false) => {
+			if (!reservationComponentMountedRef.current) {
+				return reservationRef.current;
 			}
+			const previous = selectActiveReservation(
+				reservationRef.current,
+				latestReservationPropRef.current,
+			);
+			if (previous !== reservationRef.current) {
+				reservationRef.current = previous;
+			}
+			const resolved =
+				typeof nextReservation === "function"
+					? nextReservation(previous)
+					: nextReservation;
+			const merged = mergeReservationPreservingRoomDetails(previous, resolved);
+			const ignored = merged === previous && resolved !== previous;
+			if (ignored) return previous;
+
+			reservationRef.current = merged;
+			setLocalReservation(merged);
+			if (typeof setParentReservation === "function") {
+				setParentReservation(merged);
+			}
+			if (
+				notifyParent &&
+				typeof onReservationUpdated === "function" &&
+				onReservationUpdated !== setParentReservation
+			) {
+				onReservationUpdated(merged);
+			}
+			return merged;
 		},
-		[setParentReservation],
+		[onReservationUpdated, setParentReservation],
+	);
+	const setReservation = useCallback(
+		(nextReservation) => commitReservationUpdate(nextReservation, false),
+		[commitReservationUpdate],
+	);
+	const setReservationAndNotify = useCallback(
+		(nextReservation) => commitReservationUpdate(nextReservation, true),
+		[commitReservationUpdate],
+	);
+	const notifyCommittedReservationUpdate = useCallback(
+		(nextReservation) => {
+			if (!reservationComponentMountedRef.current) {
+				return reservationRef.current;
+			}
+			// EditReservationMain commits through setReservation before invoking its
+			// completion callback. Notify outer consumers without committing twice.
+			const current = selectActiveReservation(
+				reservationRef.current,
+				latestReservationPropRef.current,
+			);
+			if (current !== reservationRef.current) {
+				reservationRef.current = current;
+			}
+			const resolved =
+				typeof nextReservation === "function"
+					? nextReservation(current)
+					: nextReservation;
+			const safeReservation = mergeReservationPreservingRoomDetails(
+				current,
+				resolved,
+			);
+			const ignored = safeReservation === current && resolved !== current;
+			if (ignored) return current;
+
+			if (
+				typeof onReservationUpdated === "function" &&
+				onReservationUpdated !== setParentReservation
+			) {
+				onReservationUpdated(safeReservation);
+			}
+			return safeReservation;
+		},
+		[onReservationUpdated, setParentReservation],
 	);
 	useEffect(() => {
-		setLocalReservation((previous) => {
-			if (!reservationProp) return previous || reservationProp;
-			if (!previous || String(previous?._id || "") !== String(reservationProp?._id || "")) {
-				return reservationProp;
+		const previous = reservationRef.current;
+		let next = previous;
+		if (!reservationProp) {
+			next = previous || reservationProp;
+		} else {
+			const active = selectActiveReservation(previous, reservationProp);
+			if (active !== previous) {
+				next = active;
+			} else {
+				const incomingUpdatedAt = reservationTimestampValue(
+					reservationProp?.updatedAt,
+				);
+				const currentUpdatedAt = reservationTimestampValue(previous?.updatedAt);
+				if (incomingUpdatedAt > currentUpdatedAt) {
+					next = mergeReservationPreservingRoomDetails(previous, reservationProp);
+				}
 			}
-			const incomingUpdatedAt = reservationTimestampValue(reservationProp?.updatedAt);
-			const currentUpdatedAt = reservationTimestampValue(previous?.updatedAt);
-			return incomingUpdatedAt > currentUpdatedAt
-				? { ...previous, ...reservationProp }
-				: previous;
-		});
+		}
+		reservationRef.current = next;
+		setLocalReservation(next);
 	}, [reservationProp]);
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [isModalVisible2, setIsModalVisible2] = useState(false);
@@ -4986,7 +5074,6 @@ const ReservationDetail = ({
 	const [editModalDirty, setEditModalDirty] = useState(false);
 	const editModalSnapshotRef = useRef("");
 	const paymentBreakdownRef = useRef(reservation?.paid_amount_breakdown);
-	const reservationRef = useRef(reservation);
 	const [agentSnapshotState, setAgentSnapshotState] = useState({
 		loading: false,
 		isAgentReservation: false,
@@ -5238,10 +5325,6 @@ const ReservationDetail = ({
 		setWhatsAppCountryCode(preset.code);
 		setWhatsAppPhone(preset.phone);
 	}, [whatsAppModalOpen, reservation?.customer_details?.phone]);
-
-	useEffect(() => {
-		reservationRef.current = reservation;
-	}, [reservation]);
 
 	useEffect(() => {
 		if (!reservation?._id || !user?._id || !canSeeReservationTracker) {
@@ -5954,8 +6037,7 @@ const ReservationDetail = ({
 				}
 				const updated = response?.reservation || response;
 				if (updated?._id) {
-					setReservation(updated);
-					onReservationUpdated(updated);
+					setReservationAndNotify(updated);
 					if (updated?.agentWalletSnapshot?.captured) {
 						setAgentSnapshotState({
 							loading: false,
@@ -5970,7 +6052,7 @@ const ReservationDetail = ({
 				setPendingDecisionLoading(false);
 			}
 		},
-		[onReservationUpdated, reservation?._id, setReservation, user?._id],
+		[reservation?._id, setReservationAndNotify, user?._id],
 	);
 	const openConfirmDecisionModal = useCallback(() => {
 		let confirmationReason = "";
@@ -6156,8 +6238,7 @@ const ReservationDetail = ({
 					}
 					const updated = response?.reservation || response;
 					if (updated?._id) {
-						setReservation(updated);
-						onReservationUpdated(updated);
+						setReservationAndNotify(updated);
 					}
 					toast.success("Reservation was cancelled.");
 					return updated;
@@ -6168,9 +6249,8 @@ const ReservationDetail = ({
 		});
 	}, [
 		chosenLanguage,
-		onReservationUpdated,
 		reservation?._id,
-		setReservation,
+		setReservationAndNotify,
 		user?._id,
 	]);
 	const openRevertDecisionModal = useCallback(() => {
@@ -6276,8 +6356,7 @@ const ReservationDetail = ({
 					}
 					const updated = response?.data || response?.reservation || response;
 					if (updated?._id) {
-						setReservation(updated);
-						onReservationUpdated(updated);
+						setReservationAndNotify(updated);
 					}
 					toast.success(
 						chosenLanguage === "Arabic"
@@ -6293,9 +6372,8 @@ const ReservationDetail = ({
 	}, [
 		canReturnToPlatformReview,
 		chosenLanguage,
-		onReservationUpdated,
 		reservation?._id,
-		setReservation,
+		setReservationAndNotify,
 		token,
 		user?._id,
 	]);
@@ -6463,8 +6541,7 @@ const ReservationDetail = ({
 			const merged = updated?._id ? updated : { ...reservation, ...updateData };
 			toast.success("Payment breakdown was successfully updated");
 			setIsPaymentBreakdownVisible(false);
-			setReservation(merged);
-			onReservationUpdated(merged);
+			setReservationAndNotify(merged);
 		});
 	};
 
@@ -6546,8 +6623,7 @@ const ReservationDetail = ({
 			}
 			const updated = response?.reservation || response;
 			const merged = updated?._id ? updated : { ...reservation, ...updateData };
-			setReservation(merged);
-			onReservationUpdated(merged);
+			setReservationAndNotify(merged);
 			setFinanceCycleModalOpen(false);
 			toast.success("Finance cycle was updated successfully.");
 		});
@@ -6904,10 +6980,7 @@ const ReservationDetail = ({
 		);
 		setEditModalDirty(false);
 		if (updatedReservation) {
-			if (typeof setReservation === "function") {
-				setReservation(updatedReservation);
-			}
-			onReservationUpdated(updatedReservation);
+			notifyCommittedReservationUpdate(updatedReservation);
 		}
 		setIsModalVisible2(false);
 	};
@@ -7044,8 +7117,7 @@ const ReservationDetail = ({
 					const updatedReservation = response?.reservation || response;
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(updatedReservation);
-					onReservationUpdated(updatedReservation);
+					setReservationAndNotify(updatedReservation);
 				}
 			});
 		}
@@ -7094,8 +7166,7 @@ const ReservationDetail = ({
 					const updatedReservation = response?.reservation || response;
 					toast.success("Status was successfully updated");
 					setIsModalVisible(false);
-					setReservation(updatedReservation);
-					onReservationUpdated(updatedReservation);
+					setReservationAndNotify(updatedReservation);
 				}
 			});
 		}
@@ -8307,8 +8378,7 @@ const ReservationDetail = ({
 								roomTableRows={roomTableRows}
 								isPaymentBreakdownVisible={isPaymentBreakdownVisible}
 								token={token}
-								setReservation={setReservation}
-								onReservationUpdated={onReservationUpdated}
+								setReservation={setReservationAndNotify}
 								chosenLanguage={chosenLanguage}
 							/>
 							<div className='row'>
@@ -9402,8 +9472,7 @@ const ReservationDetail = ({
 										ref={pdfRef}
 										reservation={reservation}
 										hotelDetails={hotelDetails}
-										setReservation={setReservation}
-										onReservationUpdated={onReservationUpdated}
+										setReservation={setReservationAndNotify}
 										calculateReservationPeriod={calculateReservationPeriod}
 										getTotalAmountPerDay={getTotalAmountPerDay}
 									/>
