@@ -53,6 +53,7 @@ import EditReservationMain from "./EditReservationMain";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
 import AlDawleya from "./AlDawleya";
+import GuestCardModal from "./GuestCard/GuestCardModal";
 import PaymentTrigger from "./PaymentTrigger";
 import VCCPayment from "./VCCPayment";
 import jsPDF from "jspdf";
@@ -798,6 +799,7 @@ const AR_LABELS = {
 		"\u0631\u0642\u0645 \u062c\u0648\u0627\u0632 \u0627\u0644\u0633\u0641\u0631",
 	emailAction: "\u0625\u064a\u0645\u064a\u0644",
 	sms: "\u0631\u0633\u0627\u0644\u0629",
+	guestCard: "\u0628\u0637\u0627\u0642\u0629 \u0627\u0644\u0636\u064a\u0641",
 	editReservation:
 		"\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062d\u062c\u0632",
 	invoice:
@@ -1887,24 +1889,40 @@ const Header = styled.div`
 	}
 
 	.top-guest-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		margin-top: 8px;
 	}
 
-	.top-guest-actions button {
-		flex: 1 1 112px;
-		margin: 0;
-		min-height: 32px;
-		padding-block: 4px !important;
+	.top-guest-actions.has-guest-card {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 
-	.top-guest-actions button:first-child {
+	.top-guest-actions button {
+		align-items: center;
+		display: inline-flex;
+		gap: 6px;
+		justify-content: center;
+		margin: 0;
+		min-width: 0;
+		min-height: 32px;
+		padding-block: 4px !important;
+		width: 100%;
+	}
+
+	.top-guest-actions .top-email-action {
 		background: var(--pms-purple) !important;
 		border-color: var(--pms-purple) !important;
 	}
 
-	.top-guest-actions button:last-child {
+	.top-guest-actions .top-message-action {
 		background: var(--pms-cyan) !important;
 		border-color: var(--pms-cyan) !important;
+	}
+
+	.top-guest-actions .top-guest-card-action {
+		background: #4e5654 !important;
+		border-color: #ff861c !important;
 	}
 
 	.top-hotel-name {
@@ -2232,6 +2250,14 @@ const Header = styled.div`
 		.top-payment-actions {
 			display: grid;
 			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.top-guest-actions.has-guest-card {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.top-guest-actions.has-guest-card .top-guest-card-action {
+			grid-column: 1 / -1;
 		}
 
 		.top-edit-action-slot {
@@ -4911,6 +4937,7 @@ const ReservationDetail = ({
 	const [isModalVisible3, setIsModalVisible3] = useState(false); // Receipt (ReceiptPDF)
 	const [isModalVisible5, setIsModalVisible5] = useState(false); // Ops Receipt (ReceiptPDFB2B)
 	const [isModalVisible6, setIsModalVisible6] = useState(false); // Al Dawleya receipt
+	const [guestCardModalOpen, setGuestCardModalOpen] = useState(false);
 	const [isModalVisible4, setIsModalVisible4] = useState(false);
 	const [linkModalVisible, setLinkModalVisible] = useState(false);
 	const [paymentLinkEmailModalOpen, setPaymentLinkEmailModalOpen] =
@@ -5002,6 +5029,16 @@ const ReservationDetail = ({
 	const isAdminRouteViewer =
 		typeof window !== "undefined" &&
 		/^\/admin(?:\/|$)/.test(window.location?.pathname || "");
+	const canUseAdminGuestCard =
+		isAdminRouteViewer &&
+		user?.activeUser !== false &&
+		(isConfiguredSuperAdmin ||
+			(Array.isArray(user?.accessTo) &&
+				user.accessTo.some((permission) =>
+					["HotelsReservations", "AllReservations"].includes(
+						String(permission || "").trim(),
+					),
+			)));
 	const canViewOtaEmailAudit =
 		isAdminRouteViewer &&
 		(isPlatformAdminViewer(user) ||
@@ -9464,6 +9501,16 @@ const ReservationDetail = ({
 							)}
 						</Modal>
 
+						<GuestCardModal
+							open={guestCardModalOpen}
+							onClose={() => setGuestCardModalOpen(false)}
+							reservationId={reservation?._id}
+							userId={user?._id}
+							token={token}
+							isArabic={chosenLanguage === "Arabic"}
+							modalProps={childModalProps("guest-card-modal-root")}
+						/>
+
 						{/* HEADER */}
 						<Header $isArabic={chosenLanguage === "Arabic"}>
 							<Section className='top-guest-card'>
@@ -9505,13 +9552,37 @@ const ReservationDetail = ({
 										</strong>
 									</div>
 								</div>
-								<div className='top-guest-actions'>
-									<button onClick={() => setConfirmationEmailModalOpen(true)}>
+								<div
+									className={`top-guest-actions ${
+										canUseAdminGuestCard ? "has-guest-card" : ""
+									}`}
+								>
+									<button
+										type='button'
+										className='top-email-action'
+										onClick={() => setConfirmationEmailModalOpen(true)}
+									>
+										<MailOutlined />
 										{chosenLanguage === "Arabic" ? AR_LABELS.emailAction : "Email"}
 									</button>
-									<button onClick={() => setWhatsAppModalOpen(true)}>
+									<button
+										type='button'
+										className='top-message-action'
+										onClick={() => setWhatsAppModalOpen(true)}
+									>
+										<PhoneOutlined />
 										{chosenLanguage === "Arabic" ? AR_LABELS.sms : "SMS"}
 									</button>
+									{canUseAdminGuestCard ? (
+										<button
+											type='button'
+											className='top-guest-card-action'
+											onClick={() => setGuestCardModalOpen(true)}
+										>
+											<IdcardOutlined />
+											{chosenLanguage === "Arabic" ? AR_LABELS.guestCard : "Guest Card"}
+										</button>
+									) : null}
 								</div>
 							</Section>
 
