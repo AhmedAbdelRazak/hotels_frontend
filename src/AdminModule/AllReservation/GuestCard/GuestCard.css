@@ -240,10 +240,12 @@
 
 .jgc-barcode {
   display: block;
-  height: 52px;
-  max-width: 320px;
-  object-fit: contain;
-  width: 100%;
+  height: 56px;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  max-width: 370px;
+  object-fit: fill;
+  width: auto;
 }
 
 .jgc-stay {

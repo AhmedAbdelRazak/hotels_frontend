@@ -1,7 +1,18 @@
+.guest-card-modal {
+  max-width: calc(100vw - 16px);
+  padding-bottom: 0;
+  top: 0;
+}
+
 .guest-card-modal .ant-modal-content {
   background: #f4f7fb;
   border-radius: 14px;
-  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  height: min(1040px, calc(100vh - 16px));
+  height: min(1040px, calc(100dvh - 16px));
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
   overflow: hidden;
   padding: 0;
 }
@@ -9,6 +20,7 @@
 .guest-card-modal .ant-modal-header {
   background: #4e5654;
   border-bottom: 7px solid #ff861c;
+  flex: 0 0 auto;
   margin: 0;
   padding: 16px 22px 13px;
 }
@@ -25,8 +37,10 @@
 }
 
 .guest-card-modal .ant-modal-body {
-  max-height: calc(100vh - 102px);
-  overflow: auto;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px;
 }
 
@@ -36,14 +50,21 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  height: 100%;
   justify-content: center;
-  min-height: 360px;
+  min-height: 0;
+  width: 100%;
   text-align: center;
 }
 
 .guest-card-modal-body {
   display: grid;
   gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
 }
 
 .guest-card-controls {
@@ -83,20 +104,45 @@
   border-color: #078754;
 }
 
-.guest-card-preview-scroll {
+.guest-card-preview-frame {
   background: #e7ebef;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
-  overflow: auto;
-  padding: 14px;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 12px;
 }
 
-.guest-card-preview-scroll .guest-card-page {
+.guest-card-preview-viewport {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.guest-card-preview-shell {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.guest-card-preview-scale-content {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: left top;
+}
+
+.guest-card-preview-scale-content .guest-card-page {
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
-  margin: 0 auto;
+  margin: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .guest-card-controls {
     align-items: stretch;
     grid-template-columns: 1fr;
@@ -104,12 +150,74 @@
 
   .guest-card-control-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .guest-card-email-action {
+    grid-column: auto;
   }
 }
 
 @media (max-width: 480px) {
   .guest-card-control-actions {
     grid-template-columns: 1fr;
+  }
+
+  .guest-card-email-action {
+    grid-column: auto;
+  }
+}
+
+@media (max-height: 480px) {
+  .guest-card-modal .ant-modal-header {
+    border-bottom-width: 4px;
+    padding: 9px 16px 7px;
+  }
+
+  .guest-card-modal .ant-modal-body {
+    padding: 8px;
+  }
+
+  .guest-card-modal-body,
+  .guest-card-controls {
+    gap: 8px;
+  }
+
+  .guest-card-controls {
+    padding: 7px;
+  }
+
+  .guest-card-email-field small {
+    display: none;
+  }
+
+  .guest-card-control-actions {
+    gap: 6px;
+  }
+
+  .guest-card-control-actions .ant-btn {
+    font-size: 12px;
+    height: 32px;
+    padding-inline: 6px;
+  }
+
+  .guest-card-preview-frame {
+    padding: 6px;
+  }
+}
+
+@media (max-height: 480px) and (min-width: 621px) and (max-width: 960px) {
+  .guest-card-controls {
+    grid-template-columns: minmax(200px, 1fr) auto;
+  }
+
+  .guest-card-control-actions {
+    grid-template-columns: repeat(3, auto);
+  }
+}
+
+@media (max-height: 480px) and (max-width: 620px) {
+  .guest-card-control-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

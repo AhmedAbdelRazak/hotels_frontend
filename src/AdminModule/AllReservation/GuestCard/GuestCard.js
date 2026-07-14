@@ -19,8 +19,18 @@ const textDensity = (value, compactAt = 70, denseAt = 145) => {
 
 const GuestCard = forwardRef(({ card }, ref) => {
   if (!card) return null;
+  const requestedBarcodeWidth = Number(card.barcodeDisplayWidth);
+  const barcodeDisplayWidth =
+    Number.isFinite(requestedBarcodeWidth) && requestedBarcodeWidth > 0
+      ? Math.min(requestedBarcodeWidth, 370)
+      : 330;
   return (
-    <main className="guest-card-page" ref={ref} aria-label="Jannat Guest Card">
+    <main
+      className="guest-card-page"
+      ref={ref}
+      aria-label="Jannat Guest Card"
+      data-guest-card-capture="true"
+    >
       <article className="jannat-guest-card">
         <header className="jgc-header">
           <div className="jgc-brand">
@@ -147,6 +157,7 @@ const GuestCard = forwardRef(({ card }, ref) => {
                       card.confirmationNumber || ""
                     }`}
                     src={card.barcodeDataUri}
+                    style={{ width: barcodeDisplayWidth }}
                   />
                 ) : null}
               </div>
