@@ -8,7 +8,13 @@ export const PAID_REPORT_DATE_ERRORS = Object.freeze({
   INVALID_FROM: "invalid_from",
   INVALID_TO: "invalid_to",
   REVERSED_RANGE: "reversed_range",
+  INVALID_YEAR: "invalid_year",
+  INVALID_MONTH: "invalid_month",
+  YEAR_REQUIRED: "year_required",
 });
+
+export const PAID_REPORT_ALL_PERIODS = "all";
+export const PAID_REPORT_YEAR_COUNT = 3;
 
 export const normalizeDateDigits = (value = "") =>
   String(value ?? "")
@@ -128,6 +134,220 @@ export const normalizePaidReportCalendarType = (value = "gregorian") => {
   if (!normalized || normalized === "gregorian") return "gregorian";
   if (normalized === "hijri") return "hijri";
   return "";
+};
+
+const getReferenceMoment = (referenceDate = new Date()) => {
+  const reference = new Date(referenceDate);
+  if (Number.isNaN(reference.getTime())) return null;
+
+  // The report backend applies day boundaries in Asia/Riyadh. Resolve the
+  // visible "current year" in the same named timezone so admins around the
+  // world receive identical options at calendar-year boundaries.
+  const parts = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(reference);
+  const readPart = (type) => parts.find((part) => part.type === type)?.value;
+  const dateKey = normalizeGregorianDateKey(
+    `${readPart("year")}-${readPart("month")}-${readPart("day")}`,
+  );
+  if (!dateKey) return null;
+
+  const probe = moment(dateKey, "YYYY-MM-DD", true).locale("en");
+  return probe.isValid() ? probe : null;
+};
+
+export const getPaidReportCurrentYear = (
+  calendarType = "gregorian",
+  referenceDate = new Date(),
+) => {
+  const normalizedCalendar = normalizePaidReportCalendarType(calendarType);
+  const probe = getReferenceMoment(referenceDate);
+  if (!normalizedCalendar || !probe) return null;
+
+  const year =
+    normalizedCalendar === "hijri"
+      ? probe.iYear()
+      : Number(probe.format("YYYY"));
+  return Number.isInteger(year) ? year : null;
+};
+
+export const getPaidReportYearValues = (
+  calendarType = "gregorian",
+  referenceDate = new Date(),
+) => {
+  const currentYear = getPaidReportCurrentYear(calendarType, referenceDate);
+  if (!Number.isInteger(currentYear)) return [];
+
+  return Array.from({ length: PAID_REPORT_YEAR_COUNT }, (_, index) =>
+    String(currentYear - index),
+  );
+};
+
+const gregorianMonthEndDay = (year, month) => {
+  const probe = new Date(Date.UTC(2000, 0, 1, 12, 0, 0, 0));
+  probe.setUTCFullYear(year, month, 0);
+  return probe.getUTCDate();
+};
+
+const resolveGregorianPeriod = (year, month) => {
+  const startMonth = month || 1;
+  const endMonth = month || 12;
+  const endDay = gregorianMonthEndDay(year, endMonth);
+
+  return {
+    dateFrom: `${String(year).padStart(4, "0")}-${pad2(startMonth)}-01`,
+    dateTo: `${String(year).padStart(4, "0")}-${pad2(endMonth)}-${pad2(
+      endDay,
+    )}`,
+  };
+};
+
+const resolveHijriPeriod = (year, month) => {
+  const startMonth = month || 1;
+  const endMonth = month || 12;
+  const endMonthProbe = moment()
+    .locale("en")
+    .iDate(1)
+    .iYear(year)
+    .iMonth(endMonth - 1)
+    .startOf("day");
+  const endDay = endMonthProbe.iDaysInMonth();
+  if (!Number.isInteger(endDay)) return null;
+
+  const dateFrom = hijriDateToGregorianKey(
+    `${String(year).padStart(4, "0")}-${pad2(startMonth)}-01`,
+  );
+  const dateTo = hijriDateToGregorianKey(
+    `${String(year).padStart(4, "0")}-${pad2(endMonth)}-${pad2(endDay)}`,
+  );
+  return dateFrom && dateTo ? { dateFrom, dateTo } : null;
+};
+
+export const resolvePaidReportPeriod = ({
+  calendarType = "gregorian",
+  year = PAID_REPORT_ALL_PERIODS,
+  month = PAID_REPORT_ALL_PERIODS,
+  referenceDate = new Date(),
+} = {}) => {
+  const normalizedCalendar = normalizePaidReportCalendarType(calendarType);
+  if (!normalizedCalendar) {
+    return {
+      dateFrom: "",
+      dateTo: "",
+      error: PAID_REPORT_DATE_ERRORS.INVALID_CALENDAR,
+    };
+  }
+
+  const normalizedYear = normalizeDateDigits(year).trim().toLowerCase();
+  const normalizedMonth = normalizeDateDigits(month).trim().toLowerCase();
+  const allYears =
+    !normalizedYear || normalizedYear === PAID_REPORT_ALL_PERIODS;
+  const allMonths =
+    !normalizedMonth || normalizedMonth === PAID_REPORT_ALL_PERIODS;
+
+  if (allYears) {
+    if (!allMonths) {
+      return {
+        dateFrom: "",
+        dateTo: "",
+        error: PAID_REPORT_DATE_ERRORS.YEAR_REQUIRED,
+      };
+    }
+    return { dateFrom: "", dateTo: "" };
+  }
+
+  const allowedYears = getPaidReportYearValues(
+    normalizedCalendar,
+    referenceDate,
+  );
+  if (
+    !/^\d{4}$/.test(normalizedYear) ||
+    !allowedYears.includes(normalizedYear)
+  ) {
+    return {
+      dateFrom: "",
+      dateTo: "",
+      error: PAID_REPORT_DATE_ERRORS.INVALID_YEAR,
+    };
+  }
+
+  let monthNumber = null;
+  if (!allMonths) {
+    if (!/^(?:[1-9]|1[0-2])$/.test(normalizedMonth)) {
+      return {
+        dateFrom: "",
+        dateTo: "",
+        error: PAID_REPORT_DATE_ERRORS.INVALID_MONTH,
+      };
+    }
+    monthNumber = Number(normalizedMonth);
+  }
+
+  const yearNumber = Number(normalizedYear);
+  const resolved =
+    normalizedCalendar === "hijri"
+      ? resolveHijriPeriod(yearNumber, monthNumber)
+      : resolveGregorianPeriod(yearNumber, monthNumber);
+
+  return (
+    resolved || {
+      dateFrom: "",
+      dateTo: "",
+      error: PAID_REPORT_DATE_ERRORS.INVALID_CALENDAR,
+    }
+  );
+};
+
+export const inferPaidReportPeriodSelection = ({
+  calendarType = "gregorian",
+  dateFrom = "",
+  dateTo = "",
+  referenceDate = new Date(),
+} = {}) => {
+  const emptySelection = {
+    year: PAID_REPORT_ALL_PERIODS,
+    month: PAID_REPORT_ALL_PERIODS,
+  };
+  const normalizedFrom = normalizeGregorianDateKey(dateFrom);
+  const normalizedTo = normalizeGregorianDateKey(dateTo);
+  if (!normalizedFrom && !normalizedTo) return emptySelection;
+  if (!normalizedFrom || !normalizedTo) return emptySelection;
+
+  const years = getPaidReportYearValues(calendarType, referenceDate);
+  for (const year of years) {
+    const fullYear = resolvePaidReportPeriod({
+      calendarType,
+      year,
+      month: PAID_REPORT_ALL_PERIODS,
+      referenceDate,
+    });
+    if (
+      fullYear.dateFrom === normalizedFrom &&
+      fullYear.dateTo === normalizedTo
+    ) {
+      return { year, month: PAID_REPORT_ALL_PERIODS };
+    }
+
+    for (let month = 1; month <= 12; month += 1) {
+      const fullMonth = resolvePaidReportPeriod({
+        calendarType,
+        year,
+        month: String(month),
+        referenceDate,
+      });
+      if (
+        fullMonth.dateFrom === normalizedFrom &&
+        fullMonth.dateTo === normalizedTo
+      ) {
+        return { year, month: String(month) };
+      }
+    }
+  }
+
+  return emptySelection;
 };
 
 export const gregorianDateToCalendarKey = (
