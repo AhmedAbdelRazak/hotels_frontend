@@ -3190,11 +3190,22 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 export const getPaidBreakdownReportAdmin = (
 	userId,
 	token,
-	{ hotelId, searchQuery = "", page = 1, limit = 200 } = {},
+	{
+		hotelId,
+		searchQuery = "",
+		dateBy = "",
+		dateFrom = "",
+		dateTo = "",
+		page = 1,
+		limit = 200,
+	} = {},
 ) => {
 	const params = new URLSearchParams();
 	if (hotelId) params.set("hotelId", hotelId);
 	if (searchQuery) params.set("searchQuery", searchQuery);
+	if (dateBy) params.set("dateBy", dateBy);
+	if (dateFrom) params.set("dateFrom", dateFrom);
+	if (dateTo) params.set("dateTo", dateTo);
 	if (page) params.set("page", String(page));
 	if (limit) params.set("limit", String(limit));
 
@@ -3208,10 +3219,23 @@ export const getPaidBreakdownReportAdmin = (
 			},
 		},
 	)
-		.then((response) => response.json())
+		.then(async (response) => {
+			let payload;
+			try {
+				payload = await response.json();
+			} catch {
+				throw new Error("Could not read the paid breakdown report response");
+			}
+			if (!response.ok) {
+				throw new Error(
+					payload?.error || payload?.message || "Could not load paid breakdown report",
+				);
+			}
+			return payload;
+		})
 		.catch((err) => {
 			console.error("Error fetching paid breakdown report:", err);
-			return { data: [], totalDocuments: 0 };
+			throw err;
 		});
 };
 

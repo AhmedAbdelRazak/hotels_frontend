@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 import { Button, Input, Modal, Select, Spin, message } from "antd";
 import * as XLSX from "xlsx";
@@ -9,6 +9,7 @@ import {
 	getPaidBreakdownReportAdmin,
 } from "../apiAdmin";
 import MoreDetails from "../AllReservation/MoreDetails";
+import PaidReportDateControls from "./PaidReportDateControls";
 
 const { Option } = Select;
 
@@ -22,6 +23,18 @@ const breakdownKeys = [
 	"paid_online_via_instapay",
 	"paid_no_show",
 ];
+
+const EMPTY_DATE_FILTER = Object.freeze({
+	dateBy: "checkin_date",
+	dateFrom: "",
+	dateTo: "",
+});
+
+const EMPTY_SCORECARDS = Object.freeze({
+	totalAmount: 0,
+	paidAmount: 0,
+	breakdownTotals: {},
+});
 
 const safeNumber = (value) => {
 	const parsed = Number(value);
@@ -75,17 +88,16 @@ const buildWorksheetCols = (rows, headers) =>
 const PaidReportAdmin = () => {
 	const { chosenLanguage } = useCartContext();
 	const { user, token } = isAuthenticated() || {};
+	const reportRequestSequence = useRef(0);
+	const mountedRef = useRef(true);
 	const [hotels, setHotels] = useState([]);
 	const [selectedHotelId, setSelectedHotelId] = useState("");
 	const [searchTerm, setSearchTerm] = useState("");
 	const [searchBoxValue, setSearchBoxValue] = useState("");
+	const [appliedDateFilter, setAppliedDateFilter] = useState(EMPTY_DATE_FILTER);
 	const [loading, setLoading] = useState(false);
 	const [reservations, setReservations] = useState([]);
-	const [scorecards, setScorecards] = useState({
-		totalAmount: 0,
-		paidAmount: 0,
-		breakdownTotals: {},
-	});
+	const [scorecards, setScorecards] = useState(EMPTY_SCORECARDS);
 	const [detailsVisible, setDetailsVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 
@@ -159,6 +171,15 @@ const PaidReportAdmin = () => {
 		}),
 		[isArabic],
 	);
+
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+			reportRequestSequence.current += 1;
+		};
+	}, []);
+
 	const fetchHotels = useCallback(() => {
 		if (!user?._id || !token) return;
 		gettingHotelDetailsForAdmin(user._id, token)
@@ -182,65 +203,93 @@ const PaidReportAdmin = () => {
 		fetchHotels();
 	}, [fetchHotels]);
 
-	const fetchReport = useCallback(() => {
+	const fetchReport = useCallback(async () => {
 		if (!user?._id || !token || !selectedHotelId) return;
+		const requestId = reportRequestSequence.current + 1;
+		reportRequestSequence.current = requestId;
 		setLoading(true);
-		getPaidBreakdownReportAdmin(user._id, token, {
-			hotelId: selectedHotelId,
-			searchQuery: searchTerm,
-		})
-			.then((data) => {
-				const list = Array.isArray(data?.data)
-					? data.data
-					: Array.isArray(data)
-					  ? data
-					  : [];
-				const scorecardPayload = data?.scorecards;
-				const fallbackTotalAmount = list.reduce(
-					(sum, reservation) => sum + safeNumber(reservation?.total_amount),
-					0,
-				);
-				const fallbackPaidAmount = list.reduce(
-					(sum, reservation) =>
-						sum +
-						safeNumber(
-							reservation?.paid_breakdown_total ??
-								breakdownKeys.reduce(
-									(innerSum, key) =>
-										innerSum +
-										safeNumber(reservation?.paid_amount_breakdown?.[key]),
-									0,
-								),
-						),
-					0,
-				);
-				setReservations(list);
-				setScorecards({
-					totalAmount: safeNumber(scorecardPayload?.totalAmount ?? fallbackTotalAmount),
-					paidAmount: safeNumber(scorecardPayload?.paidAmount ?? fallbackPaidAmount),
-					breakdownTotals: scorecardPayload?.breakdownTotals || {},
-				});
-			})
-			.catch((err) => {
-				console.error("Failed to fetch paid breakdown report", err);
-				message.error(labels.loadError);
-				setReservations([]);
-				setScorecards({ totalAmount: 0, paidAmount: 0, breakdownTotals: {} });
-			})
-			.finally(() => setLoading(false));
-	}, [user?._id, token, selectedHotelId, searchTerm, labels.loadError]);
+		try {
+			const data = await getPaidBreakdownReportAdmin(user._id, token, {
+				hotelId: selectedHotelId,
+				searchQuery: searchTerm,
+				dateBy: appliedDateFilter.dateBy,
+				dateFrom: appliedDateFilter.dateFrom,
+				dateTo: appliedDateFilter.dateTo,
+			});
+			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
+				return;
+			}
+
+			const list = Array.isArray(data?.data)
+				? data.data
+				: Array.isArray(data)
+				  ? data
+				  : [];
+			const scorecardPayload = data?.scorecards;
+			const fallbackTotalAmount = list.reduce(
+				(sum, reservation) => sum + safeNumber(reservation?.total_amount),
+				0,
+			);
+			const fallbackPaidAmount = list.reduce(
+				(sum, reservation) =>
+					sum +
+					safeNumber(
+						reservation?.paid_breakdown_total ??
+							breakdownKeys.reduce(
+								(innerSum, key) =>
+									innerSum +
+									safeNumber(reservation?.paid_amount_breakdown?.[key]),
+								0,
+							),
+					),
+				0,
+			);
+			setReservations(list);
+			setScorecards({
+				totalAmount: safeNumber(scorecardPayload?.totalAmount ?? fallbackTotalAmount),
+				paidAmount: safeNumber(scorecardPayload?.paidAmount ?? fallbackPaidAmount),
+				breakdownTotals: scorecardPayload?.breakdownTotals || {},
+			});
+		} catch (err) {
+			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
+				return;
+			}
+			console.error("Failed to fetch paid breakdown report", err);
+			message.error(labels.loadError);
+			setReservations([]);
+			setScorecards(EMPTY_SCORECARDS);
+		} finally {
+			if (mountedRef.current && requestId === reportRequestSequence.current) {
+				setLoading(false);
+			}
+		}
+	}, [
+		user?._id,
+		token,
+		selectedHotelId,
+		searchTerm,
+		appliedDateFilter.dateBy,
+		appliedDateFilter.dateFrom,
+		appliedDateFilter.dateTo,
+		labels.loadError,
+	]);
 
 	useEffect(() => {
 		if (!selectedHotelId) {
+			reportRequestSequence.current += 1;
+			setLoading(false);
 			setReservations([]);
-			setScorecards({ totalAmount: 0, paidAmount: 0, breakdownTotals: {} });
+			setScorecards(EMPTY_SCORECARDS);
 			return;
 		}
 		fetchReport();
 	}, [fetchReport, selectedHotelId]);
 
 	const handleSearch = () => {
-		setSearchTerm(searchBoxValue.trim());
+		const nextSearchTerm = searchBoxValue.trim();
+		if (nextSearchTerm === searchTerm) return;
+		reportRequestSequence.current += 1;
+		setSearchTerm(nextSearchTerm);
 	};
 
 	const handleSearchKey = (event) => {
@@ -248,6 +297,30 @@ const PaidReportAdmin = () => {
 			handleSearch();
 		}
 	};
+
+	const handleHotelChange = (value) => {
+		reportRequestSequence.current += 1;
+		setSelectedHotelId(value || "");
+	};
+
+	const handleApplyDateFilter = useCallback(
+		(nextFilter) => {
+			if (
+				appliedDateFilter.dateBy === nextFilter.dateBy &&
+				appliedDateFilter.dateFrom === nextFilter.dateFrom &&
+				appliedDateFilter.dateTo === nextFilter.dateTo
+			) {
+				return;
+			}
+			reportRequestSequence.current += 1;
+			setAppliedDateFilter(nextFilter);
+		},
+		[
+			appliedDateFilter.dateBy,
+			appliedDateFilter.dateFrom,
+			appliedDateFilter.dateTo,
+		],
+	);
 
 	const rows = useMemo(() => {
 		return reservations.map((reservation) => {
@@ -436,13 +509,13 @@ const PaidReportAdmin = () => {
 	};
 
 	return (
-		<Wrapper dir={isArabic ? "rtl" : "ltr"} isArabic={isArabic}>
+		<Wrapper dir={isArabic ? "rtl" : "ltr"} $isArabic={isArabic}>
 			<ControlsRow>
 				<Select
-					style={{ minWidth: 220, width: "100%", maxWidth: 360 }}
+					style={{ minWidth: 220, width: "100%", maxWidth: 260 }}
 					placeholder={labels.selectHotel}
 					value={selectedHotelId || undefined}
-					onChange={(value) => setSelectedHotelId(value)}
+					onChange={handleHotelChange}
 				>
 					{hotels.map((hotel) => (
 						<Option key={hotel._id} value={hotel._id}>
@@ -450,6 +523,13 @@ const PaidReportAdmin = () => {
 						</Option>
 					))}
 				</Select>
+
+				<PaidReportDateControls
+					isArabic={isArabic}
+					disabled={!selectedHotelId}
+					value={appliedDateFilter}
+					onApply={handleApplyDateFilter}
+				/>
 
 				<SearchRow>
 					<Input
@@ -510,7 +590,7 @@ const PaidReportAdmin = () => {
 						<EmptyState>{labels.emptyData}</EmptyState>
 					) : (
 						<TableWrapper>
-							<StyledTable isArabic={isArabic}>
+							<StyledTable $isArabic={isArabic}>
 						<thead>
 							<tr>
 								<th>{labels.name}</th>
@@ -641,14 +721,14 @@ export default PaidReportAdmin;
 
 const Wrapper = styled.div`
 	width: 100%;
-	direction: ${(props) => (props.isArabic ? "rtl" : "ltr")};
-	text-align: ${(props) => (props.isArabic ? "right" : "left")};
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 `;
 
 const ControlsRow = styled.div`
 	display: flex;
 	flex-wrap: wrap;
-	gap: 16px;
+	gap: 10px;
 	align-items: center;
 	margin-bottom: 16px;
 
@@ -664,7 +744,7 @@ const SearchRow = styled.div`
 	flex-wrap: wrap;
 	gap: 8px;
 	flex: 1;
-	min-width: 280px;
+	min-width: 300px;
 
 	input {
 		flex: 1;
@@ -704,7 +784,7 @@ const StyledTable = styled.table`
 		border: 1px solid #f0f0f0;
 		padding: 6px 8px;
 		font-size: 12px;
-		text-align: ${(props) => (props.isArabic ? "right" : "left")};
+		text-align: ${(props) => (props.$isArabic ? "right" : "left")};
 		white-space: nowrap;
 	}
 
@@ -845,4 +925,3 @@ const BreakdownTotalsItem = styled.div`
 		color: #1a202c;
 	}
 `;
-
