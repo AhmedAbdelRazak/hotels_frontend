@@ -1,6 +1,9 @@
 /** @format */
 
 export const GUEST_CARD_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const GUEST_CARD_WIDTH = 1200;
+export const GUEST_CARD_HEIGHT = 820;
+export const GUEST_CARD_CAPTURE_SCALE = 2;
 
 export const normalizeGuestCardEmail = (value) =>
   String(value || "")
@@ -17,14 +20,36 @@ export const isValidGuestCardEmail = (value) => {
   );
 };
 
-export const guestCardPdfFilename = (confirmationNumber) => {
+const guestCardFilenameStem = (confirmationNumber) => {
   const safe = String(confirmationNumber || "")
     .normalize("NFKC")
     .trim()
     .slice(0, 70)
     .replace(/[^a-zA-Z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `Jannat_Guest_Card_${safe || "reservation"}.pdf`;
+  return `Jannat_Guest_Card_${safe || "reservation"}`;
+};
+
+export const guestCardPdfFilename = (confirmationNumber) =>
+  `${guestCardFilenameStem(confirmationNumber)}.pdf`;
+
+export const guestCardPngFilename = (confirmationNumber) =>
+  `${guestCardFilenameStem(confirmationNumber)}.png`;
+
+export const calculateGuestCardPreviewScale = (
+  availableWidth,
+  availableHeight,
+) => {
+  const width = Number(availableWidth);
+  const height = Number(availableHeight);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  )
+    return 0;
+  return Math.min(1, width / GUEST_CARD_WIDTH, height / GUEST_CARD_HEIGHT);
 };
 
 const boundedWait = (value, timeoutMs, message) => {
@@ -74,14 +99,74 @@ const waitForImages = async (element) => {
 
 export const waitForGuestCardAssets = async (element) => {
   if (!element) throw new Error("Guest Card preview is not available.");
-  if (typeof document !== "undefined" && document.fonts?.ready) {
+  const ownerDocument =
+    element.ownerDocument ||
+    (typeof document !== "undefined" ? document : undefined);
+  if (ownerDocument?.fonts?.ready) {
     await boundedWait(
-      document.fonts.ready,
+      ownerDocument.fonts.ready,
       3_000,
       "Guest Card font loading timed out. Please try again.",
     );
   }
   await waitForImages(element);
+};
+
+export const prepareGuestCardCaptureClone = (clonedDocument, clonedElement) => {
+  if (!clonedElement) return;
+  const body = clonedDocument?.body;
+  if (body && clonedElement.parentNode !== body)
+    body.appendChild(clonedElement);
+  if (body?.style) {
+    body.style.height = `${GUEST_CARD_HEIGHT}px`;
+    body.style.margin = "0";
+    body.style.overflow = "hidden";
+    body.style.width = `${GUEST_CARD_WIDTH}px`;
+  }
+  Object.assign(clonedElement.style, {
+    boxShadow: "none",
+    direction: "ltr",
+    height: `${GUEST_CARD_HEIGHT}px`,
+    left: "0",
+    margin: "0",
+    maxHeight: "none",
+    maxWidth: "none",
+    minHeight: "0",
+    minWidth: "0",
+    position: "absolute",
+    top: "0",
+    transform: "none",
+    visibility: "visible",
+    width: `${GUEST_CARD_WIDTH}px`,
+  });
+};
+
+export const captureGuestCardCanvas = async ({ element, html2canvasImpl }) => {
+  if (!element) throw new Error("Guest Card preview is not available.");
+  if (typeof html2canvasImpl !== "function")
+    throw new Error("Guest Card capture tools are unavailable.");
+  await waitForGuestCardAssets(element);
+  const canvas = await boundedWait(
+    html2canvasImpl(element, {
+      backgroundColor: "#ffffff",
+      scale: GUEST_CARD_CAPTURE_SCALE,
+      useCORS: true,
+      logging: false,
+      width: GUEST_CARD_WIDTH,
+      height: GUEST_CARD_HEIGHT,
+      windowWidth: GUEST_CARD_WIDTH,
+      windowHeight: GUEST_CARD_HEIGHT,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: prepareGuestCardCaptureClone,
+    }),
+    30_000,
+    "Guest Card image generation timed out. Please try again.",
+  );
+  if (!canvas?.width || !canvas?.height) {
+    throw new Error("Guest Card preview could not be captured.");
+  }
+  return canvas;
 };
 
 export const downloadGuestCardPdf = async ({
@@ -90,39 +175,15 @@ export const downloadGuestCardPdf = async ({
   html2canvasImpl,
   jsPDFImpl,
 }) => {
-  if (!element) throw new Error("Guest Card preview is not available.");
-  if (
-    typeof html2canvasImpl !== "function" ||
-    typeof jsPDFImpl !== "function"
-  ) {
+  if (typeof jsPDFImpl !== "function")
     throw new Error("Guest Card PDF tools are unavailable.");
-  }
-  await waitForGuestCardAssets(element);
-  const width = Math.max(element.scrollWidth || element.offsetWidth || 0, 1);
-  const height = Math.max(element.scrollHeight || element.offsetHeight || 0, 1);
-  const canvas = await boundedWait(
-    html2canvasImpl(element, {
-      backgroundColor: "#ffffff",
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      width,
-      height,
-    }),
-    30_000,
-    "Guest Card PDF generation timed out. Please try again.",
-  );
-  if (
-    !canvas?.width ||
-    !canvas?.height ||
-    typeof canvas.toDataURL !== "function"
-  ) {
-    throw new Error("Guest Card preview could not be captured.");
-  }
+  const canvas = await captureGuestCardCanvas({ element, html2canvasImpl });
+  if (typeof canvas.toDataURL !== "function")
+    throw new Error("Guest Card PDF image could not be prepared.");
   const pdf = new jsPDFImpl({
-    orientation: width >= height ? "landscape" : "portrait",
+    orientation: "landscape",
     unit: "px",
-    format: [width, height],
+    format: [GUEST_CARD_WIDTH, GUEST_CARD_HEIGHT],
     hotfixes: ["px_scaling"],
     compress: true,
   });
@@ -131,12 +192,70 @@ export const downloadGuestCardPdf = async ({
     "PNG",
     0,
     0,
-    width,
-    height,
+    GUEST_CARD_WIDTH,
+    GUEST_CARD_HEIGHT,
     undefined,
     "FAST",
   );
   const filename = guestCardPdfFilename(confirmationNumber);
   pdf.save(filename);
+  return filename;
+};
+
+const canvasToPngBlob = (canvas) => {
+  if (typeof canvas?.toBlob !== "function")
+    throw new Error("Guest Card PNG tools are unavailable.");
+  return boundedWait(
+    new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob?.size) resolve(blob);
+        else reject(new Error("Guest Card PNG could not be prepared."));
+      }, "image/png");
+    }),
+    10_000,
+    "Guest Card PNG generation timed out. Please try again.",
+  );
+};
+
+export const downloadGuestCardPng = async ({
+  element,
+  confirmationNumber,
+  html2canvasImpl,
+  documentImpl,
+  urlImpl,
+}) => {
+  const targetDocument =
+    documentImpl ||
+    element?.ownerDocument ||
+    (typeof document !== "undefined" ? document : undefined);
+  const targetUrl =
+    urlImpl ||
+    targetDocument?.defaultView?.URL ||
+    (typeof URL !== "undefined" ? URL : undefined);
+  if (
+    !targetDocument?.body?.appendChild ||
+    typeof targetDocument.createElement !== "function" ||
+    typeof targetUrl?.createObjectURL !== "function" ||
+    typeof targetUrl?.revokeObjectURL !== "function"
+  ) {
+    throw new Error("Guest Card PNG download tools are unavailable.");
+  }
+  const canvas = await captureGuestCardCanvas({ element, html2canvasImpl });
+  const blob = await canvasToPngBlob(canvas);
+  const filename = guestCardPngFilename(confirmationNumber);
+  const objectUrl = targetUrl.createObjectURL(blob);
+  const anchor = targetDocument.createElement("a");
+  try {
+    anchor.download = filename;
+    anchor.href = objectUrl;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    targetDocument.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    if (typeof anchor.remove === "function") anchor.remove();
+    else anchor.parentNode?.removeChild(anchor);
+    targetUrl.revokeObjectURL(objectUrl);
+  }
   return filename;
 };

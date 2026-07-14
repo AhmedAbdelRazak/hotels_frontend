@@ -1,9 +1,10 @@
 /** @format */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Spin } from "antd";
 import {
   DownloadOutlined,
+  FileImageOutlined,
   IdcardOutlined,
   MailOutlined,
   ReloadOutlined,
@@ -17,7 +18,11 @@ import {
 } from "../../apiAdmin";
 import GuestCard from "./GuestCard";
 import {
+  GUEST_CARD_HEIGHT,
+  GUEST_CARD_WIDTH,
+  calculateGuestCardPreviewScale,
   downloadGuestCardPdf,
+  downloadGuestCardPng,
   isValidGuestCardEmail,
   normalizeGuestCardEmail,
 } from "./guestCardData";
@@ -31,14 +36,18 @@ const COPY = {
     retry: "Try again",
     recipient: "Recipient email",
     recipientHelp: "The attached PDF will be sent only to this email address.",
-    download: "Download PDF",
-    downloading: "Preparing PDF…",
+    downloadPdf: "Download PDF",
+    downloadPng: "Download PNG",
+    downloadingPdf: "Preparing PDF…",
+    downloadingPng: "Preparing PNG…",
     send: "Email Guest Card",
     sending: "Sending…",
     sent: "Sent",
     invalidEmail: "Enter one valid email address.",
-    downloaded: "Guest Card PDF downloaded.",
-    downloadError: "The Guest Card PDF could not be downloaded.",
+    downloadedPdf: "Guest Card PDF downloaded.",
+    downloadedPng: "Guest Card PNG downloaded.",
+    downloadErrorPdf: "The Guest Card PDF could not be downloaded.",
+    downloadErrorPng: "The Guest Card PNG could not be downloaded.",
     emailSuccess: "Guest Card emailed successfully.",
   },
   ar: {
@@ -48,14 +57,18 @@ const COPY = {
     retry: "إعادة المحاولة",
     recipient: "البريد الإلكتروني للمستلم",
     recipientHelp: "سيتم إرسال ملف PDF المرفق إلى هذا البريد فقط.",
-    download: "تحميل PDF",
-    downloading: "جاري تجهيز PDF…",
+    downloadPdf: "تحميل PDF",
+    downloadPng: "تحميل PNG",
+    downloadingPdf: "جاري تجهيز PDF…",
+    downloadingPng: "جاري تجهيز PNG…",
     send: "إرسال بطاقة الضيف",
     sending: "جاري الإرسال…",
     sent: "تم الإرسال",
     invalidEmail: "يرجى إدخال عنوان بريد إلكتروني صالح واحد.",
-    downloaded: "تم تحميل بطاقة الضيف بصيغة PDF.",
-    downloadError: "تعذر تحميل بطاقة الضيف بصيغة PDF.",
+    downloadedPdf: "تم تحميل بطاقة الضيف بصيغة PDF.",
+    downloadedPng: "تم تحميل بطاقة الضيف بصيغة PNG.",
+    downloadErrorPdf: "تعذر تحميل بطاقة الضيف بصيغة PDF.",
+    downloadErrorPng: "تعذر تحميل بطاقة الضيف بصيغة PNG.",
     emailSuccess: "تم إرسال بطاقة الضيف بنجاح.",
   },
 };
@@ -71,13 +84,15 @@ const GuestCardModal = ({
 }) => {
   const text = COPY[isArabic ? "ar" : "en"];
   const cardRef = useRef(null);
+  const previewViewportRef = useRef(null);
   const requestSequence = useRef(0);
+  const operationRef = useRef("");
   const [card, setCard] = useState(null);
   const [email, setEmail] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [operation, setOperation] = useState("");
+  const [previewScale, setPreviewScale] = useState(0);
   const [lastSentEmail, setLastSentEmail] = useState("");
   const [retryVersion, setRetryVersion] = useState(0);
 
@@ -120,37 +135,109 @@ const GuestCardModal = ({
     };
   }, [open, reservationId, retryVersion, text.loadError, token, userId]);
 
+  useLayoutEffect(() => {
+    const viewport = previewViewportRef.current;
+    if (!open || !card || !viewport) {
+      setPreviewScale((current) => (current === 0 ? current : 0));
+      return undefined;
+    }
+
+    let frameId = null;
+    const windowImpl = typeof window !== "undefined" ? window : null;
+    const measure = () => {
+      frameId = null;
+      const nextScale = calculateGuestCardPreviewScale(
+        viewport.clientWidth,
+        viewport.clientHeight,
+      );
+      setPreviewScale((current) =>
+        Math.abs(current - nextScale) > 0.001 ? nextScale : current,
+      );
+    };
+    const scheduleMeasure = () => {
+      if (frameId !== null) return;
+      if (typeof windowImpl?.requestAnimationFrame === "function") {
+        frameId = windowImpl.requestAnimationFrame(measure);
+      } else {
+        measure();
+      }
+    };
+
+    measure();
+    const ResizeObserverImpl = windowImpl?.ResizeObserver;
+    const observer = ResizeObserverImpl
+      ? new ResizeObserverImpl(scheduleMeasure)
+      : null;
+    observer?.observe(viewport);
+    windowImpl?.addEventListener?.("resize", scheduleMeasure);
+
+    return () => {
+      observer?.disconnect();
+      windowImpl?.removeEventListener?.("resize", scheduleMeasure);
+      if (
+        frameId !== null &&
+        typeof windowImpl?.cancelAnimationFrame === "function"
+      ) {
+        windowImpl.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [card, open]);
+
   const normalizedEmail = normalizeGuestCardEmail(email);
   const alreadySent = Boolean(
     lastSentEmail && normalizedEmail === lastSentEmail,
   );
 
-  const handleDownload = async () => {
-    if (!card || downloading) return;
-    setDownloading(true);
+  const beginOperation = (name) => {
+    if (operationRef.current) return false;
+    operationRef.current = name;
+    setOperation(name);
+    return true;
+  };
+
+  const finishOperation = (name) => {
+    if (operationRef.current !== name) return;
+    operationRef.current = "";
+    setOperation("");
+  };
+
+  const handleDownload = async (format) => {
+    const operationName = `download-${format}`;
+    if (!card || !beginOperation(operationName)) return;
     try {
-      await downloadGuestCardPdf({
-        element: cardRef.current,
-        confirmationNumber: card.confirmationNumber,
-        html2canvasImpl: html2canvas,
-        jsPDFImpl: jsPDF,
-      });
-      toast.success(text.downloaded);
+      if (format === "png") {
+        await downloadGuestCardPng({
+          element: cardRef.current,
+          confirmationNumber: card.confirmationNumber,
+          html2canvasImpl: html2canvas,
+        });
+        toast.success(text.downloadedPng);
+      } else {
+        await downloadGuestCardPdf({
+          element: cardRef.current,
+          confirmationNumber: card.confirmationNumber,
+          html2canvasImpl: html2canvas,
+          jsPDFImpl: jsPDF,
+        });
+        toast.success(text.downloadedPdf);
+      }
     } catch (error) {
       console.error("Guest Card download failed", error);
-      toast.error(text.downloadError);
+      toast.error(
+        format === "png" ? text.downloadErrorPng : text.downloadErrorPdf,
+      );
     } finally {
-      setDownloading(false);
+      finishOperation(operationName);
     }
   };
 
   const handleEmail = async () => {
-    if (!card || sending || alreadySent) return;
+    if (!card || operationRef.current || alreadySent) return;
     if (!isValidGuestCardEmail(email)) {
       toast.error(text.invalidEmail);
       return;
     }
-    setSending(true);
+    if (!beginOperation("email")) return;
     try {
       const response = await emailAdminReservationGuestCard(
         reservationId,
@@ -165,16 +252,19 @@ const GuestCardModal = ({
     } catch (error) {
       toast.error(error?.message || text.loadError);
     } finally {
-      setSending(false);
+      finishOperation("email");
     }
   };
 
   const handleClose = () => {
-    if (sending || downloading) return;
+    if (operationRef.current) return;
     onClose?.();
   };
 
-  const busy = sending || downloading;
+  const busy = Boolean(operation);
+  const downloadingPdf = operation === "download-pdf";
+  const downloadingPng = operation === "download-png";
+  const sending = operation === "email";
 
   return (
     <Modal
@@ -230,7 +320,7 @@ const GuestCardModal = ({
                 placeholder="guest@example.com"
                 autoComplete="email"
                 maxLength={254}
-                disabled={sending}
+                disabled={busy}
                 status={
                   email && !isValidGuestCardEmail(email) ? "error" : undefined
                 }
@@ -242,28 +332,63 @@ const GuestCardModal = ({
               <Button
                 size="large"
                 icon={<DownloadOutlined />}
-                onClick={handleDownload}
-                loading={downloading}
-                disabled={sending}
+                onClick={() => handleDownload("pdf")}
+                loading={downloadingPdf}
+                disabled={busy && !downloadingPdf}
               >
-                {downloading ? text.downloading : text.download}
+                {downloadingPdf ? text.downloadingPdf : text.downloadPdf}
+              </Button>
+              <Button
+                size="large"
+                icon={<FileImageOutlined />}
+                onClick={() => handleDownload("png")}
+                loading={downloadingPng}
+                disabled={busy && !downloadingPng}
+              >
+                {downloadingPng ? text.downloadingPng : text.downloadPng}
               </Button>
               <Button
                 type="primary"
                 size="large"
+                className="guest-card-email-action"
                 icon={<MailOutlined />}
                 onClick={handleEmail}
                 loading={sending}
                 disabled={
-                  downloading || alreadySent || !isValidGuestCardEmail(email)
+                  (busy && !sending) ||
+                  alreadySent ||
+                  !isValidGuestCardEmail(email)
                 }
               >
                 {sending ? text.sending : alreadySent ? text.sent : text.send}
               </Button>
             </div>
           </div>
-          <div className="guest-card-preview-scroll" dir="ltr">
-            <GuestCard card={card} ref={cardRef} />
+          <div className="guest-card-preview-frame" dir="ltr">
+            <div
+              className="guest-card-preview-viewport"
+              ref={previewViewportRef}
+            >
+              <div
+                className="guest-card-preview-shell"
+                style={{
+                  height: GUEST_CARD_HEIGHT * previewScale,
+                  width: GUEST_CARD_WIDTH * previewScale,
+                }}
+              >
+                <div
+                  className="guest-card-preview-scale-content"
+                  style={{
+                    height: GUEST_CARD_HEIGHT,
+                    transform: `scale(${previewScale})`,
+                    visibility: previewScale > 0 ? "visible" : "hidden",
+                    width: GUEST_CARD_WIDTH,
+                  }}
+                >
+                  <GuestCard card={card} ref={cardRef} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
