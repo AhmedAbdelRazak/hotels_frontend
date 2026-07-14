@@ -6,7 +6,16 @@ import React, {
   useState,
 } from "react";
 import styled from "styled-components";
-import { Button, Input, Modal, Select, Spin, Switch, message } from "antd";
+import {
+  Alert,
+  Button,
+  Input,
+  Modal,
+  Select,
+  Spin,
+  Switch,
+  message,
+} from "antd";
 import {
   CheckCircleOutlined,
   ReloadOutlined,
@@ -15,8 +24,18 @@ import {
 } from "@ant-design/icons";
 import {
   getAdminHotelReviews,
-  updateAdminHotelReviewStatus,
+  updateAdminHotelReviewVisibility,
 } from "../apiAdmin";
+import {
+  effectiveReviewVisibility,
+  hasAuthoritativeReviewVisibility,
+  hasPendingReviewOperations,
+  mergeServerReviewVisibility,
+  reviewVisibilityMode,
+  runVisibilityMutationIfMounted,
+  serverConfirmedVisibilityChange,
+  shouldReleaseReviewOperationOnCancel,
+} from "./hotelReviewVisibility";
 
 const PAGE_SIZE_OPTIONS = [20, 50];
 
@@ -24,14 +43,14 @@ const TEXT = {
   en: {
     title: "Hotel Ratings",
     subtitle:
-      "Moderate genuine guest feedback. Inactive reviews are hidden publicly and excluded from hotel rating calculations.",
+      "Control the public star rating and written comment independently. Every change affects only the setting you choose.",
     refresh: "Refresh",
     total: "All reviews",
-    active: "Active",
-    inactive: "Inactive",
-    average: "Active average",
+    active: "Has public content",
+    inactive: "Fully hidden",
+    average: "Public rating average",
     search: "Search guest or confirmation number",
-    allStatuses: "All statuses",
+    allStatuses: "All visibility states",
     allHotels: "All hotels",
     allRatings: "All ratings",
     stars: "stars",
@@ -43,7 +62,25 @@ const TEXT = {
     rating: "Rating",
     comment: "Comment",
     date: "Submitted",
-    status: "Public status",
+    status: "Overall visibility",
+    visibility: "Public visibility",
+    visibilityHint: "Rating and comment are controlled separately.",
+    ratingPublic: "Rating public",
+    commentPublic: "Comment public",
+    shown: "Shown",
+    hidden: "Hidden",
+    bothPublic: "Rating and comment shown",
+    ratingOnly: "Rating shown; comment hidden",
+    commentOnly: "Comment shown; rating hidden",
+    nothingPublic: "Rating and comment hidden",
+    ratingShownHelp:
+      "The stars are public and included in the hotel rating calculation.",
+    ratingHiddenHelp:
+      "The stars are not public and are excluded from the hotel rating calculation.",
+    commentShownHelp: "The written guest comment is public.",
+    commentHiddenHelp: "The written guest comment is not public.",
+    noCommentVisibilityHelp:
+      "The guest did not provide text, so comment visibility cannot be changed.",
     verified: "Verified stay",
     unverified: "Unverified",
     noComment: "No comment provided",
@@ -54,30 +91,47 @@ const TEXT = {
     page: "Page",
     of: "of",
     showing: "Showing",
-    activateTitle: "Activate this review?",
-    deactivateTitle: "Deactivate this review?",
-    activateHelp:
-      "The review will be visible publicly and included in the hotel rating.",
-    deactivateHelp:
-      "The review and comment will be hidden publicly and excluded from the hotel rating.",
-    activateAction: "Activate",
-    deactivateAction: "Deactivate",
+    showRatingTitle: "Show this rating publicly?",
+    hideRatingTitle: "Hide this rating publicly?",
+    showCommentTitle: "Show this comment publicly?",
+    hideCommentTitle: "Hide this comment publicly?",
+    showRatingHelp:
+      "The stars will appear publicly and be included in the hotel rating calculation. The comment setting will not change.",
+    hideRatingHelp:
+      "The stars will be hidden and excluded from the hotel rating calculation. The comment setting will not change.",
+    showCommentHelp:
+      "The written comment will appear publicly. The rating setting will not change.",
+    hideCommentHelp:
+      "The written comment will be hidden. The rating setting will not change.",
+    showRatingAction: "Show rating",
+    hideRatingAction: "Hide rating",
+    showCommentAction: "Show comment",
+    hideCommentAction: "Hide comment",
     cancel: "Cancel",
-    updated: "Review status updated.",
+    ratingShown: "Rating is now public. The comment setting was not changed.",
+    ratingHidden: "Rating is now hidden. The comment setting was not changed.",
+    commentShown: "Comment is now public. The rating setting was not changed.",
+    commentHidden: "Comment is now hidden. The rating setting was not changed.",
     loadError: "Could not load hotel reviews.",
-    updateError: "Could not update the review status.",
+    loadErrorTitle: "Hotel reviews are unavailable",
+    retry: "Try again",
+    updateError: "Could not update this visibility setting.",
+    syncError:
+      "The change was saved, but the server did not return its effective visibility. Refreshing the review list.",
+    conflictError:
+      "The review changed before this update finished. The server's current visibility will be shown after refresh.",
   },
   ar: {
     title: "تقييمات الفنادق",
     subtitle:
-      "إدارة آراء الضيوف الحقيقية. التقييمات غير النشطة لا تظهر للزوار ولا تدخل في حساب تقييم الفندق.",
+      "تحكّم في ظهور النجوم والتعليق المكتوب بشكل مستقل. كل تغيير يؤثر فقط في الخيار الذي تحدده.",
     refresh: "تحديث",
     total: "كل التقييمات",
-    active: "نشط",
-    inactive: "غير نشط",
-    average: "متوسط النشط",
+    active: "يوجد محتوى ظاهر",
+    inactive: "مخفي بالكامل",
+    average: "متوسط التقييمات الظاهرة",
     search: "ابحث باسم الضيف أو رقم التأكيد",
-    allStatuses: "كل الحالات",
+    allStatuses: "كل حالات الظهور",
     allHotels: "كل الفنادق",
     allRatings: "كل التقييمات",
     stars: "نجوم",
@@ -89,7 +143,23 @@ const TEXT = {
     rating: "التقييم",
     comment: "التعليق",
     date: "تاريخ الإرسال",
-    status: "حالة الظهور",
+    status: "الظهور العام",
+    visibility: "الظهور للزوار",
+    visibilityHint: "يتم التحكم في التقييم والتعليق بشكل منفصل.",
+    ratingPublic: "إظهار التقييم",
+    commentPublic: "إظهار التعليق",
+    shown: "ظاهر",
+    hidden: "مخفي",
+    bothPublic: "التقييم والتعليق ظاهران",
+    ratingOnly: "التقييم ظاهر والتعليق مخفي",
+    commentOnly: "التعليق ظاهر والتقييم مخفي",
+    nothingPublic: "التقييم والتعليق مخفيان",
+    ratingShownHelp: "النجوم ظاهرة وتدخل في حساب تقييم الفندق.",
+    ratingHiddenHelp: "النجوم مخفية ولا تدخل في حساب تقييم الفندق.",
+    commentShownHelp: "تعليق الضيف المكتوب ظاهر للزوار.",
+    commentHiddenHelp: "تعليق الضيف المكتوب مخفي عن الزوار.",
+    noCommentVisibilityHelp:
+      "لم يكتب الضيف تعليقاً، لذلك لا يمكن تغيير ظهور التعليق.",
     verified: "إقامة موثقة",
     unverified: "غير موثق",
     noComment: "لم تتم إضافة تعليق",
@@ -100,17 +170,35 @@ const TEXT = {
     page: "صفحة",
     of: "من",
     showing: "عرض",
-    activateTitle: "تفعيل هذا التقييم؟",
-    deactivateTitle: "إلغاء تفعيل هذا التقييم؟",
-    activateHelp: "سيظهر التقييم للزوار وسيدخل في حساب تقييم الفندق.",
-    deactivateHelp:
-      "سيتم إخفاء التقييم والتعليق ولن يدخلا في حساب تقييم الفندق.",
-    activateAction: "تفعيل",
-    deactivateAction: "إلغاء التفعيل",
+    showRatingTitle: "إظهار هذا التقييم للزوار؟",
+    hideRatingTitle: "إخفاء هذا التقييم عن الزوار؟",
+    showCommentTitle: "إظهار هذا التعليق للزوار؟",
+    hideCommentTitle: "إخفاء هذا التعليق عن الزوار؟",
+    showRatingHelp:
+      "ستظهر النجوم وتدخل في حساب تقييم الفندق. لن يتغير إعداد التعليق.",
+    hideRatingHelp:
+      "ستُخفى النجوم ولن تدخل في حساب تقييم الفندق. لن يتغير إعداد التعليق.",
+    showCommentHelp:
+      "سيظهر التعليق المكتوب للزوار. لن يتغير إعداد التقييم.",
+    hideCommentHelp:
+      "سيُخفى التعليق المكتوب عن الزوار. لن يتغير إعداد التقييم.",
+    showRatingAction: "إظهار التقييم",
+    hideRatingAction: "إخفاء التقييم",
+    showCommentAction: "إظهار التعليق",
+    hideCommentAction: "إخفاء التعليق",
     cancel: "إلغاء",
-    updated: "تم تحديث حالة التقييم.",
+    ratingShown: "أصبح التقييم ظاهراً. لم يتغير إعداد التعليق.",
+    ratingHidden: "أصبح التقييم مخفياً. لم يتغير إعداد التعليق.",
+    commentShown: "أصبح التعليق ظاهراً. لم يتغير إعداد التقييم.",
+    commentHidden: "أصبح التعليق مخفياً. لم يتغير إعداد التقييم.",
     loadError: "تعذر تحميل تقييمات الفنادق.",
-    updateError: "تعذر تحديث حالة التقييم.",
+    loadErrorTitle: "تعذر عرض تقييمات الفنادق",
+    retry: "إعادة المحاولة",
+    updateError: "تعذر تحديث إعداد الظهور هذا.",
+    syncError:
+      "تم حفظ التغيير، لكن الخادم لم يُرجع حالة الظهور الفعلية. جارٍ تحديث القائمة.",
+    conflictError:
+      "تغيّرت حالة المراجعة قبل اكتمال التحديث. ستظهر حالة الخادم الحالية بعد تحديث القائمة.",
   },
 };
 
@@ -123,11 +211,6 @@ const cleanText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
 };
-
-const reviewStatus = (review = {}) =>
-  cleanText(review.status, "active").toLowerCase() === "inactive"
-    ? "inactive"
-    : "active";
 
 const reviewHotel = (review = {}) =>
   cleanText(
@@ -240,6 +323,10 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
   const locale = isArabic ? "ar-SA" : "en-US";
   const requestSequence = useRef(0);
   const mounted = useRef(true);
+  const visibleLoadRequests = useRef(new Set());
+  const reviewOperationIds = useRef(new Set());
+  const reviewOperationPhases = useRef(new Map());
+  const [modalApi, modalContextHolder] = Modal.useModal();
 
   const [reviews, setReviews] = useState([]);
   const [summary, setSummary] = useState({});
@@ -255,41 +342,61 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [updatingReviewId, setUpdatingReviewId] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [reviewOperations, setReviewOperations] = useState({});
+  const navigationLocked = hasPendingReviewOperations(reviewOperations);
 
   useEffect(() => {
+    const activeLoadRequests = visibleLoadRequests.current;
+    const activeReviewOperations = reviewOperationIds.current;
+    const activeReviewOperationPhases = reviewOperationPhases.current;
     mounted.current = true;
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      activeLoadRequests.clear();
+      activeReviewOperations.clear();
+      activeReviewOperationPhases.clear();
     };
   }, []);
 
   const loadReviews = useCallback(
-    async ({ silent = false } = {}) => {
+    async ({ silent = false, notifyError = true } = {}) => {
       if (!userId || !token) return;
       const requestId = requestSequence.current + 1;
       requestSequence.current = requestId;
-      if (!silent) setLoading(true);
+      if (!silent) {
+        visibleLoadRequests.current.add(requestId);
+        setLoading(true);
+      }
 
-      const response = await getAdminHotelReviews(userId, token, {
-        page,
-        limit,
-        status,
-        hotelId,
-        rating,
-        search,
-      });
+      let response;
+      try {
+        response = await getAdminHotelReviews(userId, token, {
+          page,
+          limit,
+          status,
+          hotelId,
+          rating,
+          search,
+        });
+      } catch (error) {
+        response = { success: false, error: error?.message || L.loadError };
+      } finally {
+        if (!silent) {
+          visibleLoadRequests.current.delete(requestId);
+          if (mounted.current) {
+            setLoading(visibleLoadRequests.current.size > 0);
+          }
+        }
+      }
 
       if (!mounted.current || requestId !== requestSequence.current) return;
       if (response?.success === false || response?.error) {
-        message.error(response?.error || L.loadError);
-        setReviews([]);
-        setSummary({});
-        setHotels([]);
-        setPagination(normalizePagination({}, { page, limit, total: 0 }));
-        if (!silent) setLoading(false);
-        return;
+        const errorText = response?.error || L.loadError;
+        setLoadError(errorText);
+        if (notifyError) message.error(errorText);
+        return false;
       }
 
       const nextReviews = Array.isArray(response?.reviews)
@@ -304,10 +411,11 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
       setSummary(response?.summary || {});
       setHotels(Array.isArray(response?.hotels) ? response.hotels : []);
       setPagination(nextPagination);
+      setLoadError("");
       if (page > nextPagination.totalPages) {
         setPage(nextPagination.totalPages);
       }
-      if (!silent) setLoading(false);
+      return true;
     },
     [hotelId, L.loadError, limit, page, rating, search, status, token, userId],
   );
@@ -317,42 +425,177 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
   }, [loadReviews]);
 
   const setFilter = (setter) => (value) => {
+    if (reviewOperationIds.current.size) return;
     setPage(1);
     setter(value);
   };
 
   const applySearch = (value) => {
+    if (reviewOperationIds.current.size) return;
     setPage(1);
     setSearch(cleanText(value));
   };
 
-  const handleStatusChange = (review, shouldActivate) => {
-    const id = cleanText(review?._id || review?.id);
-    if (!id || updatingReviewId) return;
-    const nextStatus = shouldActivate ? "active" : "inactive";
+  const refreshReviews = () => {
+    if (reviewOperationIds.current.size) return;
+    loadReviews();
+  };
 
-    Modal.confirm({
-      title: shouldActivate ? L.activateTitle : L.deactivateTitle,
-      content: shouldActivate ? L.activateHelp : L.deactivateHelp,
-      okText: shouldActivate ? L.activateAction : L.deactivateAction,
+  const changePage = (nextPage) => {
+    if (reviewOperationIds.current.size) return;
+    setPage(nextPage);
+  };
+
+  const releaseReviewOperation = (id) => {
+    reviewOperationIds.current.delete(id);
+    reviewOperationPhases.current.delete(id);
+    if (!mounted.current) return;
+    setReviewOperations((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleVisibilityChange = (review, field, nextVisible) => {
+    const id = cleanText(review?._id || review?.id);
+    if (
+      !id ||
+      !["ratingVisible", "commentVisible"].includes(field) ||
+      typeof nextVisible !== "boolean" ||
+      reviewOperationIds.current.has(id)
+    ) {
+      return;
+    }
+    const currentVisibility = effectiveReviewVisibility(review);
+    if (currentVisibility[field] === nextVisible) return;
+    if (field === "commentVisible" && !cleanText(review?.comment)) return;
+
+    const ratingOperation = field === "ratingVisible";
+    const title = ratingOperation
+      ? nextVisible
+        ? L.showRatingTitle
+        : L.hideRatingTitle
+      : nextVisible
+        ? L.showCommentTitle
+        : L.hideCommentTitle;
+    const help = ratingOperation
+      ? nextVisible
+        ? L.showRatingHelp
+        : L.hideRatingHelp
+      : nextVisible
+        ? L.showCommentHelp
+        : L.hideCommentHelp;
+    const action = ratingOperation
+      ? nextVisible
+        ? L.showRatingAction
+        : L.hideRatingAction
+      : nextVisible
+        ? L.showCommentAction
+        : L.hideCommentAction;
+    const successText = ratingOperation
+      ? nextVisible
+        ? L.ratingShown
+        : L.ratingHidden
+      : nextVisible
+        ? L.commentShown
+        : L.commentHidden;
+
+    // The ref closes the tiny window before React applies the disabled state,
+    // preventing two confirmations/mutations for the same review.
+    reviewOperationIds.current.add(id);
+    reviewOperationPhases.current.set(id, "confirming");
+    setReviewOperations((current) => ({
+      ...current,
+      [id]: { field, phase: "confirming" },
+    }));
+
+    modalApi.confirm({
+      title,
+      content: help,
+      okText: action,
       cancelText: L.cancel,
-      okButtonProps: { danger: !shouldActivate },
-      onOk: async () => {
-        setUpdatingReviewId(id);
-        const response = await updateAdminHotelReviewStatus(
-          id,
-          userId,
-          token,
-          nextStatus,
-        );
-        if (!mounted.current) return;
-        setUpdatingReviewId("");
-        if (response?.success === false || response?.error) {
-          message.error(response?.error || L.updateError);
+      okButtonProps: { danger: !nextVisible },
+      onCancel: () => {
+        if (
+          !shouldReleaseReviewOperationOnCancel(
+            reviewOperationPhases.current.get(id),
+          )
+        ) {
           return;
         }
-        message.success(L.updated);
-        await loadReviews({ silent: true });
+        releaseReviewOperation(id);
+      },
+      onOk: async () => {
+        if (!mounted.current) {
+          releaseReviewOperation(id);
+          return;
+        }
+        reviewOperationPhases.current.set(id, "saving");
+        if (mounted.current) {
+          setReviewOperations((current) => ({
+            ...current,
+            [id]: { field, phase: "saving" },
+          }));
+        }
+        try {
+          const mutation = await runVisibilityMutationIfMounted({
+            isMounted: () => mounted.current,
+            mutate: () =>
+              updateAdminHotelReviewVisibility(id, userId, token, {
+                [field]: nextVisible,
+              }),
+          });
+          if (mutation.skipped) return;
+          const response = mutation.response;
+          if (!mounted.current) return;
+          if (response?.success === false || response?.error) {
+            if (response?.code === "REVIEW_VISIBILITY_CONFLICT") {
+              message.warning(L.conflictError);
+            } else {
+              message.error(response?.error || L.updateError);
+            }
+            // A timeout or transport failure has an unknown server outcome. Always
+            // reconcile before unlocking so a late commit cannot leave stale switches.
+            await loadReviews({ silent: true, notifyError: false });
+            return;
+          }
+
+          const returnedReview = response?.review;
+          const hasEffectiveVisibility =
+            hasAuthoritativeReviewVisibility(returnedReview);
+          if (hasEffectiveVisibility) {
+            setReviews((current) =>
+              current.map((currentReview) =>
+                cleanText(currentReview?._id || currentReview?.id) === id
+                  ? mergeServerReviewVisibility(currentReview, returnedReview)
+                  : currentReview,
+              ),
+            );
+            if (
+              serverConfirmedVisibilityChange(
+                returnedReview,
+                field,
+                nextVisible,
+              )
+            ) {
+              message.success(successText);
+            } else {
+              message.warning(L.conflictError);
+            }
+          } else {
+            message.warning(L.syncError);
+          }
+          await loadReviews({ silent: true });
+        } catch (error) {
+          if (mounted.current) {
+            message.error(error?.message || L.updateError);
+            await loadReviews({ silent: true, notifyError: false });
+          }
+        } finally {
+          releaseReviewOperation(id);
+        }
       },
     });
   };
@@ -380,6 +623,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
 
   return (
     <ReviewsSurface dir={isArabic ? "rtl" : "ltr"}>
+      {modalContextHolder}
       <ReviewsHeader>
         <div>
           <h2>{L.title}</h2>
@@ -388,7 +632,9 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
         <Button
           icon={<ReloadOutlined />}
           loading={loading}
-          onClick={() => loadReviews()}
+          disabled={loading || navigationLocked}
+          aria-label={L.refresh}
+          onClick={refreshReviews}
         >
           {L.refresh}
         </Button>
@@ -421,6 +667,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           <Input.Search
             allowClear
             value={searchInput}
+            disabled={loading || navigationLocked}
             placeholder={L.search}
             aria-label={L.search}
             onChange={(event) => setSearchInput(event.target.value)}
@@ -432,6 +679,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           <Select
             aria-label={L.status}
             value={status}
+            disabled={loading || navigationLocked}
             onChange={setFilter(setStatus)}
             options={[
               { value: "all", label: L.allStatuses },
@@ -447,6 +695,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
             showSearch
             optionFilterProp="label"
             value={hotelId}
+            disabled={loading || navigationLocked}
             onChange={setFilter(setHotelId)}
             options={[
               { value: "all", label: L.allHotels },
@@ -475,6 +724,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           <Select
             aria-label={L.rating}
             value={rating}
+            disabled={loading || navigationLocked}
             onChange={setFilter(setRating)}
             options={[
               { value: "all", label: L.allRatings },
@@ -490,7 +740,9 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           <Select
             aria-label={L.pageSize}
             value={limit}
+            disabled={loading || navigationLocked}
             onChange={(value) => {
+              if (reviewOperationIds.current.size) return;
               setPage(1);
               setLimit(value);
             }}
@@ -501,6 +753,25 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           />
         </label>
       </FilterGrid>
+
+      {loadError && (
+        <Alert
+          type="error"
+          showIcon
+          message={L.loadErrorTitle}
+          description={loadError}
+          action={
+            <Button
+              size="small"
+              loading={loading}
+              disabled={loading || navigationLocked}
+              onClick={refreshReviews}
+            >
+              {L.retry}
+            </Button>
+          }
+        />
+      )}
 
       {loading ? (
         <LoadingBlock aria-live="polite">
@@ -519,7 +790,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
                 <th scope="col">{L.rating}</th>
                 <th scope="col">{L.comment}</th>
                 <th scope="col">{L.date}</th>
-                <th scope="col">{L.status}</th>
+                <th scope="col">{L.visibility}</th>
               </tr>
             </thead>
             <tbody>
@@ -529,8 +800,22 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
                     review?._id || review?.id,
                     `review-${index}`,
                   );
-                  const statusValue = reviewStatus(review);
                   const verified = isVerifiedReview(review);
+                  const hasComment = Boolean(cleanText(review?.comment));
+                  const visibility = effectiveReviewVisibility(review);
+                  const visibilityMode = reviewVisibilityMode({
+                    ratingVisible: visibility.ratingVisible,
+                    commentVisible:
+                      hasComment && visibility.commentVisible,
+                  });
+                  const visibilityModeLabel = {
+                    both: L.bothPublic,
+                    ratingOnly: L.ratingOnly,
+                    commentOnly: L.commentOnly,
+                    hidden: L.nothingPublic,
+                  }[visibilityMode];
+                  const operation = reviewOperations[id];
+                  const rowBusy = Boolean(operation);
                   const ratingValue = Math.min(
                     Math.max(numberValue(review?.rating), 0),
                     5,
@@ -575,22 +860,129 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
                           locale,
                         )}
                       </td>
-                      <td data-label={L.status}>
-                        <StatusControl>
-                          <Switch
-                            checked={statusValue === "active"}
-                            loading={updatingReviewId === id}
-                            disabled={Boolean(updatingReviewId)}
-                            checkedChildren={L.active}
-                            unCheckedChildren={L.inactive}
-                            aria-label={`${L.status}: ${
-                              statusValue === "active" ? L.active : L.inactive
-                            }`}
-                            onChange={(checked) =>
-                              handleStatusChange(review, checked)
-                            }
-                          />
-                        </StatusControl>
+                      <td data-label={L.visibility}>
+                        <VisibilityControl
+                          role="group"
+                          aria-label={`${L.visibility}: ${reviewGuest(review)}`}
+                          aria-busy={operation?.phase === "saving"}
+                        >
+                          <VisibilitySummary
+                            $mode={visibilityMode}
+                            aria-live="polite"
+                          >
+                            {visibilityModeLabel}
+                          </VisibilitySummary>
+                          <span className="visibility-hint">
+                            {L.visibilityHint}
+                          </span>
+
+                          <VisibilityOption
+                            $visible={visibility.ratingVisible}
+                          >
+                            <div>
+                              <strong>{L.ratingPublic}</strong>
+                              <span>
+                                {visibility.ratingVisible
+                                  ? L.ratingShownHelp
+                                  : L.ratingHiddenHelp}
+                              </span>
+                            </div>
+                            <VisibilityAction>
+                              <Switch
+                                checked={visibility.ratingVisible}
+                                loading={
+                                  operation?.field === "ratingVisible" &&
+                                  operation?.phase === "saving"
+                                }
+                                disabled={rowBusy}
+                                aria-label={`${L.ratingPublic}: ${
+                                  visibility.ratingVisible
+                                    ? L.shown
+                                    : L.hidden
+                                }`}
+                                onChange={(checked) =>
+                                  handleVisibilityChange(
+                                    review,
+                                    "ratingVisible",
+                                    checked,
+                                  )
+                                }
+                              />
+                              <VisibilityState
+                                $visible={visibility.ratingVisible}
+                              >
+                                {visibility.ratingVisible
+                                  ? L.shown
+                                  : L.hidden}
+                              </VisibilityState>
+                            </VisibilityAction>
+                          </VisibilityOption>
+
+                          {hasComment ? (
+                            <VisibilityOption
+                              $visible={visibility.commentVisible}
+                            >
+                              <div>
+                                <strong>{L.commentPublic}</strong>
+                                <span>
+                                  {visibility.commentVisible
+                                    ? L.commentShownHelp
+                                    : L.commentHiddenHelp}
+                                </span>
+                              </div>
+                              <VisibilityAction>
+                                <Switch
+                                  checked={visibility.commentVisible}
+                                  loading={
+                                    operation?.field === "commentVisible" &&
+                                    operation?.phase === "saving"
+                                  }
+                                  disabled={rowBusy}
+                                  aria-label={`${L.commentPublic}: ${
+                                    visibility.commentVisible
+                                      ? L.shown
+                                      : L.hidden
+                                  }`}
+                                  onChange={(checked) =>
+                                    handleVisibilityChange(
+                                      review,
+                                      "commentVisible",
+                                      checked,
+                                    )
+                                  }
+                                />
+                                <VisibilityState
+                                  $visible={visibility.commentVisible}
+                                >
+                                  {visibility.commentVisible
+                                    ? L.shown
+                                    : L.hidden}
+                                </VisibilityState>
+                              </VisibilityAction>
+                            </VisibilityOption>
+                          ) : (
+                            <VisibilityOption
+                              $unavailable
+                              aria-disabled="true"
+                              aria-label={`${L.commentPublic}: ${L.noComment}`}
+                            >
+                              <div>
+                                <strong>{L.commentPublic}</strong>
+                                <span>{L.noCommentVisibilityHelp}</span>
+                              </div>
+                              <VisibilityAction>
+                                <Switch
+                                  checked={false}
+                                  disabled
+                                  aria-label={`${L.commentPublic}: ${L.noComment}`}
+                                />
+                                <NoCommentVisibility role="status">
+                                  {L.noComment}
+                                </NoCommentVisibility>
+                              </VisibilityAction>
+                            </VisibilityOption>
+                          )}
+                        </VisibilityControl>
                       </td>
                     </tr>
                   );
@@ -607,8 +999,8 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
 
       <PaginationRow aria-label={L.page}>
         <Button
-          disabled={page <= 1 || loading}
-          onClick={() => setPage((current) => Math.max(current - 1, 1))}
+          disabled={page <= 1 || loading || navigationLocked}
+          onClick={() => changePage(Math.max(page - 1, 1))}
         >
           {L.previous}
         </Button>
@@ -624,9 +1016,11 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           </span>
         </div>
         <Button
-          disabled={page >= pagination.totalPages || loading}
+          disabled={
+            page >= pagination.totalPages || loading || navigationLocked
+          }
           onClick={() =>
-            setPage((current) => Math.min(current + 1, pagination.totalPages))
+            changePage(Math.min(page + 1, pagination.totalPages))
           }
         >
           {L.next}
@@ -801,7 +1195,7 @@ const TableWrap = styled.div`
 
   table {
     width: 100%;
-    min-width: 1040px;
+    min-width: 1280px;
     border-collapse: collapse;
   }
 
@@ -847,6 +1241,11 @@ const TableWrap = styled.div`
     background: #f9fcff;
   }
 
+  th:last-child,
+  td:last-child {
+    min-width: 360px;
+  }
+
   .empty-row td {
     padding: 42px 16px;
     color: #627990;
@@ -865,6 +1264,11 @@ const TableWrap = styled.div`
     td {
       display: block;
       width: 100%;
+      min-width: 0;
+    }
+
+    th:last-child,
+    td:last-child {
       min-width: 0;
     }
 
@@ -901,6 +1305,12 @@ const TableWrap = styled.div`
 
     .empty-row td::before {
       display: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    td {
+      grid-template-columns: 1fr;
     }
   }
 `;
@@ -947,18 +1357,140 @@ const CommentText = styled.p`
   overflow-wrap: anywhere;
 `;
 
-const StatusControl = styled.div`
-  display: flex;
-  justify-content: flex-start;
-  min-width: 104px;
+const VisibilityControl = styled.div`
+  display: grid;
+  gap: 8px;
+  min-width: 330px;
 
-  .ant-switch {
-    min-width: 82px;
+  .visibility-hint {
+    color: #60768a;
+    font-size: 0.72rem;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 760px) {
+    min-width: 0;
+  }
+`;
+
+const VisibilitySummary = styled.strong`
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid
+    ${(props) =>
+      props.$mode === "both"
+        ? "#8fcdb2"
+        : props.$mode === "ratingOnly"
+          ? "#9bc9e7"
+          : props.$mode === "commentOnly"
+            ? "#c5b5df"
+            : "#d9b5b8"};
+  border-radius: 999px;
+  background: ${(props) =>
+    props.$mode === "both"
+      ? "#e8f7ef"
+      : props.$mode === "ratingOnly"
+        ? "#edf7fd"
+        : props.$mode === "commentOnly"
+          ? "#f5f0fb"
+          : "#fff3f3"};
+  color: ${(props) =>
+    props.$mode === "both"
+      ? "#08724c"
+      : props.$mode === "ratingOnly"
+        ? "#126a9d"
+        : props.$mode === "commentOnly"
+          ? "#6d4b94"
+          : "#a23f48"};
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.35;
+`;
+
+const VisibilityOption = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid
+    ${(props) =>
+      props.$unavailable
+        ? "#dce4eb"
+        : props.$visible
+          ? "#a8dac3"
+          : "#d9e2eb"};
+  border-inline-start: 3px solid
+    ${(props) =>
+      props.$unavailable
+        ? "#91a1b1"
+        : props.$visible
+          ? "#0f8a5f"
+          : "#9aa9b7"};
+  border-radius: 7px;
+  background: ${(props) =>
+    props.$unavailable
+      ? "#f7f9fb"
+      : props.$visible
+        ? "#f3fbf7"
+        : "#fbfcfd"};
+
+  > div:first-child {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  strong {
+    color: #183c5d;
+    font-size: 0.78rem;
+    font-weight: 950;
+  }
+
+  > div:first-child > span {
+    color: #61768a;
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 1.4;
   }
 
   .ant-switch-checked {
     background: #0f8a5f;
   }
+
+  @media (max-width: 420px) {
+    grid-template-columns: 1fr;
+
+    > div:last-child {
+      justify-items: start;
+    }
+  }
+`;
+
+const VisibilityAction = styled.div`
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+`;
+
+const VisibilityState = styled.span`
+  color: ${(props) => (props.$visible ? "#08724c" : "#6f7f8f")};
+  font-size: 0.66rem;
+  font-weight: 900;
+`;
+
+const NoCommentVisibility = styled.span`
+  max-width: 118px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: #e9eef3;
+  color: #5d7082;
+  font-size: 0.67rem;
+  font-weight: 850;
+  line-height: 1.35;
+  text-align: center;
 `;
 
 const PaginationRow = styled.nav`

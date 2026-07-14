@@ -553,9 +553,46 @@ const buildHotelReviewAdminQuery = (filters = {}) => {
 	return params.toString();
 };
 
+const HOTEL_REVIEW_ADMIN_TIMEOUT_MS = 15 * 1000;
+
+const fetchHotelReviewAdminJson = async (url, options = {}) => {
+	const controller =
+		typeof AbortController === "function" ? new AbortController() : null;
+	let timeoutId;
+	const timeout = new Promise((resolve, reject) => {
+		timeoutId = setTimeout(() => {
+			controller?.abort();
+			const error = new Error("The review request timed out.");
+			error.name = "AbortError";
+			reject(error);
+		}, HOTEL_REVIEW_ADMIN_TIMEOUT_MS);
+	});
+
+	try {
+		return await Promise.race([
+			Promise.resolve().then(async () => {
+				const response = await fetch(url, {
+					...options,
+					...(controller ? { signal: controller.signal } : {}),
+				});
+				const data = await response.json().catch(() => ({}));
+				return { response, data };
+			}),
+			timeout,
+		]);
+	} finally {
+		clearTimeout(timeoutId);
+	}
+};
+
+const hotelReviewAdminRequestError = (error, fallback) =>
+	error?.name === "AbortError"
+		? localizeApiError({}, fallback).error
+		: error?.message || fallback;
+
 export const getAdminHotelReviews = (userId, token, filters = {}) => {
 	const query = buildHotelReviewAdminQuery(filters);
-	return fetch(
+	return fetchHotelReviewAdminJson(
 		`${process.env.REACT_APP_API_URL}/admin/hotel-reviews/${encodeURIComponent(
 			userId,
 		)}${query ? `?${query}` : ""}`,
@@ -569,8 +606,7 @@ export const getAdminHotelReviews = (userId, token, filters = {}) => {
 			cache: "no-store",
 		},
 	)
-		.then(async (response) => {
-			const data = await response.json().catch(() => ({}));
+		.then(({ response, data }) => {
 			if (!response.ok) {
 				return {
 					...localizeApiError(data, "Could not load hotel reviews."),
@@ -585,7 +621,10 @@ export const getAdminHotelReviews = (userId, token, filters = {}) => {
 		})
 		.catch((error) => ({
 			success: false,
-			error: error?.message || "Could not load hotel reviews.",
+			error: hotelReviewAdminRequestError(
+				error,
+				"Could not load hotel reviews.",
+			),
 			reviews: [],
 			pagination: {},
 			summary: {},
@@ -593,14 +632,13 @@ export const getAdminHotelReviews = (userId, token, filters = {}) => {
 		}));
 };
 
-export const updateAdminHotelReviewStatus = (
+const updateAdminHotelReviewModeration = (
 	reviewId,
 	userId,
 	token,
-	status,
+	payload,
 ) => {
-	const normalizedStatus = status === "inactive" ? "inactive" : "active";
-	return fetch(
+	return fetchHotelReviewAdminJson(
 		`${process.env.REACT_APP_API_URL}/admin/hotel-reviews/${encodeURIComponent(
 			reviewId,
 		)}/status/${encodeURIComponent(userId)}`,
@@ -612,14 +650,13 @@ export const updateAdminHotelReviewStatus = (
 				...getStoredActiveAuthHeaders(),
 				...authHeaders(token),
 			},
-			body: JSON.stringify({ status: normalizedStatus }),
+			body: JSON.stringify(payload),
 		},
 	)
-		.then(async (response) => {
-			const data = await response.json().catch(() => ({}));
+		.then(({ response, data }) => {
 			if (!response.ok) {
 				return {
-					...localizeApiError(data, "Could not update the review status."),
+					...localizeApiError(data, "Could not update the review visibility."),
 					success: false,
 				};
 			}
@@ -627,8 +664,43 @@ export const updateAdminHotelReviewStatus = (
 		})
 		.catch((error) => ({
 			success: false,
-			error: error?.message || "Could not update the review status.",
+			error: hotelReviewAdminRequestError(
+				error,
+				"Could not update the review visibility.",
+			),
 		}));
+};
+
+export const updateAdminHotelReviewStatus = (
+	reviewId,
+	userId,
+	token,
+	status,
+) =>
+	updateAdminHotelReviewModeration(reviewId, userId, token, {
+		status: status === "inactive" ? "inactive" : "active",
+	});
+
+export const updateAdminHotelReviewVisibility = (
+	reviewId,
+	userId,
+	token,
+	visibility = {},
+) => {
+	const payload = {};
+	if (typeof visibility?.ratingVisible === "boolean") {
+		payload.ratingVisible = visibility.ratingVisible;
+	}
+	if (typeof visibility?.commentVisible === "boolean") {
+		payload.commentVisible = visibility.commentVisible;
+	}
+	if (!Object.keys(payload).length) {
+		return Promise.resolve({
+			success: false,
+			error: "Choose a valid rating or comment visibility setting.",
+		});
+	}
+	return updateAdminHotelReviewModeration(reviewId, userId, token, payload);
 };
 
 export const gettingAllHotelAccounts = (userId, token) => {
