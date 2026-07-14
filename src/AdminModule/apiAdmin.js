@@ -542,6 +542,142 @@ export const createHotelReviewInvitation = (
 		}));
 };
 
+const GUEST_CARD_PREVIEW_TIMEOUT_MS = 20 * 1000;
+const GUEST_CARD_EMAIL_TIMEOUT_MS = 180 * 1000;
+
+const fetchAdminGuestCardJson = async (
+  url,
+  options = {},
+  timeoutMs = GUEST_CARD_PREVIEW_TIMEOUT_MS,
+) => {
+  const controller =
+    typeof AbortController === "function" ? new AbortController() : null;
+  const externalSignal = options.signal;
+  const forwardAbort = () => controller?.abort();
+  if (externalSignal?.aborted) forwardAbort();
+  else
+    externalSignal?.addEventListener?.("abort", forwardAbort, { once: true });
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller?.abort();
+      const error = new Error("The Guest Card request timed out.");
+      error.name = "AbortError";
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    const { signal: _externalSignal, ...requestOptions } = options;
+    return await Promise.race([
+      Promise.resolve().then(async () => {
+        const response = await fetch(url, {
+          ...requestOptions,
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      }),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener?.("abort", forwardAbort);
+  }
+};
+
+const guestCardRequestFailure = (error, fallback) => ({
+  success: false,
+  error:
+    error?.name === "AbortError"
+      ? "The Guest Card request timed out or was cancelled."
+      : error?.message || fallback,
+});
+
+export const getAdminReservationGuestCard = (
+  reservationId,
+  userId,
+  token,
+  { signal } = {},
+) => {
+  if (!reservationId || !userId) {
+    return Promise.resolve({
+      success: false,
+      error: "Reservation and employee identifiers are required.",
+    });
+  }
+  return fetchAdminGuestCardJson(
+    `${process.env.REACT_APP_API_URL}/admin/reservations/${encodeURIComponent(
+      reservationId,
+    )}/guest-card/${encodeURIComponent(userId)}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...getStoredActiveAuthHeaders(),
+        ...authHeaders(token),
+      },
+      cache: "no-store",
+      signal,
+    },
+  )
+    .then(({ response, data }) =>
+      response.ok
+        ? data
+        : {
+            ...localizeApiError(data, "Could not load the Guest Card."),
+            success: false,
+          },
+    )
+    .catch((error) =>
+      guestCardRequestFailure(error, "Could not load the Guest Card."),
+    );
+};
+
+export const emailAdminReservationGuestCard = (
+  reservationId,
+  userId,
+  token,
+  recipientEmail,
+  { signal } = {},
+) => {
+  if (!reservationId || !userId) {
+    return Promise.resolve({
+      success: false,
+      error: "Reservation and employee identifiers are required.",
+    });
+  }
+  return fetchAdminGuestCardJson(
+    `${process.env.REACT_APP_API_URL}/admin/reservations/${encodeURIComponent(
+      reservationId,
+    )}/guest-card/email/${encodeURIComponent(userId)}`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...getStoredActiveAuthHeaders(),
+        ...authHeaders(token),
+      },
+      body: JSON.stringify({
+        recipientEmail: String(recipientEmail || "").trim(),
+      }),
+      signal,
+    },
+    GUEST_CARD_EMAIL_TIMEOUT_MS,
+  )
+    .then(({ response, data }) =>
+      response.ok
+        ? data
+        : {
+            ...localizeApiError(data, "Could not send the Guest Card email."),
+            success: false,
+          },
+    )
+    .catch((error) =>
+      guestCardRequestFailure(error, "Could not send the Guest Card email."),
+    );
+};
+
 const buildHotelReviewAdminQuery = (filters = {}) => {
 	const params = new URLSearchParams();
 	Object.entries(filters || {}).forEach(([key, value]) => {

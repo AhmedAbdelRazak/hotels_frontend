@@ -1,0 +1,115 @@
+.guest-card-modal .ant-modal-content {
+  background: #f4f7fb;
+  border-radius: 14px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.guest-card-modal .ant-modal-header {
+  background: #4e5654;
+  border-bottom: 7px solid #ff861c;
+  margin: 0;
+  padding: 16px 22px 13px;
+}
+
+.guest-card-modal .ant-modal-title,
+.guest-card-modal-title {
+  color: #ffffff;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.guest-card-modal .ant-modal-close {
+  color: #ffffff;
+}
+
+.guest-card-modal .ant-modal-body {
+  max-height: calc(100vh - 102px);
+  overflow: auto;
+  padding: 16px;
+}
+
+.guest-card-modal-loading,
+.guest-card-modal-error {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  justify-content: center;
+  min-height: 360px;
+  text-align: center;
+}
+
+.guest-card-modal-body {
+  display: grid;
+  gap: 14px;
+}
+
+.guest-card-controls {
+  align-items: end;
+  background: #ffffff;
+  border: 1px solid #d8e1ec;
+  border-radius: 11px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  padding: 13px 15px;
+}
+
+.guest-card-email-field {
+  display: grid;
+  gap: 5px;
+}
+
+.guest-card-email-field label {
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.guest-card-email-field small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.guest-card-control-actions {
+  display: flex;
+  gap: 9px;
+}
+
+.guest-card-control-actions .ant-btn-primary {
+  background: #078754;
+  border-color: #078754;
+}
+
+.guest-card-preview-scroll {
+  background: #e7ebef;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.guest-card-preview-scroll .guest-card-page {
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+  margin: 0 auto;
+}
+
+@media (max-width: 760px) {
+  .guest-card-controls {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .guest-card-control-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .guest-card-control-actions {
+    grid-template-columns: 1fr;
+  }
+}
