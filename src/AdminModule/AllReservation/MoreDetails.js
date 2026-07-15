@@ -61,6 +61,7 @@ import {
 	mergeReservationPreservingRoomDetails,
 	selectActiveReservation,
 } from "./reservationRoomDetails";
+import { getPaymentBreakdownTotalDisplay } from "./paymentBreakdownDisplay";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
@@ -7650,6 +7651,14 @@ const ReservationDetail = ({
 		reservation?.supplierData,
 		totalAmountValue,
 	]);
+	const paymentBreakdownTotalDisplay = getPaymentBreakdownTotalDisplay({
+		grossTotal: totalAmountValue,
+		hasOtaPricing: otaPricingSummary.show,
+		adminPricing: reservation?.adminPricing,
+		otaFinancialSummary:
+			reservation?.ota_financial_summary || reservation?.otaFinancialSummary,
+		canViewPlatformProfit: isConfiguredSuperAdmin,
+	});
 
 	const roomTypeAccommodationPricing = useMemo(() => {
 		const grouped = new Map();
@@ -8432,8 +8441,13 @@ const ReservationDetail = ({
 											Total Amount
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{formatMoney(totalAmountValue)} SAR
+											{formatMoney(paymentBreakdownTotalDisplay.amount)} SAR
 										</div>
+										{paymentBreakdownTotalDisplay.usesPlatformAmount ? (
+											<div style={{ fontSize: "0.72rem", color: "#777" }}>
+												Net after OTA &amp; hotel expenses
+											</div>
+										) : null}
 									</div>
 									<div className='col-md-4'>
 										<div style={{ fontSize: "0.85rem", color: "#666" }}>
@@ -8442,6 +8456,11 @@ const ReservationDetail = ({
 										<div style={{ fontWeight: "bold" }}>
 											{formatMoney(breakdownDraftTotals.total)} SAR
 										</div>
+										{paymentBreakdownTotalDisplay.usesPlatformAmount ? (
+											<div style={{ fontSize: "0.72rem", color: "#777" }}>
+												Gross guest payments
+											</div>
+										) : null}
 									</div>
 									<div className='col-md-4'>
 										<div style={{ fontSize: "0.85rem", color: "#666" }}>
@@ -8450,6 +8469,11 @@ const ReservationDetail = ({
 										<div style={{ fontWeight: "bold", color: "#1b6b34" }}>
 											{formatMoney(remainingPaymentAmount)} SAR
 										</div>
+										{paymentBreakdownTotalDisplay.usesPlatformAmount ? (
+											<div style={{ fontSize: "0.72rem", color: "#777" }}>
+												Gross guest balance
+											</div>
+										) : null}
 									</div>
 								</div>
 							</PaymentBreakdownTotals>
