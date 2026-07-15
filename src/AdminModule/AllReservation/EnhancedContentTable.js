@@ -7,6 +7,7 @@ import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
+import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	applyOtaReservationSyncJob,
@@ -233,6 +234,7 @@ const EnhancedContentTable = ({
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
+	const preferNetAfterExpensesTotal = fromPage === "AllReservations";
 
 	const summarizePayment = (reservation) => {
 		const pd = reservation?.paypal_details || {};
@@ -293,6 +295,9 @@ const EnhancedContentTable = ({
 			const { customer_details = {}, hotelId = {} } = reservation;
 			const nights = getAdminReservationNights(reservation);
 			const totalAmount = Number(reservation.total_amount || 0);
+			const displayTotalAmount = getAdminReservationDisplayTotal(reservation, {
+				preferNetAfterExpenses: preferNetAfterExpensesTotal,
+			});
 			const pricePerDay = nights > 0 ? totalAmount / nights : totalAmount;
 			const paidAmount = getAdminPaidAmount(reservation);
 
@@ -325,10 +330,11 @@ const EnhancedContentTable = ({
 				payment_status_hint: paypalAware.hint || "",
 				reservation_nights: nights,
 				price_per_day: pricePerDay,
+				display_total_amount: displayTotalAmount,
 				paid_amount_display: paidAmount,
 			};
 		});
-	}, [data, capturedConfirmationNumbers]);
+	}, [data, capturedConfirmationNumbers, preferNetAfterExpensesTotal]);
 
 	// ------------------ Sorting logic ------------------
 	const [sortConfig, setSortConfig] = useState({
@@ -360,6 +366,7 @@ const EnhancedContentTable = ({
 
 			if (
 				sortField === "total_amount" ||
+				sortField === "display_total_amount" ||
 				sortField === "reservation_nights" ||
 				sortField === "price_per_day" ||
 				sortField === "paid_amount_display"
@@ -1105,7 +1112,7 @@ const EnhancedContentTable = ({
 							<th>{sortableHeader(tableLabels.checkOut, "checkout_date")}</th>
 							<th>{sortableHeader(tableLabels.nights, "reservation_nights")}</th>
 							<th>{sortableHeader(tableLabels.pricePerDay, "price_per_day")}</th>
-							<th>{sortableHeader(tableLabels.total, "total_amount")}</th>
+							<th>{sortableHeader(tableLabels.total, "display_total_amount")}</th>
 							<th>{sortableHeader(tableLabels.paidAmount, "paid_amount_display")}</th>
 							<th>{tableLabels.moreDetails}</th>
 						</tr>
@@ -1224,7 +1231,7 @@ const EnhancedContentTable = ({
 											{formatAdminMoney(reservation.price_per_day)} {tableLabels.sar}
 										</td>
 										<td className='amount-cell'>
-											{formatAdminMoney(reservation.total_amount)} {tableLabels.sar}
+											{formatAdminMoney(reservation.display_total_amount)} {tableLabels.sar}
 										</td>
 										<td className='amount-cell'>
 											{formatAdminMoney(reservation.paid_amount_display)} {tableLabels.sar}
