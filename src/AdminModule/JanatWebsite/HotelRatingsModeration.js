@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import {
   Alert,
   Button,
@@ -24,8 +24,11 @@ import {
 } from "@ant-design/icons";
 import {
   getAdminHotelReviews,
+  getAdminHotelReviewReservationDetails,
   updateAdminHotelReviewVisibility,
 } from "../apiAdmin";
+import MoreDetails from "../AllReservation/MoreDetails";
+import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 import {
   effectiveReviewVisibility,
   hasAuthoritativeReviewVisibility,
@@ -120,6 +123,10 @@ const TEXT = {
       "The change was saved, but the server did not return its effective visibility. Refreshing the review list.",
     conflictError:
       "The review changed before this update finished. The server's current visibility will be shown after refresh.",
+    reservationDetails: "Reservation details",
+    openReservationDetails: "Open reservation details for",
+    loadingReservationDetails: "Loading reservation details…",
+    reservationDetailsError: "Could not load reservation details.",
   },
   ar: {
     title: "تقييمات الفنادق",
@@ -199,6 +206,10 @@ const TEXT = {
       "تم حفظ التغيير، لكن الخادم لم يُرجع حالة الظهور الفعلية. جارٍ تحديث القائمة.",
     conflictError:
       "تغيّرت حالة المراجعة قبل اكتمال التحديث. ستظهر حالة الخادم الحالية بعد تحديث القائمة.",
+    reservationDetails: "تفاصيل الحجز",
+    openReservationDetails: "فتح تفاصيل الحجز لرقم التأكيد",
+    loadingReservationDetails: "جارٍ تحميل تفاصيل الحجز…",
+    reservationDetailsError: "تعذر تحميل تفاصيل الحجز.",
   },
 };
 
@@ -317,11 +328,57 @@ const summaryValue = (summary, keys, fallback = 0) => {
   return fallback;
 };
 
-const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
+export const reviewReservationId = (review = {}) => {
+  const reference = review?.reservationId || review?.reservation;
+  return cleanText(
+    typeof reference === "object" ? reference?._id || reference?.id : reference,
+  );
+};
+
+export const canOpenReviewReservationDetails = (account = {}) => {
+  if (!account || account.activeUser === false) return false;
+  if (isConfiguredSuperAdminUser(account)) return true;
+  const accessTo = Array.isArray(account.accessTo) ? account.accessTo : [];
+  const access = new Set(
+    accessTo.map((permission) => String(permission || "").trim()),
+  );
+  const roles = [
+    account.role,
+    ...(Array.isArray(account.roles) ? account.roles : []),
+  ].map(Number);
+  return (
+    roles.includes(1000) &&
+    access.has("JannatBookingWebsite") &&
+    (access.has("AllReservations") || access.has("HotelsReservations"))
+  );
+};
+
+export const mergeMatchingReservationDetails = (
+  currentReservation,
+  updatedReservation,
+) => {
+  const currentId = cleanText(currentReservation?._id || currentReservation?.id);
+  const updatedId = cleanText(updatedReservation?._id || updatedReservation?.id);
+  if (!currentId || currentId !== updatedId) return currentReservation;
+  return {
+    ...currentReservation,
+    ...updatedReservation,
+    hotelId: updatedReservation.hotelId || currentReservation.hotelId,
+    belongsTo: updatedReservation.belongsTo || currentReservation.belongsTo,
+  };
+};
+
+const HotelRatingsModeration = ({
+  chosenLanguage,
+  userId,
+  token,
+  currentUser,
+}) => {
   const isArabic = chosenLanguage === "Arabic";
   const L = TEXT[isArabic ? "ar" : "en"];
   const locale = isArabic ? "ar-SA" : "en-US";
   const requestSequence = useRef(0);
+  const detailsRequestSequence = useRef(0);
   const mounted = useRef(true);
   const visibleLoadRequests = useRef(new Set());
   const reviewOperationIds = useRef(new Set());
@@ -344,7 +401,14 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reviewOperations, setReviewOperations] = useState({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsReservationId, setDetailsReservationId] = useState("");
+  const [detailsReservation, setDetailsReservation] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
   const navigationLocked = hasPendingReviewOperations(reviewOperations);
+  const canViewReservationDetails =
+    canOpenReviewReservationDetails(currentUser);
 
   useEffect(() => {
     const activeLoadRequests = visibleLoadRequests.current;
@@ -354,11 +418,84 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      detailsRequestSequence.current += 1;
       activeLoadRequests.clear();
       activeReviewOperations.clear();
       activeReviewOperationPhases.clear();
     };
   }, []);
+
+  const loadReservationDetails = useCallback(
+    async (reservationId) => {
+      const normalizedId = cleanText(reservationId);
+      if (!normalizedId || !token || !canViewReservationDetails) return;
+
+      const requestId = detailsRequestSequence.current + 1;
+      detailsRequestSequence.current = requestId;
+      setDetailsReservationId(normalizedId);
+      setDetailsReservation(null);
+      setDetailsError("");
+      setDetailsLoading(true);
+
+      let response;
+      try {
+        response = await getAdminHotelReviewReservationDetails(
+          normalizedId,
+          userId,
+          token,
+        );
+      } catch (error) {
+        response = { error: error?.message || L.reservationDetailsError };
+      }
+
+      if (!mounted.current || requestId !== detailsRequestSequence.current) {
+        return;
+      }
+
+      setDetailsLoading(false);
+      if (response?._id) {
+        setDetailsReservation(response);
+        return;
+      }
+      setDetailsError(
+        response?.message || response?.error || L.reservationDetailsError,
+      );
+    },
+    [L.reservationDetailsError, canViewReservationDetails, token, userId],
+  );
+
+  const openReservationDetails = (review) => {
+    const reservationId = reviewReservationId(review);
+    if (!reservationId || !canViewReservationDetails) return;
+    setDetailsOpen(true);
+    loadReservationDetails(reservationId);
+  };
+
+  const closeReservationDetails = () => {
+    detailsRequestSequence.current += 1;
+    setDetailsOpen(false);
+    setDetailsReservationId("");
+    setDetailsReservation(null);
+    setDetailsLoading(false);
+    setDetailsError("");
+  };
+
+  const handleReservationUpdated = (updatedReservation) => {
+    if (!updatedReservation) return;
+    setDetailsReservation((current) =>
+      mergeMatchingReservationDetails(current, updatedReservation),
+    );
+  };
+
+  useEffect(() => {
+    if (canViewReservationDetails) return;
+    detailsRequestSequence.current += 1;
+    setDetailsOpen(false);
+    setDetailsReservationId("");
+    setDetailsReservation(null);
+    setDetailsLoading(false);
+    setDetailsError("");
+  }, [canViewReservationDetails]);
 
   const loadReviews = useCallback(
     async ({ silent = false, notifyError = true } = {}) => {
@@ -623,6 +760,7 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
 
   return (
     <ReviewsSurface dir={isArabic ? "rtl" : "ltr"}>
+      <ReservationDetailsModalGlobalStyle />
       {modalContextHolder}
       <ReviewsHeader>
         <div>
@@ -820,6 +958,11 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
                     Math.max(numberValue(review?.rating), 0),
                     5,
                   );
+                  const confirmationNumber = reviewConfirmation(review);
+                  const reservationId = reviewReservationId(review);
+                  const detailsAvailable = Boolean(
+                    reservationId && canViewReservationDetails,
+                  );
                   return (
                     <tr key={id}>
                       <td data-label={L.hotel}>{reviewHotel(review)}</td>
@@ -834,8 +977,29 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
                           {verified ? L.verified : L.unverified}
                         </VerificationBadge>
                       </td>
-                      <td data-label={L.confirmation} dir="ltr">
-                        {reviewConfirmation(review)}
+                      <td data-label={L.confirmation}>
+                        {detailsAvailable ? (
+                          <ConfirmationButton
+                            type="button"
+                            title={`${L.openReservationDetails} ${confirmationNumber}`}
+                            aria-label={`${L.openReservationDetails} ${confirmationNumber}`}
+                            aria-busy={
+                              detailsLoading &&
+                              detailsReservationId === reservationId
+                            }
+                            disabled={
+                              detailsLoading &&
+                              detailsReservationId === reservationId
+                            }
+                            onClick={() => openReservationDetails(review)}
+                          >
+                            <bdi dir="ltr">{confirmationNumber}</bdi>
+                          </ConfirmationButton>
+                        ) : (
+                          <ConfirmationText>
+                            <bdi dir="ltr">{confirmationNumber}</bdi>
+                          </ConfirmationText>
+                        )}
                       </td>
                       <td data-label={L.room}>
                         {reviewRoom(review) || L.noRoom}
@@ -1026,17 +1190,212 @@ const HotelRatingsModeration = ({ chosenLanguage, userId, token }) => {
           {L.next}
         </Button>
       </PaginationRow>
+
+      <Modal
+        open={detailsOpen}
+        onCancel={closeReservationDetails}
+        title={L.reservationDetails}
+        width="min(98vw, 1720px)"
+        centered
+        className="admin-reservation-details-modal reservation-details-modal"
+        rootClassName="admin-reservation-details-layer"
+        wrapClassName="admin-reservation-details-wrap"
+        footer={null}
+        destroyOnClose
+        getContainer={() => document.body}
+        zIndex={16000}
+        styles={{
+          mask: { zIndex: 15999 },
+          header: { display: "none" },
+          content: { padding: "6px 8px 8px" },
+          body: {
+            maxHeight: "92vh",
+            overflowY: "auto",
+            padding: "0",
+          },
+        }}
+      >
+        {detailsLoading ? (
+          <ReservationDetailsLoading aria-live="polite">
+            <Spin size="large" />
+            <span className="loading-label">{L.loadingReservationDetails}</span>
+          </ReservationDetailsLoading>
+        ) : detailsReservation ? (
+          <MoreDetails
+            key={detailsReservation._id}
+            selectedReservation={detailsReservation}
+            hotelDetails={detailsReservation.hotelId}
+            reservation={detailsReservation}
+            setReservation={handleReservationUpdated}
+            onReservationUpdated={handleReservationUpdated}
+          />
+        ) : (
+          <ReservationDetailsError role="alert">
+            <strong>{detailsError || L.reservationDetailsError}</strong>
+            {detailsReservationId ? (
+              <Button
+                type="primary"
+                onClick={() => loadReservationDetails(detailsReservationId)}
+              >
+                {L.retry}
+              </Button>
+            ) : null}
+          </ReservationDetailsError>
+        )}
+      </Modal>
     </ReviewsSurface>
   );
 };
 
 export default HotelRatingsModeration;
 
+const ReservationDetailsModalGlobalStyle = createGlobalStyle`
+  .admin-reservation-details-layer .ant-modal-mask {
+    background: rgba(15, 23, 42, 0.64) !important;
+    backdrop-filter: blur(2px);
+    z-index: 15999 !important;
+  }
+
+  .admin-reservation-details-layer .ant-modal-wrap,
+  .admin-reservation-details-wrap,
+  .admin-reservation-details-layer .ant-modal {
+    z-index: 16000 !important;
+  }
+
+  .admin-reservation-details-layer .ant-modal-content {
+    position: relative;
+    z-index: 16001 !important;
+  }
+
+  .admin-reservation-details-modal {
+    max-width: min(98vw, 1720px);
+  }
+
+  .admin-reservation-details-modal .ant-modal-close {
+    align-items: center;
+    background: #7f1d1d;
+    border: 1px solid #991b1b;
+    border-radius: 999px;
+    color: #ffffff;
+    display: inline-flex;
+    height: 30px;
+    justify-content: center;
+    right: 8px;
+    top: 6px;
+    width: 30px;
+    z-index: 6;
+  }
+
+  .admin-reservation-details-modal .ant-modal-close:hover {
+    background: #991b1b;
+    border-color: #b91c1c;
+  }
+
+  .admin-reservation-details-modal .ant-modal-close-x,
+  .admin-reservation-details-modal .ant-modal-close-icon {
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .admin-reservation-details-modal .ant-modal-body {
+    padding-top: 0 !important;
+  }
+
+  @media (max-width: 900px) {
+    .admin-reservation-details-modal {
+      max-width: calc(100vw - 12px);
+      width: calc(100vw - 12px) !important;
+    }
+
+    .admin-reservation-details-modal .ant-modal-content {
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+    }
+
+    .admin-reservation-details-modal .ant-modal-body {
+      max-height: 90vh !important;
+    }
+  }
+`;
+
 const ReviewsSurface = styled.section`
   display: grid;
   gap: 16px;
   min-width: 0;
   color: #173a5f;
+`;
+
+const ConfirmationButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #0958d9;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  line-height: inherit;
+  text-align: start;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+
+  bdi {
+    overflow-wrap: anywhere;
+  }
+
+  &:hover:not(:disabled) {
+    color: #003eb3;
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(22, 119, 255, 0.3);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    color: #60758a;
+    cursor: wait;
+    text-decoration: none;
+  }
+`;
+
+const ConfirmationText = styled.span`
+  display: inline-block;
+  max-width: 100%;
+
+  bdi {
+    overflow-wrap: anywhere;
+  }
+`;
+
+const ReservationDetailsLoading = styled.div`
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: min(68vh, 620px);
+
+  .loading-label {
+    color: #526b82;
+    font-weight: 800;
+  }
+`;
+
+const ReservationDetailsError = styled.div`
+  display: grid;
+  min-height: 240px;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  color: #7f1d1d;
+  text-align: center;
 `;
 
 const ReviewsHeader = styled.header`
