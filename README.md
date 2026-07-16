@@ -2,6 +2,9 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+The durable route, role, module, and safe-change reference is
+[`application_structure_frontend.txt`](application_structure_frontend.txt).
+
 ## Operational Notes
 
 ### OTA Reservation Sync
@@ -23,8 +26,6 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
   - `src/AdminModule/AllReservation/EditReservationMain.js`
   - `src/AdminModule/JannatTools/EditPricingModal.js`
   - `src/AdminModule/OtaReservations/OtaReservationsMain.js`
-- Backend runbook:
-  `../hotels_backend/docs/ota-reservation-sync-expedia-2026-06-15.md`
 
 ### Admin Customer-Service AI Monitor
 
@@ -34,8 +35,6 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 - The monitor is intentionally compact: responder, average/max/last reply time,
   current unanswered wait, answered guest turns, duplicate AI turns, and
   per-message delay badges.
-- Backend runbook:
-  `../hotels_backend/docs/chatbot-admin-monitor-and-latency-2026-06-23.md`
 
 ## Available Scripts
 

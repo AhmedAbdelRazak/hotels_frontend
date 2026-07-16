@@ -1003,12 +1003,12 @@ Future TODO Backlog - Added 2026-05-26
   - Owns public website routes, hotel browsing, checkout/payment flows, and public B2C chat widget.
 - New public-frontend documentation:
   - D:\JannatBooking\jannatbooking_frontend\application_structure_public_frontend.txt
-- New SSR planning documentation:
-  - D:\JannatBooking\jannatbooking_ssr\application_structure_ssr.txt
+- Current SSR documentation:
+  - D:\JannatBooking\jannatbooking_ssr\JANNATBOOKING_SSR_REFERENCE.txt
 - Important migration rule:
   - hotels_frontend remains the PMS/admin/hotel-management app.
   - jannatbooking_frontend remains the current public production baseline.
-  - jannatbooking_ssr should be built as a sibling public SSR app and validated side by side before any traffic switch.
+  - jannatbooking_ssr is the sibling public SSR app; keep PMS/admin concerns isolated from it.
 - Validation run after this update:
   - npm.cmd run build in hotels_frontend compiled successfully.
   - npm.cmd run build in jannatbooking_frontend compiled successfully with existing warnings only:
