@@ -1,5 +1,6 @@
 import {
   mergeReservationPreservingRoomDetails,
+  normalizeReservationReferenceId,
   selectActiveReservation,
 } from "./reservationRoomDetails";
 
@@ -11,6 +12,13 @@ const details = [
   { _id: ROOM_101, room_number: "101" },
   { _id: ROOM_305, room_number: "305" },
 ];
+
+test("normalizes populated hotel references before room lookups", () => {
+  expect(normalizeReservationReferenceId({ _id: "hotel-1" })).toBe("hotel-1");
+  expect(normalizeReservationReferenceId({ id: "hotel-2" })).toBe("hotel-2");
+  expect(normalizeReservationReferenceId("hotel-3")).toBe("hotel-3");
+  expect(normalizeReservationReferenceId(null)).toBe("");
+});
 
 test("keeps room details when a same-reservation update omits assignments", () => {
   const previous = { _id: "reservation-1", roomDetails: details };

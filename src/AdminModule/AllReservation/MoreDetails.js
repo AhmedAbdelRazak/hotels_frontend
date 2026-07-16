@@ -59,6 +59,7 @@ import PaymentTrigger from "./PaymentTrigger";
 import VCCPayment from "./VCCPayment";
 import {
 	mergeReservationPreservingRoomDetails,
+	normalizeReservationReferenceId as resolveId,
 	selectActiveReservation,
 } from "./reservationRoomDetails";
 import { getPaymentBreakdownTotalDisplay } from "./paymentBreakdownDisplay";
@@ -4747,14 +4748,6 @@ const splitPhoneForModal = (raw) => {
 	return { code: "", phone: cleaned };
 };
 
-const resolveId = (value) => {
-	if (!value) return "";
-	if (typeof value === "string") return value;
-	if (typeof value === "number") return String(value);
-	if (typeof value === "object") return value._id || value.id || "";
-	return "";
-};
-
 const paymentBreakdownFields = [
 	{
 		key: "paid_online_via_link",
@@ -7207,7 +7200,7 @@ const ReservationDetail = ({
 	};
 
 	const roomIdValue = reservation?.roomId;
-	const hotelIdValue = reservation?.hotelId;
+	const hotelIdValue = resolveId(reservation?.hotelId);
 
 	const getHotelRoomsDetails = useCallback(() => {
 		if (!hotelIdValue || !user?._id) return;
