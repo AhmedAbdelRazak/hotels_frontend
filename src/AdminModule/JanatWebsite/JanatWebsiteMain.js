@@ -552,6 +552,7 @@ const JanatWebsiteMain = ({ chosenLanguage }) => {
 										chosenLanguage={chosenLanguage}
 										userId={getUser?._id || user?._id}
 										token={token}
+										currentUser={getUser}
 									/>
 								)}
 							</TabPanel>

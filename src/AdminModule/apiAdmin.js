@@ -768,6 +768,51 @@ export const getAdminHotelReviews = (userId, token, filters = {}) => {
 		}));
 };
 
+export const getAdminHotelReviewReservationDetails = (
+	reservationId,
+	userId,
+	token,
+) => {
+	if (!reservationId || !userId || !token) {
+		return Promise.resolve({
+			success: false,
+			error: "Reservation, employee, and authentication details are required.",
+		});
+	}
+	return fetchHotelReviewAdminJson(
+		`${process.env.REACT_APP_API_URL}/admin/hotel-reviews/reservation-details/${encodeURIComponent(
+			reservationId,
+		)}/${encodeURIComponent(userId)}?view=details`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				...getStoredActiveAuthHeaders(),
+				...authHeaders(token),
+			},
+			cache: "no-store",
+		},
+	)
+		.then(({ response, data }) =>
+			response.ok
+				? data
+				: {
+						...localizeApiError(
+							data,
+							"Could not load reservation details.",
+						),
+						success: false,
+					},
+		)
+		.catch((error) => ({
+			success: false,
+			error: hotelReviewAdminRequestError(
+				error,
+				"Could not load reservation details.",
+			),
+		}));
+};
+
 const updateAdminHotelReviewModeration = (
 	reviewId,
 	userId,

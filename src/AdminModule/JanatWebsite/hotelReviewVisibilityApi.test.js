@@ -1,4 +1,7 @@
-import { updateAdminHotelReviewVisibility } from "../apiAdmin";
+import {
+	getAdminHotelReviewReservationDetails,
+	updateAdminHotelReviewVisibility,
+} from "../apiAdmin";
 
 jest.mock("axios", () => ({}));
 
@@ -45,6 +48,27 @@ describe("admin hotel review visibility API", () => {
 
 		expect(response.success).toBe(false);
 		expect(global.fetch).not.toHaveBeenCalled();
+	});
+
+	it("loads review-linked details through the protected admin route", async () => {
+		global.fetch.mockResolvedValueOnce({
+			ok: true,
+			json: jest.fn().mockResolvedValue({ _id: "reservation-1" }),
+		});
+
+		const response = await getAdminHotelReviewReservationDetails(
+			"reservation/1",
+			"admin 1",
+			"token-1",
+		);
+
+		expect(response).toEqual({ _id: "reservation-1" });
+		const [url, options] = global.fetch.mock.calls[0];
+		expect(url).toBe(
+			"https://api.example.test/api/admin/hotel-reviews/reservation-details/reservation%2F1/admin%201?view=details",
+		);
+		expect(options.method).toBe("GET");
+		expect(options.headers.Authorization).toBe("Bearer token-1");
 	});
 
 	it("preserves a server conflict code so the UI can refresh stale state", async () => {
@@ -97,6 +121,39 @@ describe("admin hotel review visibility API", () => {
 			expect(response).toEqual({
 				success: false,
 				error: "Could not update the review visibility.",
+			});
+		} finally {
+			jest.useRealTimers();
+		}
+	});
+
+	it("aborts stalled reservation details instead of leaving the modal loading", async () => {
+		jest.useFakeTimers();
+		try {
+			let requestSignal;
+			global.fetch.mockImplementationOnce((_url, options) => {
+				requestSignal = options.signal;
+				return Promise.resolve({
+					ok: true,
+					json: jest.fn(() => new Promise(() => {})),
+				});
+			});
+
+			const request = getAdminHotelReviewReservationDetails(
+				"reservation-1",
+				"admin-1",
+				"token-1",
+			);
+			await Promise.resolve();
+			expect(requestSignal.aborted).toBe(false);
+
+			jest.advanceTimersByTime(15_000);
+			const response = await request;
+
+			expect(requestSignal.aborted).toBe(true);
+			expect(response).toEqual({
+				success: false,
+				error: "Could not load reservation details.",
 			});
 		} finally {
 			jest.useRealTimers();
