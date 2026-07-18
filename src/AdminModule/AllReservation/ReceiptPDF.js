@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import UpdatePDF from "./UpdatePDF"; // Unified editing modal
 import { updateSingleReservation } from "../apiAdmin";
+import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
 
 const dateTimeValue = (value) => {
 	const time = new Date(value || 0).getTime();
@@ -301,7 +302,14 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	);
 
 	return (
-		<ReceiptPDFWrapper ref={ref}>
+		<>
+			<OfficialReceipt
+				ref={ref}
+				reservation={localResv}
+				hotelDetails={hotelDetails}
+				onEdit={openUpdateModal}
+			/>
+			<ReceiptPDFWrapper style={{ display: "none" }} aria-hidden='true'>
 			{/* Header */}
 			<div className='header1'>
 				<div className='left'></div>
@@ -540,7 +548,8 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				onCancel={() => setUpdateOpen(false)}
 				onSave={handleSave}
 			/>
-		</ReceiptPDFWrapper>
+			</ReceiptPDFWrapper>
+		</>
 	);
 });
 
