@@ -46,8 +46,8 @@ import { toast } from "react-toastify";
 import { EditReservationMain } from "./EditWholeReservation/EditReservationMain";
 import ReceiptPDF from "../NewReservation/ReceiptPDF";
 import ReceiptPDFB2B from "../NewReservation/ReceiptPDFB2B";
+import { captureReceiptCanvas } from "../../components/OfficialReceipt/captureReceiptCanvas";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import "jspdf-autotable";
 import { relocationArray1 } from "./ReservationAssets";
 
@@ -6643,7 +6643,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	);
 
 	const downloadPDF = () => {
-		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
+		captureReceiptCanvas(pdfRef.current).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
 
 			const pdf = new jsPDF({

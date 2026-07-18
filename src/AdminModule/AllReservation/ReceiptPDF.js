@@ -3,6 +3,7 @@ import styled from "styled-components";
 import UpdatePDF from "./UpdatePDF"; // Unified editing modal
 import { updateSingleReservation } from "../apiAdmin";
 import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
+import ReceiptViewport from "../../components/OfficialReceipt/ReceiptViewport";
 
 const dateTimeValue = (value) => {
 	const time = new Date(value || 0).getTime();
@@ -303,12 +304,14 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	return (
 		<>
-			<OfficialReceipt
-				ref={ref}
-				reservation={localResv}
-				hotelDetails={hotelDetails}
-				onEdit={openUpdateModal}
-			/>
+			<ReceiptViewport>
+				<OfficialReceipt
+					ref={ref}
+					reservation={localResv}
+					hotelDetails={hotelDetails}
+					onEdit={openUpdateModal}
+				/>
+			</ReceiptViewport>
 			<ReceiptPDFWrapper style={{ display: "none" }} aria-hidden='true'>
 			{/* Header */}
 			<div className='header1'>

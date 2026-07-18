@@ -53,6 +53,7 @@ import { toast } from "react-toastify";
 import EditReservationMain from "./EditReservationMain";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
+import { captureReceiptCanvas } from "../../components/OfficialReceipt/captureReceiptCanvas";
 import AlDawleya from "./AlDawleya";
 import GuestCardModal from "./GuestCard/GuestCardModal";
 import PaymentTrigger from "./PaymentTrigger";
@@ -7742,7 +7743,7 @@ const ReservationDetail = ({
 	);
 
 	const downloadPDF = () => {
-		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
+		captureReceiptCanvas(pdfRef.current).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
 
 			const pdf = new jsPDF({

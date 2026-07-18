@@ -3,6 +3,7 @@ import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
 import { updateSingleReservation } from "../apiAdmin";
 import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
+import ReceiptViewport from "../../components/OfficialReceipt/ReceiptViewport";
 
 const PDF_CHILD_MODAL_Z = 60010;
 const pdfChildModalProps = {
@@ -216,13 +217,15 @@ const ReceiptPDF = forwardRef(
 
 		return (
 			<>
-				<OfficialReceipt
-					ref={ref}
-					reservation={receiptReservation}
-					hotelDetails={hotelDetails}
-					onSupplierNameClick={showModal}
-					onSupplierBookingNoClick={showBookingNoModal}
-				/>
+				<ReceiptViewport>
+					<OfficialReceipt
+						ref={ref}
+						reservation={receiptReservation}
+						hotelDetails={hotelDetails}
+						onSupplierNameClick={showModal}
+						onSupplierBookingNoClick={showBookingNoModal}
+					/>
+				</ReceiptViewport>
 				<ReceiptPDFWrapper style={{ display: "none" }} aria-hidden='true'>
 				{/* Header */}
 				<div className='header1'>
