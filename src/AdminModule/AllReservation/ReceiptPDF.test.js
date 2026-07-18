@@ -69,9 +69,18 @@ beforeAll(() => {
 
 afterEach(() => {
 	jest.clearAllMocks();
+	document.querySelector("[data-test-hostile-receipt-style]")?.remove();
 });
 
 test("the redesigned receipt keeps the unified edit modal and saves passport and supplier fields", async () => {
+	const hostileStyles = document.createElement("style");
+	hostileStyles.dataset.testHostileReceiptStyle = "true";
+	hostileStyles.textContent = `
+		.stay-table th { color: white !important; background: white !important; }
+		.rooms-table th { color: white !important; background: #082e55 !important; }
+	`;
+	document.head.appendChild(hostileStyles);
+
 	updateSingleReservation.mockResolvedValue({
 		reservation: {
 			...reservation,
@@ -81,6 +90,20 @@ test("the redesigned receipt keeps the unified edit modal and saves passport and
 	});
 
 	render(<ReceiptPDF reservation={reservation} hotelDetails={hotelDetails} />);
+
+	const checkinHeader = screen.getByText("Check-in Date").closest("th");
+	const roomTypeHeader = screen
+		.getAllByText("Room Type")
+		.find((node) => node.closest(".rooms-table"))
+		.closest("th");
+	expect(window.getComputedStyle(checkinHeader).color).toBe("rgb(16, 16, 16)");
+	expect(window.getComputedStyle(checkinHeader).backgroundColor).toBe(
+		"rgb(255, 255, 255)",
+	);
+	expect(window.getComputedStyle(roomTypeHeader).color).toBe("rgb(16, 16, 16)");
+	expect(window.getComputedStyle(roomTypeHeader).backgroundColor).not.toBe(
+		"rgb(8, 46, 85)",
+	);
 
 	fireEvent.click(screen.getByRole("button", { name: "Ahmed Receipt Test" }));
 	expect(await screen.findByText("Update Reservation (Receipt Fields)")).toBeTruthy();

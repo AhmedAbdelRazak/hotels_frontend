@@ -15,8 +15,8 @@ import {
 import { toast } from "react-toastify";
 import { EditReservationMain } from "./EditWholeReservation/EditReservationMain";
 import ReceiptPDF from "../HotelModule/NewReservation/ReceiptPDF"; // Adjust the path as needed
+import { captureReceiptCanvas } from "../components/OfficialReceipt/captureReceiptCanvas";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import "jspdf-autotable";
 
 const Wrapper = styled.div`
@@ -269,7 +269,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, []);
 
 	const downloadPDF = () => {
-		html2canvas(pdfRef.current, { scale: 1 }).then((canvas) => {
+		captureReceiptCanvas(pdfRef.current).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
 
 			// Let's create a PDF and add our image into it

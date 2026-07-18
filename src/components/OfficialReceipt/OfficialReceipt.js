@@ -602,7 +602,20 @@ const ReceiptCanvas = styled.article`
   }
   table {
     width: 100%;
+    margin: 0;
+    color: #101010;
+    background: transparent;
     border-collapse: collapse;
+    border-spacing: 0;
+    font-family: inherit;
+    line-height: 1.2;
+    text-transform: none;
+  }
+  table thead,
+  table tbody,
+  table tr {
+    color: #101010;
+    background: transparent;
   }
   .stay-table {
     margin-top: 16px;
@@ -610,13 +623,20 @@ const ReceiptCanvas = styled.article`
   }
   .stay-table th,
   .stay-table td {
-    border: 2px solid #1a1a1a;
+    border: 2px solid #1a1a1a !important;
     padding: 7px 8px;
+    color: #101010 !important;
+    background: #fff !important;
+    font-family: inherit !important;
+    font-size: inherit;
+    line-height: 1.2;
     text-align: center;
+    text-transform: none;
     vertical-align: middle;
   }
   .stay-table th {
-    background: #fff;
+    background: #fff !important;
+    font-weight: 700;
   }
   .stay-table thead th:first-child,
   .stay-table tbody th:first-child {
@@ -636,11 +656,11 @@ const ReceiptCanvas = styled.article`
     font-weight: 800;
   }
   .status-positive {
-    background: var(--receipt-soft-green);
+    background: var(--receipt-soft-green) !important;
     box-shadow: inset 0 -4px 0 #63c77f;
   }
   .status-neutral {
-    background: #fff2ce;
+    background: #fff2ce !important;
   }
   .status-positive span,
   .status-positive strong,
@@ -663,11 +683,18 @@ const ReceiptCanvas = styled.article`
   .rooms-table th,
   .rooms-table td {
     padding: 8px;
+    color: #101010 !important;
+    font-family: inherit !important;
+    line-height: 1.2;
     text-align: center;
+    text-transform: none;
     vertical-align: middle;
   }
   .rooms-table th {
+    border: 0 !important;
+    background: transparent !important;
     font-size: 13px;
+    font-weight: 700;
   }
   .rooms-table th:first-child {
     width: 17%;
@@ -680,8 +707,8 @@ const ReceiptCanvas = styled.article`
     width: 18%;
   }
   .rooms-table td {
-    background: var(--receipt-soft-gray);
-    border: 7px solid var(--receipt-paper);
+    background: var(--receipt-soft-gray) !important;
+    border: 7px solid var(--receipt-paper) !important;
     overflow-wrap: anywhere;
   }
   .rooms-table td span,
