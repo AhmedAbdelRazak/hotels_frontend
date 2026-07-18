@@ -2,6 +2,7 @@ import { Input, Modal } from "antd";
 import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
 import { updateSingleReservation } from "../apiAdmin";
+import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
 
 const PDF_CHILD_MODAL_Z = 60010;
 const pdfChildModalProps = {
@@ -204,8 +205,25 @@ const ReceiptPDF = forwardRef(
 			setIsBookingNoModalVisible(false);
 		};
 
+		const receiptReservation = {
+			...reservation,
+			supplierData: {
+				...(reservation?.supplierData || {}),
+				supplierName,
+				suppliedBookingNo: supplierBookingNo,
+			},
+		};
+
 		return (
-			<ReceiptPDFWrapper ref={ref}>
+			<>
+				<OfficialReceipt
+					ref={ref}
+					reservation={receiptReservation}
+					hotelDetails={hotelDetails}
+					onSupplierNameClick={showModal}
+					onSupplierBookingNoClick={showBookingNoModal}
+				/>
+				<ReceiptPDFWrapper style={{ display: "none" }} aria-hidden='true'>
 				{/* Header */}
 				<div className='header1'>
 					<div className='left'></div>
@@ -466,7 +484,8 @@ const ReceiptPDF = forwardRef(
 						placeholder='Enter Supplier Booking No'
 					/>
 				</Modal>
-			</ReceiptPDFWrapper>
+				</ReceiptPDFWrapper>
+			</>
 		);
 	}
 );
