@@ -176,6 +176,28 @@ const activityTone = {
 
 const noop = () => {};
 
+export const RESERVATION_SUMMARY_COLUMN_WIDTHS = Object.freeze({
+	index: 44,
+	activity: 102,
+	confirmation: 116,
+	hotel: 118,
+	guest: 134,
+	checkinDate: 108,
+	checkoutDate: 108,
+	createdAt: 112,
+	status: 196,
+	rooms: 56,
+	guests: 58,
+	nights: 56,
+	amount: 180,
+	source: 104,
+	actions: 118,
+});
+
+export const RESERVATION_SUMMARY_TABLE_WIDTH = Object.values(
+	RESERVATION_SUMMARY_COLUMN_WIDTHS
+).reduce((total, width) => total + width, 0);
+
 const statusTone = (status = "") => {
 	const normalized = String(status || "")
 		.toLowerCase()
@@ -379,9 +401,8 @@ const ReservationsSummary = ({
 			{
 				title: L.index,
 				key: "index",
-				width: 58,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.index,
 				align: "center",
-				fixed: "left",
 				render: (_value, row, index) => (
 					<NumericText data-testid={`reservation-index-${row.id}`}>
 						{(tablePage - 1) * tablePageSize + index + 1}
@@ -392,7 +413,8 @@ const ReservationsSummary = ({
 				title: L.activity,
 				dataIndex: "activityTypes",
 				key: "activity",
-				width: 126,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.activity,
+				align: "center",
 				render: (types = []) => (
 					<ActivityTags>
 						{types.map((type) => (
@@ -407,14 +429,15 @@ const ReservationsSummary = ({
 				title: L.confirmation,
 				dataIndex: "confirmationNumber",
 				key: "confirmationNumber",
-				width: 142,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.confirmation,
+				align: "center",
 				render: (value) => <Confirmation dir='ltr'>{value || "N/A"}</Confirmation>,
 			},
 			{
 				title: L.hotel,
 				dataIndex: "hotel",
 				key: "hotel",
-				width: 175,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.hotel,
 				render: (hotel = {}) => (
 					<Tooltip title={isArabic && hotel.nameArabic ? hotel.nameArabic : hotel.name}>
 						<HotelName>{isArabic && hotel.nameArabic ? hotel.nameArabic : hotel.name}</HotelName>
@@ -425,7 +448,7 @@ const ReservationsSummary = ({
 				title: L.guest,
 				dataIndex: "guestName",
 				key: "guestName",
-				width: 170,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.guest,
 				render: (value) => (
 					<Tooltip title={value}>
 						<CellText>{value}</CellText>
@@ -436,28 +459,32 @@ const ReservationsSummary = ({
 				title: L.checkinDate,
 				dataIndex: "checkinDate",
 				key: "checkinDate",
-				width: 125,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.checkinDate,
+				align: "center",
 				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.checkoutDate,
 				dataIndex: "checkoutDate",
 				key: "checkoutDate",
-				width: 125,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.checkoutDate,
+				align: "center",
 				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.createdAt,
 				dataIndex: "createdAt",
 				key: "createdAt",
-				width: 125,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.createdAt,
+				align: "center",
 				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.status,
 				dataIndex: "status",
 				key: "status",
-				width: 160,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.status,
+				align: "center",
 				render: (value) => (
 					<StatusPill $tone={statusTone(value)}>
 						{localizedStatus(value, isArabic)}
@@ -468,7 +495,7 @@ const ReservationsSummary = ({
 				title: L.rooms,
 				dataIndex: "rooms",
 				key: "rooms",
-				width: 85,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.rooms,
 				align: "center",
 				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
 			},
@@ -476,7 +503,7 @@ const ReservationsSummary = ({
 				title: L.guests,
 				dataIndex: "guests",
 				key: "guests",
-				width: 85,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.guests,
 				align: "center",
 				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
 			},
@@ -484,7 +511,7 @@ const ReservationsSummary = ({
 				title: L.nights,
 				dataIndex: "nights",
 				key: "nights",
-				width: 82,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.nights,
 				align: "center",
 				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
 			},
@@ -492,7 +519,7 @@ const ReservationsSummary = ({
 				title: L.amount,
 				dataIndex: "totalAmount",
 				key: "totalAmount",
-				width: 220,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.amount,
 				align: "end",
 				render: (value, row) => {
 					const quality = row.amountQuality?.status || "unverified";
@@ -524,14 +551,19 @@ const ReservationsSummary = ({
 				title: L.source,
 				dataIndex: "bookingSource",
 				key: "bookingSource",
-				width: 140,
-				render: (value) => <CellText>{value}</CellText>,
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.source,
+				align: "center",
+				render: (value) => (
+					<Tooltip title={value}>
+						<CellText>{value}</CellText>
+					</Tooltip>
+				),
 			},
 			{
 				title: L.actions,
 				key: "actions",
-				width: 126,
-				fixed: "right",
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.actions,
+				align: "center",
 				render: (_value, row) => (
 					<DetailsButton
 						type='button'
@@ -771,7 +803,8 @@ const ReservationsSummary = ({
 					columns={columns}
 					dataSource={reservations}
 					loading={{ spinning: loading, tip: L.tableTitle }}
-					scroll={{ x: 1940 }}
+					scroll={{ x: RESERVATION_SUMMARY_TABLE_WIDTH }}
+					tableLayout='fixed'
 					sticky
 					size='middle'
 					pagination={{
@@ -1243,16 +1276,24 @@ const TablePanel = styled.div`
 	}
 
 	.ant-table-thead > tr > th {
+		padding: 9px 7px !important;
 		border-bottom-color: #21567e !important;
 		background: linear-gradient(180deg, #1b6fa5 0%, #09223a 100%) !important;
 		color: #fff !important;
 		font-size: 0.81rem;
 		font-weight: 900;
+		text-overflow: clip !important;
+		white-space: nowrap !important;
+
+		.ant-table-column-title {
+			overflow: visible;
+			text-overflow: clip;
+			white-space: nowrap;
+		}
 	}
 
 	.ant-table-tbody > tr > td {
-		padding-top: 10px;
-		padding-bottom: 10px;
+		padding: 9px 7px;
 		font-size: 0.8rem;
 	}
 
@@ -1325,6 +1366,7 @@ const UniqueCount = styled.span`
 const ActivityTags = styled.div`
 	display: flex;
 	flex-wrap: wrap;
+	justify-content: center;
 	gap: 4px;
 
 	.ant-tag {
@@ -1342,6 +1384,7 @@ const Confirmation = styled.strong`
 	color: #164f7a;
 	font-weight: 950;
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 `;
 
 const HotelName = styled.strong`
@@ -1394,6 +1437,8 @@ const AmountBreakdown = styled.small`
 	font-weight: 750;
 	font-variant-numeric: tabular-nums;
 	direction: ltr;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 `;
 
@@ -1428,7 +1473,7 @@ const StatusPill = styled.span`
 	gap: 0.34rem;
 	min-height: 27px;
 	min-width: 82px;
-	max-width: 148px;
+	max-width: none;
 	padding: 0.22rem 0.68rem;
 	border: 1px solid
 		${(props) =>
@@ -1472,12 +1517,10 @@ const StatusPill = styled.span`
 			      : props.$tone === "purple"
 			        ? "#5d1d6e"
 			        : "#263452"};
-	font-size: 0.72rem;
+	font-size: 0.71rem;
 	font-weight: 950;
 	line-height: 1.25;
 	box-shadow: inset 0 1px rgba(255, 255, 255, 0.28), 0 4px 10px rgba(40, 16, 52, 0.08);
-	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 
 	&::before {

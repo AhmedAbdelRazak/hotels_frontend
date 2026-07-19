@@ -5,7 +5,10 @@ import {
 	getAdminReservationById,
 	getAdminReservationExecutiveSummary,
 } from "../apiAdmin";
-import ReservationsSummary from "./ReservationsSummary";
+import ReservationsSummary, {
+	RESERVATION_SUMMARY_COLUMN_WIDTHS,
+	RESERVATION_SUMMARY_TABLE_WIDTH,
+} from "./ReservationsSummary";
 
 jest.mock("../../auth", () => ({
 	isAuthenticated: jest.fn(),
@@ -115,9 +118,18 @@ afterEach(() => {
 	jest.clearAllMocks();
 });
 
+test("uses a compact table width budget without fixed overlay columns", () => {
+	expect(RESERVATION_SUMMARY_TABLE_WIDTH).toBe(1610);
+	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.status).toBeGreaterThanOrEqual(196);
+	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.confirmation).toBeGreaterThanOrEqual(116);
+	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.hotel).toBeLessThan(120);
+});
+
 test("loads one daily summary, keeps its table visible, and delegates URL filter changes", async () => {
 	const onDayChange = jest.fn();
-	render(<ReservationsSummary day='today' onDayChange={onDayChange} chosenLanguage='English' />);
+	const { container } = render(
+		<ReservationsSummary day='today' onDayChange={onDayChange} chosenLanguage='English' />
+	);
 
 	expect(await screen.findByText("CONF-1")).toBeTruthy();
 	expect(screen.getByText("Executive Guest")).toBeTruthy();
@@ -125,6 +137,9 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 	expect(screen.getByText("280.00 SAR \u00d7 2 nights")).toBeTruthy();
 	expect(screen.getByTestId("reservation-index-507f1f77bcf86cd799439011").textContent).toBe("1");
 	expect(screen.getByRole("button", { name: /More details/i })).toBeTruthy();
+	expect(screen.getByText("confirmed")).toBeTruthy();
+	expect(container.querySelector(".ant-table-cell-fix-left, .ant-table-cell-fix-right")).toBeNull();
+	expect(container.querySelector(".ant-table-cell-ellipsis")).toBeNull();
 	await waitFor(() => {
 		expect(screen.getByTestId("checkins-count").textContent).toBe("1");
 		expect(screen.getByTestId("checkins-amount").textContent).toBe("SAR 560.00");
@@ -169,6 +184,28 @@ test("opens the permission-checked complete details modal from a shareable reser
 		"safe-test-token",
 		expect.objectContaining({ signal: expect.any(AbortSignal) })
 	);
+});
+
+test("keeps critical Arabic table headers and status text complete", async () => {
+	const { container } = render(
+		<ReservationsSummary day='today' onDayChange={() => {}} chosenLanguage='Arabic' />
+	);
+
+	expect(await screen.findByText("CONF-1")).toBeTruthy();
+	const headerTexts = Array.from(
+		container.querySelectorAll(".ant-table-thead th")
+	).map((header) => header.textContent.trim());
+	[
+		"\u0627\u0644\u0646\u0634\u0627\u0637",
+		"\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+		"\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
+		"\u0627\u0644\u062d\u0627\u0644\u0629",
+		"\u0627\u0644\u0645\u0628\u0644\u063a",
+		"\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a",
+	].forEach((header) => {
+		expect(headerTexts).toContain(header);
+	});
+	expect(screen.getByText("\u0645\u0624\u0643\u062f")).toBeTruthy();
 });
 
 test("shows 20 rows per page and continues the index at 21 on page two", async () => {
