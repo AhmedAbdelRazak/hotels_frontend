@@ -1,22 +1,31 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 import * as XLSX from "xlsx";
 import CountUp from "react-countup";
 import {
 	CalendarOutlined,
 	CheckCircleOutlined,
+	DollarCircleOutlined,
 	DownloadOutlined,
+	EyeOutlined,
+	InfoCircleOutlined,
 	LoginOutlined,
 	LogoutOutlined,
 	ReloadOutlined,
+	WarningOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Table, Tag, message } from "antd";
+import { Alert, Button, Empty, Modal, Spin, Table, Tag, Tooltip, message } from "antd";
 import { isAuthenticated } from "../../auth";
-import { getAdminReservationExecutiveSummary } from "../apiAdmin";
+import MoreDetails from "../AllReservation/MoreDetails";
+import {
+	getAdminReservationById,
+	getAdminReservationExecutiveSummary,
+} from "../apiAdmin";
 import { ADMIN_DASHBOARD_DAYS } from "./adminDashboardQuery";
 import {
 	buildReservationSummaryExportRows,
 	formatReservationSummaryDate,
+	formatReservationSummaryNumber,
 } from "./reservationSummaryUtils";
 
 const copy = {
@@ -34,6 +43,11 @@ const copy = {
 		checkinsMeta: "Expected arrivals",
 		checkoutsMeta: "Expected departures",
 		newReservationsMeta: "Created on this date",
+		totalAmount: "Total reservation amount",
+		totalAmountMeta: "Sum of total_amount across unique rows",
+		mixedCurrencies: "Multiple currencies are shown separately in the table",
+		amountsVerified: "amounts reconciled",
+		amountsNeedReview: "amounts need review",
 		unique: "unique reservations",
 		tableTitle: "Reservation activity",
 		tableSubtitle: "Every reservation represented in the selected summary",
@@ -53,6 +67,19 @@ const copy = {
 		rooms: "Rooms",
 		guests: "Guests",
 		amount: "Amount",
+		index: "#",
+		actions: "Actions",
+		moreDetails: "More details",
+		detailsLoading: "Loading the complete reservation details...",
+		detailsError: "The reservation details could not be loaded.",
+		nights: "Nights",
+		nightsUnit: "nights",
+		amountVerified: "Verified against the reservation's daily room pricing",
+		amountUnverified: "Daily pricing was unavailable for automatic reconciliation",
+		amountReview: "Stored total differs from the daily room pricing and needs review",
+		miladi: "Miladi",
+		hijri: "Hijri (Umm al-Qura)",
+		makkahTime: "Makkah Time",
 		source: "Source",
 		checkinActivity: "Check-in",
 		checkoutActivity: "Check-out",
@@ -77,6 +104,11 @@ const copy = {
 			"\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0627\u0644\u0645\u062a\u0648\u0642\u0639\u0629",
 		newReservationsMeta:
 			"\u062a\u0645 \u0625\u0646\u0634\u0627\u0624\u0647\u0627 \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e",
+		totalAmount: "\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u0628\u0627\u0644\u063a \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		totalAmountMeta: "\u0645\u062c\u0645\u0648\u0639 total_amount \u0644\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0641\u0631\u064a\u062f\u0629",
+		mixedCurrencies: "\u062a\u0638\u0647\u0631 \u0627\u0644\u0639\u0645\u0644\u0627\u062a \u0627\u0644\u0645\u062e\u062a\u0644\u0641\u0629 \u0645\u0646\u0641\u0635\u0644\u0629 \u0641\u064a \u0627\u0644\u062c\u062f\u0648\u0644",
+		amountsVerified: "\u0645\u0628\u0627\u0644\u063a \u0645\u062a\u0637\u0627\u0628\u0642\u0629",
+		amountsNeedReview: "\u0645\u0628\u0627\u0644\u063a \u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629",
 		unique: "\u062d\u062c\u0648\u0632\u0627\u062a \u0641\u0631\u064a\u062f\u0629",
 		tableTitle: "\u0646\u0634\u0627\u0637 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		tableSubtitle:
@@ -100,6 +132,19 @@ const copy = {
 		rooms: "\u0627\u0644\u063a\u0631\u0641",
 		guests: "\u0627\u0644\u0636\u064a\u0648\u0641",
 		amount: "\u0627\u0644\u0645\u0628\u0644\u063a",
+		index: "#",
+		actions: "\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a",
+		moreDetails: "\u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644",
+		detailsLoading: "\u062c\u0627\u0631\u064d \u062a\u062d\u0645\u064a\u0644 \u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0627\u0644\u0643\u0627\u0645\u0644\u0629...",
+		detailsError: "\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u062d\u062c\u0632.",
+		nights: "\u0644\u064a\u0627\u0644\u064d",
+		nightsUnit: "\u0644\u064a\u0627\u0644\u064d",
+		amountVerified: "\u0645\u062a\u0637\u0627\u0628\u0642 \u0645\u0639 \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u064a\u0648\u0645\u064a \u0644\u063a\u0631\u0641 \u0627\u0644\u062d\u062c\u0632",
+		amountUnverified: "\u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u064a\u0648\u0645\u064a \u063a\u064a\u0631 \u0645\u062a\u0627\u062d \u0644\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u0627\u0644\u062a\u0644\u0642\u0627\u0626\u064a\u0629",
+		amountReview: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u062d\u0641\u0648\u0638 \u064a\u062e\u062a\u0644\u0641 \u0639\u0646 \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0627\u0644\u064a\u0648\u0645\u064a \u0648\u064a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629",
+		miladi: "\u0627\u0644\u0645\u064a\u0644\u0627\u062f\u064a",
+		hijri: "\u0627\u0644\u0647\u062c\u0631\u064a (\u0623\u0645 \u0627\u0644\u0642\u0631\u0649)",
+		makkahTime: "\u062a\u0648\u0642\u064a\u062a \u0645\u0643\u0629 \u0627\u0644\u0645\u0643\u0631\u0645\u0629",
 		source: "\u0627\u0644\u0645\u0635\u062f\u0631",
 		checkinActivity: "\u0648\u0635\u0648\u0644",
 		checkoutActivity: "\u0645\u063a\u0627\u062f\u0631\u0629",
@@ -115,19 +160,54 @@ const activityTone = {
 	"new-reservation": "green",
 };
 
-const statusColor = (status = "") => {
-	const normalized = String(status).toLowerCase();
-	if (normalized.includes("confirm") || normalized === "inhouse") return "green";
-	if (normalized.includes("pending")) return "gold";
-	if (normalized.includes("cancel") || normalized.includes("reject")) return "red";
-	if (normalized.includes("complete") || normalized.includes("checkout")) return "blue";
-	return "default";
+const noop = () => {};
+
+const statusTone = (status = "") => {
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ");
+	if (/cancel|reject|inactive|no\s?show/.test(normalized)) return "red";
+	if (/early checked out|checked out|closed/.test(normalized)) return "green";
+	if (/inhouse|in house|checked in/.test(normalized)) return "softGreen";
+	if (/agent|commission/.test(normalized)) return "purple";
+	if (/pending|review|unfinished|cleaning/.test(normalized)) return "orange";
+	if (/confirm|approved/.test(normalized)) return "blue";
+	if (/active|finish|done|clean/.test(normalized)) return "green";
+	return "slate";
 };
 
-const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
+const localizedStatus = (status = "", isArabic = false) => {
+	const raw = status || "-";
+	if (!isArabic) return raw;
+	const normalized = String(status || "")
+		.toLowerCase()
+		.replace(/[_-]+/g, " ")
+		.trim();
+	const statuses = {
+		confirmed: "\u0645\u0624\u0643\u062f",
+		"pending confirmation": "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+		"pending finance review": "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+		inhouse: "\u062f\u0627\u062e\u0644 \u0627\u0644\u0641\u0646\u062f\u0642",
+		"in house": "\u062f\u0627\u062e\u0644 \u0627\u0644\u0641\u0646\u062f\u0642",
+		"checked out": "\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		"early checked out": "\u0645\u063a\u0627\u062f\u0631\u0629 \u0645\u0628\u0643\u0631\u0629",
+		cancelled: "\u0645\u0644\u063a\u064a",
+		canceled: "\u0645\u0644\u063a\u064a",
+		"no show": "\u0644\u0645 \u064a\u062d\u0636\u0631",
+	};
+	return statuses[normalized] || raw;
+};
+
+const ReservationsSummary = ({
+	day,
+	onDayChange,
+	chosenLanguage,
+	reservationId = "",
+	onReservationIdChange = noop,
+}) => {
 	const isArabic = chosenLanguage === "Arabic";
 	const L = isArabic ? copy.ar : copy.en;
-	const locale = isArabic ? "ar-SA" : "en-US";
+	const locale = isArabic ? "ar-SA-u-nu-latn" : "en-US-u-nu-latn";
 	const auth = isAuthenticated();
 	const userId = auth?.user?._id || "";
 	const token = auth?.token || "";
@@ -135,6 +215,13 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [reloadKey, setReloadKey] = useState(0);
+	const [tablePage, setTablePage] = useState(1);
+	const [tablePageSize, setTablePageSize] = useState(20);
+	const [detailsReservation, setDetailsReservation] = useState(null);
+	const [detailsLoading, setDetailsLoading] = useState(false);
+	const [detailsError, setDetailsError] = useState("");
+	const [detailsReloadKey, setDetailsReloadKey] = useState(0);
+	const loadedDetailsKey = useRef("");
 
 	useEffect(() => {
 		const controller = new AbortController();
@@ -176,27 +263,122 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 		}),
 		[L.checkinActivity, L.checkoutActivity, L.newActivity]
 	);
-	const reservations = Array.isArray(data?.reservations) ? data.reservations : [];
-	const summary = data?.summary || {};
-	const numberFormatter = useMemo(
-		() => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-		[locale]
+	const reservations = useMemo(
+		() => (Array.isArray(data?.reservations) ? data.reservations : []),
+		[data?.reservations]
 	);
-	const selectedDateLabel = data?.date
+	const summary = data?.summary || {};
+	const selectedDateValue = data?.date ? `${data.date}T12:00:00.000Z` : null;
+	const selectedMiladiDate = selectedDateValue
 		? formatReservationSummaryDate(`${data.date}T12:00:00.000Z`, {
 				locale,
-				dateOnly: true,
+				calendar: "gregory",
+				month: "long",
 		  })
 		: day;
+	const selectedHijriDate = selectedDateValue
+		? formatReservationSummaryDate(selectedDateValue, {
+				locale,
+				calendar: "islamic-umalqura",
+				month: "long",
+		  })
+		: "\u2014";
+
+	useEffect(() => {
+		setTablePage(1);
+	}, [day]);
+
+	useEffect(() => {
+		const lastPage = Math.max(1, Math.ceil(reservations.length / tablePageSize));
+		if (tablePage > lastPage) setTablePage(lastPage);
+	}, [reservations.length, tablePage, tablePageSize]);
+
+	useEffect(() => {
+		if (!reservationId) {
+			loadedDetailsKey.current = "";
+			setDetailsReservation(null);
+			setDetailsError("");
+			setDetailsLoading(false);
+			return undefined;
+		}
+		if (loading || !data) return undefined;
+
+		const summaryRow = reservations.find((row) => row.id === reservationId);
+		if (!summaryRow) {
+			onReservationIdChange("");
+			return undefined;
+		}
+
+		const requestKey = `${reservationId}:${detailsReloadKey}`;
+		if (loadedDetailsKey.current === requestKey) return undefined;
+		loadedDetailsKey.current = requestKey;
+
+		const controller = new AbortController();
+		let mounted = true;
+		setDetailsLoading(true);
+		setDetailsError("");
+		setDetailsReservation(null);
+
+		getAdminReservationById(reservationId, token, { signal: controller.signal })
+			.then((payload) => {
+				if (!mounted) return;
+				if (!payload?._id || payload?.error || payload?.message) {
+					throw new Error(payload?.error || payload?.message || L.detailsError);
+				}
+				setDetailsReservation(payload);
+			})
+			.catch((requestError) => {
+				if (!mounted || requestError?.name === "AbortError") return;
+				setDetailsError(requestError?.message || L.detailsError);
+			})
+			.finally(() => {
+				if (mounted) setDetailsLoading(false);
+			});
+
+		return () => {
+			mounted = false;
+			controller.abort();
+		};
+	}, [
+		L.detailsError,
+		data,
+		detailsReloadKey,
+		loading,
+		onReservationIdChange,
+		reservationId,
+		reservations,
+		token,
+	]);
+
+	const amountQualityLabels = useMemo(
+		() => ({
+			verified: L.amountVerified,
+			unverified: L.amountUnverified,
+			discrepancy: L.amountReview,
+			invalid: L.amountReview,
+		}),
+		[L.amountReview, L.amountUnverified, L.amountVerified]
+	);
 
 	const columns = useMemo(
 		() => [
 			{
+				title: L.index,
+				key: "index",
+				width: 58,
+				align: "center",
+				fixed: "left",
+				render: (_value, row, index) => (
+					<NumericText data-testid={`reservation-index-${row.id}`}>
+						{(tablePage - 1) * tablePageSize + index + 1}
+					</NumericText>
+				),
+			},
+			{
 				title: L.activity,
 				dataIndex: "activityTypes",
 				key: "activity",
-				width: 180,
-				fixed: "left",
+				width: 126,
 				render: (types = []) => (
 					<ActivityTags>
 						{types.map((type) => (
@@ -211,51 +393,62 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 				title: L.confirmation,
 				dataIndex: "confirmationNumber",
 				key: "confirmationNumber",
-				width: 150,
-				render: (value) => <Confirmation>{value || "N/A"}</Confirmation>,
+				width: 142,
+				render: (value) => <Confirmation dir='ltr'>{value || "N/A"}</Confirmation>,
 			},
 			{
 				title: L.hotel,
 				dataIndex: "hotel",
 				key: "hotel",
-				width: 190,
+				width: 175,
 				render: (hotel = {}) => (
-					<HotelName>{isArabic && hotel.nameArabic ? hotel.nameArabic : hotel.name}</HotelName>
+					<Tooltip title={isArabic && hotel.nameArabic ? hotel.nameArabic : hotel.name}>
+						<HotelName>{isArabic && hotel.nameArabic ? hotel.nameArabic : hotel.name}</HotelName>
+					</Tooltip>
 				),
 			},
 			{
 				title: L.guest,
 				dataIndex: "guestName",
 				key: "guestName",
-				width: 190,
+				width: 170,
+				render: (value) => (
+					<Tooltip title={value}>
+						<CellText>{value}</CellText>
+					</Tooltip>
+				),
 			},
 			{
 				title: L.checkinDate,
 				dataIndex: "checkinDate",
 				key: "checkinDate",
-				width: 135,
-				render: (value) => formatReservationSummaryDate(value, { locale, dateOnly: true }),
+				width: 125,
+				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.checkoutDate,
 				dataIndex: "checkoutDate",
 				key: "checkoutDate",
-				width: 135,
-				render: (value) => formatReservationSummaryDate(value, { locale, dateOnly: true }),
+				width: 125,
+				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.createdAt,
 				dataIndex: "createdAt",
 				key: "createdAt",
-				width: 175,
-				render: (value) => formatReservationSummaryDate(value, { locale }),
+				width: 125,
+				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.status,
 				dataIndex: "status",
 				key: "status",
-				width: 135,
-				render: (value) => <Tag color={statusColor(value)}>{value}</Tag>,
+				width: 160,
+				render: (value) => (
+					<StatusPill $tone={statusTone(value)}>
+						{localizedStatus(value, isArabic)}
+					</StatusPill>
+				),
 			},
 			{
 				title: L.rooms,
@@ -263,6 +456,7 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 				key: "rooms",
 				width: 85,
 				align: "center",
+				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
 			},
 			{
 				title: L.guests,
@@ -270,27 +464,81 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 				key: "guests",
 				width: 85,
 				align: "center",
+				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
+			},
+			{
+				title: L.nights,
+				dataIndex: "nights",
+				key: "nights",
+				width: 82,
+				align: "center",
+				render: (value) => <NumericText>{formatReservationSummaryNumber(value)}</NumericText>,
 			},
 			{
 				title: L.amount,
 				dataIndex: "totalAmount",
 				key: "totalAmount",
-				width: 145,
+				width: 220,
 				align: "end",
-				render: (value, row) => (
-					<Amount>
-						{numberFormatter.format(Number(value) || 0)} {row.currency || "SAR"}
-					</Amount>
-				),
+				render: (value, row) => {
+					const quality = row.amountQuality?.status || "unverified";
+					const QualityIcon = quality === "verified" ? CheckCircleOutlined : quality === "unverified" ? InfoCircleOutlined : WarningOutlined;
+					return (
+						<AmountCell>
+							<Amount>
+								{formatReservationSummaryNumber(value, {
+									minimumFractionDigits: 2,
+								})} {row.currency || "SAR"}
+							</Amount>
+							{row.nights > 0 && row.averageNightlyAmount !== null ? (
+								<AmountBreakdown>
+									{formatReservationSummaryNumber(row.averageNightlyAmount, {
+										minimumFractionDigits: 2,
+									})} {row.currency || "SAR"} {"\u00d7"} {formatReservationSummaryNumber(row.nights)} {L.nightsUnit}
+								</AmountBreakdown>
+							) : null}
+							<Tooltip title={amountQualityLabels[quality]}>
+								<AmountQuality $status={quality} aria-label={amountQualityLabels[quality]}>
+									<QualityIcon />
+								</AmountQuality>
+							</Tooltip>
+						</AmountCell>
+					);
+				},
 			},
 			{
 				title: L.source,
 				dataIndex: "bookingSource",
 				key: "bookingSource",
-				width: 160,
+				width: 140,
+				render: (value) => <CellText>{value}</CellText>,
+			},
+			{
+				title: L.actions,
+				key: "actions",
+				width: 126,
+				fixed: "right",
+				render: (_value, row) => (
+					<DetailsButton
+						type='button'
+						onClick={() => onReservationIdChange(row.id)}
+					>
+						<EyeOutlined />
+						<span>{L.moreDetails}</span>
+					</DetailsButton>
+				),
 			},
 		],
-		[L, activityLabels, isArabic, locale, numberFormatter]
+		[
+			L,
+			activityLabels,
+			amountQualityLabels,
+			isArabic,
+			locale,
+			onReservationIdChange,
+			tablePage,
+			tablePageSize,
+		]
 	);
 
 	const exportToExcel = () => {
@@ -314,7 +562,10 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 			{ wch: 20 },
 			{ wch: 10 },
 			{ wch: 10 },
+			{ wch: 10 },
+			{ wch: 18 },
 			{ wch: 16 },
+			{ wch: 20 },
 			{ wch: 12 },
 			{ wch: 24 },
 		];
@@ -352,6 +603,20 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 			icon: CheckCircleOutlined,
 			tone: "green",
 		},
+		{
+			key: "totalAmount",
+			title: L.totalAmount,
+			meta: summary.mixedCurrencies
+				? L.mixedCurrencies
+				: summary.amountsNeedingReview > 0
+				  ? `${formatReservationSummaryNumber(summary.amountsNeedingReview)} ${L.amountsNeedReview}`
+				  : `${formatReservationSummaryNumber(summary.verifiedAmounts)} ${L.amountsVerified}`,
+			value: summary.totalAmount,
+			currency: summary.currency || "SAR",
+			isMoney: true,
+			icon: DollarCircleOutlined,
+			tone: "amber",
+		},
 	];
 
 	return (
@@ -363,11 +628,21 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 					<p>{L.description}</p>
 				</HeaderCopy>
 				<HeaderControls>
-					<SelectedDate>
-						<CalendarOutlined />
-						<strong>{selectedDateLabel}</strong>
-						<span>{data?.timezone || "Asia/Riyadh"}</span>
-					</SelectedDate>
+					<DateOverview>
+						<ZoneLine>
+							<CalendarOutlined />
+							<strong>{L.makkahTime}</strong>
+							<span dir='ltr'>{data?.timezoneOffset || "UTC+03:00"}</span>
+						</ZoneLine>
+						<DateLine>
+							<span>{L.miladi}</span>
+							<strong>{selectedMiladiDate}</strong>
+						</DateLine>
+						<DateLine>
+							<span>{L.hijri}</span>
+							<strong>{selectedHijriDate}</strong>
+						</DateLine>
+					</DateOverview>
 					<DayFilters aria-label='Reservation summary date filter'>
 						{[
 							[ADMIN_DASHBOARD_DAYS.YESTERDAY, L.yesterday],
@@ -399,7 +674,19 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 							<ScoreCopy>
 								<span>{card.title}</span>
 								<strong>
-									<CountUp end={card.value} duration={0.75} separator=',' />
+									{card.isMoney && card.value === null ? (
+										"\u2014"
+									) : (
+										<>
+											<CountUp
+												end={Number(card.value) || 0}
+												duration={0.75}
+												separator=','
+												decimals={card.isMoney ? 2 : 0}
+											/>
+											{card.isMoney ? <Currency> {card.currency}</Currency> : null}
+										</>
+									)}
 								</strong>
 								<small>{card.meta}</small>
 							</ScoreCopy>
@@ -451,20 +738,83 @@ const ReservationsSummary = ({ day, onDayChange, chosenLanguage }) => {
 					columns={columns}
 					dataSource={reservations}
 					loading={{ spinning: loading, tip: L.tableTitle }}
-					scroll={{ x: 1765 }}
+					scroll={{ x: 1940 }}
 					sticky
 					size='middle'
 					pagination={{
-						pageSize: 12,
+						current: tablePage,
+						pageSize: tablePageSize,
 						showSizeChanger: true,
-						pageSizeOptions: [12, 24, 48],
-						showTotal: (total) => `${total} ${L.unique}`,
+						pageSizeOptions: [20, 40, 60],
+						showTotal: (total) =>
+							`${formatReservationSummaryNumber(total)} ${L.unique}`,
+					}}
+					onChange={(pagination) => {
+						const nextSize = pagination.pageSize || 20;
+						setTablePageSize(nextSize);
+						setTablePage(nextSize === tablePageSize ? pagination.current || 1 : 1);
 					}}
 					locale={{
 						emptyText: <Empty description={L.empty} image={Empty.PRESENTED_IMAGE_SIMPLE} />,
 					}}
 				/>
 			</TablePanel>
+
+			<Modal
+				open={Boolean(reservationId)}
+				onCancel={() => onReservationIdChange("")}
+				width='min(98vw, 1720px)'
+				centered
+				className='admin-reservation-details-modal reservation-details-modal'
+				rootClassName='admin-reservation-details-layer'
+				wrapClassName='admin-reservation-details-wrap'
+				footer={null}
+				destroyOnClose
+				getContainer={() => document.body}
+				zIndex={16000}
+				styles={{
+					mask: { zIndex: 15999 },
+					header: { display: "none" },
+					content: { padding: "6px 8px 8px" },
+					body: { maxHeight: "92vh", overflowY: "auto", padding: "0" },
+				}}
+			>
+				{detailsLoading ? (
+					<DetailsState>
+						<Spin size='large' />
+						<strong>{L.detailsLoading}</strong>
+					</DetailsState>
+				) : detailsError ? (
+					<DetailsState>
+						<Alert
+							type='error'
+							showIcon
+							message={detailsError}
+							action={
+								<Button
+									size='small'
+									icon={<ReloadOutlined />}
+									onClick={() => setDetailsReloadKey((value) => value + 1)}
+								>
+									{L.retry}
+								</Button>
+							}
+						/>
+					</DetailsState>
+				) : detailsReservation ? (
+					<MoreDetails
+						key={detailsReservation._id}
+						selectedReservation={detailsReservation}
+						hotelDetails={detailsReservation.hotelId}
+						reservation={detailsReservation}
+						setReservation={setDetailsReservation}
+						onReservationUpdated={(updated) => {
+							if (updated) setDetailsReservation(updated);
+							setReloadKey((value) => value + 1);
+						}}
+					/>
+				) : null}
+			</Modal>
 		</SummarySurface>
 	);
 };
@@ -487,6 +837,11 @@ const tones = {
 		background: "linear-gradient(135deg, #f1fff8 0%, #dcf7e9 100%)",
 		shadow: "rgba(22, 129, 92, 0.2)",
 	},
+	amber: {
+		accent: "#a76608",
+		background: "linear-gradient(135deg, #fffaf0 0%, #ffedc7 100%)",
+		shadow: "rgba(167, 102, 8, 0.18)",
+	},
 };
 
 const SummarySurface = styled.section`
@@ -500,10 +855,10 @@ const SummarySurface = styled.section`
 
 const ExecutiveHeader = styled.header`
 	display: grid;
-	grid-template-columns: minmax(0, 1.4fr) minmax(340px, 0.8fr);
-	gap: 24px;
+	grid-template-columns: minmax(0, 1.25fr) minmax(430px, 0.9fr);
+	gap: 18px;
 	align-items: center;
-	padding: 26px 28px;
+	padding: 14px 20px;
 	background: radial-gradient(circle at 88% 0%, rgba(52, 181, 229, 0.27), transparent 36%),
 		linear-gradient(135deg, #071827 0%, #0d335d 45%, #155d95 100%);
 	color: #fff;
@@ -513,8 +868,8 @@ const ExecutiveHeader = styled.header`
 	}
 
 	@media (max-width: 600px) {
-		padding: 20px 16px;
-		gap: 18px;
+		padding: 13px 12px;
+		gap: 11px;
 	}
 `;
 
@@ -522,9 +877,9 @@ const HeaderCopy = styled.div`
 	min-width: 0;
 
 	h1 {
-		margin: 5px 0 8px;
+		margin: 2px 0 4px;
 		color: #fff;
-		font-size: clamp(1.45rem, 2.5vw, 2.25rem);
+		font-size: clamp(1.25rem, 2vw, 1.7rem);
 		font-weight: 950;
 		line-height: 1.1;
 		letter-spacing: -0.025em;
@@ -534,67 +889,107 @@ const HeaderCopy = styled.div`
 		max-width: 780px;
 		margin: 0;
 		color: rgba(235, 247, 255, 0.82);
-		font-size: 0.94rem;
+		font-size: 0.82rem;
 		font-weight: 650;
-		line-height: 1.55;
+		line-height: 1.4;
 	}
 `;
 
 const Eyebrow = styled.span`
 	color: #80daf7;
-	font-size: 0.7rem;
+	font-size: 0.64rem;
 	font-weight: 950;
 	letter-spacing: 0.16em;
 `;
 
 const HeaderControls = styled.div`
 	display: grid;
-	gap: 12px;
+	gap: 7px;
 	justify-items: stretch;
 `;
 
-const SelectedDate = styled.div`
+const DateOverview = styled.div`
 	display: grid;
-	grid-template-columns: auto 1fr;
-	column-gap: 9px;
-	row-gap: 2px;
+	grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+	gap: 8px;
 	align-items: center;
-	padding: 11px 14px;
+	padding: 7px 9px;
 	border: 1px solid rgba(201, 235, 255, 0.28);
 	border-radius: 10px;
 	background: rgba(5, 24, 43, 0.44);
 	box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
 
+	@media (max-width: 560px) {
+		grid-template-columns: 1fr 1fr;
+	}
+`;
+
+const ZoneLine = styled.div`
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: max-content;
+	padding-inline-end: 9px;
+	border-inline-end: 1px solid rgba(201, 235, 255, 0.18);
+
 	svg {
-		grid-row: 1 / 3;
 		color: #80daf7;
-		font-size: 1.2rem;
+		font-size: 1rem;
 	}
 
 	strong {
-		font-size: 0.9rem;
-		font-weight: 900;
+		font-size: 0.72rem;
+		font-weight: 950;
 	}
 
 	span {
 		color: rgba(224, 242, 254, 0.7);
-		font-size: 0.7rem;
+		font-size: 0.64rem;
 		font-weight: 700;
+	}
+
+	@media (max-width: 560px) {
+		grid-column: 1 / -1;
+		justify-content: center;
+		padding: 0 0 6px;
+		border-inline-end: 0;
+		border-bottom: 1px solid rgba(201, 235, 255, 0.18);
+	}
+`;
+
+const DateLine = styled.div`
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+
+	span {
+		color: #80daf7;
+		font-size: 0.62rem;
+		font-weight: 900;
+	}
+
+	strong {
+		overflow: hidden;
+		color: #fff;
+		font-size: 0.74rem;
+		font-weight: 850;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 `;
 
 const DayFilters = styled.div`
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 7px;
-	padding: 6px;
+	gap: 5px;
+	padding: 4px;
 	border: 1px solid rgba(191, 219, 254, 0.28);
 	border-radius: 11px;
 	background: rgba(2, 18, 34, 0.48);
 `;
 
 const DayButton = styled.button`
-	min-height: 38px;
+	min-height: 31px;
 	border: 1px solid ${(props) => (props.$active ? "#8ddcff" : "transparent")};
 	border-radius: 8px;
 	background: ${(props) =>
@@ -602,7 +997,7 @@ const DayButton = styled.button`
 	box-shadow: ${(props) => (props.$active ? "0 7px 18px rgba(0, 0, 0, 0.24)" : "none")};
 	color: ${(props) => (props.$active ? "#fff" : "rgba(230, 245, 255, 0.76)")};
 	cursor: pointer;
-	font-size: 0.79rem;
+	font-size: 0.76rem;
 	font-weight: 900;
 	transition:
 		background 0.2s ease,
@@ -618,14 +1013,18 @@ const DayButton = styled.button`
 
 const ScoreGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 14px;
-	padding: 18px;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+	padding: 12px;
 	background: linear-gradient(180deg, #f7fbff 0%, #f2f7fc 100%);
 
-	@media (max-width: 820px) {
+	@media (max-width: 1100px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	@media (max-width: 620px) {
 		grid-template-columns: 1fr;
-		padding: 14px;
+		padding: 10px;
 	}
 `;
 
@@ -633,10 +1032,10 @@ const ScoreCard = styled.article`
 	position: relative;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);
-	gap: 14px;
+	gap: 11px;
 	align-items: center;
-	min-height: 132px;
-	padding: 18px;
+	min-height: 94px;
+	padding: 12px 13px;
 	border: 1px solid ${(props) => tones[props.$tone].accent}35;
 	border-radius: 13px;
 	background: ${(props) => tones[props.$tone].background};
@@ -648,8 +1047,8 @@ const ScoreCard = styled.article`
 		position: absolute;
 		inset-inline-end: -32px;
 		inset-block-start: -38px;
-		width: 120px;
-		height: 120px;
+		width: 92px;
+		height: 92px;
 		border-radius: 999px;
 		background: ${(props) => tones[props.$tone].accent}10;
 	}
@@ -661,15 +1060,15 @@ const ScoreIcon = styled.span`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 52px;
-	height: 52px;
-	border-radius: 14px;
+	width: 43px;
+	height: 43px;
+	border-radius: 12px;
 	background: ${(props) => tones[props.$tone].accent};
 	box-shadow:
 		inset 0 1px rgba(255, 255, 255, 0.3),
 		0 9px 20px ${(props) => tones[props.$tone].shadow};
 	color: #fff;
-	font-size: 1.4rem;
+	font-size: 1.18rem;
 `;
 
 const ScoreCopy = styled.div`
@@ -680,28 +1079,34 @@ const ScoreCopy = styled.div`
 
 	span {
 		color: #253b50;
-		font-size: 0.82rem;
+		font-size: 0.88rem;
 		font-weight: 950;
 	}
 
 	strong {
-		margin: 5px 0;
+		margin: 3px 0;
 		color: #102033;
-		font-size: clamp(1.75rem, 3vw, 2.55rem);
+		font-size: clamp(1.55rem, 2.1vw, 2rem);
 		font-weight: 950;
 		line-height: 1;
 	}
 
 	small {
 		color: #5f7488;
-		font-size: 0.72rem;
+		font-size: 0.76rem;
 		font-weight: 750;
+		line-height: 1.25;
 	}
+`;
+
+const Currency = styled.span`
+	font-size: 0.55em !important;
+	white-space: nowrap;
 `;
 
 const TablePanel = styled.div`
 	min-width: 0;
-	padding: 0 18px 18px;
+	padding: 0 12px 14px;
 	background: #f7fbff;
 
 	.ant-alert {
@@ -719,8 +1124,14 @@ const TablePanel = styled.div`
 		border-bottom-color: #21567e !important;
 		background: linear-gradient(180deg, #1b6fa5 0%, #09223a 100%) !important;
 		color: #fff !important;
-		font-size: 0.77rem;
+		font-size: 0.81rem;
 		font-weight: 900;
+	}
+
+	.ant-table-tbody > tr > td {
+		padding-top: 10px;
+		padding-bottom: 10px;
+		font-size: 0.8rem;
 	}
 
 	.ant-table-tbody > tr:nth-child(even) > td {
@@ -796,23 +1207,222 @@ const ActivityTags = styled.div`
 
 	.ant-tag {
 		margin: 0;
-		font-size: 0.68rem;
+		max-width: 100%;
+		font-size: 0.72rem;
 		font-weight: 850;
+		line-height: 1.35;
+		white-space: normal;
 	}
 `;
 
 const Confirmation = styled.strong`
+	display: inline-block;
 	color: #164f7a;
 	font-weight: 950;
+	font-variant-numeric: tabular-nums;
 `;
 
 const HotelName = styled.strong`
+	display: block;
+	overflow: hidden;
 	color: #102033;
 	font-weight: 900;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 `;
 
 const Amount = styled.strong`
 	color: #0d684c;
 	font-weight: 900;
 	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+	direction: ltr;
+`;
+
+const NumericText = styled.span`
+	display: inline-block;
+	font-variant-numeric: tabular-nums;
+	direction: ltr;
+`;
+
+const DateText = styled(NumericText)`
+	white-space: nowrap;
+`;
+
+const CellText = styled.span`
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+`;
+
+const AmountCell = styled.div`
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 1px 7px;
+	align-items: center;
+	min-width: 0;
+`;
+
+const AmountBreakdown = styled.small`
+	grid-column: 1;
+	color: #587187;
+	font-size: 0.7rem;
+	font-weight: 750;
+	font-variant-numeric: tabular-nums;
+	direction: ltr;
+	white-space: nowrap;
+`;
+
+const AmountQuality = styled.span`
+	grid-column: 2;
+	grid-row: 1 / 3;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$status === "verified"
+			? "#e4f8ed"
+			: props.$status === "unverified"
+			  ? "#edf3f8"
+			  : "#fff0e3"};
+	color: ${(props) =>
+		props.$status === "verified"
+			? "#118154"
+			: props.$status === "unverified"
+			  ? "#60788e"
+			  : "#b04713"};
+	cursor: help;
+`;
+
+const StatusPill = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.34rem;
+	min-height: 27px;
+	min-width: 82px;
+	max-width: 148px;
+	padding: 0.22rem 0.68rem;
+	border: 1px solid
+		${(props) =>
+			props.$tone === "red"
+				? "#d45b68"
+				: props.$tone === "orange"
+				  ? "#d89b2e"
+				  : props.$tone === "green"
+				    ? "#14a064"
+				    : props.$tone === "softGreen"
+				      ? "#87d6a0"
+				      : props.$tone === "blue"
+				        ? "#5b8bdc"
+				        : props.$tone === "purple"
+				          ? "#b47dc2"
+				          : "#aab2c0"};
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$tone === "red"
+			? "linear-gradient(135deg, #7f1d1d 0%, #c33546 100%)"
+			: props.$tone === "orange"
+			  ? "linear-gradient(135deg, #fff3d8 0%, #f7bf4b 100%)"
+			  : props.$tone === "green"
+			    ? "linear-gradient(135deg, #064e3b 0%, #0fa66b 100%)"
+			    : props.$tone === "softGreen"
+			      ? "linear-gradient(135deg, #eefbf3 0%, #d8f7e4 100%)"
+			      : props.$tone === "blue"
+			        ? "linear-gradient(135deg, #eef4ff 0%, #dfeaff 100%)"
+			        : props.$tone === "purple"
+			          ? "linear-gradient(135deg, #fffaff 0%, #ecd9f3 100%)"
+			          : "linear-gradient(135deg, #f7f8fb 0%, #e9edf7 100%)"};
+	color: ${(props) =>
+		props.$tone === "red" || props.$tone === "green"
+			? "#fff"
+			: props.$tone === "orange"
+			  ? "#4c3000"
+			  : props.$tone === "softGreen"
+			    ? "#08722c"
+			    : props.$tone === "blue"
+			      ? "#1d4f9d"
+			      : props.$tone === "purple"
+			        ? "#5d1d6e"
+			        : "#263452"};
+	font-size: 0.72rem;
+	font-weight: 950;
+	line-height: 1.25;
+	box-shadow: inset 0 1px rgba(255, 255, 255, 0.28), 0 4px 10px rgba(40, 16, 52, 0.08);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	&::before {
+		content: "";
+		width: 7px;
+		height: 7px;
+		flex: 0 0 7px;
+		border-radius: 999px;
+		background: ${(props) =>
+			props.$tone === "red"
+				? "#ffd1d6"
+				: props.$tone === "orange"
+				  ? "#7a4c00"
+				  : props.$tone === "green"
+				    ? "#c9ffe1"
+				    : props.$tone === "softGreen"
+				      ? "#14a064"
+				      : props.$tone === "blue"
+				        ? "#356ed1"
+				        : props.$tone === "purple"
+				          ? "#8d4c9d"
+				          : "#6d7a99"};
+		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.28);
+	}
+`;
+
+const DetailsButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 30px;
+	padding: 5px 10px;
+	border: 1px solid #2a75a7;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #edf8ff 0%, #dcefff 100%);
+	color: #124e78;
+	cursor: pointer;
+	font-size: 0.72rem;
+	font-weight: 900;
+	white-space: nowrap;
+	transition: 0.18s ease;
+
+	&:hover {
+		border-color: #0d4d79;
+		background: linear-gradient(135deg, #155d95 0%, #0b365c 100%);
+		color: #fff;
+	}
+
+	&:focus-visible {
+		outline: 3px solid rgba(37, 155, 213, 0.3);
+		outline-offset: 2px;
+	}
+`;
+
+const DetailsState = styled.div`
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	min-height: 260px;
+	padding: 24px;
+	color: #264861;
+	text-align: center;
+
+	.ant-alert {
+		width: min(680px, 100%);
+	}
 `;

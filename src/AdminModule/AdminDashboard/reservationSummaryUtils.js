@@ -4,24 +4,34 @@ const dateValue = (value) => {
 	return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const localeWithLatinDigits = (locale = "en-US") =>
+	String(locale).toLowerCase().startsWith("ar")
+		? "ar-SA-u-nu-latn"
+		: "en-US-u-nu-latn";
+
 export const formatReservationSummaryDate = (
 	value,
-	{ locale = "en-US", dateOnly = false } = {}
+	{ locale = "en-US", calendar = "gregory", month = "short" } = {}
 ) => {
 	const date = dateValue(value);
-	if (!date) return "—";
-	return new Intl.DateTimeFormat(locale, {
+	if (!date) return "\u2014";
+	return new Intl.DateTimeFormat(localeWithLatinDigits(locale), {
 		timeZone: "Asia/Riyadh",
+		calendar,
+		numberingSystem: "latn",
 		year: "numeric",
-		month: "short",
+		month,
 		day: "numeric",
-		...(dateOnly
-			? {}
-			: {
-					hour: "2-digit",
-					minute: "2-digit",
-			  }),
 	}).format(date);
+};
+
+export const formatReservationSummaryNumber = (value, options = {}) => {
+	const number = Number(value);
+	return new Intl.NumberFormat("en-US-u-nu-latn", {
+		numberingSystem: "latn",
+		maximumFractionDigits: 2,
+		...options,
+	}).format(Number.isFinite(number) ? number : 0);
 };
 
 export const reservationActivityText = (types = [], labels = {}) =>
@@ -47,19 +57,19 @@ export const buildReservationSummaryExportRows = (
 		"Confirmation Number": spreadsheetSafeText(reservation.confirmationNumber, "N/A"),
 		Hotel: spreadsheetSafeText(reservation.hotel?.name, "Unknown Hotel"),
 		Guest: spreadsheetSafeText(reservation.guestName, "Guest"),
-		"Check-in": formatReservationSummaryDate(reservation.checkinDate, {
-			locale,
-			dateOnly: true,
-		}),
-		"Check-out": formatReservationSummaryDate(reservation.checkoutDate, {
-			locale,
-			dateOnly: true,
-		}),
+		"Check-in": formatReservationSummaryDate(reservation.checkinDate, { locale }),
+		"Check-out": formatReservationSummaryDate(reservation.checkoutDate, { locale }),
 		Created: formatReservationSummaryDate(reservation.createdAt, { locale }),
 		Status: spreadsheetSafeText(reservation.status, "unknown"),
 		Rooms: Number(reservation.rooms) || 0,
 		Guests: Number(reservation.guests) || 0,
+		Nights: Number(reservation.nights) || 0,
+		"Average Per Night": Number(reservation.averageNightlyAmount) || 0,
 		"Total Amount": Number(reservation.totalAmount) || 0,
+		"Amount Verification": spreadsheetSafeText(
+			reservation.amountQuality?.status,
+			"unverified"
+		),
 		Currency: spreadsheetSafeText(reservation.currency, "SAR"),
 		"Booking Source": spreadsheetSafeText(reservation.bookingSource, "N/A"),
 	}));

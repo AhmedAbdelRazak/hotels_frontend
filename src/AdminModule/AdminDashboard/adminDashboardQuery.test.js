@@ -33,3 +33,13 @@ test("dashboard query updates tabs and filters while preserving the other select
 	expect(yesterday).toContain("tab=overall-hotels-summary");
 	expect(yesterday).toContain("day=yesterday");
 });
+
+test("dashboard query preserves only valid reservation detail identifiers", () => {
+	const reservationId = "507f1f77bcf86cd799439011";
+	const withDetails = buildAdminDashboardSearch("?day=today", { reservationId });
+	expect(readAdminDashboardQuery(withDetails).reservationId).toBe(reservationId);
+
+	const withoutDetails = buildAdminDashboardSearch(withDetails, { reservationId: "" });
+	expect(withoutDetails).not.toContain("reservationId");
+	expect(readAdminDashboardQuery("?reservationId=not-an-id").reservationId).toBe("");
+});
