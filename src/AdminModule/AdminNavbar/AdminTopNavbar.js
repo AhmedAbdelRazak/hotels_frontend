@@ -1548,6 +1548,10 @@ const AdminTopNavbarGlobalStyles = createGlobalStyle`
 			max-width: calc(100% - 12px);
 			margin-inline: 6px;
 		}
+
+		.admin-route-shell .otherContentWrapper {
+			padding-top: 58px;
+		}
 	}
 `;
 

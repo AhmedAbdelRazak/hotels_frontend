@@ -3232,6 +3232,35 @@ export const getExportToExcelList = (userId, token, queryParamsObj) => {
 		);
 };
 
+export const getAdminReservationExecutiveSummary = async (
+	userId,
+	token,
+	day = "today",
+	{ signal } = {},
+) => {
+	const params = new URLSearchParams({ day });
+	const response = await fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservation-executive-summary/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			signal,
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	);
+	const payload = await response.json().catch(() => ({}));
+	if (!response.ok) {
+		const error = new Error(
+			payload.error || "Unable to load the reservation executive summary.",
+		);
+		error.payload = payload;
+		throw error;
+	}
+	return payload;
+};
+
 export const getPaidBreakdownReportAdmin = (
 	userId,
 	token,

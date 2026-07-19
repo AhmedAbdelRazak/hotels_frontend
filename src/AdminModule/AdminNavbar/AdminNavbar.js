@@ -19,6 +19,11 @@ import { Button, Menu } from "antd";
 import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
 import { isAuthenticated, signout } from "../../auth";
 import { isConfiguredSuperAdminUser } from "../utils/superUsers";
+import {
+	adminSidebarRootWidth,
+	isAdminMobileViewport,
+	shouldCloseAdminSidebarForViewport,
+} from "./adminSidebarViewport";
 
 function getItem(label, key, icon, children, type, className) {
 	return {
@@ -165,23 +170,47 @@ const AdminNavbar = ({
 	collapsed,
 	setCollapsed,
 }) => {
+	const mobileModeRef = React.useRef(null);
+
 	React.useEffect(() => {
 		if (typeof window === "undefined" || typeof document === "undefined") {
 			return undefined;
 		}
 
 		const syncSidebarWidth = () => {
-			const width = window.innerWidth <= 992 ? "0px" : collapsed ? "70px" : "285px";
+			const mobile = isAdminMobileViewport(window.innerWidth);
+			const width = adminSidebarRootWidth(window.innerWidth, collapsed);
 			document.documentElement.style.setProperty(
 				"--admin-sidebar-width",
 				width
 			);
+			if (shouldCloseAdminSidebarForViewport(mobileModeRef.current, mobile)) {
+				setCollapsed(true);
+				setAdminMenuStatus(false);
+			}
+			mobileModeRef.current = mobile;
 		};
 
 		syncSidebarWidth();
 		window.addEventListener("resize", syncSidebarWidth);
 
 		return () => window.removeEventListener("resize", syncSidebarWidth);
+	}, [collapsed, setAdminMenuStatus, setCollapsed]);
+
+	React.useEffect(() => {
+		if (
+			typeof window === "undefined" ||
+			typeof document === "undefined" ||
+		!isAdminMobileViewport(window.innerWidth) ||
+			collapsed
+		) {
+			return undefined;
+		}
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		return () => {
+			document.body.style.overflow = previousOverflow;
+		};
 	}, [collapsed]);
 
 	const toggleCollapsed = () => {
@@ -196,7 +225,8 @@ const AdminNavbar = ({
 		? items
 		: items.filter((item) => item.key !== "sub19");
 	const isMobile = () =>
-		typeof window !== "undefined" && window.innerWidth <= 992;
+		typeof window !== "undefined" &&
+		isAdminMobileViewport(window.innerWidth);
 
 	const closeMenuOnMobile = () => {
 		if (!isMobile()) return;
@@ -208,15 +238,17 @@ const AdminNavbar = ({
 		<>
 			<MobileToggleButton
 				type='primary'
-				shape='circle'
 				aria-label={collapsed ? "Open menu" : "Close menu"}
+				aria-controls='admin-mobile-sidebar'
+				aria-expanded={!collapsed}
 				onClick={toggleCollapsed}
 				$visible={collapsed}
 			>
 				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+				<span>Menu</span>
 			</MobileToggleButton>
 			<MobileBackdrop onClick={toggleCollapsed} $visible={!collapsed} />
-			<AdminNavbarWrapper show={collapsed}>
+			<AdminNavbarWrapper id='admin-mobile-sidebar' show={collapsed}>
 				<NavHeader>
 					<Button
 						type='text'
@@ -422,16 +454,25 @@ const NavHeader = styled.div`
 const MobileToggleButton = styled(Button)`
 	display: none;
 	position: fixed;
-	top: calc(var(--admin-topbar-height, 0px) + 12px);
-	left: 12px;
-	z-index: 910;
-	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+	top: calc(var(--admin-topbar-height, 0px) + 10px);
+	left: max(12px, env(safe-area-inset-left));
+	z-index: 920;
+	min-height: 42px;
+	padding-inline: 14px;
+	border: 1px solid rgba(151, 220, 251, 0.74) !important;
+	border-radius: 999px !important;
+	background: linear-gradient(135deg, #0b2947 0%, #155d95 65%, #2490c8 100%) !important;
+	box-shadow: 0 9px 24px rgba(8, 42, 75, 0.3) !important;
+	font-weight: 900;
 	opacity: ${(props) => (props.$visible ? 1 : 0)};
 	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
 	transition: opacity 0.2s ease;
 
 	@media (max-width: 992px) {
 		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
 	}
 `;
 
