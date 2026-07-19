@@ -1,5 +1,6 @@
 import {
 	buildReservationSummaryExportRows,
+	formatReservationSummaryDate,
 	reservationActivityText,
 	spreadsheetSafeText,
 } from "./reservationSummaryUtils";
@@ -22,7 +23,11 @@ test("executive export contains professional fields without private payment data
 				guestName: '=HYPERLINK("unsafe")',
 				activityTypes: ["checkout"],
 				checkoutDate: "2026-07-19T00:00:00.000Z",
+				createdAt: "2026-07-19T18:46:08.000Z",
+				nights: 8,
+				averageNightlyAmount: 70,
 				totalAmount: 560,
+				amountQuality: { status: "verified" },
 				currency: "SAR",
 			},
 		],
@@ -34,10 +39,33 @@ test("executive export contains professional fields without private payment data
 	expect(rows[0]["Hotel"]).toBe("Zad Ajyad");
 	expect(rows[0]["Guest"]).toBe('\'=HYPERLINK("unsafe")');
 	expect(rows[0]["Total Amount"]).toBe(560);
+	expect(rows[0]["Nights"]).toBe(8);
+	expect(rows[0]["Average Per Night"]).toBe(70);
+	expect(rows[0]["Amount Verification"]).toBe("verified");
+	expect(rows[0]["Created"]).not.toMatch(/:/);
 	expect(Object.keys(rows[0])).not.toContain("Card Number");
 });
 
 test("spreadsheet text keeps normal content and neutralizes formula prefixes", () => {
 	expect(spreadsheetSafeText("Normal guest")).toBe("Normal guest");
 	expect(spreadsheetSafeText(" +SUM(1,2)")).toBe("' +SUM(1,2)");
+});
+
+test("Arabic Miladi and Hijri dates always use Latin digits and omit time", () => {
+	const value = "2026-07-19T18:46:08.000Z";
+	const miladi = formatReservationSummaryDate(value, {
+		locale: "ar-SA",
+		calendar: "gregory",
+		month: "long",
+	});
+	const hijri = formatReservationSummaryDate(value, {
+		locale: "ar-SA",
+		calendar: "islamic-umalqura",
+		month: "long",
+	});
+
+	expect(miladi).toMatch(/2026/);
+	expect(hijri).toMatch(/14/);
+	expect(`${miladi}${hijri}`).not.toMatch(/[\u0660-\u0669]/);
+	expect(`${miladi}${hijri}`).not.toMatch(/:/);
 });

@@ -1778,7 +1778,7 @@ export const getOtaAssignableHotels = (userId, token) => {
 		}));
 };
 
-export const getAdminReservationById = (reservationId, token = "") => {
+export const getAdminReservationById = (reservationId, token = "", options = {}) => {
 	const query = new URLSearchParams({ view: "details" });
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/single-reservation/${reservationId}?${query.toString()}`,
@@ -1790,12 +1790,16 @@ export const getAdminReservationById = (reservationId, token = "") => {
 				...getStoredActiveAuthHeaders(),
 			},
 			cache: "no-store",
+			signal: options.signal,
 		},
 	)
 		.then((response) => response.json())
-		.catch((err) => ({
-			error: err?.message || "Could not load reservation details",
-		}));
+		.catch((err) => {
+			if (err?.name === "AbortError") throw err;
+			return {
+				error: err?.message || "Could not load reservation details",
+			};
+		});
 };
 
 export const prepareOtaReservationSyncJob = (

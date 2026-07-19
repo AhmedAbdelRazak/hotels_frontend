@@ -151,6 +151,14 @@ const AdminDashboard = ({ chosenLanguage }) => {
 		},
 		[history, location.pathname, location.search]
 	);
+	const handleSummaryDayChange = useCallback(
+		(day) => updateDashboardQuery({ day, reservationId: "" }),
+		[updateDashboardQuery]
+	);
+	const handleReservationIdChange = useCallback(
+		(reservationId) => updateDashboardQuery({ reservationId }),
+		[updateDashboardQuery]
+	);
 
 	const handlePasswordVerification = () => {
 		if (password === process.env.REACT_APP_ADMIN_DASHBOARD) {
@@ -230,6 +238,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 									onClick={() =>
 										updateDashboardQuery({
 											tab: ADMIN_DASHBOARD_TABS.RESERVATIONS,
+											reservationId: "",
 										})
 									}
 								>
@@ -246,6 +255,7 @@ const AdminDashboard = ({ chosenLanguage }) => {
 									onClick={() =>
 										updateDashboardQuery({
 											tab: ADMIN_DASHBOARD_TABS.HOTELS,
+											reservationId: "",
 										})
 									}
 								>
@@ -262,7 +272,9 @@ const AdminDashboard = ({ chosenLanguage }) => {
 								{dashboardQuery.tab === ADMIN_DASHBOARD_TABS.RESERVATIONS ? (
 									<ReservationsSummary
 										day={dashboardQuery.day}
-										onDayChange={(day) => updateDashboardQuery({ day })}
+										onDayChange={handleSummaryDayChange}
+										reservationId={dashboardQuery.reservationId}
+										onReservationIdChange={handleReservationIdChange}
 										chosenLanguage={chosenLanguage}
 									/>
 								) : (
@@ -339,13 +351,13 @@ const DashboardTabs = styled.div`
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
-	padding: 7px;
+	padding: 5px;
 	border: 1px solid #c9dff2;
 	border-radius: 12px;
 	background: linear-gradient(180deg, #f8fcff 0%, #edf6fd 100%);
 	box-shadow:
 		inset 0 1px #fff,
-		0 8px 22px rgba(8, 42, 75, 0.08);
+		0 6px 18px rgba(8, 42, 75, 0.08);
 `;
 
 const DashboardTab = styled.button`
@@ -355,8 +367,8 @@ const DashboardTab = styled.button`
 	justify-content: center;
 	gap: 9px;
 	min-width: 0;
-	min-height: 52px;
-	padding: 10px 14px;
+	min-height: 42px;
+	padding: 7px 12px;
 	border: 1px solid ${(props) => (props.$active ? "#2e8fc5" : "#c5dced")};
 	border-radius: 9px;
 	background: ${(props) =>
@@ -369,7 +381,7 @@ const DashboardTab = styled.button`
 			: "inset 0 1px #fff"};
 	color: ${(props) => (props.$active ? "#fff" : "#183b5b")};
 	cursor: pointer;
-	font-size: 0.9rem;
+	font-size: 0.84rem;
 	font-weight: 950;
 	line-height: 1.25;
 	text-align: center;
@@ -425,7 +437,7 @@ const DashboardTab = styled.button`
 	}
 
 	@media (max-width: 560px) {
-		min-height: 58px;
+		min-height: 48px;
 		padding: 8px 7px;
 		font-size: 0.74rem;
 
