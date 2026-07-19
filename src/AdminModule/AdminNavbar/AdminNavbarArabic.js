@@ -359,14 +359,21 @@ const AdminNavbarArabic = ({
 		<>
 			<MobileToggleButton
 				type='primary'
-				aria-label={collapsed ? "Open menu" : "Close menu"}
+				aria-label={
+					collapsed
+						? "\u0641\u062a\u062d \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0625\u062f\u0627\u0631\u0629"
+						: "\u0625\u063a\u0644\u0627\u0642 \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0625\u062f\u0627\u0631\u0629"
+				}
 				aria-controls='admin-mobile-sidebar'
 				aria-expanded={!collapsed}
 				onClick={toggleCollapsed}
-				$visible={collapsed}
 			>
 				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-				<span>{"\u0627\u0644\u0642\u0627\u0626\u0645\u0629"}</span>
+				<span>
+					{collapsed
+						? "\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0625\u062f\u0627\u0631\u0629"
+						: "\u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u0642\u0627\u0626\u0645\u0629"}
+				</span>
 			</MobileToggleButton>
 			<MobileBackdrop onClick={toggleCollapsed} $visible={!collapsed} />
 			<AdminNavbarWrapper
@@ -501,6 +508,7 @@ const AdminNavbarWrapper = styled.div`
 	@media (max-width: 992px) {
 		right: 0;
 		width: min(86vw, 320px);
+		z-index: 1150;
 		transform: translateX(${(props) => (props.show ? "110%" : "0")});
 		box-shadow: ${(props) =>
 			props.show ? "none" : "-18px 0 40px rgba(0, 0, 0, 0.35)"};
@@ -535,6 +543,14 @@ const NavHeader = styled.div`
 	@media (max-width: 1200px) {
 		padding: 8px 10px;
 	}
+
+	@media (max-width: 992px) {
+		min-height: 62px;
+
+		button {
+			display: none;
+		}
+	}
 `;
 
 const MobileToggleButton = styled(Button)`
@@ -542,7 +558,7 @@ const MobileToggleButton = styled(Button)`
 	position: fixed;
 	top: calc(var(--admin-topbar-height, 0px) + 10px);
 	right: max(12px, env(safe-area-inset-right));
-	z-index: 920;
+	z-index: 1190;
 	min-height: 42px;
 	padding-inline: 14px;
 	border: 1px solid rgba(151, 220, 251, 0.74) !important;
@@ -550,9 +566,15 @@ const MobileToggleButton = styled(Button)`
 	background: linear-gradient(135deg, #0b2947 0%, #155d95 65%, #2490c8 100%) !important;
 	box-shadow: 0 9px 24px rgba(8, 42, 75, 0.3) !important;
 	font-weight: 900;
-	opacity: ${(props) => (props.$visible ? 1 : 0)};
-	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
-	transition: opacity 0.2s ease;
+	opacity: 1;
+	pointer-events: auto;
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+	&:hover,
+	&:focus-visible {
+		transform: translateY(-1px);
+		box-shadow: 0 12px 28px rgba(8, 42, 75, 0.4) !important;
+	}
 
 	@media (max-width: 992px) {
 		display: inline-flex;
@@ -567,7 +589,7 @@ const MobileBackdrop = styled.div`
 	position: fixed;
 	inset: 0;
 	background: rgba(15, 23, 38, 0.45);
-	z-index: 890;
+	z-index: 1100;
 	opacity: ${(props) => (props.$visible ? 1 : 0)};
 	pointer-events: ${(props) => (props.$visible ? "auto" : "none")};
 	transition: opacity 0.2s ease;
