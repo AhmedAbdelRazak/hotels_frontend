@@ -61,6 +61,26 @@ beforeEach(() => {
 			checkins: 1,
 			checkouts: 0,
 			newReservations: 1,
+			metrics: {
+				checkins: {
+					count: 1,
+					sarAmount: 560,
+					variancePercent: 100,
+					varianceState: "increase",
+				},
+				checkouts: {
+					count: 0,
+					sarAmount: 0,
+					variancePercent: 0,
+					varianceState: "unchanged",
+				},
+				newReservations: {
+					count: 1,
+					sarAmount: 560,
+					variancePercent: null,
+					varianceState: "new",
+				},
+			},
 			totalUniqueReservations: 1,
 			totalAmount: 560,
 			currency: "SAR",
@@ -105,6 +125,12 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 	expect(screen.getByText("280.00 SAR \u00d7 2 nights")).toBeTruthy();
 	expect(screen.getByTestId("reservation-index-507f1f77bcf86cd799439011").textContent).toBe("1");
 	expect(screen.getByRole("button", { name: /More details/i })).toBeTruthy();
+	await waitFor(() => {
+		expect(screen.getByTestId("checkins-count").textContent).toBe("1");
+		expect(screen.getByTestId("checkins-amount").textContent).toBe("SAR 560.00");
+	});
+	expect(screen.getByTestId("checkins-variance").textContent).toBe("+100%");
+	expect(screen.getByTestId("new-variance").textContent).toBe("NEW");
 	expect(screen.getAllByRole("table").length).toBeGreaterThan(0);
 
 	await waitFor(() => {

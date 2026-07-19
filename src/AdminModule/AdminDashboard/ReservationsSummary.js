@@ -3,6 +3,8 @@ import styled from "styled-components";
 import * as XLSX from "xlsx";
 import CountUp from "react-countup";
 import {
+	ArrowDownOutlined,
+	ArrowUpOutlined,
 	CalendarOutlined,
 	CheckCircleOutlined,
 	DollarCircleOutlined,
@@ -11,6 +13,8 @@ import {
 	InfoCircleOutlined,
 	LoginOutlined,
 	LogoutOutlined,
+	MinusOutlined,
+	NumberOutlined,
 	ReloadOutlined,
 	WarningOutlined,
 } from "@ant-design/icons";
@@ -43,6 +47,11 @@ const copy = {
 		checkinsMeta: "Expected arrivals",
 		checkoutsMeta: "Expected departures",
 		newReservationsMeta: "Created on this date",
+		reservationCount: "Reservations",
+		sarValue: "SAR value",
+		variance: "Change",
+		versusPrevious: "vs prior day",
+		newSincePrevious: "NEW",
 		totalAmount: "Total reservation amount",
 		totalAmountMeta: "Sum of total_amount across unique rows",
 		mixedCurrencies: "Multiple currencies are shown separately in the table",
@@ -104,6 +113,11 @@ const copy = {
 			"\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0627\u0644\u0645\u062a\u0648\u0642\u0639\u0629",
 		newReservationsMeta:
 			"\u062a\u0645 \u0625\u0646\u0634\u0627\u0624\u0647\u0627 \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e",
+		reservationCount: "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		sarValue: "\u0627\u0644\u0642\u064a\u0645\u0629 \u0628\u0627\u0644\u0631\u064a\u0627\u0644",
+		variance: "\u0627\u0644\u062a\u063a\u064a\u0631",
+		versusPrevious: "\u0645\u0642\u0627\u0631\u0646\u0629 \u0628\u0627\u0644\u064a\u0648\u0645 \u0627\u0644\u0633\u0627\u0628\u0642",
+		newSincePrevious: "\u062c\u062f\u064a\u062f",
 		totalAmount: "\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u0628\u0627\u0644\u063a \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		totalAmountMeta: "\u0645\u062c\u0645\u0648\u0639 total_amount \u0644\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0641\u0631\u064a\u062f\u0629",
 		mixedCurrencies: "\u062a\u0638\u0647\u0631 \u0627\u0644\u0639\u0645\u0644\u0627\u062a \u0627\u0644\u0645\u062e\u062a\u0644\u0641\u0629 \u0645\u0646\u0641\u0635\u0644\u0629 \u0641\u064a \u0627\u0644\u062c\u062f\u0648\u0644",
@@ -578,44 +592,36 @@ const ReservationsSummary = ({
 		message.success(L.exportSuccess);
 	};
 
+	const metricFor = (key, legacyValue) => {
+		const metric = summary.metrics?.[key] || {};
+		return {
+			count: metric.count ?? legacyValue ?? 0,
+			sarAmount: metric.sarAmount ?? 0,
+			variancePercent: metric.variancePercent ?? null,
+			varianceState: metric.varianceState || "unchanged",
+		};
+	};
 	const scorecards = [
 		{
 			key: "checkins",
 			title: L.checkins,
-			meta: L.checkinsMeta,
-			value: summary.checkins || 0,
+			metric: metricFor("checkins", summary.checkins),
 			icon: LoginOutlined,
 			tone: "cyan",
 		},
 		{
 			key: "checkouts",
 			title: L.checkouts,
-			meta: L.checkoutsMeta,
-			value: summary.checkouts || 0,
+			metric: metricFor("checkouts", summary.checkouts),
 			icon: LogoutOutlined,
 			tone: "purple",
 		},
 		{
 			key: "new",
 			title: L.newReservations,
-			meta: L.newReservationsMeta,
-			value: summary.newReservations || 0,
+			metric: metricFor("newReservations", summary.newReservations),
 			icon: CheckCircleOutlined,
 			tone: "green",
-		},
-		{
-			key: "totalAmount",
-			title: L.totalAmount,
-			meta: summary.mixedCurrencies
-				? L.mixedCurrencies
-				: summary.amountsNeedingReview > 0
-				  ? `${formatReservationSummaryNumber(summary.amountsNeedingReview)} ${L.amountsNeedReview}`
-				  : `${formatReservationSummaryNumber(summary.verifiedAmounts)} ${L.amountsVerified}`,
-			value: summary.totalAmount,
-			currency: summary.currency || "SAR",
-			isMoney: true,
-			icon: DollarCircleOutlined,
-			tone: "amber",
 		},
 	];
 
@@ -627,69 +633,96 @@ const ReservationsSummary = ({
 					<h1>{L.title}</h1>
 					<p>{L.description}</p>
 				</HeaderCopy>
-				<HeaderControls>
-					<DateOverview>
-						<ZoneLine>
-							<CalendarOutlined />
-							<strong>{L.makkahTime}</strong>
-							<span dir='ltr'>{data?.timezoneOffset || "UTC+03:00"}</span>
-						</ZoneLine>
-						<DateLine>
-							<span>{L.miladi}</span>
-							<strong>{selectedMiladiDate}</strong>
-						</DateLine>
-						<DateLine>
-							<span>{L.hijri}</span>
-							<strong>{selectedHijriDate}</strong>
-						</DateLine>
-					</DateOverview>
-					<DayFilters aria-label='Reservation summary date filter'>
-						{[
-							[ADMIN_DASHBOARD_DAYS.YESTERDAY, L.yesterday],
-							[ADMIN_DASHBOARD_DAYS.TODAY, L.today],
-							[ADMIN_DASHBOARD_DAYS.TOMORROW, L.tomorrow],
-						].map(([value, label]) => (
-							<DayButton
-								key={value}
-								type='button'
-								$active={day === value}
-								aria-pressed={day === value}
-								onClick={() => onDayChange(value)}
-							>
-								{label}
-							</DayButton>
-						))}
-					</DayFilters>
-				</HeaderControls>
+				<DateOverview>
+					<ZoneLine>
+						<CalendarOutlined />
+						<strong>{L.makkahTime}</strong>
+						<span dir='ltr'>{data?.timezoneOffset || "UTC+03:00"}</span>
+					</ZoneLine>
+					<DateLine>
+						<span>{L.miladi}</span>
+						<strong>{selectedMiladiDate}</strong>
+					</DateLine>
+					<DateLine>
+						<span>{L.hijri}</span>
+						<strong>{selectedHijriDate}</strong>
+					</DateLine>
+				</DateOverview>
+				<DayFilters aria-label='Reservation summary date filter'>
+					{[
+						[ADMIN_DASHBOARD_DAYS.YESTERDAY, L.yesterday],
+						[ADMIN_DASHBOARD_DAYS.TODAY, L.today],
+						[ADMIN_DASHBOARD_DAYS.TOMORROW, L.tomorrow],
+					].map(([value, label]) => (
+						<DayButton
+							key={value}
+							type='button'
+							$active={day === value}
+							aria-pressed={day === value}
+							onClick={() => onDayChange(value)}
+						>
+							{label}
+						</DayButton>
+					))}
+				</DayFilters>
 			</ExecutiveHeader>
 
 			<ScoreGrid aria-label='Executive reservation totals'>
 				{scorecards.map((card) => {
 					const Icon = card.icon;
+					const TrendIcon =
+						card.metric.varianceState === "increase" ||
+						card.metric.varianceState === "new"
+							? ArrowUpOutlined
+							: card.metric.varianceState === "decrease"
+							  ? ArrowDownOutlined
+							  : MinusOutlined;
+					const varianceLabel =
+						card.metric.varianceState === "new"
+							? L.newSincePrevious
+							: `${card.metric.variancePercent > 0 ? "+" : ""}${formatReservationSummaryNumber(
+									card.metric.variancePercent || 0,
+									{ maximumFractionDigits: 1 }
+								)}%`;
 					return (
 						<ScoreCard key={card.key} $tone={card.tone}>
-							<ScoreIcon $tone={card.tone}>
-								<Icon />
-							</ScoreIcon>
-							<ScoreCopy>
-								<span>{card.title}</span>
-								<strong>
-									{card.isMoney && card.value === null ? (
-										"\u2014"
-									) : (
-										<>
-											<CountUp
-												end={Number(card.value) || 0}
-												duration={0.75}
-												separator=','
-												decimals={card.isMoney ? 2 : 0}
-											/>
-											{card.isMoney ? <Currency> {card.currency}</Currency> : null}
-										</>
-									)}
-								</strong>
-								<small>{card.meta}</small>
-							</ScoreCopy>
+							<ScoreHeading>
+								<ScoreIcon $tone={card.tone}>
+									<Icon />
+								</ScoreIcon>
+								<h2>{card.title}</h2>
+							</ScoreHeading>
+							<ScoreMetrics>
+								<Metric>
+									<MetricLabel><NumberOutlined /> {L.reservationCount}</MetricLabel>
+									<MetricValue dir='ltr' data-testid={`${card.key}-count`}>
+										<CountUp end={Number(card.metric.count) || 0} duration={0.75} separator=',' />
+									</MetricValue>
+								</Metric>
+								<Metric>
+									<MetricLabel><DollarCircleOutlined /> {L.sarValue}</MetricLabel>
+									<AmountMetricValue dir='ltr' data-testid={`${card.key}-amount`}>
+										<Currency>SAR</Currency>{" "}
+										<CountUp
+											end={Number(card.metric.sarAmount) || 0}
+											duration={0.75}
+											separator=','
+											decimals={2}
+										/>
+									</AmountMetricValue>
+								</Metric>
+								<Metric $trend={card.metric.varianceState}>
+									<MetricLabel><TrendIcon /> {L.variance}</MetricLabel>
+									<TrendValue
+										dir='ltr'
+										$trend={card.metric.varianceState}
+										data-testid={`${card.key}-variance`}
+									>
+										{varianceLabel}
+									</TrendValue>
+									<VarianceCaption>{L.versusPrevious}</VarianceCaption>
+								</Metric>
+							</ScoreMetrics>
 						</ScoreCard>
 					);
 				})}
@@ -855,57 +888,55 @@ const SummarySurface = styled.section`
 
 const ExecutiveHeader = styled.header`
 	display: grid;
-	grid-template-columns: minmax(0, 1.25fr) minmax(430px, 0.9fr);
-	gap: 18px;
+	grid-template-columns: minmax(340px, 1.18fr) minmax(440px, 1fr) minmax(260px, 0.68fr);
+	gap: 11px;
 	align-items: center;
-	padding: 14px 20px;
+	padding: 9px 14px;
 	background: radial-gradient(circle at 88% 0%, rgba(52, 181, 229, 0.27), transparent 36%),
 		linear-gradient(135deg, #071827 0%, #0d335d 45%, #155d95 100%);
 	color: #fff;
 
 	@media (max-width: 1050px) {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr) minmax(430px, 1.15fr);
 	}
 
-	@media (max-width: 600px) {
-		padding: 13px 12px;
-		gap: 11px;
+	@media (max-width: 760px) {
+		grid-template-columns: 1fr;
+		gap: 9px;
+		padding: 11px;
 	}
 `;
 
 const HeaderCopy = styled.div`
+	display: grid;
+	align-content: center;
 	min-width: 0;
+	text-align: start;
 
 	h1 {
-		margin: 2px 0 4px;
+		margin: 1px 0 3px;
 		color: #fff;
-		font-size: clamp(1.25rem, 2vw, 1.7rem);
+		font-size: clamp(1.22rem, 1.65vw, 1.52rem);
 		font-weight: 950;
-		line-height: 1.1;
+		line-height: 1.08;
 		letter-spacing: -0.025em;
 	}
 
 	p {
-		max-width: 780px;
+		max-width: 700px;
 		margin: 0;
 		color: rgba(235, 247, 255, 0.82);
-		font-size: 0.82rem;
+		font-size: 0.78rem;
 		font-weight: 650;
-		line-height: 1.4;
+		line-height: 1.3;
 	}
 `;
 
 const Eyebrow = styled.span`
 	color: #80daf7;
-	font-size: 0.64rem;
+	font-size: 0.62rem;
 	font-weight: 950;
 	letter-spacing: 0.16em;
-`;
-
-const HeaderControls = styled.div`
-	display: grid;
-	gap: 7px;
-	justify-items: stretch;
 `;
 
 const DateOverview = styled.div`
@@ -913,7 +944,8 @@ const DateOverview = styled.div`
 	grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
 	gap: 8px;
 	align-items: center;
-	padding: 7px 9px;
+	min-height: 48px;
+	padding: 6px 8px;
 	border: 1px solid rgba(201, 235, 255, 0.28);
 	border-radius: 10px;
 	background: rgba(5, 24, 43, 0.44);
@@ -921,6 +953,7 @@ const DateOverview = styled.div`
 
 	@media (max-width: 560px) {
 		grid-template-columns: 1fr 1fr;
+		min-height: 0;
 	}
 `;
 
@@ -982,14 +1015,22 @@ const DayFilters = styled.div`
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 5px;
-	padding: 4px;
+	padding: 3px;
 	border: 1px solid rgba(191, 219, 254, 0.28);
 	border-radius: 11px;
 	background: rgba(2, 18, 34, 0.48);
+
+	@media (max-width: 1050px) {
+		grid-column: 1 / -1;
+	}
+
+	@media (max-width: 760px) {
+		grid-column: auto;
+	}
 `;
 
 const DayButton = styled.button`
-	min-height: 31px;
+	min-height: 35px;
 	border: 1px solid ${(props) => (props.$active ? "#8ddcff" : "transparent")};
 	border-radius: 8px;
 	background: ${(props) =>
@@ -997,7 +1038,7 @@ const DayButton = styled.button`
 	box-shadow: ${(props) => (props.$active ? "0 7px 18px rgba(0, 0, 0, 0.24)" : "none")};
 	color: ${(props) => (props.$active ? "#fff" : "rgba(230, 245, 255, 0.76)")};
 	cursor: pointer;
-	font-size: 0.76rem;
+	font-size: 0.79rem;
 	font-weight: 900;
 	transition:
 		background 0.2s ease,
@@ -1013,12 +1054,12 @@ const DayButton = styled.button`
 
 const ScoreGrid = styled.div`
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 10px;
-	padding: 12px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+	padding: 12px 14px;
 	background: linear-gradient(180deg, #f7fbff 0%, #f2f7fc 100%);
 
-	@media (max-width: 1100px) {
+	@media (max-width: 1050px) {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
@@ -1031,11 +1072,10 @@ const ScoreGrid = styled.div`
 const ScoreCard = styled.article`
 	position: relative;
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
-	gap: 11px;
-	align-items: center;
-	min-height: 94px;
-	padding: 12px 13px;
+	grid-template-rows: auto 1fr;
+	gap: 8px;
+	min-height: 112px;
+	padding: 10px 12px;
 	border: 1px solid ${(props) => tones[props.$tone].accent}35;
 	border-radius: 13px;
 	background: ${(props) => tones[props.$tone].background};
@@ -1045,12 +1085,29 @@ const ScoreCard = styled.article`
 	&::after {
 		content: "";
 		position: absolute;
-		inset-inline-end: -32px;
-		inset-block-start: -38px;
-		width: 92px;
-		height: 92px;
+		inset-inline-end: -28px;
+		inset-block-start: -44px;
+		width: 104px;
+		height: 104px;
 		border-radius: 999px;
 		background: ${(props) => tones[props.$tone].accent}10;
+	}
+`;
+
+const ScoreHeading = styled.div`
+	position: relative;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-width: 0;
+
+	h2 {
+		margin: 0;
+		color: #173047;
+		font-size: 0.96rem;
+		font-weight: 950;
+		line-height: 1.2;
 	}
 `;
 
@@ -1060,47 +1117,112 @@ const ScoreIcon = styled.span`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 43px;
-	height: 43px;
-	border-radius: 12px;
+	width: 34px;
+	height: 34px;
+	flex: 0 0 34px;
+	border-radius: 10px;
 	background: ${(props) => tones[props.$tone].accent};
 	box-shadow:
 		inset 0 1px rgba(255, 255, 255, 0.3),
 		0 9px 20px ${(props) => tones[props.$tone].shadow};
 	color: #fff;
-	font-size: 1.18rem;
+	font-size: 1rem;
 `;
 
-const ScoreCopy = styled.div`
+const ScoreMetrics = styled.div`
 	position: relative;
 	z-index: 1;
 	display: grid;
+	grid-template-columns: 0.72fr 1.25fr 0.9fr;
+	align-items: stretch;
 	min-width: 0;
+	border: 1px solid rgba(65, 96, 123, 0.13);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.66);
+	overflow: hidden;
 
-	span {
-		color: #253b50;
-		font-size: 0.88rem;
-		font-weight: 950;
-	}
-
-	strong {
-		margin: 3px 0;
-		color: #102033;
-		font-size: clamp(1.55rem, 2.1vw, 2rem);
-		font-weight: 950;
-		line-height: 1;
-	}
-
-	small {
-		color: #5f7488;
-		font-size: 0.76rem;
-		font-weight: 750;
-		line-height: 1.25;
+	@media (max-width: 430px) {
+		grid-template-columns: 1fr;
 	}
 `;
 
+const Metric = styled.div`
+	display: grid;
+	align-content: center;
+	gap: 3px;
+	min-width: 0;
+	padding: 8px 10px;
+	border-inline-end: 1px solid rgba(65, 96, 123, 0.13);
+	background: ${(props) =>
+		props.$trend === "increase" || props.$trend === "new"
+			? "rgba(225, 249, 237, 0.54)"
+			: props.$trend === "decrease"
+			  ? "rgba(255, 235, 235, 0.58)"
+			  : "transparent"};
+
+	&:last-child {
+		border-inline-end: 0;
+	}
+
+	@media (max-width: 430px) {
+		border-inline-end: 0;
+		border-bottom: 1px solid rgba(65, 96, 123, 0.13);
+
+		&:last-child {
+			border-bottom: 0;
+		}
+	}
+`;
+
+const MetricLabel = styled.span`
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: #526a7f;
+	font-size: 0.76rem;
+	font-weight: 850;
+	line-height: 1.1;
+	white-space: nowrap;
+
+	svg {
+		color: #247ca8;
+		font-size: 0.78rem;
+	}
+`;
+
+const MetricValue = styled.strong`
+	color: #102033;
+	font-size: clamp(1.42rem, 1.8vw, 1.72rem);
+	font-weight: 950;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+`;
+
+const AmountMetricValue = styled(MetricValue)`
+	font-size: clamp(1rem, 1.25vw, 1.2rem);
+	white-space: nowrap;
+`;
+
+const TrendValue = styled(MetricValue)`
+	color: ${(props) =>
+		props.$trend === "increase" || props.$trend === "new"
+			? "#0b7a4c"
+			: props.$trend === "decrease"
+			  ? "#b42332"
+			  : "#4f6477"};
+	font-size: clamp(1rem, 1.25vw, 1.2rem);
+`;
+
+const VarianceCaption = styled.small`
+	color: #667b8d;
+	font-size: 0.68rem;
+	font-weight: 750;
+	line-height: 1.05;
+`;
+
 const Currency = styled.span`
-	font-size: 0.55em !important;
+	font-size: 0.72em;
+	font-weight: 900;
 	white-space: nowrap;
 `;
 
