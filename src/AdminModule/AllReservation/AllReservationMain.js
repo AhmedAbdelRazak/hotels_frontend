@@ -1,5 +1,5 @@
 // client/src/AdminModule/AllReservation/AllReservationMain.jsx
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
@@ -109,6 +109,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	const [dateFilter, setDateFilter] = useState(() =>
 		getDateFilterFromSearch(location.search)
 	);
+	const syncingAllQueryRef = useRef(false);
 
 	// Password modal states
 	const [isModalVisible, setIsModalVisible] = useState(false);
@@ -146,6 +147,11 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 	// Keep currentPage/searchTerm in sync with query params
 	useEffect(() => {
+		if (!isAllReservationsTab) {
+			syncingAllQueryRef.current = false;
+			return;
+		}
+		syncingAllQueryRef.current = true;
 		const pageFromQuery = getPageFromSearch(location.search);
 		const searchFromQuery = getSearchTermFromSearch(location.search);
 		const dateFromQuery = getDateFilterFromSearch(location.search);
@@ -158,9 +164,17 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		setDateFilter((prev) =>
 			isSameDateFilter(prev, dateFromQuery) ? prev : dateFromQuery
 		);
-	}, [location.search]);
+	}, [isAllReservationsTab, location.search]);
 
 	useEffect(() => {
+		if (!isAllReservationsTab) {
+			syncingAllQueryRef.current = false;
+			return;
+		}
+		if (syncingAllQueryRef.current) {
+			syncingAllQueryRef.current = false;
+			return;
+		}
 		const params = new URLSearchParams(location.search);
 		const desiredPage = String(currentPage);
 		const desiredSearch = (searchTerm || "").trim();
@@ -226,6 +240,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 		dateFilter?.from,
 		dateFilter?.to,
 		history,
+		isAllReservationsTab,
 		location.pathname,
 		location.search,
 	]);
@@ -756,6 +771,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 										chosenLanguage={chosenLanguage}
 										actionsLoader={getAdminPendingFinanceReservations}
 										actionsExporter={getAdminPendingFinanceReservations}
+										adminTheme
 									/>
 								)}
 							</ReservationCyclePanel>

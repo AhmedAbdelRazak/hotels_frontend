@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Checkbox, DatePicker, Input, message, Modal, Select } from "antd";
 import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
@@ -362,6 +362,7 @@ const OverallPendingReservations = ({
 		sortOrder: "asc",
 	});
 	const [page, setPage] = useState(() => pageFromSearch(location.search));
+	const syncingPageFromSearchRef = useRef(false);
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
@@ -425,10 +426,18 @@ const OverallPendingReservations = ({
 
 	useEffect(() => {
 		const nextPage = pageFromSearch(location.search);
-		setPage((previous) => (previous === nextPage ? previous : nextPage));
+		setPage((previous) => {
+			if (previous === nextPage) return previous;
+			syncingPageFromSearchRef.current = true;
+			return nextPage;
+		});
 	}, [location.search]);
 
 	useEffect(() => {
+		if (syncingPageFromSearchRef.current) {
+			syncingPageFromSearchRef.current = false;
+			return;
+		}
 		const safePage = Math.max(Number(page) || 1, 1);
 		const query = new URLSearchParams(location.search || "");
 		if (query.get("page") === String(safePage)) return;
