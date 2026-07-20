@@ -11,9 +11,6 @@ import {
 	readUserId,
 	distinctReservedByList,
 	distinctBookingSources, // <-- NEW
-	getAdminPendingConfirmationReservations,
-	exportAdminPendingConfirmationReservations,
-	getAdminPendingFinanceReservations,
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
@@ -25,8 +22,8 @@ import {
 	EyeTwoTone,
 } from "@ant-design/icons";
 import { SUPER_USER_IDS } from "../utils/superUsers";
-import OverallPendingReservations from "../../HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations";
-import OverallFinancialActions from "../../HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions";
+import AdminPendingConfirmationReservations from "./AdminPendingConfirmationReservations";
+import AdminPendingFinancialActions from "./AdminPendingFinancialActions";
 import {
 	ADMIN_RESERVATION_CYCLE_TABS,
 	buildAdminReservationCycleSearch,
@@ -752,26 +749,16 @@ const AllReservationMain = ({ chosenLanguage }) => {
 									/>
 								) : activeTab ===
 								  ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION ? (
-									<OverallPendingReservations
+									<AdminPendingConfirmationReservations
 										userId={getUser?._id}
 										token={token}
 										chosenLanguage={chosenLanguage}
-										confirmationOnly
-										reservationsLoader={
-											getAdminPendingConfirmationReservations
-										}
-										reservationsExporter={
-											exportAdminPendingConfirmationReservations
-										}
 									/>
 								) : (
-									<OverallFinancialActions
+									<AdminPendingFinancialActions
 										userId={getUser?._id}
 										token={token}
 										chosenLanguage={chosenLanguage}
-										actionsLoader={getAdminPendingFinanceReservations}
-										actionsExporter={getAdminPendingFinanceReservations}
-										adminTheme
 									/>
 								)}
 							</ReservationCyclePanel>

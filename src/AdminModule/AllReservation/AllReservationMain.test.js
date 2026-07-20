@@ -21,7 +21,7 @@ jest.mock("./EnhancedContentTable", () => () => (
   <div data-testid="all-reservations-panel">All reservations table</div>
 ));
 jest.mock(
-  "../../HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations",
+  "./AdminPendingConfirmationReservations",
   () => () => {
     const { useHistory, useLocation } = require("react-router-dom");
     const history = useHistory();
@@ -46,12 +46,9 @@ jest.mock(
   },
 );
 jest.mock(
-  "../../HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions",
-  () => (props) => (
-    <div
-      data-testid="pending-finance-panel"
-      data-admin-theme={String(Boolean(props.adminTheme))}
-    >
+  "./AdminPendingFinancialActions",
+  () => () => (
+    <div data-testid="pending-finance-panel" data-admin-component="true">
       Pending finance table
     </div>
   ),
@@ -149,7 +146,7 @@ it("loads only the Pending Finance surface for its query tab", async () => {
     "true",
   );
   expect(screen.getByTestId("pending-finance-panel")).toHaveAttribute(
-    "data-admin-theme",
+    "data-admin-component",
     "true",
   );
   await waitFor(() => expect(readUserId).toHaveBeenCalledTimes(1));

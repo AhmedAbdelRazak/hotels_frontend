@@ -606,6 +606,14 @@ export const reservationSingleHotelRoute = (
 	return `/hotel-management/new-reservation/${ownerId}/${hotelId}?${params.toString()}`;
 };
 
+const PENDING_QUEUE_TERMINAL_STATUS =
+	/cancel(?:led|ed)?|void|no[_\s-]?show|in[_\s-]?house|checked[_\s-]?in|checked[_\s-]?out|checkedin|checkedout|early[_\s-]?checked[_\s-]?out|closed/i;
+
+export const isTerminalPendingQueueReservation = (reservation = {}) =>
+	[reservation.reservation_status, reservation.state].some((value) =>
+		PENDING_QUEUE_TERMINAL_STATUS.test(String(value || "").trim())
+	);
+
 export const OverallPageShell = styled.section`
 	display: grid;
 	gap: 1rem;
