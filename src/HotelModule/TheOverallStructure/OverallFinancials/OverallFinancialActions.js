@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, DatePicker, Input, InputNumber, message, Modal, Select, Tag } from "antd";
 import {
 	CheckCircleOutlined,
@@ -9,7 +9,7 @@ import {
 	StopOutlined,
 } from "@ant-design/icons";
 import { useHistory, useLocation } from "react-router-dom";
-import styled from "styled-components";
+import styled, { createGlobalStyle, css } from "styled-components";
 import dayjs from "dayjs";
 import {
 	exportOverallFinancialActions,
@@ -387,9 +387,9 @@ Object.assign(TEXT.ar, {
 		"\u0644\u0627 \u064a\u0648\u062c\u062f \u0648\u0643\u064a\u0644 \u0645\u0631\u062a\u0628\u0637 \u0628\u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632\u060c \u0644\u0630\u0644\u0643 \u062a\u062a\u0639\u0627\u0645\u0644 \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u0645\u0639\u0647 \u0643\u0639\u0645\u0648\u0644\u0629 \u0645\u0635\u062f\u0631 \u0641\u0642\u0637.",
 });
 
-const reasonTone = (reason = "") => {
+const reasonTone = (reason = "", adminTheme = false) => {
 	if (/rejected/.test(reason)) return "red";
-	if (/agent/.test(reason)) return "purple";
+	if (/agent/.test(reason)) return adminTheme ? "blue" : "purple";
 	if (/review/.test(reason)) return "blue";
 	return "orange";
 };
@@ -796,6 +796,7 @@ const OverallFinancialActions = ({
 	chosenLanguage,
 	actionsLoader = getOverallFinancialActions,
 	actionsExporter = exportOverallFinancialActions,
+	adminTheme = false,
 }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -842,6 +843,7 @@ const OverallFinancialActions = ({
 		commissionMonth: dayjs().format("YYYY-MM"),
 	});
 	const [page, setPage] = useState(() => pageFromSearch(location.search));
+	const syncingPageFromSearchRef = useRef(false);
 	const [walletPage, setWalletPage] = useState(1);
 	const [commissionPage, setCommissionPage] = useState(1);
 	const [selectedCommissionIds, setSelectedCommissionIds] = useState([]);
@@ -902,10 +904,18 @@ const OverallFinancialActions = ({
 
 	useEffect(() => {
 		const nextPage = pageFromSearch(location.search);
-		setPage((previous) => (previous === nextPage ? previous : nextPage));
+		setPage((previous) => {
+			if (previous === nextPage) return previous;
+			syncingPageFromSearchRef.current = true;
+			return nextPage;
+		});
 	}, [location.search]);
 
 	useEffect(() => {
+		if (syncingPageFromSearchRef.current) {
+			syncingPageFromSearchRef.current = false;
+			return;
+		}
 		const safePage = Math.max(Number(page) || 1, 1);
 		const query = new URLSearchParams(location.search || "");
 		if (query.get("page") === String(safePage)) return;
@@ -1656,7 +1666,8 @@ const OverallFinancialActions = ({
 	};
 
 	return (
-		<OverallPageShell $isRTL={isRTL}>
+		<FinancialPageShell $isRTL={isRTL} $adminTheme={adminTheme}>
+			{adminTheme ? <AdminFinanceModalGlobalStyle /> : null}
 			<FinancialSectionHeader>
 				<div>
 					<strong>{labels.title}</strong>
@@ -1851,7 +1862,7 @@ const OverallFinancialActions = ({
 									</td>
 									<td>
 										{(reservation.financialActionReasons || []).map((reason) => (
-											<Tag key={reason} color={reasonTone(reason)}>
+											<Tag key={reason} color={reasonTone(reason, adminTheme)}>
 												{reasonLabel(reason, labels)}
 											</Tag>
 										))}
@@ -2223,7 +2234,10 @@ const OverallFinancialActions = ({
 				footer={null}
 				destroyOnClose
 				width='min(96vw, 1120px)'
-				className={`${PENDING_REVIEW_MODAL_CLASS} overall-finance-review-modal`}
+				className={`${PENDING_REVIEW_MODAL_CLASS} overall-finance-review-modal${
+					adminTheme ? " admin-finance-review-modal" : ""
+				}`}
+				zIndex={adminTheme ? 2000 : undefined}
 			>
 				<div dir={isRTL ? "rtl" : "ltr"}>
 					<FinanceModalFrame $isRTL={isRTL} $hasAgent={!!financeAgentInfo}>
@@ -2471,9 +2485,151 @@ const OverallFinancialActions = ({
 					</FinanceModalActions>
 				</FinanceRejectModalBody>
 			</Modal>
-		</OverallPageShell>
+		</FinancialPageShell>
 	);
 };
+
+const FinancialPageShell = styled(OverallPageShell)`
+	${({ $adminTheme }) =>
+		$adminTheme &&
+		css`
+			--pms-metal-purple: var(--admin-metal-blue, #155d95);
+			--pms-metal-purple-lift: var(--admin-metal-blue-lift, #2490c8);
+			--pms-metal-purple-bg: var(
+				--admin-metal-blue-bg,
+				linear-gradient(135deg, #071827 0%, #0d3f6a 52%, #155d95 100%)
+			);
+			--finance-header-glow: rgba(21, 93, 149, 0.08);
+			--finance-tab-accent: var(--admin-metal-blue-lift, #2490c8);
+			--finance-tab-active-bg: linear-gradient(
+				135deg,
+				#071827 0%,
+				#0d3f6a 52%,
+				#155d95 100%
+			);
+			--finance-tab-active-shadow: 0 10px 24px rgba(8, 50, 87, 0.26),
+				inset 0 1px rgba(255, 255, 255, 0.14);
+			--finance-tab-count-ink: #0d3f6a;
+
+			${OverallToolbar} {
+				border-color: #c9dff2;
+				background: linear-gradient(180deg, #f8fcff 0%, #edf6fd 100%);
+				box-shadow:
+					inset 0 1px #ffffff,
+					0 8px 22px rgba(8, 42, 75, 0.08);
+			}
+
+			${OverallToolbar} > input:focus,
+			${OverallToolbar} > select:focus,
+			${OverallToolbar} .overall-filter-select.ant-select-focused .ant-select-selector,
+			${OverallToolbar} .overall-date-picker.ant-picker-focused {
+				box-shadow: 0 0 0 3px rgba(36, 144, 200, 0.15) !important;
+			}
+
+			${OverallToolbar} button {
+				border-color: rgba(36, 144, 200, 0.92);
+				box-shadow:
+					inset 0 1px rgba(255, 255, 255, 0.2),
+					0 9px 20px rgba(8, 42, 75, 0.22);
+			}
+
+			${OverallToolbar} button:hover {
+				box-shadow:
+					inset 0 1px rgba(255, 255, 255, 0.24),
+					0 12px 24px rgba(8, 50, 87, 0.28);
+			}
+
+			${OverallToolbar} button.secondary {
+				border-color: #b9d7ec;
+				background: linear-gradient(180deg, #ffffff 0%, #eef7fd 100%);
+				color: #183b5b;
+				box-shadow: 0 5px 14px rgba(8, 50, 87, 0.1);
+			}
+
+			${OverallToolbar} button.secondary:hover {
+				background: #eaf5fc;
+			}
+
+			${ActionButton} {
+				border-color: rgba(36, 144, 200, 0.92);
+				box-shadow:
+					inset 0 1px rgba(255, 255, 255, 0.2),
+					0 7px 16px rgba(8, 50, 87, 0.2);
+			}
+
+			${ActionButton}:not(:disabled):hover {
+				border-color: #d7f3ff;
+			}
+		`}
+`;
+
+const AdminFinanceModalGlobalStyle = createGlobalStyle`
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal {
+		top: calc(var(--admin-topbar-height, 84px) + 12px) !important;
+		padding-bottom: 12px;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+		.ant-modal-content {
+		display: flex;
+		max-height: calc(100vh - var(--admin-topbar-height, 84px) - 24px);
+		overflow: hidden;
+		border: 1px solid rgba(36, 144, 200, 0.42);
+		box-shadow:
+			0 24px 64px rgba(7, 24, 39, 0.34),
+			inset 0 1px rgba(255, 255, 255, 0.9);
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+		.ant-modal-header {
+		flex: 0 0 auto;
+		padding-bottom: 12px;
+		border-bottom: 1px solid #d7e7f8;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+		.ant-modal-title {
+		color: var(--admin-metal-blue-deep, #0e3157);
+		font-weight: 950;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+		.ant-modal-body {
+		max-height: calc(100vh - var(--admin-topbar-height, 84px) - 92px);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scrollbar-gutter: stable;
+	}
+
+	.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+		.ant-btn-primary:not(.ant-btn-dangerous) {
+		border-color: rgba(36, 144, 200, 0.92);
+		background: var(
+			--admin-metal-blue-bg,
+			linear-gradient(135deg, #071827 0%, #0d3f6a 52%, #155d95 100%)
+		);
+		box-shadow:
+			inset 0 1px rgba(255, 255, 255, 0.2),
+			0 9px 20px rgba(8, 42, 75, 0.22);
+	}
+
+	@media (max-width: 640px) {
+		.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal {
+			top: calc(var(--admin-topbar-height, 112px) + 8px) !important;
+			padding-bottom: 8px;
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+			.ant-modal-content {
+			max-height: calc(100vh - var(--admin-topbar-height, 112px) - 16px);
+		}
+
+		.${PENDING_REVIEW_MODAL_CLASS}.overall-finance-review-modal.admin-finance-review-modal
+			.ant-modal-body {
+			max-height: calc(100vh - var(--admin-topbar-height, 112px) - 84px);
+		}
+	}
+`;
 
 const FinancialSectionHeader = styled.header`
 	display: flex;
@@ -2485,7 +2641,11 @@ const FinancialSectionHeader = styled.header`
 	border-radius: 8px;
 	background:
 		linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.98)),
-		linear-gradient(135deg, rgba(36, 84, 125, 0.08), rgba(100, 22, 110, 0.05));
+		linear-gradient(
+			135deg,
+			rgba(36, 84, 125, 0.08),
+			var(--finance-header-glow, rgba(100, 22, 110, 0.05))
+		);
 	box-shadow:
 		inset 0 1px rgba(255, 255, 255, 0.75),
 		0 8px 22px rgba(15, 40, 66, 0.06);
@@ -2558,10 +2718,13 @@ const FinancialTabs = styled.div`
 
 	button:hover,
 	button[data-active="true"] {
-		border-color: #64166e;
-		background: linear-gradient(135deg, #3d0b48 0%, #792286 100%);
+		border-color: var(--finance-tab-accent, #64166e);
+		background: var(
+			--finance-tab-active-bg,
+			linear-gradient(135deg, #3d0b48 0%, #792286 100%)
+		);
 		color: #ffffff;
-		box-shadow: 0 10px 22px rgba(82, 20, 93, 0.18);
+		box-shadow: var(--finance-tab-active-shadow, 0 10px 22px rgba(82, 20, 93, 0.18));
 	}
 
 	span {
@@ -2580,7 +2743,7 @@ const FinancialTabs = styled.div`
 		padding: 0 8px;
 		border-radius: 999px;
 		background: rgba(255, 255, 255, 0.86);
-		color: #2c1634;
+		color: var(--finance-tab-count-ink, #2c1634);
 		font-size: 0.8rem;
 		font-weight: 950;
 	}

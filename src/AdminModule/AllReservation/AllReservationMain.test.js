@@ -1,6 +1,6 @@
 import React from "react";
 import "@testing-library/jest-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route } from "react-router-dom";
 import AllReservationMain from "./AllReservationMain";
 import {
@@ -22,16 +22,38 @@ jest.mock("./EnhancedContentTable", () => () => (
 ));
 jest.mock(
   "../../HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations",
-  () => () => (
-    <div data-testid="pending-confirmation-panel">
-      Pending confirmation table
-    </div>
-  ),
+  () => () => {
+    const { useHistory, useLocation } = require("react-router-dom");
+    const history = useHistory();
+    const location = useLocation();
+    return (
+      <div data-testid="pending-confirmation-panel">
+        Pending confirmation table
+        <span data-testid="pending-confirmation-query">{location.search}</span>
+        <button
+          type="button"
+          onClick={() =>
+            history.replace({
+              pathname: location.pathname,
+              search: "?page=2&tab=pending-confirmation",
+            })
+          }
+        >
+          Pending page 2
+        </button>
+      </div>
+    );
+  },
 );
 jest.mock(
   "../../HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions",
-  () => () => (
-    <div data-testid="pending-finance-panel">Pending finance table</div>
+  () => (props) => (
+    <div
+      data-testid="pending-finance-panel"
+      data-admin-theme={String(Boolean(props.adminTheme))}
+    >
+      Pending finance table
+    </div>
   ),
 );
 jest.mock("../apiAdmin", () => ({
@@ -102,6 +124,20 @@ it("loads only the Pending Confirmation surface for its query tab", async () => 
   expect(gettingHotelDetailsForAdminAll).not.toHaveBeenCalled();
 });
 
+it("lets the active Pending Confirmation tab own its page query without a loop", async () => {
+  renderRoute("/admin/all-reservations?tab=pending-confirmation&page=1");
+
+  await screen.findByTestId("pending-confirmation-panel");
+  fireEvent.click(screen.getByRole("button", { name: "Pending page 2" }));
+
+  await waitFor(() =>
+    expect(screen.getByTestId("pending-confirmation-query")).toHaveTextContent(
+      "?page=2&tab=pending-confirmation",
+    ),
+  );
+  expect(getAllReservationForAdmin).not.toHaveBeenCalled();
+});
+
 it("loads only the Pending Finance surface for its query tab", async () => {
   renderRoute("/admin/all-reservations?tab=pending-finance&page=1");
 
@@ -110,6 +146,10 @@ it("loads only the Pending Finance surface for its query tab", async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Pending Finance" })).toHaveAttribute(
     "aria-selected",
+    "true",
+  );
+  expect(screen.getByTestId("pending-finance-panel")).toHaveAttribute(
+    "data-admin-theme",
     "true",
   );
   await waitFor(() => expect(readUserId).toHaveBeenCalledTimes(1));
