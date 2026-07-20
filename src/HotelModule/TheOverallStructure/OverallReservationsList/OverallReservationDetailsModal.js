@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Modal, Spin } from "antd";
 import styled, { createGlobalStyle } from "styled-components";
 import { useHistory, useLocation } from "react-router-dom";
@@ -83,6 +83,8 @@ const OverallReservationDetailsModal = ({
 	ownerId,
 	onReservationUpdated,
 	chosenLanguage,
+	DetailsComponent = ReservationDetail,
+	adminTheme = false,
 }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const labels = getOverallText(chosenLanguage);
@@ -225,24 +227,22 @@ const OverallReservationDetailsModal = ({
 		]
 	);
 
-	const modalBody = useMemo(() => {
-		if (loading) {
-			return (
-				<LoadingPanel>
-					<Spin size='large' />
-					<span>{labels.loading}</span>
-				</LoadingPanel>
-			);
-		}
-		if (!modalReservation || !hotelDetails) return null;
-		return (
-			<ReservationDetail
+	const modalBody = loading ? (
+		<LoadingPanel>
+			<Spin size='large' />
+			<span>{labels.loading}</span>
+		</LoadingPanel>
+	) : modalReservation && hotelDetails ? (
+			<DetailsComponent
+				selectedReservation={modalReservation}
 				reservation={modalReservation}
 				setReservation={setReservationFromDetail}
 				hotelDetails={hotelDetails}
+				onReservationUpdated={setReservationFromDetail}
 			/>
-		);
-	}, [hotelDetails, labels.loading, loading, modalReservation, setReservationFromDetail]);
+	) : null;
+
+	const modalZIndex = adminTheme ? 16000 : RESERVATION_DETAILS_MODAL_Z_INDEX;
 
 	return (
 		<>
@@ -253,17 +253,26 @@ const OverallReservationDetailsModal = ({
 				open={!!selectedReservation}
 				onCancel={closeReservation}
 				footer={null}
-				width='min(94vw, calc(100vw - 220px))'
+				width={
+					adminTheme ? "min(98vw, 1720px)" : "min(94vw, calc(100vw - 220px))"
+				}
 				centered
-				zIndex={RESERVATION_DETAILS_MODAL_Z_INDEX}
-				rootClassName='reservation-details-modal-root'
-				className={`reservation-details-modal${isRTL ? " is-rtl" : ""}`}
+				zIndex={modalZIndex}
+				rootClassName={`reservation-details-modal-root${
+					adminTheme ? " admin-reservation-details-layer" : ""
+				}`}
+				wrapClassName={adminTheme ? "admin-reservation-details-wrap" : undefined}
+				className={`reservation-details-modal${
+					adminTheme ? " admin-reservation-details-modal" : ""
+				}${isRTL ? " is-rtl" : ""}`}
 				destroyOnClose
+				getContainer={adminTheme ? () => document.body : undefined}
 				styles={{
+					mask: adminTheme ? { zIndex: modalZIndex - 1 } : undefined,
 					header: { display: "none" },
 					content: { padding: "6px 10px 8px" },
 					body: {
-						maxHeight: "86vh",
+						maxHeight: adminTheme ? "92vh" : "86vh",
 						overflowY: "auto",
 						padding: "0",
 					},
@@ -300,8 +309,21 @@ const ReservationDetailsModalGlobalStyle = createGlobalStyle`
 		z-index: ${RESERVATION_DETAILS_MODAL_Z_INDEX} !important;
 	}
 
+	.reservation-details-modal-root.admin-reservation-details-layer .ant-modal-mask {
+		z-index: 15999 !important;
+	}
+
+	.reservation-details-modal-root.admin-reservation-details-layer .ant-modal-wrap,
+	.reservation-details-modal-root.admin-reservation-details-layer .ant-modal {
+		z-index: 16000 !important;
+	}
+
 	.reservation-details-modal {
 		max-width: min(94vw, calc(100vw - 220px));
+	}
+
+	.reservation-details-modal.admin-reservation-details-modal {
+		max-width: min(98vw, 1720px);
 	}
 
 	.reservation-details-modal .ant-modal-close {

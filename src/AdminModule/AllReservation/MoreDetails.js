@@ -1274,7 +1274,7 @@ const Wrapper = styled.div`
 	--pms-green: #05a857;
 	--pms-red: #dc3545;
 	--pms-amber: #d97706;
-	--pms-purple: #7c3aed;
+	--pms-purple: var(--admin-metal-blue, #155d95);
 	--pms-cyan: #0891b2;
 	--pms-border: #cfe5fb;
 	--pms-text: #18212f;

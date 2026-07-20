@@ -27,6 +27,7 @@ import {
 	formatDate,
 	formatMoney,
 	getOverallText,
+	isTerminalPendingQueueReservation,
 	localizeStatus,
 	normalizeId,
 	OVERALL_PAGE_SIZE,
@@ -797,6 +798,8 @@ const OverallFinancialActions = ({
 	actionsLoader = getOverallFinancialActions,
 	actionsExporter = exportOverallFinancialActions,
 	adminTheme = false,
+	DetailsModalComponent = OverallReservationDetailsModal,
+	queryStateAdapter,
 }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -832,22 +835,38 @@ const OverallFinancialActions = ({
 					baseLabels.reservationActionsSubtitle,
 		  }
 		: baseLabels;
-	const [filters, setFilters] = useState({
-		hotelId: "",
-		bookingSource: "",
-		agentId: "",
-		actionType: "",
-		dateBy: "booked_at",
-		dateFrom: "",
-		dateTo: "",
-		commissionMonth: dayjs().format("YYYY-MM"),
-	});
-	const [page, setPage] = useState(() => pageFromSearch(location.search));
-	const syncingPageFromSearchRef = useRef(false);
+	const defaultFilters = useMemo(
+		() => ({
+			hotelId: "",
+			bookingSource: "",
+			agentId: "",
+			actionType: "",
+			dateBy: "booked_at",
+			dateFrom: "",
+			dateTo: "",
+			commissionMonth: dayjs().format("YYYY-MM"),
+		}),
+		[]
+	);
+	const initialQueryState = useMemo(
+		() =>
+			queryStateAdapter
+				? queryStateAdapter.read(location.search, { filters: defaultFilters })
+				: { filters: defaultFilters, page: pageFromSearch(location.search) },
+		// The URL-to-state effect owns subsequent navigation changes.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[]
+	);
+	const [filters, setFilters] = useState(initialQueryState.filters);
+	const [page, setPage] = useState(initialQueryState.page);
+	const syncingQueryFromSearchRef = useRef(false);
+	const lastReadSearchRef = useRef(location.search || "");
 	const [walletPage, setWalletPage] = useState(1);
 	const [commissionPage, setCommissionPage] = useState(1);
 	const [selectedCommissionIds, setSelectedCommissionIds] = useState([]);
-	const [activeFinanceTab, setActiveFinanceTab] = useState("reservations");
+	const [activeFinanceTab, setActiveFinanceTab] = useState(
+		initialQueryState.activeFinanceTab || "reservations"
+	);
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
@@ -903,28 +922,64 @@ const OverallFinancialActions = ({
 	}, [params, token, userId]);
 
 	useEffect(() => {
-		const nextPage = pageFromSearch(location.search);
-		setPage((previous) => {
-			if (previous === nextPage) return previous;
-			syncingPageFromSearchRef.current = true;
-			return nextPage;
-		});
-	}, [location.search]);
+		if (lastReadSearchRef.current === (location.search || "")) return;
+		lastReadSearchRef.current = location.search || "";
+		const nextState = queryStateAdapter
+			? queryStateAdapter.read(location.search, {
+					filters: defaultFilters,
+					activeFinanceTab: "reservations",
+			  })
+			: { filters, page: pageFromSearch(location.search), activeFinanceTab };
+		const filtersChanged =
+			queryStateAdapter &&
+			JSON.stringify(nextState.filters) !== JSON.stringify(filters);
+		const pageChanged = nextState.page !== page;
+		const financeTabChanged =
+			queryStateAdapter && nextState.activeFinanceTab !== activeFinanceTab;
+		if (!filtersChanged && !pageChanged && !financeTabChanged) return;
+		syncingQueryFromSearchRef.current = true;
+		if (filtersChanged) setFilters(nextState.filters);
+		if (pageChanged) setPage(nextState.page);
+		if (financeTabChanged) setActiveFinanceTab(nextState.activeFinanceTab);
+	}, [
+		activeFinanceTab,
+		defaultFilters,
+		filters,
+		location.search,
+		page,
+		queryStateAdapter,
+	]);
 
 	useEffect(() => {
-		if (syncingPageFromSearchRef.current) {
-			syncingPageFromSearchRef.current = false;
+		if (syncingQueryFromSearchRef.current) {
+			syncingQueryFromSearchRef.current = false;
 			return;
 		}
-		const safePage = Math.max(Number(page) || 1, 1);
-		const query = new URLSearchParams(location.search || "");
-		if (query.get("page") === String(safePage)) return;
-		query.set("page", String(safePage));
+		const nextSearch = queryStateAdapter
+			? queryStateAdapter.write(location.search, {
+					filters,
+					page,
+					activeFinanceTab,
+			  })
+			: (() => {
+					const query = new URLSearchParams(location.search || "");
+					query.set("page", String(Math.max(Number(page) || 1, 1)));
+					return `?${query.toString()}`;
+			  })();
+		if (nextSearch === (location.search || "")) return;
 		history.replace({
 			pathname: location.pathname,
-			search: `?${query.toString()}`,
+			search: nextSearch,
 		});
-	}, [history, location.pathname, location.search, page]);
+	}, [
+		activeFinanceTab,
+		filters,
+		history,
+		location.pathname,
+		location.search,
+		page,
+		queryStateAdapter,
+	]);
 
 	const hotels = Array.isArray(result.hotels) ? result.hotels : [];
 	const bookingSources = Array.isArray(result.bookingSources)
@@ -933,7 +988,11 @@ const OverallFinancialActions = ({
 	const agentOptions = Array.isArray(result.agentOptions)
 		? result.agentOptions
 		: [];
-	const reservations = Array.isArray(result.reservations) ? result.reservations : [];
+	const reservations = Array.isArray(result.reservations)
+		? result.reservations.filter(
+				(reservation) => !isTerminalPendingQueueReservation(reservation)
+		  )
+		: [];
 	const pages = Math.max(Number(result.pages || 1), 1);
 	const walletClaims = result.walletClaims || {};
 	const walletClaimRows = Array.isArray(walletClaims.transactions)
@@ -2218,7 +2277,7 @@ const OverallFinancialActions = ({
 				) : null}
 			</FinancialTabPanel>
 
-			<OverallReservationDetailsModal
+			<DetailsModalComponent
 				reservations={reservations}
 				selectedReservation={selectedReservation}
 				setSelectedReservation={setSelectedReservation}

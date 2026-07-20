@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Checkbox, DatePicker, Input, message, Modal, Select } from "antd";
 import dayjs from "dayjs";
 import { useHistory, useLocation } from "react-router-dom";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import {
 	exportOverallPendingReservations,
 	exportOverallRejectedReservations,
@@ -20,6 +20,7 @@ import {
 	getOverallText,
 	getReservationNights,
 	getReservationPricePerDay,
+	isTerminalPendingQueueReservation,
 	localizeStatus,
 	OVERALL_PAGE_SIZE,
 	OverallCenteredSearch,
@@ -333,6 +334,9 @@ const OverallPendingReservations = ({
 	confirmationOnly = false,
 	reservationsLoader = getOverallPendingReservations,
 	reservationsExporter = exportOverallPendingReservations,
+	DetailsModalComponent = OverallReservationDetailsModal,
+	adminTheme = false,
+	queryStateAdapter,
 }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -351,18 +355,32 @@ const OverallPendingReservations = ({
 		() => getPendingWorkflowPermissions(currentUser),
 		[currentUser]
 	);
-	const [filters, setFilters] = useState({
-		search: "",
-		hotelId: [],
-		status: rejectedOnly ? [] : DEFAULT_PENDING_STATUS_FILTER,
-		dateBy: "createdAt",
-		dateFrom: "",
-		dateTo: "",
-		sortBy: "createdAt",
-		sortOrder: "asc",
-	});
-	const [page, setPage] = useState(() => pageFromSearch(location.search));
-	const syncingPageFromSearchRef = useRef(false);
+	const defaultFilters = useMemo(
+		() => ({
+			search: "",
+			hotelId: [],
+			status: rejectedOnly ? [] : DEFAULT_PENDING_STATUS_FILTER,
+			dateBy: "createdAt",
+			dateFrom: "",
+			dateTo: "",
+			sortBy: "createdAt",
+			sortOrder: "asc",
+		}),
+		[rejectedOnly]
+	);
+	const initialQueryState = useMemo(
+		() =>
+			queryStateAdapter
+				? queryStateAdapter.read(location.search, { filters: defaultFilters })
+				: { filters: defaultFilters, page: pageFromSearch(location.search) },
+		// The URL-to-state effect owns subsequent navigation changes.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[]
+	);
+	const [filters, setFilters] = useState(initialQueryState.filters);
+	const [page, setPage] = useState(initialQueryState.page);
+	const syncingQueryFromSearchRef = useRef(false);
+	const lastReadSearchRef = useRef(location.search || "");
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [result, setResult] = useState({ reservations: [], hotels: [], total: 0 });
@@ -420,33 +438,46 @@ const OverallPendingReservations = ({
 
 	const hotels = Array.isArray(result.hotels) ? result.hotels : [];
 	const reservations = Array.isArray(result.reservations)
-		? result.reservations
+		? result.reservations.filter(
+				(reservation) => !isTerminalPendingQueueReservation(reservation)
+		  )
 		: [];
 	const pages = Math.max(Number(result.pages || 1), 1);
 
 	useEffect(() => {
-		const nextPage = pageFromSearch(location.search);
-		setPage((previous) => {
-			if (previous === nextPage) return previous;
-			syncingPageFromSearchRef.current = true;
-			return nextPage;
-		});
-	}, [location.search]);
+		if (lastReadSearchRef.current === (location.search || "")) return;
+		lastReadSearchRef.current = location.search || "";
+		const nextState = queryStateAdapter
+			? queryStateAdapter.read(location.search, { filters: defaultFilters })
+			: { filters, page: pageFromSearch(location.search) };
+		const filtersChanged =
+			queryStateAdapter &&
+			JSON.stringify(nextState.filters) !== JSON.stringify(filters);
+		const pageChanged = nextState.page !== page;
+		if (!filtersChanged && !pageChanged) return;
+		syncingQueryFromSearchRef.current = true;
+		if (filtersChanged) setFilters(nextState.filters);
+		if (pageChanged) setPage(nextState.page);
+	}, [defaultFilters, filters, location.search, page, queryStateAdapter]);
 
 	useEffect(() => {
-		if (syncingPageFromSearchRef.current) {
-			syncingPageFromSearchRef.current = false;
+		if (syncingQueryFromSearchRef.current) {
+			syncingQueryFromSearchRef.current = false;
 			return;
 		}
-		const safePage = Math.max(Number(page) || 1, 1);
-		const query = new URLSearchParams(location.search || "");
-		if (query.get("page") === String(safePage)) return;
-		query.set("page", String(safePage));
+		const nextSearch = queryStateAdapter
+			? queryStateAdapter.write(location.search, { filters, page })
+			: (() => {
+					const query = new URLSearchParams(location.search || "");
+					query.set("page", String(Math.max(Number(page) || 1, 1)));
+					return `?${query.toString()}`;
+			  })();
+		if (nextSearch === (location.search || "")) return;
 		history.replace({
 			pathname: location.pathname,
-			search: `?${query.toString()}`,
+			search: nextSearch,
 		});
-	}, [history, location.pathname, location.search, page]);
+	}, [filters, history, location.pathname, location.search, page, queryStateAdapter]);
 
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value }));
@@ -822,7 +853,7 @@ const OverallPendingReservations = ({
 	];
 
 	return (
-		<OverallPageShell $isRTL={isRTL}>
+		<PendingPageShell $isRTL={isRTL} $adminTheme={adminTheme}>
 			{rejectedOnly ? (
 				<RejectedOverviewPanel $isRTL={isRTL}>
 					<div className='rejected-header'>
@@ -1314,7 +1345,7 @@ const OverallPendingReservations = ({
 				</DecisionModalBody>
 			</Modal>
 
-			<OverallReservationDetailsModal
+			<DetailsModalComponent
 				reservations={reservations}
 				selectedReservation={selectedReservation}
 				setSelectedReservation={setSelectedReservation}
@@ -1322,11 +1353,82 @@ const OverallPendingReservations = ({
 				onReservationUpdated={refreshUpdatedReservation}
 				chosenLanguage={chosenLanguage}
 			/>
-		</OverallPageShell>
+		</PendingPageShell>
 	);
 };
 
 export default OverallPendingReservations;
+
+const PendingPageShell = styled(OverallPageShell)`
+	${({ $adminTheme }) =>
+		$adminTheme &&
+		css`
+			--pms-metal-purple: var(--admin-metal-blue, #155d95);
+			--pms-metal-purple-lift: var(--admin-metal-blue-lift, #2490c8);
+			--pms-metal-purple-bg: var(
+				--admin-metal-blue-bg,
+				linear-gradient(135deg, #071827 0%, #0d3f6a 52%, #155d95 100%)
+			);
+
+			${OverallCenteredSearch} .overall-centered-search-input.ant-input-affix-wrapper-focused,
+			${OverallCenteredSearch} .overall-centered-search-input.ant-input-affix-wrapper:focus-within {
+				border-color: #2490c8;
+				box-shadow: 0 0 0 3px rgba(36, 144, 200, 0.15);
+			}
+
+			${OverallToolbar} {
+				border-color: #c9dff2;
+				background: linear-gradient(180deg, #f8fcff 0%, #edf6fd 100%);
+				box-shadow: inset 0 1px #ffffff, 0 8px 22px rgba(8, 42, 75, 0.08);
+			}
+
+			${OverallToolbar} > input:focus,
+			${OverallToolbar} > select:focus,
+			${OverallToolbar} .overall-filter-select.ant-select-focused .ant-select-selector,
+			${OverallToolbar} .overall-date-picker.ant-picker-focused {
+				box-shadow: 0 0 0 3px rgba(36, 144, 200, 0.15) !important;
+			}
+
+			${OverallToolbar} button {
+				border-color: rgba(36, 144, 200, 0.92);
+				box-shadow: inset 0 1px rgba(255, 255, 255, 0.2),
+					0 9px 20px rgba(8, 42, 75, 0.22);
+			}
+
+			${OverallToolbar} button:hover {
+				box-shadow: inset 0 1px rgba(255, 255, 255, 0.24),
+					0 12px 24px rgba(8, 50, 87, 0.28);
+			}
+
+			${OverallToolbar} button.secondary {
+				border-color: #b9d7ec;
+				background: linear-gradient(180deg, #ffffff 0%, #eef7fd 100%);
+				color: #183b5b;
+				box-shadow: 0 5px 14px rgba(8, 50, 87, 0.1);
+			}
+
+			${OverallToolbar} button.secondary:hover {
+				background: #eaf5fc;
+			}
+
+			${ReservationTableControls} {
+				border-color: #c9dff2;
+				background: linear-gradient(180deg, #fafdff 0%, #f1f8fd 100%);
+				box-shadow: 0 4px 16px rgba(8, 42, 75, 0.08);
+			}
+
+			${ReservationTableControls} button.active,
+			${ReservationTableControls} button.summary-trigger {
+				border-color: #2490c8;
+				box-shadow: 0 8px 18px rgba(8, 50, 87, 0.24);
+			}
+
+			${ReservationTableControls} button.calendar-hijri.active {
+				border-color: #079b35;
+				background: #079b35;
+			}
+		`}
+`;
 
 const RejectedOverviewPanel = styled.section`
 	display: grid;
