@@ -1,5 +1,5 @@
 // client/src/AdminModule/AllReservation/AllReservationMain.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
@@ -11,11 +11,27 @@ import {
 	readUserId,
 	distinctReservedByList,
 	distinctBookingSources, // <-- NEW
+	getAdminPendingConfirmationReservations,
+	exportAdminPendingConfirmationReservations,
+	getAdminPendingFinanceReservations,
 } from "../apiAdmin";
 import EnhancedContentTable from "./EnhancedContentTable";
 import { Modal, Input, Button, message } from "antd";
-import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import {
+	CalendarOutlined,
+	ClockCircleOutlined,
+	DollarOutlined,
+	EyeInvisibleOutlined,
+	EyeTwoTone,
+} from "@ant-design/icons";
 import { SUPER_USER_IDS } from "../utils/superUsers";
+import OverallPendingReservations from "../../HotelModule/TheOverallStructure/OverallReservationsList/OverallPendingReservations";
+import OverallFinancialActions from "../../HotelModule/TheOverallStructure/OverallFinancials/OverallFinancialActions";
+import {
+	ADMIN_RESERVATION_CYCLE_TABS,
+	buildAdminReservationCycleSearch,
+	readAdminReservationCycleTab,
+} from "./adminReservationCycleQuery";
 
 const getPageFromSearch = (search) => {
 	const params = new URLSearchParams(search || "");
@@ -45,6 +61,12 @@ const isSameDateFilter = (a, b) =>
 const AllReservationMain = ({ chosenLanguage }) => {
 	const history = useHistory();
 	const location = useLocation();
+	const activeTab = useMemo(
+		() => readAdminReservationCycleTab(location.search),
+		[location.search]
+	);
+	const isAllReservationsTab =
+		activeTab === ADMIN_RESERVATION_CYCLE_TABS.ALL;
 
 	// Local UI states
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -98,6 +120,29 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 	// Auth token still via isAuthenticated()
 	const { user: authUser, token } = isAuthenticated() || {};
+	const reservationCycleLabels =
+		chosenLanguage === "Arabic"
+			? {
+					all: "\u0643\u0644 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+					pendingConfirmation: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
+					pendingFinance: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+			  }
+			: {
+					all: "All Reservations",
+					pendingConfirmation: "Pending Confirmation",
+					pendingFinance: "Pending Finance",
+			  };
+
+	const changeReservationCycleTab = useCallback(
+		(nextTab) => {
+			if (nextTab === activeTab) return;
+			history.push({
+				pathname: location.pathname,
+				search: buildAdminReservationCycleSearch(location.search, nextTab),
+			});
+		},
+		[activeTab, history, location.pathname, location.search]
+	);
 
 	// Keep currentPage/searchTerm in sync with query params
 	useEffect(() => {
@@ -328,9 +373,9 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [getUser?._id, token]);
 
 	useEffect(() => {
-		if (!getUser) return;
+		if (!getUser || !isAllReservationsTab) return;
 		adminAllHotelDetails();
-	}, [getUser, adminAllHotelDetails]);
+	}, [getUser, adminAllHotelDetails, isAllReservationsTab]);
 
 	/** 8) Fetch reservedBy list (lowercase). */
 	const fetchReservedByOptions = useCallback(() => {
@@ -361,13 +406,14 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	}, [getUser?._id, token]);
 
 	useEffect(() => {
-		if (isPasswordVerified && getUser) {
+		if (isPasswordVerified && getUser && isAllReservationsTab) {
 			fetchReservedByOptions();
 			fetchBookingSourceOptions(); // NEW
 		}
 	}, [
 		isPasswordVerified,
 		getUser,
+		isAllReservationsTab,
 		fetchReservedByOptions,
 		fetchBookingSourceOptions,
 	]);
@@ -446,10 +492,10 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	]);
 
 	useEffect(() => {
-		if (isPasswordVerified && getUser) {
+		if (isPasswordVerified && getUser && isAllReservationsTab) {
 			fetchReservations();
 		}
-	}, [isPasswordVerified, getUser, fetchReservations]);
+	}, [isPasswordVerified, getUser, fetchReservations, isAllReservationsTab]);
 
 	/** 10) After-fetch filtering (non-super-admin, role 1000) */
 	useEffect(() => {
@@ -525,7 +571,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 	return (
 		<AllReservationMainWrapper
 			dir={chosenLanguage === "Arabic" ? "rtl" : "ltr"}
-			show={collapsed}
+			$show={collapsed}
 		>
 			{/* Password Modal */}
 			<Modal
@@ -578,41 +624,141 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 					<div className='otherContentWrapper'>
 						<div className='container-wrapper'>
-							<EnhancedContentTable
-								data={filteredReservations}
-								totalDocuments={allReservationsForAdmin.totalDocuments}
-								currentPage={currentPage}
-								pageSize={pageSize}
-								setCurrentPage={setCurrentPage}
-								setPageSize={setPageSize}
-								searchTerm={searchTerm}
-								setSearchTerm={setSearchTerm}
-								handleSearch={handleSearch}
-								scorecardsObject={allReservationsForAdmin.scorecards}
-								fromPage='AllReservations'
-								filterType={filterType}
-								setFilterType={setFilterType}
-								handleFilterClickFromParent={handleFilterClickFromParent}
-								allHotelDetailsAdmin={allHotelDetailsAdmin}
-								// Reserved By (existing)
-								reservedByOptions={reservedByOptions}
-								activeReservedBy={activeReservedBy}
-								onReservedByChange={handleReservedByChange}
-								// NEW: Booking Source filter props
-								bookingSourceOptions={bookingSourceOptions}
-								activeBookingSource={activeBookingSource}
-								onBookingSourceChange={handleBookingSourceChange}
-								// Date filters
-								dateFilter={dateFilter}
-								onDateFilterApply={handleDateFilterApply}
-								onClearDateFilter={handleDateFilterClear}
-								// ReservedBy permissions
-								allowAllReservedBy={allowAllReservedBy}
-								selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
-								currentUserId={getUser?._id}
-								onReservationUpdated={fetchReservations}
-								chosenLanguage={chosenLanguage}
-							/>
+							<ReservationCycleTabs
+								role='tablist'
+								aria-label='Admin reservation cycle'
+							>
+								<ReservationCycleTab
+									id='admin-all-reservations-tab'
+									type='button'
+									role='tab'
+									aria-label={reservationCycleLabels.all}
+									aria-controls='admin-reservation-cycle-panel'
+									aria-selected={isAllReservationsTab}
+									$active={isAllReservationsTab}
+									onClick={() =>
+										changeReservationCycleTab(
+											ADMIN_RESERVATION_CYCLE_TABS.ALL
+										)
+									}
+								>
+									<CalendarOutlined />
+									<span>{reservationCycleLabels.all}</span>
+								</ReservationCycleTab>
+								<ReservationCycleTab
+									id='admin-pending-confirmation-tab'
+									type='button'
+									role='tab'
+									aria-label={reservationCycleLabels.pendingConfirmation}
+									aria-controls='admin-reservation-cycle-panel'
+									aria-selected={
+										activeTab ===
+										ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION
+									}
+									$active={
+										activeTab ===
+										ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION
+									}
+									onClick={() =>
+										changeReservationCycleTab(
+											ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION
+										)
+									}
+								>
+									<ClockCircleOutlined />
+									<span>{reservationCycleLabels.pendingConfirmation}</span>
+								</ReservationCycleTab>
+								<ReservationCycleTab
+									id='admin-pending-finance-tab'
+									type='button'
+									role='tab'
+									aria-label={reservationCycleLabels.pendingFinance}
+									aria-controls='admin-reservation-cycle-panel'
+									aria-selected={
+										activeTab === ADMIN_RESERVATION_CYCLE_TABS.PENDING_FINANCE
+									}
+									$active={
+										activeTab === ADMIN_RESERVATION_CYCLE_TABS.PENDING_FINANCE
+									}
+									onClick={() =>
+										changeReservationCycleTab(
+											ADMIN_RESERVATION_CYCLE_TABS.PENDING_FINANCE
+										)
+									}
+								>
+									<DollarOutlined />
+									<span>{reservationCycleLabels.pendingFinance}</span>
+								</ReservationCycleTab>
+							</ReservationCycleTabs>
+
+							<ReservationCyclePanel
+								id='admin-reservation-cycle-panel'
+								role='tabpanel'
+								aria-labelledby={
+									isAllReservationsTab
+										? "admin-all-reservations-tab"
+										: activeTab ===
+										  ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION
+										? "admin-pending-confirmation-tab"
+										: "admin-pending-finance-tab"
+								}
+							>
+								{isAllReservationsTab ? (
+									<EnhancedContentTable
+										data={filteredReservations}
+										totalDocuments={allReservationsForAdmin.totalDocuments}
+										currentPage={currentPage}
+										pageSize={pageSize}
+										setCurrentPage={setCurrentPage}
+										setPageSize={setPageSize}
+										searchTerm={searchTerm}
+										setSearchTerm={setSearchTerm}
+										handleSearch={handleSearch}
+										scorecardsObject={allReservationsForAdmin.scorecards}
+										fromPage='AllReservations'
+										filterType={filterType}
+										setFilterType={setFilterType}
+										handleFilterClickFromParent={handleFilterClickFromParent}
+										allHotelDetailsAdmin={allHotelDetailsAdmin}
+										reservedByOptions={reservedByOptions}
+										activeReservedBy={activeReservedBy}
+										onReservedByChange={handleReservedByChange}
+										bookingSourceOptions={bookingSourceOptions}
+										activeBookingSource={activeBookingSource}
+										onBookingSourceChange={handleBookingSourceChange}
+										dateFilter={dateFilter}
+										onDateFilterApply={handleDateFilterApply}
+										onClearDateFilter={handleDateFilterClear}
+										allowAllReservedBy={allowAllReservedBy}
+										selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
+										currentUserId={getUser?._id}
+										onReservationUpdated={fetchReservations}
+										chosenLanguage={chosenLanguage}
+									/>
+								) : activeTab ===
+								  ADMIN_RESERVATION_CYCLE_TABS.PENDING_CONFIRMATION ? (
+									<OverallPendingReservations
+										userId={getUser?._id}
+										token={token}
+										chosenLanguage={chosenLanguage}
+										confirmationOnly
+										reservationsLoader={
+											getAdminPendingConfirmationReservations
+										}
+										reservationsExporter={
+											exportAdminPendingConfirmationReservations
+										}
+									/>
+								) : (
+									<OverallFinancialActions
+										userId={getUser?._id}
+										token={token}
+										chosenLanguage={chosenLanguage}
+										actionsLoader={getAdminPendingFinanceReservations}
+										actionsExporter={getAdminPendingFinanceReservations}
+									/>
+								)}
+							</ReservationCyclePanel>
 						</div>
 					</div>
 				</div>
@@ -623,6 +769,73 @@ const AllReservationMain = ({ chosenLanguage }) => {
 
 export default AllReservationMain;
 
+const ReservationCycleTabs = styled.div`
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	padding: 5px;
+	border: 1px solid #c9dff2;
+	border-radius: 12px;
+	background: linear-gradient(180deg, #f8fcff 0%, #edf6fd 100%);
+	box-shadow:
+		inset 0 1px #fff,
+		0 6px 18px rgba(8, 42, 75, 0.08);
+
+	@media (max-width: 620px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const ReservationCycleTab = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	min-width: 0;
+	min-height: 42px;
+	padding: 7px 12px;
+	border: 1px solid ${(props) => (props.$active ? "#2e8fc5" : "#c5dced")};
+	border-radius: 9px;
+	background: ${(props) =>
+		props.$active
+			? "linear-gradient(135deg, #071827 0%, #0d3f6a 52%, #155d95 100%)"
+			: "rgba(255, 255, 255, 0.94)"};
+	box-shadow: ${(props) =>
+		props.$active
+			? "0 10px 24px rgba(8, 50, 87, 0.26), inset 0 1px rgba(255, 255, 255, 0.14)"
+			: "inset 0 1px #fff"};
+	color: ${(props) => (props.$active ? "#fff" : "#183b5b")};
+	cursor: pointer;
+	font-size: 0.84rem;
+	font-weight: 950;
+	line-height: 1.25;
+	text-align: center;
+	transition:
+		background 0.24s ease,
+		border-color 0.24s ease,
+		box-shadow 0.24s ease,
+		color 0.24s ease;
+
+	&:hover {
+		border-color: #4da9d5;
+		box-shadow: 0 10px 22px rgba(8, 50, 87, 0.16);
+	}
+
+	&:focus-visible {
+		outline: 3px solid rgba(37, 155, 213, 0.34);
+		outline-offset: 2px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+`;
+
+const ReservationCyclePanel = styled.div`
+	min-width: 0;
+	margin-top: 12px;
+`;
+
 /* --- Styled Component --- */
 const AllReservationMainWrapper = styled.div`
 	margin-top: 0;
@@ -631,7 +844,7 @@ const AllReservationMainWrapper = styled.div`
 	.grid-container-main {
 		display: grid;
 		grid-template-columns: ${(props) => {
-			const nav = props.show ? "70px" : "285px";
+			const nav = props.$show ? "70px" : "285px";
 			return props.dir === "rtl" ? `1fr ${nav}` : `${nav} 1fr`;
 		}};
 		grid-template-areas: ${(props) =>

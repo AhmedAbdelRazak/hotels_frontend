@@ -1639,6 +1639,90 @@ export const getAllReservationForAdmin = (
 		.catch((err) => console.error("Error fetching reservations:", err));
 };
 
+const buildAdminReservationCycleQuery = (params = {}) => {
+	const searchParams = new URLSearchParams();
+	Object.entries(params || {}).forEach(([key, value]) => {
+		if (value === undefined || value === null || value === "") return;
+		const normalized = Array.isArray(value) ? value.join(",") : String(value);
+		if (normalized.trim()) searchParams.set(key, normalized.trim());
+	});
+	const query = searchParams.toString();
+	return query ? `?${query}` : "";
+};
+
+const getAdminReservationCycleData = (
+	path,
+	userId,
+	token,
+	params = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}${path}/${userId}${buildAdminReservationCycleQuery(
+			params,
+		)}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json();
+			if (!response.ok) {
+				return localizeApiError(
+					data,
+					"Could not load the admin reservation cycle.",
+				);
+			}
+			return data;
+		})
+		.catch((error) => ({
+			error: error?.message || "Could not load the admin reservation cycle.",
+			reservations: [],
+			hotels: [],
+			total: 0,
+		}));
+
+export const getAdminPendingConfirmationReservations = (
+	userId,
+	token,
+	params = {},
+) =>
+	getAdminReservationCycleData(
+		"/admin/reservation-cycle/pending-confirmations",
+		userId,
+		token,
+		params,
+	);
+
+export const exportAdminPendingConfirmationReservations = (
+	userId,
+	token,
+	params = {},
+) =>
+	getAdminReservationCycleData(
+		"/admin/reservation-cycle/pending-confirmations-export",
+		userId,
+		token,
+		params,
+	);
+
+export const getAdminPendingFinanceReservations = (
+	userId,
+	token,
+	params = {},
+) =>
+	getAdminReservationCycleData(
+		"/admin/reservation-cycle/pending-finance",
+		userId,
+		token,
+		params,
+	);
+
 const buildAdminRejectedReservationQuery = (params = {}) => {
 	const searchParams = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {
