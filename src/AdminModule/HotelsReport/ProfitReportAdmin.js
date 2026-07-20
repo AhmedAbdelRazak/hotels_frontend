@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import Chart from "react-apexcharts";
 import * as XLSX from "xlsx";
@@ -34,8 +35,11 @@ import {
 	getHotelById,
 	singlePreReservationById,
 } from "../../HotelModule/apiAdmin";
+import {
+	readProfitReportQuery,
+	writeProfitReportQuery,
+} from "./profitReportQuery";
 
-const DEFAULT_PROFIT_FROM = "2026-05-01";
 const PAGE_SIZE = 25;
 const TABLE_SCROLL_X = 1180;
 const PROFIT_DETAILS_MODAL_Z_INDEX = 14000;
@@ -295,18 +299,21 @@ const ProfitReportAdmin = () => {
 	const { user, token } = isAuthenticated() || {};
 	const isArabic = chosenLanguage === "Arabic";
 	const labels = TEXT[isArabic ? "ar" : "en"];
-	const [filters, setFilters] = useState({
-		hotelId: "",
-		dateBy: "createdAt",
-		dateFrom: DEFAULT_PROFIT_FROM,
-		dateTo: "",
-		granularity: "week",
-		search: "",
-		sortBy: "createdAt",
-		sortOrder: "desc",
-	});
-	const [searchDraft, setSearchDraft] = useState("");
-	const [page, setPage] = useState(1);
+	const history = useHistory();
+	const location = useLocation();
+	const initialQueryState = useMemo(
+		() => readProfitReportQuery(location.search),
+		// URL navigation after mount is handled by the guarded synchronization effect.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[],
+	);
+	const [filters, setFilters] = useState(initialQueryState.filters);
+	const [searchDraft, setSearchDraft] = useState(
+		initialQueryState.filters.search,
+	);
+	const [page, setPage] = useState(initialQueryState.page);
+	const syncingQueryFromSearchRef = useRef(false);
+	const lastReadSearchRef = useRef(location.search || "");
 	const [loading, setLoading] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [report, setReport] = useState({
@@ -387,6 +394,38 @@ const ProfitReportAdmin = () => {
 	useEffect(() => {
 		loadReport();
 	}, [loadReport]);
+
+	useEffect(() => {
+		if (lastReadSearchRef.current === (location.search || "")) return;
+		lastReadSearchRef.current = location.search || "";
+		const nextState = readProfitReportQuery(location.search);
+		const filtersChanged =
+			JSON.stringify(nextState.filters) !== JSON.stringify(filters);
+		const pageChanged = nextState.page !== page;
+		if (!filtersChanged && !pageChanged) return;
+		syncingQueryFromSearchRef.current = true;
+		if (filtersChanged) {
+			setFilters(nextState.filters);
+			setSearchDraft(nextState.filters.search);
+		}
+		if (pageChanged) setPage(nextState.page);
+	}, [filters, location.search, page]);
+
+	useEffect(() => {
+		if (syncingQueryFromSearchRef.current) {
+			syncingQueryFromSearchRef.current = false;
+			return;
+		}
+		const nextSearch = writeProfitReportQuery(location.search, {
+			filters,
+			page,
+		});
+		if (nextSearch === (location.search || "")) return;
+		history.replace({
+			pathname: location.pathname,
+			search: nextSearch,
+		});
+	}, [filters, history, location.pathname, location.search, page]);
 
 	const updateFilter = (key, value) => {
 		setFilters((previous) => ({ ...previous, [key]: value || "" }));
