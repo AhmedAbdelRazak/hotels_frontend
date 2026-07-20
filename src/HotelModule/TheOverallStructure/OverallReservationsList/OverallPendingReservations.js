@@ -330,6 +330,9 @@ const OverallPendingReservations = ({
 	ownerId,
 	chosenLanguage,
 	rejectedOnly = false,
+	confirmationOnly = false,
+	reservationsLoader = getOverallPendingReservations,
+	reservationsExporter = exportOverallPendingReservations,
 }) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
@@ -392,20 +395,20 @@ const OverallPendingReservations = ({
 		if (!userId || !token) return;
 		const reservationLoader = rejectedOnly
 			? getOverallRejectedReservations
-			: getOverallPendingReservations;
+			: reservationsLoader;
 		setLoading(true);
 		reservationLoader(userId, token, params)
 			.then((data) => {
 				setResult(data && !data.error ? data : { reservations: [], hotels: [], total: 0 });
 			})
 			.finally(() => setLoading(false));
-	}, [params, rejectedOnly, token, userId]);
+	}, [params, rejectedOnly, reservationsLoader, token, userId]);
 
 	const loadPendingReservations = () => {
 		if (!userId || !token) return;
 		const reservationLoader = rejectedOnly
 			? getOverallRejectedReservations
-			: getOverallPendingReservations;
+			: reservationsLoader;
 		setLoading(true);
 		reservationLoader(userId, token, params)
 			.then((data) => {
@@ -739,7 +742,7 @@ const OverallPendingReservations = ({
 		if (!userId || !token || exporting) return;
 		const exportReservations = rejectedOnly
 			? exportOverallRejectedReservations
-			: exportOverallPendingReservations;
+			: reservationsExporter;
 		setExporting(true);
 		exportReservations(userId, token, {
 			...buildOwnerParams(ownerId),
@@ -883,7 +886,11 @@ const OverallPendingReservations = ({
 					onChange={(value) => updateFilter("status", value)}
 					placeholder={labels.allStatuses}
 					optionFilterProp='label'
-					options={pendingStatusOptions(labels)}
+					options={
+						confirmationOnly
+							? pendingStatusOptions(labels).slice(0, 1)
+							: pendingStatusOptions(labels)
+					}
 				/>
 				<Select
 					showSearch
@@ -939,7 +946,9 @@ const OverallPendingReservations = ({
 						setFilters({
 							search: "",
 							hotelId: [],
-							status: [],
+							status: confirmationOnly
+								? DEFAULT_PENDING_STATUS_FILTER
+								: [],
 							dateBy: "createdAt",
 							dateFrom: "",
 							dateTo: "",

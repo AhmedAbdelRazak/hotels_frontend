@@ -786,7 +786,17 @@ const toDatePickerValue = (value = "") => {
 	return parsed.isValid() ? parsed : null;
 };
 
-const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => {
+const pageFromSearch = (search = "") =>
+	Math.max(parseInt(new URLSearchParams(search || "").get("page"), 10) || 1, 1);
+
+const OverallFinancialActions = ({
+	userId,
+	token,
+	ownerId,
+	chosenLanguage,
+	actionsLoader = getOverallFinancialActions,
+	actionsExporter = exportOverallFinancialActions,
+}) => {
 	const isRTL = chosenLanguage === "Arabic";
 	const common = getOverallText(chosenLanguage);
 	const baseLabels = { ...common, ...TEXT[isRTL ? "ar" : "en"] };
@@ -831,7 +841,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		dateTo: "",
 		commissionMonth: dayjs().format("YYYY-MM"),
 	});
-	const [page, setPage] = useState(1);
+	const [page, setPage] = useState(() => pageFromSearch(location.search));
 	const [walletPage, setWalletPage] = useState(1);
 	const [commissionPage, setCommissionPage] = useState(1);
 	const [selectedCommissionIds, setSelectedCommissionIds] = useState([]);
@@ -878,7 +888,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 	const loadActions = () => {
 		if (!userId || !token) return;
 		setLoading(true);
-		getOverallFinancialActions(userId, token, params)
+		actionsLoader(userId, token, params)
 			.then((data) => {
 				setResult(data && !data.error ? data : { reservations: [], hotels: [], total: 0 });
 			})
@@ -889,6 +899,22 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		loadActions();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [params, token, userId]);
+
+	useEffect(() => {
+		const nextPage = pageFromSearch(location.search);
+		setPage((previous) => (previous === nextPage ? previous : nextPage));
+	}, [location.search]);
+
+	useEffect(() => {
+		const safePage = Math.max(Number(page) || 1, 1);
+		const query = new URLSearchParams(location.search || "");
+		if (query.get("page") === String(safePage)) return;
+		query.set("page", String(safePage));
+		history.replace({
+			pathname: location.pathname,
+			search: `?${query.toString()}`,
+		});
+	}, [history, location.pathname, location.search, page]);
 
 	const hotels = Array.isArray(result.hotels) ? result.hotels : [];
 	const bookingSources = Array.isArray(result.bookingSources)
@@ -1464,7 +1490,7 @@ const OverallFinancialActions = ({ userId, token, ownerId, chosenLanguage }) => 
 		if (!userId || !token || exporting) return;
 		setExporting(true);
 		try {
-			const exportData = await exportOverallFinancialActions(userId, token, {
+			const exportData = await actionsExporter(userId, token, {
 				...params,
 				page: 1,
 				limit: 5000,
