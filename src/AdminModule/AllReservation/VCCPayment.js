@@ -364,7 +364,6 @@ const VCCPayment = ({
 	token,
 	setReservation,
 	onReservationUpdated = () => {},
-	chosenLanguage = "English",
 }) => {
 	const vccProceedWithoutRoomRef = useRef(false);
 	const [isVccPanelVisible, setIsVccPanelVisible] = useState(false);
@@ -388,7 +387,8 @@ const VCCPayment = ({
 	const [isBofaHealthLoading, setIsBofaHealthLoading] = useState(false);
 	const [bofaHealthState, setBofaHealthState] = useState(null);
 
-	const localeCode = chosenLanguage === "Arabic" ? "ar" : "en";
+	// Payment-card controls stay English/LTR even when the surrounding dashboard is Arabic.
+	const localeCode = "en";
 	const formattedCheckin = formatDisplayDate(
 		reservation?.checkin_date,
 		localeCode,
@@ -1278,7 +1278,11 @@ const VCCPayment = ({
 	return (
 		<div
 			className='mb-3'
+			dir='ltr'
+			lang='en'
 			style={{
+				direction: "ltr",
+				textAlign: "left",
 				border: "1px solid #e5e7eb",
 				borderRadius: "10px",
 				padding: "12px",

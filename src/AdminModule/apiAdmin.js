@@ -2633,6 +2633,7 @@ export const chargeReservationViaBofaVcc = ({
 	token,
 	reservationId,
 	usdAmount,
+	currency = "USD",
 	postalCode,
 	cardNumber,
 	cardExpiry,
@@ -2657,6 +2658,7 @@ export const chargeReservationViaBofaVcc = ({
 		body: JSON.stringify({
 			reservationId,
 			usdAmount: Number(usdAmount),
+			currency: String(currency || "USD").toUpperCase(),
 			proceedWithoutRoom: !!proceedWithoutRoom,
 			...(confirmationNumber2
 				? { confirmationNumber2: String(confirmationNumber2) }

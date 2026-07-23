@@ -11681,7 +11681,10 @@ const ReservationDetail = ({
 					</div>
 				</div>
 			)}
-			<PaymentTrigger reservation={reservation} />
+			<PaymentTrigger
+				reservation={reservation}
+				onReservationUpdated={setReservationAndNotify}
+			/>
 		</Wrapper>
 	);
 };

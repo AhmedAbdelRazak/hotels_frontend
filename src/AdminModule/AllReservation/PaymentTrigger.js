@@ -7,7 +7,8 @@ import { triggerPayment } from "../apiAdmin";
 import { Modal, Radio, Input, message } from "antd";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { toast } from "react-toastify";
-import { SUPER_USER_IDS } from "../utils/superUsers";
+import { isSuperAdminUser } from "../utils/superUsers";
+import BofaVccModal from "./BofaVccModal";
 
 const safeNumber = (val) => {
 	const n = Number(val);
@@ -16,11 +17,10 @@ const safeNumber = (val) => {
 
 const toMoney = (n) => Number(n || 0).toFixed(2);
 const PAYMENT_MODAL_Z = 12110;
-const PAYMENT_CONFIRM_MODAL_Z = 12120;
 
-const PaymentTrigger = ({ reservation }) => {
+const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 	const { user, token } = isAuthenticated();
-	const isSuperUser = SUPER_USER_IDS.includes(user?._id);
+	const isSuperUser = isSuperAdminUser(user);
 
 	// UI state
 	const [loading, setLoading] = useState(false);
@@ -28,11 +28,7 @@ const PaymentTrigger = ({ reservation }) => {
 	const [selectedOption, setSelectedOption] = useState(null);
 	const [customAmountUSD, setCustomAmountUSD] = useState("");
 	const [modalError, setModalError] = useState("");
-
-	// Password modal
-	const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
-	const [passwordInput, setPasswordInput] = useState("");
-	const [modalErrorPassword, setModalErrorPassword] = useState("");
+	const [isBofaVccModalVisible, setIsBofaVccModalVisible] = useState(false);
 
 	// Antd message config
 	useEffect(() => {
@@ -212,31 +208,10 @@ const PaymentTrigger = ({ reservation }) => {
 			return;
 		}
 		setModalError("");
-		if (isSuperUser) {
-			setPasswordInput("");
-			setModalErrorPassword("");
-			void handlePasswordConfirm(true);
-			return;
-		}
-		setIsPasswordModalVisible(true);
+		void handleCaptureConfirm();
 	};
 
-	const handlePasswordConfirm = async (skipPassword = false) => {
-		if (!skipPassword) {
-			if (!passwordInput) {
-				setModalErrorPassword("Please enter the confirmation password.");
-				return;
-			}
-			if (passwordInput !== process.env.REACT_APP_CONFIRM_PAYMENT) {
-				setModalErrorPassword("Incorrect password. Please try again.");
-				toast.error("Incorrect password. Please try again.");
-				return;
-			}
-		} else {
-			setModalErrorPassword("");
-			setPasswordInput("");
-		}
-
+	const handleCaptureConfirm = async () => {
 		const { finalUSD, finalSAR } = getChargeAmount();
 
 		// Double-check limits at click time
@@ -269,7 +244,6 @@ const PaymentTrigger = ({ reservation }) => {
 
 			// Wait 1.5s, then close modal and refresh
 			setTimeout(() => {
-				setIsPasswordModalVisible(false);
 				setIsModalVisible(false);
 				setLoading(false);
 				window.location.reload(false);
@@ -311,27 +285,35 @@ const PaymentTrigger = ({ reservation }) => {
 
 	// Preview for footer / info panel
 	const { finalUSD, finalSAR } = getChargeAmount();
+	if (!isSuperUser) return null;
 
 	return (
-		<PaymentTriggerWrapper>
+		<PaymentTriggerWrapper dir='ltr' lang='en'>
 			<h3>Trigger Payment</h3>
 			<p>This action will capture the payment for the reservation.</p>
 
-			<Button onClick={openOptionsModal} disabled={isDisabled}>
+			<Button
+				onClick={
+					isDisabled
+						? () => setIsBofaVccModalVisible(true)
+						: openOptionsModal
+				}
+				disabled={loading}
+			>
 				{isDisabled ? "Capture Unavailable" : "Capture Payment"}
 			</Button>
 
 			{isDisabled && (
 				<DisabledMessage>
 					{hasPaymentPath
-						? "Nothing left to capture at this time."
-						: "No saved card or authorization found for this reservation."}
+						? "Nothing remains on the saved authorization. Click to use an OTA virtual card."
+						: "No saved card or authorization was found. Click to add an OTA virtual card."}
 				</DisabledMessage>
 			)}
 
 			{/* Payment Options Modal */}
 			<Modal
-				title='Select Payment Option'
+				title={<span dir='ltr' lang='en'>Select Payment Option</span>}
 				open={isModalVisible}
 				onOk={handlePaymentOptionConfirm}
 				onCancel={() => setIsModalVisible(false)}
@@ -339,7 +321,12 @@ const PaymentTrigger = ({ reservation }) => {
 				cancelText='Cancel'
 				width={640}
 				zIndex={PAYMENT_MODAL_Z}
-				styles={{ mask: { zIndex: PAYMENT_MODAL_Z - 1 } }}
+				styles={{
+					mask: { zIndex: PAYMENT_MODAL_Z - 1 },
+					header: { direction: "ltr", textAlign: "left" },
+					body: { direction: "ltr", textAlign: "left" },
+					footer: { direction: "ltr", textAlign: "right" },
+				}}
 				getContainer={() => document.body}
 			>
 				{/* Remaining panel */}
@@ -453,33 +440,12 @@ const PaymentTrigger = ({ reservation }) => {
 				)}
 			</Modal>
 
-			{/* Password Confirmation Modal */}
-			<Modal
-				title='Confirm Payment'
-				open={isPasswordModalVisible}
-				onOk={handlePasswordConfirm}
-				onCancel={() => {
-					setIsPasswordModalVisible(false);
-					setPasswordInput("");
-					setModalErrorPassword("");
-				}}
-				okText={loading ? "Processing..." : "Confirm"}
-				cancelText='Cancel'
-				confirmLoading={loading} // <-- spinner on Confirm
-				zIndex={PAYMENT_CONFIRM_MODAL_Z}
-				styles={{ mask: { zIndex: PAYMENT_CONFIRM_MODAL_Z - 1 } }}
-				getContainer={() => document.body}
-			>
-				<p>Please enter your password to confirm the payment:</p>
-				<PasswordInput
-					type='password'
-					placeholder='Enter confirmation password'
-					value={passwordInput}
-					onChange={(e) => setPasswordInput(e.target.value)}
-					disabled={loading}
-				/>
-				{modalErrorPassword && <ModalError>{modalErrorPassword}</ModalError>}
-			</Modal>
+			<BofaVccModal
+				open={isBofaVccModalVisible}
+				reservation={reservation}
+				onClose={() => setIsBofaVccModalVisible(false)}
+				onReservationUpdated={onReservationUpdated}
+			/>
 		</PaymentTriggerWrapper>
 	);
 };
@@ -527,12 +493,6 @@ const CustomInput = styled(Input)`
 	margin-top: 12px;
 	font-size: 18px;
 	font-weight: bold;
-	text-align: center;
-`;
-
-const PasswordInput = styled(Input)`
-	margin-top: 10px;
-	font-size: 16px;
 	text-align: center;
 `;
 
