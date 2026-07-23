@@ -69,10 +69,14 @@ export const getCheckinEligibility = (checkinDate, now = new Date()) => {
 };
 
 export const resolveVccProvider = (bookingSource) => {
-	const source = String(bookingSource || "").toLowerCase();
+	const source = String(bookingSource || "").trim().toLowerCase();
 	if (source.includes("expedia")) return "expedia";
 	if (source.includes("agoda")) return "agoda";
-	if (source.includes("booking")) return "booking";
+	if (
+		source.includes("booking.com") ||
+		source === "booking"
+	)
+		return "booking";
 	return "other";
 };
 
@@ -81,25 +85,17 @@ export const providerLabel = (provider) =>
 		"OTA");
 
 export const initialVccForm = (reservation = {}) => {
-	const provider = resolveVccProvider(reservation.booking_source);
 	const metadata = reservation?.vcc_payment?.metadata || {};
 	const sourceCurrency = String(metadata.amount_to_charge_currency || "").toUpperCase();
 	const sourceAmount = Number(metadata.amount_to_charge || 0);
 	const savedUsd =
 		Number(metadata.amount_to_charge_usd || 0) ||
 		(sourceCurrency === "USD" ? sourceAmount : 0);
-	const isExpedia = provider === "expedia";
 	return {
 		amountUsd: savedUsd > 0 ? savedUsd.toFixed(2) : "",
-		cardholderName: `${providerLabel(provider)} Virtual Card`,
 		cardNumber: "",
 		expiry: "",
 		cvv: "",
-		address1: isExpedia ? "1111 Expedia Group Way W" : "",
-		locality: isExpedia ? "Seattle" : "",
-		administrativeArea: isExpedia ? "WA" : "",
-		postalCode: isExpedia ? "98119" : "",
-		countryCode: "US",
 	};
 };
 
@@ -125,17 +121,5 @@ export const validateVccForm = (form, now = new Date()) => {
 	}
 	const cvv = digitsOnly(form.cvv, 4);
 	if (cvv.length < 3 || cvv.length > 4) return "Enter a valid card security code.";
-	if (!String(form.cardholderName || "").trim()) return "Enter the cardholder name.";
-	const requiredBilling = [
-		["billing address", form.address1],
-		["city/locality", form.locality],
-		["state/administrative area", form.administrativeArea],
-		["postal code", form.postalCode],
-	];
-	const missing = requiredBilling.find(([, value]) => !String(value || "").trim());
-	if (missing) return `Enter the ${missing[0]} shown by the OTA.`;
-	if (!/^[A-Za-z]{2}$/.test(String(form.countryCode || "").trim())) {
-		return "Enter a two-letter billing country code.";
-	}
 	return "";
 };

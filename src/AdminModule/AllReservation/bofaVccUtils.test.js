@@ -4,6 +4,7 @@ import {
 	getCheckinEligibility,
 	initialVccForm,
 	isLuhnValid,
+	resolveVccProvider,
 	validateVccForm,
 } from "./bofaVccUtils";
 
@@ -21,7 +22,7 @@ describe("BofA OTA virtual-card form policy", () => {
 		expect(getCheckinEligibility("2026-07-24T00:00:00.000Z", now).ok).toBe(false);
 	});
 
-	test("prefills Expedia billing and saved USD amount", () => {
+	test("prefills only the saved USD amount, never browser-managed billing", () => {
 		const form = initialVccForm({
 			booking_source: "Expedia",
 			vcc_payment: {
@@ -29,11 +30,12 @@ describe("BofA OTA virtual-card form policy", () => {
 			},
 		});
 		expect(form.amountUsd).toBe("235.50");
-		expect(form.address1).toBe("1111 Expedia Group Way W");
-		expect(form.postalCode).toBe("98119");
+		expect(form).not.toHaveProperty("cardholderName");
+		expect(form).not.toHaveProperty("address1");
+		expect(form).not.toHaveProperty("postalCode");
 	});
 
-	test("requires a valid USD amount, card, and complete billing address", () => {
+	test("requires only valid USD and card fields from the browser", () => {
 		const form = {
 			...initialVccForm({ booking_source: "Expedia" }),
 			amountUsd: "100.00",
@@ -43,6 +45,10 @@ describe("BofA OTA virtual-card form policy", () => {
 		};
 		expect(validateVccForm(form, new Date("2026-07-23T00:00:00.000Z"))).toBe("");
 		expect(validateVccForm({ ...form, amountUsd: "100.001" })).toMatch(/two decimals/i);
-		expect(validateVccForm({ ...form, address1: "" })).toMatch(/billing address/i);
+	});
+
+	test("does not classify Jannat Booking as Booking.com", () => {
+		expect(resolveVccProvider("Booking.com")).toBe("booking");
+		expect(resolveVccProvider("Online Jannat Booking")).toBe("other");
 	});
 });

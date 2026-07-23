@@ -92,6 +92,12 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 		).not.toBeInTheDocument(),
 	);
 	await waitFor(() => expect(title).toBeVisible());
+	expect(
+		screen.getByText(/billing details are applied securely by the backend/i),
+	).toBeVisible();
+	expect(screen.queryByLabelText(/cardholder name/i)).not.toBeInTheDocument();
+	expect(screen.queryByLabelText(/address line 1/i)).not.toBeInTheDocument();
+	expect(screen.queryByLabelText(/zip|postal code/i)).not.toBeInTheDocument();
 
 	const root = document.querySelector(".bofa-vcc-modal-root");
 	const mask = root?.querySelector(".ant-modal-mask");

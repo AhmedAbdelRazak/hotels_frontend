@@ -2634,15 +2634,11 @@ export const chargeReservationViaBofaVcc = ({
 	reservationId,
 	usdAmount,
 	currency = "USD",
-	postalCode,
 	cardNumber,
 	cardExpiry,
 	cardCVV,
 	cardType = "",
-	cardholderName = "",
-	billingAddress = {},
 	proceedWithoutRoom = false,
-	confirmationNumber2 = "",
 }) => {
 	if (!reservationId) {
 		return Promise.reject(new Error("reservationId is required"));
@@ -2660,19 +2656,11 @@ export const chargeReservationViaBofaVcc = ({
 			usdAmount: Number(usdAmount),
 			currency: String(currency || "USD").toUpperCase(),
 			proceedWithoutRoom: !!proceedWithoutRoom,
-			...(confirmationNumber2
-				? { confirmationNumber2: String(confirmationNumber2) }
-				: {}),
-			...(cardholderName ? { cardholderName: String(cardholderName) } : {}),
 			card: {
 				number: String(cardNumber || ""),
 				expiry: String(cardExpiry || ""),
 				cvv: String(cardCVV || ""),
 				...(cardType ? { type: String(cardType) } : {}),
-			},
-			billingAddress: {
-				...billingAddress,
-				...(postalCode ? { postalCode: String(postalCode).trim() } : {}),
 			},
 		}),
 	}).then(parseJSON);
