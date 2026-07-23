@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Spin } from "antd";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import { toast } from "react-toastify";
 import { isAuthenticated } from "../../auth";
 import {
@@ -20,7 +20,9 @@ import {
 	validateVccForm,
 } from "./bofaVccUtils";
 
-const MODAL_Z_INDEX = 60100;
+export const BOFA_VCC_MODAL_Z_INDEX = 110000;
+const BOFA_VCC_MODAL_ROOT_CLASS = "bofa-vcc-modal-root";
+const BOFA_VCC_MODAL_WRAP_CLASS = "bofa-vcc-modal-wrap";
 
 const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 	const auth = isAuthenticated() || {};
@@ -241,24 +243,40 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 	const cardLast4 = digitsOnly(form.cardNumber, 19).slice(-4);
 
 	return (
-		<Modal
-			title={<span dir='ltr' lang='en'>Process OTA Virtual Card</span>}
-			open={open}
-			onCancel={() => !submitting && onClose()}
-			footer={null}
-			width={760}
-			zIndex={MODAL_Z_INDEX}
-			styles={{
-				mask: { zIndex: MODAL_Z_INDEX - 1 },
-				header: { direction: "ltr", textAlign: "left" },
-				body: { direction: "ltr", textAlign: "left" },
-			}}
-			getContainer={() => document.body}
-			destroyOnClose
-			maskClosable={!submitting}
-			keyboard={!submitting}
-		>
-			<ModalBody dir='ltr' lang='en'>
+		<>
+			<BofaVccModalGlobalStyle />
+			<Modal
+				title={<span dir='ltr' lang='en'>Process OTA Virtual Card</span>}
+				open={open}
+				onCancel={() => !submitting && onClose()}
+				footer={null}
+				width={760}
+				centered
+				zIndex={BOFA_VCC_MODAL_Z_INDEX}
+				rootClassName={BOFA_VCC_MODAL_ROOT_CLASS}
+				wrapClassName={BOFA_VCC_MODAL_WRAP_CLASS}
+				className='bofa-vcc-modal'
+				styles={{
+					mask: { zIndex: BOFA_VCC_MODAL_Z_INDEX - 1 },
+					wrapper: { zIndex: BOFA_VCC_MODAL_Z_INDEX },
+					content: {
+						position: "relative",
+						zIndex: BOFA_VCC_MODAL_Z_INDEX + 1,
+					},
+					header: { direction: "ltr", textAlign: "left" },
+					body: {
+						direction: "ltr",
+						textAlign: "left",
+						maxHeight: "calc(100vh - 180px)",
+						overflowY: "auto",
+					},
+				}}
+				getContainer={() => document.body}
+				destroyOnClose
+				maskClosable={!submitting}
+				keyboard={!submitting}
+			>
+				<ModalBody dir='ltr' lang='en'>
 				<SummaryGrid>
 					<div><span>OTA</span><strong>{providerName}</strong></div>
 					<div><span>Reservation</span><strong>{reservation?.confirmation_number || "N/A"}</strong></div>
@@ -313,12 +331,51 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 						<Actions><button type='button' className='secondary' disabled={submitting} onClick={() => setStep("details")}>Back</button><button type='button' className='danger' disabled={submitting} onClick={handleSubmit}>{submitting ? "Processing once..." : `Charge $${Number(form.amountUsd).toFixed(2)} USD`}</button></Actions>
 					</ReviewPanel>
 				)}
-			</ModalBody>
-		</Modal>
+				</ModalBody>
+			</Modal>
+		</>
 	);
 };
 
 export default BofaVccModal;
+
+const BofaVccModalGlobalStyle = createGlobalStyle`
+	.${BOFA_VCC_MODAL_ROOT_CLASS} {
+		position: relative;
+		z-index: ${BOFA_VCC_MODAL_Z_INDEX} !important;
+	}
+
+	.${BOFA_VCC_MODAL_ROOT_CLASS} .ant-modal-mask {
+		background: rgba(15, 23, 42, 0.72) !important;
+		backdrop-filter: blur(2px);
+		z-index: ${BOFA_VCC_MODAL_Z_INDEX - 1} !important;
+	}
+
+	.${BOFA_VCC_MODAL_ROOT_CLASS} .ant-modal-wrap,
+	.ant-modal-wrap.${BOFA_VCC_MODAL_WRAP_CLASS} {
+		opacity: 1 !important;
+		visibility: visible !important;
+		z-index: ${BOFA_VCC_MODAL_Z_INDEX} !important;
+	}
+
+	.${BOFA_VCC_MODAL_ROOT_CLASS} .ant-modal,
+	.ant-modal-wrap.${BOFA_VCC_MODAL_WRAP_CLASS} .ant-modal {
+		max-width: calc(100vw - 24px);
+		opacity: 1 !important;
+		position: relative;
+		transform: none !important;
+		visibility: visible !important;
+		z-index: ${BOFA_VCC_MODAL_Z_INDEX} !important;
+	}
+
+	.${BOFA_VCC_MODAL_ROOT_CLASS} .ant-modal-content,
+	.ant-modal-wrap.${BOFA_VCC_MODAL_WRAP_CLASS} .ant-modal-content {
+		opacity: 1 !important;
+		position: relative;
+		visibility: visible !important;
+		z-index: ${BOFA_VCC_MODAL_Z_INDEX + 1} !important;
+	}
+`;
 
 const ModalBody = styled.div`
 	direction: ltr !important;

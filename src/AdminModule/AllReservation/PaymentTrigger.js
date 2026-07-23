@@ -289,8 +289,12 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 
 	return (
 		<PaymentTriggerWrapper dir='ltr' lang='en'>
-			<h3>Trigger Payment</h3>
-			<p>This action will capture the payment for the reservation.</p>
+			<h3>Process Reservation Payment</h3>
+			<p>
+				{isDisabled
+					? "Use the OTA virtual card supplied by the booking platform."
+					: "Capture the saved payment method for this reservation."}
+			</p>
 
 			<Button
 				onClick={
@@ -299,16 +303,19 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 						: openOptionsModal
 				}
 				disabled={loading}
+				aria-label={
+					isDisabled ? "Enter OTA Virtual Card" : "Capture Saved Payment"
+				}
 			>
-				{isDisabled ? "Capture Unavailable" : "Capture Payment"}
+				{isDisabled ? "Enter OTA Virtual Card" : "Capture Saved Payment"}
 			</Button>
 
 			{isDisabled && (
-				<DisabledMessage>
+				<ActionHint>
 					{hasPaymentPath
-						? "Nothing remains on the saved authorization. Click to use an OTA virtual card."
-						: "No saved card or authorization was found. Click to add an OTA virtual card."}
-				</DisabledMessage>
+						? "The saved authorization has no capturable balance. Use an OTA virtual card only if payment is still due."
+						: "No saved card or authorization is available. This opens the secure OTA virtual-card form."}
+				</ActionHint>
 			)}
 
 			{/* Payment Options Modal */}
@@ -483,8 +490,8 @@ const Button = styled.button`
 	}
 `;
 
-const DisabledMessage = styled.p`
-	color: #b91c1c;
+const ActionHint = styled.p`
+	color: #475569;
 	font-size: 14px;
 	margin-top: 10px;
 `;
