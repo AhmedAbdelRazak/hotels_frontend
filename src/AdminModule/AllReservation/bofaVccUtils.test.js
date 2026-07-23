@@ -1,22 +1,15 @@
 import {
-	formatCardNumber,
-	formatExpiry,
 	formatPostalCode,
 	getCheckinEligibility,
 	initialVccForm,
-	isLuhnValid,
 	resolveVccProvider,
 	requiresBillingPostalCode,
 	validateVccForm,
 } from "./bofaVccUtils";
 
 describe("BofA OTA virtual-card form policy", () => {
-	test("formats card fields without persisting anything", () => {
-		expect(formatCardNumber("4111-1111-1111-1111")).toBe("4111 1111 1111 1111");
-		expect(formatExpiry("1231")).toBe("12/31");
+	test("formats the only optional browser billing field", () => {
 		expect(formatPostalCode("1011 dl")).toBe("1011 DL");
-		expect(isLuhnValid("4111111111111111")).toBe(true);
-		expect(isLuhnValid("4111111111111112")).toBe(false);
 	});
 
 	test("enforces check-in today or in the past using Riyadh dates", () => {
@@ -39,7 +32,7 @@ describe("BofA OTA virtual-card form policy", () => {
 		expect(form).not.toHaveProperty("billingPostalCode");
 	});
 
-	test("requires only valid USD and card fields from the browser", () => {
+	test("validates only the USD amount because card fields are hosted by BofA", () => {
 		const form = {
 			...initialVccForm({ booking_source: "Expedia" }),
 			amountUsd: "100.00",
@@ -48,6 +41,7 @@ describe("BofA OTA virtual-card form policy", () => {
 			cvv: "123",
 		};
 		expect(validateVccForm(form, new Date("2026-07-23T00:00:00.000Z"))).toBe("");
+		expect(initialVccForm({ booking_source: "Expedia" })).not.toHaveProperty("cardNumber");
 		expect(validateVccForm({ ...form, amountUsd: "100.001" })).toMatch(/two decimals/i);
 	});
 

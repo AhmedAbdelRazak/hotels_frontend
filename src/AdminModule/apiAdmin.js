@@ -2629,22 +2629,18 @@ export const chargeReservationViaBraintreeVcc = ({
 	).then(parseJSON);
 };
 
-export const chargeReservationViaBofaVcc = ({
+export const createBofaHostedCheckoutSession = ({
 	token,
 	reservationId,
 	usdAmount,
 	currency = "USD",
-	cardNumber,
-	cardExpiry,
-	cardCVV,
-	cardType = "",
 	billingPostalCode = "",
 	proceedWithoutRoom = false,
 }) => {
 	if (!reservationId) {
 		return Promise.reject(new Error("reservationId is required"));
 	}
-	return fetch(`${process.env.REACT_APP_API_URL}/reservations/bofa/vcc-charge`, {
+	return fetch(`${process.env.REACT_APP_API_URL}/bofa/checkout/session`, {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
@@ -2657,12 +2653,6 @@ export const chargeReservationViaBofaVcc = ({
 			usdAmount: Number(usdAmount),
 			currency: String(currency || "USD").toUpperCase(),
 			proceedWithoutRoom: !!proceedWithoutRoom,
-			card: {
-				number: String(cardNumber || ""),
-				expiry: String(cardExpiry || ""),
-				cvv: String(cardCVV || ""),
-				...(cardType ? { type: String(cardType) } : {}),
-			},
 			...(String(billingPostalCode || "").trim()
 				? {
 						billingPostalCode: String(billingPostalCode)

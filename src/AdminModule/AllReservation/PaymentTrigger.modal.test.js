@@ -20,7 +20,7 @@ jest.mock("../utils/superUsers", () => ({
 }));
 
 jest.mock("../apiAdmin", () => ({
-	chargeReservationViaBofaVcc: jest.fn(),
+	createBofaHostedCheckoutSession: jest.fn(),
 	getBofaVccHealth: jest.fn(),
 	getReservationBofaVccStatus: jest.fn(),
 	triggerPayment: jest.fn(),
@@ -93,9 +93,14 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 	);
 	await waitFor(() => expect(title).toBeVisible());
 	expect(
-		screen.getByText(/billing details are applied securely by the backend/i),
+		screen.getByText(/billing details are selected securely by the backend/i),
+	).toBeVisible();
+	expect(
+		screen.getByText(/entered only inside Bank of America’s secure embedded form/i),
 	).toBeVisible();
 	expect(screen.queryByLabelText(/cardholder name/i)).not.toBeInTheDocument();
+	expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument();
+	expect(screen.queryByLabelText(/security code|cvv/i)).not.toBeInTheDocument();
 	expect(screen.queryByLabelText(/address line 1/i)).not.toBeInTheDocument();
 	expect(screen.queryByLabelText(/zip|postal code/i)).not.toBeInTheDocument();
 
@@ -140,7 +145,7 @@ test("other OTA cards request only a ZIP or postal code and no street address", 
 	);
 
 	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
-	await screen.findByText("Bank of America connection and credentials are ready.");
+	await screen.findByText("Secure Bank of America embedded checkout is configured.");
 	const postalCodeInput = await screen.findByLabelText("ZIP / postal code");
 	await waitFor(() => expect(postalCodeInput).toBeVisible());
 	expect(

@@ -3,7 +3,7 @@ jest.mock("axios", () => ({
 	default: {},
 }));
 
-import { chargeReservationViaBofaVcc } from "../apiAdmin";
+import { createBofaHostedCheckoutSession } from "../apiAdmin";
 
 describe("Bank of America OTA virtual-card API payload", () => {
 	const originalFetch = global.fetch;
@@ -21,8 +21,8 @@ describe("Bank of America OTA virtual-card API payload", () => {
 		jest.clearAllMocks();
 	});
 
-	test("sends only payment inputs and never sends browser billing fields", async () => {
-		await chargeReservationViaBofaVcc({
+	test("never sends PAN, expiry, CVV, or browser billing fields", async () => {
+		await createBofaHostedCheckoutSession({
 			token: "super-admin-token",
 			reservationId: "reservation-1",
 			usdAmount: 125.5,
@@ -43,12 +43,11 @@ describe("Bank of America OTA virtual-card API payload", () => {
 			usdAmount: 125.5,
 			currency: "USD",
 			proceedWithoutRoom: false,
-			card: {
-				number: "4111111111111111",
-				expiry: "12/31",
-				cvv: "123",
-			},
 		});
+		expect(global.fetch.mock.calls[0][0]).toMatch(/\/bofa\/checkout\/session$/);
+		expect(JSON.stringify(payload)).not.toContain("4111111111111111");
+		expect(JSON.stringify(payload)).not.toContain("123");
+		expect(payload).not.toHaveProperty("card");
 		expect(payload).not.toHaveProperty("billingAddress");
 		expect(payload).not.toHaveProperty("cardholderName");
 		expect(payload).not.toHaveProperty("postalCode");
@@ -56,7 +55,7 @@ describe("Bank of America OTA virtual-card API payload", () => {
 	});
 
 	test("sends only the explicit postal-code override for other OTA cards", async () => {
-		await chargeReservationViaBofaVcc({
+		await createBofaHostedCheckoutSession({
 			token: "super-admin-token",
 			reservationId: "reservation-2",
 			usdAmount: 55,
