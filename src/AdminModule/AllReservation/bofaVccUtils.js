@@ -16,6 +16,13 @@ export const formatExpiry = (value) => {
 	return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 };
 
+export const formatPostalCode = (value) =>
+	String(value || "")
+		.toUpperCase()
+		.replace(/[^A-Z0-9 -]/g, "")
+		.replace(/\s+/g, " ")
+		.slice(0, 14);
+
 export const isLuhnValid = (value) => {
 	const number = digitsOnly(value, 19);
 	if (!number || /^(\d)\1+$/.test(number)) return false;
@@ -84,6 +91,9 @@ export const providerLabel = (provider) =>
 	({ expedia: "Expedia", agoda: "Agoda", booking: "Booking.com" }[provider] ||
 		"OTA");
 
+export const requiresBillingPostalCode = (provider) =>
+	provider !== "expedia" && provider !== "agoda";
+
 export const initialVccForm = (reservation = {}) => {
 	const metadata = reservation?.vcc_payment?.metadata || {};
 	const sourceCurrency = String(metadata.amount_to_charge_currency || "").toUpperCase();
@@ -91,15 +101,21 @@ export const initialVccForm = (reservation = {}) => {
 	const savedUsd =
 		Number(metadata.amount_to_charge_usd || 0) ||
 		(sourceCurrency === "USD" ? sourceAmount : 0);
+	const provider = resolveVccProvider(reservation?.booking_source);
 	return {
 		amountUsd: savedUsd > 0 ? savedUsd.toFixed(2) : "",
 		cardNumber: "",
 		expiry: "",
 		cvv: "",
+		...(requiresBillingPostalCode(provider) ? { billingPostalCode: "" } : {}),
 	};
 };
 
-export const validateVccForm = (form, now = new Date()) => {
+export const validateVccForm = (
+	form,
+	now = new Date(),
+	{ requirePostalCode = false } = {},
+) => {
 	if (!/^\d+(?:\.\d{1,2})?$/.test(String(form.amountUsd || "").trim())) {
 		return "Enter a valid amount in USD with no more than two decimals.";
 	}
@@ -121,5 +137,18 @@ export const validateVccForm = (form, now = new Date()) => {
 	}
 	const cvv = digitsOnly(form.cvv, 4);
 	if (cvv.length < 3 || cvv.length > 4) return "Enter a valid card security code.";
+	if (requirePostalCode) {
+		const postalCode = String(form.billingPostalCode || "")
+			.trim()
+			.toUpperCase();
+		if (!postalCode) return "Enter the ZIP / postal code provided for this virtual card.";
+		if (
+			postalCode.length < 3 ||
+			postalCode.length > 14 ||
+			!/^[A-Z0-9](?:[A-Z0-9 -]*[A-Z0-9])?$/.test(postalCode)
+		) {
+			return "Enter a valid ZIP / postal code using 3 to 14 letters, numbers, spaces, or hyphens.";
+		}
+	}
 	return "";
 };

@@ -13,9 +13,11 @@ import {
 	digitsOnly,
 	formatCardNumber,
 	formatExpiry,
+	formatPostalCode,
 	getCheckinEligibility,
 	initialVccForm,
 	providerLabel,
+	requiresBillingPostalCode,
 	resolveVccProvider,
 	validateVccForm,
 } from "./bofaVccUtils";
@@ -38,8 +40,11 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 	const [proceedWithoutRoom, setProceedWithoutRoom] = useState(false);
 
 	const provider = resolveVccProvider(reservation?.booking_source);
-	const providerName = providerLabel(provider);
-	const providerSupported = provider !== "other";
+	const providerName =
+		provider === "other"
+			? String(reservation?.booking_source || "Other OTA").trim()
+			: providerLabel(provider);
+	const requirePostalCode = requiresBillingPostalCode(provider);
 	const eligibility = useMemo(
 		() => getCheckinEligibility(reservation?.checkin_date),
 		[reservation?.checkin_date],
@@ -104,12 +109,6 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 		setForm((current) => ({ ...current, cardNumber: "", cvv: "" }));
 
 	const handleReview = () => {
-		if (!providerSupported) {
-			setError(
-				"OTA virtual-card processing is available only for Expedia, Agoda, and Booking.com reservations.",
-			);
-			return;
-		}
 		if (!eligibility.ok) {
 			setError(eligibility.message);
 			return;
@@ -135,7 +134,9 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 			);
 			return;
 		}
-		const validationError = validateVccForm(form);
+		const validationError = validateVccForm(form, new Date(), {
+			requirePostalCode,
+		});
 		if (validationError) {
 			setError(validationError);
 			return;
@@ -146,7 +147,9 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 
 	const handleSubmit = async () => {
 		if (submitting) return;
-		const validationError = validateVccForm(form);
+		const validationError = validateVccForm(form, new Date(), {
+			requirePostalCode,
+		});
 		if (validationError) {
 			setError(validationError);
 			setStep("details");
@@ -164,6 +167,9 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 				cardNumber: digitsOnly(form.cardNumber, 19),
 				cardExpiry: form.expiry,
 				cardCVV: digitsOnly(form.cvv, 4),
+				billingPostalCode: requirePostalCode
+					? form.billingPostalCode
+					: "",
 				proceedWithoutRoom,
 			});
 
@@ -215,6 +221,7 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 		? "This reservation was already charged successfully. Another charge is blocked."
 		: status?.warningMessage || status?.loadError || "";
 	const cardLast4 = digitsOnly(form.cardNumber, 19).slice(-4);
+	const readinessReference = health?.probe?.correlationId || "";
 
 	return (
 		<>
@@ -262,11 +269,17 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 					<StatusLine><Spin size='small' /> Checking Bank of America and reservation status...</StatusLine>
 				) : null}
 				{!eligibility.ok ? <Alert type='error' showIcon message={eligibility.message} /> : null}
-				{!providerSupported ? (
-					<Alert type='error' showIcon message='Unsupported reservation source' description='Only Expedia, Agoda, and Booking.com OTA virtual cards can be processed.' />
-				) : null}
 				{health && health.readyForCharge !== true ? (
-					<Alert type='error' showIcon message='Bank of America is not ready' description={readinessMessage} />
+					<Alert
+						type='error'
+						showIcon
+						message='Bank of America gateway activation is required'
+						description={`${readinessMessage}${
+							readinessReference
+								? ` Support reference: ${readinessReference}.`
+								: ""
+						}`}
+					/>
 				) : null}
 				{health?.readyForCharge === true ? (
 					<Alert type='success' showIcon message='Bank of America connection and credentials are ready.' />
@@ -284,17 +297,28 @@ const BofaVccModal = ({ open, reservation, onClose, onReservationUpdated }) => {
 							<Field className='full'><label htmlFor='bofa-vcc-number'>Virtual card number</label><input id='bofa-vcc-number' inputMode='numeric' value={form.cardNumber} onChange={(event) => setField("cardNumber", formatCardNumber(event.target.value))} placeholder='0000 0000 0000 0000' maxLength={23} autoComplete='new-password' /></Field>
 							<Field><label htmlFor='bofa-vcc-expiry'>Expiration (MM/YY)</label><input id='bofa-vcc-expiry' inputMode='numeric' value={form.expiry} onChange={(event) => setField("expiry", formatExpiry(event.target.value))} placeholder='MM/YY' maxLength={5} autoComplete='new-password' /></Field>
 							<Field><label htmlFor='bofa-vcc-cvv'>Security code</label><input id='bofa-vcc-cvv' type='password' inputMode='numeric' value={form.cvv} onChange={(event) => setField("cvv", digitsOnly(event.target.value, 4))} placeholder='CVV' maxLength={4} autoComplete='new-password' /></Field>
+							{requirePostalCode ? (
+								<Field className='full'>
+									<label htmlFor='bofa-vcc-postal-code'>ZIP / postal code</label>
+									<input id='bofa-vcc-postal-code' inputMode='text' value={form.billingPostalCode || ""} onChange={(event) => setField("billingPostalCode", formatPostalCode(event.target.value))} placeholder='Enter the code supplied with the virtual card' maxLength={14} autoComplete='postal-code' />
+									<small>No street address is requested for this card.</small>
+								</Field>
+							) : null}
 						</FormGrid>
 
-						<ServerBillingNote>{providerName} cardholder and billing details are applied securely by the backend from the reservation source. They cannot be viewed or changed in the browser.</ServerBillingNote>
-						<SecurityNote>Card number and CVV are held only while this modal is open. They are sent to the backend over HTTPS for the Bank of America request and are never saved in the reservation, logs, or browser storage.</SecurityNote>
+						<ServerBillingNote>
+							{requirePostalCode
+								? "Only the ZIP / postal code is collected for this OTA card. Cardholder identity is server-managed, and no street address is requested."
+								: `${providerName} cardholder and billing details are applied securely by the backend from the reservation source. They cannot be viewed or changed in the browser.`}
+						</ServerBillingNote>
+						<SecurityNote>Card number, expiration, CVV, and any entered postal code are held only while this modal is open. They are sent to the backend over HTTPS for the Bank of America request and are never saved in the reservation, logs, or browser storage.</SecurityNote>
 						{error ? <InlineError role='alert'>{error}</InlineError> : null}
-						<Actions><button type='button' className='secondary' onClick={onClose}>Cancel</button><button type='submit' disabled={loadingReadiness || health?.readyForCharge !== true || !providerSupported || !eligibility.ok || !!status?.loadError || status?.alreadyCharged || status?.processing || status?.outcomeUnknown || status?.attemptedBefore}>Review charge</button></Actions>
+						<Actions><button type='button' className='secondary' onClick={onClose}>Cancel</button><button type='submit' disabled={loadingReadiness || health?.readyForCharge !== true || !eligibility.ok || !!status?.loadError || status?.alreadyCharged || status?.processing || status?.outcomeUnknown || status?.attemptedBefore}>Review charge</button></Actions>
 					</form>
 				) : (
 					<ReviewPanel>
 						<SectionTitle>Final review</SectionTitle>
-						<dl><div><dt>Amount</dt><dd>${Number(form.amountUsd).toFixed(2)} USD</dd></div><div><dt>Card</dt><dd>Ending in {cardLast4}</dd></div><div><dt>Billing profile</dt><dd>{providerName} — securely managed by the backend</dd></div><div><dt>Check-in rule</dt><dd>Eligible: check-in is today or in the past</dd></div></dl>
+						<dl><div><dt>Amount</dt><dd>${Number(form.amountUsd).toFixed(2)} USD</dd></div><div><dt>Card</dt><dd>Ending in {cardLast4}</dd></div>{requirePostalCode ? <div><dt>ZIP / postal code</dt><dd>{form.billingPostalCode}</dd></div> : <div><dt>Billing profile</dt><dd>{providerName} — securely managed by the backend</dd></div>}<div><dt>Check-in rule</dt><dd>Eligible: check-in is today or in the past</dd></div></dl>
 						<Alert type='warning' showIcon message='Confirm once only' description='Do not refresh, close the page, or click twice while Bank of America is processing. If the outcome is uncertain, the backend will block another attempt until reconciliation.' />
 						{error ? <InlineError role='alert'>{error}</InlineError> : null}
 						<Actions><button type='button' className='secondary' disabled={submitting} onClick={() => setStep("details")}>Back</button><button type='button' className='danger' disabled={submitting} onClick={handleSubmit}>{submitting ? "Processing once..." : `Charge $${Number(form.amountUsd).toFixed(2)} USD`}</button></Actions>

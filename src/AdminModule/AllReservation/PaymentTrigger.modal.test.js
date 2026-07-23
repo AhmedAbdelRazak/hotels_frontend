@@ -114,3 +114,39 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 	expect(Number(panel?.style.zIndex)).toBe(BOFA_VCC_MODAL_Z_INDEX + 1);
 	expect(Number(wrap?.style.zIndex)).toBeGreaterThan(Number(mask?.style.zIndex));
 });
+
+test("other OTA cards request only a ZIP or postal code and no street address", async () => {
+	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
+	getReservationBofaVccStatus.mockResolvedValue({
+		alreadyCharged: false,
+		processing: false,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+	});
+
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-2",
+				confirmation_number: "TEST-2",
+				booking_source: "Booking.com",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				total_amount: 100,
+				paid_amount: 0,
+				paypal_details: {},
+				payment_details: {},
+			}}
+		/>,
+	);
+
+	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
+	await screen.findByText("Bank of America connection and credentials are ready.");
+	const postalCodeInput = await screen.findByLabelText("ZIP / postal code");
+	await waitFor(() => expect(postalCodeInput).toBeVisible());
+	expect(
+		screen.queryByLabelText(/address line|street address|city|state/i),
+	).not.toBeInTheDocument();
+	expect(
+		screen.getByText("No street address is requested for this card."),
+	).toBeVisible();
+});

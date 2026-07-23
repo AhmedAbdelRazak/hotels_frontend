@@ -1,10 +1,12 @@
 import {
 	formatCardNumber,
 	formatExpiry,
+	formatPostalCode,
 	getCheckinEligibility,
 	initialVccForm,
 	isLuhnValid,
 	resolveVccProvider,
+	requiresBillingPostalCode,
 	validateVccForm,
 } from "./bofaVccUtils";
 
@@ -12,6 +14,7 @@ describe("BofA OTA virtual-card form policy", () => {
 	test("formats card fields without persisting anything", () => {
 		expect(formatCardNumber("4111-1111-1111-1111")).toBe("4111 1111 1111 1111");
 		expect(formatExpiry("1231")).toBe("12/31");
+		expect(formatPostalCode("1011 dl")).toBe("1011 DL");
 		expect(isLuhnValid("4111111111111111")).toBe(true);
 		expect(isLuhnValid("4111111111111112")).toBe(false);
 	});
@@ -33,6 +36,7 @@ describe("BofA OTA virtual-card form policy", () => {
 		expect(form).not.toHaveProperty("cardholderName");
 		expect(form).not.toHaveProperty("address1");
 		expect(form).not.toHaveProperty("postalCode");
+		expect(form).not.toHaveProperty("billingPostalCode");
 	});
 
 	test("requires only valid USD and card fields from the browser", () => {
@@ -45,6 +49,34 @@ describe("BofA OTA virtual-card form policy", () => {
 		};
 		expect(validateVccForm(form, new Date("2026-07-23T00:00:00.000Z"))).toBe("");
 		expect(validateVccForm({ ...form, amountUsd: "100.001" })).toMatch(/two decimals/i);
+	});
+
+	test("requires a ZIP or postal code only outside Expedia and Agoda", () => {
+		expect(requiresBillingPostalCode("expedia")).toBe(false);
+		expect(requiresBillingPostalCode("agoda")).toBe(false);
+		expect(requiresBillingPostalCode("booking")).toBe(true);
+		expect(requiresBillingPostalCode("other")).toBe(true);
+
+		const form = {
+			...initialVccForm({ booking_source: "Booking.com" }),
+			amountUsd: "100.00",
+			cardNumber: "4111 1111 1111 1111",
+			expiry: "12/31",
+			cvv: "123",
+		};
+		expect(form).toHaveProperty("billingPostalCode", "");
+		expect(
+			validateVccForm(form, new Date("2026-07-23T00:00:00.000Z"), {
+				requirePostalCode: true,
+			}),
+		).toMatch(/ZIP \/ postal code/i);
+		expect(
+			validateVccForm(
+				{ ...form, billingPostalCode: "1011 DL" },
+				new Date("2026-07-23T00:00:00.000Z"),
+				{ requirePostalCode: true },
+			),
+		).toBe("");
 	});
 
 	test("does not classify Jannat Booking as Booking.com", () => {

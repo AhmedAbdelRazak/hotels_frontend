@@ -52,5 +52,25 @@ describe("Bank of America OTA virtual-card API payload", () => {
 		expect(payload).not.toHaveProperty("billingAddress");
 		expect(payload).not.toHaveProperty("cardholderName");
 		expect(payload).not.toHaveProperty("postalCode");
+		expect(payload).not.toHaveProperty("billingPostalCode");
+	});
+
+	test("sends only the explicit postal-code override for other OTA cards", async () => {
+		await chargeReservationViaBofaVcc({
+			token: "super-admin-token",
+			reservationId: "reservation-2",
+			usdAmount: 55,
+			cardNumber: "4111111111111111",
+			cardExpiry: "12/31",
+			cardCVV: "123",
+			billingPostalCode: " 1011 dl ",
+			billingAddress: { address1: "Must never be sent" },
+		});
+
+		const [, options] = global.fetch.mock.calls[0];
+		const payload = JSON.parse(options.body);
+		expect(payload.billingPostalCode).toBe("1011 DL");
+		expect(payload).not.toHaveProperty("billingAddress");
+		expect(payload).not.toHaveProperty("cardholderName");
 	});
 });

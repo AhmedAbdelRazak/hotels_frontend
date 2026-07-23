@@ -2638,6 +2638,7 @@ export const chargeReservationViaBofaVcc = ({
 	cardExpiry,
 	cardCVV,
 	cardType = "",
+	billingPostalCode = "",
 	proceedWithoutRoom = false,
 }) => {
 	if (!reservationId) {
@@ -2662,6 +2663,13 @@ export const chargeReservationViaBofaVcc = ({
 				cvv: String(cardCVV || ""),
 				...(cardType ? { type: String(cardType) } : {}),
 			},
+			...(String(billingPostalCode || "").trim()
+				? {
+						billingPostalCode: String(billingPostalCode)
+							.trim()
+							.toUpperCase(),
+				  }
+				: {}),
 		}),
 	}).then(parseJSON);
 };
