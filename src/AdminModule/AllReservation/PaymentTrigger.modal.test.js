@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import PaymentTrigger from "./PaymentTrigger";
 import { BOFA_VCC_MODAL_Z_INDEX } from "./BofaVccModal";
 import {
+	createBofaHostedCheckoutSession,
 	getBofaVccHealth,
 	getReservationBofaVccStatus,
 } from "../apiAdmin";
@@ -44,6 +45,7 @@ beforeAll(() => {
 			unobserve() {}
 			disconnect() {}
 		};
+	jest.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -96,7 +98,7 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 		screen.getByText(/billing details are selected securely by the backend/i),
 	).toBeVisible();
 	expect(
-		screen.getByText(/entered only inside Bank of America’s secure embedded form/i),
+		screen.getByText(/entered only inside Bank of America.s secure embedded form/i),
 	).toBeVisible();
 	expect(screen.queryByLabelText(/cardholder name/i)).not.toBeInTheDocument();
 	expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument();
@@ -120,6 +122,59 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 	expect(Number(wrap?.style.zIndex)).toBeGreaterThan(Number(mask?.style.zIndex));
 });
 
+test("a complete saved USD amount loads the Bank of America fields without a review step", async () => {
+	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
+	getReservationBofaVccStatus.mockResolvedValue({
+		alreadyCharged: false,
+		processing: false,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+	});
+	createBofaHostedCheckoutSession.mockResolvedValue({
+		endpointUrl: "https://secureacceptance.merchant-services.bankofamerica.com/embedded/pay",
+		fields: {
+			access_key: "test-access-key",
+			profile_id: "test-profile",
+			transaction_uuid: "test-session-1",
+			signature: "test-signature",
+		},
+		session: {
+			transactionUuid: "test-session-1",
+			amountUsd: 25,
+			currency: "USD",
+		},
+	});
+
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-saved-amount",
+				confirmation_number: "TEST-SAVED-25",
+				booking_source: "Agoda",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				vcc_payment: {
+					metadata: { amount_to_charge_usd: 25 },
+				},
+				payment_details: {},
+			}}
+		/>,
+	);
+
+	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
+	await screen.findByTitle("Secure Bank of America card form");
+	expect(screen.queryByRole("button", { name: /review secure charge/i })).not.toBeInTheDocument();
+	expect(screen.queryByText("Final review")).not.toBeInTheDocument();
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledTimes(1);
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
+		expect.objectContaining({
+			reservationId: "reservation-saved-amount",
+			usdAmount: 25,
+			currency: "USD",
+			proceedWithoutRoom: true,
+		}),
+	);
+});
+
 test("other OTA cards request only a ZIP or postal code and no street address", async () => {
 	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
 	getReservationBofaVccStatus.mockResolvedValue({
@@ -127,6 +182,11 @@ test("other OTA cards request only a ZIP or postal code and no street address", 
 		processing: false,
 		outcomeUnknown: false,
 		attemptedBefore: false,
+	});
+	createBofaHostedCheckoutSession.mockResolvedValue({
+		endpointUrl: "https://secureacceptance.merchant-services.bankofamerica.com/embedded/pay",
+		fields: { transaction_uuid: "test-session-2", signature: "test-signature" },
+		session: { transactionUuid: "test-session-2", amountUsd: 20, currency: "USD" },
 	});
 
 	render(
@@ -154,4 +214,20 @@ test("other OTA cards request only a ZIP or postal code and no street address", 
 	expect(
 		screen.getByText("No street address is requested for this card."),
 	).toBeVisible();
+
+	fireEvent.change(screen.getByLabelText("Amount (USD)"), {
+		target: { value: "20" },
+	});
+	fireEvent.change(postalCodeInput, { target: { value: "92376" } });
+	fireEvent.blur(postalCodeInput);
+	await screen.findByTitle("Secure Bank of America card form");
+	expect(screen.queryByRole("button", { name: /review secure charge/i })).not.toBeInTheDocument();
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
+		expect.objectContaining({
+			reservationId: "reservation-2",
+			usdAmount: 20,
+			currency: "USD",
+			billingPostalCode: "92376",
+		}),
+	);
 });

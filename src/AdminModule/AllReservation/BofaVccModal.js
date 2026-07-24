@@ -46,8 +46,9 @@ const BofaVccModal = ({
 	const [health, setHealth] = useState(null);
 	const [status, setStatus] = useState(null);
 	const [hostedSession, setHostedSession] = useState(null);
-	const [proceedWithoutRoom, setProceedWithoutRoom] = useState(false);
 	const successShown = useRef(false);
+	const autoLoadInitialAmount = useRef(false);
+	const sessionRequestInFlight = useRef(false);
 
 	const provider = resolveVccProvider(reservation?.booking_source);
 	const providerName =
@@ -60,6 +61,62 @@ const BofaVccModal = ({
 		[reservation?.checkin_date],
 	);
 
+	const launchHostedForm = useCallback(async () => {
+		if (submitting || sessionRequestInFlight.current) return;
+		if (!eligibility.ok) return setError(eligibility.message);
+		if (health?.readyForCharge !== true) {
+			return setError("Bank of America Hosted Checkout is not ready on the server.");
+		}
+		if (status?.loadError) return setError(status.loadError);
+		if (status?.alreadyCharged) return setError("This reservation was already charged.");
+		if (status?.processing || status?.outcomeUnknown || status?.attemptedBefore) {
+			return setError(
+				status?.warningMessage ||
+					"This reservation is blocked from another virtual-card attempt.",
+			);
+		}
+		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
+		if (validationError) {
+			setError(validationError);
+			return;
+		}
+		sessionRequestInFlight.current = true;
+		setSubmitting(true);
+		setError("");
+		try {
+			const response = await createBofaHostedCheckoutSession({
+				token,
+				reservationId: reservation._id,
+				usdAmount: Number(form.amountUsd),
+				currency: "USD",
+				billingPostalCode: requirePostalCode ? form.billingPostalCode : "",
+				proceedWithoutRoom: true,
+			});
+			setHostedSession(response);
+			setStep("hosted");
+		} catch (requestError) {
+			const payload = requestError?.response || {};
+			setStatus(payload?.bofaStatus || status);
+			setError(
+				payload?.message ||
+					requestError?.message ||
+					"The secure Bank of America form could not be loaded.",
+			);
+		} finally {
+			sessionRequestInFlight.current = false;
+			setSubmitting(false);
+		}
+	}, [
+		eligibility,
+		form,
+		health?.readyForCharge,
+		requirePostalCode,
+		reservation?._id,
+		status,
+		submitting,
+		token,
+	]);
+
 	const refreshStatus = useCallback(async () => {
 		if (!reservation?._id || !token) return null;
 		const result = await getReservationBofaVccStatus(reservation._id, token);
@@ -69,14 +126,18 @@ const BofaVccModal = ({
 
 	useEffect(() => {
 		if (!open) return undefined;
-		setForm(initialForm());
+		const nextForm = initialForm();
+		setForm(nextForm);
 		setStep("details");
 		setError("");
 		setHealth(null);
 		setStatus(null);
 		setHostedSession(null);
-		setProceedWithoutRoom(false);
 		successShown.current = false;
+		sessionRequestInFlight.current = false;
+		autoLoadInitialAmount.current = !validateVccForm(nextForm, new Date(), {
+			requirePostalCode,
+		});
 		if (!isSuperAdmin || !reservation?._id) return undefined;
 
 		let active = true;
@@ -113,7 +174,33 @@ const BofaVccModal = ({
 		return () => {
 			active = false;
 		};
-	}, [initialForm, isSuperAdmin, open, reservation?._id, token]);
+	}, [initialForm, isSuperAdmin, open, requirePostalCode, reservation?._id, token]);
+
+	useEffect(() => {
+		if (
+			!open ||
+			step !== "details" ||
+			!autoLoadInitialAmount.current ||
+			loadingReadiness ||
+			health?.readyForCharge !== true ||
+			status?.loadError ||
+			status?.alreadyCharged ||
+			status?.processing ||
+			status?.outcomeUnknown ||
+			status?.attemptedBefore
+		) {
+			return;
+		}
+		autoLoadInitialAmount.current = false;
+		launchHostedForm();
+	}, [
+		health?.readyForCharge,
+		launchHostedForm,
+		loadingReadiness,
+		open,
+		status,
+		step,
+	]);
 
 	useEffect(() => {
 		if (!open || step !== "hosted") return undefined;
@@ -174,66 +261,17 @@ const BofaVccModal = ({
 
 	if (!isSuperAdmin) return null;
 
-	const handleReview = () => {
-		if (!eligibility.ok) return setError(eligibility.message);
-		if (health?.readyForCharge !== true) {
-			return setError("Bank of America Hosted Checkout is not ready on the server.");
-		}
-		if (status?.loadError) return setError(status.loadError);
-		if (status?.alreadyCharged) return setError("This reservation was already charged.");
-		if (status?.processing || status?.outcomeUnknown || status?.attemptedBefore) {
-			return setError(
-				status?.warningMessage ||
-					"This reservation is blocked from another virtual-card attempt.",
-			);
-		}
-		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
-		if (validationError) return setError(validationError);
-		setError("");
-		setStep("review");
-	};
-
-	const launchHostedForm = async () => {
-		if (submitting) return;
-		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
-		if (validationError) {
-			setError(validationError);
-			setStep("details");
+	const loadWhenComplete = (event) => {
+		if (step !== "details" || submitting || loadingReadiness) return;
+		const nextTarget = event?.relatedTarget;
+		if (
+			nextTarget?.dataset?.skipBofaAutoLoad === "true" ||
+			nextTarget?.closest?.(".ant-modal-close")
+		) {
 			return;
 		}
-		setSubmitting(true);
-		setError("");
-		try {
-			const response = await createBofaHostedCheckoutSession({
-				token,
-				reservationId: reservation._id,
-				usdAmount: Number(form.amountUsd),
-				currency: "USD",
-				billingPostalCode: requirePostalCode ? form.billingPostalCode : "",
-				proceedWithoutRoom,
-			});
-			setHostedSession(response);
-			setStep("hosted");
-		} catch (requestError) {
-			const payload = requestError?.response || {};
-			if (payload.issue === "BOFA_VCC_ROOM_CONFIRM_REQUIRED") {
-				setProceedWithoutRoom(true);
-				setError(
-					"No room is assigned. Review once more to confirm that you want to continue without a room assignment.",
-				);
-				setStep("details");
-			} else {
-				setStatus(payload?.bofaStatus || status);
-				setError(
-					payload?.message ||
-						requestError?.message ||
-						"The secure Bank of America form could not be opened.",
-				);
-				setStep("details");
-			}
-		} finally {
-			setSubmitting(false);
-		}
+		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
+		if (!validationError) launchHostedForm();
 	};
 
 	const readinessMessage =
@@ -269,7 +307,7 @@ const BofaVccModal = ({
 				}}
 				getContainer={() => document.body}
 				destroyOnClose
-				maskClosable={step !== "hosted"}
+				maskClosable={false}
 			>
 				<Body dir='ltr' lang='en'>
 					<Summary>
@@ -284,38 +322,30 @@ const BofaVccModal = ({
 					{health && health.readyForCharge !== true ? <Alert type='error' showIcon message='Bank of America Hosted Checkout is not ready' description={readinessMessage} /> : null}
 					{health?.readyForCharge === true ? <Alert type='success' showIcon message='Secure Bank of America embedded checkout is configured.' /> : null}
 					{blockedMessage ? <Alert type={status?.alreadyCharged ? "success" : "warning"} showIcon message={blockedMessage} /> : null}
-					{proceedWithoutRoom ? <Alert type='warning' showIcon message='No assigned room was found. Continuing will explicitly confirm this exception.' /> : null}
 
 					{step === "details" ? (
-						<form onSubmit={(event) => { event.preventDefault(); handleReview(); }}>
+						<form onSubmit={(event) => { event.preventDefault(); launchHostedForm(); }}>
 							<Heading>Charge details</Heading>
 							<Field>
 								<label htmlFor='bofa-vcc-amount'>Amount (USD)</label>
-								<InputWrap><span>$</span><input id='bofa-vcc-amount' inputMode='decimal' value={form.amountUsd} onChange={(event) => { setError(""); setForm((current) => ({ ...current, amountUsd: event.target.value.replace(/[^0-9.]/g, "") })); }} placeholder='0.00' /></InputWrap>
+								<InputWrap><span>$</span><input id='bofa-vcc-amount' inputMode='decimal' value={form.amountUsd} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); setForm((current) => ({ ...current, amountUsd: event.target.value.replace(/[^0-9.]/g, "") })); }} onBlur={loadWhenComplete} placeholder='0.00' autoFocus /></InputWrap>
 								<small>The charge is always signed and processed in USD.</small>
 							</Field>
 							{requirePostalCode ? (
 								<Field>
 									<label htmlFor='bofa-vcc-postal-code'>ZIP / postal code</label>
-									<input id='bofa-vcc-postal-code' value={form.billingPostalCode || ""} onChange={(event) => { setError(""); setForm((current) => ({ ...current, billingPostalCode: formatPostalCode(event.target.value) })); }} placeholder='Enter the code supplied with the virtual card' maxLength={14} autoComplete='postal-code' />
+									<input id='bofa-vcc-postal-code' value={form.billingPostalCode || ""} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); setForm((current) => ({ ...current, billingPostalCode: formatPostalCode(event.target.value) })); }} onBlur={loadWhenComplete} placeholder='Enter the code supplied with the virtual card' maxLength={14} autoComplete='postal-code' />
 									<small>No street address is requested for this card.</small>
 								</Field>
 							) : null}
 							<ProviderNote>{requirePostalCode ? "Only the ZIP / postal code is collected for this OTA. Cardholder identity remains server-managed." : `${providerName} cardholder and billing details are selected securely by the backend from the reservation source.`}</ProviderNote>
 							<SecurityNote>Card number, expiration date, and security code are entered only inside Bank of America’s secure embedded form. They are sent directly from your browser to Bank of America and never pass through or get stored by Jannat Booking.</SecurityNote>
+							<SecureEntryPlaceholder aria-live='polite'>
+								{submitting ? <><Spin size='small' /> Loading secure card fields...</> : "The secure card fields load automatically when the required amount and ZIP, when applicable, are complete."}
+							</SecureEntryPlaceholder>
 							{error ? <InlineError role='alert'>{error}</InlineError> : null}
-							<Actions><button type='button' className='secondary' onClick={onClose}>Cancel</button><button type='submit' disabled={loadingReadiness || health?.readyForCharge !== true || !eligibility.ok || !!status?.loadError || status?.alreadyCharged || status?.processing || status?.outcomeUnknown || status?.attemptedBefore}>Review secure charge</button></Actions>
+							<Actions><button type='button' className='secondary' data-skip-bofa-auto-load='true' onClick={onClose}>Cancel</button></Actions>
 						</form>
-					) : null}
-
-					{step === "review" ? (
-						<section>
-							<Heading>Final review</Heading>
-							<Review><div><span>Amount</span><strong>${Number(form.amountUsd).toFixed(2)} USD</strong></div><div><span>Card entry</span><strong>Bank of America secure form</strong></div><div><span>Check-in rule</span><strong>Eligible: today or in the past</strong></div></Review>
-							<Alert type='info' showIcon message='The next form belongs to Bank of America' description='Enter the OTA card once in the embedded form. The backend verifies Bank of America’s signed result and blocks duplicate successful charges.' />
-							{error ? <InlineError role='alert'>{error}</InlineError> : null}
-							<Actions><button type='button' className='secondary' disabled={submitting} onClick={() => setStep("details")}>Back</button><button type='button' disabled={submitting} onClick={launchHostedForm}>{submitting ? "Opening secure form..." : "Open secure Bank of America form"}</button></Actions>
-						</section>
 					) : null}
 
 					{step === "hosted" && hostedSession ? (
@@ -353,6 +383,6 @@ const Field = styled.div`margin-bottom:12px;label{display:block;font-weight:650;
 const InputWrap = styled.div`display:flex;align-items:center;border:1px solid #cbd5e1;border-radius:8px;overflow:hidden;span{padding-left:11px;font-weight:700}input{border:0}`;
 const ProviderNote = styled.p`margin:14px 0 0;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#14532d;font-size:13px`;
 const SecurityNote = styled.p`margin:14px 0 0;padding:10px 12px;background:#eef6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a5f;font-size:13px`;
+const SecureEntryPlaceholder = styled.div`display:flex;align-items:center;gap:8px;min-height:54px;margin:14px 0 0;padding:10px 12px;background:#f8fafc;border:1px dashed #94a3b8;border-radius:8px;color:#475569;font-size:13px`;
 const InlineError = styled.p`margin:12px 0 0;padding:10px 12px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-weight:600`;
 const Actions = styled.div`display:flex;justify-content:flex-end;gap:9px;margin-top:18px;button{border:0;border-radius:8px;padding:10px 16px;background:#1677ff;color:#fff;font-weight:650;cursor:pointer}button.secondary{background:#e2e8f0;color:#1e293b}button:disabled{opacity:.55;cursor:not-allowed}`;
-const Review = styled.div`margin:0 0 14px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;div{display:grid;grid-template-columns:150px 1fr;gap:12px;padding:10px 12px;border-bottom:1px solid #e5e7eb}div:last-child{border-bottom:0}span{color:#64748b}strong{overflow-wrap:anywhere}`;
