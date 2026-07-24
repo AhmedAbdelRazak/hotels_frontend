@@ -4,6 +4,7 @@ import styled, { createGlobalStyle } from "styled-components";
 import { toast } from "react-toastify";
 import { isAuthenticated } from "../../auth";
 import {
+	abandonUnsubmittedBofaHostedCheckoutSession,
 	createBofaHostedCheckoutSession,
 	getBofaVccHealth,
 	getReservationBofaVccStatus,
@@ -46,6 +47,7 @@ const BofaVccModal = ({
 	const [health, setHealth] = useState(null);
 	const [status, setStatus] = useState(null);
 	const [hostedSession, setHostedSession] = useState(null);
+	const [recoveringSession, setRecoveringSession] = useState(false);
 	const successShown = useRef(false);
 	const autoLoadInitialAmount = useRef(false);
 	const sessionRequestInFlight = useRef(false);
@@ -55,6 +57,13 @@ const BofaVccModal = ({
 		provider === "other"
 			? String(reservation?.booking_source || "Other OTA").trim()
 			: providerLabel(provider);
+	const otaBookingNumber = String(
+		reservation?.customer_details?.confirmation_number2 ||
+			reservation?.reservation_id ||
+			reservation?.supplierData?.otaConfirmationNumber ||
+			reservation?.supplierData?.suppliedBookingNo ||
+			"N/A",
+	).trim();
 	const requirePostalCode = requiresBillingPostalCode(provider);
 	const eligibility = useMemo(
 		() => getCheckinEligibility(reservation?.checkin_date),
@@ -124,6 +133,32 @@ const BofaVccModal = ({
 		return result;
 	}, [reservation?._id, token]);
 
+	const restartUnsubmittedForm = async () => {
+		const referenceNumber = status?.secureAcceptance?.referenceNumber;
+		if (!referenceNumber || recoveringSession) return;
+		setRecoveringSession(true);
+		setError("");
+		try {
+			const next = await abandonUnsubmittedBofaHostedCheckoutSession({
+				token,
+				reservationId: reservation._id,
+				referenceNumber,
+			});
+			setStatus(next);
+			autoLoadInitialAmount.current = true;
+		} catch (requestError) {
+			const payload = requestError?.response || {};
+			setStatus(payload?.bofaStatus || status);
+			setError(
+				payload?.message ||
+					requestError?.message ||
+					"The previous secure form could not be restarted safely.",
+			);
+		} finally {
+			setRecoveringSession(false);
+		}
+	};
+
 	useEffect(() => {
 		if (!open) return undefined;
 		const nextForm = initialForm();
@@ -133,6 +168,7 @@ const BofaVccModal = ({
 		setHealth(null);
 		setStatus(null);
 		setHostedSession(null);
+		setRecoveringSession(false);
 		successShown.current = false;
 		sessionRequestInFlight.current = false;
 		autoLoadInitialAmount.current = !validateVccForm(nextForm, new Date(), {
@@ -312,7 +348,8 @@ const BofaVccModal = ({
 				<Body dir='ltr' lang='en'>
 					<Summary>
 						<div><span>OTA</span><strong>{providerName}</strong></div>
-						<div><span>Reservation</span><strong>{reservation?.confirmation_number || "N/A"}</strong></div>
+						<div><span>OTA booking</span><strong>{otaBookingNumber}</strong></div>
+						<div><span>PMS confirmation</span><strong>{reservation?.confirmation_number || "N/A"}</strong></div>
 						<div><span>Check-in</span><strong>{eligibility.checkinDate || "Invalid"}</strong></div>
 						<div><span>Currency</span><strong>USD only</strong></div>
 					</Summary>
@@ -322,6 +359,15 @@ const BofaVccModal = ({
 					{health && health.readyForCharge !== true ? <Alert type='error' showIcon message='Bank of America Hosted Checkout is not ready' description={readinessMessage} /> : null}
 					{health?.readyForCharge === true ? <Alert type='success' showIcon message='Secure Bank of America embedded checkout is configured.' /> : null}
 					{blockedMessage ? <Alert type={status?.alreadyCharged ? "success" : "warning"} showIcon message={blockedMessage} /> : null}
+					{status?.canDiscardUnsubmittedSession ? (
+						<RecoveryBox>
+							<strong>No card result was received for the expired form.</strong>
+							<span>If you did not press Pay in that form, archive it and load a fresh Bank of America form. A form with any bank callback or transaction ID cannot be cleared here.</span>
+							<button type='button' onClick={restartUnsubmittedForm} disabled={recoveringSession}>
+								{recoveringSession ? <><Spin size='small' /> Restarting...</> : "I did not submit it — load a fresh form"}
+							</button>
+						</RecoveryBox>
+					) : null}
 
 					{step === "details" ? (
 						<form onSubmit={(event) => { event.preventDefault(); launchHostedForm(); }}>
@@ -376,7 +422,7 @@ const ModalLayer = createGlobalStyle`
 	.${ROOT_CLASS} .ant-modal-content, .ant-modal-wrap.${WRAP_CLASS} .ant-modal-content { opacity: 1 !important; position: relative; visibility: visible !important; z-index: ${BOFA_VCC_MODAL_Z_INDEX + 1} !important; }
 `;
 const Body = styled.div`direction:ltr!important;text-align:left!important;color:#172033;.ant-alert{margin:10px 0;text-align:left;direction:ltr}`;
-const Summary = styled.div`display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px;div{padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc}span,strong{display:block}span{color:#64748b;font-size:12px;margin-bottom:2px}strong{overflow-wrap:anywhere}@media(max-width:640px){grid-template-columns:repeat(2,minmax(0,1fr))}`;
+const Summary = styled.div`display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:12px;div{padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc}span,strong{display:block}span{color:#64748b;font-size:12px;margin-bottom:2px}strong{overflow-wrap:anywhere}@media(max-width:760px){grid-template-columns:repeat(2,minmax(0,1fr))}`;
 const StatusLine = styled.div`display:flex;align-items:center;gap:8px;padding:10px 0;color:#475569`;
 const Heading = styled.h4`margin:18px 0 10px;font-size:16px;color:#0f172a`;
 const Field = styled.div`margin-bottom:12px;label{display:block;font-weight:650;margin-bottom:5px}input{width:100%;height:42px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;direction:ltr;text-align:left;background:#fff}input:focus{outline:2px solid rgba(22,119,255,.2);border-color:#1677ff}small{display:block;margin-top:4px;color:#64748b}`;
@@ -385,4 +431,5 @@ const ProviderNote = styled.p`margin:14px 0 0;padding:10px 12px;background:#f0fd
 const SecurityNote = styled.p`margin:14px 0 0;padding:10px 12px;background:#eef6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a5f;font-size:13px`;
 const SecureEntryPlaceholder = styled.div`display:flex;align-items:center;gap:8px;min-height:54px;margin:14px 0 0;padding:10px 12px;background:#f8fafc;border:1px dashed #94a3b8;border-radius:8px;color:#475569;font-size:13px`;
 const InlineError = styled.p`margin:12px 0 0;padding:10px 12px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-weight:600`;
+const RecoveryBox = styled.div`display:grid;gap:7px;margin:12px 0;padding:12px;background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;color:#78350f;font-size:13px;button{justify-self:start;display:flex;align-items:center;gap:7px;border:0;border-radius:7px;padding:9px 12px;background:#b45309;color:#fff;font-weight:650;cursor:pointer}button:disabled{opacity:.6;cursor:not-allowed}`;
 const Actions = styled.div`display:flex;justify-content:flex-end;gap:9px;margin-top:18px;button{border:0;border-radius:8px;padding:10px 16px;background:#1677ff;color:#fff;font-weight:650;cursor:pointer}button.secondary{background:#e2e8f0;color:#1e293b}button:disabled{opacity:.55;cursor:not-allowed}`;

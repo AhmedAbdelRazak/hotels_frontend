@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import PaymentTrigger from "./PaymentTrigger";
 import { BOFA_VCC_MODAL_Z_INDEX } from "./BofaVccModal";
 import {
+	abandonUnsubmittedBofaHostedCheckoutSession,
 	createBofaHostedCheckoutSession,
 	getBofaVccHealth,
 	getReservationBofaVccStatus,
@@ -21,6 +22,7 @@ jest.mock("../utils/superUsers", () => ({
 }));
 
 jest.mock("../apiAdmin", () => ({
+	abandonUnsubmittedBofaHostedCheckoutSession: jest.fn(),
 	createBofaHostedCheckoutSession: jest.fn(),
 	getBofaVccHealth: jest.fn(),
 	getReservationBofaVccStatus: jest.fn(),
@@ -229,5 +231,76 @@ test("other OTA cards request only a ZIP or postal code and no street address", 
 			currency: "USD",
 			billingPostalCode: "92376",
 		}),
+	);
+});
+
+test("an expired blank form can be archived and automatically restarted", async () => {
+	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
+	getReservationBofaVccStatus.mockResolvedValueOnce({
+		alreadyCharged: false,
+		processing: false,
+		outcomeUnknown: true,
+		attemptedBefore: true,
+		canDiscardUnsubmittedSession: true,
+		warningMessage: "The prior result is not conclusive.",
+		secureAcceptance: {
+			status: "expired_unconfirmed",
+			referenceNumber: "JB-EXPIRED-1",
+		},
+	});
+	getReservationBofaVccStatus.mockResolvedValue({
+		alreadyCharged: false,
+		processing: true,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+		canDiscardUnsubmittedSession: false,
+		secureAcceptance: { status: "pending" },
+	});
+	abandonUnsubmittedBofaHostedCheckoutSession.mockResolvedValue({
+		alreadyCharged: false,
+		processing: false,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+		canDiscardUnsubmittedSession: false,
+		secureAcceptance: { status: "abandoned_unsubmitted" },
+	});
+	createBofaHostedCheckoutSession.mockResolvedValue({
+		endpointUrl: "https://secureacceptance.merchant-services.bankofamerica.com/embedded/pay",
+		fields: { transaction_uuid: "fresh-session", signature: "test-signature" },
+		session: { transactionUuid: "fresh-session", amountUsd: 20, currency: "USD" },
+	});
+
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-expired-form",
+				confirmation_number: "TEST-EXPIRED",
+				booking_source: "Agoda",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				vcc_payment: { metadata: { amount_to_charge_usd: 20 } },
+				payment_details: {},
+			}}
+		/>,
+	);
+
+	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
+	const restart = await screen.findByRole("button", {
+		name: /I did not submit it/i,
+	});
+	fireEvent.click(restart);
+
+	await screen.findByTitle("Secure Bank of America card form");
+	expect(abandonUnsubmittedBofaHostedCheckoutSession).toHaveBeenCalledWith({
+		token: "test-token",
+		reservationId: "reservation-expired-form",
+		referenceNumber: "JB-EXPIRED-1",
+	});
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledTimes(1);
+	await waitFor(() =>
+		expect(getReservationBofaVccStatus.mock.calls.length).toBeGreaterThanOrEqual(2),
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+	await waitFor(() =>
+		expect(screen.queryByText("Process OTA Virtual Card")).not.toBeInTheDocument(),
 	);
 });

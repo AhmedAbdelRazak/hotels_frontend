@@ -2664,6 +2664,35 @@ export const createBofaHostedCheckoutSession = ({
 	}).then(parseJSON);
 };
 
+export const abandonUnsubmittedBofaHostedCheckoutSession = ({
+	token,
+	reservationId,
+	referenceNumber,
+}) => {
+	if (!reservationId || !referenceNumber) {
+		return Promise.reject(
+			new Error("reservationId and referenceNumber are required"),
+		);
+	}
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/bofa/checkout/session/abandon-unsubmitted`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+			},
+			credentials: "omit",
+			body: JSON.stringify({
+				reservationId,
+				referenceNumber,
+				confirmCardWasNotSubmitted: true,
+			}),
+		},
+	).then(parseJSON);
+};
+
 export const triggerPayment = (
 	userId, // kept for call-site compatibility; not used in route
 	token,
