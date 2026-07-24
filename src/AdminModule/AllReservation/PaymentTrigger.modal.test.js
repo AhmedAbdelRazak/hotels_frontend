@@ -304,3 +304,60 @@ test("an expired blank form can be archived and automatically restarted", async 
 		expect(screen.queryByText("Process OTA Virtual Card")).not.toBeInTheDocument(),
 	);
 });
+
+test("an active checkout resumes the same bank amount instead of showing a block", async () => {
+	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
+	getReservationBofaVccStatus.mockResolvedValue({
+		alreadyCharged: false,
+		processing: true,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+		secureAcceptance: {
+			status: "pending",
+			amountUsd: 10,
+			resumeAvailable: true,
+		},
+	});
+	createBofaHostedCheckoutSession.mockResolvedValue({
+		resumed: true,
+		endpointUrl: "https://secureacceptance.merchant-services.bankofamerica.com/embedded/pay",
+		fields: { transaction_uuid: "same-active-session", signature: "new-signature" },
+		session: {
+			transactionUuid: "same-active-session",
+			amountUsd: 10,
+			currency: "USD",
+			resumed: true,
+		},
+	});
+
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-active-session",
+				reservation_id: "OTA-10",
+				confirmation_number: "PMS-10",
+				booking_source: "Agoda",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				vcc_payment: { metadata: { amount_to_charge_usd: 20 } },
+				payment_details: {},
+			}}
+		/>,
+	);
+
+	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
+	await screen.findByTitle("Secure Bank of America card form");
+	await waitFor(() =>
+		expect(screen.getByText("Bank of America will process $10.00 USD.")).toBeVisible(),
+	);
+	expect(
+		screen.getByText(/existing secure checkout was resumed automatically/i),
+	).toBeVisible();
+	expect(screen.queryByText(/blocked from another virtual-card attempt/i)).not.toBeInTheDocument();
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
+		expect.objectContaining({
+			reservationId: "reservation-active-session",
+			usdAmount: 10,
+		}),
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+});

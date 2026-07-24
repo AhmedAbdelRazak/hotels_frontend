@@ -78,13 +78,26 @@ const BofaVccModal = ({
 		}
 		if (status?.loadError) return setError(status.loadError);
 		if (status?.alreadyCharged) return setError("This reservation was already charged.");
-		if (status?.processing || status?.outcomeUnknown || status?.attemptedBefore) {
+		const resumableActiveSession =
+			status?.processing && status?.secureAcceptance?.resumeAvailable;
+		if (
+			(status?.processing && !resumableActiveSession) ||
+			status?.outcomeUnknown ||
+			status?.attemptedBefore
+		) {
 			return setError(
 				status?.warningMessage ||
 					"This reservation is blocked from another virtual-card attempt.",
 			);
 		}
-		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
+		const requestAmountUsd = resumableActiveSession
+			? Number(status?.secureAcceptance?.amountUsd || 0)
+			: Number(form.amountUsd);
+		const requestForm = {
+			...form,
+			amountUsd: requestAmountUsd > 0 ? String(requestAmountUsd) : form.amountUsd,
+		};
+		const validationError = validateVccForm(requestForm, new Date(), { requirePostalCode });
 		if (validationError) {
 			setError(validationError);
 			return;
@@ -96,11 +109,17 @@ const BofaVccModal = ({
 			const response = await createBofaHostedCheckoutSession({
 				token,
 				reservationId: reservation._id,
-				usdAmount: Number(form.amountUsd),
+				usdAmount: requestAmountUsd,
 				currency: "USD",
 				billingPostalCode: requirePostalCode ? form.billingPostalCode : "",
 				proceedWithoutRoom: true,
 			});
+			if (Number(response?.session?.amountUsd) > 0) {
+				setForm((current) => ({
+					...current,
+					amountUsd: Number(response.session.amountUsd).toFixed(2),
+				}));
+			}
 			setHostedSession(response);
 			setStep("hosted");
 		} catch (requestError) {
@@ -221,7 +240,7 @@ const BofaVccModal = ({
 			health?.readyForCharge !== true ||
 			status?.loadError ||
 			status?.alreadyCharged ||
-			status?.processing ||
+			(status?.processing && !status?.secureAcceptance?.resumeAvailable) ||
 			status?.outcomeUnknown ||
 			status?.attemptedBefore
 		) {
@@ -397,7 +416,7 @@ const BofaVccModal = ({
 					{step === "hosted" && hostedSession ? (
 						<section>
 							<Heading>Secure card entry</Heading>
-							<Alert type='info' showIcon message={`Bank of America will process $${Number(form.amountUsd).toFixed(2)} USD.`} description='Complete the card form below once. This page will update automatically after Bank of America returns a verified result.' />
+							<Alert type='info' showIcon message={`Bank of America will process $${Number(hostedSession?.session?.amountUsd || form.amountUsd).toFixed(2)} USD.`} description={hostedSession?.resumed ? "Your existing secure checkout was resumed automatically. Complete this same card form once; no second payment session was created." : "Complete the card form below once. This page will update automatically after Bank of America returns a verified result."} />
 							{error ? <InlineError role='alert'>{error}</InlineError> : null}
 							<BofaHostedCheckoutFrame session={hostedSession} onSecurityError={setError} />
 							<Actions><button type='button' className='secondary' onClick={onClose}>Close window</button></Actions>
