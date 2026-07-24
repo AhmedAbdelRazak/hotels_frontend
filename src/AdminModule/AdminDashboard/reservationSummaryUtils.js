@@ -1,3 +1,5 @@
+import { getRoomTypeDisplayLabel } from "../AllReservation/reservationRoomDetails";
+
 const dateValue = (value) => {
 	if (!value) return null;
 	const date = new Date(value);
@@ -15,6 +17,19 @@ export const formatReservationSummaryDate = (
 ) => {
 	const date = dateValue(value);
 	if (!date) return "\u2014";
+	if (
+		String(locale).toLowerCase().startsWith("ar") &&
+		calendar === "gregory"
+	) {
+		return new Intl.DateTimeFormat("en-GB-u-ca-gregory-nu-latn", {
+			timeZone: "Asia/Riyadh",
+			calendar: "gregory",
+			numberingSystem: "latn",
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		}).format(date);
+	}
 	return new Intl.DateTimeFormat(localeWithLatinDigits(locale), {
 		timeZone: "Asia/Riyadh",
 		calendar,
@@ -60,6 +75,7 @@ export const buildReservationSummaryExportRows = (
 		"Room Type": spreadsheetSafeText(
 			(Array.isArray(reservation.roomTypes) ? reservation.roomTypes : [])
 				.filter(Boolean)
+				.map(getRoomTypeDisplayLabel)
 				.join(", ")
 		),
 		"Room Number": spreadsheetSafeText(

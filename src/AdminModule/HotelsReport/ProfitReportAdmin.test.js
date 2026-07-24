@@ -105,7 +105,7 @@ it("includes room type and assigned room number in profit exports", () => {
     ],
   });
 
-  expect(row["Room Type"]).toBe("familyRooms - Family Quintuple");
+  expect(row["Room Type"]).toBe("Family Quintuple");
   expect(row["Room Number"]).toBe("424");
 });
 

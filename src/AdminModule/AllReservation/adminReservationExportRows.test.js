@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
 	ADMIN_RESERVATION_EXPORT_HEADERS,
 	buildAdminReservationExportRows,
+	getAdminReservationExportHeaders,
 } from "./adminReservationExportRows";
 
 test("shared admin export includes room type and assigned room number", () => {
@@ -12,14 +13,17 @@ test("shared admin export includes room type and assigned room number", () => {
 			room_type: "Family Quintuple Room",
 			room_number: "424",
 			paid_amount: 125,
+			booking_source: "agoda",
 		},
 	]);
 
 	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Room Type");
 	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Room Number");
+	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Booking Source");
 	expect(row["Room Type"]).toBe("Family Quintuple Room");
 	expect(row["Room Number"]).toBe("424");
 	expect(row["Paid Amount (Online)"]).toBe(125);
+	expect(row["Booking Source"]).toBe("agoda");
 	expect(row).not.toHaveProperty("Paid Amount");
 });
 
@@ -58,7 +62,7 @@ test("shared admin export uses the exact formatted table values and populated ro
 		"Hotel Name": "Filtered Hotel",
 		"Total Amount": 750,
 		"Paid Amount (Online)": 225,
-		"Room Type": "familyRooms - Family Suite",
+		"Room Type": "Family Suite",
 		"Room Number": "424",
 	});
 });
@@ -74,8 +78,18 @@ test("shared admin export skips placeholder room fields when populated details a
 		},
 	]);
 
-	expect(row["Room Type"]).toBe("doubleRooms - Double");
+	expect(row["Room Type"]).toBe("Double");
 	expect(row["Room Number"]).toBe("303");
+});
+
+test("shared admin export removes legacy internal room type prefixes", () => {
+	const [row] = buildAdminReservationExportRows([
+		{
+			room_type: "quadRooms - Quadruple Room – Comfort & Privacy",
+		},
+	]);
+
+	expect(row["Room Type"]).toBe("Quadruple Room – Comfort & Privacy");
 });
 
 test("filtered rows round-trip through the real XLSX library without changing row scope", () => {
@@ -103,4 +117,45 @@ test("filtered rows round-trip through the real XLSX library without changing ro
 	expect(restoredRows[0]["Room Number"]).toBe("101");
 	expect(restoredRows[1]["Room Number"]).toBe("");
 	expect(restoredRows[0]).toHaveProperty("Room Type");
+	expect(restoredRows[0]).toHaveProperty("Booking Source");
+});
+
+test("Arabic export localizes headers and known status values while preserving booking source", () => {
+	const headers = getAdminReservationExportHeaders("Arabic");
+	const rows = buildAdminReservationExportRows(
+		[
+			{
+				confirmation_number: "AR-FILTER",
+				booking_source: "booking.com",
+				reservation_status: "inhouse",
+				payment_status: "Captured",
+				room_number: "424",
+			},
+		],
+		"en-US",
+		"Arabic",
+	);
+	const worksheet = XLSX.utils.json_to_sheet(rows, {
+		header: ADMIN_RESERVATION_EXPORT_HEADERS,
+	});
+	XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: "A1" });
+	const workbook = XLSX.utils.book_new();
+	XLSX.utils.book_append_sheet(workbook, worksheet, "الحجوزات");
+	const serialized = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+	const restoredWorkbook = XLSX.read(serialized, { type: "array" });
+	const restoredRows = XLSX.utils.sheet_to_json(
+		restoredWorkbook.Sheets["الحجوزات"],
+		{ defval: "" },
+	);
+
+	expect(headers).toHaveLength(ADMIN_RESERVATION_EXPORT_HEADERS.length);
+	expect(headers).toContain("مصدر الحجز");
+	expect(headers).toContain("نوع الغرفة");
+	expect(headers).toContain("رقم الغرفة");
+	expect(restoredRows).toHaveLength(1);
+	expect(restoredRows[0]["رقم التأكيد"]).toBe("AR-FILTER");
+	expect(restoredRows[0]["مصدر الحجز"]).toBe("booking.com");
+	expect(restoredRows[0]["حالة الحجز"]).toBe("داخل الفندق");
+	expect(restoredRows[0]["حالة الدفع"]).toBe("تم التحصيل");
+	expect(restoredRows[0]["رقم الغرفة"]).toBe("424");
 });

@@ -1,5 +1,6 @@
 import {
   getReservationRoomSummary,
+	getRoomTypeDisplayLabel,
   mergeReservationPreservingRoomDetails,
   normalizeReservationReferenceId,
   selectActiveReservation,
@@ -21,7 +22,7 @@ test("normalizes populated hotel references before room lookups", () => {
   expect(normalizeReservationReferenceId(null)).toBe("");
 });
 
-test("formats populated room types and numbers without duplicates", () => {
+test("formats populated room display names and numbers without internal type keys", () => {
   const summary = getReservationRoomSummary({
     roomId: [
       {
@@ -43,9 +44,9 @@ test("formats populated room types and numbers without duplicates", () => {
   });
 
   expect(summary).toEqual({
-    roomTypes: ["doubleRooms - City View", "suite"],
+	roomTypes: ["City View", "suite"],
     roomNumbers: ["101", "305"],
-    roomTypeText: "doubleRooms - City View, suite",
+	roomTypeText: "City View, suite",
     roomNumberText: "101, 305",
   });
 });
@@ -58,7 +59,7 @@ test("falls back to reserved room types and never displays raw room ids", () => 
     ],
   });
 
-  expect(summary.roomTypeText).toBe("tripleRooms - Family Triple");
+  expect(summary.roomTypeText).toBe("Family Triple");
   expect(summary.roomNumberText).toBe("");
 });
 
@@ -77,8 +78,20 @@ test("prefers the booked room type over the physical room display name", () => {
     ],
   });
 
-  expect(summary.roomTypeText).toBe("familyRooms - Family Quintuple Room");
+  expect(summary.roomTypeText).toBe("Family Quintuple Room");
   expect(summary.roomNumberText).toBe("501");
+});
+
+test("removes legacy camel-case room type prefixes but keeps display labels", () => {
+	expect(
+		getRoomTypeDisplayLabel(
+			"quadRooms - Quadruple Room – Comfort & Privacy",
+		),
+	).toBe("Quadruple Room – Comfort & Privacy");
+	expect(getRoomTypeDisplayLabel("Quadruple Room – Comfort & Privacy")).toBe(
+		"Quadruple Room – Comfort & Privacy",
+	);
+	expect(getRoomTypeDisplayLabel("quadRooms")).toBe("quadRooms");
 });
 
 test("keeps room details when a same-reservation update omits assignments", () => {

@@ -115,6 +115,7 @@ const reportPayload = (confirmationNumber) => ({
       confirmation_number: confirmationNumber,
       customer_details: { name: `Guest ${confirmationNumber}` },
       hotelId: { _id: "hotel-1", hotelName: "Test Hotel" },
+	  booking_source: "agoda",
       checkin_date: "2026-07-14T00:00:00.000Z",
       checkout_date: "2026-07-15T00:00:00.000Z",
       paid_amount_breakdown: { paid_at_hotel_cash: 100 },
@@ -201,7 +202,7 @@ describe("PaidReportAdmin request sequencing", () => {
     expect(screen.getByText("NEW-RESULT")).toBeTruthy();
   });
 
-  it("includes room type and assigned room number in paid exports", async () => {
+  it("includes room details and booking source in paid exports", async () => {
     getPaidBreakdownReportAdmin.mockResolvedValue(reportPayload("EXPORT-ROOM"));
     XLSX.utils.json_to_sheet.mockReturnValue({});
     XLSX.utils.book_new.mockReturnValue({});
@@ -223,9 +224,9 @@ describe("PaidReportAdmin request sequencing", () => {
     const [exportRows, options] = XLSX.utils.json_to_sheet.mock.calls[0];
     expect(options.header).toContain("Room Type");
     expect(options.header).toContain("Room Number");
-    expect(exportRows[0]["Room Type"]).toBe(
-      "familyRooms - Family Quintuple",
-    );
+	expect(options.header).toContain("Booking Source");
+    expect(exportRows[0]["Room Type"]).toBe("Family Quintuple");
     expect(exportRows[0]["Room Number"]).toBe("424");
+	expect(exportRows[0]["Booking Source"]).toBe("agoda");
   });
 });

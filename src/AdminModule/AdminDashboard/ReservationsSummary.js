@@ -31,6 +31,7 @@ import {
 	formatReservationSummaryDate,
 	formatReservationSummaryNumber,
 } from "./reservationSummaryUtils";
+import { getRoomTypeDisplayLabel } from "../AllReservation/reservationRoomDetails";
 
 const copy = {
 	en: {
@@ -468,7 +469,9 @@ const ReservationsSummary = ({
 				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.roomType,
 				render: (values = []) => {
 					const text =
-						Array.isArray(values) && values.length ? values.join(", ") : "N/A";
+						Array.isArray(values) && values.length
+							? values.map(getRoomTypeDisplayLabel).join(", ")
+							: "N/A";
 					return (
 						<Tooltip title={text}>
 							<CellText>{text}</CellText>

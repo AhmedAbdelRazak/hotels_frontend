@@ -34,15 +34,22 @@ const uniqueRoomText = (values = []) => {
   }, []);
 };
 
+export const getRoomTypeDisplayLabel = (value) => {
+	const text = cleanRoomText(value);
+	const combinedInternalLabel = text.match(
+		/^[a-z][A-Za-z0-9_]*(?:[A-Z][A-Za-z0-9_]*)+\s*-\s*(.+)$/,
+	);
+	return combinedInternalLabel?.[1]?.trim() || text;
+};
+
 const roomTypeLabel = (room = {}) => {
   if (!room || typeof room !== "object") return "";
   const type = cleanRoomText(room.room_type || room.roomType);
   const displayName = cleanRoomText(room.display_name || room.displayName);
-  if (!type) return displayName;
-  if (!displayName || displayName.toLowerCase() === type.toLowerCase()) {
-    return type;
+  if (displayName && displayName.toLowerCase() !== type.toLowerCase()) {
+	return getRoomTypeDisplayLabel(displayName);
   }
-  return `${type} - ${displayName}`;
+  return getRoomTypeDisplayLabel(type || displayName);
 };
 
 const roomNumbersFromRecord = (room = {}) => {

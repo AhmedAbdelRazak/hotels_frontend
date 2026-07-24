@@ -135,7 +135,7 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 
 	expect(await screen.findByText("CONF-1")).toBeTruthy();
 	expect(screen.getByText("Executive Guest")).toBeTruthy();
-	expect(screen.getByText("doubleRooms - City View")).toBeTruthy();
+	expect(screen.getByText("City View")).toBeTruthy();
 	expect(screen.getByText("101, 305")).toBeTruthy();
 	expect(screen.getByText("Nights")).toBeTruthy();
 	expect(screen.getByText("280.00 SAR \u00d7 2 nights")).toBeTruthy();
@@ -164,6 +164,21 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 
 	fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
 	expect(onDayChange).toHaveBeenCalledWith("tomorrow");
+});
+
+test("renders Arabic Gregorian table dates in an unambiguous day/month/year order", async () => {
+	render(
+		<ReservationsSummary
+			day='today'
+			onDayChange={jest.fn()}
+			chosenLanguage='Arabic'
+		/>
+	);
+
+	expect(await screen.findByText("CONF-1")).toBeTruthy();
+	expect(screen.getAllByText("19/07/2026").length).toBeGreaterThanOrEqual(2);
+	expect(screen.getByText("21/07/2026")).toBeTruthy();
+	expect(screen.queryByText(/يوليو\s+19|19\s+يوليو/)).toBeNull();
 });
 
 test("opens the permission-checked complete details modal from a shareable reservation id", async () => {

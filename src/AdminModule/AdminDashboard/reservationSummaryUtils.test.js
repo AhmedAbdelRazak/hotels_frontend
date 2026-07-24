@@ -40,7 +40,7 @@ test("executive export contains professional fields without private payment data
 	expect(rows[0]["Activity"]).toBe("Check-out");
 	expect(rows[0]["Hotel"]).toBe("Zad Ajyad");
 	expect(rows[0]["Guest"]).toBe('\'=HYPERLINK("unsafe")');
-	expect(rows[0]["Room Type"]).toBe("doubleRooms - City View");
+	expect(rows[0]["Room Type"]).toBe("City View");
 	expect(rows[0]["Room Number"]).toBe("101, 305");
 	expect(rows[0]["Total Amount"]).toBe(560);
 	expect(rows[0]["Nights"]).toBe(8);
@@ -75,7 +75,7 @@ test("Arabic Miladi and Hijri dates always use Latin digits and omit time", () =
 		month: "long",
 	});
 
-	expect(miladi).toMatch(/2026/);
+	expect(miladi).toBe("19/07/2026");
 	expect(hijri).toMatch(/14/);
 	expect(`${miladi}${hijri}`).not.toMatch(/[\u0660-\u0669]/);
 	expect(`${miladi}${hijri}`).not.toMatch(/:/);

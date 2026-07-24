@@ -132,6 +132,7 @@ const PaidReportAdmin = () => {
 			roomNumber: isArabic
 				? "\u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629"
 				: "Room Number",
+			source: isArabic ? "\u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632" : "Booking Source",
 			breakdown: {
 				paid_online_via_link: isArabic
 					? "مدفوع أونلاين (رابط الدفع)"
@@ -403,6 +404,7 @@ const PaidReportAdmin = () => {
 			labels.hotel,
 			labels.roomType,
 			labels.roomNumber,
+			labels.source,
 			labels.checkin,
 			labels.checkout,
 			...breakdownKeys.map((key) => labels.breakdown[key] || key),
@@ -421,6 +423,7 @@ const PaidReportAdmin = () => {
 					reservation?.hotelId?.hotelName || selectedHotelName || "",
 				[labels.roomType]: roomSummary.roomTypeText,
 				[labels.roomNumber]: roomSummary.roomNumberText,
+				[labels.source]: reservation?.booking_source || "",
 				[labels.checkin]: formatDate(
 					reservation?.checkin_date,
 					numberLocale,
@@ -453,6 +456,7 @@ const PaidReportAdmin = () => {
 			[labels.hotel]: "",
 			[labels.roomType]: "",
 			[labels.roomNumber]: "",
+			[labels.source]: "",
 			[labels.checkin]: "",
 			[labels.checkout]: "",
 			[labels.paidBreakdown]: "",

@@ -9,6 +9,7 @@ import { isAuthenticated } from "../../auth";
 import {
 	ADMIN_RESERVATION_EXPORT_HEADERS,
 	buildAdminReservationExportRows,
+	getAdminReservationExportHeaders,
 } from "./adminReservationExportRows";
 
 const { Option } = Select;
@@ -156,10 +157,17 @@ const ExportToExcelButton = ({
 
 	// Create the XLSX file
 	const doExportToExcel = (dataArray) => {
-		let finalFileName = defaultFileName;
+		let finalFileName =
+			chosenLanguage === "Arabic" && defaultFileName === "ReservationsData.xlsx"
+				? "بيانات الحجوزات.xlsx"
+				: defaultFileName;
 		if (!finalFileName.toLowerCase().endsWith(".xlsx")) {
 			finalFileName += ".xlsx";
 		}
+		const finalSheetName =
+			chosenLanguage === "Arabic" && sheetName === "Reservations"
+				? "الحجوزات"
+				: sheetName;
 
 		// Determine locale => date format
 		const userLocale = navigator.language || "en-US";
@@ -171,12 +179,15 @@ const ExportToExcelButton = ({
 		const exportData = buildAdminReservationExportRows(
 			dataArray,
 			localeForDate,
+			chosenLanguage,
 		);
+		const localizedHeaders = getAdminReservationExportHeaders(chosenLanguage);
 
 		// Convert to worksheet
 		const ws = XLSX.utils.json_to_sheet(exportData, {
 			header: ADMIN_RESERVATION_EXPORT_HEADERS,
 		});
+		XLSX.utils.sheet_add_aoa(ws, [localizedHeaders], { origin: "A1" });
 
 		// Optional column widths
 		ws["!cols"] = [
@@ -184,6 +195,7 @@ const ExportToExcelButton = ({
 			{ wch: 15 }, // Name
 			{ wch: 15 }, // Phone
 			{ wch: 25 }, // Hotel Name
+			{ wch: 18 }, // Booking Source
 			{ wch: 15 }, // Status
 			{ wch: 15 }, // Checkin Date
 			{ wch: 15 }, // Checkout Date
@@ -199,7 +211,7 @@ const ExportToExcelButton = ({
 
 		// Create workbook & append sheet
 		const wb = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(wb, ws, sheetName);
+		XLSX.utils.book_append_sheet(wb, ws, finalSheetName);
 		XLSX.writeFile(wb, finalFileName);
 	};
 
