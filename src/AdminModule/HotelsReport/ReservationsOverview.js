@@ -26,6 +26,7 @@ import {
 	gettingHotelDetailsForAdmin,
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+import { useCartContext } from "../../cart_context";
 
 const { Panel } = Collapse;
 const { Option } = Select;
@@ -201,6 +202,8 @@ function extractHotels(payload) {
 
 const ReservationsOverview = () => {
 	const { user, token } = isAuthenticated() || {};
+	const { chosenLanguage } = useCartContext();
+	const isArabic = chosenLanguage === "Arabic";
 	const [loading, setLoading] = useState(false);
 
 	// Raw data
@@ -1471,7 +1474,7 @@ const ReservationsOverview = () => {
 				className='custom-reservations-modal'
 				rootClassName='reports-reservations-modal-root'
 				wrapClassName='reports-reservations-modal-wrap'
-				title='Detailed Reservations List'
+				title={isArabic ? "قائمة الحجوزات التفصيلية" : "Detailed Reservations List"}
 				open={modalVisible}
 				onCancel={() => setModalVisible(false)}
 				footer={null}
@@ -1489,9 +1492,9 @@ const ReservationsOverview = () => {
 				}}
 			>
 				{modalLoading ? (
-					<Spin tip='Loading...' />
+					<Spin tip={isArabic ? "جاري التحميل..." : "Loading..."} />
 				) : modalData.data.length === 0 ? (
-					<p>No reservations found</p>
+					<p>{isArabic ? "لا توجد حجوزات" : "No reservations found"}</p>
 				) : (
 					<EnhancedContentTable
 						data={modalData.data}
@@ -1505,6 +1508,7 @@ const ReservationsOverview = () => {
 						handleSearch={handleSearch}
 						scorecardsObject={modalData.scorecards}
 						fromPage='reports'
+						chosenLanguage={chosenLanguage}
 					/>
 				)}
 			</Modal>

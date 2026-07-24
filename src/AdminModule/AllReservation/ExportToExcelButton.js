@@ -32,9 +32,12 @@ const resolvePopupContainer = (triggerNode) => {
  * @param {String} sheetName           - Sheet name.
  */
 const ExportToExcelButton = ({
+	data = [],
 	allHotelDetailsAdmin = [],
 	defaultFileName = "ReservationsData.xlsx",
 	sheetName = "Reservations",
+	exportCurrentData = false,
+	chosenLanguage = "English",
 }) => {
 	const [exportModalVisible, setExportModalVisible] = useState(false);
 	const [exporting, setExporting] = useState(false);
@@ -72,6 +75,27 @@ const ExportToExcelButton = ({
 
 	// Open modal
 	const handleOpenModal = () => {
+		if (exportCurrentData) {
+			if (!Array.isArray(data) || data.length === 0) {
+				message.warning(
+					chosenLanguage === "Arabic"
+						? "لا توجد بيانات في الجدول للتصدير."
+						: "There is no table data to export.",
+				);
+				return;
+			}
+			try {
+				doExportToExcel(data);
+			} catch (err) {
+				console.error("Export error:", err);
+				message.error(
+					chosenLanguage === "Arabic"
+						? "تعذر تصدير بيانات الجدول. يرجى المحاولة مرة أخرى."
+						: "Failed to export the table data. Please try again.",
+				);
+			}
+			return;
+		}
 		setExportModalVisible(true);
 	};
 
@@ -200,7 +224,7 @@ const ExportToExcelButton = ({
 	return (
 		<>
 			<StyledExportButton onClick={handleOpenModal}>
-				Export to Excel
+				{chosenLanguage === "Arabic" ? "تصدير إلى Excel" : "Export to Excel"}
 			</StyledExportButton>
 
 			<Modal

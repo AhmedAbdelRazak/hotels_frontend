@@ -39,7 +39,19 @@ jest.mock("antd", () => ({
 
 jest.mock("./ScoreCards", () => () => null);
 jest.mock("./MoreDetails", () => () => null);
-jest.mock("./ExportToExcelButton", () => () => null);
+jest.mock("./ExportToExcelButton", () => ({
+  data,
+  exportCurrentData,
+  chosenLanguage,
+}) => (
+  <div
+    data-testid="reservation-export"
+    data-direct={String(exportCurrentData)}
+    data-language={chosenLanguage}
+  >
+    {data.map((row) => row.confirmation_number).join(",")}
+  </div>
+));
 jest.mock("./DateFilterModal", () => () => null);
 jest.mock("../apiAdmin", () => ({
   applyOtaReservationSyncJob: jest.fn(),
@@ -78,7 +90,11 @@ const reservation = ({
   adminPricing: { mode, netAfterExpensesTotal: net },
 });
 
-const renderTable = ({ data, fromPage = "AllReservations" }) =>
+const renderTable = ({
+  data,
+  fromPage = "AllReservations",
+  chosenLanguage = "English",
+}) =>
   render(
     <MemoryRouter>
       <EnhancedContentTable
@@ -94,6 +110,7 @@ const renderTable = ({ data, fromPage = "AllReservations" }) =>
         fromPage={fromPage}
         scorecardsObject={{}}
         allHotelDetailsAdmin={[]}
+		chosenLanguage={chosenLanguage}
       />
     </MemoryRouter>,
   );
@@ -174,6 +191,39 @@ describe("EnhancedContentTable total amount column", () => {
     expect(totalCellTextFor("Report Guest")).toBe("1200.00 SAR");
 	expect(screen.queryByText("Reserved By:")).toBeNull();
 	expect(screen.queryByText("Booking Source:")).toBeNull();
+	expect(
+	  screen.getByTestId("reservation-export").getAttribute("data-direct"),
+	).toBe("true");
+	expect(screen.getByTestId("reservation-export").textContent).toContain(
+	  "REPORT",
+	);
+  });
+
+  it("uses Arabic table headers and passes Arabic to the direct report export", () => {
+	renderTable({
+	  fromPage: "reports",
+	  chosenLanguage: "Arabic",
+	  data: [
+		reservation({
+		  id: "ARABIC",
+		  guest: "Arabic Guest",
+		  total: 250,
+		  net: 200,
+		}),
+	  ],
+	});
+
+	const headers = screen
+	  .getAllByRole("columnheader")
+	  .map((header) => header.textContent.trim());
+	expect(headers).toContain("الفندق");
+	expect(headers).toContain("رقم التأكيد");
+	expect(headers).toContain("رقم الغرفة");
+	expect(headers).toContain("التفاصيل");
+	expect(headers).not.toContain("Hotel");
+	expect(
+	  screen.getByTestId("reservation-export").getAttribute("data-language"),
+	).toBe("Arabic");
   });
 
   it("sorts the Total column by the value shown to the admin", () => {
@@ -188,5 +238,6 @@ describe("EnhancedContentTable total amount column", () => {
     const rows = screen.getAllByRole("row").slice(1, 3);
     expect(rows[0].textContent).toContain("Low Net");
     expect(rows[1].textContent).toContain("High Net");
+	expect(screen.getByTestId("reservation-export").textContent).toBe("LOW,HIGH");
   });
 });

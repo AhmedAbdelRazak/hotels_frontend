@@ -1097,6 +1097,8 @@ const EnhancedContentTable = ({
 				<ExportToExcelButton
 					data={sortedData}
 					allHotelDetailsAdmin={allHotelDetailsAdmin}
+					exportCurrentData={fromPage === "reports"}
+					chosenLanguage={chosenLanguage}
 				/>
 				{canPrepareOtaSync ? (
 					<SyncReservationsButton
