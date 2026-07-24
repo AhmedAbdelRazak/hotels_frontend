@@ -40,7 +40,7 @@ describe("Bank of America OTA virtual-card API payload", () => {
 		const payload = JSON.parse(options.body);
 		expect(payload).toEqual({
 			reservationId: "reservation-1",
-			usdAmount: 125.5,
+			usdAmount: "125.5",
 			currency: "USD",
 			proceedWithoutRoom: false,
 		});
@@ -52,6 +52,17 @@ describe("Bank of America OTA virtual-card API payload", () => {
 		expect(payload).not.toHaveProperty("cardholderName");
 		expect(payload).not.toHaveProperty("postalCode");
 		expect(payload).not.toHaveProperty("billingPostalCode");
+	});
+
+	test("keeps the exact two-decimal amount in the signed-session request", async () => {
+		await createBofaHostedCheckoutSession({
+			token: "super-admin-token",
+			reservationId: "reservation-decimal",
+			usdAmount: "67.30",
+		});
+
+		const [, options] = global.fetch.mock.calls[0];
+		expect(JSON.parse(options.body).usdAmount).toBe("67.30");
 	});
 
 	test("sends only the explicit postal-code override for other OTA cards", async () => {

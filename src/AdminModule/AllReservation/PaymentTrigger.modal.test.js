@@ -170,9 +170,54 @@ test("a complete saved USD amount loads the Bank of America fields without a rev
 	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
 		expect.objectContaining({
 			reservationId: "reservation-saved-amount",
-			usdAmount: 25,
+			usdAmount: "25.00",
 			currency: "USD",
 			proceedWithoutRoom: true,
+		}),
+	);
+});
+
+test("a one-decimal amount is submitted as the exact two-decimal USD value", async () => {
+	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
+	getReservationBofaVccStatus.mockResolvedValue({
+		alreadyCharged: false,
+		processing: false,
+		outcomeUnknown: false,
+		attemptedBefore: false,
+		retryAllowed: true,
+		lastFailureCode: "203",
+		lastFailureMessage: "Invalid merchant",
+	});
+	createBofaHostedCheckoutSession.mockResolvedValue({
+		endpointUrl: "https://secureacceptance.merchant-services.bankofamerica.com/embedded/pay",
+		fields: { transaction_uuid: "decimal-session", signature: "test-signature" },
+		session: { transactionUuid: "decimal-session", amountUsd: 67.3, currency: "USD" },
+	});
+
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-decimal",
+				confirmation_number: "PMS-DECIMAL",
+				booking_source: "Agoda",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				payment_details: {},
+			}}
+		/>,
+	);
+
+	fireEvent.click(screen.getByRole("button", { name: "Enter OTA Virtual Card" }));
+	await screen.findByText("Secure Bank of America embedded checkout is configured.");
+	const amountInput = await screen.findByLabelText("Amount (USD)");
+	fireEvent.change(amountInput, { target: { value: "67.3" } });
+	fireEvent.blur(amountInput);
+
+	await screen.findByTitle("Secure Bank of America card form");
+	expect(amountInput.value).toBe("67.30");
+	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
+		expect.objectContaining({
+			reservationId: "reservation-decimal",
+			usdAmount: "67.30",
 		}),
 	);
 });
@@ -227,7 +272,7 @@ test("other OTA cards request only a ZIP or postal code and no street address", 
 	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
 		expect.objectContaining({
 			reservationId: "reservation-2",
-			usdAmount: 20,
+			usdAmount: "20.00",
 			currency: "USD",
 			billingPostalCode: "92376",
 		}),
@@ -356,7 +401,7 @@ test("an active checkout resumes the same bank amount instead of showing a block
 	expect(createBofaHostedCheckoutSession).toHaveBeenCalledWith(
 		expect.objectContaining({
 			reservationId: "reservation-active-session",
-			usdAmount: 10,
+			usdAmount: "10.00",
 		}),
 	);
 	fireEvent.click(screen.getByRole("button", { name: "Close window" }));

@@ -12,11 +12,13 @@ import {
 import { isSuperAdminUser } from "../utils/superUsers";
 import {
 	formatPostalCode,
+	formatUsdAmountForRequest,
 	getCheckinEligibility,
 	initialVccForm,
 	providerLabel,
 	requiresBillingPostalCode,
 	resolveVccProvider,
+	sanitizeUsdAmountInput,
 	validateVccForm,
 } from "./bofaVccUtils";
 import BofaHostedCheckoutFrame from "./BofaHostedCheckoutFrame";
@@ -48,9 +50,20 @@ const BofaVccModal = ({
 	const [status, setStatus] = useState(null);
 	const [hostedSession, setHostedSession] = useState(null);
 	const [recoveringSession, setRecoveringSession] = useState(false);
+	const formRef = useRef(form);
 	const successShown = useRef(false);
 	const autoLoadInitialAmount = useRef(false);
 	const sessionRequestInFlight = useRef(false);
+	const commitForm = useCallback((nextForm) => {
+		formRef.current = nextForm;
+		setForm(nextForm);
+	}, []);
+	const patchForm = useCallback((values) => {
+		const nextForm = { ...formRef.current, ...values };
+		formRef.current = nextForm;
+		setForm(nextForm);
+		return nextForm;
+	}, []);
 
 	const provider = resolveVccProvider(reservation?.booking_source);
 	const providerName =
@@ -70,7 +83,7 @@ const BofaVccModal = ({
 		[reservation?.checkin_date],
 	);
 
-	const launchHostedForm = useCallback(async () => {
+	const launchHostedForm = useCallback(async (formOverride = null) => {
 		if (submitting || sessionRequestInFlight.current) return;
 		if (!eligibility.ok) return setError(eligibility.message);
 		if (health?.readyForCharge !== true) {
@@ -90,12 +103,13 @@ const BofaVccModal = ({
 					"This reservation is blocked from another virtual-card attempt.",
 			);
 		}
+		const effectiveForm = formOverride || formRef.current;
 		const requestAmountUsd = resumableActiveSession
-			? Number(status?.secureAcceptance?.amountUsd || 0)
-			: Number(form.amountUsd);
+			? Number(status?.secureAcceptance?.amountUsd || 0).toFixed(2)
+			: formatUsdAmountForRequest(effectiveForm.amountUsd);
 		const requestForm = {
-			...form,
-			amountUsd: requestAmountUsd > 0 ? String(requestAmountUsd) : form.amountUsd,
+			...effectiveForm,
+			amountUsd: requestAmountUsd || effectiveForm.amountUsd,
 		};
 		const validationError = validateVccForm(requestForm, new Date(), { requirePostalCode });
 		if (validationError) {
@@ -111,14 +125,16 @@ const BofaVccModal = ({
 				reservationId: reservation._id,
 				usdAmount: requestAmountUsd,
 				currency: "USD",
-				billingPostalCode: requirePostalCode ? form.billingPostalCode : "",
+				billingPostalCode: requirePostalCode
+					? effectiveForm.billingPostalCode
+					: "",
 				proceedWithoutRoom: true,
 			});
 			if (Number(response?.session?.amountUsd) > 0) {
-				setForm((current) => ({
-					...current,
+				commitForm({
+					...formRef.current,
 					amountUsd: Number(response.session.amountUsd).toFixed(2),
-				}));
+				});
 			}
 			setHostedSession(response);
 			setStep("hosted");
@@ -136,7 +152,7 @@ const BofaVccModal = ({
 		}
 	}, [
 		eligibility,
-		form,
+		commitForm,
 		health?.readyForCharge,
 		requirePostalCode,
 		reservation?._id,
@@ -181,7 +197,7 @@ const BofaVccModal = ({
 	useEffect(() => {
 		if (!open) return undefined;
 		const nextForm = initialForm();
-		setForm(nextForm);
+		commitForm(nextForm);
 		setStep("details");
 		setError("");
 		setHealth(null);
@@ -229,7 +245,7 @@ const BofaVccModal = ({
 		return () => {
 			active = false;
 		};
-	}, [initialForm, isSuperAdmin, open, requirePostalCode, reservation?._id, token]);
+	}, [commitForm, initialForm, isSuperAdmin, open, requirePostalCode, reservation?._id, token]);
 
 	useEffect(() => {
 		if (
@@ -316,8 +332,8 @@ const BofaVccModal = ({
 
 	if (!isSuperAdmin) return null;
 
-	const loadWhenComplete = (event) => {
-		if (step !== "details" || submitting || loadingReadiness) return;
+	const loadWhenComplete = (event, formSnapshot = formRef.current) => {
+		if (step !== "details" || submitting) return;
 		const nextTarget = event?.relatedTarget;
 		if (
 			nextTarget?.dataset?.skipBofaAutoLoad === "true" ||
@@ -325,8 +341,22 @@ const BofaVccModal = ({
 		) {
 			return;
 		}
-		const validationError = validateVccForm(form, new Date(), { requirePostalCode });
-		if (!validationError) launchHostedForm();
+		const validationError = validateVccForm(formSnapshot, new Date(), {
+			requirePostalCode,
+		});
+		if (loadingReadiness) {
+			autoLoadInitialAmount.current = !validationError;
+			return;
+		}
+		if (!validationError) launchHostedForm(formSnapshot);
+	};
+
+	const handleAmountBlur = (event) => {
+		const canonicalAmount = formatUsdAmountForRequest(event.currentTarget.value);
+		const nextForm = patchForm({
+			amountUsd: canonicalAmount || sanitizeUsdAmountInput(event.currentTarget.value),
+		});
+		loadWhenComplete(event, nextForm);
 	};
 
 	const readinessMessage =
@@ -334,6 +364,12 @@ const BofaVccModal = ({
 	const blockedMessage = status?.alreadyCharged
 		? "This reservation was already charged successfully. Another charge is blocked."
 		: status?.warningMessage || status?.loadError || "";
+	const retryMessage = status?.retryAllowed
+		? `${
+				status?.lastFailureMessage ||
+				"The previous attempt was declined by the card issuer. No charge was recorded."
+		  } ${Number(status?.retryAttemptsRemaining || 1)} controlled retry remains.`
+		: "";
 
 	return (
 		<>
@@ -378,6 +414,7 @@ const BofaVccModal = ({
 					{health && health.readyForCharge !== true ? <Alert type='error' showIcon message='Bank of America Hosted Checkout is not ready' description={readinessMessage} /> : null}
 					{health?.readyForCharge === true ? <Alert type='success' showIcon message='Secure Bank of America embedded checkout is configured.' /> : null}
 					{blockedMessage ? <Alert type={status?.alreadyCharged ? "success" : "warning"} showIcon message={blockedMessage} /> : null}
+					{retryMessage ? <Alert type='warning' showIcon message='Previous card attempt was declined' description={retryMessage} /> : null}
 					{status?.canDiscardUnsubmittedSession ? (
 						<RecoveryBox>
 							<strong>No card result was received for the expired form.</strong>
@@ -389,17 +426,17 @@ const BofaVccModal = ({
 					) : null}
 
 					{step === "details" ? (
-						<form onSubmit={(event) => { event.preventDefault(); launchHostedForm(); }}>
+						<form onSubmit={(event) => { event.preventDefault(); launchHostedForm(formRef.current); }}>
 							<Heading>Charge details</Heading>
 							<Field>
 								<label htmlFor='bofa-vcc-amount'>Amount (USD)</label>
-								<InputWrap><span>$</span><input id='bofa-vcc-amount' inputMode='decimal' value={form.amountUsd} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); setForm((current) => ({ ...current, amountUsd: event.target.value.replace(/[^0-9.]/g, "") })); }} onBlur={loadWhenComplete} placeholder='0.00' autoFocus /></InputWrap>
+								<InputWrap><span>$</span><input id='bofa-vcc-amount' inputMode='decimal' value={form.amountUsd} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); patchForm({ amountUsd: sanitizeUsdAmountInput(event.target.value) }); }} onBlur={handleAmountBlur} placeholder='0.00' autoComplete='off' autoFocus /></InputWrap>
 								<small>The charge is always signed and processed in USD.</small>
 							</Field>
 							{requirePostalCode ? (
 								<Field>
 									<label htmlFor='bofa-vcc-postal-code'>ZIP / postal code</label>
-									<input id='bofa-vcc-postal-code' value={form.billingPostalCode || ""} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); setForm((current) => ({ ...current, billingPostalCode: formatPostalCode(event.target.value) })); }} onBlur={loadWhenComplete} placeholder='Enter the code supplied with the virtual card' maxLength={14} autoComplete='postal-code' />
+									<input id='bofa-vcc-postal-code' value={form.billingPostalCode || ""} onChange={(event) => { autoLoadInitialAmount.current = false; setError(""); patchForm({ billingPostalCode: formatPostalCode(event.target.value) }); }} onBlur={(event) => loadWhenComplete(event, formRef.current)} placeholder='Enter the code supplied with the virtual card' maxLength={14} autoComplete='postal-code' />
 									<small>No street address is requested for this card.</small>
 								</Field>
 							) : null}

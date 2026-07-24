@@ -2650,7 +2650,7 @@ export const createBofaHostedCheckoutSession = ({
 		credentials: "omit",
 		body: JSON.stringify({
 			reservationId,
-			usdAmount: Number(usdAmount),
+			usdAmount: String(usdAmount == null ? "" : usdAmount).trim(),
 			currency: String(currency || "USD").toUpperCase(),
 			proceedWithoutRoom: !!proceedWithoutRoom,
 			...(String(billingPostalCode || "").trim()

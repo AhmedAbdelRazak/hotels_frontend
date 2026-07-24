@@ -7,6 +7,26 @@ export const formatPostalCode = (value) =>
 		.replace(/\s+/g, " ")
 		.slice(0, 14);
 
+export const sanitizeUsdAmountInput = (value) => {
+	const filtered = String(value || "").replace(/[^0-9.]/g, "");
+	const decimalAt = filtered.indexOf(".");
+	if (decimalAt === -1) return filtered.slice(0, 9);
+	const whole = filtered.slice(0, decimalAt).slice(0, 9);
+	const fraction = filtered
+		.slice(decimalAt + 1)
+		.replace(/\./g, "")
+		.slice(0, 2);
+	return `${whole || "0"}.${fraction}`;
+};
+
+export const formatUsdAmountForRequest = (value) => {
+	const raw = String(value || "").trim();
+	if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return "";
+	const [wholePart, fractionPart = ""] = raw.split(".");
+	const whole = wholePart.replace(/^0+(?=\d)/, "") || "0";
+	return `${whole}.${fractionPart.padEnd(2, "0")}`;
+};
+
 const dateKey = (value, timeZone = BOFA_VCC_TIME_ZONE) => {
 	const date = value instanceof Date ? value : new Date(value);
 	if (!value || Number.isNaN(date.getTime())) return "";

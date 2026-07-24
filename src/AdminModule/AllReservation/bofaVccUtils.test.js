@@ -1,15 +1,25 @@
 import {
 	formatPostalCode,
+	formatUsdAmountForRequest,
 	getCheckinEligibility,
 	initialVccForm,
 	resolveVccProvider,
 	requiresBillingPostalCode,
 	validateVccForm,
+	sanitizeUsdAmountInput,
 } from "./bofaVccUtils";
 
 describe("BofA OTA virtual-card form policy", () => {
 	test("formats the only optional browser billing field", () => {
 		expect(formatPostalCode("1011 dl")).toBe("1011 DL");
+	});
+
+	test("preserves exact USD cents and canonicalizes one decimal place", () => {
+		expect(sanitizeUsdAmountInput("$67.3")).toBe("67.3");
+		expect(formatUsdAmountForRequest("67.3")).toBe("67.30");
+		expect(formatUsdAmountForRequest("67.34")).toBe("67.34");
+		expect(formatUsdAmountForRequest("00067.30")).toBe("67.30");
+		expect(formatUsdAmountForRequest("67.345")).toBe("");
 	});
 
 	test("enforces check-in today or in the past using Riyadh dates", () => {
