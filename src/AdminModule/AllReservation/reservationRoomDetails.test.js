@@ -1,4 +1,5 @@
 import {
+  getReservationRoomSummary,
   mergeReservationPreservingRoomDetails,
   normalizeReservationReferenceId,
   selectActiveReservation,
@@ -18,6 +19,47 @@ test("normalizes populated hotel references before room lookups", () => {
   expect(normalizeReservationReferenceId({ id: "hotel-2" })).toBe("hotel-2");
   expect(normalizeReservationReferenceId("hotel-3")).toBe("hotel-3");
   expect(normalizeReservationReferenceId(null)).toBe("");
+});
+
+test("formats populated room types and numbers without duplicates", () => {
+  const summary = getReservationRoomSummary({
+    roomId: [
+      {
+        _id: ROOM_101,
+        room_number: "101",
+        room_type: "doubleRooms",
+        display_name: "City View",
+      },
+    ],
+    roomDetails: [
+      {
+        _id: ROOM_101,
+        room_number: "101",
+        room_type: "doubleRooms",
+        display_name: "City View",
+      },
+      { _id: ROOM_305, room_number: "305", room_type: "suite" },
+    ],
+  });
+
+  expect(summary).toEqual({
+    roomTypes: ["doubleRooms - City View", "suite"],
+    roomNumbers: ["101", "305"],
+    roomTypeText: "doubleRooms - City View, suite",
+    roomNumberText: "101, 305",
+  });
+});
+
+test("falls back to reserved room types and never displays raw room ids", () => {
+  const summary = getReservationRoomSummary({
+    roomId: [ROOM_401],
+    pickedRoomsType: [
+      { room_type: "tripleRooms", displayName: "Family Triple" },
+    ],
+  });
+
+  expect(summary.roomTypeText).toBe("tripleRooms - Family Triple");
+  expect(summary.roomNumberText).toBe("");
 });
 
 test("keeps room details when a same-reservation update omits assignments", () => {

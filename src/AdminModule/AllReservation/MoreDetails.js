@@ -60,6 +60,7 @@ import PaymentTrigger from "./PaymentTrigger";
 import VCCPayment from "./VCCPayment";
 import BofaCapturedPaymentSummary from "./BofaCapturedPaymentSummary";
 import {
+	getReservationRoomSummary,
 	mergeReservationPreservingRoomDetails,
 	normalizeReservationReferenceId as resolveId,
 	selectActiveReservation,
@@ -7246,14 +7247,12 @@ const ReservationDetail = ({
 		return fromRoomId;
 	}, [reservation, chosenRooms]);
 
-	const assignedRoomsDisplay = useMemo(() => {
-		const roomNumbers = Array.isArray(roomTableRows)
-			? roomTableRows
-					.map((room) => room?.room_number || room?.roomNumber)
-					.filter(Boolean)
-			: [];
-		return roomNumbers.length > 0 ? roomNumbers.join(", ") : "N/A";
-	}, [roomTableRows]);
+	const assignedRoomSummary = useMemo(
+		() => getReservationRoomSummary(reservation, roomTableRows),
+		[reservation, roomTableRows],
+	);
+	const assignedRoomTypesDisplay = assignedRoomSummary.roomTypeText || "N/A";
+	const assignedRoomsDisplay = assignedRoomSummary.roomNumberText || "N/A";
 
 	const groupedPickedRoomsType = useMemo(() => {
 		const grouped = new Map();
@@ -9834,6 +9833,11 @@ const ReservationDetail = ({
 											: "Open room details"
 									}
 								>
+									<span>
+										<HomeOutlined />{" "}
+										{chosenLanguage === "Arabic" ? AR_LABELS.roomType : "Room Type"}
+									</span>
+									<strong>{assignedRoomTypesDisplay}</strong>
 									<span>
 										<HomeOutlined />{" "}
 										{chosenLanguage === "Arabic" ? AR_LABELS.roomNumber : "Room #"}

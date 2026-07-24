@@ -65,6 +65,13 @@ const reservation = ({
   checkout_date: "2026-07-16T00:00:00.000Z",
   days_of_residence: 1,
   total_amount: total,
+  roomId: [
+    {
+      room_number: "101",
+      room_type: "doubleRooms",
+      display_name: "City View",
+    },
+  ],
   adminPricing: { mode, netAfterExpensesTotal: net },
 });
 
@@ -89,9 +96,13 @@ const renderTable = ({ data, fromPage = "AllReservations" }) =>
   );
 
 const totalCellTextFor = (guest) => {
+  const headers = screen
+    .getAllByRole("columnheader")
+    .map((header) => header.textContent.trim());
+  const totalIndex = headers.indexOf("Total");
   const row = screen.getByRole("row", { name: new RegExp(guest) });
   return within(row)
-    .getAllByRole("cell")[12]
+    .getAllByRole("cell")[totalIndex]
     .textContent.replace(/\s+/g, " ")
     .trim();
 };
@@ -124,9 +135,18 @@ describe("EnhancedContentTable total amount column", () => {
     expect(totalCellTextFor("Net Guest")).toBe("950.00 SAR");
     expect(totalCellTextFor("Fallback Guest")).toBe("800.00 SAR");
     expect(totalCellTextFor("Zero Guest")).toBe("0.00 SAR");
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent.trim());
+    const roomTypeIndex = headers.indexOf("Room Type");
+    const roomNumberIndex = headers.indexOf("Room #");
+    const priceIndex = headers.indexOf("Price/Day");
+    const netGuestCells = within(screen.getByRole("row", { name: /Net Guest/ }))
+      .getAllByRole("cell");
+    expect(netGuestCells[roomTypeIndex].textContent).toContain("doubleRooms");
+    expect(netGuestCells[roomNumberIndex].textContent).toBe("101");
     expect(
-      within(screen.getByRole("row", { name: /Net Guest/ }))
-        .getAllByRole("cell")[11]
+      netGuestCells[priceIndex]
         .textContent.replace(/\s+/g, " ")
         .trim(),
     ).toBe("1200.00 SAR");

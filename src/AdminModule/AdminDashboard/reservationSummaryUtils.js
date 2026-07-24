@@ -57,6 +57,16 @@ export const buildReservationSummaryExportRows = (
 		"Confirmation Number": spreadsheetSafeText(reservation.confirmationNumber, "N/A"),
 		Hotel: spreadsheetSafeText(reservation.hotel?.name, "Unknown Hotel"),
 		Guest: spreadsheetSafeText(reservation.guestName, "Guest"),
+		"Room Type": spreadsheetSafeText(
+			(Array.isArray(reservation.roomTypes) ? reservation.roomTypes : [])
+				.filter(Boolean)
+				.join(", ") || "N/A"
+		),
+		"Room Number": spreadsheetSafeText(
+			(Array.isArray(reservation.roomNumbers) ? reservation.roomNumbers : [])
+				.filter(Boolean)
+				.join(", ") || "N/A"
+		),
 		"Check-in": formatReservationSummaryDate(reservation.checkinDate, { locale }),
 		"Check-out": formatReservationSummaryDate(reservation.checkoutDate, { locale }),
 		Created: formatReservationSummaryDate(reservation.createdAt, { locale }),

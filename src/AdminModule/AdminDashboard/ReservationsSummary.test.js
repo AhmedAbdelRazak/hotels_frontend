@@ -96,6 +96,8 @@ beforeEach(() => {
 				confirmationNumber: "CONF-1",
 				hotel: { name: "Zad Ajyad" },
 				guestName: "Executive Guest",
+				roomTypes: ["doubleRooms - City View"],
+				roomNumbers: ["101", "305"],
 				status: "confirmed",
 				bookingSource: "Jannat Employee",
 				checkinDate: "2026-07-19T00:00:00.000Z",
@@ -119,7 +121,7 @@ afterEach(() => {
 });
 
 test("uses a compact table width budget without fixed overlay columns", () => {
-	expect(RESERVATION_SUMMARY_TABLE_WIDTH).toBe(1610);
+	expect(RESERVATION_SUMMARY_TABLE_WIDTH).toBe(1852);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.status).toBeGreaterThanOrEqual(196);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.confirmation).toBeGreaterThanOrEqual(116);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.hotel).toBeLessThan(120);
@@ -133,6 +135,8 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 
 	expect(await screen.findByText("CONF-1")).toBeTruthy();
 	expect(screen.getByText("Executive Guest")).toBeTruthy();
+	expect(screen.getByText("doubleRooms - City View")).toBeTruthy();
+	expect(screen.getByText("101, 305")).toBeTruthy();
 	expect(screen.getByText("Nights")).toBeTruthy();
 	expect(screen.getByText("280.00 SAR \u00d7 2 nights")).toBeTruthy();
 	expect(screen.getByTestId("reservation-index-507f1f77bcf86cd799439011").textContent).toBe("1");

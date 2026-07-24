@@ -8,6 +8,7 @@ import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
+import { getReservationRoomSummary } from "./reservationRoomDetails";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	applyOtaReservationSyncJob,
@@ -293,6 +294,7 @@ const EnhancedContentTable = ({
 	const formattedReservations = useMemo(() => {
 		return data.map((reservation) => {
 			const { customer_details = {}, hotelId = {} } = reservation;
+			const roomSummary = getReservationRoomSummary(reservation);
 			const nights = getAdminReservationNights(reservation);
 			const totalAmount = Number(reservation.total_amount || 0);
 			const displayTotalAmount = getAdminReservationDisplayTotal(reservation, {
@@ -325,6 +327,8 @@ const EnhancedContentTable = ({
 				customer_name: customer_details.name || "N/A",
 				customer_phone: customer_details.phone || "N/A",
 				hotel_name: hotelId?.hotelName || "Unknown Hotel",
+				room_type_display: roomSummary.roomTypeText || "-",
+				room_number_display: roomSummary.roomNumberText || "-",
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
 				payment_status_hint: paypalAware.hint || "",
@@ -783,6 +787,8 @@ const EnhancedContentTable = ({
 				hotel: "الفندق",
 				confirmation: "رقم التأكيد",
 				guest: "الضيف",
+				roomType: "\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629",
+				roomNumber: "\u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629",
 				source: "مصدر الحجز",
 				status: "الحالة",
 				payment: "الدفع",
@@ -801,6 +807,8 @@ const EnhancedContentTable = ({
 				hotel: "Hotel",
 				confirmation: "Confirmation",
 				guest: "Guest",
+				roomType: "Room Type",
+				roomNumber: "Room #",
 				source: "Source",
 				status: "Status",
 				payment: "Payment",
@@ -1104,6 +1112,8 @@ const EnhancedContentTable = ({
 							<th>{sortableHeader(tableLabels.hotel, "hotel_name")}</th>
 							<th>{sortableHeader(tableLabels.confirmation, "confirmation_number")}</th>
 							<th>{sortableHeader(tableLabels.guest, "customer_name")}</th>
+							<th>{sortableHeader(tableLabels.roomType, "room_type_display")}</th>
+							<th>{sortableHeader(tableLabels.roomNumber, "room_number_display")}</th>
 							<th>{sortableHeader(tableLabels.source, "booking_source")}</th>
 							<th>{sortableHeader(tableLabels.status, "reservation_status")}</th>
 							<th>{sortableHeader(tableLabels.payment, "payment_status")}</th>
@@ -1171,6 +1181,19 @@ const EnhancedContentTable = ({
 											<AdminTableTooltipText
 												value={reservation.customer_name}
 												className='table-truncate'
+											/>
+										</td>
+										<td>
+											<AdminTableTooltipText
+												value={reservation.room_type_display}
+												max={22}
+												className='table-truncate'
+											/>
+										</td>
+										<td>
+											<AdminTableTooltipText
+												value={reservation.room_number_display}
+												max={16}
 											/>
 										</td>
 										<td className='source-cell'>
@@ -1250,7 +1273,7 @@ const EnhancedContentTable = ({
 							})
 						) : (
 							<tr>
-								<td colSpan='15'>{tableLabels.noReservationsFound}</td>
+								<td colSpan='17'>{tableLabels.noReservationsFound}</td>
 							</tr>
 						)}
 					</tbody>

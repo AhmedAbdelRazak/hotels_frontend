@@ -107,7 +107,7 @@ const ExportToExcelButton = ({
 			// {
 			//   confirmation_number, customer_name, customer_phone, hotel_name,
 			//   reservation_status, checkin_date, checkout_date, payment_status,
-			//   total_amount, paid_amount, room_type, room_count,
+			//   total_amount, paid_amount, room_type, room_number, room_count,
 			//   paid_onsite, paid_offline, createdAt
 			// }
 
@@ -157,6 +157,7 @@ const ExportToExcelButton = ({
 			"Total Amount": item.total_amount || 0,
 			"Paid Amount": item.paid_amount || 0,
 			"Room Type": item.room_type || "",
+			"Room Number": item.room_number || "",
 			"Room Count": item.room_count || 0,
 			"Paid Offline": item.paid_offline || 0, // new column
 			"Created At": item.createdAt
@@ -177,6 +178,7 @@ const ExportToExcelButton = ({
 			"Total Amount",
 			"Paid Amount (Online)",
 			"Room Type",
+			"Room Number",
 			"Room Count",
 			"Paid Offline", // new
 			"Created At",
@@ -198,6 +200,7 @@ const ExportToExcelButton = ({
 			{ wch: 15 }, // Total Amount
 			{ wch: 15 }, // Paid Amount
 			{ wch: 15 }, // Room Type
+			{ wch: 18 }, // Room Number
 			{ wch: 10 }, // Room Count
 			{ wch: 15 }, // Paid Offline
 			{ wch: 15 }, // Created At

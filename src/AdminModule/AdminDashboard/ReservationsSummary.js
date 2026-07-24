@@ -69,6 +69,8 @@ const copy = {
 		confirmation: "Confirmation #",
 		hotel: "Hotel",
 		guest: "Guest",
+		roomType: "Room Type",
+		roomNumber: "Room #",
 		checkinDate: "Check-in",
 		checkoutDate: "Check-out",
 		createdAt: "Created",
@@ -139,6 +141,8 @@ const copy = {
 		confirmation: "\u0631\u0642\u0645 \u0627\u0644\u062a\u0623\u0643\u064a\u062f",
 		hotel: "\u0627\u0644\u0641\u0646\u062f\u0642",
 		guest: "\u0627\u0644\u0636\u064a\u0641",
+		roomType: "\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629",
+		roomNumber: "\u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629",
 		checkinDate: "\u0627\u0644\u0648\u0635\u0648\u0644",
 		checkoutDate: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
 		createdAt: "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
@@ -182,6 +186,8 @@ export const RESERVATION_SUMMARY_COLUMN_WIDTHS = Object.freeze({
 	confirmation: 116,
 	hotel: 118,
 	guest: 134,
+	roomType: 138,
+	roomNumber: 104,
 	checkinDate: 108,
 	checkoutDate: 108,
 	createdAt: 112,
@@ -456,6 +462,33 @@ const ReservationsSummary = ({
 				),
 			},
 			{
+				title: L.roomType,
+				dataIndex: "roomTypes",
+				key: "roomTypes",
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.roomType,
+				render: (values = []) => {
+					const text =
+						Array.isArray(values) && values.length ? values.join(", ") : "N/A";
+					return (
+						<Tooltip title={text}>
+							<CellText>{text}</CellText>
+						</Tooltip>
+					);
+				},
+			},
+			{
+				title: L.roomNumber,
+				dataIndex: "roomNumbers",
+				key: "roomNumbers",
+				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.roomNumber,
+				align: "center",
+				render: (values = []) => (
+					<Confirmation dir='ltr'>
+						{Array.isArray(values) && values.length ? values.join(", ") : "N/A"}
+					</Confirmation>
+				),
+			},
+			{
 				title: L.checkinDate,
 				dataIndex: "checkinDate",
 				key: "checkinDate",
@@ -602,6 +635,8 @@ const ReservationsSummary = ({
 			{ wch: 22 },
 			{ wch: 28 },
 			{ wch: 28 },
+			{ wch: 28 },
+			{ wch: 18 },
 			{ wch: 16 },
 			{ wch: 16 },
 			{ wch: 22 },

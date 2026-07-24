@@ -21,6 +21,8 @@ test("executive export contains professional fields without private payment data
 				confirmationNumber: "CONF-1",
 				hotel: { name: "Zad Ajyad" },
 				guestName: '=HYPERLINK("unsafe")',
+				roomTypes: ["doubleRooms - City View"],
+				roomNumbers: ["101", "305"],
 				activityTypes: ["checkout"],
 				checkoutDate: "2026-07-19T00:00:00.000Z",
 				createdAt: "2026-07-19T18:46:08.000Z",
@@ -38,6 +40,8 @@ test("executive export contains professional fields without private payment data
 	expect(rows[0]["Activity"]).toBe("Check-out");
 	expect(rows[0]["Hotel"]).toBe("Zad Ajyad");
 	expect(rows[0]["Guest"]).toBe('\'=HYPERLINK("unsafe")');
+	expect(rows[0]["Room Type"]).toBe("doubleRooms - City View");
+	expect(rows[0]["Room Number"]).toBe("101, 305");
 	expect(rows[0]["Total Amount"]).toBe(560);
 	expect(rows[0]["Nights"]).toBe(8);
 	expect(rows[0]["Average Per Night"]).toBe(70);

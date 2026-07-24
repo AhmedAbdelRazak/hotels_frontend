@@ -19,6 +19,86 @@ const normalizeRoomId = (value) => {
   return /^[a-f\d]{24}$/i.test(normalized) ? normalized : "";
 };
 
+const cleanRoomText = (value) =>
+  String(value === null || value === undefined ? "" : value).trim();
+
+const uniqueRoomText = (values = []) => {
+  const seen = new Set();
+  return values.reduce((result, value) => {
+    const text = cleanRoomText(value);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) return result;
+    seen.add(key);
+    result.push(text);
+    return result;
+  }, []);
+};
+
+const roomTypeLabel = (room = {}) => {
+  if (!room || typeof room !== "object") return "";
+  const type = cleanRoomText(room.room_type || room.roomType);
+  const displayName = cleanRoomText(room.display_name || room.displayName);
+  if (!type) return displayName;
+  if (!displayName || displayName.toLowerCase() === type.toLowerCase()) {
+    return type;
+  }
+  return `${type} - ${displayName}`;
+};
+
+const roomNumbersFromRecord = (room = {}) => {
+  if (!room || typeof room !== "object") return [];
+  return [
+    room.room_number,
+    room.roomNumber,
+    ...asArray(room.room_numbers),
+    ...asArray(room.roomNumbers),
+  ];
+};
+
+/**
+ * Normalize reserved room types and assigned room numbers across legacy and
+ * populated API response shapes. Raw ObjectIds are deliberately never shown as
+ * room numbers.
+ */
+export const getReservationRoomSummary = (
+  reservation = {},
+  extraRoomDetails = [],
+) => {
+  const assignedRooms = [
+    ...asArray(reservation?.roomDetails),
+    ...asArray(reservation?.roomId).filter(
+      (room) => room && typeof room === "object",
+    ),
+    ...asArray(extraRoomDetails),
+  ].filter(Boolean);
+  const pickedRooms = asArray(reservation?.pickedRoomsType).flatMap((room) => [
+    room,
+    ...asArray(room?.roomDetails),
+    ...asArray(room?.roomId).filter(
+      (assignedRoom) => assignedRoom && typeof assignedRoom === "object",
+    ),
+  ]);
+
+  const roomTypes = uniqueRoomText(
+    [...assignedRooms, ...pickedRooms].map(roomTypeLabel),
+  );
+  const roomNumbers = uniqueRoomText([
+    ...asArray(reservation?.room_numbers),
+    ...asArray(reservation?.roomNumbers),
+    reservation?.room_number,
+    reservation?.roomNumber,
+    ...assignedRooms.flatMap(roomNumbersFromRecord),
+    ...pickedRooms.flatMap(roomNumbersFromRecord),
+  ]);
+
+  return {
+    roomTypes,
+    roomNumbers,
+    roomTypeText: roomTypes.join(", "),
+    roomNumberText: roomNumbers.join(", "),
+  };
+};
+
 const uniqueRoomIds = (value) => {
   const seen = new Set();
   return asArray(value).reduce((ids, roomRef) => {
