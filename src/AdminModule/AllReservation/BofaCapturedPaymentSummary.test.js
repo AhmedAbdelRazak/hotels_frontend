@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import BofaCapturedPaymentSummary, {
 	mergeVerifiedBofaCapture,
+	selectRecordedExternalVccCapture,
 	selectVerifiedBofaCapture,
 } from "./BofaCapturedPaymentSummary";
 
@@ -43,4 +44,77 @@ test("renders nothing for a declined or unverified attempt", () => {
 	expect(
 		mergeVerifiedBofaCapture({}, { ...capture, verified: false }),
 	).toEqual({});
+});
+
+const externalVirtualTerminalReservation = {
+	reservation_id: "675894003",
+	booking_source: "agoda",
+	payment_details: {
+		captured: true,
+		vccCharged: true,
+		vccCaptureId: "3KS57024FW675651X",
+		finalCaptureTransactionId: "3KS57024FW675651X",
+		lastChargeVia: "VCC_PAYPAL_VIRTUAL_TERMINAL_EXTERNAL",
+		lastChargeAt: "2026-07-24T17:11:28.000Z",
+	},
+	paypal_details: {
+		captured_total_usd: 67,
+		initial: {
+			capture_id: "3KS57024FW675651X",
+			capture_status: "COMPLETED",
+			amount: "67.00",
+			currency: "USD",
+		},
+		external_virtual_terminal: {
+			transaction_id: "3KS57024FW675651X",
+			status: "COMPLETED",
+			invoice_id: "675894003",
+			gross_amount_usd: 67,
+			currency: "USD",
+			transaction_at: "2026-07-24T17:11:28.000Z",
+		},
+	},
+	vcc_payment: {
+		source: "agoda",
+		charged: true,
+		total_captured_usd: 67,
+		last_success_at: "2026-07-24T17:11:28.000Z",
+	},
+};
+
+test("renders a reconciled PayPal Virtual Terminal OTA capture", () => {
+	render(
+		<BofaCapturedPaymentSummary
+			reservation={externalVirtualTerminalReservation}
+		/>,
+	);
+
+	expect(screen.getByText("Captured successfully")).toBeTruthy();
+	expect(screen.getByText("67.00")).toBeTruthy();
+	expect(screen.getByText("PayPal Virtual Terminal")).toBeTruthy();
+	expect(screen.getByText("Reconciled")).toBeTruthy();
+	expect(screen.getByText("675894003")).toBeTruthy();
+	expect(screen.getByText("3KS57024FW675651X")).toBeTruthy();
+	expect(
+		selectRecordedExternalVccCapture(externalVirtualTerminalReservation)
+			?.amountUsd,
+	).toBe(67);
+});
+
+test("does not render an external capture when its evidence disagrees", () => {
+	const mismatched = {
+		...externalVirtualTerminalReservation,
+		paypal_details: {
+			...externalVirtualTerminalReservation.paypal_details,
+			external_virtual_terminal: {
+				...externalVirtualTerminalReservation.paypal_details
+					.external_virtual_terminal,
+				invoice_id: "different-reservation",
+			},
+		},
+	};
+	const { container } = render(
+		<BofaCapturedPaymentSummary reservation={mismatched} />,
+	);
+	expect(container.innerHTML).toBe("");
 });

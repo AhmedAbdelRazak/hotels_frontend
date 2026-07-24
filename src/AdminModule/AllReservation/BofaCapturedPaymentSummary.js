@@ -48,8 +48,10 @@ export const selectVerifiedBofaCapture = (reservation = {}) => {
 	if (currency !== "USD" || amountUsd <= 0) return null;
 
 	return {
+		evidence: "Verified",
 		amountUsd,
 		currency: "USD",
+		gateway: "Bank of America",
 		capturedAt:
 			vcc.last_success_at || paymentDetails.bofaVccChargedAt || null,
 		provider: clean(vcc.source || reservation?.booking_source, 60),
@@ -57,12 +59,72 @@ export const selectVerifiedBofaCapture = (reservation = {}) => {
 			lastCapture.reference_number || secureAcceptance.last_reference_number,
 			50,
 		),
+		referenceLabel: "Merchant reference",
 		transactionId: clean(
 			lastCapture.transaction_id ||
 				vcc.last_transaction_id ||
 				paymentDetails.bofaVccTransactionId,
 			100,
 		),
+	};
+};
+
+const sameMoney = (left, right) =>
+	Math.round(Number(left) * 100) === Math.round(Number(right) * 100);
+
+export const selectRecordedExternalVccCapture = (reservation = {}) => {
+	const paymentDetails = reservation?.payment_details || {};
+	const paypal = reservation?.paypal_details || {};
+	const external = paypal.external_virtual_terminal || {};
+	const initial = paypal.initial || {};
+	const vcc = reservation?.vcc_payment || {};
+	const transactionId = clean(external.transaction_id, 100);
+	const amountUsd = positiveMoney(external.gross_amount_usd);
+	const invoiceId = clean(external.invoice_id, 80);
+	const reservationReference = clean(reservation?.reservation_id, 80);
+	const status = clean(external.status, 30).toUpperCase();
+	const currency = clean(external.currency, 3).toUpperCase();
+	const lastChargeVia = clean(paymentDetails.lastChargeVia, 80).toUpperCase();
+	const initialStatus = clean(
+		initial.capture_status || initial.status,
+		30,
+	).toUpperCase();
+
+	const recorded =
+		paymentDetails.captured === true &&
+		paymentDetails.vccCharged === true &&
+		vcc.charged === true &&
+		lastChargeVia === "VCC_PAYPAL_VIRTUAL_TERMINAL_EXTERNAL" &&
+		status === "COMPLETED" &&
+		currency === "USD" &&
+		amountUsd > 0 &&
+		transactionId &&
+		clean(paymentDetails.vccCaptureId, 100) === transactionId &&
+		clean(paymentDetails.finalCaptureTransactionId, 100) === transactionId &&
+		clean(initial.capture_id, 100) === transactionId &&
+		initialStatus === "COMPLETED" &&
+		clean(initial.currency, 3).toUpperCase() === "USD" &&
+		sameMoney(initial.amount, amountUsd) &&
+		sameMoney(paypal.captured_total_usd, amountUsd) &&
+		sameMoney(vcc.total_captured_usd, amountUsd) &&
+		invoiceId &&
+		invoiceId === reservationReference;
+	if (!recorded) return null;
+
+	return {
+		evidence: "Reconciled",
+		amountUsd,
+		currency: "USD",
+		gateway: "PayPal Virtual Terminal",
+		capturedAt:
+			external.transaction_at ||
+			vcc.last_success_at ||
+			paymentDetails.lastChargeAt ||
+			null,
+		provider: clean(vcc.source || reservation?.booking_source, 60),
+		referenceNumber: invoiceId,
+		referenceLabel: "OTA confirmation",
+		transactionId,
 	};
 };
 
@@ -137,7 +199,9 @@ const providerName = (value) => {
 };
 
 const BofaCapturedPaymentSummary = ({ reservation }) => {
-	const capture = selectVerifiedBofaCapture(reservation);
+	const capture =
+		selectVerifiedBofaCapture(reservation) ||
+		selectRecordedExternalVccCapture(reservation);
 	if (!capture) return null;
 
 	return (
@@ -151,7 +215,7 @@ const BofaCapturedPaymentSummary = ({ reservation }) => {
 					<Title>Captured successfully</Title>
 				</div>
 				<VerifiedBadge>
-					<SafetyCertificateFilled /> Verified
+					<SafetyCertificateFilled /> {capture.evidence}
 				</VerifiedBadge>
 			</Header>
 
@@ -164,7 +228,9 @@ const BofaCapturedPaymentSummary = ({ reservation }) => {
 			<Details>
 				<div>
 					<span>Gateway</span>
-					<strong><BankOutlined /> Bank of America</strong>
+					<strong>
+						<BankOutlined /> {capture.gateway}
+					</strong>
 				</div>
 				<div>
 					<span>OTA</span>
@@ -172,18 +238,30 @@ const BofaCapturedPaymentSummary = ({ reservation }) => {
 				</div>
 				<div>
 					<span>Captured at</span>
-					<strong>{formatSaudiDateTime(capture.capturedAt, { language: "English", fallback: "Recorded" })}</strong>
+					<strong>
+						{formatSaudiDateTime(capture.capturedAt, {
+							language: "English",
+							fallback: "Recorded",
+						})}
+					</strong>
 				</div>
 				{capture.referenceNumber ? (
 					<div>
-						<span>Merchant reference</span>
+						<span>{capture.referenceLabel}</span>
 						<strong className='reference'>{capture.referenceNumber}</strong>
+					</div>
+				) : null}
+				{capture.transactionId ? (
+					<div>
+						<span>Transaction ID</span>
+						<strong className='reference'>{capture.transactionId}</strong>
 					</div>
 				) : null}
 			</Details>
 
 			<Footer>
-				Reservation payment updated. Additional Bank of America charges are blocked.
+				Reservation payment updated. Additional OTA virtual-card charges are
+				blocked.
 			</Footer>
 		</Card>
 	);
