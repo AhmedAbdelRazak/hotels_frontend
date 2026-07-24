@@ -58,6 +58,7 @@ import AlDawleya from "./AlDawleya";
 import GuestCardModal from "./GuestCard/GuestCardModal";
 import PaymentTrigger from "./PaymentTrigger";
 import VCCPayment from "./VCCPayment";
+import BofaCapturedPaymentSummary from "./BofaCapturedPaymentSummary";
 import {
 	mergeReservationPreservingRoomDetails,
 	normalizeReservationReferenceId as resolveId,
@@ -11324,6 +11325,8 @@ const ReservationDetail = ({
 											) : null}
 										</div>
 									</div>
+
+									<BofaCapturedPaymentSummary reservation={reservation} />
 
 									<div
 										className={`finance-cycle-card ${

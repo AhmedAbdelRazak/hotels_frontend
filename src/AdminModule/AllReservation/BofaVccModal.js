@@ -22,6 +22,7 @@ import {
 	validateVccForm,
 } from "./bofaVccUtils";
 import BofaHostedCheckoutFrame from "./BofaHostedCheckoutFrame";
+import { mergeVerifiedBofaCapture } from "./BofaCapturedPaymentSummary";
 
 export const BOFA_VCC_MODAL_Z_INDEX = 110000;
 const ROOT_CLASS = "bofa-vcc-modal-root";
@@ -285,17 +286,11 @@ const BofaVccModal = ({
 					if (!successShown.current) {
 						successShown.current = true;
 						toast.success("The OTA virtual card was charged successfully.");
-						onReservationUpdated?.({
-							...reservation,
-							bofa_payment: {
-								...(reservation?.bofa_payment || {}),
-								vcc: { ...(reservation?.bofa_payment?.vcc || {}), charged: true },
-							},
-							payment_details: {
-								...(reservation?.payment_details || {}),
-								bofaVccCharged: true,
-							},
-						});
+						const updatedReservation = mergeVerifiedBofaCapture(
+							reservation,
+							next.capture,
+						);
+						onReservationUpdated?.(updatedReservation);
 					}
 				} else if (["declined", "canceled"].includes(next?.secureAcceptance?.status)) {
 					setError(
