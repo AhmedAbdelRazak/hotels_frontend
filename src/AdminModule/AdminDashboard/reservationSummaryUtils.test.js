@@ -55,6 +55,13 @@ test("spreadsheet text keeps normal content and neutralizes formula prefixes", (
 	expect(spreadsheetSafeText(" +SUM(1,2)")).toBe("' +SUM(1,2)");
 });
 
+test("executive export leaves unavailable room fields blank", () => {
+	const [row] = buildReservationSummaryExportRows([{}]);
+
+	expect(row["Room Type"]).toBe("");
+	expect(row["Room Number"]).toBe("");
+});
+
 test("Arabic Miladi and Hijri dates always use Latin digits and omit time", () => {
 	const value = "2026-07-19T18:46:08.000Z";
 	const miladi = formatReservationSummaryDate(value, {

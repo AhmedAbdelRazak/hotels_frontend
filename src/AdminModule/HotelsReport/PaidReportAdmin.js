@@ -9,6 +9,7 @@ import {
 	getPaidBreakdownReportAdmin,
 } from "../apiAdmin";
 import MoreDetails from "../AllReservation/MoreDetails";
+import { getReservationRoomSummary } from "../AllReservation/reservationRoomDetails";
 import PaidReportDateControls from "./PaidReportDateControls";
 
 const { Option } = Select;
@@ -125,6 +126,12 @@ const PaidReportAdmin = () => {
 			confirmation: isArabic ? "رقم التأكيد" : "Confirmation #",
 			checkin: isArabic ? "تاريخ الوصول" : "Check-in",
 			checkout: isArabic ? "تاريخ المغادرة" : "Check-out",
+			roomType: isArabic
+				? "\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629"
+				: "Room Type",
+			roomNumber: isArabic
+				? "\u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629"
+				: "Room Number",
 			breakdown: {
 				paid_online_via_link: isArabic
 					? "مدفوع أونلاين (رابط الدفع)"
@@ -394,6 +401,8 @@ const PaidReportAdmin = () => {
 			labels.name,
 			labels.confirmation,
 			labels.hotel,
+			labels.roomType,
+			labels.roomNumber,
 			labels.checkin,
 			labels.checkout,
 			...breakdownKeys.map((key) => labels.breakdown[key] || key),
@@ -404,11 +413,14 @@ const PaidReportAdmin = () => {
 		];
 
 		const exportRows = rows.map((reservation) => {
+			const roomSummary = getReservationRoomSummary(reservation);
 			const row = {
 				[labels.name]: reservation?.customer_details?.name || "",
 				[labels.confirmation]: reservation?.confirmation_number || "",
 				[labels.hotel]:
 					reservation?.hotelId?.hotelName || selectedHotelName || "",
+				[labels.roomType]: roomSummary.roomTypeText,
+				[labels.roomNumber]: roomSummary.roomNumberText,
 				[labels.checkin]: formatDate(
 					reservation?.checkin_date,
 					numberLocale,
@@ -439,6 +451,8 @@ const PaidReportAdmin = () => {
 			[labels.name]: labels.totalRow,
 			[labels.confirmation]: "",
 			[labels.hotel]: "",
+			[labels.roomType]: "",
+			[labels.roomNumber]: "",
 			[labels.checkin]: "",
 			[labels.checkout]: "",
 			[labels.paidBreakdown]: "",

@@ -8,7 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, Route, useLocation } from "react-router-dom";
-import ProfitReportAdmin from "./ProfitReportAdmin";
+import ProfitReportAdmin, { buildProfitExportRows } from "./ProfitReportAdmin";
 import { getOverallProfitReport } from "../apiAdmin";
 import { DEFAULT_PROFIT_HOTEL_ID } from "./profitReportQuery";
 
@@ -72,6 +72,41 @@ beforeEach(() => {
     total: 0,
     pages: 1,
   });
+});
+
+it("includes room type and assigned room number in profit exports", () => {
+  const [row] = buildProfitExportRows({
+    labels: {
+      fullName: "Full Name",
+      reportDate: "Report Date",
+      confirmation: "Confirmation",
+      checkIn: "Check In",
+      checkOut: "Check Out",
+      hotel: "Hotel",
+      roomType: "Room Type",
+      roomNumber: "Room Number",
+      source: "Source",
+      clientPaid: "Client Paid",
+      hotelTotal: "Hotel Total",
+      commission: "Commission",
+      otaExpense: "OTA Expense",
+      totalProfit: "Total Profit",
+      profitRate: "Profit Rate",
+    },
+    rows: [
+      {
+        pickedRoomsType: [
+          { room_type: "familyRooms", displayName: "Family Quintuple" },
+        ],
+        roomDetails: [
+          { room_number: "424", room_type: "familyRooms" },
+        ],
+      },
+    ],
+  });
+
+  expect(row["Room Type"]).toBe("familyRooms - Family Quintuple");
+  expect(row["Room Number"]).toBe("424");
 });
 
 it("loads Zad Ajyad once and applies a UI filter without a request loop", async () => {

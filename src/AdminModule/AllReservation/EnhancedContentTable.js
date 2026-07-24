@@ -23,6 +23,31 @@ const OTA_SYNC_RUNNING_STATUSES = new Set([
 	"running",
 	"needs_mfa",
 ]);
+
+export const ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS = Object.freeze([
+	42, // row number
+	100, // hotel
+	110, // confirmation
+	150, // guest
+	70, // assigned room number
+	96, // booking source
+	104, // reservation status
+	88, // payment status
+	90, // booked
+	90, // check-in
+	90, // check-out
+	56, // nights
+	100, // price per day
+	100, // total
+	100, // paid amount
+	76, // more details
+]);
+
+export const ADMIN_RESERVATION_TABLE_MIN_WIDTH =
+	ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS.reduce(
+		(total, width) => total + width,
+		0,
+	);
 const OTA_SYNC_BUCKET_LABELS = [
 	{ key: "newReservations", label: "New candidates" },
 	{ key: "skippedCancelled", label: "Skipped cancelled" },
@@ -781,6 +806,11 @@ const EnhancedContentTable = ({
 	const reservedByActive = (val) => (activeReservedBy || "") === (val || "");
 	const bookingSourceActive = (val) =>
 		(activeBookingSource || "") === (val || "");
+	const showReservedByFilter =
+		typeof onReservedByChange === "function" &&
+		(allowAllReservedBy || Boolean(selfReservedBy));
+	const showBookingSourceFilter =
+		typeof onBookingSourceChange === "function";
 	const isArabicTable = chosenLanguage === "Arabic";
 	const tableLabels = isArabicTable
 		? {
@@ -901,7 +931,10 @@ const EnhancedContentTable = ({
 	);
 
 	return (
-		<ContentTableWrapper>
+		<ContentTableWrapper
+			$isArabic={isArabicTable}
+			$isReport={fromPage === "reports"}
+		>
 			<AdminReservationDetailsModalGlobalStyle />
 
 			{/* ScoreCards */}
@@ -914,62 +947,63 @@ const EnhancedContentTable = ({
 			/>
 
 			{/* Reserved By Filter Row */}
-			<ReservedByFilterContainer>
-				<ReservedByTitle>Reserved By:</ReservedByTitle>
+			{showReservedByFilter ? (
+				<ReservedByFilterContainer>
+					<ReservedByTitle>Reserved By:</ReservedByTitle>
 
-				{allowAllReservedBy ? (
-					<>
-						<UserFilterButton
-							onClick={() => onReservedByChange && onReservedByChange("")}
-							isActive={reservedByActive("")}
-						>
-							All
-						</UserFilterButton>
-						{reservedByOptions.map((rb) => (
+					{allowAllReservedBy ? (
+						<>
 							<UserFilterButton
-								key={rb}
-								isActive={reservedByActive(rb)}
-								onClick={() =>
-									onReservedByChange &&
-									onReservedByChange(reservedByActive(rb) ? "" : rb)
-								}
+								onClick={() => onReservedByChange("")}
+								isActive={reservedByActive("")}
 							>
-								<span style={{ textTransform: "capitalize" }}>{rb}</span>
+								All
 							</UserFilterButton>
-						))}
-					</>
-				) : (
-					// Non-super: show only own name, fixed & active
-					<UserFilterButton isActive disabled>
-						<span style={{ textTransform: "capitalize" }}>
-							{selfReservedBy}
-						</span>
-					</UserFilterButton>
-				)}
-			</ReservedByFilterContainer>
+							{reservedByOptions.map((rb) => (
+								<UserFilterButton
+									key={rb}
+									isActive={reservedByActive(rb)}
+									onClick={() =>
+										onReservedByChange(reservedByActive(rb) ? "" : rb)
+									}
+								>
+									<span style={{ textTransform: "capitalize" }}>{rb}</span>
+								</UserFilterButton>
+							))}
+						</>
+					) : (
+						<UserFilterButton isActive disabled>
+							<span style={{ textTransform: "capitalize" }}>
+								{selfReservedBy}
+							</span>
+						</UserFilterButton>
+					)}
+				</ReservedByFilterContainer>
+			) : null}
 
 			{/* NEW: Booking Source Filter Row */}
-			<ReservedByFilterContainer>
-				<ReservedByTitle>Booking Source:</ReservedByTitle>
-				<UserFilterButton
-					onClick={() => onBookingSourceChange && onBookingSourceChange("")}
-					isActive={bookingSourceActive("")}
-				>
-					All
-				</UserFilterButton>
-				{bookingSourceOptions.map((bs) => (
+			{showBookingSourceFilter ? (
+				<ReservedByFilterContainer>
+					<ReservedByTitle>Booking Source:</ReservedByTitle>
 					<UserFilterButton
-						key={bs}
-						isActive={bookingSourceActive(bs)}
-						onClick={() =>
-							onBookingSourceChange &&
-							onBookingSourceChange(bookingSourceActive(bs) ? "" : bs)
-						}
+						onClick={() => onBookingSourceChange("")}
+						isActive={bookingSourceActive("")}
 					>
-						<span style={{ textTransform: "capitalize" }}>{bs}</span>
+						All
 					</UserFilterButton>
-				))}
-			</ReservedByFilterContainer>
+					{bookingSourceOptions.map((bs) => (
+						<UserFilterButton
+							key={bs}
+							isActive={bookingSourceActive(bs)}
+							onClick={() =>
+								onBookingSourceChange(bookingSourceActive(bs) ? "" : bs)
+							}
+						>
+							<span style={{ textTransform: "capitalize" }}>{bs}</span>
+						</UserFilterButton>
+					))}
+				</ReservedByFilterContainer>
+			) : null}
 
 			{fromPage === "reports" ? null : (
 				<FilterButtonContainer>
@@ -1059,7 +1093,7 @@ const EnhancedContentTable = ({
 				</FilterButtonContainer>
 			)}
 
-			<AdminActionsRow>
+			<AdminActionsRow $isReport={fromPage === "reports"}>
 				<ExportToExcelButton
 					data={sortedData}
 					allHotelDetailsAdmin={allHotelDetailsAdmin}
@@ -1105,14 +1139,21 @@ const EnhancedContentTable = ({
 
 			{/* Table */}
 			<TableWrapper>
-				<StyledTable className='admin-reservation-list-table'>
+				<StyledTable
+					className='admin-reservation-list-table'
+					$minWidth={ADMIN_RESERVATION_TABLE_MIN_WIDTH}
+				>
+					<colgroup>
+						{ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS.map((width, index) => (
+							<col key={`${index}-${width}`} style={{ width }} />
+						))}
+					</colgroup>
 					<thead>
 						<tr>
 							<th>#</th>
 							<th>{sortableHeader(tableLabels.hotel, "hotel_name")}</th>
 							<th>{sortableHeader(tableLabels.confirmation, "confirmation_number")}</th>
 							<th>{sortableHeader(tableLabels.guest, "customer_name")}</th>
-							<th>{sortableHeader(tableLabels.roomType, "room_type_display")}</th>
 							<th>{sortableHeader(tableLabels.roomNumber, "room_number_display")}</th>
 							<th>{sortableHeader(tableLabels.source, "booking_source")}</th>
 							<th>{sortableHeader(tableLabels.status, "reservation_status")}</th>
@@ -1185,13 +1226,6 @@ const EnhancedContentTable = ({
 										</td>
 										<td>
 											<AdminTableTooltipText
-												value={reservation.room_type_display}
-												max={22}
-												className='table-truncate'
-											/>
-										</td>
-										<td>
-											<AdminTableTooltipText
 												value={reservation.room_number_display}
 												max={16}
 											/>
@@ -1251,13 +1285,22 @@ const EnhancedContentTable = ({
 										</td>
 										<td className='amount-cell'>{reservation.reservation_nights}</td>
 										<td className='amount-cell'>
-											{formatAdminMoney(reservation.price_per_day)} {tableLabels.sar}
+											<AdminTableTooltipText
+												value={`${formatAdminMoney(reservation.price_per_day)} ${tableLabels.sar}`}
+												max={18}
+											/>
 										</td>
 										<td className='amount-cell'>
-											{formatAdminMoney(reservation.display_total_amount)} {tableLabels.sar}
+											<AdminTableTooltipText
+												value={`${formatAdminMoney(reservation.display_total_amount)} ${tableLabels.sar}`}
+												max={18}
+											/>
 										</td>
 										<td className='amount-cell'>
-											{formatAdminMoney(reservation.paid_amount_display)} {tableLabels.sar}
+											<AdminTableTooltipText
+												value={`${formatAdminMoney(reservation.paid_amount_display)} ${tableLabels.sar}`}
+												max={18}
+											/>
 										</td>
 										<td>
 											<button
@@ -1273,7 +1316,7 @@ const EnhancedContentTable = ({
 							})
 						) : (
 							<tr>
-								<td colSpan='17'>{tableLabels.noReservationsFound}</td>
+								<td colSpan='16'>{tableLabels.noReservationsFound}</td>
 							</tr>
 						)}
 					</tbody>
@@ -1666,7 +1709,10 @@ const AdminReservationDetailsModalGlobalStyle = createGlobalStyle`
 `;
 
 const ContentTableWrapper = styled.div`
-	padding: 20px;
+	width: 100%;
+	min-width: 0;
+	padding: ${(props) => (props.$isReport ? "12px 0 0" : "20px")};
+	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
 `;
 
 const AdminActionsRow = styled.div`
@@ -1675,6 +1721,7 @@ const AdminActionsRow = styled.div`
 	flex-wrap: wrap;
 	gap: 10px;
 	align-items: center;
+	justify-content: ${(props) => (props.$isReport ? "center" : "space-between")};
 `;
 
 const SyncReservationsButton = styled(Button)`
@@ -1690,12 +1737,11 @@ const SyncReservationsButton = styled(Button)`
 `;
 
 const ReservedByFilterContainer = styled.div`
-	margin: 12px 0 8px 0;
+	margin: 10px 0 8px;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
-	margin-bottom: 30px;
 `;
 
 const ReservedByTitle = styled.span`
@@ -1736,7 +1782,7 @@ const TableWrapper = styled.div`
 
 const StyledTable = styled.table`
 	width: 100%;
-	min-width: 1180px;
+	min-width: ${(props) => props.$minWidth || ADMIN_RESERVATION_TABLE_MIN_WIDTH}px;
 	border-collapse: separate;
 	border-spacing: 0;
 	table-layout: fixed;
@@ -1791,7 +1837,6 @@ const StyledTable = styled.table`
 	th:first-child,
 	td:first-child {
 		text-align: center;
-		width: 2.6%;
 	}
 
 	.hotel-cell,
@@ -1853,6 +1898,11 @@ const StyledTable = styled.table`
 		color: #f3dcff;
 	}
 
+	.sortable-heading > span:first-child {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.sort-arrow {
 		color: #f4c84f;
 		font-size: 0.72rem;
@@ -1889,9 +1939,8 @@ const StyledTable = styled.table`
 	.amount-cell {
 		direction: ltr;
 		font-weight: 950;
-		min-width: 82px;
-		overflow: visible !important;
-		text-overflow: clip !important;
+		overflow: hidden !important;
+		text-overflow: ellipsis !important;
 		white-space: nowrap;
 	}
 
@@ -1912,79 +1961,7 @@ const StyledTable = styled.table`
 		color: var(--pms-metal-purple, #64166e);
 	}
 
-	@media (min-width: 992px) {
-		min-width: 0;
-
-		th:nth-child(1),
-		td:nth-child(1) {
-			width: 2.6%;
-		}
-
-		th:nth-child(2),
-		td:nth-child(2) {
-			width: 6.7%;
-		}
-
-		th:nth-child(3),
-		td:nth-child(3) {
-			width: 6.2%;
-		}
-
-		th:nth-child(4),
-		td:nth-child(4) {
-			width: 12%;
-		}
-
-		th:nth-child(5),
-		td:nth-child(5) {
-			width: 9.7%;
-		}
-
-		th:nth-child(6),
-		td:nth-child(6) {
-			width: 7.4%;
-		}
-
-		th:nth-child(7),
-		td:nth-child(7) {
-			width: 5.8%;
-		}
-
-		th:nth-child(8),
-		td:nth-child(8),
-		th:nth-child(9),
-		td:nth-child(9),
-		th:nth-child(10),
-		td:nth-child(10) {
-			width: 5.7%;
-		}
-
-		th:nth-child(11),
-		td:nth-child(11) {
-			width: 3.7%;
-		}
-
-		th:nth-child(12),
-		td:nth-child(12),
-		th:nth-child(13),
-		td:nth-child(13) {
-			width: 6.8%;
-		}
-
-		th:nth-child(14),
-		td:nth-child(14) {
-			width: 6.5%;
-		}
-
-		th:nth-child(15),
-		td:nth-child(15) {
-			width: 4.3%;
-		}
-	}
-
 	@media (max-width: 720px) {
-		min-width: 980px;
-
 		th,
 		td {
 			padding: 8px 9px;
@@ -1996,9 +1973,6 @@ const StyledTable = styled.table`
 		}
 	}
 
-	@media (max-width: 420px) {
-		min-width: 920px;
-	}
 `;
 
 const AdminStatusPill = styled.span.attrs((props) => ({

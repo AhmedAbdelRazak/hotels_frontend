@@ -11,6 +11,7 @@ import {
   getPaidBreakdownReportAdmin,
 } from "../apiAdmin";
 import PaidReportAdmin from "./PaidReportAdmin";
+import * as XLSX from "xlsx";
 
 jest.mock("../../auth", () => ({
   isAuthenticated: () => ({ user: { _id: "admin-1" }, token: "token-1" }),
@@ -118,6 +119,12 @@ const reportPayload = (confirmationNumber) => ({
       checkout_date: "2026-07-15T00:00:00.000Z",
       paid_amount_breakdown: { paid_at_hotel_cash: 100 },
       total_amount: 100,
+      pickedRoomsType: [
+        { room_type: "familyRooms", displayName: "Family Quintuple" },
+      ],
+      roomDetails: [
+        { room_number: "424", room_type: "familyRooms" },
+      ],
     },
   ],
   scorecards: {
@@ -192,5 +199,33 @@ describe("PaidReportAdmin request sequencing", () => {
     });
     expect(screen.queryByText("OLD-RESULT")).toBeNull();
     expect(screen.getByText("NEW-RESULT")).toBeTruthy();
+  });
+
+  it("includes room type and assigned room number in paid exports", async () => {
+    getPaidBreakdownReportAdmin.mockResolvedValue(reportPayload("EXPORT-ROOM"));
+    XLSX.utils.json_to_sheet.mockReturnValue({});
+    XLSX.utils.book_new.mockReturnValue({});
+    XLSX.utils.encode_range.mockReturnValue("A1:Z3");
+
+    render(<PaidReportAdmin />);
+    expect(
+      await screen.findByRole("option", { name: "Test Hotel" }),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Select hotel"), {
+      target: { value: "hotel-1" },
+    });
+    expect(await screen.findByText("EXPORT-ROOM")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Excel" }));
+
+    await waitFor(() => expect(XLSX.utils.json_to_sheet).toHaveBeenCalled());
+    const [exportRows, options] = XLSX.utils.json_to_sheet.mock.calls[0];
+    expect(options.header).toContain("Room Type");
+    expect(options.header).toContain("Room Number");
+    expect(exportRows[0]["Room Type"]).toBe(
+      "familyRooms - Family Quintuple",
+    );
+    expect(exportRows[0]["Room Number"]).toBe("424");
   });
 });

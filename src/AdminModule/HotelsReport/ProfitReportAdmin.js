@@ -31,6 +31,7 @@ import {
 	getOverallProfitReport,
 } from "../apiAdmin";
 import MoreDetails from "../AllReservation/MoreDetails";
+import { getReservationRoomSummary } from "../AllReservation/reservationRoomDetails";
 import {
 	getHotelById,
 	singlePreReservationById,
@@ -79,6 +80,8 @@ const TEXT = {
 		source: "Source",
 		checkIn: "Check-in",
 		checkOut: "Checkout",
+		roomType: "Room Type",
+		roomNumber: "Room Number",
 		details: "Details",
 		showDetails: "Show Details",
 		noData: "No reservations found.",
@@ -129,6 +132,8 @@ const TEXT = {
 		source: "\u0627\u0644\u0645\u0635\u062f\u0631",
 		checkIn: "\u0627\u0644\u0648\u0635\u0648\u0644",
 		checkOut: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		roomType: "\u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629",
+		roomNumber: "\u0631\u0642\u0645 \u0627\u0644\u063a\u0631\u0641\u0629",
 		details: "\u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644",
 		showDetails: "\u0639\u0631\u0636 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644",
 		noData: "\u0644\u0627 \u062a\u0648\u062c\u062f \u062d\u062c\u0648\u0632\u0627\u062a.",
@@ -204,9 +209,10 @@ const profitMetricsForReservation = (reservation = {}) =>
 
 const moneyText = (value, labels) => `${formatMoney(value)} ${labels.sar}`;
 
-const buildExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
+export const buildProfitExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 	rows.map((reservation, index) => {
 		const metrics = profitMetricsForReservation(reservation);
+		const roomSummary = getReservationRoomSummary(reservation);
 		return {
 			"#": index + 1,
 			[labels.fullName]: fullNameForReservation(reservation),
@@ -215,6 +221,8 @@ const buildExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 			[labels.checkIn]: formatDate(reservation.checkin_date),
 			[labels.checkOut]: formatDate(reservation.checkout_date),
 			[labels.hotel]: hotelNameForReservation(reservation),
+			[labels.roomType]: roomSummary.roomTypeText,
+			[labels.roomNumber]: roomSummary.roomNumberText,
 			[labels.source]: reservation.booking_source || "",
 			[labels.clientPaid]: safeNumber(metrics.clientTotal),
 			[labels.hotelTotal]: safeNumber(metrics.hotelTotal),
@@ -226,7 +234,7 @@ const buildExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 	});
 
 const downloadProfitWorkbook = ({ rows = [], labels = {}, dateByLabel = "" }) => {
-	const exportRows = buildExportRows({ rows, labels, dateByLabel });
+	const exportRows = buildProfitExportRows({ rows, labels, dateByLabel });
 	const worksheet = XLSX.utils.json_to_sheet(exportRows);
 	worksheet["!cols"] = [
 		{ wch: 7 },
@@ -236,6 +244,8 @@ const downloadProfitWorkbook = ({ rows = [], labels = {}, dateByLabel = "" }) =>
 		{ wch: 14 },
 		{ wch: 14 },
 		{ wch: 26 },
+		{ wch: 24 },
+		{ wch: 16 },
 		{ wch: 18 },
 		{ wch: 18 },
 		{ wch: 18 },

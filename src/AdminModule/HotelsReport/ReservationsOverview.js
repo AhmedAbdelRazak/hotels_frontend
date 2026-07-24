@@ -1475,13 +1475,17 @@ const ReservationsOverview = () => {
 				open={modalVisible}
 				onCancel={() => setModalVisible(false)}
 				footer={null}
-				width='85%'
-				style={{ top: "3%", left: "7%" }}
+				width='96vw'
+				style={{ top: 12, maxWidth: "none", paddingBottom: 12 }}
 				getContainer={() => document.body}
 				zIndex={10000}
 				styles={{
 					mask: { zIndex: 9999 },
-					body: { maxHeight: "82vh", overflowY: "auto" },
+					body: {
+						maxHeight: "calc(100vh - 96px)",
+						overflowY: "auto",
+						padding: "12px 16px 16px",
+					},
 				}}
 			>
 				{modalLoading ? (
@@ -1601,6 +1605,10 @@ const ReservationsOverviewModalGlobalStyle = createGlobalStyle`
 	.reports-reservations-modal-root .ant-modal-content {
 		position: relative;
 		z-index: 10001 !important;
+	}
+
+	.reports-reservations-modal-root .ant-modal {
+		max-width: calc(100vw - 24px);
 	}
 `;
 

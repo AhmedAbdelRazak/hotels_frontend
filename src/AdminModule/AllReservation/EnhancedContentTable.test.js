@@ -1,7 +1,10 @@
 import React from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import EnhancedContentTable from "./EnhancedContentTable";
+import EnhancedContentTable, {
+  ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS,
+  ADMIN_RESERVATION_TABLE_MIN_WIDTH,
+} from "./EnhancedContentTable";
 
 jest.mock("@ant-design/icons", () => ({
   CalendarOutlined: () => <span aria-hidden="true" />,
@@ -128,7 +131,7 @@ describe("EnhancedContentTable total amount column", () => {
       total: 500,
       net: 0,
     });
-    renderTable({
+    const { container } = renderTable({
       data: [netReservation, fallbackReservation, zeroReservation],
     });
 
@@ -138,13 +141,15 @@ describe("EnhancedContentTable total amount column", () => {
     const headers = screen
       .getAllByRole("columnheader")
       .map((header) => header.textContent.trim());
-    const roomTypeIndex = headers.indexOf("Room Type");
     const roomNumberIndex = headers.indexOf("Room #");
     const priceIndex = headers.indexOf("Price/Day");
     const netGuestCells = within(screen.getByRole("row", { name: /Net Guest/ }))
       .getAllByRole("cell");
-    expect(netGuestCells[roomTypeIndex].textContent).toContain("doubleRooms");
     expect(netGuestCells[roomNumberIndex].textContent).toBe("101");
+	expect(headers).not.toContain("Room Type");
+	expect(ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS).toHaveLength(headers.length);
+	expect(ADMIN_RESERVATION_TABLE_MIN_WIDTH).toBe(1462);
+	expect(container.querySelectorAll("colgroup col")).toHaveLength(headers.length);
     expect(
       netGuestCells[priceIndex]
         .textContent.replace(/\s+/g, " ")
@@ -167,6 +172,8 @@ describe("EnhancedContentTable total amount column", () => {
     });
 
     expect(totalCellTextFor("Report Guest")).toBe("1200.00 SAR");
+	expect(screen.queryByText("Reserved By:")).toBeNull();
+	expect(screen.queryByText("Booking Source:")).toBeNull();
   });
 
   it("sorts the Total column by the value shown to the admin", () => {

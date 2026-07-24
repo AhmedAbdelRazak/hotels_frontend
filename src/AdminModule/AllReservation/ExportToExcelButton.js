@@ -6,6 +6,10 @@ import dayjs from "dayjs";
 
 import { getExportToExcelList } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+import {
+	ADMIN_RESERVATION_EXPORT_HEADERS,
+	buildAdminReservationExportRows,
+} from "./adminReservationExportRows";
 
 const { Option } = Select;
 const resolvePopupContainer = (triggerNode) => {
@@ -140,52 +144,15 @@ const ExportToExcelButton = ({
 				? "en-US"
 				: "en-GB";
 
-		// Map each reservation to the fields you want in Excel
-		const exportData = dataArray.map((item) => ({
-			"Confirmation Number": item.confirmation_number || "",
-			Name: item.customer_name || "",
-			Phone: item.customer_phone || "",
-			"Hotel Name": item.hotel_name || "",
-			Status: item.reservation_status || "",
-			"Checkin Date": item.checkin_date
-				? new Date(item.checkin_date).toLocaleDateString(localeForDate)
-				: "",
-			"Checkout Date": item.checkout_date
-				? new Date(item.checkout_date).toLocaleDateString(localeForDate)
-				: "",
-			"Payment Status": item.payment_status || "",
-			"Total Amount": item.total_amount || 0,
-			"Paid Amount": item.paid_amount || 0,
-			"Room Type": item.room_type || "",
-			"Room Number": item.room_number || "",
-			"Room Count": item.room_count || 0,
-			"Paid Offline": item.paid_offline || 0, // new column
-			"Created At": item.createdAt
-				? new Date(item.createdAt).toLocaleDateString(localeForDate)
-				: "",
-		}));
-
-		// Define headers in desired order
-		const headers = [
-			"Confirmation Number",
-			"Name",
-			"Phone",
-			"Hotel Name",
-			"Status",
-			"Checkin Date",
-			"Checkout Date",
-			"Payment Status",
-			"Total Amount",
-			"Paid Amount (Online)",
-			"Room Type",
-			"Room Number",
-			"Room Count",
-			"Paid Offline", // new
-			"Created At",
-		];
+		const exportData = buildAdminReservationExportRows(
+			dataArray,
+			localeForDate,
+		);
 
 		// Convert to worksheet
-		const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
+		const ws = XLSX.utils.json_to_sheet(exportData, {
+			header: ADMIN_RESERVATION_EXPORT_HEADERS,
+		});
 
 		// Optional column widths
 		ws["!cols"] = [

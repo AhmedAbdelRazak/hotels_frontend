@@ -60,12 +60,12 @@ export const buildReservationSummaryExportRows = (
 		"Room Type": spreadsheetSafeText(
 			(Array.isArray(reservation.roomTypes) ? reservation.roomTypes : [])
 				.filter(Boolean)
-				.join(", ") || "N/A"
+				.join(", ")
 		),
 		"Room Number": spreadsheetSafeText(
 			(Array.isArray(reservation.roomNumbers) ? reservation.roomNumbers : [])
 				.filter(Boolean)
-				.join(", ") || "N/A"
+				.join(", ")
 		),
 		"Check-in": formatReservationSummaryDate(reservation.checkinDate, { locale }),
 		"Check-out": formatReservationSummaryDate(reservation.checkoutDate, { locale }),

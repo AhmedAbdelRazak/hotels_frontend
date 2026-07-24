@@ -70,6 +70,9 @@ const ModalZFix = createGlobalStyle`
 	.report-reservations-modal .ant-modal-mask {
 		z-index: 4002 !important;
 	}
+	.report-reservations-modal .ant-modal {
+		max-width: calc(100vw - 24px);
+	}
 	.payment-breakdown-modal .ant-modal,
 	.payment-breakdown-modal .ant-modal-wrap {
 		z-index: 50050 !important;
@@ -124,6 +127,9 @@ const ModalZFix = createGlobalStyle`
 		background:
 			linear-gradient(135deg, rgba(229, 243, 255, 0.55), rgba(255, 255, 255, 0.98) 42%),
 			#ffffff;
+		max-height: calc(100vh - 96px);
+		overflow-y: auto;
+		padding: 12px 16px 16px;
 	}
 `;
 
@@ -3355,8 +3361,8 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 					setReportModalContext({ date: "", dateType: "checkout" });
 				}}
 				footer={null}
-				width='85%'
-				style={{ top: "3%", left: "7%" }}
+				width='96vw'
+				style={{ top: 12, maxWidth: "none", paddingBottom: 12 }}
 				wrapClassName='report-reservations-modal'
 			>
 				{reportModalLoading ? (
@@ -3377,6 +3383,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 						scorecardsObject={reportModalData.scorecards}
 						fromPage='reports'
 						onReservationUpdated={handleReservationUpdated}
+						chosenLanguage={chosenLanguage}
 					/>
 				)}
 			</Modal>
