@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import * as XLSX from "xlsx";
 import { isAuthenticated } from "../../auth";
 import {
 	getAdminReservationById,
@@ -53,6 +54,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+	XLSX.utils.json_to_sheet.mockReturnValue({});
+	XLSX.utils.book_new.mockReturnValue({});
 	isAuthenticated.mockReturnValue({
 		user: { _id: "admin-1" },
 		token: "safe-test-token",
@@ -164,6 +167,109 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 
 	fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
 	expect(onDayChange).toHaveBeenCalledWith("tomorrow");
+});
+
+test("toggles and combines activity filters, then exports only the visible reservations", async () => {
+	const baseReservation = {
+		hotel: { name: "Zad Ajyad" },
+		guestName: "Filter Guest",
+		roomTypes: ["doubleRooms"],
+		roomNumbers: ["101"],
+		status: "confirmed",
+		bookingSource: "Jannat Employee",
+		checkinDate: "2026-07-19T00:00:00.000Z",
+		checkoutDate: "2026-07-21T00:00:00.000Z",
+		createdAt: "2026-07-19T02:00:00.000Z",
+		rooms: 1,
+		guests: 2,
+		totalAmount: 560,
+		nights: 2,
+		averageNightlyAmount: 280,
+		amountQuality: { status: "verified" },
+		currency: "SAR",
+	};
+	const reservations = [
+		{
+			...baseReservation,
+			id: "507f1f77bcf86cd799439101",
+			confirmationNumber: "ARRIVAL-ONLY",
+			activityTypes: ["checkin"],
+		},
+		{
+			...baseReservation,
+			id: "507f1f77bcf86cd799439102",
+			confirmationNumber: "DEPARTURE-ONLY",
+			activityTypes: ["checkout"],
+		},
+		{
+			...baseReservation,
+			id: "507f1f77bcf86cd799439103",
+			confirmationNumber: "NEW-ONLY",
+			activityTypes: ["new-reservation"],
+		},
+	];
+	getAdminReservationExecutiveSummary.mockResolvedValueOnce({
+		date: "2026-07-19",
+		timezoneOffset: "UTC+03:00",
+		summary: {
+			checkins: 1,
+			checkouts: 1,
+			newReservations: 1,
+			totalUniqueReservations: 3,
+		},
+		reservations,
+	});
+
+	render(<ReservationsSummary day='today' onDayChange={() => {}} chosenLanguage='English' />);
+
+	expect(await screen.findByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
+
+	const allFilter = screen.getByRole("button", { name: "All" });
+	const arrivalFilter = screen.getByRole("button", { name: "Arrival" });
+	const departureFilter = screen.getByRole("button", { name: "Departure" });
+	const newlyCreatedFilter = screen.getByRole("button", { name: "Newly Created" });
+	expect(allFilter.getAttribute("aria-pressed")).toBe("true");
+
+	fireEvent.click(allFilter);
+	expect(allFilter.getAttribute("aria-pressed")).toBe("false");
+	expect(screen.queryByText("ARRIVAL-ONLY")).toBeNull();
+	expect(screen.getByText("0 unique reservations")).toBeTruthy();
+	expect(
+		screen.getByText("Select one or more activity filters to show reservations.")
+	).toBeTruthy();
+
+	fireEvent.click(newlyCreatedFilter);
+	expect(newlyCreatedFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
+	expect(screen.queryByText("ARRIVAL-ONLY")).toBeNull();
+	fireEvent.click(newlyCreatedFilter);
+	expect(newlyCreatedFilter.getAttribute("aria-pressed")).toBe("false");
+
+	fireEvent.click(arrivalFilter);
+	expect(arrivalFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.queryByText("DEPARTURE-ONLY")).toBeNull();
+	expect(screen.queryByText("NEW-ONLY")).toBeNull();
+
+	fireEvent.click(departureFilter);
+	expect(arrivalFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(departureFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+	expect(screen.queryByText("NEW-ONLY")).toBeNull();
+
+	fireEvent.click(arrivalFilter);
+	expect(arrivalFilter.getAttribute("aria-pressed")).toBe("false");
+	expect(screen.queryByText("ARRIVAL-ONLY")).toBeNull();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+
+	fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+	const sheetCalls = XLSX.utils.json_to_sheet.mock.calls;
+	const exportedRows = sheetCalls[sheetCalls.length - 1][0];
+	expect(exportedRows).toHaveLength(1);
+	expect(exportedRows[0]["Confirmation Number"]).toBe("DEPARTURE-ONLY");
 });
 
 test("renders Arabic Gregorian table dates with the localized month first", async () => {

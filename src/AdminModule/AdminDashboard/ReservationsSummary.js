@@ -3,6 +3,7 @@ import styled from "styled-components";
 import * as XLSX from "xlsx";
 import CountUp from "react-countup";
 import {
+	AppstoreOutlined,
 	ArrowDownOutlined,
 	ArrowUpOutlined,
 	CalendarOutlined,
@@ -61,6 +62,12 @@ const copy = {
 		unique: "unique reservations",
 		tableTitle: "Reservation activity",
 		tableSubtitle: "Every reservation represented in the selected summary",
+		activityFilters: "Filter reservation activity",
+		allActivity: "All",
+		arrivalActivity: "Arrival",
+		departureActivity: "Departure",
+		newlyCreatedActivity: "Newly Created",
+		chooseActivityFilter: "Select one or more activity filters to show reservations.",
 		exportExcel: "Export to Excel",
 		exportSuccess: "Executive summary exported successfully.",
 		nothingToExport: "There are no reservations to export for this date.",
@@ -130,6 +137,15 @@ const copy = {
 		tableTitle: "\u0646\u0634\u0627\u0637 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		tableSubtitle:
 			"\u0643\u0644 \u062d\u062c\u0632 \u0645\u0645\u062b\u0644 \u0641\u064a \u0627\u0644\u0645\u0644\u062e\u0635 \u0627\u0644\u0645\u062d\u062f\u062f",
+		activityFilters:
+			"\u062a\u0635\u0641\u064a\u0629 \u0646\u0634\u0627\u0637 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
+		allActivity: "\u0627\u0644\u0643\u0644",
+		arrivalActivity: "\u0627\u0644\u0648\u0635\u0648\u0644",
+		departureActivity: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		newlyCreatedActivity:
+			"\u0627\u0644\u0645\u0646\u0634\u0623\u0629 \u062d\u062f\u064a\u062b\u0627\u064b",
+		chooseActivityFilter:
+			"\u062d\u062f\u062f \u0646\u0648\u0639\u0627\u064b \u0648\u0627\u062d\u062f\u0627\u064b \u0623\u0648 \u0623\u0643\u062b\u0631 \u0644\u0639\u0631\u0636 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a.",
 		exportExcel: "\u062a\u0635\u062f\u064a\u0631 Excel",
 		exportSuccess:
 			"\u062a\u0645 \u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0645\u0644\u062e\u0635 \u0628\u0646\u062c\u0627\u062d.",
@@ -178,6 +194,8 @@ const activityTone = {
 	checkout: "purple",
 	"new-reservation": "green",
 };
+
+const ALL_ACTIVITY_FILTER = "all";
 
 const noop = () => {};
 
@@ -260,6 +278,7 @@ const ReservationsSummary = ({
 	const [reloadKey, setReloadKey] = useState(0);
 	const [tablePage, setTablePage] = useState(1);
 	const [tablePageSize, setTablePageSize] = useState(20);
+	const [selectedActivityFilters, setSelectedActivityFilters] = useState([ALL_ACTIVITY_FILTER]);
 	const [detailsReservation, setDetailsReservation] = useState(null);
 	const [detailsLoading, setDetailsLoading] = useState(false);
 	const [detailsError, setDetailsError] = useState("");
@@ -310,6 +329,45 @@ const ReservationsSummary = ({
 		() => (Array.isArray(data?.reservations) ? data.reservations : []),
 		[data?.reservations]
 	);
+	const filteredReservations = useMemo(() => {
+		if (selectedActivityFilters.includes(ALL_ACTIVITY_FILTER)) {
+			return reservations;
+		}
+		if (!selectedActivityFilters.length) return [];
+		return reservations.filter((reservation) => {
+			const types = Array.isArray(reservation?.activityTypes) ? reservation.activityTypes : [];
+			return selectedActivityFilters.some((filter) => types.includes(filter));
+		});
+	}, [reservations, selectedActivityFilters]);
+	const activityFilterOptions = useMemo(
+		() => [
+			{
+				key: ALL_ACTIVITY_FILTER,
+				label: L.allActivity,
+				icon: AppstoreOutlined,
+				tone: "all",
+			},
+			{
+				key: "checkin",
+				label: L.arrivalActivity,
+				icon: LoginOutlined,
+				tone: "cyan",
+			},
+			{
+				key: "checkout",
+				label: L.departureActivity,
+				icon: LogoutOutlined,
+				tone: "purple",
+			},
+			{
+				key: "new-reservation",
+				label: L.newlyCreatedActivity,
+				icon: CheckCircleOutlined,
+				tone: "green",
+			},
+		],
+		[L.allActivity, L.arrivalActivity, L.departureActivity, L.newlyCreatedActivity]
+	);
 	const summary = data?.summary || {};
 	const selectedDateValue = data?.date ? `${data.date}T12:00:00.000Z` : null;
 	const selectedMiladiDate = selectedDateValue
@@ -332,9 +390,23 @@ const ReservationsSummary = ({
 	}, [day]);
 
 	useEffect(() => {
-		const lastPage = Math.max(1, Math.ceil(reservations.length / tablePageSize));
+		const lastPage = Math.max(1, Math.ceil(filteredReservations.length / tablePageSize));
 		if (tablePage > lastPage) setTablePage(lastPage);
-	}, [reservations.length, tablePage, tablePageSize]);
+	}, [filteredReservations.length, tablePage, tablePageSize]);
+
+	const toggleActivityFilter = (filter) => {
+		setTablePage(1);
+		setSelectedActivityFilters((current) => {
+			if (filter === ALL_ACTIVITY_FILTER) {
+				return current.includes(ALL_ACTIVITY_FILTER) ? [] : [ALL_ACTIVITY_FILTER];
+			}
+
+			const withoutAll = current.filter((selected) => selected !== ALL_ACTIVITY_FILTER);
+			return withoutAll.includes(filter)
+				? withoutAll.filter((selected) => selected !== filter)
+				: [...withoutAll, filter];
+		});
+	};
 
 	useEffect(() => {
 		if (!reservationId) {
@@ -624,11 +696,11 @@ const ReservationsSummary = ({
 	);
 
 	const exportToExcel = () => {
-		if (!reservations.length) {
+		if (!filteredReservations.length) {
 			message.info(L.nothingToExport);
 			return;
 		}
-		const exportRows = buildReservationSummaryExportRows(reservations, {
+		const exportRows = buildReservationSummaryExportRows(filteredReservations, {
 			locale,
 			activityLabels,
 		});
@@ -800,19 +872,42 @@ const ReservationsSummary = ({
 
 			<TablePanel>
 				<TableHeading>
-					<div>
+					<TableTitle>
 						<h2>{L.tableTitle}</h2>
 						<p>{L.tableSubtitle}</p>
-					</div>
+					</TableTitle>
+					<ActivityFilterBar role='group' aria-label={L.activityFilters}>
+						{activityFilterOptions.map((filter) => {
+							const Icon = filter.icon;
+							const isActive = selectedActivityFilters.includes(filter.key);
+							return (
+								<ActivityFilterButton
+									key={filter.key}
+									type='button'
+									$tone={filter.tone}
+									$active={isActive}
+									aria-label={filter.label}
+									aria-pressed={isActive}
+									onClick={() => toggleActivityFilter(filter.key)}
+								>
+									<FilterIcon $tone={filter.tone} $active={isActive}>
+										<Icon />
+									</FilterIcon>
+									<FilterLabel>{filter.label}</FilterLabel>
+								</ActivityFilterButton>
+							);
+						})}
+					</ActivityFilterBar>
 					<TableActions>
 						<UniqueCount>
-							{summary.totalUniqueReservations || 0} {L.unique}
+							{filteredReservations.length} {L.unique}
 						</UniqueCount>
 						<Button
 							type='primary'
 							icon={<DownloadOutlined />}
+							aria-label={L.exportExcel}
 							onClick={exportToExcel}
-							disabled={!reservations.length}
+							disabled={!filteredReservations.length}
 						>
 							{L.exportExcel}
 						</Button>
@@ -839,7 +934,7 @@ const ReservationsSummary = ({
 				<Table
 					rowKey={(row) => row.id}
 					columns={columns}
-					dataSource={reservations}
+					dataSource={filteredReservations}
 					loading={{ spinning: loading, tip: L.tableTitle }}
 					scroll={{ x: RESERVATION_SUMMARY_TABLE_WIDTH }}
 					tableLayout='fixed'
@@ -859,7 +954,12 @@ const ReservationsSummary = ({
 						setTablePage(nextSize === tablePageSize ? pagination.current || 1 : 1);
 					}}
 					locale={{
-						emptyText: <Empty description={L.empty} image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+						emptyText: (
+							<Empty
+								description={selectedActivityFilters.length ? L.empty : L.chooseActivityFilter}
+								image={Empty.PRESENTED_IMAGE_SIMPLE}
+							/>
+						),
 					}}
 				/>
 			</TablePanel>
@@ -1349,10 +1449,10 @@ const TablePanel = styled.div`
 `;
 
 const TableHeading = styled.div`
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(210px, 1fr) minmax(420px, auto) minmax(210px, 1fr);
 	align-items: center;
-	justify-content: space-between;
-	gap: 18px;
+	gap: 14px;
 	padding: 18px 2px 12px;
 
 	h2 {
@@ -1369,16 +1469,160 @@ const TableHeading = styled.div`
 		font-weight: 650;
 	}
 
-	@media (max-width: 720px) {
-		align-items: stretch;
-		flex-direction: column;
+	@media (max-width: 1050px) {
+		grid-template-columns: minmax(0, 1fr) auto;
+
+		> [role="group"] {
+			grid-column: 1 / -1;
+			grid-row: 2;
+		}
 	}
+
+	@media (max-width: 720px) {
+		grid-template-columns: 1fr;
+		align-items: stretch;
+
+		> [role="group"] {
+			grid-column: auto;
+			grid-row: auto;
+		}
+	}
+`;
+
+const TableTitle = styled.div`
+	min-width: 0;
+`;
+
+const filterTones = {
+	all: { accent: "#155d95", soft: "#e8f4fc", shadow: "rgba(21, 93, 149, 0.2)" },
+	cyan: {
+		accent: "#0787a6",
+		soft: "#e5f9fd",
+		shadow: "rgba(7, 135, 166, 0.2)",
+	},
+	purple: {
+		accent: "#6d4bb0",
+		soft: "#f1ebff",
+		shadow: "rgba(109, 75, 176, 0.2)",
+	},
+	green: {
+		accent: "#16815c",
+		soft: "#e8f9f0",
+		shadow: "rgba(22, 129, 92, 0.2)",
+	},
+};
+
+const ActivityFilterBar = styled.div`
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 5px;
+	min-width: 500px;
+	padding: 5px;
+	border: 1px solid #d2e2ef;
+	border-radius: 14px;
+	background: linear-gradient(180deg, #ffffff 0%, #f0f6fb 100%);
+	box-shadow:
+		0 9px 24px rgba(17, 61, 96, 0.09),
+		inset 0 1px #fff;
+
+	@media (max-width: 1050px) {
+		min-width: 0;
+	}
+
+	@media (max-width: 560px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+`;
+
+const ActivityFilterButton = styled.button`
+	position: relative;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	min-height: 44px;
+	padding: 5px 7px;
+	border: 1px solid ${(props) => (props.$active ? filterTones[props.$tone].accent : "transparent")};
+	border-radius: 10px;
+	background: ${(props) =>
+		props.$active
+			? `linear-gradient(145deg, #fff 0%, ${filterTones[props.$tone].soft} 100%)`
+			: "rgba(255, 255, 255, 0.46)"};
+	box-shadow: ${(props) =>
+		props.$active ? `0 6px 15px ${filterTones[props.$tone].shadow}, inset 0 1px #fff` : "none"};
+	color: ${(props) => (props.$active ? filterTones[props.$tone].accent : "#526b80")};
+	cursor: pointer;
+	transition:
+		transform 0.18s ease,
+		border-color 0.18s ease,
+		background 0.18s ease,
+		box-shadow 0.18s ease,
+		color 0.18s ease;
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset-block-start: 5px;
+		inset-inline-end: 5px;
+		width: 5px;
+		height: 5px;
+		border-radius: 999px;
+		background: ${(props) => (props.$active ? filterTones[props.$tone].accent : "transparent")};
+		box-shadow: ${(props) =>
+			props.$active ? `0 0 0 3px ${filterTones[props.$tone].soft}` : "none"};
+	}
+
+	&:hover {
+		transform: translateY(-1px);
+		border-color: ${(props) => filterTones[props.$tone].accent}88;
+		background: ${(props) =>
+			`linear-gradient(145deg, #fff 0%, ${filterTones[props.$tone].soft} 100%)`};
+		color: ${(props) => filterTones[props.$tone].accent};
+	}
+
+	&:focus-visible {
+		outline: 3px solid ${(props) => filterTones[props.$tone].accent}3f;
+		outline-offset: 2px;
+	}
+`;
+
+const FilterIcon = styled.span`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 27px;
+	height: 27px;
+	border-radius: 8px;
+	background: ${(props) =>
+		props.$active ? filterTones[props.$tone].accent : filterTones[props.$tone].soft};
+	color: ${(props) => (props.$active ? "#fff" : filterTones[props.$tone].accent)};
+	font-size: 0.82rem;
+	transition:
+		background 0.18s ease,
+		color 0.18s ease;
+`;
+
+const FilterLabel = styled.span`
+	overflow: hidden;
+	font-size: 0.72rem;
+	font-weight: 900;
+	line-height: 1.15;
+	text-align: start;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 `;
 
 const TableActions = styled.div`
 	display: flex;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 10px;
+	min-width: 0;
+
+	@media (max-width: 720px) {
+		justify-content: flex-start;
+	}
 
 	@media (max-width: 520px) {
 		align-items: stretch;
