@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import BofaCapturedPaymentSummary, {
 	mergeVerifiedBofaCapture,
 	selectRecordedExternalVccCapture,
+	selectReservationVccCapture,
+	selectSanitizedVccCaptureSummary,
 	selectVerifiedBofaCapture,
 } from "./BofaCapturedPaymentSummary";
 
@@ -117,4 +119,42 @@ test("does not render an external capture when its evidence disagrees", () => {
 		<BofaCapturedPaymentSummary reservation={mismatched} />,
 	);
 	expect(container.innerHTML).toBe("");
+});
+
+test("renders the sanitized capture summary returned by the admin API", () => {
+	const reservation = {
+		vcc_capture_summary: {
+			verified: true,
+			status: "captured",
+			amountUsd: 67,
+			currency: "USD",
+			capturedAt: "2026-07-24T17:11:28.000Z",
+			provider: "agoda",
+			referenceNumber: "675894003",
+			referenceLabel: "OTA confirmation",
+			transactionId: "3KS57024FW675651X",
+			evidence: "Reconciled",
+			gateway: "PayPal Virtual Terminal",
+		},
+	};
+	render(<BofaCapturedPaymentSummary reservation={reservation} />);
+
+	expect(screen.getByText("Captured successfully")).toBeTruthy();
+	expect(screen.getByText("67.00")).toBeTruthy();
+	expect(selectSanitizedVccCaptureSummary(reservation)?.currency).toBe("USD");
+	expect(selectReservationVccCapture(reservation)?.amountUsd).toBe(67);
+});
+
+test("rejects an unverified sanitized capture summary", () => {
+	const reservation = {
+		vcc_capture_summary: {
+			verified: false,
+			status: "captured",
+			amountUsd: 67,
+			currency: "USD",
+			evidence: "Reconciled",
+			gateway: "PayPal Virtual Terminal",
+		},
+	};
+	expect(selectSanitizedVccCaptureSummary(reservation)).toBeNull();
 });

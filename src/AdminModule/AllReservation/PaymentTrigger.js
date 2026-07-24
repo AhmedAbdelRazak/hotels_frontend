@@ -5,10 +5,11 @@ import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
 import { triggerPayment } from "../apiAdmin";
 import { Modal, Radio, Input, message } from "antd";
-import { InfoCircleOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { toast } from "react-toastify";
 import { isSuperAdminUser } from "../utils/superUsers";
 import BofaVccModal from "./BofaVccModal";
+import { selectReservationVccCapture } from "./BofaCapturedPaymentSummary";
 
 const safeNumber = (val) => {
 	const n = Number(val);
@@ -81,6 +82,11 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 
 	// Anything to capture?
 	const captureDisabledGlobally = !hasPaymentPath || allowedMaxUSD <= 0;
+	const recordedVccCapture = useMemo(
+		() => selectReservationVccCapture(reservation),
+		[reservation],
+	);
+	const vccAlreadyCaptured = Boolean(recordedVccCapture);
 
 	// Nights (kept from your original code)
 	const calculateNights = (checkin, checkout) => {
@@ -267,8 +273,12 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 	const isOption3Disabled =
 		parseFloat(option3_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
 
-	// Disable main button if no path or nothing to capture
-	const isDisabled = captureDisabledGlobally;
+	const usesOtaVccEntry = captureDisabledGlobally;
+	const actionLabel = vccAlreadyCaptured
+		? "OTA Virtual Card Captured"
+		: usesOtaVccEntry
+		  ? "Enter OTA Virtual Card"
+		  : "Capture Saved Payment";
 
 	const handleCustomChange = (e) => {
 		const val = e.target.value;
@@ -291,32 +301,47 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 		<PaymentTriggerWrapper dir='ltr' lang='en'>
 			<h3>Process Reservation Payment</h3>
 			<p>
-				{isDisabled
+				{vccAlreadyCaptured
+					? `$${toMoney(recordedVccCapture.amountUsd)} USD was captured successfully.`
+					: usesOtaVccEntry
 					? "Use the OTA virtual card supplied by the booking platform."
 					: "Capture the saved payment method for this reservation."}
 			</p>
 
 			<Button
+				$captured={vccAlreadyCaptured}
 				onClick={
-					isDisabled
+					vccAlreadyCaptured
+						? undefined
+						: usesOtaVccEntry
 						? () => setIsBofaVccModalVisible(true)
 						: openOptionsModal
 				}
-				disabled={loading}
-				aria-label={
-					isDisabled ? "Enter OTA Virtual Card" : "Capture Saved Payment"
+				disabled={loading || vccAlreadyCaptured}
+				aria-label={actionLabel}
+				title={
+					vccAlreadyCaptured
+						? "This reservation already has a captured OTA virtual-card payment."
+						: undefined
 				}
 			>
-				{isDisabled ? "Enter OTA Virtual Card" : "Capture Saved Payment"}
+				{vccAlreadyCaptured ? <CheckCircleOutlined aria-hidden='true' /> : null}
+				{actionLabel}
 			</Button>
 
-			{isDisabled && (
+			{vccAlreadyCaptured ? (
+				<ActionHint className='captured'>
+					Captured ${toMoney(recordedVccCapture.amountUsd)} USD via{" "}
+					{recordedVccCapture.gateway}. Additional OTA virtual-card charges are
+					disabled.
+				</ActionHint>
+			) : usesOtaVccEntry ? (
 				<ActionHint>
 					{hasPaymentPath
 						? "The saved authorization has no capturable balance. Use an OTA virtual card only if payment is still due."
 						: "No saved card or authorization is available. This opens the secure OTA virtual-card form."}
 				</ActionHint>
-			)}
+			) : null}
 
 			{/* Payment Options Modal */}
 			<Modal
@@ -471,22 +496,30 @@ const PaymentTriggerWrapper = styled.div`
 `;
 
 const Button = styled.button`
-	background-color: #1677ff;
-	color: #fff;
+	align-items: center;
+	background-color: ${({ $captured }) => ($captured ? "#dcfce7" : "#1677ff")};
+	border: ${({ $captured }) =>
+		$captured ? "1px solid #86efac" : "1px solid transparent"};
+	color: ${({ $captured }) => ($captured ? "#166534" : "#fff")};
+	display: inline-flex;
+	gap: 7px;
+	justify-content: center;
 	padding: 10px 20px;
-	border: 0;
 	border-radius: 8px;
 	cursor: pointer;
 	font-size: 16px;
 	margin-top: 8px;
 	transition: all 0.2s ease-in-out;
 
-	&:hover {
+	&:hover:not(:disabled) {
 		background-color: #155bd6;
 	}
 	&:disabled {
-		background-color: #cbd5e1;
+		background-color: ${({ $captured }) =>
+			$captured ? "#dcfce7" : "#cbd5e1"};
+		color: ${({ $captured }) => ($captured ? "#166534" : "#fff")};
 		cursor: not-allowed;
+		opacity: 1;
 	}
 `;
 
@@ -494,6 +527,11 @@ const ActionHint = styled.p`
 	color: #475569;
 	font-size: 14px;
 	margin-top: 10px;
+
+	&.captured {
+		color: #166534;
+		font-weight: 700;
+	}
 `;
 
 const CustomInput = styled(Input)`

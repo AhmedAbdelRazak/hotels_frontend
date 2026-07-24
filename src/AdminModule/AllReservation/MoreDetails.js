@@ -11381,8 +11381,6 @@ const ReservationDetail = ({
 										</div>
 									</div>
 
-									<BofaCapturedPaymentSummary reservation={reservation} />
-
 									<div
 										className={`finance-cycle-card ${
 											financeCycleSummary.isClosed ? "closed" : "open"
@@ -11550,6 +11548,8 @@ const ReservationDetail = ({
 											</>
 										) : null}
 									</div>
+
+									<BofaCapturedPaymentSummary reservation={reservation} />
 								</div>
 								<div
 									className='row'

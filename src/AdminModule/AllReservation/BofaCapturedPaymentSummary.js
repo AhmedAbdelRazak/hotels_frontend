@@ -128,6 +128,42 @@ export const selectRecordedExternalVccCapture = (reservation = {}) => {
 	};
 };
 
+export const selectSanitizedVccCaptureSummary = (reservation = {}) => {
+	const summary = reservation?.vcc_capture_summary || {};
+	const amountUsd = positiveMoney(summary.amountUsd);
+	const currency = clean(summary.currency, 3).toUpperCase();
+	const status = clean(summary.status, 30).toLowerCase();
+	const evidence = clean(summary.evidence, 30);
+	const gateway = clean(summary.gateway, 80);
+	if (
+		summary.verified !== true ||
+		status !== "captured" ||
+		currency !== "USD" ||
+		amountUsd <= 0 ||
+		!evidence ||
+		!gateway
+	) {
+		return null;
+	}
+
+	return {
+		evidence,
+		amountUsd,
+		currency: "USD",
+		gateway,
+		capturedAt: summary.capturedAt || null,
+		provider: clean(summary.provider, 60),
+		referenceNumber: clean(summary.referenceNumber, 80),
+		referenceLabel: clean(summary.referenceLabel, 40) || "Reference",
+		transactionId: clean(summary.transactionId, 100),
+	};
+};
+
+export const selectReservationVccCapture = (reservation = {}) =>
+	selectSanitizedVccCaptureSummary(reservation) ||
+	selectVerifiedBofaCapture(reservation) ||
+	selectRecordedExternalVccCapture(reservation);
+
 export const mergeVerifiedBofaCapture = (reservation = {}, capture = null) => {
 	if (
 		capture?.verified !== true ||
@@ -199,9 +235,7 @@ const providerName = (value) => {
 };
 
 const BofaCapturedPaymentSummary = ({ reservation }) => {
-	const capture =
-		selectVerifiedBofaCapture(reservation) ||
-		selectRecordedExternalVccCapture(reservation);
+	const capture = selectReservationVccCapture(reservation);
 	if (!capture) return null;
 
 	return (

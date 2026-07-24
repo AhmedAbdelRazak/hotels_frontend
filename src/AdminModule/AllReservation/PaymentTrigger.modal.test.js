@@ -124,6 +124,43 @@ test("the OTA virtual-card action opens a dialog above its own mask", async () =
 	expect(Number(wrap?.style.zIndex)).toBeGreaterThan(Number(mask?.style.zIndex));
 });
 
+test("a recorded OTA virtual-card capture disables the entry action", () => {
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "reservation-captured",
+				confirmation_number: "TEST-CAPTURED",
+				booking_source: "Agoda",
+				checkin_date: "2020-01-01T00:00:00.000Z",
+				total_amount: 100,
+				paid_amount: 0,
+				paypal_details: {},
+				payment_details: {},
+				vcc_capture_summary: {
+					verified: true,
+					status: "captured",
+					amountUsd: 67.3,
+					currency: "USD",
+					capturedAt: "2026-07-24T17:11:28.000Z",
+					provider: "agoda",
+					referenceNumber: "TEST-CAPTURED",
+					referenceLabel: "OTA confirmation",
+					transactionId: "txn-captured",
+					evidence: "Reconciled",
+					gateway: "PayPal Virtual Terminal",
+				},
+			}}
+		/>,
+	);
+
+	const action = screen.getByRole("button", {
+		name: "OTA Virtual Card Captured",
+	});
+	expect(action).toBeDisabled();
+	expect(screen.getByText(/captured \$67\.30 USD/i)).toBeVisible();
+	expect(screen.queryByRole("button", { name: "Enter OTA Virtual Card" })).toBeNull();
+});
+
 test("a complete saved USD amount loads the Bank of America fields without a review step", async () => {
 	getBofaVccHealth.mockResolvedValue({ readyForCharge: true });
 	getReservationBofaVccStatus.mockResolvedValue({
