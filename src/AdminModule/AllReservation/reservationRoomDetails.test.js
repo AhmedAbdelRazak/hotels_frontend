@@ -62,6 +62,25 @@ test("falls back to reserved room types and never displays raw room ids", () => 
   expect(summary.roomNumberText).toBe("");
 });
 
+test("prefers the booked room type over the physical room display name", () => {
+  const summary = getReservationRoomSummary({
+    pickedRoomsType: [
+      { room_type: "familyRooms", displayName: "Family Quintuple Room" },
+    ],
+    roomDetails: [
+      {
+        _id: ROOM_401,
+        room_number: "501",
+        room_type: "familyRooms",
+        display_name: "Spacious Six-Bed Room",
+      },
+    ],
+  });
+
+  expect(summary.roomTypeText).toBe("familyRooms - Family Quintuple Room");
+  expect(summary.roomNumberText).toBe("501");
+});
+
 test("keeps room details when a same-reservation update omits assignments", () => {
   const previous = { _id: "reservation-1", roomDetails: details };
   const incoming = { _id: "reservation-1", payment: "paid offline" };

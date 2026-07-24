@@ -79,9 +79,10 @@ export const getReservationRoomSummary = (
     ),
   ]);
 
-  const roomTypes = uniqueRoomText(
-    [...assignedRooms, ...pickedRooms].map(roomTypeLabel),
-  );
+  const reservedRoomTypes = uniqueRoomText(pickedRooms.map(roomTypeLabel));
+  const roomTypes = reservedRoomTypes.length
+    ? reservedRoomTypes
+    : uniqueRoomText(assignedRooms.map(roomTypeLabel));
   const roomNumbers = uniqueRoomText([
     ...asArray(reservation?.room_numbers),
     ...asArray(reservation?.roomNumbers),
