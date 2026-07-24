@@ -2271,7 +2271,7 @@ export const updatePaymentToken = (
 		.catch((err) => console.error("Error updating payment token:", err));
 };
 
-export const createNewReservationClient = async (reservationData) => {
+export const createNewReservationClient = async (reservationData, token) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/new-reservation-client-employee`,
 		{
@@ -2279,6 +2279,7 @@ export const createNewReservationClient = async (reservationData) => {
 			headers: {
 				Accept: "application/json",
 				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
 			},
 			body: JSON.stringify(reservationData), // This line was missing the body to send the request data
 		},

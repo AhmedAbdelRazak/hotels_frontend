@@ -1911,7 +1911,7 @@ const OrderTaker = ({ getUser: parentUser, isSuperAdmin }) => {
 			setIsSubmitting(true);
 
 			message.loading({ content: "Submitting...", key: "submit" });
-			const response = await createNewReservationClient(reservationData);
+			const response = await createNewReservationClient(reservationData, token);
 
 			if (response?.message === "Reservation created successfully") {
 				setReservationCreated(true);
