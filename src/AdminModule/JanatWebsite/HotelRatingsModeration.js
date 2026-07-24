@@ -39,6 +39,7 @@ import {
   serverConfirmedVisibilityChange,
   shouldReleaseReviewOperationOnCancel,
 } from "./hotelReviewVisibility";
+import { formatSaudiDateTime } from "../../utils/saudiDates";
 
 const PAGE_SIZE_OPTIONS = [20, 50];
 
@@ -279,12 +280,13 @@ const isVerifiedReview = (review = {}) =>
   Boolean(review.reservationId || review.reservation?._id);
 
 const formatSubmittedAt = (value, locale) => {
-  const date = new Date(value || "");
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatSaudiDateTime(value, {
+    language: String(locale).toLowerCase().startsWith("ar")
+      ? "Arabic"
+      : "English",
+    month: "long",
+    fallback: "—",
+  });
 };
 
 const normalizePagination = (pagination = {}, fallback = {}) => {

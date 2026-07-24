@@ -1,7 +1,15 @@
 import { Input, Modal } from "antd";
 import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { updateSingleReservation } from "../../HotelModule/apiAdmin";
+
+const formatReceiptDate = (value) =>
+	formatSaudiGregorianDate(value, {
+		language: "English",
+		month: "long",
+		fallback: "-",
+	});
 
 const PDF_CHILD_MODAL_Z = 60010;
 const pdfChildModalProps = {
@@ -22,7 +30,7 @@ const ReceiptPDFB2B = forwardRef(
 		},
 		ref
 	) => {
-		const bookingDate = new Date(reservation?.createdAt).toLocaleDateString();
+		const bookingDate = formatReceiptDate(reservation?.createdAt);
 		const [supplierName, setSupplierName] = useState(
 			(reservation?.supplierData && reservation.supplierData.supplierName) ||
 				hotelDetails?.belongsTo?.name ||
@@ -228,10 +236,10 @@ const ReceiptPDFB2B = forwardRef(
 					<tbody>
 						<tr>
 							<td>
-								{new Date(reservation?.checkin_date).toLocaleDateString()}
+								{formatReceiptDate(reservation?.checkin_date)}
 							</td>
 							<td>
-								{new Date(reservation?.checkout_date).toLocaleDateString()}
+								{formatReceiptDate(reservation?.checkout_date)}
 							</td>
 							<td>{reservation?.reservation_status || "Confirmed"}</td>
 							<td>{reservation?.total_guests}</td>

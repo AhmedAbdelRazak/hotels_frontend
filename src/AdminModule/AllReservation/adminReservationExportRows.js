@@ -2,6 +2,7 @@ import {
 	getReservationRoomSummary,
 	getRoomTypeDisplayLabel,
 } from "./reservationRoomDetails";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 export const ADMIN_RESERVATION_EXPORT_HEADERS = Object.freeze([
 	"Confirmation Number",
@@ -77,11 +78,16 @@ const localizePaymentStatus = (value, chosenLanguage) => {
 	return labels[normalized] || raw;
 };
 
-const exportDate = (value, locale) => {
-	if (!value) return "";
-	const parsed = new Date(value);
-	return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString(locale);
-};
+const exportDate = (value, locale, chosenLanguage) =>
+	formatSaudiGregorianDate(value, {
+		language:
+			chosenLanguage === "Arabic" ||
+			String(locale || "").toLowerCase().startsWith("ar")
+				? "Arabic"
+				: "English",
+		month: "long",
+		fallback: "",
+	});
 
 const firstAvailable = (...values) =>
 	values.find(
@@ -154,8 +160,16 @@ export const buildAdminReservationExportRows = (
 				item.reservation_status,
 				chosenLanguage,
 			),
-			"Checkin Date": exportDate(item.checkin_date, localeForDate),
-			"Checkout Date": exportDate(item.checkout_date, localeForDate),
+			"Checkin Date": exportDate(
+				item.checkin_date,
+				localeForDate,
+				chosenLanguage,
+			),
+			"Checkout Date": exportDate(
+				item.checkout_date,
+				localeForDate,
+				chosenLanguage,
+			),
 			"Payment Status": localizePaymentStatus(
 				item.payment_status,
 				chosenLanguage,
@@ -178,6 +192,7 @@ export const buildAdminReservationExportRows = (
 			"Created At": exportDate(
 				firstAvailable(item.booked_at, item.createdAt),
 				localeForDate,
+				chosenLanguage,
 			),
 		};
 	});

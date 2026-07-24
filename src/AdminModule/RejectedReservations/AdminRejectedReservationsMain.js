@@ -22,6 +22,7 @@ import {
 	readUserId,
 } from "../apiAdmin";
 import { SUPER_USER_IDS } from "../utils/superUsers";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const PAGE_SIZE = 20;
 const DATE_TYPES = new Set(["created", "checkin", "checkout"]);
@@ -134,16 +135,12 @@ const money = (value) =>
 const getReservationKey = (reservation = {}) =>
 	String(reservation._id || reservation.id || "");
 
-const formatDate = (value) => {
-	if (!value) return "-";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "-";
-	return new Intl.DateTimeFormat("en-US", {
-		year: "numeric",
-		month: "short",
-		day: "2-digit",
-	}).format(date);
-};
+const formatDate = (value, chosenLanguage = "English") =>
+	formatSaudiGregorianDate(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "-",
+	});
 
 const csvCell = (value) => {
 	const textValue = String(value ?? "");
@@ -406,9 +403,9 @@ const AdminRejectedReservationsMain = ({ chosenLanguage }) => {
 				row.booking_source,
 				row.rejection_label,
 				row.rejection_reason,
-				formatDate(row.rejected_at || row.updatedAt),
-				formatDate(row.checkin_date),
-				formatDate(row.checkout_date),
+				formatDate(row.rejected_at || row.updatedAt, lang),
+				formatDate(row.checkin_date, lang),
+				formatDate(row.checkout_date, lang),
 				numberValue(row.total_amount),
 			].map(csvCell)
 		);
@@ -638,9 +635,14 @@ const AdminRejectedReservationsMain = ({ chosenLanguage }) => {
 															</span>
 														</Tooltip>
 													</td>
-													<td>{formatDate(reservation.rejected_at || reservation.updatedAt)}</td>
-													<td>{formatDate(reservation.checkin_date)}</td>
-													<td>{formatDate(reservation.checkout_date)}</td>
+											<td>
+												{formatDate(
+													reservation.rejected_at || reservation.updatedAt,
+													lang,
+												)}
+											</td>
+											<td>{formatDate(reservation.checkin_date, lang)}</td>
+											<td>{formatDate(reservation.checkout_date, lang)}</td>
 													<td>{reservation.days_of_residence || "-"}</td>
 													<td>{money(reservation.total_amount)} SAR</td>
 													<td>

@@ -43,6 +43,7 @@ import {
 	formatZoneDateTime,
 	formatZoneHijriDate,
 } from "../../utils/worldTimeZones";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const ADMIN_BRAND_LOGO =
 	"https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png";
@@ -252,14 +253,11 @@ const formatNotificationMoney = (value) =>
 	});
 
 const formatNotificationDate = (value, isArabic = false) => {
-	if (!value) return "";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "";
-	return new Intl.DateTimeFormat(isArabic ? "ar-EG" : "en-US", {
-		month: "short",
-		day: "2-digit",
-		year: "numeric",
-	}).format(date);
+	return formatSaudiGregorianDate(value, {
+		language: isArabic ? "Arabic" : "English",
+		month: "long",
+		fallback: "",
+	});
 };
 
 const notificationTitle = (item = {}, isArabic = false) => {

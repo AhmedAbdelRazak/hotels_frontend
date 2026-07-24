@@ -40,9 +40,10 @@ import {
 	readProfitReportQuery,
 	writeProfitReportQuery,
 } from "./profitReportQuery";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const PAGE_SIZE = 25;
-const TABLE_SCROLL_X = 1180;
+const TABLE_SCROLL_X = 1450;
 const PROFIT_DETAILS_MODAL_Z_INDEX = 14000;
 
 const TEXT = {
@@ -179,11 +180,12 @@ const formatPercent = (value) =>
 		maximumFractionDigits: 2,
 	})}%`;
 
-const formatDate = (value) => {
-	if (!value) return "-";
-	const parsed = dayjs(value);
-	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "-";
-};
+const formatDate = (value, chosenLanguage = "English") =>
+	formatSaudiGregorianDate(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "-",
+	});
 
 const safeFileSegment = (value = "admin-profit-report") =>
 	String(value || "admin-profit-report")
@@ -209,17 +211,25 @@ const profitMetricsForReservation = (reservation = {}) =>
 
 const moneyText = (value, labels) => `${formatMoney(value)} ${labels.sar}`;
 
-export const buildProfitExportRows = ({ rows = [], labels = {}, dateByLabel = "" }) =>
+export const buildProfitExportRows = ({
+	rows = [],
+	labels = {},
+	dateByLabel = "",
+	chosenLanguage = "English",
+}) =>
 	rows.map((reservation, index) => {
 		const metrics = profitMetricsForReservation(reservation);
 		const roomSummary = getReservationRoomSummary(reservation);
 		return {
 			"#": index + 1,
 			[labels.fullName]: fullNameForReservation(reservation),
-			[dateByLabel || labels.reportDate]: formatDate(metrics.reportDate),
+			[dateByLabel || labels.reportDate]: formatDate(
+				metrics.reportDate,
+				chosenLanguage,
+			),
 			[labels.confirmation]: reservation.confirmation_number || "",
-			[labels.checkIn]: formatDate(reservation.checkin_date),
-			[labels.checkOut]: formatDate(reservation.checkout_date),
+			[labels.checkIn]: formatDate(reservation.checkin_date, chosenLanguage),
+			[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
 			[labels.hotel]: hotelNameForReservation(reservation),
 			[labels.roomType]: roomSummary.roomTypeText,
 			[labels.roomNumber]: roomSummary.roomNumberText,
@@ -233,16 +243,26 @@ export const buildProfitExportRows = ({ rows = [], labels = {}, dateByLabel = ""
 		};
 	});
 
-const downloadProfitWorkbook = ({ rows = [], labels = {}, dateByLabel = "" }) => {
-	const exportRows = buildProfitExportRows({ rows, labels, dateByLabel });
+const downloadProfitWorkbook = ({
+	rows = [],
+	labels = {},
+	dateByLabel = "",
+	chosenLanguage = "English",
+}) => {
+	const exportRows = buildProfitExportRows({
+		rows,
+		labels,
+		dateByLabel,
+		chosenLanguage,
+	});
 	const worksheet = XLSX.utils.json_to_sheet(exportRows);
 	worksheet["!cols"] = [
 		{ wch: 7 },
 		{ wch: 24 },
-		{ wch: 16 },
 		{ wch: 22 },
-		{ wch: 14 },
-		{ wch: 14 },
+		{ wch: 22 },
+		{ wch: 22 },
+		{ wch: 22 },
 		{ wch: 26 },
 		{ wch: 24 },
 		{ wch: 16 },
@@ -473,7 +493,12 @@ const ProfitReportAdmin = () => {
 					message.info(labels.noRowsToExport);
 					return;
 				}
-				downloadProfitWorkbook({ rows, labels, dateByLabel });
+				downloadProfitWorkbook({
+					rows,
+					labels,
+					dateByLabel,
+					chosenLanguage,
+				});
 			})
 			.catch(() => message.error(labels.exportFailed))
 			.finally(() => setExporting(false));
@@ -863,10 +888,13 @@ const ProfitReportAdmin = () => {
 	const reportColumns = [
 		{
 			title: dateByLabel,
-			width: 88,
+			width: 150,
 			align: "center",
 			render: (_value, row) =>
-				formatDate(profitMetricsForReservation(row).reportDate),
+				formatDate(
+					profitMetricsForReservation(row).reportDate,
+					chosenLanguage,
+				),
 		},
 		{
 			title: labels.confirmation,
@@ -879,15 +907,17 @@ const ProfitReportAdmin = () => {
 		},
 		{
 			title: labels.checkIn,
-			width: 78,
+			width: 140,
 			align: "center",
-			render: (_value, row) => formatDate(row.checkin_date),
+			render: (_value, row) =>
+				formatDate(row.checkin_date, chosenLanguage),
 		},
 		{
 			title: labels.checkOut,
-			width: 82,
+			width: 140,
 			align: "center",
-			render: (_value, row) => formatDate(row.checkout_date),
+			render: (_value, row) =>
+				formatDate(row.checkout_date, chosenLanguage),
 		},
 		{
 			title: labels.hotel,

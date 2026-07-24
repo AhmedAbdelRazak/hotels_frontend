@@ -11,6 +11,7 @@ import {
 import MoreDetails from "../AllReservation/MoreDetails";
 import { getReservationRoomSummary } from "../AllReservation/reservationRoomDetails";
 import PaidReportDateControls from "./PaidReportDateControls";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const { Option } = Select;
 
@@ -48,12 +49,14 @@ const formatMoney = (value, locale = "en-US") =>
 		maximumFractionDigits: 2,
 	});
 
-const formatDate = (value, locale = "en-US", fallback = "N/A") => {
-	if (!value) return fallback;
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return fallback;
-	return date.toLocaleDateString(locale);
-};
+const formatDate = (value, locale = "en-US", fallback = "N/A") =>
+	formatSaudiGregorianDate(value, {
+		language: String(locale).toLowerCase().startsWith("ar")
+			? "Arabic"
+			: "English",
+		month: "long",
+		fallback,
+	});
 
 const extractHotels = (payload) => {
 	if (Array.isArray(payload)) return payload;

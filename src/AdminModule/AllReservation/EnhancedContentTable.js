@@ -9,6 +9,7 @@ import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
 import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
 import { getReservationRoomSummary } from "./reservationRoomDetails";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	applyOtaReservationSyncJob,
@@ -33,9 +34,9 @@ export const ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS = Object.freeze([
 	96, // booking source
 	104, // reservation status
 	88, // payment status
-	90, // booked
-	90, // check-in
-	90, // check-out
+	132, // booked
+	132, // check-in
+	132, // check-out
 	56, // nights
 	100, // price per day
 	100, // total
@@ -178,12 +179,12 @@ const formatAdminMoney = (value) => {
 	return Number.isFinite(number) ? number.toFixed(2) : "0.00";
 };
 
-const formatAdminDate = (value) => {
-	if (!value) return "-";
-	const parsed = new Date(value);
-	if (Number.isNaN(parsed.getTime())) return "-";
-	return parsed.toLocaleDateString("en-US");
-};
+const formatAdminDate = (value, chosenLanguage = "English") =>
+	formatSaudiGregorianDate(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "-",
+	});
 
 const getAdminReservationNights = (reservation = {}) => {
 	const explicit = Number(reservation.days_of_residence || 0);
@@ -1266,22 +1267,31 @@ const EnhancedContentTable = ({
 										</td>
 										<td className='date-cell'>
 											<AdminTableTooltipText
-												value={formatAdminDate(reservation.booked_at || reservation.createdAt)}
-												max={16}
+											value={formatAdminDate(
+												reservation.booked_at || reservation.createdAt,
+												chosenLanguage,
+											)}
+											max={22}
 												className='date-truncate'
 											/>
 										</td>
 										<td className='date-cell'>
 											<AdminTableTooltipText
-												value={formatAdminDate(reservation.checkin_date)}
-												max={16}
+											value={formatAdminDate(
+												reservation.checkin_date,
+												chosenLanguage,
+											)}
+											max={22}
 												className='date-truncate'
 											/>
 										</td>
 										<td className='date-cell'>
 											<AdminTableTooltipText
-												value={formatAdminDate(reservation.checkout_date)}
-												max={16}
+											value={formatAdminDate(
+												reservation.checkout_date,
+												chosenLanguage,
+											)}
+											max={22}
 												className='date-truncate'
 											/>
 										</td>
@@ -1931,7 +1941,7 @@ const StyledTable = styled.table`
 
 	.date-cell .date-truncate {
 		display: inline-block;
-		max-width: 16ch;
+		max-width: 22ch;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		vertical-align: middle;

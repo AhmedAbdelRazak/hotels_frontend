@@ -27,6 +27,7 @@ import {
 } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
 import { useCartContext } from "../../cart_context";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const { Panel } = Collapse;
 const { Option } = Select;
@@ -35,6 +36,34 @@ const { Option } = Select;
 function parseGroupKeyDate(groupKey) {
 	return dayjs(groupKey, "YYYY-MM-DD", true);
 }
+
+const formatMonthYearLabel = (value, chosenLanguage = "English") => {
+	const parsed = dayjs(`${value}-01`);
+	if (!/^\d{4}-\d{2}$/.test(String(value || "")) || !parsed.isValid()) {
+		return value || "-";
+	}
+	const isArabic = chosenLanguage === "Arabic";
+	const parts = new Intl.DateTimeFormat(
+		isArabic ? "ar-SA-u-ca-gregory-nu-latn" : "en-US",
+		{ month: "long", year: "numeric", timeZone: "Asia/Riyadh" },
+	).formatToParts(parsed.toDate());
+	const month = parts.find((part) => part.type === "month")?.value || "";
+	const year = parts.find((part) => part.type === "year")?.value || "";
+	return [month, year].filter(Boolean).join(" ") || value;
+};
+
+const formatChartDateLabel = (
+	value,
+	mode = "daily",
+	chosenLanguage = "English",
+) =>
+	mode === "monthly"
+		? formatMonthYearLabel(value, chosenLanguage)
+		: formatSaudiGregorianDate(value, {
+				language: chosenLanguage,
+				month: "long",
+				fallback: value || "-",
+		  });
 
 /** 2) Build unique year-month & year-quarter sets from the data */
 function buildMonthQuarterOptions(dataArray) {
@@ -527,7 +556,19 @@ const ReservationsOverview = () => {
 					},
 				},
 			},
-			xaxis: { categories: dayCategories },
+			xaxis: {
+				categories: dayCategories,
+				labels: {
+					formatter: (value) =>
+						formatChartDateLabel(value, dayChartMode, chosenLanguage),
+				},
+			},
+			tooltip: {
+				x: {
+					formatter: (value) =>
+						formatChartDateLabel(value, dayChartMode, chosenLanguage),
+				},
+			},
 			yaxis: {
 				labels: { formatter: createYAxisFormatter(measureDay) },
 				min: 0,
@@ -605,7 +646,19 @@ const ReservationsOverview = () => {
 					},
 				},
 			},
-			xaxis: { categories: checkinsCategories },
+			xaxis: {
+				categories: checkinsCategories,
+				labels: {
+					formatter: (value) =>
+						formatChartDateLabel(value, checkinChartMode, chosenLanguage),
+				},
+			},
+			tooltip: {
+				x: {
+					formatter: (value) =>
+						formatChartDateLabel(value, checkinChartMode, chosenLanguage),
+				},
+			},
 			yaxis: {
 				labels: { formatter: createYAxisFormatter(measureCheckin) },
 				min: 0,
@@ -685,7 +738,19 @@ const ReservationsOverview = () => {
 					},
 				},
 			},
-			xaxis: { categories: checkoutCategories },
+			xaxis: {
+				categories: checkoutCategories,
+				labels: {
+					formatter: (value) =>
+						formatChartDateLabel(value, checkoutChartMode, chosenLanguage),
+				},
+			},
+			tooltip: {
+				x: {
+					formatter: (value) =>
+						formatChartDateLabel(value, checkoutChartMode, chosenLanguage),
+				},
+			},
 			yaxis: {
 				labels: { formatter: createYAxisFormatter(measureCheckout) },
 				min: 0,
@@ -945,7 +1010,7 @@ const ReservationsOverview = () => {
 									>
 										{dayMonthOptions.map((mKey) => (
 											<Option key={mKey} value={mKey}>
-												{mKey}
+												{formatMonthYearLabel(mKey, chosenLanguage)}
 											</Option>
 										))}
 									</Select>
@@ -1039,9 +1104,9 @@ const ReservationsOverview = () => {
 												onChange={(val) => setCheckinMonthSelected(val)}
 												disabled={checkinChartMode === "monthly"}
 											>
-												{checkinMonthOptions.map((mKey) => (
-													<Option key={mKey} value={mKey}>
-														{mKey}
+											{checkinMonthOptions.map((mKey) => (
+												<Option key={mKey} value={mKey}>
+													{formatMonthYearLabel(mKey, chosenLanguage)}
 													</Option>
 												))}
 											</Select>
@@ -1124,9 +1189,9 @@ const ReservationsOverview = () => {
 												onChange={(val) => setCheckoutMonthSelected(val)}
 												disabled={checkoutChartMode === "monthly"}
 											>
-												{checkoutMonthOptions.map((mKey) => (
-													<Option key={mKey} value={mKey}>
-														{mKey}
+											{checkoutMonthOptions.map((mKey) => (
+												<Option key={mKey} value={mKey}>
+													{formatMonthYearLabel(mKey, chosenLanguage)}
 													</Option>
 												))}
 											</Select>
@@ -1202,9 +1267,9 @@ const ReservationsOverview = () => {
 												value={statusMonthSelected}
 												onChange={(val) => setStatusMonthSelected(val)}
 											>
-												{statusMonthOptions.map((mKey) => (
-													<Option key={mKey} value={mKey}>
-														{mKey}
+											{statusMonthOptions.map((mKey) => (
+												<Option key={mKey} value={mKey}>
+													{formatMonthYearLabel(mKey, chosenLanguage)}
 													</Option>
 												))}
 											</Select>
@@ -1265,9 +1330,9 @@ const ReservationsOverview = () => {
 												value={topMonthSelected}
 												onChange={(val) => setTopMonthSelected(val)}
 											>
-												{topMonthOptions.map((mKey) => (
-													<Option key={mKey} value={mKey}>
-														{mKey}
+											{topMonthOptions.map((mKey) => (
+												<Option key={mKey} value={mKey}>
+													{formatMonthYearLabel(mKey, chosenLanguage)}
 													</Option>
 												))}
 											</Select>
@@ -1332,7 +1397,7 @@ const ReservationsOverview = () => {
 									>
 										{hotelMonthOptions.map((mKey) => (
 											<Option key={mKey} value={mKey}>
-												{mKey}
+												{formatMonthYearLabel(mKey, chosenLanguage)}
 											</Option>
 										))}
 									</Select>

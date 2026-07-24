@@ -12,7 +12,7 @@ const ARABIC_HIJRI_LOCALE = "ar-SA-u-ca-islamic-umalqura-nu-latn";
 
 const normalizeArabicText = (value = "") =>
 	String(value || "")
-		.replace(/\u060c/g, "")
+		.replace(/[\u200e\u200f]/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
 
@@ -68,6 +68,54 @@ const formatZone = (value, locale, options, fallback = "-") => {
 	}
 };
 
+const formatZoneMonthDayYear = (
+	value,
+	locale,
+	{
+		timeZone,
+		calendar = "gregory",
+		includeWeekday = false,
+		month = "short",
+		fallback = "-",
+	} = {},
+) => {
+	const date = parseDateValue(value);
+	if (!date) return fallback;
+	try {
+		const parts = new Intl.DateTimeFormat(locale, {
+			timeZone,
+			calendar,
+			numberingSystem: "latn",
+			weekday: includeWeekday ? "short" : undefined,
+			month,
+			day: "numeric",
+			year: "numeric",
+		}).formatToParts(date);
+		const part = (type) =>
+			normalizeArabicText(
+				parts
+					.filter((entry) => entry.type === type)
+					.map((entry) => entry.value)
+					.join(" "),
+			);
+		const monthText = part("month");
+		const dayText = part("day");
+		const yearText = part("year");
+		const eraText = part("era");
+		if (!monthText || !dayText || !yearText) return fallback;
+		const isArabic = String(locale).toLowerCase().startsWith("ar");
+		const separator = isArabic ? "\u060c" : ",";
+		const yearWithEra = [yearText, eraText].filter(Boolean).join(" ");
+		const dateText = `${monthText} ${dayText}${separator} ${yearWithEra}`;
+		const weekdayText = part("weekday");
+		return includeWeekday && weekdayText
+			? `${dateText} (${weekdayText})`
+			: dateText;
+	} catch (error) {
+		return fallback;
+	}
+};
+
 export const formatZoneDateTime = (
 	value,
 	timeZone,
@@ -76,14 +124,20 @@ export const formatZoneDateTime = (
 ) => {
 	const date = parseDateValue(value);
 	if (!date) return fallback;
-	const formatted = formatZone(
+	const locale = isArabic
+		? ARABIC_GREGORIAN_LOCALE
+		: ENGLISH_GREGORIAN_LOCALE;
+	const dateText = formatZoneMonthDayYear(date, locale, {
+		timeZone,
+		includeWeekday: true,
+		month: "short",
+		fallback,
+	});
+	const formattedTime = formatZone(
 		date,
-		isArabic ? ARABIC_GREGORIAN_LOCALE : ENGLISH_GREGORIAN_LOCALE,
+		locale,
 		{
 			timeZone,
-			weekday: "short",
-			month: "short",
-			day: "2-digit",
 			hour: "2-digit",
 			minute: "2-digit",
 			hour12: true,
@@ -91,15 +145,16 @@ export const formatZoneDateTime = (
 		},
 		fallback,
 	);
-	if (formatted !== fallback || !includeZoneName) return formatted;
+	if (formattedTime !== fallback || !includeZoneName) {
+		return dateText === fallback || formattedTime === fallback
+			? formattedTime
+			: `${dateText} - ${formattedTime}`;
+	}
 	const withoutZone = formatZone(
 		date,
-		isArabic ? ARABIC_GREGORIAN_LOCALE : ENGLISH_GREGORIAN_LOCALE,
+		locale,
 		{
 			timeZone,
-			weekday: "short",
-			month: "short",
-			day: "2-digit",
 			hour: "2-digit",
 			minute: "2-digit",
 			hour12: true,
@@ -107,9 +162,12 @@ export const formatZoneDateTime = (
 		fallback,
 	);
 	const offset = fallbackOffsetLabel(date, timeZone, "");
-	return withoutZone === fallback || !offset
+	const timeText = withoutZone === fallback || !offset
 		? withoutZone
 		: `${withoutZone} ${offset}`;
+	return dateText === fallback || timeText === fallback
+		? timeText
+		: `${dateText} - ${timeText}`;
 };
 
 export const formatZoneHijriDate = (
@@ -118,17 +176,16 @@ export const formatZoneHijriDate = (
 	isArabic = false,
 	fallback = "-",
 ) =>
-	formatZone(
+	formatZoneMonthDayYear(
 		value,
 		isArabic ? ARABIC_HIJRI_LOCALE : ENGLISH_HIJRI_LOCALE,
 		{
 			timeZone,
-			weekday: "short",
-			day: "2-digit",
+			calendar: "islamic-umalqura",
+			includeWeekday: true,
 			month: "short",
-			year: "numeric",
+			fallback,
 		},
-		fallback,
 	);
 
 export const formatZoneOffset = (

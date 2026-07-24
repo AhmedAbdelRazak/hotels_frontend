@@ -33,6 +33,7 @@ import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { useHistory } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { SUPER_USER_IDS } from "../utils/superUsers";
 import {
 	cloudinaryUpload1,
@@ -698,7 +699,12 @@ const ExpensesManagement = () => {
 				title: "Date",
 				dataIndex: "expenseDate",
 				key: "expenseDate",
-				render: (value) => (value ? dayjs(value).format("YYYY-MM-DD") : "-"),
+				render: (value) =>
+					formatSaudiGregorianDate(value, {
+						language: "English",
+						month: "long",
+						fallback: "-",
+					}),
 				sorter: (a, b) =>
 					getDateValue(a?.expenseDate) - getDateValue(b?.expenseDate),
 				sortOrder:

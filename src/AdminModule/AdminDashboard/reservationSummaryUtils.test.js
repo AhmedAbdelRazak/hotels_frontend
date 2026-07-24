@@ -62,7 +62,7 @@ test("executive export leaves unavailable room fields blank", () => {
 	expect(row["Room Number"]).toBe("");
 });
 
-test("Arabic Miladi and Hijri dates always use Latin digits and omit time", () => {
+test("Arabic Miladi and Hijri dates put the localized month name first", () => {
 	const value = "2026-07-19T18:46:08.000Z";
 	const miladi = formatReservationSummaryDate(value, {
 		locale: "ar-SA",
@@ -75,8 +75,8 @@ test("Arabic Miladi and Hijri dates always use Latin digits and omit time", () =
 		month: "long",
 	});
 
-	expect(miladi).toBe("19/07/2026");
-	expect(hijri).toMatch(/14/);
+	expect(miladi).toBe("يوليو 19، 2026");
+	expect(hijri).toMatch(/^صفر 5، 1448/);
 	expect(`${miladi}${hijri}`).not.toMatch(/[\u0660-\u0669]/);
 	expect(`${miladi}${hijri}`).not.toMatch(/:/);
 });

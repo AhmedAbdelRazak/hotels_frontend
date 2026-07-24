@@ -4,6 +4,7 @@ import {
   countryCodeFromNationality,
   deriveReceiptPayment,
   displayNationality,
+  formatReceiptDate,
 } from "./receiptUtils";
 
 describe("official receipt utilities", () => {
@@ -17,6 +18,13 @@ describe("official receipt utilities", () => {
 
   it("calculates nights by UTC calendar date", () => {
     expect(calculateNights("2026-07-14", "2026-07-16")).toBe(2);
+  });
+
+  it("formats receipt dates month first in both supported languages", () => {
+    expect(formatReceiptDate("2026-07-24")).toBe("July 24, 2026");
+    expect(formatReceiptDate("2026-07-24", "ar-EG")).toBe(
+      "يوليو 24، 2026",
+    );
   });
 
   it("does not count an uncaptured authorization as paid", () => {

@@ -165,7 +165,7 @@ describe("EnhancedContentTable total amount column", () => {
     expect(netGuestCells[roomNumberIndex].textContent).toBe("101");
 	expect(headers).not.toContain("Room Type");
 	expect(ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS).toHaveLength(headers.length);
-	expect(ADMIN_RESERVATION_TABLE_MIN_WIDTH).toBe(1462);
+	expect(ADMIN_RESERVATION_TABLE_MIN_WIDTH).toBe(1588);
 	expect(container.querySelectorAll("colgroup col")).toHaveLength(headers.length);
     expect(
       netGuestCells[priceIndex]

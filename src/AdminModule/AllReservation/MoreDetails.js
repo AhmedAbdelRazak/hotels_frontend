@@ -637,13 +637,21 @@ const isAuditObject = (value) =>
 	typeof value === "object" &&
 	!(value instanceof Date);
 
-const formatAuditScalar = (value, path = "") => {
+const formatAuditScalar = (
+	value,
+	path = "",
+	chosenLanguage = "English",
+) => {
 	if (value === undefined || value === null || value === "") return "-";
 	if (isAuditInternalPath(path)) return "-";
 	if (value instanceof Date) {
 		return Number.isNaN(value.getTime())
 			? "-"
-			: moment(value).format("YYYY-MM-DD HH:mm");
+			: formatSaudiDateTime(value, {
+					language: chosenLanguage,
+					month: "long",
+					fallback: "-",
+			  });
 	}
 	if (typeof value === "boolean") return value ? "Yes" : "No";
 	if (typeof value === "number") {
@@ -657,7 +665,11 @@ const formatAuditScalar = (value, path = "") => {
 		if (!text) return "-";
 		if (AUDIT_OBJECT_ID_PATTERN.test(text)) return "-";
 		if (/(date|at|time|expiry)$/i.test(path) && moment(text).isValid()) {
-			return moment(text).format("YYYY-MM-DD HH:mm");
+			return formatSaudiDateTime(text, {
+				language: chosenLanguage,
+				month: "long",
+				fallback: "-",
+			});
 		}
 		return text.length > 180 ? `${text.slice(0, 177)}...` : text;
 	}
@@ -712,7 +724,12 @@ const formatAuditRoom = (room = {}) => {
 		.join(" | ");
 };
 
-const formatAuditValue = (field, value, path = field) => {
+const formatAuditValue = (
+	field,
+	value,
+	path = field,
+	chosenLanguage = "English",
+) => {
 	if (Array.isArray(value)) {
 		if (["pickedRoomsType", "pickedRoomsPricing"].includes(field)) {
 			return value.length ? value.map(formatAuditRoom).join("; ") : "-";
@@ -722,16 +739,22 @@ const formatAuditValue = (field, value, path = field) => {
 			.slice(0, 4)
 			.map((item) =>
 				isAuditObject(item)
-					? formatAuditObjectSummary(field, item)
-					: formatAuditScalar(item, path),
+					? formatAuditObjectSummary(field, item, chosenLanguage)
+					: formatAuditScalar(item, path, chosenLanguage),
 			)
 			.join("; ");
 	}
-	if (isAuditObject(value)) return formatAuditObjectSummary(field, value);
-	return formatAuditScalar(value, path);
+	if (isAuditObject(value)) {
+		return formatAuditObjectSummary(field, value, chosenLanguage);
+	}
+	return formatAuditScalar(value, path, chosenLanguage);
 };
 
-function formatAuditObjectSummary(field, value = {}) {
+function formatAuditObjectSummary(
+	field,
+	value = {},
+	chosenLanguage = "English",
+) {
 	const paths =
 		AUDIT_OBJECT_PATHS[field] ||
 		collectAuditPaths(value).filter((path) => path.split(".").length <= 2);
@@ -739,14 +762,23 @@ function formatAuditObjectSummary(field, value = {}) {
 		.filter((path) => !isAuditInternalPath(path) && auditPathExists(value, path))
 		.map((path) => {
 			const label = formatAuditPathLabel(field, path);
-			return `${label}: ${formatAuditScalar(getAuditPathValue(value, path), path)}`;
+			return `${label}: ${formatAuditScalar(
+				getAuditPathValue(value, path),
+				path,
+				chosenLanguage,
+			)}`;
 		})
 		.filter((part) => !part.endsWith(": -"));
-	if (!parts.length) return formatAuditScalar(value);
+	if (!parts.length) return formatAuditScalar(value, "", chosenLanguage);
 	return parts.slice(0, 6).join("; ");
 }
 
-const buildAuditObjectChangeParts = (field, fromValue = {}, toValue = {}) => {
+const buildAuditObjectChangeParts = (
+	field,
+	fromValue = {},
+	toValue = {},
+	chosenLanguage = "English",
+) => {
 	const preferredPaths = AUDIT_OBJECT_PATHS[field];
 	const paths = preferredPaths || [
 		...new Set([
@@ -761,8 +793,16 @@ const buildAuditObjectChangeParts = (field, fromValue = {}, toValue = {}) => {
 				(auditPathExists(fromValue, path) || auditPathExists(toValue, path)),
 		)
 		.map((path) => {
-			const fromText = formatAuditScalar(getAuditPathValue(fromValue, path), path);
-			const toText = formatAuditScalar(getAuditPathValue(toValue, path), path);
+			const fromText = formatAuditScalar(
+				getAuditPathValue(fromValue, path),
+				path,
+				chosenLanguage,
+			);
+			const toText = formatAuditScalar(
+				getAuditPathValue(toValue, path),
+				path,
+				chosenLanguage,
+			);
 			if (fromText === "-" && toText === "-") return null;
 			if (fromText === toText) return null;
 			const label = formatAuditPathLabel(field, path);
@@ -773,7 +813,10 @@ const buildAuditObjectChangeParts = (field, fromValue = {}, toValue = {}) => {
 		.filter(Boolean);
 };
 
-const formatAuditEntryDetail = (entry = {}) => {
+const formatAuditEntryDetail = (
+	entry = {},
+	chosenLanguage = "English",
+) => {
 	const field = entry.field || "change";
 	const label = formatAuditFieldLabel(field);
 	const fromValue = entry.from;
@@ -785,7 +828,12 @@ const formatAuditEntryDetail = (entry = {}) => {
 		Array.isArray(toValue);
 
 	if (hasObjectValue && !Array.isArray(fromValue) && !Array.isArray(toValue)) {
-		const parts = buildAuditObjectChangeParts(field, fromValue || {}, toValue || {});
+		const parts = buildAuditObjectChangeParts(
+			field,
+			fromValue || {},
+			toValue || {},
+			chosenLanguage,
+		);
 		if (parts.length) {
 			const visible = parts.slice(0, 6).join("; ");
 			const extra = parts.length > 6 ? `; +${parts.length - 6} more` : "";
@@ -793,8 +841,13 @@ const formatAuditEntryDetail = (entry = {}) => {
 		}
 	}
 
-	const fromText = formatAuditValue(field, fromValue);
-	const toText = formatAuditValue(field, toValue);
+	const fromText = formatAuditValue(
+		field,
+		fromValue,
+		field,
+		chosenLanguage,
+	);
+	const toText = formatAuditValue(field, toValue, field, chosenLanguage);
 	if (fromText === "-" && toText === "-") return "";
 	if (fromText === "-") return `${label}: ${toText}`;
 	if (toText === "-") return `${label}: removed`;
@@ -6382,7 +6435,7 @@ const ReservationDetail = ({
 			rows.push({
 				at: at ? new Date(at) : null,
 				title: title || "Reservation update",
-				by: formatAuditScalar(by, "by"),
+				by: formatAuditScalar(by, "by", chosenLanguage),
 				detail: detail || "",
 			});
 		};
@@ -6390,7 +6443,7 @@ const ReservationDetail = ({
 		(reservation?.reservationAuditLog || reservation?.adminChangeLog || []).forEach(
 			(entry) => {
 				const detail = entry.field
-					? formatAuditEntryDetail(entry)
+					? formatAuditEntryDetail(entry, chosenLanguage)
 					: entry.note || "";
 				if (entry.field && !detail) return;
 				pushRow({
@@ -7856,7 +7909,7 @@ const ReservationDetail = ({
 			language: chosenLanguage,
 			includeHijri: options.includeHijri ?? useSaudiHijri,
 			includeWeekday: options.includeWeekday ?? useSaudiHijri,
-			month: options.month || "short",
+			month: options.month || "long",
 			fallback: "N/A",
 		});
 	const reservationDisplayDateTime = (value, options = {}) =>
@@ -7864,7 +7917,7 @@ const ReservationDetail = ({
 			language: chosenLanguage,
 			includeHijri: options.includeHijri ?? false,
 			includeWeekday: options.includeWeekday ?? false,
-			month: options.month || "short",
+			month: options.month || "long",
 			fallback: "N/A",
 		});
 	const reservationLifecycle = useMemo(() => {
@@ -8542,11 +8595,9 @@ const ReservationDetail = ({
 									<div>
 										<strong>Received</strong>
 										<br />
-										{otaEmailAudit.receivedAt
-											? moment(otaEmailAudit.receivedAt).format(
-													"YYYY-MM-DD HH:mm",
-											  )
-											: "N/A"}
+										{reservationDisplayDateTime(
+											otaEmailAudit.receivedAt,
+										)}
 									</div>
 									<div>
 										<strong>Total</strong>

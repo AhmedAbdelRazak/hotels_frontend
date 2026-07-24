@@ -95,6 +95,8 @@ it("includes room type and assigned room number in profit exports", () => {
     },
     rows: [
       {
+        checkin_date: "2026-07-24T12:00:00.000Z",
+        checkout_date: "2026-07-25T12:00:00.000Z",
         pickedRoomsType: [
           { room_type: "familyRooms", displayName: "Family Quintuple" },
         ],
@@ -107,6 +109,8 @@ it("includes room type and assigned room number in profit exports", () => {
 
   expect(row["Room Type"]).toBe("Family Quintuple");
   expect(row["Room Number"]).toBe("424");
+  expect(row["Check In"]).toBe("July 24, 2026");
+  expect(row["Check Out"]).toBe("July 25, 2026");
 });
 
 it("loads Zad Ajyad once and applies a UI filter without a request loop", async () => {

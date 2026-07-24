@@ -36,18 +36,12 @@ export const formatDate = (value, chosenLanguage = "English", options = {}) => {
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
-	if (
-		isArabicDateLanguage(chosenLanguage) &&
-		(options.useSaudiDisplay || options.includeHijri || options.includeWeekday)
-	) {
-		return formatSaudiDateForDisplay(date, {
-			language: chosenLanguage,
-			includeHijri: options.includeHijri ?? false,
-			includeWeekday: options.includeWeekday ?? false,
-			month: options.month || "short",
-		});
-	}
-	return date.toLocaleDateString("en-CA");
+	return formatSaudiDateForDisplay(date, {
+		language: chosenLanguage,
+		includeHijri: options.includeHijri ?? false,
+		includeWeekday: options.includeWeekday ?? false,
+		month: options.month || "long",
+	});
 };
 
 export const formatDateByCalendar = (
@@ -61,10 +55,13 @@ export const formatDateByCalendar = (
 	if (calendarMode === "hijri") {
 		return formatSaudiHijriDateForDisplay(date, {
 			language: chosenLanguage,
-			month: isArabicDateLanguage(chosenLanguage) ? "long" : "short",
+			month: "long",
 		});
 	}
-	return date.toLocaleDateString("en-CA");
+	return formatSaudiDateForDisplay(date, {
+		language: chosenLanguage,
+		month: "long",
+	});
 };
 
 export const getReservationNights = (reservation = {}) => {
@@ -118,21 +115,12 @@ export const formatDateTime = (
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
-	if (
-		isArabicDateLanguage(chosenLanguage) &&
-		(options.useSaudiDisplay || options.includeHijri || options.includeWeekday)
-	) {
-		return formatSaudiDateTimeForDisplay(date, {
-			language: chosenLanguage,
-			includeHijri: options.includeHijri ?? false,
-			includeWeekday: options.includeWeekday ?? false,
-			month: options.month || "short",
-		});
-	}
-	return `${date.toLocaleDateString("en-CA")} ${date.toLocaleTimeString([], {
-		hour: "2-digit",
-		minute: "2-digit",
-	})}`;
+	return formatSaudiDateTimeForDisplay(date, {
+		language: chosenLanguage,
+		includeHijri: options.includeHijri ?? false,
+		includeWeekday: options.includeWeekday ?? false,
+		month: options.month || "long",
+	});
 };
 
 export const isArabicLanguage = (chosenLanguage) =>

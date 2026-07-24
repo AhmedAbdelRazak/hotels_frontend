@@ -31,6 +31,10 @@ import {
 import {
 	titleCase,
 } from "../../HotelModule/TheOverallStructure/overallShared";
+import {
+	formatSaudiGregorianDate,
+	formatSaudiHijriDate,
+} from "../../utils/saudiDates";
 
 const ADMIN_GLOBAL_SETTINGS_MODAL_Z_INDEX = 65000;
 const ADMIN_GLOBAL_SETTINGS_MODAL_ROOT_CLASS =
@@ -243,11 +247,18 @@ const formatPreviewDate = (date, isArabic = false) => {
 	if (!m.isValid()) {
 		return { hijri: date || "", gregorian: date || "" };
 	}
-	const hijriMonths = isArabic ? hijriMonthsAr : hijriMonthsEn;
-	const gregorianMonths = isArabic ? gregorianMonthsAr : gregorianMonthsEn;
+	const language = isArabic ? "Arabic" : "English";
 	return {
-		hijri: `${m.iDate()} ${hijriMonths[m.iMonth()]} ${m.iYear()}`,
-		gregorian: `${m.date()} ${gregorianMonths[m.month()]} ${m.year()}`,
+		hijri: formatSaudiHijriDate(date, {
+			language,
+			month: "long",
+			fallback: date || "",
+		}),
+		gregorian: formatSaudiGregorianDate(date, {
+			language,
+			month: "long",
+			fallback: date || "",
+		}),
 	};
 };
 

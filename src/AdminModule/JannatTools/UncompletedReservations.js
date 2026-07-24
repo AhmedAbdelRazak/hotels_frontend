@@ -3,8 +3,11 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { getUncompletedReservations } from "../apiAdmin";
-import dayjs from "dayjs";
 import { isAuthenticated } from "../../auth";
+import {
+	formatSaudiDateTime,
+	formatSaudiGregorianDate,
+} from "../../utils/saudiDates";
 
 const UncompletedReservations = () => {
 	const [reservations, setReservations] = useState([]);
@@ -94,13 +97,25 @@ const UncompletedReservations = () => {
 									<td>{reservation.customer_details.email}</td>
 									<td>{reservation.customer_details.phone}</td>
 									<td>
-										{dayjs(reservation.createdAt).format("DD MMM YYYY, HH:mm")}
+										{formatSaudiDateTime(reservation.createdAt, {
+											language: "English",
+											month: "long",
+											fallback: "N/A",
+										})}
 									</td>
 									<td>
-										{dayjs(reservation.checkin_date).format("DD MMM YYYY")}
+										{formatSaudiGregorianDate(reservation.checkin_date, {
+											language: "English",
+											month: "long",
+											fallback: "N/A",
+										})}
 									</td>
 									<td>
-										{dayjs(reservation.checkout_date).format("DD MMM YYYY")}
+										{formatSaudiGregorianDate(reservation.checkout_date, {
+											language: "English",
+											month: "long",
+											fallback: "N/A",
+										})}
 									</td>
 									<td>
 										{reservation.pickedRoomsType &&

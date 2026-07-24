@@ -6,6 +6,7 @@ import {
 	canonicalPackageDateKey,
 	isFixedPackageEligible,
 } from "../../utils/packagePolicy";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const { Option } = Select;
 
@@ -335,8 +336,16 @@ const PackagesModal = ({
 						const start = dayjs(d.from);
 						const end = dayjs(d.to);
 						const nights = Math.max(end.diff(start, "day"), 1);
-						const fromStr = start.isValid() ? start.format("DD MMM YYYY") : "—";
-						const toStr = end.isValid() ? end.format("DD MMM YYYY") : "—";
+						const fromStr = formatSaudiGregorianDate(d.from, {
+							language: "English",
+							month: "long",
+							fallback: "—",
+						});
+						const toStr = formatSaudiGregorianDate(d.to, {
+							language: "English",
+							month: "long",
+							fallback: "—",
+						});
 
 						// inline preview so each option shows accurate price at a glance
 						const total = safeNum(d.base, 0);
@@ -441,8 +450,16 @@ const PackagesModal = ({
 							<div>
 								<b>Dates will be locked</b> to the selected package window.
 								<div style={{ marginTop: 6, fontWeight: 700 }}>
-									{totals.start.format("DD MMM YYYY")} &rarr{" "}
-									{totals.end.format("DD MMM YYYY")}{" "}
+									{formatSaudiGregorianDate(totals.start.toDate(), {
+										language: "English",
+										month: "long",
+										fallback: "—",
+									})} &rarr;{" "}
+									{formatSaudiGregorianDate(totals.end.toDate(), {
+										language: "English",
+										month: "long",
+										fallback: "—",
+									})}{" "}
 									<span style={{ color: "#666" }}>
 										({totals.nights} {totals.nights === 1 ? "night" : "nights"})
 									</span>

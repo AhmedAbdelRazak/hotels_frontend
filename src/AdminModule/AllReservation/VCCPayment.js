@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
-import moment from "moment";
 import { toast } from "react-toastify";
 import DropIn from "braintree-web-drop-in-react";
 import {
@@ -25,6 +24,7 @@ import {
 import { isAuthenticated } from "../../auth";
 import { isSuperAdminUser } from "../utils/superUsers";
 import BofaVccModal from "./BofaVccModal";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const safeNumber = (val) => {
 	const parsed = Number(val);
@@ -50,10 +50,12 @@ const resolveStoredVccAmounts = (reservation) => {
 		(currency === "SAR" ? sourceAmount : 0);
 	return { amountUsd, amountSar };
 };
-const formatDisplayDate = (date, locale) => {
-	if (!date) return "N/A";
-	return moment(date).locale(locale).format("MMM DD, YYYY");
-};
+const formatDisplayDate = (date) =>
+	formatSaudiGregorianDate(date, {
+		language: "English",
+		month: "long",
+		fallback: "N/A",
+	});
 
 const VCC_PROMPT_WARNING_MESSAGE =
 	"This reservation was prompted once before, please reach out to Ahmed Admin for more details";
@@ -311,15 +313,8 @@ const VCCPayment = ({
 	const [vccManualCardholderName, setVccManualCardholderName] = useState("");
 
 	// Payment-card controls stay English/LTR even when the surrounding dashboard is Arabic.
-	const localeCode = "en";
-	const formattedCheckin = formatDisplayDate(
-		reservation?.checkin_date,
-		localeCode,
-	);
-	const formattedCheckout = formatDisplayDate(
-		reservation?.checkout_date,
-		localeCode,
-	);
+	const formattedCheckin = formatDisplayDate(reservation?.checkin_date);
+	const formattedCheckout = formatDisplayDate(reservation?.checkout_date);
 	const customerFullName =
 		reservation?.customer_details?.fullName ||
 		reservation?.customer_details?.name ||

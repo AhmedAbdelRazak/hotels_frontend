@@ -5,6 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { Input, Modal } from "antd";
 import { updateSingleReservation } from "../apiAdmin";
 import websiteLogo from "../../GeneralImages/websiteLogo.png";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const PDF_CHILD_MODAL_Z = 60010;
 
@@ -16,9 +17,11 @@ const safeNumber = (value) => {
 const toCents = (value) => Math.round(safeNumber(value) * 100);
 
 const formatDateShort = (value) => {
-	if (!value) return "N/A";
-	const parsed = moment(value);
-	return parsed.isValid() ? parsed.format("DD-MMM-YY") : "N/A";
+	return formatSaudiGregorianDate(value, {
+		language: "English",
+		month: "long",
+		fallback: "N/A",
+	});
 };
 
 const calculateNights = (checkin, checkout) => {
@@ -280,7 +283,7 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 		reservation?.customer_details?.confirmation_number ||
 		"N/A";
 
-	const invoiceDate = moment().format("DD-MMM-YY");
+	const invoiceDate = formatDateShort(new Date());
 	const arrivalDate = formatDateShort(reservation?.checkin_date);
 	const departureDate = formatDateShort(reservation?.checkout_date);
 	const nights = calculateNights(

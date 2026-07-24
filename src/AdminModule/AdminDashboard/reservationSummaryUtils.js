@@ -1,43 +1,23 @@
 import { getRoomTypeDisplayLabel } from "../AllReservation/reservationRoomDetails";
-
-const dateValue = (value) => {
-	if (!value) return null;
-	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const localeWithLatinDigits = (locale = "en-US") =>
-	String(locale).toLowerCase().startsWith("ar")
-		? "ar-SA-u-nu-latn"
-		: "en-US-u-nu-latn";
+import {
+	formatSaudiGregorianDate,
+	formatSaudiHijriDate,
+} from "../../utils/saudiDates";
 
 export const formatReservationSummaryDate = (
 	value,
-	{ locale = "en-US", calendar = "gregory", month = "short" } = {}
+	{ locale = "en-US", calendar = "gregory", month = "long" } = {},
 ) => {
-	const date = dateValue(value);
-	if (!date) return "\u2014";
-	if (
-		String(locale).toLowerCase().startsWith("ar") &&
-		calendar === "gregory"
-	) {
-		return new Intl.DateTimeFormat("en-GB-u-ca-gregory-nu-latn", {
-			timeZone: "Asia/Riyadh",
-			calendar: "gregory",
-			numberingSystem: "latn",
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-		}).format(date);
-	}
-	return new Intl.DateTimeFormat(localeWithLatinDigits(locale), {
-		timeZone: "Asia/Riyadh",
-		calendar,
-		numberingSystem: "latn",
-		year: "numeric",
+	const options = {
+		language: String(locale).toLowerCase().startsWith("ar")
+			? "Arabic"
+			: "English",
 		month,
-		day: "numeric",
-	}).format(date);
+		fallback: "\u2014",
+	};
+	return calendar === "islamic-umalqura"
+		? formatSaudiHijriDate(value, options)
+		: formatSaudiGregorianDate(value, options);
 };
 
 export const formatReservationSummaryNumber = (value, options = {}) => {

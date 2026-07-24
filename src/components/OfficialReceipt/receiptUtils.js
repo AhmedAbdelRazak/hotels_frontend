@@ -1,3 +1,5 @@
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+
 export const safeNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -23,14 +25,13 @@ export const calculateNights = (checkin, checkout) => {
 };
 
 export const formatReceiptDate = (value, locale = "en-US") => {
-  const date = new Date(value);
-  if (!value || Number.isNaN(date.getTime())) return "N/A";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "UTC",
-    year: "numeric",
+  return formatSaudiGregorianDate(value, {
+    language: String(locale).toLowerCase().startsWith("ar")
+      ? "Arabic"
+      : "English",
     month: "long",
-    day: "numeric",
-  }).format(date);
+    fallback: "N/A",
+  });
 };
 
 const ISO_COUNTRY_CODES = Object.freeze(

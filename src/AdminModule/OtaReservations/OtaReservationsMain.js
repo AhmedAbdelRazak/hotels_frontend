@@ -225,12 +225,12 @@ const savedCommissionForReservation = (reservation = {}) => {
 	return value !== null ? round2(value) : 0;
 };
 
-const formatDate = (value) => {
-	if (!value) return "-";
-	const parsed = new Date(value);
-	if (Number.isNaN(parsed.getTime())) return "-";
-	return parsed.toLocaleDateString("en-US");
-};
+const formatDate = (value, chosenLanguage = "English") =>
+	formatSaudiGregorianDate(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "-",
+	});
 
 const roomCount = (room = {}) => {
 	const count = Number(room.count || 1);
@@ -1408,9 +1408,14 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 													<td>
 														<StatusPill>{reservation.reservation_status || "ota review"}</StatusPill>
 													</td>
-													<td>{formatDate(reservation.booked_at || reservation.createdAt)}</td>
-													<td>{formatDate(reservation.checkin_date)}</td>
-													<td>{formatDate(reservation.checkout_date)}</td>
+											<td>
+												{formatDate(
+													reservation.booked_at || reservation.createdAt,
+													chosenLanguage,
+												)}
+											</td>
+											<td>{formatDate(reservation.checkin_date, chosenLanguage)}</td>
+											<td>{formatDate(reservation.checkout_date, chosenLanguage)}</td>
 													<td>{reservation.days_of_residence || "-"}</td>
 													<td>{money(reservation.total_amount)} SAR</td>
 													<td>

@@ -4,11 +4,19 @@ import UpdatePDF from "./UpdatePDF"; // Unified editing modal
 import { updateSingleReservation } from "../apiAdmin";
 import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
 import ReceiptViewport from "../../components/OfficialReceipt/ReceiptViewport";
+import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const dateTimeValue = (value) => {
 	const time = new Date(value || 0).getTime();
 	return Number.isFinite(time) ? time : 0;
 };
+
+const formatReceiptDate = (value) =>
+	formatSaudiGregorianDate(value, {
+		language: "English",
+		month: "long",
+		fallback: "-",
+	});
 
 /**
  * ReceiptPDF (drop-in)
@@ -42,9 +50,9 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 	const bookingDate = useMemo(
 		() =>
-			new Date(
+			formatReceiptDate(
 				localResv?.createdAt || reservation?.createdAt || Date.now(),
-			).toLocaleDateString(),
+			),
 		[localResv?.createdAt, reservation?.createdAt],
 	);
 
@@ -424,8 +432,8 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 				</thead>
 				<tbody>
 					<tr>
-						<td>{new Date(localResv?.checkin_date).toLocaleDateString()}</td>
-						<td>{new Date(localResv?.checkout_date).toLocaleDateString()}</td>
+						<td>{formatReceiptDate(localResv?.checkin_date)}</td>
+						<td>{formatReceiptDate(localResv?.checkout_date)}</td>
 						<td>{localResv?.reservation_status || "Confirmed"}</td>
 						<td>{localResv?.total_guests}</td>
 						<td>

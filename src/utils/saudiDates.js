@@ -7,7 +7,7 @@ const ENGLISH_HIJRI_LOCALE = "en-GB-u-ca-islamic-umalqura-nu-latn";
 
 const cleanArabicDateText = (value = "") =>
 	String(value || "")
-		.replace(/\u060c/g, "")
+		.replace(/[\u200e\u200f]/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
 
@@ -37,26 +37,76 @@ const formatWithIntl = (value, locale, options, fallback = "-") => {
 	}
 };
 
+const formatMonthDayYear = (
+	value,
+	locale,
+	{
+		includeWeekday = false,
+		month = "long",
+		calendar = "gregory",
+		fallback = "-",
+	} = {},
+) => {
+	const date = parseDateValue(value);
+	if (!date) return fallback;
+	try {
+		const formatter = new Intl.DateTimeFormat(locale, {
+			timeZone: SAUDI_TIME_ZONE,
+			calendar,
+			numberingSystem: "latn",
+			weekday: includeWeekday ? "long" : undefined,
+			month,
+			day: "numeric",
+			year: "numeric",
+		});
+		const parts = formatter.formatToParts(date);
+		const part = (type) =>
+			cleanArabicDateText(
+				parts
+					.filter((entry) => entry.type === type)
+					.map((entry) => entry.value)
+					.join(" "),
+			);
+		const monthText = part("month");
+		const dayText = part("day");
+		const yearText = part("year");
+		const eraText = part("era");
+		if (!monthText || !dayText || !yearText) return fallback;
+
+		const isArabic = String(locale).toLowerCase().startsWith("ar");
+		const yearWithEra = [yearText, eraText].filter(Boolean).join(" ");
+		const dateText = isArabic
+			? `${monthText} ${dayText}\u060c ${yearWithEra}`
+			: `${monthText} ${dayText}, ${yearWithEra}`;
+		const weekdayText = part("weekday");
+		if (!includeWeekday || !weekdayText) return dateText;
+		return isArabic
+			? `${weekdayText}\u060c ${dateText}`
+			: `${weekdayText}, ${dateText}`;
+	} catch (error) {
+		return fallback;
+	}
+};
+
 export const formatSaudiGregorianDate = (
 	value,
 	{
 		language = "English",
 		includeWeekday = false,
-		month = "short",
+		month = "long",
 		fallback = "-",
 	} = {},
 ) => {
 	const isArabic = isArabicLanguage(language);
-	return formatWithIntl(
+	return formatMonthDayYear(
 		value,
 		isArabic ? ARABIC_GREGORIAN_LOCALE : ENGLISH_GREGORIAN_LOCALE,
 		{
-			weekday: includeWeekday ? "long" : undefined,
-			day: "numeric",
+			includeWeekday,
 			month,
-			year: "numeric",
+			calendar: "gregory",
+			fallback,
 		},
-		fallback,
 	);
 };
 
@@ -70,16 +120,15 @@ export const formatSaudiHijriDate = (
 	} = {},
 ) => {
 	const isArabic = isArabicLanguage(language);
-	return formatWithIntl(
+	return formatMonthDayYear(
 		value,
 		isArabic ? ARABIC_HIJRI_LOCALE : ENGLISH_HIJRI_LOCALE,
 		{
-			weekday: includeWeekday ? "long" : undefined,
-			day: "numeric",
+			includeWeekday,
 			month,
-			year: "numeric",
+			calendar: "islamic-umalqura",
+			fallback,
 		},
-		fallback,
 	);
 };
 
@@ -105,7 +154,7 @@ export const formatSaudiDateTime = (
 		language = "English",
 		includeHijri = false,
 		includeWeekday = false,
-		month = "short",
+		month = "long",
 		fallback = "-",
 	} = {},
 ) => {
@@ -135,7 +184,7 @@ export const formatSaudiDate = (
 		language = "English",
 		includeHijri = false,
 		includeWeekday = false,
-		month = "short",
+		month = "long",
 		fallback = "-",
 	} = {},
 ) => {

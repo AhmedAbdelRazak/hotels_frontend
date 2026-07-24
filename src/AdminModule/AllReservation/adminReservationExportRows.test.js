@@ -27,6 +27,20 @@ test("shared admin export includes room type and assigned room number", () => {
 	expect(row).not.toHaveProperty("Paid Amount");
 });
 
+test("shared admin export uses localized month-name-first dates", () => {
+	const [english] = buildAdminReservationExportRows([
+		{ checkin_date: "2026-07-24T12:00:00.000Z" },
+	]);
+	const [arabic] = buildAdminReservationExportRows(
+		[{ checkin_date: "2026-07-24T12:00:00.000Z" }],
+		"ar-SA",
+		"Arabic",
+	);
+
+	expect(english["Checkin Date"]).toBe("July 24, 2026");
+	expect(arabic["Checkin Date"]).toBe("يوليو 24، 2026");
+});
+
 test("shared admin export leaves unavailable room fields blank", () => {
 	const [row] = buildAdminReservationExportRows([
 		{ confirmation_number: "CONF-2" },

@@ -54,6 +54,10 @@ import {
 	distinctBookingSources as getDistinctBookingSources,
 } from "../apiAdmin";
 import WarningsModal from "./WarningsModal";
+import {
+	formatSaudiGregorianDate,
+	formatSaudiHijriDate,
+} from "../../utils/saudiDates";
 
 const { Option } = Select;
 
@@ -736,10 +740,11 @@ const getReservationId = (reservation) =>
 
 const formatHijriCellDate = (date, isArabic = false) => {
 	if (!date || !supportsMomentHijri()) return "";
-	const m = moment(date);
-	if (!m.isValid()) return "";
-	const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
-	return `${m.iDate()} ${months[m.iMonth()] || ""} ${m.iYear()}`;
+	return formatSaudiHijriDate(date, {
+		language: isArabic ? "Arabic" : "English",
+		month: "long",
+		fallback: "",
+	});
 };
 
 const supportsMomentHijri = () =>
@@ -1156,10 +1161,18 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 	const monthLabel = useMemo(() => {
 		if (rangeOverride?.start && rangeOverride?.end) {
 			if (calendarType !== "hijri") {
-				return `${tableLabels.gregorian}: ${
-					rangeOverride.label ||
-					makeDateRangeLabel(rangeOverride.start, rangeOverride.end)
-				}`;
+				const language = isArabic ? "Arabic" : "English";
+				const startLabel = formatSaudiGregorianDate(rangeOverride.start, {
+					language,
+					month: "long",
+					fallback: rangeOverride.start,
+				});
+				const endLabel = formatSaudiGregorianDate(rangeOverride.end, {
+					language,
+					month: "long",
+					fallback: rangeOverride.end,
+				});
+				return `${tableLabels.gregorian}: ${startLabel} - ${endLabel}`;
 			}
 			const months = isArabic ? hijriMonthsAr : hijriMonthsEn;
 			const monthName = months[Number(hijriMonth)] || rangeOverride?.label || "";
@@ -1268,17 +1281,23 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 
 	const formatDualDate = useCallback(
 		(dateValue) => {
-			const d = dateValue ? dayjs(dateValue) : null;
-			const gregDate = d?.isValid()
-				? d.format("ddd, DD MMM YYYY")
-				: dateValue || "n/a";
+			const language = isArabic ? "Arabic" : "English";
+			const gregDate = formatSaudiGregorianDate(dateValue, {
+				language,
+				month: "long",
+				fallback: dateValue || "n/a",
+			});
 			const hijriDate =
 				hijriAvailable && dateValue
-					? moment(dateValue).locale("en").format("iD iMMMM iYYYY")
+					? formatSaudiHijriDate(dateValue, {
+							language,
+							month: "long",
+							fallback: "",
+					  })
 					: "";
 			return { gregDate, hijriDate };
 		},
-		[hijriAvailable],
+		[hijriAvailable, isArabic],
 	);
 
 	// ------------------ Load hotels ------------------
@@ -2834,7 +2853,13 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 															{formatHijriCellDate(day.date, isArabic)}
 														</div>
 													)}
-													<div className='greg-date'>{day.date}</div>
+											<div className='greg-date'>
+												{formatSaudiGregorianDate(day.date, {
+													language: isArabic ? "Arabic" : "English",
+													month: "long",
+													fallback: day.date,
+												})}
+											</div>
 												</td>
 
 												{roomTypes.map((rt) => {
@@ -3518,14 +3543,18 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 														{res?.reservation_status || "N/A"}
 													</td>
 													<td>
-														{res?.checkin_date
-															? dayjs(res.checkin_date).format("YYYY-MM-DD")
-															: "N/A"}
+												{formatSaudiGregorianDate(res?.checkin_date, {
+													language: isArabic ? "Arabic" : "English",
+													month: "long",
+													fallback: "N/A",
+												})}
 													</td>
 													<td>
-														{res?.checkout_date
-															? dayjs(res.checkout_date).format("YYYY-MM-DD")
-															: "N/A"}
+												{formatSaudiGregorianDate(res?.checkout_date, {
+													language: isArabic ? "Arabic" : "English",
+													month: "long",
+													fallback: "N/A",
+												})}
 													</td>
 													<td>{roomLabelString || "-"}</td>
 													<td>{roomCountString || "-"}</td>
@@ -4079,7 +4108,7 @@ const TableWrapper = styled.div`
 
 	/* dynamic column width */
 	--col-w: 145px;
-	--date-col-w: 130px;
+	--date-col-w: 180px;
 	--total-col-w: 120px;
 
 	table {

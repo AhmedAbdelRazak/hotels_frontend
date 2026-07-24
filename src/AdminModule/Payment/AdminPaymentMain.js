@@ -27,6 +27,10 @@ import {
 	adminUpdateReservationPayoutFlags, // NEW
 	adminAutoReconcileHotel, // NEW
 } from "../apiAdmin";
+import {
+	formatSaudiDateTime,
+	formatSaudiGregorianDate,
+} from "../../utils/saudiDates";
 
 /* ---------------- helpers ---------------- */
 const n2 = (v) => Number(v || 0).toFixed(2);
@@ -90,14 +94,28 @@ function pickLastChange(r, kind /* 'commission' | 'transfer' */) {
 }
 
 /** Renderer for the note/date cell */
-function renderLastNoteCell(r) {
+const formatPaymentDate = (value, chosenLanguage = "English") =>
+	formatSaudiGregorianDate(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "—",
+	});
+
+const formatPaymentDateTime = (value, chosenLanguage = "English") =>
+	formatSaudiDateTime(value, {
+		language: chosenLanguage,
+		month: "long",
+		fallback: "—",
+	});
+
+function renderLastNoteCell(chosenLanguage) {
 	const styleNote = { whiteSpace: "pre-wrap" };
 	const styleDate = { color: "#64748b", fontSize: 12, marginTop: 2 };
 	return ({ note, at }) => (
 		<div>
 			<div style={styleNote}>{note || "—"}</div>
 			<div style={styleDate}>
-				{at ? new Date(at).toLocaleDateString() : "—"}
+				{formatPaymentDate(at, chosenLanguage)}
 			</div>
 		</div>
 	);
@@ -603,10 +621,10 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			title: lastNoteTitle,
 			key: "lastNoteCommission",
 			width: 260,
-			render: (_, r) => renderLastNoteCell(r)(pickLastChange(r, "commission")),
+			render: (_, r) =>
+				renderLastNoteCell(chosenLanguage)(pickLastChange(r, "commission")),
 		}),
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[lastNoteTitle]
+		[lastNoteTitle, chosenLanguage]
 	);
 
 	const lastNoteTransferCol = useMemo(
@@ -614,10 +632,10 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			title: lastNoteTitle,
 			key: "lastNoteTransfer",
 			width: 260,
-			render: (_, r) => renderLastNoteCell(r)(pickLastChange(r, "transfer")),
+			render: (_, r) =>
+				renderLastNoteCell(chosenLanguage)(pickLastChange(r, "transfer")),
 		}),
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[lastNoteTitle]
+		[lastNoteTitle, chosenLanguage]
 	);
 
 	const pendingCols = useMemo(
@@ -669,15 +687,15 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 				title: isArabic ? "الوصول" : "Check‑in",
 				dataIndex: "checkin_date",
 				key: "in",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic ? "المغادرة" : "Check‑out",
 				dataIndex: "checkout_date",
 				key: "out",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic
@@ -699,7 +717,7 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			},
 			actionCol,
 		],
-		[isArabic, selected, selectedHotelId, hotelCol, actionCol]
+		[isArabic, chosenLanguage, selected, selectedHotelId, hotelCol, actionCol]
 	);
 
 	const paidCols = useMemo(
@@ -722,7 +740,7 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 				dataIndex: "commissionPaidAt",
 				key: "paidAt",
 				width: 180,
-				render: (d) => (d ? new Date(d).toLocaleString() : "—"),
+				render: (d) => formatPaymentDateTime(d, chosenLanguage),
 			},
 			{
 				title: isArabic
@@ -735,7 +753,7 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			},
 			actionCol,
 		],
-		[isArabic, hotelCol, actionCol, lastNoteCommissionCol]
+		[isArabic, chosenLanguage, hotelCol, actionCol, lastNoteCommissionCol]
 	);
 
 	const onlineColsDue = useMemo(
@@ -773,15 +791,15 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 				title: isArabic ? "الوصول" : "Check‑in",
 				dataIndex: "checkin_date",
 				key: "in",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic ? "المغادرة" : "Check‑out",
 				dataIndex: "checkout_date",
 				key: "out",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic
@@ -824,7 +842,7 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			},
 			actionCol,
 		],
-		[isArabic, hotelCol, actionCol]
+		[isArabic, chosenLanguage, hotelCol, actionCol]
 	);
 
 	const onlineColsSent = useMemo(
@@ -863,15 +881,15 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 				title: isArabic ? "الوصول" : "Check‑in",
 				dataIndex: "checkin_date",
 				key: "in",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic ? "المغادرة" : "Check‑out",
 				dataIndex: "checkout_date",
 				key: "out",
-				width: 120,
-				render: (d) => (d ? new Date(d).toLocaleDateString("en-US") : "—"),
+				width: 150,
+				render: (d) => formatPaymentDate(d, chosenLanguage),
 			},
 			{
 				title: isArabic
@@ -914,7 +932,7 @@ const AdminPaymentMain = ({ chosenLanguage = "English" }) => {
 			},
 			actionCol,
 		],
-		[isArabic, hotelCol, actionCol, lastNoteTransferCol]
+		[isArabic, chosenLanguage, hotelCol, actionCol, lastNoteTransferCol]
 	);
 
 	return (

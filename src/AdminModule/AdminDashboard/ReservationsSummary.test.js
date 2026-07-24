@@ -121,7 +121,7 @@ afterEach(() => {
 });
 
 test("uses a compact table width budget without fixed overlay columns", () => {
-	expect(RESERVATION_SUMMARY_TABLE_WIDTH).toBe(1852);
+	expect(RESERVATION_SUMMARY_TABLE_WIDTH).toBe(1932);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.status).toBeGreaterThanOrEqual(196);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.confirmation).toBeGreaterThanOrEqual(116);
 	expect(RESERVATION_SUMMARY_COLUMN_WIDTHS.hotel).toBeLessThan(120);
@@ -166,7 +166,7 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 	expect(onDayChange).toHaveBeenCalledWith("tomorrow");
 });
 
-test("renders Arabic Gregorian table dates in an unambiguous day/month/year order", async () => {
+test("renders Arabic Gregorian table dates with the localized month first", async () => {
 	render(
 		<ReservationsSummary
 			day='today'
@@ -176,9 +176,9 @@ test("renders Arabic Gregorian table dates in an unambiguous day/month/year orde
 	);
 
 	expect(await screen.findByText("CONF-1")).toBeTruthy();
-	expect(screen.getAllByText("19/07/2026").length).toBeGreaterThanOrEqual(2);
-	expect(screen.getByText("21/07/2026")).toBeTruthy();
-	expect(screen.queryByText(/يوليو\s+19|19\s+يوليو/)).toBeNull();
+	expect(screen.getAllByText("يوليو 19، 2026").length).toBeGreaterThanOrEqual(2);
+	expect(screen.getByText("يوليو 21، 2026")).toBeTruthy();
+	expect(screen.queryByText(/19[/-]07[/-]2026/)).toBeNull();
 });
 
 test("opens the permission-checked complete details modal from a shareable reservation id", async () => {

@@ -189,9 +189,9 @@ export const RESERVATION_SUMMARY_COLUMN_WIDTHS = Object.freeze({
 	guest: 134,
 	roomType: 138,
 	roomNumber: 104,
-	checkinDate: 108,
-	checkoutDate: 108,
-	createdAt: 112,
+	checkinDate: 136,
+	checkoutDate: 136,
+	createdAt: 136,
 	status: 196,
 	rooms: 56,
 	guests: 58,
@@ -497,7 +497,7 @@ const ReservationsSummary = ({
 				key: "checkinDate",
 				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.checkinDate,
 				align: "center",
-				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
+				render: (value) => <DateText dir='auto'>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.checkoutDate,
@@ -505,7 +505,7 @@ const ReservationsSummary = ({
 				key: "checkoutDate",
 				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.checkoutDate,
 				align: "center",
-				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
+				render: (value) => <DateText dir='auto'>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.createdAt,
@@ -513,7 +513,7 @@ const ReservationsSummary = ({
 				key: "createdAt",
 				width: RESERVATION_SUMMARY_COLUMN_WIDTHS.createdAt,
 				align: "center",
-				render: (value) => <DateText>{formatReservationSummaryDate(value, { locale })}</DateText>,
+				render: (value) => <DateText dir='auto'>{formatReservationSummaryDate(value, { locale })}</DateText>,
 			},
 			{
 				title: L.status,
@@ -1450,6 +1450,8 @@ const NumericText = styled.span`
 
 const DateText = styled(NumericText)`
 	white-space: nowrap;
+	direction: inherit;
+	unicode-bidi: plaintext;
 `;
 
 const CellText = styled.span`
