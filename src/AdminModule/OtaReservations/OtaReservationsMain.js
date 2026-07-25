@@ -30,6 +30,12 @@ import {
 	updateOtaReservationPricing,
 } from "../apiAdmin";
 import { allocateWeightedTotal } from "./otaPricingDistribution";
+import {
+	assignedHotelIdForReservation,
+	hasAssignedHotel,
+	isReleaseReady,
+	isZeroHotelBasePriceRelease,
+} from "./otaReleaseEligibility";
 import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const numberValue = (value) => {
@@ -439,17 +445,6 @@ const formatModalDatePair = (value, language = "English") => ({
 		fallback: "-",
 	}),
 });
-
-const assignedHotelIdForReservation = (reservation = {}) =>
-	String(reservation?.hotelId?._id || reservation?.hotelId || "").trim();
-
-const hasAssignedHotel = (reservation = {}) =>
-	Boolean(assignedHotelIdForReservation(reservation));
-
-const isReleaseReady = (reservation = {}) =>
-	hasAssignedHotel(reservation) &&
-	Boolean(reservation?.hotel_base_price_ready) &&
-	numberValue(reservation?.hotel_visible_amount) > 0;
 
 const mergeReservationDetailsForModal = (details = {}, listRow = {}) => {
 	const customerDetails = details?.customer_details || {};
@@ -1192,7 +1187,14 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 		const response = await releaseOtaReservationToHotel(
 			getReservationKey(selectedReleaseReservation),
 			getUser._id,
-			token
+			token,
+			isZeroHotelBasePriceRelease(selectedReleaseReservation)
+				? {
+						allowZeroHotelBasePrice: true,
+						zeroHotelBasePriceReason:
+							"Authorized platform confirmation to release the reservation to the hotel at SAR 0.00.",
+				  }
+				: {},
 		);
 		setReleasing(false);
 		if (!response?.success) {
@@ -1579,7 +1581,16 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				onOk={handleRelease}
 				centered
 			>
-				{isReleaseReady(selectedReleaseReservation) ? (
+				{isZeroHotelBasePriceRelease(selectedReleaseReservation) ? (
+					<BasePriceWarning>
+						<strong>Confirm zero-price release.</strong>
+						<span>
+							This reservation will be released to the hotel at <b>SAR 0.00</b>.
+							 The authorization and zero amount will be recorded in the reservation
+							 audit history.
+						</span>
+					</BasePriceWarning>
+				) : isReleaseReady(selectedReleaseReservation) ? (
 					<>
 						<p>
 							Are you sure you want to release this reservation to the hotel for{" "}

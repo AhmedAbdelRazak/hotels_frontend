@@ -2147,6 +2147,7 @@ export const releaseOtaReservationToHotel = (
 	reservationId,
 	userId,
 	token,
+	payload = {},
 ) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/release/${userId}`,
@@ -2158,7 +2159,7 @@ export const releaseOtaReservationToHotel = (
 				Authorization: `Bearer ${token}`,
 				...getStoredActiveAuthHeaders(),
 			},
-			body: JSON.stringify({}),
+			body: JSON.stringify(payload),
 		},
 	)
 		.then((response) => response.json())
