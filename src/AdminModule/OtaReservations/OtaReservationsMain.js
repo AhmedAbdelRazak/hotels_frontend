@@ -580,6 +580,19 @@ const OtaPricingModal = ({
 		});
 		return days;
 	}, [rooms]);
+	const unmappedRoomIndexes = useMemo(
+		() =>
+			roomOptionsStatus === "loaded"
+				? rooms.reduce(
+						(indexes, room, roomIndex) =>
+							hasCurrentOtaRoomMapping(room, roomOptions)
+								? indexes
+								: [...indexes, roomIndex],
+						[],
+				  )
+				: [],
+		[roomOptions, roomOptionsStatus, rooms],
+	);
 
 	const updateDay = (roomIndex, dayIndex, patch) => {
 		setRooms((previous) =>
@@ -762,28 +775,29 @@ const OtaPricingModal = ({
 						<strong>{stayNights || "-"}</strong>
 					</PricingContextItem>
 				</PricingContextGrid>
-				<RoomMappingPanel>
-					<div className='room-mapping-heading'>
-						<div>
-							<strong>{t.mappingTitle}</strong>
-							<span>{t.mappingHelp}</span>
+				{roomOptionsStatus === "loading" || roomOptionsStatus === "idle" ? (
+					<RoomOptionsStatus>
+						<Spin size='small' />
+						<span>{t.roomOptionsLoading}</span>
+					</RoomOptionsStatus>
+				) : roomOptionsStatus === "error" ? (
+					<RoomOptionsStatus $error>
+						<span>{roomOptionsState?.error || t.roomOptionsFailed}</span>
+						<Button size='small' onClick={onReloadRoomOptions}>
+							{t.retry}
+						</Button>
+					</RoomOptionsStatus>
+				) : unmappedRoomIndexes.length ? (
+					<RoomMappingPanel>
+						<div className='room-mapping-heading'>
+							<div>
+								<strong>{t.mappingTitle}</strong>
+								<span>{t.mappingHelp}</span>
+							</div>
 						</div>
-						{roomOptionsStatus === "loading" || roomOptionsStatus === "idle" ? (
-							<Spin size='small' />
-						) : null}
-					</div>
-					{roomOptionsStatus === "loading" || roomOptionsStatus === "idle" ? (
-						<div className='room-mapping-status'>{t.roomOptionsLoading}</div>
-					) : roomOptionsStatus === "error" ? (
-						<div className='room-mapping-status is-error'>
-							<span>{roomOptionsState?.error || t.roomOptionsFailed}</span>
-							<Button size='small' onClick={onReloadRoomOptions}>
-								{t.retry}
-							</Button>
-						</div>
-					) : rooms.length ? (
 						<div className='room-mapping-list'>
-							{rooms.map((room, roomIndex) => (
+							{rooms.map((room, roomIndex) =>
+								unmappedRoomIndexes.includes(roomIndex) ? (
 								<div
 									className='room-mapping-row'
 									key={`room-mapping-${roomIndex}`}
@@ -818,14 +832,11 @@ const OtaPricingModal = ({
 										}))}
 									/>
 								</div>
-							))}
+								) : null,
+							)}
 						</div>
-					) : (
-						<div className='room-mapping-status is-error'>
-							{t.roomOptionsFailed}
-						</div>
-					)}
-				</RoomMappingPanel>
+					</RoomMappingPanel>
+				) : null}
 				<PricingSummaryRows $isArabic={isArabic}>
 					<div className='pricing-summary-fields'>
 						<PricingSummaryRow>
@@ -2169,6 +2180,19 @@ const RoomMappingPanel = styled.section`
 			grid-template-columns: 1fr;
 		}
 	}
+`;
+
+const RoomOptionsStatus = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: ${(props) => (props.$error ? "space-between" : "center")};
+	gap: 10px;
+	margin-bottom: 14px;
+	padding: 10px 12px;
+	border: 1px solid ${(props) => (props.$error ? "#ffccc7" : "#cfe2ff")};
+	border-radius: 8px;
+	color: ${(props) => (props.$error ? "#a61d24" : "#405a75")};
+	background: ${(props) => (props.$error ? "#fff1f0" : "#f8fbff")};
 `;
 
 const PricingSummaryRows = styled.div`
