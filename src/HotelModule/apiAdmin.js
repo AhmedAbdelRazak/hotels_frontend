@@ -1314,6 +1314,34 @@ export const updateSingleReservation = (reservationId, reservation) => {
 		}));
 };
 
+export const updateHotelManagementReservation = (reservationId, reservation) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/hotel-management/reservations/${reservationId}`,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+				...getStoredAuthHeaders(),
+			},
+			body: JSON.stringify(reservation || {}),
+		},
+	)
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return localizeApiError(
+					{ ...data, status: response.status },
+					`Reservation update failed (${response.status})`,
+				);
+			}
+			return data;
+		})
+		.catch((err) => ({
+			error: err?.message || "Network error while updating reservation.",
+		}));
+};
+
 export const getOpenFinanceCycleNotifications = (hotelId, userId) => {
 	return fetch(
 		`${process.env.REACT_APP_API_URL}/reservations/open-finance-cycles/${hotelId}/${userId}`,

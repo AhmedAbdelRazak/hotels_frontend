@@ -30,7 +30,7 @@ import {
 	getHotelReservations,
 	getHotelRooms,
 	getHotelInventoryAvailability,
-	updateSingleReservation,
+	updateHotelManagementReservation,
 } from "../../apiAdmin";
 import { isAuthenticated } from "../../../auth";
 import { toast } from "react-toastify";
@@ -41,6 +41,10 @@ import {
 	paymentMethodOptionsWithCurrent,
 } from "../../utils/paymentMethods";
 import { isSuperAdminUser } from "../../../AdminModule/utils/superUsers";
+import {
+	reconcilePricingRowsToStay,
+	totalFromRoomPricingRows,
+} from "./reservationStayPricing";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -115,6 +119,7 @@ export const EditReservationMain = ({
 	setReservation,
 	hotelDetails,
 	onReservationSaved,
+	onSavingChange,
 	basicEditOnly = false,
 }) => {
 	const [isRoomCountModalOpen, setIsRoomCountModalOpen] = useState(false);
@@ -133,6 +138,7 @@ export const EditReservationMain = ({
 	const [pendingRoomIds, setPendingRoomIds] = useState([]);
 	const [hasRoomLineEdits, setHasRoomLineEdits] = useState(false);
 	const [hasDateEdits, setHasDateEdits] = useState(false);
+	const [isSaving, setIsSaving] = useState(false);
 	const isArabic = chosenLanguage === "Arabic";
 	const blockedCalendarMessageFromResponse = (response) => {
 		const blockedRooms =
@@ -205,7 +211,9 @@ export const EditReservationMain = ({
 	);
 	const lastDateKeyRef = useRef("");
 	const initialRoomIdsRef = useRef(null);
+	const initialReservationRef = useRef(reservation);
 	const lastReservationIdRef = useRef(null);
+	const savingRef = useRef(false);
 
 	const safeParseFloat = useCallback((value, fallback = 0) => {
 		const parsed = parseFloat(value);
@@ -437,34 +445,21 @@ export const EditReservationMain = ({
 
 	const getPricingByDayForRoom = useCallback(
 		(nightlyPrice, existingPricingByDay, roomType, displayName) => {
-			const nightsCount = Math.max(getNightsCount(), 1);
+			const nightsCount = getNightsCount();
 			const start = normalizeDate(reservation.checkin_date);
-			if (!start) return [];
+			if (!start || nightsCount <= 0) return [];
+			const expectedDates = Array.from({ length: nightsCount }, (_, idx) =>
+				start.clone().add(idx, "day").format("YYYY-MM-DD"),
+			);
 			if (
 				Array.isArray(existingPricingByDay) &&
 				existingPricingByDay.length > 0
 			) {
-				const expectedDates = Array.from({ length: nightsCount }, (_, idx) =>
-					start.clone().add(idx, "day").format("YYYY-MM-DD")
-				);
-				const pricingDatesMatch =
-					existingPricingByDay.length === nightsCount &&
-					existingPricingByDay.every(
-						(day, idx) =>
-							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") ===
-							expectedDates[idx]
-					);
-				if (pricingDatesMatch) {
-					return existingPricingByDay.map((day) => ({
-						...buildDayRow(day.date, nightlyPrice, day),
-					}));
-				}
-			}
-			const template = Array.isArray(existingPricingByDay)
-				? existingPricingByDay[0]
-				: null;
-			if (nightlyPrice > 0 && template) {
-				return buildPricingByNightly(nightlyPrice, nightsCount, start, template);
+				return reconcilePricingRowsToStay({
+					existingRows: existingPricingByDay,
+					stayDates: expectedDates,
+					fallbackNightlyPrice: nightlyPrice,
+				});
 			}
 			if (nightlyPrice > 0) {
 				return buildPricingByNightly(nightlyPrice, nightsCount, start);
@@ -476,7 +471,6 @@ export const EditReservationMain = ({
 			return buildPricingByNightly(nightlyPrice, nightsCount, start);
 		},
 		[
-			buildDayRow,
 			buildPricingByDayFromDetail,
 			buildPricingByNightly,
 			getNightsCount,
@@ -570,31 +564,24 @@ export const EditReservationMain = ({
 		return current.isBefore(earliestAllowed, "day");
 	};
 
-	const getRoomInventory = () => {
-		const formattedStartDate = formatDate(reservation.checkin_date);
-		const formattedEndDate = formatDate(reservation.checkout_date);
-		if (!hotelIdValue || !formattedStartDate || !formattedEndDate) return;
-		getHotelInventoryAvailability(hotelIdValue, {
-			start: formattedStartDate,
-			end: formattedEndDate,
-		}).then((data) => {
-			if (data && data.error) {
-				console.log(data.error, "Error rendering");
-			} else {
-				setRoomInventory(Array.isArray(data) ? data : []);
-			}
-		});
-	};
-
 	useEffect(() => {
 		if (!hotelIdValue || !belongsToId) return;
-		getHotelRooms(hotelIdValue, belongsToId).then((data) => {
-			if (data && data.error) {
-				console.log(data.error);
-			} else {
+		let cancelled = false;
+		getHotelRooms(hotelIdValue, belongsToId)
+			.then((data) => {
+				if (cancelled) return;
+				if (data && data.error) {
+					console.error(data.error);
+					return;
+				}
 				setHotelRooms(Array.isArray(data) ? data : []);
-			}
-		});
+			})
+			.catch((error) => {
+				if (!cancelled) console.error("Failed to load hotel rooms", error);
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, [hotelIdValue, belongsToId]);
 
 	useEffect(() => {
@@ -605,8 +592,12 @@ export const EditReservationMain = ({
 		if (!reservation?._id) return;
 		if (lastReservationIdRef.current === reservation._id) return;
 		lastReservationIdRef.current = reservation._id;
+		lastDateKeyRef.current = "";
+		initialReservationRef.current = reservation;
 		initialRoomIdsRef.current = getReservationRoomIds(reservation?.roomId);
-	}, [reservation?._id, reservation?.roomId, getReservationRoomIds]);
+		setHasRoomLineEdits(false);
+		setHasDateEdits(false);
+	}, [reservation, getReservationRoomIds]);
 
 	useEffect(() => {
 		if (!reservation?.checkin_date || !reservation?.checkout_date) return;
@@ -617,29 +608,40 @@ export const EditReservationMain = ({
 		const rangeStart = normalizeDate(reservation.checkin_date);
 		const rangeEnd = normalizeDate(reservation.checkout_date);
 
+		let cancelled = false;
 		getHotelReservations(
 			hotelIdValue,
 			belongsToId,
 			formattedStartDate,
 			formattedEndDate,
-		).then((data) => {
-			if (data && data.error) {
-				console.log(data.error, "Error loading reservations");
-				return;
-			}
-			const reservationsList = Array.isArray(data) ? data : [];
-			const bookedIds = new Set();
-			reservationsList.forEach((reservationItem) => {
-				if (reservation?._id && reservationItem?._id === reservation._id)
+		)
+			.then((data) => {
+				if (cancelled) return;
+				if (data && data.error) {
+					console.error(data.error, "Error loading reservations");
 					return;
-				if (!isReservationActive(reservationItem)) return;
-				if (!hasOverlap(reservationItem, rangeStart, rangeEnd)) return;
-				getReservationRoomIds(reservationItem.roomId).forEach((id) =>
-					bookedIds.add(id),
-				);
+				}
+				const reservationsList = Array.isArray(data) ? data : [];
+				const bookedIds = new Set();
+				reservationsList.forEach((reservationItem) => {
+					if (reservation?._id && reservationItem?._id === reservation._id)
+						return;
+					if (!isReservationActive(reservationItem)) return;
+					if (!hasOverlap(reservationItem, rangeStart, rangeEnd)) return;
+					getReservationRoomIds(reservationItem.roomId).forEach((id) =>
+						bookedIds.add(id),
+					);
+				});
+				setBookedRoomIds(Array.from(bookedIds));
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					console.error("Failed to load overlapping reservations", error);
+				}
 			});
-			setBookedRoomIds(Array.from(bookedIds));
-		});
+		return () => {
+			cancelled = true;
+		};
 	}, [
 		reservation?.checkin_date,
 		reservation?.checkout_date,
@@ -654,15 +656,32 @@ export const EditReservationMain = ({
 	]);
 
 	useEffect(() => {
-		if (reservation.checkin_date && reservation.checkout_date) {
-			getRoomInventory();
-		}
-		// eslint-disable-next-line
+		const start = formatDate(reservation.checkin_date);
+		const end = formatDate(reservation.checkout_date);
+		if (!hotelIdValue || !start || !end) return;
+		let cancelled = false;
+		getHotelInventoryAvailability(hotelIdValue, { start, end })
+			.then((data) => {
+				if (cancelled) return;
+				if (data && data.error) {
+					console.error(data.error, "Error loading room inventory");
+					return;
+				}
+				setRoomInventory(Array.isArray(data) ? data : []);
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					console.error("Failed to load room inventory", error);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, [
 		reservation.checkin_date,
 		reservation.checkout_date,
-		belongsToId,
 		hotelIdValue,
+		formatDate,
 	]);
 
 	useEffect(() => {
@@ -955,7 +974,7 @@ export const EditReservationMain = ({
 				nightsCount = Math.max(currentEnd.diff(currentStart, "day"), 0);
 			} else if (Number(currentReservation.days_of_residence) > 0) {
 				nightsCount = Math.max(
-					Number(currentReservation.days_of_residence) - 1,
+					Number(currentReservation.days_of_residence),
 					0,
 				);
 			}
@@ -981,6 +1000,22 @@ export const EditReservationMain = ({
 
 	const onEndDateChange = (date) => {
 		const adjustedDate = datePickerValue(date);
+		const currentStart = reservation.checkin_date
+			? datePickerValue(reservation.checkin_date)
+			: null;
+		if (
+			adjustedDate &&
+			currentStart &&
+			!adjustedDate.isAfter(currentStart, "day")
+		) {
+			toast.error(
+				successMessage(
+					"Checkout date must be after check-in date.",
+					"يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول.",
+				),
+			);
+			return;
+		}
 		setHasDateEdits(true);
 
 		setReservation((currentReservation) => {
@@ -1004,7 +1039,7 @@ export const EditReservationMain = ({
 		if (!reservation.checkin_date) return false;
 		if (!current) return false;
 		return current.isBefore(
-			datePickerValue(reservation.checkin_date),
+			datePickerValue(reservation.checkin_date).add(1, "day"),
 			"day",
 		);
 	};
@@ -1283,17 +1318,6 @@ export const EditReservationMain = ({
 		setIsRoomChangeConfirmVisible(false);
 	};
 
-	const calculateTotalAmountPerDay = () => {
-		const rooms = Array.isArray(reservation.pickedRoomsType)
-			? reservation.pickedRoomsType
-			: [];
-		return rooms.reduce(
-			(total, room) =>
-				total + (Number(room.count) || 1) * (Number(room.chosenPrice) || 0),
-			0,
-		);
-	};
-
 	const removeRoom = () => {
 		if (selectedRoomIndex !== null) {
 			setReservation((currentReservation) => ({
@@ -1408,10 +1432,6 @@ export const EditReservationMain = ({
 		const nightsCount = hasValidDates
 			? Math.max(dateEnd.diff(dateStart, "days"), 0)
 			: 0;
-		const totalPerDay = calculateTotalAmountPerDay();
-		const totalAmount = Number(
-			(totalPerDay * Number(nightsCount)).toFixed(2),
-		);
 		const normalizedPickedRoomsType = Array.isArray(
 			reservation.pickedRoomsType,
 		)
@@ -1443,6 +1463,7 @@ export const EditReservationMain = ({
 			? Math.max(nightsCount, 0)
 			: Number(reservation.days_of_residence) || 0;
 		const flattenedRooms = flattenRoomsForSave(normalizedPickedRoomsType);
+		const totalAmount = totalFromRoomPricingRows(flattenedRooms);
 
 		return {
 			pickedRoomsType: flattenedRooms,
@@ -1483,7 +1504,31 @@ export const EditReservationMain = ({
 		resolveDisplayNameForType,
 	]);
 
-	const UpdateReservation = () => {
+	const UpdateReservation = async () => {
+		if (isSaving || savingRef.current) return;
+		const dateStart = normalizeDate(reservation.checkin_date);
+		const dateEnd = normalizeDate(reservation.checkout_date);
+		if (!dateStart || !dateEnd || !dateEnd.isAfter(dateStart, "day")) {
+			toast.error(
+				successMessage(
+					"Checkout date must be after check-in date.",
+					"يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول.",
+				),
+			);
+			return;
+		}
+		if (
+			!Array.isArray(reservation.pickedRoomsType) ||
+			reservation.pickedRoomsType.length === 0
+		) {
+			toast.error(
+				successMessage(
+					"At least one room type is required.",
+					"يجب اختيار نوع غرفة واحد على الأقل.",
+				),
+			);
+			return;
+		}
 		const calendarBlockedIssues = getSelectedCalendarBlockedIssues();
 		if (calendarBlockedIssues.length > 0) {
 			const issue = calendarBlockedIssues[0];
@@ -1507,6 +1552,10 @@ export const EditReservationMain = ({
 			"هل أنت متأكد أنك تريد تحديث هذا الحجز؟"
 		);
 		if (window.confirm(confirmationMessage)) {
+			savingRef.current = true;
+			setIsSaving(true);
+			if (typeof onSavingChange === "function") onSavingChange(true);
+			try {
 			if (basicEditRestrictionsActive) {
 				const updateData = {
 					customer_details: reservation.customer_details || {},
@@ -1519,13 +1568,15 @@ export const EditReservationMain = ({
 					children: reservation.children,
 					comment: reservation.comment,
 					booking_comment: reservation.booking_comment || reservation.comment,
-					requestingUserId: user?._id,
 				};
 				if (hasRoomLineEdits || hasDateEdits) {
 					Object.assign(updateData, buildRoomPricingUpdatePayload());
 				}
 
-				updateSingleReservation(reservation._id, updateData).then((response) => {
+				const response = await updateHotelManagementReservation(
+					reservation._id,
+					updateData,
+				);
 					if (!response || response.error) {
 						console.error(response?.error || response);
 						toast.error(apiErrorMessage(response));
@@ -1544,7 +1595,6 @@ export const EditReservationMain = ({
 							onReservationSaved(updatedReservation);
 						}
 					}
-				});
 				return;
 			}
 
@@ -1554,30 +1604,38 @@ export const EditReservationMain = ({
 			const existingRoomIds = Array.isArray(initialRoomIdsRef.current)
 				? initialRoomIdsRef.current
 				: [];
-			const statusRaw = String(reservation?.reservation_status || "");
-			const statusLower = statusRaw.toLowerCase();
-			const isCheckedOut =
-				statusLower.includes("checked_out") ||
-				statusLower.includes("checkedout") ||
-				statusLower.includes("checked out");
-			const shouldSetInhouse =
-				!isCheckedOut &&
-				existingRoomIds.length === 0 &&
-				normalizedRoomIds.length > 0;
 			const updateData = {
-				...reservation,
-				roomId: normalizedRoomIds,
+				customer_details: reservation.customer_details || {},
+				total_guests: reservation.total_guests,
+				adults: reservation.adults,
+				children: reservation.children,
+				comment: reservation.comment,
+				booking_comment:
+					reservation.booking_comment || reservation.comment,
 				hotelName: hotelDetails.hotelName,
 				sendEmail: sendEmail,
-				requestingUserId: user?._id,
 			};
-			if (shouldSetInhouse) {
-				updateData.reservation_status = "inhouse";
+			if (!areSameRoomSelection(existingRoomIds, normalizedRoomIds)) {
+				updateData.roomId = normalizedRoomIds;
+			}
+			if (
+				String(reservation.booking_source || "") !==
+				String(initialReservationRef.current?.booking_source || "")
+			) {
+				updateData.booking_source = reservation.booking_source;
+			}
+			if (
+				String(reservation.payment || "") !==
+				String(initialReservationRef.current?.payment || "")
+			) {
+				updateData.payment = reservation.payment;
 			}
 			if (
 				reservation.paid_amount !== "" &&
 				reservation.paid_amount !== null &&
-				reservation.paid_amount !== undefined
+				reservation.paid_amount !== undefined &&
+				safeParseFloat(reservation.paid_amount, 0) !==
+					safeParseFloat(initialReservationRef.current?.paid_amount, 0)
 			) {
 				updateData.paid_amount = safeParseFloat(reservation.paid_amount, 0);
 			}
@@ -1585,24 +1643,16 @@ export const EditReservationMain = ({
 			if (hasRoomLineEdits || hasDateEdits) {
 				Object.assign(updateData, buildRoomPricingUpdatePayload());
 				if (hasDateEdits) {
+					updateData.checkin_date = reservation.checkin_date;
+					updateData.checkout_date = reservation.checkout_date;
 					updateData.__reservationDateUpdateIntent = true;
-				} else {
-					delete updateData.checkin_date;
-					delete updateData.checkout_date;
 				}
-			} else {
-				delete updateData.pickedRoomsType;
-				delete updateData.pickedRoomsPricing;
-				delete updateData.total_rooms;
-				delete updateData.days_of_residence;
-				delete updateData.total_amount;
-				delete updateData.sub_total;
-				delete updateData.commission;
-				delete updateData.checkin_date;
-				delete updateData.checkout_date;
 			}
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const response = await updateHotelManagementReservation(
+				reservation._id,
+				updateData,
+			);
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(
@@ -1641,7 +1691,11 @@ export const EditReservationMain = ({
 					setHasRoomLineEdits(false);
 					setHasDateEdits(false);
 				}
-			});
+			} finally {
+				savingRef.current = false;
+				setIsSaving(false);
+				if (typeof onSavingChange === "function") onSavingChange(false);
+			}
 		}
 	};
 
@@ -1817,18 +1871,14 @@ export const EditReservationMain = ({
 		() => getSelectedCalendarBlockedIssues(),
 		[getSelectedCalendarBlockedIssues],
 	);
+	const grandTotal = useMemo(
+		() => totalFromRoomPricingRows(reservation.pickedRoomsType),
+		[reservation.pickedRoomsType],
+	);
 	const totalPerDay = useMemo(() => {
-		if (!Array.isArray(reservation.pickedRoomsType)) return 0;
-		return reservation.pickedRoomsType.reduce(
-			(sum, room) =>
-				sum + (Number(room.chosenPrice) || 0) * (Number(room.count) || 1),
-			0,
-		);
-	}, [reservation.pickedRoomsType]);
-	const grandTotal = useMemo(() => {
 		const nights = Math.max(0, nightsCountDisplay);
-		return Number((totalPerDay * nights).toFixed(2));
-	}, [totalPerDay, nightsCountDisplay]);
+		return nights > 0 ? Number((grandTotal / nights).toFixed(2)) : 0;
+	}, [grandTotal, nightsCountDisplay]);
 	const paidAmountValue = useMemo(() => {
 		if (
 			reservation.paid_amount === "" ||
@@ -2316,7 +2366,10 @@ export const EditReservationMain = ({
 											: "Booking Source"}
 									</Label>
 									<select
-										disabled={basicEditRestrictionsActive}
+										disabled={
+											basicEditRestrictionsActive ||
+											!isSuperAdminUser(user)
+										}
 										onChange={(e) =>
 											setReservation({
 												...reservation,
@@ -2358,6 +2411,7 @@ export const EditReservationMain = ({
 										</Label>
 										<input
 											type='text'
+											disabled
 											value={reservation.confirmation_number || ""}
 											onChange={(e) =>
 												setReservation({
@@ -2898,6 +2952,8 @@ export const EditReservationMain = ({
 										type='primary'
 										block
 										size='large'
+										loading={isSaving}
+										disabled={isSaving}
 										onClick={() => {
 											UpdateReservation();
 										}}

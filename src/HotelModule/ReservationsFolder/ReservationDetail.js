@@ -50,6 +50,7 @@ import { captureReceiptCanvas } from "../../components/OfficialReceipt/captureRe
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { relocationArray1 } from "./ReservationAssets";
+import { canUseHotelReservationEditor } from "./hotelReservationEditPermissions";
 
 const PAYMENT_LINK_LANGUAGE_OPTIONS = [
 	{ value: "en", label: "English" },
@@ -4558,6 +4559,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		useState(false);
 	const [isSavingFinanceCycle, setIsSavingFinanceCycle] = useState(false);
 	const [editModalDirty, setEditModalDirty] = useState(false);
+	const [isEditReservationSaving, setIsEditReservationSaving] = useState(false);
 	const [editReservationDraft, setEditReservationDraft] = useState(() =>
 		cloneReservationDraft(reservation),
 	);
@@ -4588,11 +4590,26 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
+	const canEditHotelReservation = canUseHotelReservationEditor(user, {
+		isSuperAdmin: isSuperAdminUser(user),
+		hotelOwnerId:
+			hotelDetails?.belongsTo ||
+			reservation?.hotelId?.belongsTo ||
+			reservation?.belongsTo,
+	});
 	const canFullManageReservation =
 		isSuperAdminUser(user) || !limitedOrderTakerAccount;
 	const canLimitedOrderTakerEditReservation =
 		!limitedOrderTakerAccount || isOrderTakerEditableReservation(reservation);
 	const openEditReservationModal = () => {
+		if (!canEditHotelReservation) {
+			toast.error(
+				chosenLanguage === "Arabic"
+					? "ليس لديك صلاحية تعديل حجوزات هذا الفندق."
+					: "You are not authorized to edit reservations for this hotel.",
+			);
+			return;
+		}
 		if (limitedOrderTakerAccount && !canLimitedOrderTakerEditReservation) {
 			toast.error(
 				chosenLanguage === "Arabic"
@@ -4605,6 +4622,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		setEditReservationDraft(draft);
 		editModalSnapshotRef.current = JSON.stringify(draft || {});
 		setEditModalDirty(false);
+		setIsEditReservationSaving(false);
 		setIsModalVisible2(true);
 	};
 	const activeRoleNumbers = getAccountRoleNumbers(user);
@@ -4816,18 +4834,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	useEffect(() => {
 		if (!isModalVisible2) return;
-		const draft = cloneReservationDraft(reservationRef.current || reservation);
-		setEditReservationDraft(draft);
-		editModalSnapshotRef.current = JSON.stringify(draft || {});
-		setEditModalDirty(false);
-	}, [isModalVisible2, reservation]);
-
-	useEffect(() => {
-		if (!isModalVisible2) return;
 		const snapshot = JSON.stringify(editReservationDraft || {});
-		if (snapshot !== editModalSnapshotRef.current) {
-			setEditModalDirty(true);
-		}
+		setEditModalDirty(snapshot !== editModalSnapshotRef.current);
 	}, [editReservationDraft, isModalVisible2]);
 
 	const summarizePayment = useCallback(
@@ -6124,6 +6132,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	};
 
 	const handleEditModalClose = () => {
+		if (isEditReservationSaving) {
+			toast.info(
+				chosenLanguage === "Arabic"
+					? "جارٍ حفظ التعديلات، يرجى الانتظار."
+					: "The reservation is being saved. Please wait.",
+			);
+			return;
+		}
 		if (editModalDirty) {
 			confirmDiscardChanges(() => {
 				setIsModalVisible2(false);
@@ -6147,6 +6163,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			nextReservation,
 		);
 		setEditModalDirty(false);
+		setIsEditReservationSaving(false);
 		setIsModalVisible2(false);
 	};
 
@@ -6988,6 +7005,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							"reservation-update-modal-root"
 						)}
 						width='min(94vw, 1580px)'
+						closable={!isEditReservationSaving}
+						maskClosable={!isEditReservationSaving}
+						keyboard={!isEditReservationSaving}
 						styles={{ body: { padding: 0 } }}
 						style={{
 							top: 10,
@@ -6995,13 +7015,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 						}}
 						{...childModalProps("reservation-update-modal-root")}
 					>
-						{editReservationDraft && (
+						{isModalVisible2 && editReservationDraft && (
 							<EditReservationMain
+								key={editReservationDraft?._id || "reservation-editor"}
 								reservation={editReservationDraft}
 								setReservation={setEditReservationDraft}
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
 								onReservationSaved={handleEditReservationSaved}
+								onSavingChange={setIsEditReservationSaving}
 								basicEditOnly={limitedOrderTakerAccount}
 							/>
 						)}
@@ -7964,6 +7986,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 					<div className='container-wrapper'>
 						{/* EDIT ACTION ENTRY */}
+						{canEditHotelReservation ? (
 						<h5
 							className='text-center mx-auto'
 							style={{
@@ -7979,6 +8002,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							<EditOutlined />
 							{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
 						</h5>
+						) : null}
 
 						{/* RELOCATE ENTRY (same condition you already had) */}
 						{relocationArray1 &&
@@ -8341,6 +8365,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									) : null}
 								</div>
 								<div className='top-edit-action-slot'>
+									{canEditHotelReservation ? (
 									<button
 										className='top-request-button'
 										onClick={openEditReservationModal}
@@ -8348,6 +8373,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<EditOutlined />
 										{chosenLanguage === "Arabic" ? AR_LABELS.editReservation : "Edit Reservation"}
 									</button>
+									) : null}
 								</div>
 								{canFullManageReservation ? (
 									<div className='top-right-actions'>
