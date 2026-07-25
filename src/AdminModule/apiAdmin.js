@@ -1862,6 +1862,27 @@ export const getOtaAssignableHotels = (userId, token) => {
 		}));
 };
 
+export const getOtaReservationRoomOptions = (reservationId, userId, token) => {
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/admin/ota-reservations/${reservationId}/room-options/${userId}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+				...getStoredActiveAuthHeaders(),
+			},
+			cache: "no-store",
+		},
+	)
+		.then((response) => response.json())
+		.catch((err) => ({
+			success: false,
+			error: err?.message || "Could not load active PMS rooms",
+			rooms: [],
+		}));
+};
+
 export const getAdminReservationById = (reservationId, token = "", options = {}) => {
 	const query = new URLSearchParams({ view: "details" });
 	return fetch(
