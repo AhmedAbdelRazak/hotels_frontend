@@ -26,4 +26,3 @@ export const isReleaseReady = (reservation = {}) =>
 	((Boolean(reservation?.hotel_base_price_ready) &&
 		numberValue(reservation?.hotel_visible_amount) > 0) ||
 		isZeroHotelBasePriceRelease(reservation));
-
