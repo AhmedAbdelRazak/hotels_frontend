@@ -233,19 +233,22 @@ test("toggles and combines activity filters, then exports only the visible reser
 	expect(allFilter.getAttribute("aria-pressed")).toBe("true");
 
 	fireEvent.click(allFilter);
-	expect(allFilter.getAttribute("aria-pressed")).toBe("false");
-	expect(screen.queryByText("ARRIVAL-ONLY")).toBeNull();
-	expect(screen.getByText("0 unique reservations")).toBeTruthy();
-	expect(
-		screen.getByText("Select one or more activity filters to show reservations.")
-	).toBeTruthy();
+	expect(allFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
 
 	fireEvent.click(newlyCreatedFilter);
+	expect(allFilter.getAttribute("aria-pressed")).toBe("false");
 	expect(newlyCreatedFilter.getAttribute("aria-pressed")).toBe("true");
 	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
 	expect(screen.queryByText("ARRIVAL-ONLY")).toBeNull();
 	fireEvent.click(newlyCreatedFilter);
 	expect(newlyCreatedFilter.getAttribute("aria-pressed")).toBe("false");
+	expect(allFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
 
 	fireEvent.click(arrivalFilter);
 	expect(arrivalFilter.getAttribute("aria-pressed")).toBe("true");
@@ -270,6 +273,13 @@ test("toggles and combines activity filters, then exports only the visible reser
 	const exportedRows = sheetCalls[sheetCalls.length - 1][0];
 	expect(exportedRows).toHaveLength(1);
 	expect(exportedRows[0]["Confirmation Number"]).toBe("DEPARTURE-ONLY");
+
+	fireEvent.click(departureFilter);
+	expect(departureFilter.getAttribute("aria-pressed")).toBe("false");
+	expect(allFilter.getAttribute("aria-pressed")).toBe("true");
+	expect(screen.getByText("ARRIVAL-ONLY")).toBeTruthy();
+	expect(screen.getByText("DEPARTURE-ONLY")).toBeTruthy();
+	expect(screen.getByText("NEW-ONLY")).toBeTruthy();
 });
 
 test("renders Arabic Gregorian table dates with the localized month first", async () => {

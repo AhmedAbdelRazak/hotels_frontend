@@ -67,7 +67,6 @@ const copy = {
 		arrivalActivity: "Arrival",
 		departureActivity: "Departure",
 		newlyCreatedActivity: "Newly Created",
-		chooseActivityFilter: "Select one or more activity filters to show reservations.",
 		exportExcel: "Export to Excel",
 		exportSuccess: "Executive summary exported successfully.",
 		nothingToExport: "There are no reservations to export for this date.",
@@ -144,8 +143,6 @@ const copy = {
 		departureActivity: "\u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
 		newlyCreatedActivity:
 			"\u0627\u0644\u0645\u0646\u0634\u0623\u0629 \u062d\u062f\u064a\u062b\u0627\u064b",
-		chooseActivityFilter:
-			"\u062d\u062f\u062f \u0646\u0648\u0639\u0627\u064b \u0648\u0627\u062d\u062f\u0627\u064b \u0623\u0648 \u0623\u0643\u062b\u0631 \u0644\u0639\u0631\u0636 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a.",
 		exportExcel: "\u062a\u0635\u062f\u064a\u0631 Excel",
 		exportSuccess:
 			"\u062a\u0645 \u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0645\u0644\u062e\u0635 \u0628\u0646\u062c\u0627\u062d.",
@@ -330,10 +327,12 @@ const ReservationsSummary = ({
 		[data?.reservations]
 	);
 	const filteredReservations = useMemo(() => {
-		if (selectedActivityFilters.includes(ALL_ACTIVITY_FILTER)) {
+		if (
+			!selectedActivityFilters.length ||
+			selectedActivityFilters.includes(ALL_ACTIVITY_FILTER)
+		) {
 			return reservations;
 		}
-		if (!selectedActivityFilters.length) return [];
 		return reservations.filter((reservation) => {
 			const types = Array.isArray(reservation?.activityTypes) ? reservation.activityTypes : [];
 			return selectedActivityFilters.some((filter) => types.includes(filter));
@@ -398,13 +397,14 @@ const ReservationsSummary = ({
 		setTablePage(1);
 		setSelectedActivityFilters((current) => {
 			if (filter === ALL_ACTIVITY_FILTER) {
-				return current.includes(ALL_ACTIVITY_FILTER) ? [] : [ALL_ACTIVITY_FILTER];
+				return [ALL_ACTIVITY_FILTER];
 			}
 
 			const withoutAll = current.filter((selected) => selected !== ALL_ACTIVITY_FILTER);
-			return withoutAll.includes(filter)
-				? withoutAll.filter((selected) => selected !== filter)
-				: [...withoutAll, filter];
+			if (!withoutAll.includes(filter)) return [...withoutAll, filter];
+
+			const remainingFilters = withoutAll.filter((selected) => selected !== filter);
+			return remainingFilters.length ? remainingFilters : [ALL_ACTIVITY_FILTER];
 		});
 	};
 
@@ -954,12 +954,7 @@ const ReservationsSummary = ({
 						setTablePage(nextSize === tablePageSize ? pagination.current || 1 : 1);
 					}}
 					locale={{
-						emptyText: (
-							<Empty
-								description={selectedActivityFilters.length ? L.empty : L.chooseActivityFilter}
-								image={Empty.PRESENTED_IMAGE_SIMPLE}
-							/>
-						),
+						emptyText: <Empty description={L.empty} image={Empty.PRESENTED_IMAGE_SIMPLE} />,
 					}}
 				/>
 			</TablePanel>
