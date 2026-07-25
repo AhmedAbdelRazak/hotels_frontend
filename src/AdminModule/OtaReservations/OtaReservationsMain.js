@@ -29,6 +29,7 @@ import {
 	releaseOtaReservationToHotel,
 	updateOtaReservationPricing,
 } from "../apiAdmin";
+import { allocateWeightedTotal } from "./otaPricingDistribution";
 import { SUPER_USER_IDS } from "../utils/superUsers";
 
 const numberValue = (value) => {
@@ -396,21 +397,19 @@ const recalcDay = (day = {}, patch = {}) => {
 
 const distributeRoomsTotal = (rooms = [], field, totalValue) => {
 	const total = numberValue(totalValue);
-	const flatDays = [];
+	const weights = [];
 	rooms.forEach((room) => {
 		(room.pricingByDay || []).forEach(() => {
-			flatDays.push({ room });
+			weights.push(roomCount(room));
 		});
 	});
-	if (!total || !flatDays.length) return rooms;
-	const weightedNights = flatDays.reduce(
-		(sum, item) => sum + roomCount(item.room),
-		0
-	);
-	const perRoomNight = weightedNights > 0 ? round2(total / weightedNights) : 0;
+	if (!total || !weights.length) return rooms;
+	const allocation = allocateWeightedTotal(total, weights);
+	let allocationIndex = 0;
 	return rooms.map((room) => ({
 		...room,
 		pricingByDay: (room.pricingByDay || []).map((day) => {
+			const perRoomNight = allocation.unitAmounts[allocationIndex++] || 0;
 			if (field === "client") return recalcDay(day, { clientPrice: perRoomNight });
 			if (field === "root") return recalcDay(day, { rootPrice: perRoomNight });
 			return recalcDay(day, { netAfterExpenses: perRoomNight });
@@ -616,38 +615,19 @@ const OtaPricingModal = ({
 			return;
 		}
 		if (!flatDays.length) return;
-		const weightedNights = flatDays.reduce(
-			(sum, item) => sum + roomCount(item.room),
-			0
-		);
-		const sharesByField = activeTotals.reduce((acc, item) => {
-			acc[item.field] =
-				weightedNights > 0 ? round2(item.total / weightedNights) : 0;
-			return acc;
-		}, {});
 		setRooms((previous) =>
-			previous.map((room) => ({
-				...room,
-				pricingByDay: (room.pricingByDay || []).map((day) => {
-					const patch = {};
-					if (sharesByField.client !== undefined) {
-						patch.clientPrice = sharesByField.client;
-					}
-					if (sharesByField.root !== undefined) {
-						patch.rootPrice = sharesByField.root;
-					}
-					if (sharesByField.net !== undefined) {
-						patch.netAfterExpenses = sharesByField.net;
-					}
-					return recalcDay(day, patch);
-				}),
-			}))
+			activeTotals.reduce(
+				(nextRooms, item) =>
+					distributeRoomsTotal(nextRooms, item.field, item.total),
+				previous,
+			),
 		);
 		message.success(t.distributeAll || t.distribute);
 	};
 
 	const handleSave = () => {
 		const payload = {
+			allowOtaClientTotalOverride: true,
 			pickedRoomsType: rooms,
 			pickedRoomsPricing: rooms,
 			total_rooms: totals.totalRooms,
