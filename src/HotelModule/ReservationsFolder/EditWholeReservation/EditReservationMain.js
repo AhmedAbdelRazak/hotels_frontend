@@ -45,6 +45,7 @@ import {
 	reconcilePricingRowsToStay,
 	totalFromRoomPricingRows,
 } from "./reservationStayPricing";
+import { dateOnlyKey, datePickerValue } from "./reservationDateValues";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -53,20 +54,6 @@ const splitRoomKey = (key = "") => {
 	const idx = key.indexOf("|");
 	if (idx === -1) return { room_type: key, displayName: "" };
 	return { room_type: key.slice(0, idx), displayName: key.slice(idx + 1) };
-};
-
-const dateOnlyKey = (value) => {
-	if (!value) return "";
-	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-		return value.slice(0, 10);
-	}
-	const parsed = moment(value);
-	return parsed.isValid() ? parsed.format("YYYY-MM-DD") : "";
-};
-
-const datePickerValue = (value) => {
-	const key = dateOnlyKey(value);
-	return key ? dayjs(key) : null;
 };
 
 const buildStayDateKeysForCalendar = (startDate, endDate) => {
