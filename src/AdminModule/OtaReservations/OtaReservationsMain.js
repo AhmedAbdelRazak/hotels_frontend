@@ -48,6 +48,7 @@ import {
 	recalculateOtaPricingDay as recalcDay,
 	summarizeOtaPricingRooms as summarizeRooms,
 } from "./otaPricingEditor";
+import { formatOtaReservationStatus } from "./otaReservationPresentation";
 
 const numberValue = (value) => {
 	if (value === null || value === undefined || value === "") return 0;
@@ -1580,16 +1581,20 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 													</td>
 													<td>{reservation.booking_source || "-"}</td>
 													<td>
-														<StatusPill>{reservation.reservation_status || "ota review"}</StatusPill>
+														<StatusPill>
+															{formatOtaReservationStatus(
+																reservation.reservation_status
+															)}
+														</StatusPill>
 													</td>
-											<td>
-												{formatDate(
-													reservation.booked_at || reservation.createdAt,
-													chosenLanguage,
-												)}
-											</td>
-											<td>{formatDate(reservation.checkin_date, chosenLanguage)}</td>
-											<td>{formatDate(reservation.checkout_date, chosenLanguage)}</td>
+													<td>
+														{formatDate(
+															reservation.booked_at || reservation.createdAt,
+															chosenLanguage,
+														)}
+													</td>
+													<td>{formatDate(reservation.checkin_date, chosenLanguage)}</td>
+													<td>{formatDate(reservation.checkout_date, chosenLanguage)}</td>
 													<td>{reservation.days_of_residence || "-"}</td>
 													<td>{money(reservation.total_amount)} SAR</td>
 													<td>
