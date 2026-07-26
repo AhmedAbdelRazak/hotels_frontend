@@ -1,6 +1,6 @@
 /** @format */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import { Button, Input, Modal, Select, Spin, Tooltip, message } from "antd";
@@ -24,7 +24,6 @@ import {
 	assignOtaReservationHotel,
 	getAdminReservationById,
 	getOtaAssignableHotels,
-	getOtaReservationRoomOptions,
 	getOtaReservationsForAdmin,
 	readUserId,
 	releaseOtaReservationToHotel,
@@ -39,12 +38,8 @@ import {
 } from "./otaReleaseEligibility";
 import { SUPER_USER_IDS } from "../utils/superUsers";
 import {
-	applyOtaRoomConfig,
-	autoMapOtaPricingRooms,
 	copyFirstOtaPricingRowValues,
-	hasCurrentOtaRoomMapping,
 	otaPricingRoomCount as roomCount,
-	otaRoomConfigId,
 	recalculateOtaPricingDay as recalcDay,
 	summarizeOtaPricingRooms as summarizeRooms,
 } from "./otaPricingEditor";
@@ -93,17 +88,6 @@ const OTA_PRICING_TEXT = {
 		noDistributionValues: "Enter at least one total to distribute.",
 		copyFirstRow: "Copy first row",
 		firstRowCopied: "First-row pricing was copied to every room-night.",
-		mappingTitle: "PMS room mapping",
-		mappingHelp:
-			"Each OTA room unit must point to an active room configuration in the assigned hotel before pricing can be saved.",
-		roomLine: "OTA room",
-		roomUnits: (count) => `${count} ${count === 1 ? "room" : "rooms"}`,
-		selectPmsRoom: "Select the current PMS room",
-		roomMappingRequired: (index) =>
-			`Select an active PMS room for OTA room ${index + 1}.`,
-		roomOptionsLoading: "Loading active PMS rooms...",
-		roomOptionsFailed: "Active PMS rooms could not be loaded.",
-		retry: "Retry",
 		invalidDailyPricing:
 			"Every row needs a positive client price, non-negative hotel/net prices, and net after expenses cannot exceed the client price.",
 		context: {
@@ -164,18 +148,6 @@ const OTA_PRICING_TEXT = {
 		copyFirstRow: "\u0646\u0633\u062e \u0642\u064a\u0645 \u0623\u0648\u0644 \u0635\u0641",
 		firstRowCopied:
 			"\u062a\u0645 \u0646\u0633\u062e \u0623\u0633\u0639\u0627\u0631 \u0623\u0648\u0644 \u0635\u0641 \u0625\u0644\u0649 \u0643\u0644 \u0644\u064a\u0644\u0629 \u0648\u063a\u0631\u0641\u0629.",
-		mappingTitle: "\u0631\u0628\u0637 \u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629 \u0645\u0639 \u0646\u0638\u0627\u0645 PMS",
-		mappingHelp:
-			"\u064a\u062c\u0628 \u0631\u0628\u0637 \u0643\u0644 \u063a\u0631\u0641\u0629 OTA \u0628\u0646\u0648\u0639 \u063a\u0631\u0641\u0629 \u0646\u0634\u0637 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642 \u0642\u0628\u0644 \u062d\u0641\u0638 \u0627\u0644\u0623\u0633\u0639\u0627\u0631.",
-		roomLine: "\u063a\u0631\u0641\u0629 OTA",
-		roomUnits: (count) =>
-			`${count} ${count === 1 ? "\u063a\u0631\u0641\u0629" : "\u063a\u0631\u0641"}`,
-		selectPmsRoom: "\u0627\u062e\u062a\u0631 \u0646\u0648\u0639 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u062d\u0627\u0644\u064a \u0641\u064a PMS",
-		roomMappingRequired: (index) =>
-			`\u0627\u062e\u062a\u0631 \u0646\u0648\u0639 \u063a\u0631\u0641\u0629 PMS \u0646\u0634\u0637 \u0644\u063a\u0631\u0641\u0629 OTA ${index + 1}.`,
-		roomOptionsLoading: "\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u063a\u0631\u0641 PMS \u0627\u0644\u0646\u0634\u0637\u0629...",
-		roomOptionsFailed: "\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u063a\u0631\u0641 PMS \u0627\u0644\u0646\u0634\u0637\u0629.",
-		retry: "\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629",
 		invalidDailyPricing:
 			"\u064a\u062c\u0628 \u0623\u0646 \u064a\u062d\u062a\u0648\u064a \u0643\u0644 \u0635\u0641 \u0639\u0644\u0649 \u0633\u0639\u0631 \u0639\u0645\u064a\u0644 \u0645\u0648\u062c\u0628\u060c \u0648\u0623\u0633\u0639\u0627\u0631 \u0641\u0646\u062f\u0642/\u0635\u0627\u0641\u064a \u063a\u064a\u0631 \u0633\u0627\u0644\u0628\u0629\u060c \u0648\u0623\u0644\u0627 \u064a\u062a\u062c\u0627\u0648\u0632 \u0627\u0644\u0635\u0627\u0641\u064a \u0633\u0639\u0631 \u0627\u0644\u0639\u0645\u064a\u0644.",
 		context: {
@@ -500,8 +472,6 @@ const OtaPricingModal = ({
 	onCancel,
 	onSave,
 	saving,
-	roomOptionsState,
-	onReloadRoomOptions,
 	chosenLanguage = "English",
 	canViewPlatformProfit = false,
 }) => {
@@ -514,25 +484,10 @@ const OtaPricingModal = ({
 		net: "",
 	});
 	const [commissionValue, setCommissionValue] = useState("");
-	const initializedReservationIdRef = useRef("");
-	const roomOptions = useMemo(
-		() =>
-			Array.isArray(roomOptionsState?.rooms) ? roomOptionsState.rooms : [],
-		[roomOptionsState?.rooms],
-	);
-	const roomOptionsStatus = roomOptionsState?.status || "idle";
 
 	useEffect(() => {
-		if (!open) {
-			initializedReservationIdRef.current = "";
-			return;
-		}
+		if (!open) return;
 		if (!reservation) return;
-		if (roomOptionsStatus !== "loaded") return;
-		const reservationKey =
-			reservation?._id || reservation?.confirmation_number || "current";
-		if (initializedReservationIdRef.current === reservationKey) return;
-		initializedReservationIdRef.current = reservationKey;
 
 		const savedClientTotal = savedClientTotalForReservation(reservation);
 		const savedRootTotal = savedRootTotalForReservation(reservation);
@@ -540,10 +495,7 @@ const OtaPricingModal = ({
 		const savedCommission =
 			savedCommissionForReservation(reservation) ||
 			(savedRootTotal > 0 ? round2(savedRootTotal * 0.1) : 0);
-		let nextRooms = autoMapOtaPricingRooms(
-			normalizeRoomsForEdit(reservation),
-			roomOptions,
-		);
+		let nextRooms = normalizeRoomsForEdit(reservation);
 		const currentClientTotal = round2(summarizeRooms(nextRooms).clientTotal);
 		if (
 			savedClientTotal > 0 &&
@@ -558,7 +510,7 @@ const OtaPricingModal = ({
 			net: savedNetTotal > 0 ? money(savedNetTotal) : "",
 		});
 		setCommissionValue(savedCommission > 0 ? money(savedCommission) : "");
-	}, [open, reservation, roomOptions, roomOptionsStatus]);
+	}, [open, reservation]);
 
 	const totals = useMemo(() => {
 		const summary = summarizeRooms(rooms);
@@ -581,20 +533,6 @@ const OtaPricingModal = ({
 		});
 		return days;
 	}, [rooms]);
-	const unmappedRoomIndexes = useMemo(
-		() =>
-			roomOptionsStatus === "loaded"
-				? rooms.reduce(
-						(indexes, room, roomIndex) =>
-							hasCurrentOtaRoomMapping(room, roomOptions)
-								? indexes
-								: [...indexes, roomIndex],
-						[],
-				  )
-				: [],
-		[roomOptions, roomOptionsStatus, rooms],
-	);
-
 	const updateDay = (roomIndex, dayIndex, patch) => {
 		setRooms((previous) =>
 			previous.map((room, currentRoomIndex) => {
@@ -606,20 +544,6 @@ const OtaPricingModal = ({
 					),
 				};
 			})
-		);
-	};
-
-	const updateRoomMapping = (roomIndex, optionId) => {
-		const option = roomOptions.find(
-			(item) => String(item.hotelRoomConfigId || item._id || "") === optionId,
-		);
-		if (!option) return;
-		setRooms((previous) =>
-			previous.map((room, currentRoomIndex) =>
-				currentRoomIndex === roomIndex
-					? applyOtaRoomConfig(room, option)
-					: room,
-			),
 		);
 	};
 
@@ -653,19 +577,6 @@ const OtaPricingModal = ({
 
 	const handleSave = () => {
 		if (saving) return;
-		if (roomOptionsStatus !== "loaded") {
-			message.error(
-				roomOptionsState?.error || t.roomOptionsFailed,
-			);
-			return;
-		}
-		const unmappedRoomIndex = rooms.findIndex(
-			(room) => !hasCurrentOtaRoomMapping(room, roomOptions),
-		);
-		if (unmappedRoomIndex >= 0) {
-			message.error(t.roomMappingRequired(unmappedRoomIndex));
-			return;
-		}
 		const invalidDailyPricing = flatDays.some(({ day }) => {
 			const client = numberValue(day.clientPrice);
 			const root = numberValue(day.rootPrice);
@@ -776,68 +687,6 @@ const OtaPricingModal = ({
 						<strong>{stayNights || "-"}</strong>
 					</PricingContextItem>
 				</PricingContextGrid>
-				{roomOptionsStatus === "loading" || roomOptionsStatus === "idle" ? (
-					<RoomOptionsStatus>
-						<Spin size='small' />
-						<span>{t.roomOptionsLoading}</span>
-					</RoomOptionsStatus>
-				) : roomOptionsStatus === "error" ? (
-					<RoomOptionsStatus $error>
-						<span>{roomOptionsState?.error || t.roomOptionsFailed}</span>
-						<Button size='small' onClick={onReloadRoomOptions}>
-							{t.retry}
-						</Button>
-					</RoomOptionsStatus>
-				) : unmappedRoomIndexes.length ? (
-					<RoomMappingPanel>
-						<div className='room-mapping-heading'>
-							<div>
-								<strong>{t.mappingTitle}</strong>
-								<span>{t.mappingHelp}</span>
-							</div>
-						</div>
-						<div className='room-mapping-list'>
-							{rooms.map((room, roomIndex) =>
-								unmappedRoomIndexes.includes(roomIndex) ? (
-								<div
-									className='room-mapping-row'
-									key={`room-mapping-${roomIndex}`}
-								>
-									<div className='room-mapping-label'>
-										<strong>
-											{t.roomLine} {roomIndex + 1}
-										</strong>
-										<span>{t.roomUnits(roomCount(room))}</span>
-										<small>
-											{room.sourceRoomName ||
-												reservation?.otaPlatformReview?.otaRoomName ||
-												reservation?.supplierData?.otaRoomName ||
-												room.displayName ||
-												room.room_type ||
-												"-"}
-										</small>
-									</div>
-									<Select
-										showSearch
-										optionFilterProp='label'
-										getPopupContainer={() => document.body}
-										dropdownStyle={{ zIndex: 26020 }}
-										placeholder={t.selectPmsRoom}
-										value={otaRoomConfigId(room) || undefined}
-										onChange={(value) =>
-											updateRoomMapping(roomIndex, value)
-										}
-										options={roomOptions.map((option) => ({
-											value: String(option.hotelRoomConfigId || option._id || ""),
-											label: `${option.displayName || option.room_type || "Room"} (${option.room_type || "-"})`,
-										}))}
-									/>
-								</div>
-								) : null,
-							)}
-						</div>
-					</RoomMappingPanel>
-				) : null}
 				<PricingSummaryRows $isArabic={isArabic}>
 					<div className='pricing-summary-fields'>
 						<PricingSummaryRow>
@@ -1065,12 +914,6 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const [detailsLoading, setDetailsLoading] = useState(false);
 	const [detailsReservation, setDetailsReservation] = useState(null);
 	const [savingPricing, setSavingPricing] = useState(false);
-	const [pricingRoomOptionsState, setPricingRoomOptionsState] = useState({
-		status: "idle",
-		rooms: [],
-		error: "",
-	});
-	const [pricingRoomOptionsRetry, setPricingRoomOptionsRetry] = useState(0);
 	const [releasing, setReleasing] = useState(false);
 	const [assigningHotel, setAssigningHotel] = useState(false);
 	const [hotelsLoading, setHotelsLoading] = useState(false);
@@ -1169,9 +1012,6 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 	const selectedPricingReservation = reservations.find(
 		(reservation) => getReservationKey(reservation) === pricingReservationId
 	);
-	const selectedPricingReservationKey = selectedPricingReservation
-		? getReservationKey(selectedPricingReservation)
-		: "";
 	const selectedReleaseReservation = reservations.find(
 		(reservation) => getReservationKey(reservation) === releaseReservationId
 	);
@@ -1198,55 +1038,6 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 		Math.ceil(Number(dataState.totalDocuments || 0) / pageSize),
 		1
 	);
-
-	useEffect(() => {
-		let cancelled = false;
-		if (
-			!pricingReservationId ||
-			!selectedPricingReservationKey ||
-			!getUser?._id ||
-			!token
-		) {
-			setPricingRoomOptionsState({ status: "idle", rooms: [], error: "" });
-			return () => {
-				cancelled = true;
-			};
-		}
-
-		setPricingRoomOptionsState({ status: "loading", rooms: [], error: "" });
-		getOtaReservationRoomOptions(
-			selectedPricingReservationKey,
-			getUser._id,
-			token,
-		).then((response) => {
-			if (cancelled) return;
-			if (response?.success) {
-				setPricingRoomOptionsState({
-					status: "loaded",
-					rooms: Array.isArray(response.rooms) ? response.rooms : [],
-					error: "",
-				});
-				return;
-			}
-			setPricingRoomOptionsState({
-				status: "error",
-				rooms: [],
-				error:
-					response?.message ||
-					response?.error ||
-					"Could not load active PMS rooms for this reservation.",
-			});
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [
-		pricingReservationId,
-		selectedPricingReservationKey,
-		getUser?._id,
-		token,
-		pricingRoomOptionsRetry,
-	]);
 
 	const openPricing = (reservation) =>
 		replaceQuery({ pricingReservationId: getReservationKey(reservation) });
@@ -1667,10 +1458,6 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 				onCancel={closePricing}
 				onSave={handlePricingSave}
 				saving={savingPricing}
-				roomOptionsState={pricingRoomOptionsState}
-				onReloadRoomOptions={() =>
-					setPricingRoomOptionsRetry((current) => current + 1)
-				}
 				chosenLanguage={chosenLanguage}
 				canViewPlatformProfit={canViewPlatformProfit}
 			/>
@@ -2114,90 +1901,6 @@ const PricingContextItem = styled.div`
 		font-weight: 600;
 		text-transform: none;
 	}
-`;
-
-const RoomMappingPanel = styled.section`
-	margin-bottom: 14px;
-	padding: 12px;
-	border: 1px solid #cfe2ff;
-	border-radius: 10px;
-	background: #f8fbff;
-
-	.room-mapping-heading {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		margin-bottom: 10px;
-	}
-
-	.room-mapping-heading > div,
-	.room-mapping-label {
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
-	}
-
-	.room-mapping-heading span,
-	.room-mapping-label span,
-	.room-mapping-label small {
-		color: #60738a;
-		font-size: 12px;
-	}
-
-	.room-mapping-list {
-		display: grid;
-		gap: 9px;
-	}
-
-	.room-mapping-row {
-		display: grid;
-		grid-template-columns: minmax(220px, 0.75fr) minmax(280px, 1.25fr);
-		align-items: center;
-		gap: 12px;
-		padding: 9px;
-		border: 1px solid #e0ebf7;
-		border-radius: 8px;
-		background: #fff;
-	}
-
-	.room-mapping-row .ant-select {
-		width: 100%;
-	}
-
-	.room-mapping-status {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 10px;
-		border-radius: 7px;
-		background: #eef5ff;
-	}
-
-	.room-mapping-status.is-error {
-		color: #a61d24;
-		background: #fff1f0;
-	}
-
-	@media (max-width: 760px) {
-		.room-mapping-row {
-			grid-template-columns: 1fr;
-		}
-	}
-`;
-
-const RoomOptionsStatus = styled.div`
-	display: flex;
-	align-items: center;
-	justify-content: ${(props) => (props.$error ? "space-between" : "center")};
-	gap: 10px;
-	margin-bottom: 14px;
-	padding: 10px 12px;
-	border: 1px solid ${(props) => (props.$error ? "#ffccc7" : "#cfe2ff")};
-	border-radius: 8px;
-	color: ${(props) => (props.$error ? "#a61d24" : "#405a75")};
-	background: ${(props) => (props.$error ? "#fff1f0" : "#f8fbff")};
 `;
 
 const PricingSummaryRows = styled.div`
