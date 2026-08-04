@@ -15,6 +15,7 @@ import dayjs from "dayjs";
 
 import EnhancedContentTable from "../AllReservation/EnhancedContentTable";
 import {
+	getReservationOverview,
 	getReservationsByDay,
 	getCheckinsByDay,
 	getCheckoutsByDay,
@@ -229,6 +230,17 @@ function extractHotels(payload) {
 	return [];
 }
 
+const hasCompleteReservationOverview = (payload) =>
+	payload &&
+	[
+		"reservationsByDay",
+		"checkinsByDay",
+		"checkoutsByDay",
+		"reservationsByBookingStatus",
+		"reservationsByHotelNames",
+		"topHotels",
+	].every((key) => Array.isArray(payload[key]));
+
 const ReservationsOverview = () => {
 	const { user, token } = isAuthenticated() || {};
 	const { chosenLanguage } = useCartContext();
@@ -360,39 +372,75 @@ const ReservationsOverview = () => {
 		setLoading(true);
 		const extraParams = { excludeCancelled };
 
+		const fetchLegacyOverviewOnce = () =>
+			Promise.all([
+				getReservationsByDay(user._id, token, selectedHotels, extraParams),
+				getCheckinsByDay(user._id, token, selectedHotels, extraParams),
+				getCheckoutsByDay(user._id, token, selectedHotels, extraParams),
+				getReservationsByBookingStatus(
+					user._id,
+					token,
+					selectedHotels,
+					extraParams
+				),
+				getReservationsByHotelNames(
+					user._id,
+					token,
+					selectedHotels,
+					extraParams
+				),
+				getTopHotelsByReservations(
+					user._id,
+					token,
+					100,
+					selectedHotels,
+					extraParams
+				),
+			]).then(
+				([
+					reservationsByDayData,
+					checkinsByDayData,
+					checkoutsByDayData,
+					reservationsByBookingStatusData,
+					reservationsByHotelNamesData,
+					topHotelsData,
+				]) => ({
+					reservationsByDay: reservationsByDayData,
+					checkinsByDay: checkinsByDayData,
+					checkoutsByDay: checkoutsByDayData,
+					reservationsByBookingStatus: reservationsByBookingStatusData,
+					reservationsByHotelNames: reservationsByHotelNamesData,
+					topHotels: topHotelsData,
+				})
+			);
+
+		const overviewPromise = getReservationOverview(
+			user._id,
+			token,
+			100,
+			selectedHotels,
+			extraParams
+		).then((payload) =>
+			hasCompleteReservationOverview(payload)
+				? payload
+				: fetchLegacyOverviewOnce()
+		);
+
 		Promise.all([
-			getReservationsByDay(user._id, token, selectedHotels, extraParams),
-			getCheckinsByDay(user._id, token, selectedHotels, extraParams),
-			getCheckoutsByDay(user._id, token, selectedHotels, extraParams),
-			getReservationsByBookingStatus(
-				user._id,
-				token,
-				selectedHotels,
-				extraParams
-			),
-			getReservationsByHotelNames(user._id, token, selectedHotels, extraParams),
-			getTopHotelsByReservations(
-				user._id,
-				token,
-				100,
-				selectedHotels,
-				extraParams
-			),
+			overviewPromise,
 			getBookingSourcePaymentSummary(user._id, token, {
 				selectedHotels,
 				excludeCancelled,
 			}),
 		])
 			.then((results) => {
-				const [
-					rByDay,
-					cByDay,
-					coByDay,
-					rByStatus,
-					rByHotelNames,
-					topHotelsData,
-					bookingSourceSummaryData,
-				] = results;
+				const [overviewData, bookingSourceSummaryData] = results;
+				const rByDay = overviewData?.reservationsByDay;
+				const cByDay = overviewData?.checkinsByDay;
+				const coByDay = overviewData?.checkoutsByDay;
+				const rByStatus = overviewData?.reservationsByBookingStatus;
+				const rByHotelNames = overviewData?.reservationsByHotelNames;
+				const topHotelsData = overviewData?.topHotels;
 
 				setReservationsByDay(Array.isArray(rByDay) ? rByDay : []);
 				setCheckinsByDay(Array.isArray(cByDay) ? cByDay : []);

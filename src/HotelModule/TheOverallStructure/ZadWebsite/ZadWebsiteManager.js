@@ -326,6 +326,69 @@ const ZadWebsiteWrapper = styled.div`
 	@media (max-width: 768px) {
 		padding: 10px;
 	}
+
+	@media (max-width: 560px) {
+		.ant-tabs-nav {
+			margin-bottom: 12px;
+		}
+
+		.ant-tabs-nav::before {
+			border-bottom: 0;
+		}
+
+		.ant-tabs-nav-wrap {
+			min-width: 0;
+			overflow: visible;
+		}
+
+		.ant-tabs-nav-list {
+			display: grid !important;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+			width: 100%;
+			transform: none !important;
+		}
+
+		.ant-tabs-tab {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 100%;
+			min-width: 0;
+			min-height: 52px;
+			margin: 0 !important;
+			padding: 8px !important;
+			border: 1px solid rgba(37, 87, 199, 0.2);
+			border-radius: 8px;
+			background: #ffffff;
+			text-align: center;
+		}
+
+		.ant-tabs-tab-btn,
+		.ant-tabs-tab-btn > span {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			flex-wrap: wrap;
+			gap: 5px;
+			width: 100%;
+			min-width: 0;
+			font-size: clamp(0.74rem, 3.1vw, 0.86rem);
+			line-height: 1.25;
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
+
+		.ant-tabs-tab-active {
+			border-color: #2557c7;
+			background: rgba(37, 87, 199, 0.08);
+		}
+
+		.ant-tabs-ink-bar,
+		.ant-tabs-nav-operations {
+			display: none !important;
+		}
+	}
 `;
 
 const PageHeader = styled.div`

@@ -1518,7 +1518,17 @@ const AccountTabs = styled.div`
 	}
 
 	@media (max-width: 560px) {
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+
+		button {
+			width: 100%;
+			min-height: 52px;
+			padding: 8px;
+			font-size: clamp(0.72rem, 3.1vw, 0.84rem);
+			line-height: 1.25;
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
 	}
 `;
 

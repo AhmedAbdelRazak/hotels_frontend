@@ -1526,7 +1526,7 @@ const TabsBar = styled.div`
 	background: #e3f2fd;
 
 	@media (max-width: 560px) {
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 `;
 
@@ -1539,6 +1539,17 @@ const TabButton = styled.button`
 	font-weight: 950;
 	box-shadow: ${(props) =>
 		props.$active ? "0 8px 18px rgba(30, 136, 229, 0.18)" : "none"};
+
+	@media (max-width: 560px) {
+		width: 100%;
+		min-width: 0;
+		min-height: 52px;
+		padding: 8px;
+		font-size: clamp(0.72rem, 3.1vw, 0.86rem);
+		line-height: 1.25;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
 `;
 
 const TopControlsBar = styled.div`

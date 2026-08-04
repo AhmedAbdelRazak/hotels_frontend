@@ -343,6 +343,12 @@ const CustomerServiceDetailsWrapper = styled.div`
 	}
 
 	@media (max-width: 768px) {
+		.tab-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			align-items: stretch;
+		}
+
 		.content-wrapper {
 			padding: 10px;
 		}
@@ -400,11 +406,18 @@ const Tab = styled.button`
 	}
 
 	@media (max-width: 768px) {
-		flex: 1 1 100%;
+		flex: none;
+		width: 100%;
+		height: 100%;
 		min-width: 0;
+		min-height: 52px;
+		padding: 8px 6px;
+		font-size: clamp(0.82rem, 3.3vw, 0.9rem);
+		line-height: 1.4;
 
 		.tab-label {
 			white-space: normal;
+			overflow-wrap: break-word;
 		}
 	}
 `;

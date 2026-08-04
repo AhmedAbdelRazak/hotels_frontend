@@ -10,6 +10,7 @@ import { isAuthenticated } from "../../auth";
 import FinancialReport from "./FinancialReport";
 import ExpensesManagement from "./ExpensesManagement";
 import { isSuperAdminUser } from "../utils/superUsers";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 
 const FINANCIAL_TEXT = {
 	en: {
@@ -343,14 +344,5 @@ const TabNavigation = styled.div`
 		}
 	}
 
-	@media (max-width: 768px) {
-		flex-wrap: wrap;
-		gap: 8px;
-
-		button {
-			width: 48%;
-			padding: 8px;
-			font-size: 0.9rem;
-		}
-	}
+	${twoColumnPhoneTopTabs}
 `;

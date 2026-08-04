@@ -36,6 +36,7 @@ import {
 import EmojiPicker from "emoji-picker-react";
 import { useHistory, useLocation } from "react-router-dom";
 import TopNavbar from "../AdminNavbar/TopNavbar";
+import { HOTEL_TOP_NAVBAR_HEIGHT_PX } from "../AdminNavbar/mobileSidebarLayout";
 import AdminOverallSideMenu from "../AdminOverallSideMenu/AdminOverallSideMenu";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -1278,8 +1279,8 @@ export default B2BChatMain;
 
 const ChatShell = styled.div`
 	overflow-x: hidden;
-	margin-top: 70px;
-	min-height: calc(100vh - 70px);
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
+	min-height: calc(100vh - ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px);
 	background: #f5f8fc;
 	padding: ${(props) =>
 		props.$isArabic
@@ -1303,8 +1304,8 @@ const ChatShell = styled.div`
 	}
 
 	@media (max-width: 640px) {
-		margin-top: 62px;
-		min-height: calc(100vh - 62px);
+		margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
+		min-height: calc(100vh - ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px);
 		padding: 8px;
 	}
 `;
@@ -1480,17 +1481,28 @@ const ChatTabs = styled.div`
 		filter: drop-shadow(0 1px 1px rgba(16, 32, 51, 0.16));
 	}
 
-	@media (max-width: 640px) {
+	@media (max-width: 768px) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 6px;
 		padding: 6px;
+		overflow: visible;
 
 		button {
-			flex: 1 0 0;
+			flex: initial;
 			min-width: 0;
-			min-height: 42px;
-			padding-inline: 6px;
-			font-size: 0.76rem;
+			min-height: 52px;
+			padding: 8px 6px;
+			font-size: 0.82rem;
+			line-height: 1.25;
+			overflow-wrap: anywhere;
 			white-space: normal;
+		}
+	}
+
+	@media (max-width: 560px) {
+		button {
+			font-size: 0.78rem;
 		}
 	}
 `;

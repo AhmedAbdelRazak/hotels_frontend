@@ -3,6 +3,7 @@ import { useHistory, useLocation } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 import ZLogoAdd from "./ZLogoAdd";
 import ZHomePageBanners from "./ZHomePageBanners";
 import ZHomePageBanner2 from "./ZHomePageBanner2";
@@ -754,12 +755,7 @@ const TabNavigation = styled.div`
 		}
 	}
 
-	@media (max-width: 768px) {
-		button {
-			flex-basis: 100%;
-			font-size: 0.9rem;
-		}
-	}
+	${twoColumnPhoneTopTabs}
 `;
 
 const TabPanel = styled.section`

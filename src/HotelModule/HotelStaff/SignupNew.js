@@ -17,6 +17,7 @@ import {
 } from "../../auth";
 import { getHotelDetails, getHotelById, hotelAccount } from "../apiAdmin";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import { HOTEL_TOP_NAVBAR_HEIGHT_PX } from "../AdminNavbar/mobileSidebarLayout";
 
 const roleOptions = [
 	{
@@ -704,7 +705,7 @@ export default SignupNew;
 const SignupNewWrapper = styled.div`
 	overflow-x: hidden;
 	background: #f5f8fc;
-	margin-top: 46px;
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 	min-height: 715px;
 
 	.grid-container-main {
@@ -783,7 +784,7 @@ const SignupNewWrapper = styled.div`
 	}
 
 	@media (max-width: 1000px) {
-		margin-top: 62px;
+		margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 
 		.grid-container-main {
 			grid-template-columns: 1fr;

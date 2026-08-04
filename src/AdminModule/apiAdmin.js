@@ -2938,6 +2938,43 @@ function buildQueryString(params) {
 		.join("&");
 }
 
+/* ========================================================================
+	 Combined reservations overview
+	 Returns the same six chart payloads as the legacy report calls after one
+	 projected backend read. Callers may retain a one-shot legacy fallback while
+	 mixed frontend/backend versions are being deployed.
+	 ======================================================================== */
+export const getReservationOverview = (
+	userId,
+	token,
+	limit = 100,
+	selectedHotels = [],
+	extraParams = {},
+) => {
+	const query = buildQueryWithParams(selectedHotels, limit, extraParams);
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/adminreports/reservations-overview/${userId}${query}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+			return response.json();
+		})
+		.catch((err) => {
+			console.error("Error fetching combined reservation overview data:", err);
+			return null;
+		});
+};
+
 export const distinctReservedByList = (userId, token) => {
 	return fetch(`${process.env.REACT_APP_API_URL}/reserved-by-list/${userId}`, {
 		method: "GET",

@@ -15,6 +15,10 @@ import PreReservationTable from "../ReservationsFolder/PreReservationTable";
 import { Spin } from "antd";
 import { useCartContext } from "../../cart_context";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import {
+	HOTEL_MOBILE_CONTENT_GRID_CSS,
+	HOTEL_TOP_NAVBAR_HEIGHT_PX,
+} from "../AdminNavbar/mobileSidebarLayout";
 
 const ReservationsMain = () => {
 	const history = useHistory();
@@ -330,7 +334,7 @@ export default ReservationsMain;
 const ReservationsMainWrapper = styled.div`
 	overflow-x: hidden;
 	/* background: #ededed; */
-	margin-top: 50px;
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 	min-height: 750px;
 	/* background-color: #f0f0f0; */
 
@@ -364,4 +368,6 @@ const ReservationsMainWrapper = styled.div`
 	@media (max-width: 1400px) {
 		background: white;
 	}
+
+	${HOTEL_MOBILE_CONTENT_GRID_CSS}
 `;

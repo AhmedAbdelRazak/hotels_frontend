@@ -785,7 +785,7 @@ const ReservationCycleTabs = styled.div`
 		0 6px 18px rgba(8, 42, 75, 0.08);
 
 	@media (max-width: 620px) {
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 `;
 
@@ -831,6 +831,13 @@ const ReservationCycleTab = styled.button`
 
 	@media (prefers-reduced-motion: reduce) {
 		transition: none;
+	}
+
+	@media (max-width: 620px) {
+		min-height: 52px;
+		padding: 8px 6px;
+		font-size: clamp(0.78rem, 3.3vw, 0.84rem);
+		white-space: normal;
 	}
 `;
 

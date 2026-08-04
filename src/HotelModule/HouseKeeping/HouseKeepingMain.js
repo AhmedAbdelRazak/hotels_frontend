@@ -24,6 +24,7 @@ import {
 import { useHistory, useParams } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
+import { HOTEL_TOP_NAVBAR_HEIGHT_PX } from "../AdminNavbar/mobileSidebarLayout";
 import { useCartContext } from "../../cart_context";
 import {
 	createNewHouseKeepingTask,
@@ -2646,7 +2647,7 @@ export default HouseKeepingMain;
 
 const HouseKeepingMainWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 70px;
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 	min-height: 100vh;
 	background: #f5f7fb;
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
@@ -2655,7 +2656,7 @@ const HouseKeepingMainWrapper = styled.div`
 		display: grid;
 		grid-template-columns: ${(props) =>
 			props.$collapsed ? "72px minmax(0, 1fr)" : "270px minmax(0, 1fr)"};
-		min-height: calc(100vh - 70px);
+		min-height: calc(100vh - ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px);
 	}
 
 	.otherContentWrapper {
@@ -2667,7 +2668,7 @@ const HouseKeepingMainWrapper = styled.div`
 	}
 
 	@media (max-width: 900px) {
-		margin-top: 66px;
+		margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 
 		.grid-container-main {
 			display: block;
@@ -2887,10 +2888,11 @@ const TabsBar = styled.div`
 	background: linear-gradient(135deg, #eef8ff, #f8fcff);
 	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
 
-	@media (max-width: 580px) {
-		grid-template-columns: repeat(${(props) => props.$count || 3}, minmax(94px, 1fr));
-		overflow-x: auto;
-		scrollbar-width: thin;
+	@media (max-width: 768px) {
+		grid-template-columns: repeat(
+			${(props) => Math.min(props.$count || 3, 2)},
+			minmax(0, 1fr)
+		);
 	}
 `;
 
@@ -2906,6 +2908,19 @@ const TabButton = styled.button`
 	box-shadow: ${(props) =>
 		props.$active ? "0 10px 20px rgba(22, 119, 255, 0.16)" : "none"};
 	white-space: nowrap;
+
+	@media (max-width: 768px) {
+		min-width: 0;
+		min-height: 52px;
+		padding: 8px 6px;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
+
+	@media (max-width: 560px) {
+		font-size: 0.8rem;
+	}
 `;
 
 const AssignmentPanel = styled.section`

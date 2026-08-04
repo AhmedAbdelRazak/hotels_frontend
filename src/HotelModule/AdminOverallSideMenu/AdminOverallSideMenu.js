@@ -30,6 +30,13 @@ import { Button, Menu } from "antd";
 import { isAuthenticated, signout } from "../../auth";
 import { MENU_COLLAPSE_KEY } from "../utils/menuState";
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
+import {
+	HOTEL_MOBILE_MENU_BREAKPOINT,
+	HOTEL_PHONE_MENU_BREAKPOINT,
+	HOTEL_PHONE_MENU_TOGGLE_INSET_PX,
+	HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX,
+	isHotelMobileMenuViewport,
+} from "../AdminNavbar/mobileSidebarLayout";
 
 function getItem(label, key, icon, children, type, className) {
 	return {
@@ -113,11 +120,9 @@ const SIDE_MENU_AR_TEXT = {
 	closeMenu: "إغلاق القائمة الجانبية",
 };
 
-const MOBILE_MENU_BREAKPOINT = 1200;
-
 const isMobileMenuViewport = () => {
 	if (typeof window === "undefined") return false;
-	return window.innerWidth <= MOBILE_MENU_BREAKPOINT;
+	return isHotelMobileMenuViewport(window.innerWidth);
 };
 
 const roleNumbers = (user = {}) => [
@@ -689,6 +694,7 @@ const AdminOverallSideMenu = ({
 				/>
 			)}
 			<AdminOverallSideMenuWrapper
+				id='overall-mobile-sidebar'
 				$show={collapsed}
 				$show2={clickedOn}
 				$isArabic={isArabic}
@@ -702,6 +708,7 @@ const AdminOverallSideMenu = ({
 					type='primary'
 					onClick={toggleCollapsed}
 					aria-label={collapsed ? "Open overall side menu" : text.closeMenu}
+					aria-controls='overall-mobile-sidebar'
 					aria-expanded={!collapsed}
 				>
 					{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -740,7 +747,7 @@ const MobileMenuBackdrop = styled.button`
 	margin: 0;
 	padding: 0;
 
-	@media (max-width: 1200px) {
+	@media (max-width: ${HOTEL_MOBILE_MENU_BREAKPOINT}px) {
 		display: block;
 		position: fixed;
 		top: 70px;
@@ -1106,7 +1113,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 1200px) {
+	@media (max-width: ${HOTEL_MOBILE_MENU_BREAKPOINT}px) {
 		top: 70px !important;
 		left: ${(props) => (props.$isArabic ? "auto" : "0")};
 		right: ${(props) => (props.$isArabic ? "0" : "auto")};
@@ -1166,7 +1173,7 @@ const AdminOverallSideMenuWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 560px) {
+	@media (max-width: ${HOTEL_PHONE_MENU_BREAKPOINT}px) {
 		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
 			!important;
 		background: ${(props) => (props.$show ? "transparent" : "#1b1726")};
@@ -1176,11 +1183,15 @@ const AdminOverallSideMenuWrapper = styled.div`
 
 		.menu-toggle-button {
 			position: fixed !important;
-			left: ${(props) => (props.$isArabic ? "auto" : "8px")} !important;
-			right: ${(props) => (props.$isArabic ? "8px" : "auto")} !important;
+			left: ${(props) =>
+				props.$isArabic ? "auto" : `${HOTEL_PHONE_MENU_TOGGLE_INSET_PX}px`}
+				!important;
+			right: ${(props) =>
+				props.$isArabic ? `${HOTEL_PHONE_MENU_TOGGLE_INSET_PX}px` : "auto"}
+				!important;
 			top: 13px !important;
-			min-width: 44px;
-			width: 44px;
+			min-width: ${HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX}px;
+			width: ${HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX}px;
 			z-index: 1205;
 			pointer-events: auto;
 		}

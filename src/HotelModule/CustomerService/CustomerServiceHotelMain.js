@@ -5,6 +5,7 @@ import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
 import CustomerServiceDetailsHotels from "./CustomerServiceDetailsHotels";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import { HOTEL_MOBILE_CONTENT_GRID_CSS } from "../AdminNavbar/mobileSidebarLayout";
 
 const CustomerServiceHotelMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -85,15 +86,12 @@ const CustomerServiceHotelMainWrapper = styled.div`
 		text-align: ${(props) => (props.isArabic ? "right" : "")};
 	}
 
-	.tab-grid {
-		display: flex;
-		/* Additional styling for grid layout */
-	}
-
 	@media (max-width: 1600px) {
 		.grid-container-main {
 			grid-template-columns: ${(props) =>
 				props.show ? "5% 90%" : props.showList ? "13% 87%" : "19% 81%"};
 		}
 	}
+
+	${HOTEL_MOBILE_CONTENT_GRID_CSS}
 `;

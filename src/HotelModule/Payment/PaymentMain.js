@@ -9,6 +9,10 @@ import React, {
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import styled from "styled-components";
+import {
+	HOTEL_MOBILE_CONTENT_GRID_CSS,
+	HOTEL_TOP_NAVBAR_HEIGHT_PX,
+} from "../AdminNavbar/mobileSidebarLayout";
 import { useCartContext } from "../../cart_context";
 import {
 	hotelAccount,
@@ -1533,7 +1537,7 @@ export default PaymentMain;
 /* ---------------- styles ---------------- */
 const PaymentMainWrapper = styled.div`
 	overflow-x: hidden;
-	margin-top: 70px;
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 	min-height: 715px;
 
 	.grid-container-main {
@@ -1553,16 +1557,23 @@ const PaymentMainWrapper = styled.div`
 	@media (max-width: 1400px) {
 		background: white;
 	}
+
+	${HOTEL_MOBILE_CONTENT_GRID_CSS}
 `;
 const Grid = styled.div`
 	display: grid;
-	grid-template-columns: 220px 1fr;
+	grid-template-columns: 220px minmax(0, 1fr);
 	gap: 16px;
+	min-width: 0;
+	width: 100%;
+
 	@media (max-width: 980px) {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 `;
-const Left = styled.div``;
+const Left = styled.div`
+	min-width: 0;
+`;
 const LeftTitle = styled.h4`
 	margin: 0 0 10px 0;
 	font-weight: 800;
@@ -1575,7 +1586,23 @@ const CardBox = styled.div`
 	padding: 14px;
 	box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
 `;
-const Right = styled.div``;
+const Right = styled.div`
+	min-width: 0;
+	max-width: 100%;
+
+	.ant-table-wrapper,
+	.ant-table-container,
+	.ant-table-content,
+	.ant-table-body {
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	.ant-table-content,
+	.ant-table-body {
+		overflow-x: auto !important;
+	}
+`;
 const SectionHeader = styled.h3`
 	margin: 8px 0;
 	font-weight: 800;
@@ -1620,6 +1647,20 @@ const KV = styled.p`
 	span {
 		color: #111827;
 	}
+
+	@media (max-width: 520px) {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 2px;
+
+		label {
+			min-width: 0;
+		}
+
+		span {
+			overflow-wrap: anywhere;
+		}
+	}
 `;
 const ActionBar = styled.div`
 	margin: 6px 0 10px;
@@ -1641,7 +1682,27 @@ const TabsBar = styled.div`
 	display: inline-flex;
 	gap: 8px;
 	margin: 6px 0 10px;
+
+	@media (max-width: 768px) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
 `;
 const TabBtn = styled(Button)`
 	border-radius: 999px !important;
+
+	@media (max-width: 768px) {
+		height: auto !important;
+		min-width: 0;
+		min-height: 52px;
+		padding: 8px 10px !important;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
+
+	@media (max-width: 560px) {
+		font-size: 0.8rem;
+	}
 `;

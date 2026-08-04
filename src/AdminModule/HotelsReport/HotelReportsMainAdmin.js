@@ -12,6 +12,7 @@ import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
 import ProfitReportAdmin from "./ProfitReportAdmin";
 import { isSuperAdminUser } from "../utils/superUsers";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 
 const VALID_REPORT_TABS = ["reservations", "inventory", "paid-overview", "Profit"];
 const normalizeReportTab = (tab) => {
@@ -448,12 +449,5 @@ const TabNavigation = styled.div`
 		}
 	}
 
-	@media (max-width: 768px) {
-		button {
-			flex: 1 1 100%;
-			min-width: 0;
-			padding: 8px;
-			font-size: 0.9rem;
-		}
-	}
+	${twoColumnPhoneTopTabs}
 `;

@@ -30,6 +30,7 @@ import {
 } from "../apiAdmin";
 import socket from "../../socket";
 import { formatSaudiDate } from "../../utils/saudiDates";
+import { hotelPhoneHeaderPadding } from "./mobileSidebarLayout";
 
 const normalizeTopNavId = (value) => {
 	if (!value) return "";
@@ -2741,8 +2742,7 @@ const NavbarWrapper = styled.div`
 		direction: ltr !important;
 		gap: 10px;
 		justify-content: flex-start;
-		padding: ${(props) =>
-			props.$isArabic ? "0 62px 0 10px" : "0 10px 0 62px"};
+		padding: ${(props) => hotelPhoneHeaderPadding(props.$isArabic)};
 	}
 `;
 

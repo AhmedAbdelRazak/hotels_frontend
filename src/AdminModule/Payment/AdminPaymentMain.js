@@ -31,6 +31,7 @@ import {
 	formatSaudiDateTime,
 	formatSaudiGregorianDate,
 } from "../../utils/saudiDates";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 
 /* ---------------- helpers ---------------- */
 const n2 = (v) => Number(v || 0).toFixed(2);
@@ -1608,12 +1609,23 @@ const KV = styled.p`
 	span {
 		color: #111827;
 	}
+
+	@media (max-width: 520px) {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 2px;
+
+		label {
+			min-width: 0;
+		}
+	}
 `;
 
 const TabsBar = styled.div`
 	display: inline-flex;
 	gap: 8px;
 	margin: 6px 0 10px;
+	${twoColumnPhoneTopTabs}
 `;
 
 const TabBtn = styled(Button)`

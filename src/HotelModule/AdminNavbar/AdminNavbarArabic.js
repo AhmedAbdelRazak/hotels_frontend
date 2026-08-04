@@ -22,6 +22,13 @@ import { useCartContext } from "../../cart_context";
 import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
 import { signout, isAuthenticated } from "../../auth";
 import TopNavbar from "./TopNavbar";
+import {
+	HOTEL_MOBILE_MENU_BREAKPOINT,
+	HOTEL_PHONE_MENU_BREAKPOINT,
+	HOTEL_PHONE_MENU_TOGGLE_INSET_PX,
+	HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX,
+	isHotelMobileMenuViewport,
+} from "./mobileSidebarLayout";
 
 function getItem(label, key, icon, children, type, className) {
 	return {
@@ -41,11 +48,10 @@ const handleSignout = (history) => {
 };
 
 const MENU_COLLAPSE_KEY = "hotelAdminMenuCollapsed";
-const MOBILE_MENU_BREAKPOINT = 1200;
 
 const isMobileMenuViewport = () => {
 	if (typeof window === "undefined") return false;
-	return window.innerWidth <= MOBILE_MENU_BREAKPOINT;
+	return isHotelMobileMenuViewport(window.innerWidth);
 };
 
 const AdminNavbarArabic = ({
@@ -361,6 +367,7 @@ const AdminNavbarArabic = ({
 				/>
 			)}
 			<AdminNavbarWrapper
+				id='hotel-mobile-sidebar'
 				$show={collapsed}
 				$show2={clickedOn}
 				style={{
@@ -372,6 +379,13 @@ const AdminNavbarArabic = ({
 					className='menu-toggle-button'
 					type='primary'
 					onClick={toggleCollapsed}
+					aria-label={
+						collapsed
+							? "\u0641\u062a\u062d \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0641\u0646\u062f\u0642"
+							: "\u0625\u063a\u0644\u0627\u0642 \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0641\u0646\u062f\u0642"
+					}
+					aria-controls='hotel-mobile-sidebar'
+					aria-expanded={!collapsed}
 				>
 					{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
 				</Button>
@@ -437,7 +451,7 @@ const MobileMenuBackdrop = styled.button`
 	margin: 0;
 	padding: 0;
 
-	@media (max-width: 1200px) {
+	@media (max-width: ${HOTEL_MOBILE_MENU_BREAKPOINT}px) {
 		display: block;
 		position: fixed;
 		top: 70px;
@@ -611,7 +625,7 @@ const AdminNavbarWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 1200px) {
+	@media (max-width: ${HOTEL_MOBILE_MENU_BREAKPOINT}px) {
 		top: 70px !important;
 		right: 0;
 		height: calc(100vh - 70px);
@@ -666,7 +680,7 @@ const AdminNavbarWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 560px) {
+	@media (max-width: ${HOTEL_PHONE_MENU_BREAKPOINT}px) {
 		width: ${(props) => (props.$show ? "56px" : "min(92vw, 340px)")}
 			!important;
 		background: ${(props) => (props.$show ? "transparent" : "#1b1726")};
@@ -676,10 +690,10 @@ const AdminNavbarWrapper = styled.div`
 
 		.menu-toggle-button {
 			position: fixed !important;
-			right: 8px !important;
+			right: ${HOTEL_PHONE_MENU_TOGGLE_INSET_PX}px !important;
 			top: 13px !important;
-			min-width: 44px;
-			width: 44px;
+			min-width: ${HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX}px;
+			width: ${HOTEL_PHONE_MENU_TOGGLE_WIDTH_PX}px;
 			z-index: 1205;
 			pointer-events: auto;
 		}

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useLocation, useHistory } from "react-router-dom";
 import AdminNavbar from "../AdminNavbar/AdminNavbar";
 import styled from "styled-components";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 import AdminNavbarArabic from "../AdminNavbar/AdminNavbarArabic";
 import { Modal, Input, Button, message } from "antd";
 import {
@@ -429,12 +430,7 @@ const TabNavigation = styled.div`
 		}
 	}
 
-	@media (max-width: 768px) {
-		button {
-			flex-basis: 100%;
-			font-size: 0.9rem;
-		}
-	}
+	${twoColumnPhoneTopTabs}
 `;
 
 const TabPanel = styled.section`

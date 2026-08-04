@@ -1305,7 +1305,21 @@ const AdminAccountsWrapper = styled.div`
 		}
 
 		.admin-tabs .ant-tabs-nav-list {
-			flex-wrap: wrap;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			width: 100%;
+		}
+
+		.admin-tabs .ant-tabs-tab {
+			width: 100%;
+			min-width: 0;
+			padding: 8px 6px;
+		}
+
+		.admin-tabs .ant-tabs-tab-btn {
+			font-size: clamp(0.82rem, 3.3vw, 0.9rem);
+			line-height: 1.4;
+			white-space: normal;
 		}
 
 		.stats-grid,

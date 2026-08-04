@@ -1252,6 +1252,7 @@ const NewReservationMain = ({
 						<TabsShell $wide={activeTab === "list" || isRoomMapWorkspace}>
 							<div className='tab-grid'>
 								<Tab
+									type='button'
 									$isHidden={!canShowReservationTab("heatmap")}
 									$isActive={activeTab === "heatmap"}
 									onClick={() => {
@@ -1263,6 +1264,7 @@ const NewReservationMain = ({
 										: "Hotel Heat Map"}
 								</Tab>
 								<Tab
+									type='button'
 									$isHidden={!canShowReservationTab("reserveARoom")}
 									$isActive={activeTab === "reserveARoom"}
 									onClick={() => {
@@ -1275,6 +1277,7 @@ const NewReservationMain = ({
 								</Tab>
 
 								<Tab
+									type='button'
 									$isActive={activeTab === "newReservation"}
 									onClick={() => {
 										navigateReservationTab("newReservation", "?newReservation");
@@ -1286,6 +1289,7 @@ const NewReservationMain = ({
 								</Tab>
 
 								<Tab
+									type='button'
 									$isActive={activeTab === "list"}
 									onClick={() => {
 										navigateReservationTab("list", "?list=&page=1");
@@ -1297,6 +1301,7 @@ const NewReservationMain = ({
 								</Tab>
 
 								<Tab
+									type='button'
 									$isHidden={!canShowReservationTab("housingreport")}
 									$isActive={activeTab === "housingreport"}
 									onClick={() => {
@@ -1679,11 +1684,22 @@ const NewReservationMainWrapper = styled.div`
 		}
 	}
 
-	@media (max-width: 560px) {
+	@media (max-width: 768px) {
+		.tab-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			align-items: stretch;
+			overflow-x: visible;
+			gap: 8px;
+		}
+
 		.container-wrapper {
 			padding: 8px;
 		}
 
+	}
+
+	@media (max-width: 560px) {
 		.otherContentWrapper {
 			padding-inline-start: 0;
 			padding-inline-end: 0;
@@ -1701,20 +1717,22 @@ const TabsShell = styled.div`
 	min-width: 0;
 	width: calc(100% - clamp(16px, 2.8vw, 36px));
 
-	@media (max-width: 560px) {
+	@media (max-width: 768px) {
 		margin: 8px 8px 0;
 		width: auto;
 		padding: 7px;
 	}
 `;
 
-const Tab = styled.div`
+const Tab = styled.button`
+	appearance: none;
 	display: ${(props) => (props.$isHidden ? "none" : "flex")};
 	cursor: pointer;
 	flex: 1 0 138px;
 	margin: 0;
 	padding: 11px 10px;
 	font-weight: bold;
+	font-family: inherit;
 	background-color: ${(props) => (props.$isActive ? "#fff" : "#f3f7fb")};
 	border: 1px solid
 		${(props) => (props.$isActive ? "#9ecdf8" : "rgba(16, 24, 40, 0.08)")};
@@ -1740,12 +1758,16 @@ const Tab = styled.div`
 		padding: 10px 8px;
 	}
 
-	@media (max-width: 760px) {
-		flex: 0 0 auto;
-		font-size: 0.74rem;
-		min-width: 92px;
-		min-height: 48px;
-		padding: 8px 10px;
+	@media (max-width: 768px) {
+		flex: none;
+		width: 100%;
+		height: 100%;
+		font-size: clamp(0.78rem, 3.3vw, 0.88rem);
+		min-width: 0;
+		min-height: 52px;
+		padding: 8px 6px;
+		white-space: normal;
+		overflow-wrap: break-word;
 	}
 `;
 

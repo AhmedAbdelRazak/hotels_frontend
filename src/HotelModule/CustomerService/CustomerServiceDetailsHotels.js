@@ -34,27 +34,31 @@ const CustomerServiceDetailsHotels = () => {
 		<CustomerServiceDetailsHotelsWrapper>
 			<div className='tab-grid'>
 				<Tab
-					isActive={activeTab === "active-client-cases"}
+					type='button'
+					$isActive={activeTab === "active-client-cases"}
 					onClick={() => handleTabChange("active-client-cases")}
 				>
 					Active Client Support Cases
 				</Tab>
 
 				<Tab
-					isActive={activeTab === "active-hotel-cases"}
+					type='button'
+					$isActive={activeTab === "active-hotel-cases"}
 					onClick={() => handleTabChange("active-hotel-cases")}
 				>
 					Active Hotel Support Cases
 				</Tab>
 
 				<Tab
-					isActive={activeTab === "history-hotel-cases"}
+					type='button'
+					$isActive={activeTab === "history-hotel-cases"}
 					onClick={() => handleTabChange("history-hotel-cases")}
 				>
 					History Of Hotel Support Cases
 				</Tab>
 				<Tab
-					isActive={activeTab === "history-client-cases"}
+					type='button'
+					$isActive={activeTab === "history-client-cases"}
 					onClick={() => handleTabChange("history-client-cases")}
 				>
 					History Of Client Support Cases
@@ -106,26 +110,58 @@ const CustomerServiceDetailsHotelsWrapper = styled.div`
 		border-radius: 20px;
 		background: white;
 	}
+
+	@media (max-width: 768px) {
+		padding: 10px;
+
+		.tab-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.content-wrapper {
+			min-width: 0;
+			padding: 10px;
+		}
+	}
 `;
 
-const Tab = styled.div`
+const Tab = styled.button`
+	appearance: none;
 	cursor: pointer;
+	border: 0;
 	margin: 0 3px;
 	padding: 15px 5px;
-	font-weight: ${(props) => (props.isActive ? "bold" : "normal")};
-	background-color: ${(props) => (props.isActive ? "transparent" : "#e0e0e0")};
+	font-weight: ${(props) => (props.$isActive ? "bold" : "normal")};
+	font-family: inherit;
+	background-color: ${(props) => (props.$isActive ? "transparent" : "#e0e0e0")};
 	box-shadow: ${(props) =>
-		props.isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
+		props.$isActive ? "inset 5px 5px 5px rgba(0, 0, 0, 0.3)" : "none"};
 	transition: all 0.3s ease;
 	min-width: 25px;
 	width: 100%;
 	text-align: center;
 	z-index: 100;
 	font-size: 1.2rem;
-	color: ${(props) => (props.isActive ? "black" : "black")};
+	color: black;
 
 	@media (max-width: 1600px) {
 		font-size: 1rem;
 		padding: 10px 1px;
+	}
+
+	@media (max-width: 768px) {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		min-width: 0;
+		min-height: 52px;
+		margin: 0;
+		padding: 8px 6px;
+		font-size: clamp(0.78rem, 3.3vw, 0.88rem);
+		line-height: 1.35;
+		overflow-wrap: break-word;
 	}
 `;

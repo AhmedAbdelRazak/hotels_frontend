@@ -8,6 +8,7 @@ import HotelInventory from "./HotelInventory";
 import PaidReportHotel from "./PaidReportHotel";
 import { useCartContext } from "../../cart_context";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 
 const HotelReportsMain = () => {
 	const [AdminMenuStatus, setAdminMenuStatus] = useState(false);
@@ -98,18 +99,21 @@ const HotelReportsMain = () => {
 						{/* --------------- Tab Navigation --------------- */}
 						<TabNavigation>
 							<button
+								type='button'
 								className={activeTab === "reservations" ? "active" : ""}
 								onClick={() => handleTabChange("reservations")}
 							>
 								{labels.reservations}
 							</button>
 							<button
+								type='button'
 								className={activeTab === "inventory" ? "active" : ""}
 								onClick={() => handleTabChange("inventory")}
 							>
 								{labels.inventory}
 							</button>
 							<button
+								type='button'
 								className={activeTab === "paid-overview" ? "active" : ""}
 								onClick={() => handleTabChange("paid-overview")}
 							>
@@ -283,13 +287,7 @@ const TabNavigation = styled.div`
 
 	@media (max-width: 768px) {
 		padding: 7px;
-
-		button {
-			flex: 0 0 118px;
-			min-height: 48px;
-			padding: 8px 9px;
-			font-size: 0.78rem;
-			white-space: normal;
-		}
 	}
+
+	${twoColumnPhoneTopTabs}
 `;

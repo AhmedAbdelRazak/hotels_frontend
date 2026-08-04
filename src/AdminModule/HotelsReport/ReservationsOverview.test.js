@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import ReservationsOverview from "./ReservationsOverview";
 import {
+	getReservationOverview,
 	getReservationsByDay,
 	getCheckinsByDay,
 	getCheckoutsByDay,
@@ -23,6 +24,7 @@ jest.mock("../../cart_context", () => ({
 }));
 
 jest.mock("../apiAdmin", () => ({
+	getReservationOverview: jest.fn(),
 	getReservationsByDay: jest.fn(),
 	getCheckinsByDay: jest.fn(),
 	getCheckoutsByDay: jest.fn(),
@@ -46,17 +48,18 @@ jest.mock("react-apexcharts", () => ({ options = {} }) => (
 	/>
 ));
 
-jest.mock("../AllReservation/EnhancedContentTable", () => ({
-	data,
-	chosenLanguage,
-}) => (
-	<div
-		data-testid="filtered-reservations-table"
-		data-language={chosenLanguage}
-	>
-		{data.map((row) => row.confirmation_number).join(",")}
-	</div>
-));
+jest.mock(
+	"../AllReservation/EnhancedContentTable",
+	() =>
+		({ data, chosenLanguage }) => (
+			<div
+				data-testid="filtered-reservations-table"
+				data-language={chosenLanguage}
+			>
+				{data.map((row) => row.confirmation_number).join(",")}
+			</div>
+		),
+);
 
 jest.mock("antd", () => {
 	const Collapse = ({ children }) => <div>{children}</div>;
@@ -92,16 +95,23 @@ jest.mock("antd", () => {
 describe("admin reservations overview chart details", () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		getReservationOverview.mockResolvedValue({
+			reservationsByDay: [],
+			checkinsByDay: [],
+			checkoutsByDay: [],
+			reservationsByBookingStatus: [
+				{
+					reservation_status: "inhouse",
+					reservationsCount: 1,
+				},
+			],
+			reservationsByHotelNames: [],
+			topHotels: [],
+		});
 		getReservationsByDay.mockResolvedValue([]);
 		getCheckinsByDay.mockResolvedValue([]);
 		getCheckoutsByDay.mockResolvedValue([]);
-		getReservationsByBookingStatus.mockResolvedValue([
-			{
-				groupKey: "2026-07-22",
-				reservation_status: "inhouse",
-				reservationsCount: 1,
-			},
-		]);
+		getReservationsByBookingStatus.mockResolvedValue([]);
 		getReservationsByHotelNames.mockResolvedValue([]);
 		getTopHotelsByReservations.mockResolvedValue([]);
 		getBookingSourcePaymentSummary.mockResolvedValue(null);
@@ -115,6 +125,23 @@ describe("admin reservations overview chart details", () => {
 
 	it("keeps the clicked chart filter and Arabic language on the modal table", async () => {
 		render(<ReservationsOverview />);
+
+		await waitFor(() => {
+			expect(getReservationOverview).toHaveBeenCalledTimes(1);
+			expect(getReservationOverview).toHaveBeenCalledWith(
+				"admin-1",
+				"token-1",
+				100,
+				["all"],
+				{ excludeCancelled: true },
+			);
+			expect(getReservationsByDay).not.toHaveBeenCalled();
+			expect(getCheckinsByDay).not.toHaveBeenCalled();
+			expect(getCheckoutsByDay).not.toHaveBeenCalled();
+			expect(getReservationsByBookingStatus).not.toHaveBeenCalled();
+			expect(getReservationsByHotelNames).not.toHaveBeenCalled();
+			expect(getTopHotelsByReservations).not.toHaveBeenCalled();
+		});
 
 		fireEvent.click(
 			await screen.findByRole("button", {
@@ -138,5 +165,27 @@ describe("admin reservations overview chart details", () => {
 		expect(table.textContent).toBe("BAR-FILTERED-AR");
 		expect(table.getAttribute("data-language")).toBe("Arabic");
 		expect(screen.getByText("قائمة الحجوزات التفصيلية")).not.toBeNull();
+	});
+
+	it("uses the legacy requests only once when a mixed-version backend lacks the combined endpoint", async () => {
+		getReservationOverview.mockResolvedValueOnce(null);
+		getReservationsByBookingStatus.mockResolvedValueOnce([
+			{
+				reservation_status: "confirmed",
+				reservationsCount: 1,
+			},
+		]);
+
+		render(<ReservationsOverview />);
+
+		await waitFor(() => {
+			expect(getReservationOverview).toHaveBeenCalledTimes(1);
+			expect(getReservationsByDay).toHaveBeenCalledTimes(1);
+			expect(getCheckinsByDay).toHaveBeenCalledTimes(1);
+			expect(getCheckoutsByDay).toHaveBeenCalledTimes(1);
+			expect(getReservationsByBookingStatus).toHaveBeenCalledTimes(1);
+			expect(getReservationsByHotelNames).toHaveBeenCalledTimes(1);
+			expect(getTopHotelsByReservations).toHaveBeenCalledTimes(1);
+		});
 	});
 });

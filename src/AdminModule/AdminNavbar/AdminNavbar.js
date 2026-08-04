@@ -20,6 +20,8 @@ import { useHistory } from "react-router-dom/cjs/react-router-dom.min";
 import { isAuthenticated, signout } from "../../auth";
 import { isConfiguredSuperAdminUser } from "../utils/superUsers";
 import {
+	ADMIN_MOBILE_MENU_BUTTON_HEIGHT_PX,
+	ADMIN_MOBILE_MENU_INSET_PX,
 	adminSidebarRootWidth,
 	isAdminMobileViewport,
 	shouldCloseAdminSidebarForViewport,
@@ -462,10 +464,12 @@ const NavHeader = styled.div`
 const MobileToggleButton = styled(Button)`
 	display: none;
 	position: fixed;
-	top: calc(var(--admin-topbar-height, 0px) + 10px);
-	left: max(12px, env(safe-area-inset-left));
+	top: calc(var(--admin-topbar-height, 0px) + ${ADMIN_MOBILE_MENU_INSET_PX}px);
+	left: max(${ADMIN_MOBILE_MENU_INSET_PX}px, env(safe-area-inset-left));
 	z-index: 1190;
-	min-height: 42px;
+	height: ${ADMIN_MOBILE_MENU_BUTTON_HEIGHT_PX}px;
+	min-height: ${ADMIN_MOBILE_MENU_BUTTON_HEIGHT_PX}px;
+	max-width: calc(100vw - ${ADMIN_MOBILE_MENU_INSET_PX * 2}px);
 	padding-inline: 14px;
 	border: 1px solid rgba(151, 220, 251, 0.74) !important;
 	border-radius: 999px !important;
@@ -488,6 +492,7 @@ const MobileToggleButton = styled(Button)`
 		justify-content: center;
 		gap: 7px;
 	}
+
 `;
 
 const MobileBackdrop = styled.div`

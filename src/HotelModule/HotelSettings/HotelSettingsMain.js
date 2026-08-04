@@ -22,6 +22,10 @@ import ZSuccessfulUpdate from "./ZSuccessfulUpdate";
 import PaymentSettings from "./PaymentSettings";
 import HotelPolicySettings from "./HotelPolicySettings";
 import { getStoredMenuCollapsed } from "../utils/menuState";
+import {
+	HOTEL_MOBILE_CONTENT_GRID_CSS,
+	HOTEL_TOP_NAVBAR_HEIGHT_PX,
+} from "../AdminNavbar/mobileSidebarLayout";
 
 const roomTypeColors = {
 	standardRooms: "#003366", // Dark Blue
@@ -739,6 +743,7 @@ const HotelSettingsMain = () => {
 					<TabsShell>
 						<div className='tab-grid'>
 							<Tab
+								type='button'
 								$isActive={activeTab === "HotelDetails"}
 								onClick={() => {
 									clearUnsavedNewRoomDraft();
@@ -755,6 +760,7 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
+								type='button'
 								$isActive={activeTab === "UpdateRoomCount"}
 								onClick={() => {
 									goToSettingsTab(
@@ -770,6 +776,7 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
+								type='button'
 								$isActive={activeTab === "RoomDetails"}
 								onClick={() => {
 									goToSettingsTab("RoomDetails", "?roomdetails");
@@ -781,6 +788,7 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
+								type='button'
 								$isActive={activeTab === "PaymentSettings"}
 								onClick={() => {
 									goToSettingsTab("PaymentSettings", "?paymentsettings");
@@ -792,6 +800,7 @@ const HotelSettingsMain = () => {
 							</Tab>
 
 							<Tab
+								type='button'
 								$isActive={activeTab === "PolicySettings"}
 								onClick={() => {
 									goToSettingsTab("PolicySettings", "?activeTab=policies");
@@ -943,7 +952,7 @@ export default HotelSettingsMain;
 const HotelSettingsMainWrapper = styled.div`
 	overflow-x: hidden;
 	/* background: #ededed; */
-	margin-top: 46px;
+	margin-top: ${HOTEL_TOP_NAVBAR_HEIGHT_PX}px;
 	min-height: 715px;
 
 	.grid-container-main {
@@ -980,6 +989,18 @@ const HotelSettingsMainWrapper = styled.div`
 				props.show ? "5% 90%" : props.showList ? "13% 87%" : "19% 81%"};
 		}
 	}
+
+	${HOTEL_MOBILE_CONTENT_GRID_CSS}
+
+	@media (max-width: 768px) {
+		.tab-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+			overflow: visible;
+			padding: 0;
+		}
+	}
 `;
 const TabsShell = styled.div`
 	background: #e3f2fd;
@@ -998,13 +1019,15 @@ const TabsShell = styled.div`
 	}
 `;
 
-const Tab = styled.div`
+const Tab = styled.button`
+	appearance: none;
 	display: flex;
 	cursor: pointer;
 	flex: 1 0 138px;
 	margin: 0;
 	padding: 11px 10px;
 	font-weight: bold;
+	font-family: inherit;
 	background-color: ${(props) => (props.$isActive ? "#fff" : "#f3f7fb")};
 	border: 1px solid
 		${(props) => (props.$isActive ? "#9ecdf8" : "rgba(16, 24, 40, 0.08)")};
@@ -1030,11 +1053,20 @@ const Tab = styled.div`
 		padding: 10px 8px;
 	}
 
-	@media (max-width: 760px) {
-		flex: 0 0 auto;
-		font-size: 0.74rem;
-		min-width: 92px;
-		min-height: 48px;
+	@media (max-width: 768px) {
+		flex: initial;
+		width: 100%;
+		font-size: 0.82rem;
+		min-width: 0;
+		min-height: 52px;
 		padding: 8px 10px;
+		overflow-wrap: anywhere;
+		text-overflow: clip;
+		white-space: normal;
+	}
+
+	@media (max-width: 560px) {
+		font-size: 0.78rem;
+		line-height: 1.3;
 	}
 `;

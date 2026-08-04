@@ -6233,12 +6233,22 @@ const AccountsModalShell = styled.div`
 	@media (max-width: 560px) {
 		.ant-tabs-nav-list {
 			display: grid !important;
-			grid-template-columns: 1fr;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			width: 100%;
 		}
 
 		.ant-tabs-tab {
 			justify-content: center;
+			min-width: 0;
 			width: 100%;
+		}
+
+		.account-tab-label {
+			min-width: 0;
+			font-size: clamp(0.78rem, 3.3vw, 0.88rem);
+			line-height: 1.35;
+			white-space: normal;
+			text-align: center;
 		}
 	}
 `;

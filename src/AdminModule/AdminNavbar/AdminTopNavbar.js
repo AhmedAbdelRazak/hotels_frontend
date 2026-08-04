@@ -44,6 +44,11 @@ import {
 	formatZoneHijriDate,
 } from "../../utils/worldTimeZones";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import {
+	ADMIN_MOBILE_MENU_CLEARANCE_PX,
+	ADMIN_PHONE_BREAKPOINT,
+	ADMIN_STACKED_TOPBAR_HEIGHT_PX,
+} from "./adminSidebarViewport";
 
 const ADMIN_BRAND_LOGO =
 	"https://xhotelpro.com/static/media/XHotelLogo.706e3ec89ab26bfecf21.png";
@@ -1522,7 +1527,12 @@ const AdminTopNavbarGlobalStyles = createGlobalStyle`
 
 	@media (max-width: 900px) {
 		:root {
-			--admin-topbar-height: 112px;
+			--admin-topbar-height: ${ADMIN_STACKED_TOPBAR_HEIGHT_PX}px;
+		}
+
+		/* The phone header is sticky and therefore participates in document flow. */
+		.admin-route-shell {
+			padding-top: 0;
 		}
 
 		.admin-platform-notification-dropdown {
@@ -1549,6 +1559,18 @@ const AdminTopNavbarGlobalStyles = createGlobalStyle`
 
 		.admin-route-shell .otherContentWrapper {
 			padding-top: 58px;
+		}
+	}
+
+	@media (max-width: ${ADMIN_PHONE_BREAKPOINT}px) {
+		.admin-route-shell .grid-container-main > .navcontent {
+			position: relative;
+			width: 100% !important;
+			height: ${ADMIN_MOBILE_MENU_CLEARANCE_PX}px;
+		}
+
+		.admin-route-shell .otherContentWrapper {
+			padding-top: 0;
 		}
 	}
 `;
