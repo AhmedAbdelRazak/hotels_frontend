@@ -1,6 +1,6 @@
 /** @format */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import { Button, Input, Modal, Select, Spin, Tooltip, message } from "antd";
@@ -29,7 +29,6 @@ import {
 	releaseOtaReservationToHotel,
 	updateOtaReservationPricing,
 } from "../apiAdmin";
-import { allocateWeightedTotal } from "./otaPricingDistribution";
 import {
 	assignedHotelIdForReservation,
 	hasAssignedHotel,
@@ -43,13 +42,20 @@ import {
 	recalculateOtaPricingDay as recalcDay,
 	summarizeOtaPricingRooms as summarizeRooms,
 } from "./otaPricingEditor";
+import {
+	applyTouchedOtaDistributions,
+	otaPricingInitializationDecision,
+	otaPricingNumberValue,
+	parseLocalizedMoney,
+	preferredOtaPricingRooms,
+	prepareOtaPricingSave,
+	resolveInitialOtaCommissionInput,
+	touchedOtaDistributionFields,
+} from "./otaPricingModalModel";
 import { formatOtaReservationStatus } from "./otaReservationPresentation";
 
 const numberValue = (value) => {
-	if (value === null || value === undefined || value === "") return 0;
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	const parsed = Number(String(value).replace(/,/g, "").trim());
-	return Number.isFinite(parsed) ? parsed : 0;
+	return otaPricingNumberValue(value);
 };
 
 const money = (value) => numberValue(value).toFixed(2);
@@ -86,6 +92,11 @@ const OTA_PRICING_TEXT = {
 		generalCommissionPlaceholder: "Enter general commission",
 		noDailyPricing: "No daily pricing rows were found.",
 		noDistributionValues: "Enter at least one total to distribute.",
+		invalidDistributionValue:
+			"Enter a valid non-negative total in every changed distribution field.",
+		inexactDistribution:
+			"That total cannot be divided exactly across the selected room quantities. Adjust it by one cent and try again.",
+		invalidCommission: "Enter a valid non-negative general commission amount.",
 		copyFirstRow: "Copy first row",
 		firstRowCopied: "First-row pricing was copied to every room-night.",
 		invalidDailyPricing:
@@ -143,6 +154,12 @@ const OTA_PRICING_TEXT = {
 		savedTotalPlaceholder: "الإجمالي المحفوظ للتوزيع",
 		enterTotalPlaceholder: "أدخل الإجمالي للتوزيع",
 		noDailyPricing: "لا توجد صفوف أسعار يومية لهذا الحجز.",
+		noDistributionValues: "أدخل إجمالياً واحداً على الأقل للتوزيع.",
+		invalidDistributionValue:
+			"أدخل إجمالياً صحيحاً وغير سالب في كل حقل توزيع تم تعديله.",
+		inexactDistribution:
+			"لا يمكن تقسيم هذا الإجمالي بدقة على كميات الغرف المحددة. عدّل المبلغ بمقدار هللة واحدة ثم حاول مرة أخرى.",
+		invalidCommission: "أدخل مبلغ عمولة عامة صحيحاً وغير سالب.",
 		generalCommissionPlaceholder:
 			"\u0623\u062f\u062e\u0644 \u0645\u0628\u0644\u063a \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
 		copyFirstRow: "\u0646\u0633\u062e \u0642\u064a\u0645 \u0623\u0648\u0644 \u0635\u0641",
@@ -198,17 +215,10 @@ const OTA_PRICING_TEXT = {
 	},
 };
 
-const hasExplicitNumberInput = (value) =>
-	value !== null &&
-	value !== undefined &&
-	value !== "" &&
-	Number.isFinite(Number(String(value).replace(/,/g, "").trim()));
-
 const firstExplicitNumber = (...values) => {
 	for (const value of values) {
-		if (hasExplicitNumberInput(value)) {
-			return Number(String(value).replace(/,/g, "").trim());
-		}
+		const parsed = parseLocalizedMoney(value);
+		if (parsed.status === "valid") return parsed.value;
 	}
 	return null;
 };
@@ -233,17 +243,6 @@ const savedRootTotalForReservation = (reservation = {}) => {
 const savedNetTotalForReservation = (reservation = {}) => {
 	const value = firstExplicitNumber(
 		reservation?.adminPricing?.netAfterExpensesTotal
-	);
-	return value !== null ? round2(value) : 0;
-};
-
-const savedCommissionForReservation = (reservation = {}) => {
-	const value = firstExplicitNumber(
-		reservation?.adminPricing?.commissionAmount,
-		reservation?.financial_cycle?.commissionAmount,
-		reservation?.commissionData?.commissionAmount,
-		reservation?.commissionData?.amount,
-		reservation?.commission
 	);
 	return value !== null ? round2(value) : 0;
 };
@@ -342,39 +341,13 @@ const normalizeDay = (day = {}) => {
 };
 
 const normalizeRoomsForEdit = (reservation = {}) => {
-	const source = Array.isArray(reservation.pickedRoomsType)
-		? reservation.pickedRoomsType
-		: Array.isArray(reservation.pickedRoomsPricing)
-		? reservation.pickedRoomsPricing
-		: [];
+	const source = preferredOtaPricingRooms(reservation);
 	return JSON.parse(JSON.stringify(source || [])).map((room) => ({
 		...room,
 		count: roomCount(room),
 		pricingByDay: Array.isArray(room.pricingByDay)
 			? room.pricingByDay.map(normalizeDay)
 			: [],
-	}));
-};
-
-const distributeRoomsTotal = (rooms = [], field, totalValue) => {
-	const total = numberValue(totalValue);
-	const weights = [];
-	rooms.forEach((room) => {
-		(room.pricingByDay || []).forEach(() => {
-			weights.push(roomCount(room));
-		});
-	});
-	if (!total || !weights.length) return rooms;
-	const allocation = allocateWeightedTotal(total, weights);
-	let allocationIndex = 0;
-	return rooms.map((room) => ({
-		...room,
-		pricingByDay: (room.pricingByDay || []).map((day) => {
-			const perRoomNight = allocation.unitAmounts[allocationIndex++] || 0;
-			if (field === "client") return recalcDay(day, { clientPrice: perRoomNight });
-			if (field === "root") return recalcDay(day, { rootPrice: perRoomNight });
-			return recalcDay(day, { netAfterExpenses: perRoomNight });
-		}),
 	}));
 };
 
@@ -466,6 +439,12 @@ const PricingHelpLabel = ({ label, help }) => (
 	</span>
 );
 
+const emptyDistributionTouched = () => ({
+	client: false,
+	root: false,
+	net: false,
+});
+
 const OtaPricingModal = ({
 	open,
 	reservation,
@@ -483,33 +462,48 @@ const OtaPricingModal = ({
 		root: "",
 		net: "",
 	});
+	const [distributionTouched, setDistributionTouched] = useState(
+		emptyDistributionTouched,
+	);
 	const [commissionValue, setCommissionValue] = useState("");
+	const roomsRef = useRef([]);
+	const distributeValuesRef = useRef({ client: "", root: "", net: "" });
+	const distributionTouchedRef = useRef(emptyDistributionTouched());
+	const commissionValueRef = useRef("");
+	const initializedReservationIdRef = useRef("");
 
 	useEffect(() => {
-		if (!open) return;
+		const initialization = otaPricingInitializationDecision({
+			open,
+			reservationKey: reservation ? getReservationKey(reservation) : "",
+			initializedKey: initializedReservationIdRef.current,
+		});
+		initializedReservationIdRef.current = initialization.nextInitializedKey;
+		if (!initialization.initialize) return;
 		if (!reservation) return;
 
 		const savedClientTotal = savedClientTotalForReservation(reservation);
 		const savedRootTotal = savedRootTotalForReservation(reservation);
 		const savedNetTotal = savedNetTotalForReservation(reservation);
-		const savedCommission =
-			savedCommissionForReservation(reservation) ||
-			(savedRootTotal > 0 ? round2(savedRootTotal * 0.1) : 0);
-		let nextRooms = normalizeRoomsForEdit(reservation);
-		const currentClientTotal = round2(summarizeRooms(nextRooms).clientTotal);
-		if (
-			savedClientTotal > 0 &&
-			Math.abs(currentClientTotal - savedClientTotal) > 0.01
-		) {
-			nextRooms = distributeRoomsTotal(nextRooms, "client", savedClientTotal);
-		}
-		setRooms(nextRooms);
-		setDistributeValues({
+		const initialCommission = resolveInitialOtaCommissionInput(
+			reservation,
+			savedRootTotal,
+		);
+		const nextRooms = normalizeRoomsForEdit(reservation);
+		const nextDistributionValues = {
 			client: savedClientTotal > 0 ? money(savedClientTotal) : "",
-			root: savedRootTotal > 0 ? money(savedRootTotal) : "",
-			net: savedNetTotal > 0 ? money(savedNetTotal) : "",
-		});
-		setCommissionValue(savedCommission > 0 ? money(savedCommission) : "");
+			root: savedRootTotal >= 0 ? money(savedRootTotal) : "",
+			net: savedNetTotal >= 0 ? money(savedNetTotal) : "",
+		};
+		const nextTouched = emptyDistributionTouched();
+		roomsRef.current = nextRooms;
+		distributeValuesRef.current = nextDistributionValues;
+		distributionTouchedRef.current = nextTouched;
+		commissionValueRef.current = initialCommission.inputValue;
+		setRooms(nextRooms);
+		setDistributeValues(nextDistributionValues);
+		setDistributionTouched(nextTouched);
+		setCommissionValue(initialCommission.inputValue);
 	}, [open, reservation]);
 
 	const totals = useMemo(() => {
@@ -523,6 +517,12 @@ const OtaPricingModal = ({
 			totalRooms: summary.totalRooms,
 		};
 	}, [rooms]);
+	const parsedCommission = useMemo(
+		() => parseLocalizedMoney(commissionValue),
+		[commissionValue],
+	);
+	const displayedCommission =
+		parsedCommission.status === "valid" ? money(parsedCommission.value) : "";
 
 	const flatDays = useMemo(() => {
 		const days = [];
@@ -533,8 +533,38 @@ const OtaPricingModal = ({
 		});
 		return days;
 	}, [rooms]);
+	const updateRooms = (updater) => {
+		const previous = roomsRef.current;
+		const next = typeof updater === "function" ? updater(previous) : updater;
+		roomsRef.current = next;
+		setRooms(next);
+	};
+	const clearDistributionTouched = () => {
+		const nextTouched = emptyDistributionTouched();
+		distributionTouchedRef.current = nextTouched;
+		setDistributionTouched(nextTouched);
+	};
+	const showPricingDraftError = (result = {}) => {
+		if (result.code === "inexact_distribution") {
+			message.error(t.inexactDistribution);
+			return;
+		}
+		if (result.code === "invalid_distribution") {
+			message.error(t.invalidDistributionValue);
+			return;
+		}
+		if (
+			result.code === "invalid_commission" ||
+			result.code === "negative_commission" ||
+			result.code === "commission_out_of_range"
+		) {
+			message.error(t.invalidCommission);
+			return;
+		}
+		message.error(t.invalidDailyPricing || t.noDailyPricing);
+	};
 	const updateDay = (roomIndex, dayIndex, patch) => {
-		setRooms((previous) =>
+		updateRooms((previous) =>
 			previous.map((room, currentRoomIndex) => {
 				if (currentRoomIndex !== roomIndex) return room;
 				return {
@@ -546,66 +576,64 @@ const OtaPricingModal = ({
 			})
 		);
 	};
+	const updateDistributionValue = (field, value) => {
+		const nextValues = { ...distributeValuesRef.current, [field]: value };
+		const nextTouched = { ...distributionTouchedRef.current, [field]: true };
+		distributeValuesRef.current = nextValues;
+		distributionTouchedRef.current = nextTouched;
+		setDistributeValues(nextValues);
+		setDistributionTouched(nextTouched);
+	};
+	const updateCommissionValue = (value) => {
+		commissionValueRef.current = value;
+		setCommissionValue(value);
+	};
 
 	const copyFirstRow = () => {
 		if (!flatDays.length) {
 			message.warning(t.noDailyPricing);
 			return;
 		}
-		setRooms((previous) => copyFirstOtaPricingRowValues(previous));
+		updateRooms((previous) => copyFirstOtaPricingRowValues(previous));
 		message.success(t.firstRowCopied);
 	};
 
 	const distributeAllTotals = () => {
-		const activeTotals = ["client", "root", "net"]
-			.map((field) => ({ field, total: numberValue(distributeValues[field]) }))
-			.filter((item) => item.total > 0);
-		if (!activeTotals.length) {
+		if (!touchedOtaDistributionFields(distributionTouchedRef.current).length) {
 			message.warning(t.noDistributionValues || "Enter at least one total to distribute.");
 			return;
 		}
-		if (!flatDays.length) return;
-		setRooms((previous) =>
-			activeTotals.reduce(
-				(nextRooms, item) =>
-					distributeRoomsTotal(nextRooms, item.field, item.total),
-				previous,
-			),
-		);
+		const distributed = applyTouchedOtaDistributions({
+			rooms: roomsRef.current,
+			distributionValues: distributeValuesRef.current,
+			distributionTouched: distributionTouchedRef.current,
+		});
+		if (!distributed.ok) {
+			showPricingDraftError(distributed);
+			return;
+		}
+		updateRooms(distributed.rooms);
+		clearDistributionTouched();
 		message.success(t.distributeAll || t.distribute);
 	};
 
 	const handleSave = () => {
 		if (saving) return;
-		const invalidDailyPricing = flatDays.some(({ day }) => {
-			const client = numberValue(day.clientPrice);
-			const root = numberValue(day.rootPrice);
-			const net = numberValue(day.netAfterExpenses);
-			return client <= 0 || root < 0 || net < 0 || net - client > 0.009;
+		const prepared = prepareOtaPricingSave({
+			rooms: roomsRef.current,
+			distributionValues: distributeValuesRef.current,
+			distributionTouched: distributionTouchedRef.current,
+			commissionInput: commissionValueRef.current,
 		});
-		if (!flatDays.length || invalidDailyPricing) {
-			message.error(t.invalidDailyPricing || t.noDailyPricing);
+		if (!prepared.ok) {
+			showPricingDraftError(prepared);
 			return;
 		}
-		const payload = {
-			allowOtaClientTotalOverride: true,
-			pickedRoomsType: rooms,
-			pickedRoomsPricing: rooms,
-			total_rooms: totals.totalRooms,
-			total_amount: totals.clientTotal,
-			sub_total: totals.rootTotal,
-			commission: round2(commissionValue),
-			adminPricing: {
-				mode: "ota_review",
-				clientTotal: totals.clientTotal,
-				rootTotal: totals.rootTotal,
-				netAfterExpensesTotal: totals.netAfterExpensesTotal,
-				otaExpenseTotal: totals.otaExpenseTotal,
-				platformMarginTotal: totals.platformMarginTotal,
-				commissionAmount: round2(commissionValue),
-			},
-		};
-		onSave(payload);
+		if (prepared.appliedFields?.length) {
+			updateRooms(prepared.rooms);
+			clearDistributionTouched();
+		}
+		onSave(prepared.payload);
 	};
 
 	const checkinDate = formatModalDatePair(
@@ -700,11 +728,10 @@ const OtaPricingModal = ({
 							<Input
 								placeholder={t.savedTotalPlaceholder}
 								value={distributeValues.client}
+								inputMode='decimal'
+								data-touched={distributionTouched.client ? "true" : "false"}
 								onChange={(event) =>
-									setDistributeValues((prev) => ({
-										...prev,
-										client: event.target.value,
-									}))
+									updateDistributionValue("client", event.target.value)
 								}
 							/>
 						</PricingSummaryRow>
@@ -719,11 +746,10 @@ const OtaPricingModal = ({
 							<Input
 								placeholder={t.enterTotalPlaceholder}
 								value={distributeValues.root}
+								inputMode='decimal'
+								data-touched={distributionTouched.root ? "true" : "false"}
 								onChange={(event) =>
-									setDistributeValues((prev) => ({
-										...prev,
-										root: event.target.value,
-									}))
+									updateDistributionValue("root", event.target.value)
 								}
 							/>
 						</PricingSummaryRow>
@@ -738,11 +764,10 @@ const OtaPricingModal = ({
 							<Input
 								placeholder={t.enterTotalPlaceholder}
 								value={distributeValues.net}
+								inputMode='decimal'
+								data-touched={distributionTouched.net ? "true" : "false"}
 								onChange={(event) =>
-									setDistributeValues((prev) => ({
-										...prev,
-										net: event.target.value,
-									}))
+									updateDistributionValue("net", event.target.value)
 								}
 							/>
 						</PricingSummaryRow>
@@ -756,13 +781,15 @@ const OtaPricingModal = ({
 									}
 								/>
 							</strong>
-							<Input value={money(commissionValue)} readOnly />
+							<Input value={displayedCommission} readOnly />
 							<Input
 								placeholder={
 									t.generalCommissionPlaceholder || "Enter general commission"
 								}
 								value={commissionValue}
-								onChange={(event) => setCommissionValue(event.target.value)}
+								inputMode='decimal'
+								aria-invalid={parsedCommission.status === "invalid"}
+								onChange={(event) => updateCommissionValue(event.target.value)}
 							/>
 						</PricingSummaryRow>
 					</div>

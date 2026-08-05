@@ -12,6 +12,8 @@ describe("OTA pricing review API", () => {
 		localStorage.clear();
 		process.env.REACT_APP_API_URL = "https://api.example.test/api";
 		global.fetch = jest.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
 			json: jest.fn().mockResolvedValue({ success: true, rooms: [] }),
 		});
 	});
@@ -68,5 +70,50 @@ describe("OTA pricing review API", () => {
 		expect(options.method).toBe("PUT");
 		expect(options.headers.Authorization).toBe("Bearer token-1");
 		expect(JSON.parse(options.body)).toEqual(payload);
+	});
+
+	test("never reports a non-2xx pricing response as a successful save", async () => {
+		global.fetch.mockResolvedValueOnce({
+			ok: false,
+			status: 422,
+			json: jest.fn().mockResolvedValue({
+				success: true,
+				message: "Pricing validation failed",
+			}),
+		});
+
+		const result = await updateOtaReservationPricing(
+			"reservation-1",
+			"admin-1",
+			"token-1",
+			{},
+		);
+
+		expect(result).toMatchObject({
+			success: false,
+			status: 422,
+			message: "Pricing validation failed",
+		});
+	});
+
+	test("returns a useful failure when the server response is not JSON", async () => {
+		global.fetch.mockResolvedValueOnce({
+			ok: false,
+			status: 502,
+			json: jest.fn().mockRejectedValue(new SyntaxError("Unexpected token")),
+		});
+
+		const result = await updateOtaReservationPricing(
+			"reservation-1",
+			"admin-1",
+			"token-1",
+			{},
+		);
+
+		expect(result).toEqual({
+			success: false,
+			status: 502,
+			error: "Could not update OTA reservation pricing",
+		});
 	});
 });
