@@ -2131,7 +2131,21 @@ export const updateOtaReservationPricing = (
 			body: JSON.stringify(payload),
 		},
 	)
-		.then((response) => response.json())
+		.then(async (response) => {
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return {
+					...data,
+					success: false,
+					status: response.status,
+					error:
+						data?.error ||
+						data?.message ||
+						"Could not update OTA reservation pricing",
+				};
+			}
+			return data;
+		})
 		.catch((err) => ({
 			success: false,
 			error: err?.message || "Could not update OTA reservation pricing",

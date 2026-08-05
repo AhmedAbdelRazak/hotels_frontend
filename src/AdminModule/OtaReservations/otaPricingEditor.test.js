@@ -4,6 +4,7 @@ import {
 	copyFirstOtaPricingRowValues,
 	hasCurrentOtaRoomMapping,
 	otaPricingRoomCount,
+	recalculateOtaPricingDay,
 	summarizeOtaPricingRooms,
 } from "./otaPricingEditor";
 
@@ -154,5 +155,36 @@ describe("OTA pricing editor room mapping and copy behavior", () => {
 			"triple-current",
 			"triple-current",
 		]);
+	});
+
+	test("does not turn cleared or malformed daily drafts into a valid zero", () => {
+		const original = {
+			clientPrice: 100,
+			rootPrice: 60,
+			netAfterExpenses: 75,
+		};
+		const clearedRoot = recalculateOtaPricingDay(original, { rootPrice: "" });
+		expect(clearedRoot.rootPrice).toBe("");
+
+		const changedAnotherCell = recalculateOtaPricingDay(clearedRoot, {
+			clientPrice: 101,
+		});
+		expect(changedAnotherCell.rootPrice).toBe("");
+
+		const malformedNet = recalculateOtaPricingDay(changedAnotherCell, {
+			netAfterExpenses: "not-money",
+		});
+		expect(malformedNet.netAfterExpenses).toBe("not-money");
+		const commaDraft = recalculateOtaPricingDay(malformedNet, {
+			rootPrice: "82,50",
+		});
+		expect(commaDraft.rootPrice).toBe("82,50");
+
+		const explicitZeros = recalculateOtaPricingDay(commaDraft, {
+			rootPrice: "0",
+			netAfterExpenses: 0,
+		});
+		expect(explicitZeros.rootPrice).toBe(0);
+		expect(explicitZeros.netAfterExpenses).toBe(0);
 	});
 });

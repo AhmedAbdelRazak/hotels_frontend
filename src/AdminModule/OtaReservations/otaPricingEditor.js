@@ -4,6 +4,23 @@ const numberValue = (value) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const editableMoneyValue = (value) => {
+	if (value === null || value === undefined) {
+		return { valid: true, value: 0 };
+	}
+	if (typeof value === "number") {
+		return Number.isFinite(value)
+			? { valid: true, value }
+			: { valid: false, value: 0 };
+	}
+	const text = String(value).trim();
+	if (!text) return { valid: false, value: 0 };
+	const parsed = Number(text);
+	return Number.isFinite(parsed)
+		? { valid: true, value: parsed }
+		: { valid: false, value: 0 };
+};
+
 const round2 = (value) => Number(numberValue(value).toFixed(2));
 const normalizedLabel = (value) =>
 	String(value || "")
@@ -135,19 +152,22 @@ export const hasCurrentOtaRoomMapping = (room = {}, options = []) => {
 
 export const recalculateOtaPricingDay = (day = {}, patch = {}) => {
 	const merged = { ...day, ...patch };
-	const clientPrice = round2(
+	const rawClientPrice =
 		merged.clientPrice ??
-			merged.mainPrice ??
-			merged.totalPriceWithCommission ??
-			merged.price,
-	);
-	const rootPrice = round2(
-		merged.rootPrice ?? merged.totalPriceWithoutCommission,
-	);
-	const netAfterExpenses = round2(
+		merged.mainPrice ??
+		merged.totalPriceWithCommission ??
+		merged.price;
+	const clientDraft = editableMoneyValue(rawClientPrice);
+	const clientPrice = round2(clientDraft.value);
+	const rawRootPrice =
+		merged.rootPrice ?? merged.totalPriceWithoutCommission;
+	const rootDraft = editableMoneyValue(rawRootPrice);
+	const rootPrice = round2(rootDraft.value);
+	const rawNetAfterExpenses =
 		merged.netAfterExpenses ??
-			clientPrice - numberValue(merged.otaExpenseAmount),
-	);
+		clientPrice - numberValue(merged.otaExpenseAmount);
+	const netDraft = editableMoneyValue(rawNetAfterExpenses);
+	const netAfterExpenses = round2(netDraft.value);
 	const otaExpenseAmount = round2(clientPrice - netAfterExpenses);
 	const platformMargin = round2(netAfterExpenses - rootPrice);
 	const platformMarginRate =
@@ -157,12 +177,14 @@ export const recalculateOtaPricingDay = (day = {}, patch = {}) => {
 	return {
 		...merged,
 		price: clientPrice,
-		clientPrice,
+		clientPrice: clientDraft.valid ? clientPrice : rawClientPrice,
 		mainPrice: clientPrice,
 		totalPriceWithCommission: clientPrice,
-		rootPrice,
+		rootPrice: rootDraft.valid ? rootPrice : rawRootPrice,
 		totalPriceWithoutCommission: rootPrice,
-		netAfterExpenses,
+		netAfterExpenses: netDraft.valid
+			? netAfterExpenses
+			: rawNetAfterExpenses,
 		netAfterOtaExpenses: netAfterExpenses,
 		otaExpenseAmount,
 		platformMargin,
