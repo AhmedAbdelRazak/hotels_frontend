@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { Redirect, Link } from "react-router-dom";
 import {
 	AreaChartOutlined,
+	ApiOutlined,
 	BankTwoTone,
 	BarChartOutlined,
 	MenuFoldOutlined,
@@ -59,6 +60,14 @@ const canAccessOtaReservations = (user = {}) =>
 	(hasPlatformAdminRole(user) &&
 		Array.isArray(user?.accessTo) &&
 		user.accessTo.includes("OTAReservations"));
+
+const canAccessHotelRunner = (user = {}) =>
+	isConfiguredSuperAdminUser(user) ||
+	(hasPlatformAdminRole(user) &&
+		Array.isArray(user?.accessTo) &&
+		["HotelRunnerIntegration", "AdminDashboard"].some((permission) =>
+			user.accessTo.includes(permission)
+		));
 
 const items = [
 	getItem(
@@ -205,6 +214,7 @@ const AR = {
 	customerService: "\u062e\u062f\u0645\u0629 \u0627\u0644\u0639\u0645\u0644\u0627\u0621",
 	reservations: "\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
+	hotelRunner: "HotelRunner",
 	tools: "\u0623\u062f\u0648\u0627\u062a \u062c\u0646\u0627\u062a \u0628\u0648\u0643\u064a\u0646\u062c",
 	reports: "\u062a\u0642\u0627\u0631\u064a\u0631 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 	globalSettings:
@@ -232,6 +242,7 @@ const adminArabicItemsClean = [
 getItem(<Link to='/admin/customer-service?tab=active-client-cases'>{AR.customerService}</Link>, "sub2", <AreaChartOutlined />),
 getItem(<Link to='/admin/all-reservations'>{AR.reservations}</Link>, "sub4", <ShopOutlined />),
 getItem(<Link to='/admin/ota-reservations'>{AR.otaReservations}</Link>, "sub19", <InboxOutlined />),
+getItem(<Link to='/admin/hotelrunner'>{AR.hotelRunner}</Link>, "sub21", <ApiOutlined />),
 getItem(<Link to='/admin/jannatbooking-tools'>{AR.tools}</Link>, "sub6", <AreaChartOutlined />),
 	getItem(<Link to='/admin/overall-hotel-reports'>{AR.reports}</Link>, "sub7", <TeamOutlined />),
 	getItem(
@@ -272,6 +283,7 @@ const selectedKeyByPage = {
 	ElIntegrator: "sub3",
 	AllReservations: "sub4",
 	OTAReservations: "sub19",
+	HotelRunner: "sub21",
 	Tools: "sub6",
 	AdminReports: "sub7",
 	GlobalHotelSettings: "sub20",
@@ -344,9 +356,12 @@ const AdminNavbarArabic = ({
 	const history = useHistory();
 	const authUser = (isAuthenticated() || {}).user || {};
 	const canSeeOtaReservations = canAccessOtaReservations(authUser);
-	const visibleItems = canSeeOtaReservations
-		? adminArabicItemsClean
-		: adminArabicItemsClean.filter((item) => item.key !== "sub19");
+	const canSeeHotelRunner = canAccessHotelRunner(authUser);
+	const visibleItems = adminArabicItemsClean.filter((item) => {
+		if (item.key === "sub19") return canSeeOtaReservations;
+		if (item.key === "sub21") return canSeeHotelRunner;
+		return true;
+	});
 	const isMobile = () =>
 		typeof window !== "undefined" &&
 		isAdminMobileViewport(window.innerWidth);
