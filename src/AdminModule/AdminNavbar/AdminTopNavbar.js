@@ -6,6 +6,7 @@ import { Link, useHistory, useLocation } from "react-router-dom";
 import { Badge, Dropdown, Empty, Spin, Tag } from "antd";
 import {
 	AppstoreOutlined,
+	ApiOutlined,
 	BarChartOutlined,
 	BellOutlined,
 	CalendarOutlined,
@@ -63,6 +64,7 @@ const labels = {
 		hotels: "Hotels",
 		reservations: "Reservations",
 		otaReservations: "OTA reservations",
+		hotelRunner: "HotelRunner",
 		reports: "Reports",
 		globalSettings: "Hotel settings",
 		financials: "Financials",
@@ -99,6 +101,7 @@ const labels = {
 		hotels: "\u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		reservations: "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a",
 		otaReservations: "\u062d\u062c\u0648\u0632\u0627\u062a OTA",
+		hotelRunner: "HotelRunner",
 		reports: "\u0627\u0644\u062a\u0642\u0627\u0631\u064a\u0631",
 		globalSettings:
 			"\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
@@ -148,6 +151,12 @@ const adminLinks = [
 		key: "otaReservations",
 		icon: <BellOutlined />,
 		access: ["OTAReservations"],
+	},
+	{
+		to: "/admin/hotelrunner",
+		key: "hotelRunner",
+		icon: <ApiOutlined />,
+		access: ["HotelRunnerIntegration", "AdminDashboard"],
 	},
 	{
 		to: "/admin/overall-hotel-reports",
