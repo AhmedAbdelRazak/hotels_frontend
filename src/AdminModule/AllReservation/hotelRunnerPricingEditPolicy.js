@@ -16,6 +16,7 @@ const HOTELRUNNER_SOURCE_PRICING_FIELDS = [
 	"tax_total",
 	"item_total",
 	"currency",
+	"commission_ota",
 	"adminPricing",
 	"adminPricingVisibility",
 	"ota_financial_summary",

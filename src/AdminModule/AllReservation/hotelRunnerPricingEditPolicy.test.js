@@ -221,6 +221,7 @@ test("removes HotelRunner source pricing and fabricated commercial review fields
 		},
 		ota_financial_summary: { commercialVerified: true },
 		commission: 299,
+		commission_ota: 99,
 		commissionData: { assigned: true, amount: 299 },
 		financial_cycle: { commissionAssigned: true, commissionAmount: 299 },
 		commissionPaid: true,
