@@ -33,6 +33,13 @@ import {
 import EditPricingModal from "../JannatTools/EditPricingModal";
 import MoreDetails from "../AllReservation/MoreDetails";
 import { SUPER_USER_IDS } from "../utils/superUsers";
+import {
+	getHotelRunnerPayoutDisplay,
+	getHotelRunnerPlatformFinanceDisplay,
+	getHotelRunnerReportPricingDisplay,
+	isHotelRunnerReservation,
+} from "./hotelRunnerPricingDisplay";
+import { protectHotelRunnerEditorPayload } from "./hotelRunnerPricingEditPolicy";
 
 const { Option } = Select;
 
@@ -71,6 +78,11 @@ const firstExplicitMoney = (...values) => {
 		if (hasExplicitMoneyInput(value)) return roundMoney(value);
 	}
 	return null;
+};
+
+const explicitMoneyText = (...values) => {
+	const amount = firstExplicitMoney(...values);
+	return amount === null ? "Unavailable" : `${amount.toFixed(2)} SAR`;
 };
 
 const dateOnlyKey = (value) => {
@@ -461,6 +473,18 @@ const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
 	});
 };
 
+const mapHotelRunnerRoomsForEditor = (sourceRows = []) =>
+	(Array.isArray(sourceRows) ? sourceRows : []).map((room = {}) => ({
+		...room,
+		roomType: room.roomType || room.room_type || "",
+		displayName: room.displayName || room.display_name || "",
+		count: normalizeRoomCount(room.count),
+		pricingByDay: (Array.isArray(room.pricingByDay)
+			? room.pricingByDay
+			: []
+		).map((day) => ({ ...day })),
+	}));
+
 /** Resolve daily "price" with your requested fallback chain */
 const resolveDailyPrice = (matchedRate, basePrice, defaultCost) => {
 	const cp = safeParseFloat(matchedRate?.price, NaN);
@@ -567,6 +591,8 @@ const EditReservationMain = ({
 	const [hasExplicitCommissionEdit, setHasExplicitCommissionEdit] =
 		useState(false);
 	const [hasExplicitDateEdits, setHasExplicitDateEdits] = useState(false);
+	const [hasExplicitAdvancePaymentEdit, setHasExplicitAdvancePaymentEdit] =
+		useState(false);
 	const [reservationCreated, setReservationCreated] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState("");
 	const [sendEmail, setSendEmail] = useState(false);
@@ -575,6 +601,22 @@ const EditReservationMain = ({
 	const { user, token } = isAuthenticated();
 	const isSuperUser = SUPER_USER_IDS.includes(user?._id);
 	const isArabic = chosenLanguage === "Arabic";
+	const directHotelRunnerReservation = useMemo(
+		() => isHotelRunnerReservation(reservation),
+		[reservation]
+	);
+	const hotelRunnerPricingDisplay = useMemo(
+		() => getHotelRunnerReportPricingDisplay(reservation),
+		[reservation]
+	);
+	const hotelRunnerPayoutDisplay = useMemo(
+		() => getHotelRunnerPayoutDisplay(reservation),
+		[reservation]
+	);
+	const hotelRunnerPlatformFinance = useMemo(
+		() => getHotelRunnerPlatformFinanceDisplay(reservation),
+		[reservation]
+	);
 	const hasCommissionOverride =
 		commissionOverride !== null &&
 		commissionOverride !== undefined &&
@@ -584,8 +626,18 @@ const EditReservationMain = ({
 		[reservation]
 	);
 	const savedReservationCommission = useMemo(
-		() => savedCommissionForReservation(reservation),
-		[reservation]
+		() =>
+			directHotelRunnerReservation
+				? hotelRunnerPlatformFinance.available
+					? hotelRunnerPlatformFinance.amount
+					: null
+				: savedCommissionForReservation(reservation),
+		[
+			reservation,
+			directHotelRunnerReservation,
+			hotelRunnerPlatformFinance.available,
+			hotelRunnerPlatformFinance.amount,
+		]
 	);
 	const apiErrorMessage = (
 		response,
@@ -742,10 +794,16 @@ const EditReservationMain = ({
 		setHasExplicitPricingEdits(false);
 		setHasExplicitCommissionEdit(false);
 		setHasExplicitDateEdits(false);
+		setHasExplicitAdvancePaymentEdit(false);
+		const platformFinance = getHotelRunnerPlatformFinanceDisplay(reservation);
 		setCommissionOverride(
-			reservation.commission !== null &&
-				reservation.commission !== undefined &&
-				reservation.commission !== ""
+			isHotelRunnerReservation(reservation)
+				? platformFinance.available
+					? platformFinance.amount
+					: null
+				: reservation.commission !== null &&
+				  reservation.commission !== undefined &&
+				  reservation.commission !== ""
 				? safeParseFloat(reservation.commission, 0)
 				: null
 		);
@@ -785,12 +843,18 @@ const EditReservationMain = ({
 				? reservation.pickedRoomsType
 				: [];
 			const sourceRows =
-				adminManagedPricing && pricingRows.length
+				directHotelRunnerReservation && regularRows.length
+					? regularRows
+					: directHotelRunnerReservation
+					? pricingRows
+					: adminManagedPricing && pricingRows.length
 					? pricingRows
 					: regularRows.length
 					? regularRows
 					: pricingRows;
-			const mappedRooms = adminManagedPricing
+			const mappedRooms = directHotelRunnerReservation
+				? mapHotelRunnerRoomsForEditor(sourceRows)
+				: adminManagedPricing
 				? normalizeSavedAdminPricingRooms(sourceRows, reservation)
 				: sourceRows.map((room) => ({
 						roomType: room.room_type || "",
@@ -807,7 +871,12 @@ const EditReservationMain = ({
 		} else {
 			setSelectedHotel(null);
 		}
-	}, [reservation, allHotels, adminManagedPricing]);
+	}, [
+		reservation,
+		allHotels,
+		adminManagedPricing,
+		directHotelRunnerReservation,
+	]);
 
 	const availabilityByRoomKey = useMemo(() => {
 		const map = new Map();
@@ -994,6 +1063,68 @@ const EditReservationMain = ({
 			const endDate = dayjs(checkOutDate).startOf("day");
 			let nights = endDate.diff(startDate, "day");
 			if (nights < 1) nights = 1;
+
+			if (directHotelRunnerReservation) {
+				const grossTotal =
+					firstExplicitMoney(
+						hotelRunnerPricingDisplay.grossAmount,
+						reservation?.total_amount
+					) ?? 0;
+				const localBaseTotal =
+					firstExplicitMoney(
+						hotelRunnerPricingDisplay.localBaseAmount,
+						reservation?.adminPricing?.rootTotal,
+						reservation?.sub_total
+					) ?? 0;
+				const reviewedCommission = hotelRunnerPlatformFinance.available
+					? hotelRunnerPlatformFinance.amount
+					: 0;
+				const firstNightRoot = rooms.reduce((sum, room) => {
+					const firstDay = Array.isArray(room?.pricingByDay)
+						? room.pricingByDay[0]
+						: null;
+					const explicitRoot = firstExplicitMoney(
+						firstDay?.rootPrice,
+						firstDay?.totalPriceWithoutCommission
+					);
+					return (
+						sum +
+						(explicitRoot ?? 0) * normalizeRoomCount(room?.count)
+					);
+				}, 0);
+				const sourceNightCount = rooms.reduce(
+					(max, room) =>
+						Math.max(
+							max,
+							Array.isArray(room?.pricingByDay)
+								? room.pricingByDay.length
+								: 0
+						),
+					0
+				);
+				const existingDeposit = firstExplicitMoney(
+					reservation?.advancePayment?.finalAdvancePayment
+				);
+
+				setHotelCost(localBaseTotal);
+				setTotalAmount(grossTotal);
+				setTotalCommission(reviewedCommission);
+				setOneNightCost(Number(firstNightRoot.toFixed(2)));
+				setNumberOfNights(
+					hasExplicitDateEdits
+						? nights
+						: Number(reservation?.days_of_residence || 0) ||
+						  sourceNightCount ||
+						  nights
+				);
+				setDefaultDeposit(
+					hotelRunnerPlatformFinance.available
+						? Number((reviewedCommission + firstNightRoot).toFixed(2))
+						: existingDeposit ?? 0
+				);
+				return;
+			}
+
 			const expectedDates = Array.from({ length: nights }, (_, index) =>
 				startDate.add(index, "day").format("YYYY-MM-DD")
 			);
@@ -1145,6 +1276,11 @@ const EditReservationMain = ({
 			hasExplicitPricingEdits,
 			reservation,
 			savedReservationCommission,
+			directHotelRunnerReservation,
+			hotelRunnerPricingDisplay.grossAmount,
+			hotelRunnerPricingDisplay.localBaseAmount,
+			hotelRunnerPlatformFinance.available,
+			hotelRunnerPlatformFinance.amount,
 			getMatchedRoom,
 			buildPricingForRoom,
 			buildPricingFromCurrentNightly,
@@ -1253,6 +1389,12 @@ const EditReservationMain = ({
 
 	// ---------------- Room selection ----------------
 	const handleRoomSelectionChange = (value, index) => {
+		if (directHotelRunnerReservation) {
+			message.warning(
+				"HotelRunner room assignments and nightly pricing are source-controlled."
+			);
+			return;
+		}
 		const updated = [...selectedRooms];
 		setHasExplicitPricingEdits(true);
 
@@ -1292,6 +1434,7 @@ const EditReservationMain = ({
 	};
 
 	const handleRoomCountChange = (cnt, index) => {
+		if (directHotelRunnerReservation) return;
 		const updated = [...selectedRooms];
 		updated[index] = { ...updated[index], count: cnt };
 		setHasExplicitPricingEdits(true);
@@ -1299,6 +1442,7 @@ const EditReservationMain = ({
 	};
 
 	const addRoomSelection = () => {
+		if (directHotelRunnerReservation) return;
 		setHasExplicitPricingEdits(true);
 		setSelectedRooms((prev) => [
 			...prev,
@@ -1307,6 +1451,7 @@ const EditReservationMain = ({
 	};
 
 	const removeRoomSelection = (index) => {
+		if (directHotelRunnerReservation) return;
 		const updated = [...selectedRooms];
 		updated.splice(index, 1);
 		setHasExplicitPricingEdits(true);
@@ -1327,6 +1472,7 @@ const EditReservationMain = ({
 		setIsModalVisible(false);
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
+		if (directHotelRunnerReservation) return;
 		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
 		setHasExplicitPricingEdits(true);
 		setSelectedRooms((currentRooms) =>
@@ -1353,6 +1499,12 @@ const EditReservationMain = ({
 	}, []);
 
 	const handleHotelChange = (hotelId) => {
+		if (directHotelRunnerReservation) {
+			message.warning(
+				"HotelRunner reservations cannot be relocated from the general editor."
+			);
+			return;
+		}
 		const newHotel = allHotels.find((ht) => ht._id === hotelId);
 		if (!newHotel) return;
 
@@ -1370,6 +1522,7 @@ const EditReservationMain = ({
 
 	// Optional full clear
 	const clearAll = () => {
+		if (directHotelRunnerReservation) return;
 		setSelectedRooms([
 			{ roomType: "", displayName: "", count: 1, pricingByDay: [] },
 		]);
@@ -1391,6 +1544,7 @@ const EditReservationMain = ({
 		setTotalCommission(0);
 		setCommissionOverride(null);
 		setHasExplicitCommissionEdit(false);
+		setHasExplicitAdvancePaymentEdit(false);
 		setNumberOfNights(0);
 		setOneNightCost(0);
 		setDefaultDeposit(0);
@@ -1411,12 +1565,16 @@ const EditReservationMain = ({
 			!checkInDate ||
 			!checkOutDate ||
 			!selectedHotel ||
-			!selectedRooms.every((r) => r.roomType && r.displayName && r.count > 0)
+			(!directHotelRunnerReservation &&
+				!selectedRooms.every(
+					(r) => r.roomType && r.displayName && r.count > 0
+				))
 		) {
 			message.error("Please fill in all required fields.");
 			return;
 		}
 		if (
+			!directHotelRunnerReservation &&
 			!selectedRooms.every(
 				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0
 			)
@@ -1441,10 +1599,32 @@ const EditReservationMain = ({
 				return;
 			}
 		}
+		if (
+			directHotelRunnerReservation &&
+			hasExplicitCommissionEdit &&
+			(!hasExplicitMoneyInput(commissionOverride) ||
+				Number(commissionOverride) < 0)
+		) {
+			message.error(
+				"Enter an explicit non-negative HotelRunner platform commission, or leave the review unchanged."
+			);
+			return;
+		}
+
+		const hotelChanged =
+			normalizeId(selectedHotel) !== normalizeId(reservation.hotelId);
+		if (directHotelRunnerReservation && hotelChanged) {
+			message.error(
+				"HotelRunner reservations cannot be relocated from the general editor. Source rooms and pricing were not changed."
+			);
+			return;
+		}
 
 		// Flatten to pickedRoomsType
-		const pickedRoomsType = selectedRooms.flatMap((room) =>
-			Array.from({ length: room.count }, () => {
+		const pickedRoomsType = directHotelRunnerReservation
+			? []
+			: selectedRooms.flatMap((room) =>
+				  Array.from({ length: room.count }, () => {
 				const pricingDetails = room.pricingByDay.map(resolveAdminPricingDay);
 				const totalWithComm = pricingDetails.reduce(
 					(acc, d) => acc + d.totalPriceWithCommission,
@@ -1465,16 +1645,16 @@ const EditReservationMain = ({
 						0
 					),
 				};
-			})
-		);
-		const adminPricingTotals = summarizeAdminPricingRooms(pickedRoomsType);
+			  })
+			);
+		const adminPricingTotals = directHotelRunnerReservation
+			? null
+			: summarizeAdminPricingRooms(pickedRoomsType);
 
 		const belongsToId =
 			(selectedHotel.belongsTo && selectedHotel.belongsTo._id) ||
 			selectedHotel.belongsTo ||
 			"";
-		const hotelChanged =
-			normalizeId(selectedHotel) !== normalizeId(reservation.hotelId);
 		const checkinValue = dayjs(checkInDate).format("YYYY-MM-DD");
 		const checkoutValue = dayjs(checkOutDate).format("YYYY-MM-DD");
 		const dateChanged =
@@ -1487,20 +1667,35 @@ const EditReservationMain = ({
 				Number(adults || 0) + Number(children || 0),
 				reservation.total_guests
 			);
-		const commissionToSave =
-			isSuperUser && (hasExplicitCommissionEdit || hasCommissionOverride)
+		const commissionToSave = directHotelRunnerReservation
+			? isSuperUser && hasExplicitCommissionEdit && hasCommissionOverride
 				? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
-				: adminManagedPricing && savedReservationCommission !== null
-				? savedReservationCommission
-				: totalCommission;
-		const pricingPayloadNeeded = hotelChanged || hasExplicitPricingEdits;
-		const commissionPayloadNeeded =
-			isSuperUser &&
-			hasExplicitCommissionEdit &&
-			moneyDiffers(
-				commissionToSave,
-				savedReservationCommission ?? reservation.commission ?? 0
-			);
+				: hotelRunnerPlatformFinance.available
+				? hotelRunnerPlatformFinance.amount
+				: 0
+			: isSuperUser && (hasExplicitCommissionEdit || hasCommissionOverride)
+			? Number(safeParseFloat(commissionOverride, 0).toFixed(2))
+			: adminManagedPricing && savedReservationCommission !== null
+			? savedReservationCommission
+			: totalCommission;
+		const pricingPayloadNeeded =
+			!directHotelRunnerReservation &&
+			(hotelChanged || hasExplicitPricingEdits);
+		const commissionPayloadNeeded = directHotelRunnerReservation
+			? isSuperUser &&
+			  hasExplicitCommissionEdit &&
+			  hasCommissionOverride &&
+			  (!hotelRunnerPlatformFinance.available ||
+					moneyDiffers(
+						commissionToSave,
+						hotelRunnerPlatformFinance.amount
+					))
+			: isSuperUser &&
+			  hasExplicitCommissionEdit &&
+			  moneyDiffers(
+					commissionToSave,
+					savedReservationCommission ?? reservation.commission ?? 0
+			  );
 		const advancePaymentPayload = {
 			paymentPercentage:
 				advancePaymentOption === "percentage" ? advancePaymentPercentage : "",
@@ -1508,14 +1703,15 @@ const EditReservationMain = ({
 		};
 		const existingAdvancePayment = reservation.advancePayment || {};
 		const advancePaymentChanged =
-			stringsDiffer(
+			(!directHotelRunnerReservation || hasExplicitAdvancePaymentEdit) &&
+			(stringsDiffer(
 				advancePaymentPayload.paymentPercentage,
 				existingAdvancePayment.paymentPercentage || ""
 			) ||
 			moneyDiffers(
 				advancePaymentPayload.finalAdvancePayment,
 				existingAdvancePayment.finalAdvancePayment || 0
-			);
+			));
 		const customerDetailsChanged =
 			stringsDiffer(name, reservation.customer_details?.name) ||
 			stringsDiffer(nickName, reservation.customer_details?.nickName) ||
@@ -1600,17 +1796,25 @@ const EditReservationMain = ({
 
 		if (commissionPayloadNeeded && !pricingPayloadNeeded) {
 			reservationData.commission = commissionToSave;
-			reservationData.commissionPaid =
-				reservation.commissionPaid ??
-				reservation.payment_details?.commissionPaid ??
-				false;
+			if (!directHotelRunnerReservation) {
+				reservationData.commissionPaid =
+					reservation.commissionPaid ??
+					reservation.payment_details?.commissionPaid ??
+					false;
+			}
 		}
 
 		if (sendEmail) {
 			reservationData.sendEmail = true;
 		}
 
-		if (Object.keys(reservationData).length <= 1) {
+		const protectedReservationData = protectHotelRunnerEditorPayload(
+			reservation,
+			reservationData,
+			{ allowExplicitCommission: commissionPayloadNeeded }
+		);
+
+		if (Object.keys(protectedReservationData).length <= 1) {
 			message.info("No changes to save.");
 			return;
 		}
@@ -1619,7 +1823,7 @@ const EditReservationMain = ({
 			setIsLoading(true);
 			const response = await updateSingleReservation(
 				reservation._id,
-				reservationData
+				protectedReservationData
 			);
 			if (response?.message === "Reservation updated successfully") {
 				message.success(
@@ -1650,6 +1854,7 @@ const EditReservationMain = ({
 				setHasExplicitPricingEdits(false);
 				setHasExplicitCommissionEdit(false);
 				setHasExplicitDateEdits(false);
+				setHasExplicitAdvancePaymentEdit(false);
 				onReservationUpdated(mergedReservation);
 				message.success({ content: savedTitle, duration: 6 });
 				window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1714,6 +1919,7 @@ const EditReservationMain = ({
 					type='primary'
 					danger
 					onClick={clearAll}
+					disabled={directHotelRunnerReservation}
 					style={{ marginBottom: 20 }}
 				>
 					Clear All
@@ -1759,6 +1965,15 @@ const EditReservationMain = ({
 						style={{ marginBottom: 12, padding: 8 }}
 					/>
 				)}
+				{directHotelRunnerReservation && (
+					<Alert
+						type='info'
+						showIcon
+						message='HotelRunner source pricing is protected'
+						description='Hotel, room selection, gross/local-base totals, and nightly prices are synchronized in the background and are read-only here. Ordinary local reservation fields remain editable. A SUPER admin may explicitly review the separate PMS platform commission; missing OTA expense or hotel-net data is never inferred.'
+						style={{ marginBottom: 12 }}
+					/>
+				)}
 
 				<div className='my-3'>
 					<h3 style={{ fontSize: "1.3rem", fontWeight: "bold" }}>
@@ -1782,7 +1997,7 @@ const EditReservationMain = ({
 								placeholder='Select a hotel'
 								value={selectedHotel?._id}
 								onChange={handleHotelChange}
-								disabled={isLoading}
+								disabled={isLoading || directHotelRunnerReservation}
 								getPopupContainer={resolvePopupContainer}
 							>
 								{allHotels.map((ht) => (
@@ -1876,7 +2091,9 @@ const EditReservationMain = ({
 										: undefined
 								}
 								onChange={(val) => handleRoomSelectionChange(val, index)}
-								disabled={isLoading || !selectedHotel}
+								disabled={
+									isLoading || !selectedHotel || directHotelRunnerReservation
+								}
 								getPopupContainer={resolvePopupContainer}
 								optionLabelProp='label'
 							>
@@ -1917,7 +2134,7 @@ const EditReservationMain = ({
 								min={1}
 								value={room.count}
 								onChange={(cnt) => handleRoomCountChange(cnt, index)}
-								disabled={isLoading}
+								disabled={isLoading || directHotelRunnerReservation}
 							/>
 						</Form.Item>
 
@@ -1927,7 +2144,12 @@ const EditReservationMain = ({
 									{room.pricingByDay.map((day, i) => (
 										<li key={i}>
 											{day.date}:{" "}
-											{Number(day.totalPriceWithCommission).toFixed(2)} SAR
+											{explicitMoneyText(
+												day.clientPrice,
+												day.mainPrice,
+												day.totalPriceWithCommission,
+												day.price
+											)}
 										</li>
 									))}
 								</ul>
@@ -1941,7 +2163,10 @@ const EditReservationMain = ({
 									}}
 									disabled={isLoading}
 								>
-									<EditOutlined /> Edit Pricing
+									<EditOutlined />{` `}
+									{directHotelRunnerReservation
+										? "View Pricing / Review Commission"
+										: "Edit Pricing"}
 								</Button>
 							</Form.Item>
 						)}
@@ -1951,7 +2176,7 @@ const EditReservationMain = ({
 								type='link'
 								danger
 								onClick={() => removeRoomSelection(index)}
-								disabled={isLoading}
+								disabled={isLoading || directHotelRunnerReservation}
 							>
 								Remove
 							</Button>
@@ -1962,7 +2187,9 @@ const EditReservationMain = ({
 				<Button
 					type='dashed'
 					onClick={addRoomSelection}
-					disabled={isLoading || !selectedHotel}
+					disabled={
+						isLoading || !selectedHotel || directHotelRunnerReservation
+					}
 				>
 					Add Another Room
 				</Button>
@@ -2069,7 +2296,10 @@ const EditReservationMain = ({
 				{/* Advance Payment */}
 				<Form.Item label='Advance Payment Option' required>
 					<Radio.Group
-						onChange={(e) => setAdvancePaymentOption(e.target.value)}
+						onChange={(e) => {
+							setHasExplicitAdvancePaymentEdit(true);
+							setAdvancePaymentOption(e.target.value);
+						}}
 						value={advancePaymentOption}
 						disabled={isLoading}
 					>
@@ -2085,7 +2315,10 @@ const EditReservationMain = ({
 							min={1}
 							max={100}
 							value={advancePaymentPercentage}
-							onChange={(v) => setAdvancePaymentPercentage(v)}
+							onChange={(v) => {
+								setHasExplicitAdvancePaymentEdit(true);
+								setAdvancePaymentPercentage(v);
+							}}
 							style={{ width: "100%" }}
 							disabled={isLoading}
 						/>
@@ -2098,7 +2331,10 @@ const EditReservationMain = ({
 							min={1}
 							max={totalAmount}
 							value={advancePaymentSAR}
-							onChange={(v) => setAdvancePaymentSAR(v)}
+							onChange={(v) => {
+								setHasExplicitAdvancePaymentEdit(true);
+								setAdvancePaymentSAR(v);
+							}}
 							style={{ width: "100%" }}
 							disabled={isLoading}
 						/>
@@ -2108,20 +2344,48 @@ const EditReservationMain = ({
 				{/* Totals */}
 				<Form.Item>
 					<Descriptions bordered column={1} size='small'>
-						<Descriptions.Item label='Total Amount (For the Hotel)'>
-							{hotelCost.toFixed(2)} SAR
+						<Descriptions.Item
+							label={
+								directHotelRunnerReservation
+									? "Local PMS Base (Not Hotel Net Payout)"
+									: "Total Amount (For the Hotel)"
+							}
+						>
+							{directHotelRunnerReservation &&
+							hotelRunnerPricingDisplay.localBaseAmount === null
+								? "Unavailable"
+								: `${hotelCost.toFixed(2)} SAR`}
 						</Descriptions.Item>
-						<Descriptions.Item label='Total Commission'>
-							{totalCommission.toFixed(2)} SAR
+						<Descriptions.Item
+							label={
+								directHotelRunnerReservation
+									? "PMS Platform Commission"
+									: "Total Commission"
+							}
+						>
+							{directHotelRunnerReservation &&
+							!hotelRunnerPlatformFinance.available
+								? "Not reviewed"
+								: `${totalCommission.toFixed(2)} SAR`}
 						</Descriptions.Item>
 						{isSuperUser && (
-							<Descriptions.Item label='General Commission (SUPER Admin)'>
+							<Descriptions.Item
+								label={
+									directHotelRunnerReservation
+										? "Explicit PMS Commission Review (SUPER Admin)"
+										: "General Commission (SUPER Admin)"
+								}
+							>
 								<InputNumber
 									min={0}
 									step={0.01}
 									precision={2}
 									value={commissionOverride}
-									placeholder={`Calculated: ${totalCommission.toFixed(2)} SAR`}
+									placeholder={
+										directHotelRunnerReservation
+											? "Enter an explicit reviewed amount"
+											: `Calculated: ${totalCommission.toFixed(2)} SAR`
+									}
 									onChange={(value) => {
 										setHasExplicitCommissionEdit(true);
 										setCommissionOverride(value);
@@ -2130,18 +2394,38 @@ const EditReservationMain = ({
 									style={{ width: "100%" }}
 								/>
 								<div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>
-									Leave blank to save the calculated commission.
+									{directHotelRunnerReservation
+										? "Entering an amount (including zero) is an intentional finance review. HotelRunner gross minus local base is never used as commission."
+										: "Leave blank to save the calculated commission."}
 								</div>
 							</Descriptions.Item>
 						)}
 						<Descriptions.Item label='Cost of One Night (First Night)'>
-							{oneNightCost.toFixed(2)} SAR
+							{directHotelRunnerReservation &&
+							!selectedRooms.some(
+								(room) =>
+									firstExplicitMoney(
+										room?.pricingByDay?.[0]?.rootPrice,
+										room?.pricingByDay?.[0]?.totalPriceWithoutCommission
+									) !== null
+							)
+								? "Unavailable"
+								: `${oneNightCost.toFixed(2)} SAR`}
 						</Descriptions.Item>
 						<Descriptions.Item label='Total Deposit (Based on Option Above)'>
 							{finalDeposit.toFixed(2)} SAR
 						</Descriptions.Item>
-						<Descriptions.Item label='Grand Total (Including Commission)'>
-							{totalAmount.toFixed(2)} SAR
+						<Descriptions.Item
+							label={
+								directHotelRunnerReservation
+									? "HotelRunner Gross Reservation Total"
+									: "Grand Total (Including Commission)"
+							}
+						>
+							{directHotelRunnerReservation &&
+							hotelRunnerPricingDisplay.grossAmount === null
+								? "Unavailable"
+								: `${totalAmount.toFixed(2)} SAR`}
 						</Descriptions.Item>
 						<Descriptions.Item label='Paid Amount'>
 							{paidAmountDisplay.toFixed(2)} SAR{" "}
@@ -2206,12 +2490,24 @@ const EditReservationMain = ({
 				}
 				showCommissionAmount={isSuperUser}
 				commissionAmount={
-					hasCommissionOverride ? commissionOverride : totalCommission
+					directHotelRunnerReservation
+						? hasCommissionOverride
+							? commissionOverride
+							: hotelRunnerPlatformFinance.available
+							? hotelRunnerPlatformFinance.amount
+							: null
+						: hasCommissionOverride
+						? commissionOverride
+						: totalCommission
 				}
 				commissionAmountIsOverride={
-					hasCommissionOverride ||
-					(adminManagedPricing && savedReservationCommission !== null)
+					directHotelRunnerReservation
+						? hasCommissionOverride || hotelRunnerPlatformFinance.available
+						: hasCommissionOverride ||
+						  (adminManagedPricing && savedReservationCommission !== null)
 				}
+				hotelRunnerSourceOwned={directHotelRunnerReservation}
+				hotelRunnerCommercialVerified={hotelRunnerPayoutDisplay.verified === true}
 				onCommissionChange={(value) => {
 					setHasExplicitCommissionEdit(true);
 					setCommissionOverride(

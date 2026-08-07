@@ -50,6 +50,7 @@ import {
 	TableTooltipText,
 	titleCase,
 } from "../overallShared";
+import { getHotelRunnerPlatformFinanceDisplay } from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const SUMMARY_MODAL_Z_INDEX = 11000;
 
@@ -74,6 +75,12 @@ const reportText = {
 		reservations: "Reservations",
 		paidAmount: "Paid Amount",
 		commission: "Commission",
+		commissionUnavailable: "Commission unavailable",
+		commissionFinanceStatus: "Commission finance status",
+		commissionAwaitingReview: "Awaiting HotelRunner finance review",
+		commissionReviewed: "Reviewed / available",
+		commissionInvalidReview: "Invalid HotelRunner finance review",
+		commissionConflictingReview: "Conflicting HotelRunner finance review",
 		remaining: "Remaining",
 		hotels: "Hotels",
 		hotel: "Hotel",
@@ -247,6 +254,15 @@ const reportText = {
 	},
 };
 
+Object.assign(reportText.ar, {
+	commissionUnavailable: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629",
+	commissionFinanceStatus: "\u062d\u0627\u0644\u0629 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	commissionAwaitingReview: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 HotelRunner",
+	commissionReviewed: "\u062a\u0645\u062a \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629 / \u0645\u062a\u0627\u062d\u0629",
+	commissionInvalidReview: "\u0645\u0631\u0627\u062c\u0639\u0629 HotelRunner \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629",
+	commissionConflictingReview: "\u062a\u0639\u0627\u0631\u0636 \u0641\u064a \u0645\u0631\u0627\u062c\u0639\u0629 HotelRunner \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+});
+
 const getLabels = (chosenLanguage) =>
 	reportText[chosenLanguage === "Arabic" ? "ar" : "en"];
 
@@ -260,6 +276,96 @@ const toNumber = (value) => {
 const money = (value, labels) => `${formatMoney(value)} ${labels.sar}`;
 
 const currencyNumber = (value) => Math.round(toNumber(value) * 100) / 100;
+
+const finiteNumberOrNull = (value) => {
+	if (value === null || value === undefined || value === "") return null;
+	const amount = Number(value);
+	return Number.isFinite(amount) ? amount : null;
+};
+
+const executiveCommissionUnavailableCount = (row = {}) =>
+	Math.max(0, Number(row.commissionUnavailableCount || 0));
+
+export const getExecutiveReservationCommission = (reservation = {}) => {
+	const hotelRunnerFinance =
+		getHotelRunnerPlatformFinanceDisplay(reservation);
+	if (hotelRunnerFinance.isHotelRunner) {
+		return {
+			isHotelRunner: true,
+			available: hotelRunnerFinance.available,
+			amount: hotelRunnerFinance.available
+				? hotelRunnerFinance.amount
+				: null,
+			reason: hotelRunnerFinance.reason || "",
+		};
+	}
+
+	const reportAmount = finiteNumberOrNull(reservation.report_commission);
+	const topLevel = finiteNumberOrNull(reservation.commission);
+	const cycleAmount = finiteNumberOrNull(
+		reservation.financial_cycle?.commissionAmount
+	);
+	return {
+		isHotelRunner: false,
+		available: true,
+		amount:
+			reportAmount !== null
+				? reportAmount
+				: topLevel
+				? topLevel
+				: cycleAmount || 0,
+		reason: "",
+	};
+};
+
+const commissionFinanceStatus = (row = {}, labels = reportText.en) => {
+	const unavailable = executiveCommissionUnavailableCount(row);
+	if (!unavailable) return labels.commissionReviewed;
+	const statuses = [];
+	const conflicts = Math.max(0, Number(row.commissionConflictCount || 0));
+	const invalid = Math.max(0, Number(row.commissionInvalidCount || 0));
+	const unreviewed = Math.max(0, Number(row.commissionUnreviewedCount || 0));
+	if (unreviewed) statuses.push(`${unreviewed} ${labels.commissionAwaitingReview}`);
+	if (invalid) statuses.push(`${invalid} ${labels.commissionInvalidReview}`);
+	if (conflicts) statuses.push(`${conflicts} ${labels.commissionConflictingReview}`);
+	return statuses.length
+		? statuses.join("; ")
+		: `${unavailable} ${labels.commissionUnavailable}`;
+};
+
+const reservationCommissionFinanceStatus = (
+	finance = {},
+	labels = reportText.en
+) => {
+	if (finance.available) return labels.commissionReviewed;
+	if (finance.reason === "hotelrunner_platform_commission_invalid") {
+		return labels.commissionInvalidReview;
+	}
+	if (finance.reason === "hotelrunner_platform_commission_conflict") {
+		return labels.commissionConflictingReview;
+	}
+	return labels.commissionAwaitingReview;
+};
+
+const CommissionAggregateValue = ({ row = {}, labels }) => (
+	<span className='commission-report-value'>
+		<strong>{money(row.commission, labels)}</strong>
+		{executiveCommissionUnavailableCount(row) ? (
+			<small>{commissionFinanceStatus(row, labels)}</small>
+		) : null}
+	</span>
+);
+
+const CommissionReservationValue = ({ row = {}, labels }) => {
+	const finance = getExecutiveReservationCommission(row);
+	return finance.available ? (
+		money(finance.amount, labels)
+	) : (
+		<span className='commission-report-value unavailable'>
+			<small>{reservationCommissionFinanceStatus(finance, labels)}</small>
+		</span>
+	);
+};
 
 const escapeHtml = (value = "") =>
 	String(value ?? "")
@@ -948,6 +1054,8 @@ const buildTimelineExportRows = (rows, section, labels) =>
 		[labels.totalAmount]: currencyNumber(row.total_amount),
 		[labels.paidAmount]: currencyNumber(row.paidAmount),
 		[labels.commission]: currencyNumber(row.commission),
+		[labels.commissionUnavailable]: executiveCommissionUnavailableCount(row),
+		[labels.commissionFinanceStatus]: commissionFinanceStatus(row, labels),
 		[labels.capturedPayments]: toNumber(row.capturedCount),
 	}));
 
@@ -2803,7 +2911,7 @@ export const ExecutiveReservationsReport = ({
 		{
 			key: "commission",
 			label: labels.commission,
-			render: (row) => money(row.commission, labels),
+			render: (row) => <CommissionAggregateValue row={row} labels={labels} />,
 		},
 	];
 
@@ -2855,6 +2963,14 @@ export const ExecutiveReservationsReport = ({
 					[labels.metric]: labels.commission,
 					[labels.value]: currencyNumber(stats.commission),
 				},
+				{
+					[labels.metric]: labels.commissionUnavailable,
+					[labels.value]: executiveCommissionUnavailableCount(stats),
+				},
+				{
+					[labels.metric]: labels.commissionFinanceStatus,
+					[labels.value]: commissionFinanceStatus(stats, labels),
+				},
 			];
 			const arrivalsDeparturesRows = [
 				...buildTimelineExportRows(checkinRows, labels.checkins, labels),
@@ -2872,6 +2988,8 @@ export const ExecutiveReservationsReport = ({
 					[labels.totalAmount]: currencyNumber(row.total_amount),
 					[labels.paidAmount]: currencyNumber(row.paidAmount),
 					[labels.commission]: currencyNumber(row.commission),
+					[labels.commissionUnavailable]: executiveCommissionUnavailableCount(row),
+					[labels.commissionFinanceStatus]: commissionFinanceStatus(row, labels),
 					[labels.capturedPayments]: toNumber(row.capturedCount),
 				})),
 				...buildTimelineExportRows(creationRows, labels.creationDate, labels).map(
@@ -2890,6 +3008,8 @@ export const ExecutiveReservationsReport = ({
 					[labels.totalAmount]: currencyNumber(row.total_amount),
 					[labels.paidAmount]: currencyNumber(row.paidAmount),
 					[labels.commission]: currencyNumber(row.commission),
+					[labels.commissionUnavailable]: executiveCommissionUnavailableCount(row),
+					[labels.commissionFinanceStatus]: commissionFinanceStatus(row, labels),
 					[labels.capturedPayments]: toNumber(row.capturedCount),
 				})),
 				...bookingSources.map((row) => ({
@@ -2900,6 +3020,8 @@ export const ExecutiveReservationsReport = ({
 					[labels.totalAmount]: currencyNumber(row.total_amount),
 					[labels.paidAmount]: currencyNumber(row.paidAmount),
 					[labels.commission]: currencyNumber(row.commission),
+					[labels.commissionUnavailable]: executiveCommissionUnavailableCount(row),
+					[labels.commissionFinanceStatus]: commissionFinanceStatus(row, labels),
 					[labels.capturedPayments]: toNumber(row.capturedCount),
 				})),
 			];
@@ -3182,14 +3304,13 @@ export const ExecutiveReservationsReport = ({
 						{...scorecardProps(
 							labels.commission,
 							{ sortBy: "total_amount", sortOrder: "desc" },
-							(reservation) =>
-								toNumber(
-									reservation.commission ||
-										reservation?.financial_cycle?.commissionAmount
-								) > 0
+							(reservation) => {
+								const finance = getExecutiveReservationCommission(reservation);
+								return finance.available && Number(finance.amount || 0) > 0;
+							}
 						)}
 					>
-						<strong>{money(stats.commission, labels)}</strong>
+						<CommissionAggregateValue row={stats} labels={labels} />
 						<span>{labels.commission}</span>
 					</OverallCard>
 				</OverallCards>
@@ -3784,7 +3905,9 @@ export const ExecutivePaidReport = ({
 					{
 						key: "commission",
 						label: labels.commission,
-						render: (row) => money(row.commission, labels),
+						render: (row) => (
+							<CommissionAggregateValue row={row} labels={labels} />
+						),
 					},
 				]}
 			/>
@@ -3812,7 +3935,7 @@ export const ExecutivePaidReport = ({
 						<span>{labels.remaining}</span>
 					</OverallCard>
 					<OverallCard>
-						<strong>{money(scorecards.commission, labels)}</strong>
+						<CommissionAggregateValue row={scorecards} labels={labels} />
 						<span>{labels.commission}</span>
 					</OverallCard>
 				</OverallCards>
@@ -3867,7 +3990,9 @@ export const ExecutivePaidReport = ({
 								{
 									key: "commission",
 									label: labels.commission,
-									render: (row) => money(row.commission, labels),
+									render: (row) => (
+										<CommissionAggregateValue row={row} labels={labels} />
+									),
 								},
 							]}
 						/>
@@ -3919,6 +4044,13 @@ export const ExecutivePaidReport = ({
 								key: "paid_breakdown_remaining",
 								label: labels.remaining,
 								render: (row) => money(row.paid_breakdown_remaining, labels),
+							},
+							{
+								key: "report_commission",
+								label: labels.commission,
+								render: (row) => (
+									<CommissionReservationValue row={row} labels={labels} />
+								),
 							},
 						]}
 					/>
@@ -4928,6 +5060,27 @@ const ExecutiveReportShell = styled.div`
 	min-width: 0;
 	max-width: 100%;
 	direction: ${(props) => (props.$isRTL ? "rtl" : "ltr")};
+
+	.commission-report-value {
+		display: inline-grid;
+		gap: 2px;
+		line-height: 1.2;
+	}
+
+	.commission-report-value strong {
+		font-weight: 950;
+	}
+
+	.commission-report-value small {
+		color: #b45309;
+		font-size: 0.68rem;
+		font-weight: 900;
+		white-space: normal;
+	}
+
+	.commission-report-value.unavailable small {
+		color: #9a3412;
+	}
 
 	.report-toolbar {
 		display: grid;

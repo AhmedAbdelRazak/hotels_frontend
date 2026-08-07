@@ -25,6 +25,10 @@ import {
 	OverallPageShell,
 	titleCase,
 } from "../overallShared";
+import {
+	getHotelRunnerPlatformFinanceDisplay,
+	getReservationGuestGrossDisplay,
+} from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const TEXT = {
 	en: {
@@ -64,6 +68,11 @@ const TEXT = {
 		commissionMarkedPaid: "Commission marked paid.",
 		commissionMarkPaidError: "Could not mark commission paid.",
 		commissionPayment: "Commission payment",
+		commissionUnavailable: "Commission unavailable",
+		commissionAvailable: "Commission reviewed",
+		commissionAwaitingReview: "Awaiting HotelRunner finance review",
+		commissionInvalidReview: "Invalid HotelRunner finance review",
+		commissionConflictingReview: "Conflicting HotelRunner finance review",
 		pending: "Pending confirmation",
 		transactions: "Wallet movements",
 		reservationDeductions: "Reservations / deductions",
@@ -153,6 +162,11 @@ Object.assign(TEXT.ar, {
 	commissionMarkedPaid: "\u062a\u0645 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0643\u0645\u062f\u0641\u0648\u0639\u0629.",
 	commissionMarkPaidError: "\u062a\u0639\u0630\u0631 \u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0643\u0645\u062f\u0641\u0648\u0639\u0629.",
 	commissionPayment: "\u062f\u0641\u0639 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	commissionUnavailable: "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629",
+	commissionAvailable: "\u062a\u0645\u062a \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	commissionAwaitingReview: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0645\u0627\u0644\u064a\u0629 HotelRunner",
+	commissionInvalidReview: "\u0645\u0631\u0627\u062c\u0639\u0629 HotelRunner \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629",
+	commissionConflictingReview: "\u062a\u0639\u0627\u0631\u0636 \u0641\u064a \u0645\u0631\u0627\u062c\u0639\u0629 HotelRunner \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
 });
 
 const money = (value) =>
@@ -162,6 +176,68 @@ const money = (value) =>
 	})} SAR`;
 
 const n2 = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+const finiteNumberOrNull = (value) => {
+	if (value === null || value === undefined || value === "") return null;
+	const amount = Number(value);
+	return Number.isFinite(amount) ? amount : null;
+};
+
+export const getFinancialReportCommission = (reservation = {}) => {
+	const hotelRunnerFinance =
+		getHotelRunnerPlatformFinanceDisplay(reservation);
+	if (hotelRunnerFinance.isHotelRunner) {
+		return {
+			isHotelRunner: true,
+			available: hotelRunnerFinance.available,
+			amount: hotelRunnerFinance.available
+				? hotelRunnerFinance.amount
+				: null,
+			reason: hotelRunnerFinance.reason || "",
+		};
+	}
+
+	const reportAmount = finiteNumberOrNull(reservation.report_commission);
+	const topLevel = finiteNumberOrNull(reservation.commission);
+	const cycleAmount = finiteNumberOrNull(
+		reservation.financial_cycle?.commissionAmount
+	);
+	return {
+		isHotelRunner: false,
+		available: true,
+		amount:
+			reportAmount !== null
+				? reportAmount
+				: topLevel
+				? topLevel
+				: cycleAmount || 0,
+		reason: "",
+	};
+};
+
+export const getFinancialReportGross = (reservation = {}) => {
+	const gross = getReservationGuestGrossDisplay(reservation);
+	if (gross.isHotelRunner) return gross;
+	return {
+		...gross,
+		available: true,
+		amount: finiteNumberOrNull(reservation.total_amount) ?? 0,
+	};
+};
+
+const commissionUnavailableCount = (item = {}) =>
+	Math.max(0, Number(item.commissionUnavailableCount || 0));
+
+const commissionStatusText = (finance = {}, txt = TEXT.en) => {
+	if (finance.available) return txt.commissionAvailable;
+	if (finance.reason === "hotelrunner_platform_commission_invalid") {
+		return txt.commissionInvalidReview;
+	}
+	if (finance.reason === "hotelrunner_platform_commission_conflict") {
+		return txt.commissionConflictingReview;
+	}
+	return txt.commissionAwaitingReview;
+};
 
 const formatDate = (value) =>
 	value ? moment(value).format("YYYY-MM-DD") : "-";
@@ -192,6 +268,8 @@ const REPORT_COLUMN_WIDTHS = {
 	"Reservation Value": 18,
 	"Commission Paid": 16,
 	"Commission Due": 16,
+	"Commission Unavailable": 22,
+	"Commission Finance Status": 28,
 	"Pending Confirmation": 19,
 	Type: 18,
 	Amount: 14,
@@ -341,7 +419,7 @@ const transactionReconciliationEligible = (transaction = {}) =>
 	transaction.reconciliationEligible === true ||
 	transactionFinancialStatus(transaction) === "accepted";
 
-const buildAgentExportRows = (items = [], txt = TEXT.en) =>
+export const buildAgentExportRows = (items = [], txt = TEXT.en) =>
 	items.map((item, index) => ({
 		"#": index + 1,
 		Hotel: item.hotelName || "",
@@ -356,6 +434,10 @@ const buildAgentExportRows = (items = [], txt = TEXT.en) =>
 		"Reservation Value": Number(item.totalReservationValue || 0),
 		"Commission Paid": Number(item.commissionPaid || 0),
 		"Commission Due": Number(item.commissionDue || 0),
+		"Commission Unavailable": commissionUnavailableCount(item),
+		"Commission Finance Status": commissionUnavailableCount(item)
+			? `${commissionUnavailableCount(item)} ${txt.commissionUnavailable}`
+			: txt.commissionAvailable,
 		"Pending Confirmation": Number(item.pendingConfirmation || 0),
 	}));
 
@@ -397,8 +479,11 @@ const buildTransactionTrackingRows = (items = [], displayRows = []) =>
 		reconciliationEligible: transactionReconciliationEligible(items[index]),
 	}));
 
-const buildReservationExportRows = (items = []) =>
-	items.map((reservation, index) => ({
+export const buildReservationExportRows = (items = [], txt = TEXT.en) =>
+	items.map((reservation, index) => {
+		const finance = getFinancialReportCommission(reservation);
+		const gross = getFinancialReportGross(reservation);
+		return {
 		"#": index + 1,
 		Hotel: reservation.hotelName || "",
 		Agent: reservation.agentName || "",
@@ -406,14 +491,12 @@ const buildReservationExportRows = (items = []) =>
 		Confirmation: reservation.confirmation_number || "",
 		Guest: reservation.customer_details?.name || "",
 		Date: formatDate(reservation.booked_at || reservation.createdAt),
-		Amount: Number(reservation.total_amount || 0),
-		"Commission Due": Number(
-			reservation.commission ||
-				reservation.financial_cycle?.commissionAmount ||
-				0
-		),
+		Amount: gross.available ? Number(gross.amount) : "",
+		"Commission Due": finance.available ? Number(finance.amount || 0) : "",
+		"Commission Finance Status": commissionStatusText(finance, txt),
 		Status: reservation.reservation_status || reservation.state || "",
-	}));
+		};
+	});
 
 const buildReservationTrackingRows = (items = [], displayRows = []) =>
 	displayRows.map((row, index) => ({
@@ -424,7 +507,7 @@ const buildReservationTrackingRows = (items = [], displayRows = []) =>
 		confirmation_number: items[index]?.confirmation_number || row.Confirmation || "",
 	}));
 
-const buildTotalsExportRows = (totals = {}, txt = TEXT.en) => [
+export const buildTotalsExportRows = (totals = {}, txt = TEXT.en) => [
 	{ Metric: txt.walletAdded, Value: Number(totals.walletAdded || 0) },
 	{ Metric: txt.walletUsed, Value: Number(totals.walletUsed || 0) },
 	{ Metric: txt.balance, Value: Number(totals.balance || 0) },
@@ -435,6 +518,10 @@ const buildTotalsExportRows = (totals = {}, txt = TEXT.en) => [
 	},
 	{ Metric: txt.commissionPaid, Value: Number(totals.commissionPaid || 0) },
 	{ Metric: txt.commissionDue, Value: Number(totals.commissionDue || 0) },
+	{
+		Metric: txt.commissionUnavailable,
+		Value: commissionUnavailableCount(totals),
+	},
 	{ Metric: txt.pending, Value: Number(totals.pendingConfirmation || 0) },
 ];
 
@@ -458,7 +545,7 @@ const decorateAgentRow = (item = {}, hotel = {}) => ({
 	),
 });
 
-const buildTotals = (items = []) =>
+export const buildTotals = (items = []) =>
 	items.reduce(
 		(acc, item) => ({
 			walletAdded: n2(acc.walletAdded + Number(item.walletAdded || 0)),
@@ -471,6 +558,8 @@ const buildTotals = (items = []) =>
 			),
 			commissionPaid: n2(acc.commissionPaid + Number(item.commissionPaid || 0)),
 			commissionDue: n2(acc.commissionDue + Number(item.commissionDue || 0)),
+			commissionUnavailableCount:
+				acc.commissionUnavailableCount + commissionUnavailableCount(item),
 			pendingConfirmation:
 				acc.pendingConfirmation + Number(item.pendingConfirmation || 0),
 		}),
@@ -482,6 +571,7 @@ const buildTotals = (items = []) =>
 			totalReservationValue: 0,
 			commissionPaid: 0,
 			commissionDue: 0,
+			commissionUnavailableCount: 0,
 			pendingConfirmation: 0,
 		}
 	);
@@ -731,7 +821,7 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		try {
 			const agentRows = buildAgentExportRows(rows, txt);
 			const transactionRows = buildTransactionExportRows(transactions);
-			const reservationRows = buildReservationExportRows(reservations);
+			const reservationRows = buildReservationExportRows(reservations, txt);
 			const totalsRows = buildTotalsExportRows(totals, txt);
 			const selectedHotelIds = filters.hotelId
 				? [filters.hotelId]
@@ -871,6 +961,17 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		]
 	);
 
+	const renderCommissionSummary = (value, row = {}) => (
+		<StatusStack>
+			<strong>{money(value)}</strong>
+			{commissionUnavailableCount(row) ? (
+				<Tag color='orange'>
+					{commissionUnavailableCount(row)} {txt.commissionUnavailable}
+				</Tag>
+			) : null}
+		</StatusStack>
+	);
+
 	const agentColumns = [
 		{ title: txt.hotel, dataIndex: "hotelName", render: (value) => titleCase(value || "-") },
 		{
@@ -899,8 +1000,16 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		},
 		{ title: txt.reservations, dataIndex: "totalReservations" },
 		{ title: txt.reservationValue, dataIndex: "totalReservationValue", render: money },
-		{ title: txt.commissionPaid, dataIndex: "commissionPaid", render: money },
-		{ title: txt.commissionUnpaid, dataIndex: "commissionDue", render: money },
+		{
+			title: txt.commissionPaid,
+			dataIndex: "commissionPaid",
+			render: renderCommissionSummary,
+		},
+		{
+			title: txt.commissionUnpaid,
+			dataIndex: "commissionDue",
+			render: renderCommissionSummary,
+		},
 		{ title: txt.pending, dataIndex: "pendingConfirmation" },
 	];
 
@@ -943,23 +1052,38 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 		{ title: txt.confirmation, dataIndex: "confirmation_number" },
 		{ title: txt.guest, dataIndex: ["customer_details", "name"], render: (value) => value || "-" },
 		{ title: txt.date, render: (_, row) => formatDate(row.booked_at || row.createdAt, chosenLanguage) },
-		{ title: txt.amount, dataIndex: "total_amount", render: money },
+		{
+			title: txt.amount,
+			render: (_, row) => {
+				const gross = getFinancialReportGross(row);
+				return gross.available ? money(gross.amount) : "—";
+			},
+		},
 		{
 			title: txt.commissionDue,
-			render: (_, row) => money(row.commission || row.financial_cycle?.commissionAmount || 0),
+			render: (_, row) => {
+				const finance = getFinancialReportCommission(row);
+				return finance.available ? (
+					money(finance.amount)
+				) : (
+					<Tag color='orange'>{commissionStatusText(finance, txt)}</Tag>
+				);
+			},
 		},
 		{
 			title: txt.commissionPayment,
 			render: (_, row) => {
-				const commission = Number(
-					row.commission || row.financial_cycle?.commissionAmount || 0
-				);
+				const finance = getFinancialReportCommission(row);
+				if (!finance.available) {
+					return <Tag color='orange'>{commissionStatusText(finance, txt)}</Tag>;
+				}
+				const commission = Number(finance.amount || 0);
 				const paid =
 					row.commissionPaid === true ||
 					/commission\s*paid/i.test(String(row.commissionStatus || ""));
 				if (paid) return <Tag color='green'>{txt.commissionPaid}</Tag>;
 				if (!commission || commission <= 0) {
-					return <Tag>{txt.commissionDue}</Tag>;
+					return <Tag color='blue'>{txt.commissionAvailable}</Tag>;
 				}
 				if (!canMarkCommissionPaid) {
 					return <Tag color='volcano'>{txt.commissionUnpaid}</Tag>;
@@ -1085,12 +1209,26 @@ const OverallFinancialReport = ({ userId, user, token, ownerId, chosenLanguage }
 					</OverallCard>
 					<OverallCard>
 						<BankOutlined />
-						<strong>{money(totals.commissionPaid)}</strong>
+						<StatusStack>
+							<strong>{money(totals.commissionPaid)}</strong>
+							{commissionUnavailableCount(totals) ? (
+								<Tag color='orange'>
+									{commissionUnavailableCount(totals)} {txt.commissionUnavailable}
+								</Tag>
+							) : null}
+						</StatusStack>
 						<span>{txt.commissionPaid}</span>
 					</OverallCard>
 					<OverallCard>
 						<CalendarOutlined />
-						<strong>{money(totals.commissionDue)}</strong>
+						<StatusStack>
+							<strong>{money(totals.commissionDue)}</strong>
+							{commissionUnavailableCount(totals) ? (
+								<Tag color='orange'>
+									{commissionUnavailableCount(totals)} {txt.commissionUnavailable}
+								</Tag>
+							) : null}
+						</StatusStack>
 						<span>{txt.commissionUnpaid}</span>
 					</OverallCard>
 				</OverallCards>

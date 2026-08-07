@@ -2,6 +2,18 @@ import React from "react";
 import * as XLSX from "xlsx";
 import moment from "moment";
 
+export const normalizeFinancialExcelCell = (value) => {
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? value : "";
+	}
+	if (typeof value !== "string") return value;
+	const trimmed = value.trim();
+	const plainMoney = /^[+-]?(?:(?:\d{1,3}(?:,\d{3})+)|\d+)(?:\.\d+)?(?:\s*SAR)?$/i;
+	if (!plainMoney.test(trimmed)) return value;
+	const parsed = Number(trimmed.replace(/SAR/gi, "").replace(/,/g, "").trim());
+	return Number.isFinite(parsed) ? parsed : value;
+};
+
 const DownloadExcel = ({
 	data,
 	columns,
@@ -86,12 +98,11 @@ const DownloadExcel = ({
 
 				// Ensure "Total Amount" is formatted as a number
 				if (col.dataIndex === "total_amount") {
-					cellValue = parseFloat(cellValue.replace(/[^\d.-]/g, ""));
+					cellValue = normalizeFinancialExcelCell(cellValue);
 				}
 
 				if (["sub_total", "commission"].includes(col.dataIndex)) {
-					// Remove any non-numeric characters before parsing (like currency symbols)
-					cellValue = parseFloat(cellValue.replace(/[^\d.-]/g, ""));
+					cellValue = normalizeFinancialExcelCell(cellValue);
 				}
 
 				formattedRow[col.title] = cellValue;

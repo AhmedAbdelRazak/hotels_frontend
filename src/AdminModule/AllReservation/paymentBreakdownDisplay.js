@@ -1,3 +1,5 @@
+import { getHotelRunnerPayoutDisplay } from "./hotelRunnerPricingDisplay";
+
 const finiteMoneyOrNull = (value) => {
   if (value === null || value === undefined || typeof value === "boolean") {
     return null;
@@ -74,12 +76,31 @@ export const getPaymentBreakdownTotalDisplay = ({
   adminPricing,
   otaFinancialSummary,
   canViewPlatformProfit = false,
+  isHotelRunner = false,
+  reservation,
 } = {}) => {
-  const fallbackAmount = finiteMoneyOrNull(grossTotal) ?? 0;
-  const platformAmount = resolveAvailablePlatformAmount({
-    adminPricing,
-    otaFinancialSummary,
-  });
+  const parsedGrossTotal = finiteMoneyOrNull(grossTotal);
+  const fallbackAmount = isHotelRunner
+    ? parsedGrossTotal
+    : parsedGrossTotal ?? 0;
+  const hotelRunnerMetrics = isHotelRunner
+    ? getHotelRunnerPayoutDisplay(
+        reservation || {
+          adminPricing: { mode: "hotelrunner_api", ...(adminPricing || {}) },
+          ota_financial_summary: otaFinancialSummary || {},
+        },
+      )
+    : null;
+  const reviewedHotelRunnerMargin =
+    hotelRunnerMetrics?.platformMarginAvailable === true
+      ? finiteMoneyOrNull(hotelRunnerMetrics.platformMarginAmount)
+      : null;
+  const platformAmount = isHotelRunner
+    ? reviewedHotelRunnerMargin
+    : resolveAvailablePlatformAmount({
+        adminPricing,
+        otaFinancialSummary,
+      });
   const usesPlatformAmount =
     canViewPlatformProfit === true &&
     hasOtaPricing === true &&

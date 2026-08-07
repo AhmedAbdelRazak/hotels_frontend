@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import { isSuperAdminUser } from "../utils/superUsers";
 import BofaVccModal from "./BofaVccModal";
 import { selectReservationVccCapture } from "./BofaCapturedPaymentSummary";
+import { getHotelRunnerPlatformFinanceDisplay } from "./hotelRunnerPricingDisplay";
 
 const safeNumber = (val) => {
 	const n = Number(val);
@@ -101,7 +102,32 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 		reservation?.checkout_date
 	);
 
-	// Commission calc (as in your original)
+	// HotelRunner does not promise an OTA commission/net-payout field. Never
+	// turn its room-price breakdown into a chargeable commission unless finance
+	// has explicitly reviewed and assigned that PMS commission.
+	const hotelRunnerPlatformFinance =
+		getHotelRunnerPlatformFinanceDisplay(reservation);
+	const directHotelRunnerReservation = hotelRunnerPlatformFinance.isHotelRunner;
+	const normalizedCommissionStatus = String(
+		reservation?.commissionStatus || "",
+	)
+		.trim()
+		.toLowerCase();
+	const commissionWasReviewed = directHotelRunnerReservation
+		? hotelRunnerPlatformFinance.available
+		: reservation?.financial_cycle?.commissionAssigned === true ||
+		  reservation?.commissionData?.assigned === true ||
+		  ["commission due", "commission paid", "no commission due"].includes(
+				normalizedCommissionStatus,
+		  );
+	const reviewedCommission = directHotelRunnerReservation
+		? safeNumber(hotelRunnerPlatformFinance.amount)
+		: safeNumber(
+				reservation?.financial_cycle?.commissionAmount ??
+					reservation?.commission,
+		  );
+
+	// Legacy non-HotelRunner commission calculation remains unchanged.
 	const computedCommissionPerNight = reservation?.pickedRoomsType
 		? reservation.pickedRoomsType.reduce((total, room) => {
 				let roomCommission = 0;
@@ -114,7 +140,13 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 				return total + roomCommission;
 		  }, 0)
 		: 0;
-	const computedCommission = computedCommissionPerNight;
+	const hotelRunnerCommissionUnavailable =
+		directHotelRunnerReservation && !commissionWasReviewed;
+	const computedCommission = directHotelRunnerReservation
+		? commissionWasReviewed
+			? reviewedCommission
+			: 0
+		: computedCommissionPerNight;
 
 	const computeOneNightCost = () => {
 		if (
@@ -267,9 +299,13 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 	/* ------------------------------- UI helpers ------------------------------- */
 
 	const isOption1Disabled =
-		parseFloat(option1_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
+		hotelRunnerCommissionUnavailable ||
+		parseFloat(option1_USD) > allowedMaxUSD ||
+		allowedMaxUSD <= 0;
 	const isOption2Disabled =
-		parseFloat(option2_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
+		hotelRunnerCommissionUnavailable ||
+		parseFloat(option2_USD) > allowedMaxUSD ||
+		allowedMaxUSD <= 0;
 	const isOption3Disabled =
 		parseFloat(option3_USD) > allowedMaxUSD || allowedMaxUSD <= 0;
 
@@ -416,9 +452,18 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 					onChange={(e) => setSelectedOption(e.target.value)}
 					value={selectedOption}
 				>
+					{hotelRunnerCommissionUnavailable ? (
+						<CommissionUnavailable role='status'>
+							HotelRunner did not provide a verified commission or net payout.
+							 Finance must review and assign a commission before the
+							 commission-based payment options can be used.
+						</CommissionUnavailable>
+					) : null}
 					<Radio value='depositOnly' disabled={isOption1Disabled}>
 						Commission Only: ${option1_USD} USD ({option1_SAR} SAR)
-						{isOption1Disabled && <Exceeded>(Exceeds allowed max)</Exceeded>}
+						{isOption1Disabled && !hotelRunnerCommissionUnavailable ? (
+							<Exceeded>(Exceeds allowed max)</Exceeded>
+						) : null}
 					</Radio>
 					<br />
 					<Radio
@@ -427,7 +472,9 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 						disabled={isOption2Disabled}
 					>
 						Commission + 1 Night: ${option2_USD} USD ({option2_SAR} SAR)
-						{isOption2Disabled && <Exceeded>(Exceeds allowed max)</Exceeded>}
+						{isOption2Disabled && !hotelRunnerCommissionUnavailable ? (
+							<Exceeded>(Exceeds allowed max)</Exceeded>
+						) : null}
 					</Radio>
 					<br />
 					<Radio
@@ -552,6 +599,17 @@ const Exceeded = styled.span`
 	color: #dc2626;
 	margin-left: 8px;
 	font-weight: 600;
+`;
+
+const CommissionUnavailable = styled.p`
+	background: #fff7ed;
+	border: 1px solid #fdba74;
+	border-radius: 8px;
+	color: #9a3412;
+	font-size: 14px;
+	line-height: 1.45;
+	margin: 0 0 12px;
+	padding: 10px 12px;
 `;
 
 const SelectionPreview = styled.div`

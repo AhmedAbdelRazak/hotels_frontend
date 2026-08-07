@@ -27,7 +27,11 @@ app.get("*", function (req, res) {
 app.use(express.static(__dirname + "/public"));
 
 const PORT = process.env.PORT || 3080;
+// Nginx is the public edge. Keeping the static Node server on loopback avoids
+// bypassing the site's TLS and security-header policy through the raw port.
+const BIND_HOST =
+	String(process.env.BIND_HOST || "127.0.0.1").trim() || "127.0.0.1";
 
-app.listen(PORT, () => {
-	console.log(`App is running on port ${PORT}`);
+app.listen(PORT, BIND_HOST, () => {
+	console.log(`App is running on ${BIND_HOST}:${PORT}`);
 });

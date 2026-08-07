@@ -18,6 +18,13 @@ import html2canvas from "html2canvas";
 import "jspdf-autotable";
 import { relocationArray1 } from "../ReservationsFolder/ReservationAssets";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
+import HotelRunnerPricingBreakdown from "../../AdminModule/AllReservation/HotelRunnerPricingBreakdown";
+import {
+	getHotelRunnerPlatformFinanceDisplay,
+	getHotelRunnerPricingDisplay,
+	getReservationGuestGrossDisplay,
+} from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
+import { protectHotelRunnerEditorPayload } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 
 const Wrapper = styled.div`
 	min-height: 750px;
@@ -111,6 +118,19 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
+	const hotelRunnerPlatformFinance =
+		getHotelRunnerPlatformFinanceDisplay(reservation);
+	const hotelRunnerPricing = getHotelRunnerPricingDisplay(reservation);
+	const guestGross = getReservationGuestGrossDisplay(reservation);
+	const displayedReservationTotal = guestGross.amount;
+	const displayedReservationTotalText = guestGross.available
+		? guestGross.amount.toLocaleString()
+		: "—";
+	const displayedReservationCurrency = guestGross.isHotelRunner
+		? guestGross.currency
+		: chosenLanguage === "Arabic"
+			? "Ø±ÙŠØ§Ù„"
+			: "SAR";
 
 	const getTotalAmountPerDay = (pickedRoomsType) => {
 		return pickedRoomsType.reduce((total, room) => {
@@ -179,16 +199,22 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
-				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
-					(total, room) => total + room.count * parseFloat(room.chosenPrice),
-					0
-				);
+				if (!hotelRunnerPricing.isHotelRunner) {
+					const totalAmountPerDay = reservation.pickedRoomsType.reduce(
+						(total, room) => total + room.count * parseFloat(room.chosenPrice),
+						0
+					);
 
-				updateData.total_amount = totalAmountPerDay * daysOfResidence;
+					updateData.total_amount = totalAmountPerDay * daysOfResidence;
+				}
 			}
 
 			// ✅ Call API with sendEmail flag
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (response.error) {
 					console.error(response.error);
 					toast.error("An error occurred while updating the status");
@@ -263,7 +289,11 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 				state: "relocated",
 			};
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (response.error) {
 					console.error(response.error);
 					toast.error("An error occurred while updating the status");
@@ -411,7 +441,11 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 
 	// We've already accounted for all nights in pricingByDay,
 	// so we do NOT multiply by 'nights' again.
-	const computedCommission = computedCommissionPerNight;
+	const computedCommission = hotelRunnerPlatformFinance.isHotelRunner
+		? hotelRunnerPlatformFinance.available
+			? hotelRunnerPlatformFinance.amount
+			: null
+		: computedCommissionPerNight;
 
 	const computeOneNightCost = () => {
 		if (
@@ -440,7 +474,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 	const oneNightCost = computeOneNightCost() ? computeOneNightCost() : 0;
 
 	// The final deposit is the sum of the computed commission and one night cost.
-	const finalDeposit = computedCommission + oneNightCost;
+	const finalDeposit =
+		computedCommission === null ? null : computedCommission + oneNightCost;
 
 	return (
 		<Wrapper
@@ -697,10 +732,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 													: "Total Amount"}
 											</div>
 											<h4 className='mx-2'>
-												{reservation
-													? reservation.total_amount.toLocaleString()
-													: 0}{" "}
-												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+											{displayedReservationTotalText}{" "}
+											{displayedReservationCurrency}
 											</h4>
 										</div>
 										<div className='col-md-12'>
@@ -1248,9 +1281,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 										<div style={{ fontWeight: "bold" }}>
 											{/* Calculation of total amount */}
-											{reservation &&
-												reservation.total_amount.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+											{displayedReservationTotalText}{" "}
+											{displayedReservationCurrency}
 										</div>
 									</div>
 								</div>
@@ -1262,8 +1294,17 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 												? "الضرائب والرسوم"
 												: "Taxes & Extra Fees"}
 										</div>
-										<div className='col-md-5 mx-auto text-center my-2'>
-											{0} {chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+									<div className='col-md-5 mx-auto text-center my-2'>
+										{hotelRunnerPricing.isHotelRunner
+											? hotelRunnerPricing.summary?.taxTotal === null ||
+											  hotelRunnerPricing.summary?.taxTotal === undefined
+												? chosenLanguage === "Arabic"
+													? "راجع تفاصيل HotelRunner"
+													: "See HotelRunner breakdown"
+												: `${hotelRunnerPricing.summary.taxTotal.toLocaleString()} ${
+														hotelRunnerPricing.currency
+												  }`
+											: `0 ${chosenLanguage === "Arabic" ? "ريال" : "SAR"}`}
 										</div>
 									</div>
 
@@ -1272,18 +1313,27 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										<div className='col-md-5 mx-auto text-center my-2'>
 											{chosenLanguage === "Arabic" ? "عمولة" : "Commission"}
 										</div>
-										<div className='col-md-5 mx-auto text-center my-2'>
-											{computedCommission.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+									<div className='col-md-5 mx-auto text-center my-2'>
+										{computedCommission === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${computedCommission.toLocaleString()} ${
+													chosenLanguage === "Arabic" ? "ريال" : "SAR"
+											  }`}
 										</div>
 									</div>
 
 									{/* One Night Cost Row */}
 									<div className='row' style={{ fontWeight: "bold" }}>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{chosenLanguage === "Arabic"
-												? "سعر الليلة الواحدة"
-												: "One Night Cost"}
+										{chosenLanguage === "Arabic"
+											? hotelRunnerPlatformFinance.isHotelRunner
+												? "المبلغ المحلي المتعاقد عليه لأول ليلة"
+												: "سعر الليلة الواحدة"
+											: hotelRunnerPlatformFinance.isHotelRunner
+											  ? "Local Contracted First Night"
+											  : "One Night Cost"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
 											{oneNightCost.toLocaleString()}{" "}
@@ -1294,13 +1344,22 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 									{/* Final Deposit Row */}
 									<div className='row' style={{ fontWeight: "bold" }}>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{chosenLanguage === "Arabic"
-												? "المبلغ المستحق"
-												: "Final Deposit"}
+										{chosenLanguage === "Arabic"
+											? hotelRunnerPlatformFinance.isHotelRunner
+												? "تسوية مالية محلية"
+												: "المبلغ المستحق"
+											: hotelRunnerPlatformFinance.isHotelRunner
+											  ? "Local Finance Deposit"
+											  : "Final Deposit"}
 										</div>
-										<div className='col-md-5 mx-auto text-center my-2'>
-											{finalDeposit.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+									<div className='col-md-5 mx-auto text-center my-2'>
+										{finalDeposit === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${finalDeposit.toLocaleString()} ${
+													chosenLanguage === "Arabic" ? "ريال" : "SAR"
+											  }`}
 										</div>
 									</div>
 								</div>
@@ -1316,8 +1375,8 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										</div>
 										<div className='col-md-5 mx-auto'>
 											<h3>
-												{reservation.total_amount.toLocaleString()}{" "}
-												{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
+												{displayedReservationTotalText}{" "}
+												{displayedReservationCurrency}
 											</h3>
 										</div>
 
@@ -1353,10 +1412,12 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 										{reservation && reservation.paid_amount !== 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3 style={{ color: "darkgreen" }}>
-													{Number(
-														Number(reservation.total_amount) -
-															Number(reservation.paid_amount)
-													).toLocaleString()}{" "}
+													{displayedReservationTotal === null
+														? "—"
+														: Number(
+																displayedReservationTotal -
+																	Number(reservation.paid_amount)
+														  ).toLocaleString()}{" "}
 													{chosenLanguage === "Arabic" ? "ريال" : "SAR"}
 												</h3>
 											</div>
@@ -1450,6 +1511,10 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 								</div>
 							</ContentSection>
 						</Content>
+						<HotelRunnerPricingBreakdown
+							reservation={reservation}
+							chosenLanguage={chosenLanguage}
+						/>
 					</div>
 				</div>
 			)}

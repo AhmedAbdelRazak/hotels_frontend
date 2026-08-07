@@ -89,6 +89,13 @@ const TEXT = {
 		loadError: "Could not load profit report.",
 		exportFailed: "Could not export profit report.",
 		noRowsToExport: "No rows available to export.",
+		unavailable: "Unavailable",
+		commercialCoverage: (count) =>
+			`Verified HotelRunner commercial data is incomplete for ${count.toLocaleString(
+				"en-US",
+			)} reservation${
+				count === 1 ? "" : "s"
+			}. Gross totals remain included; net, OTA expense, commission, and profit totals exclude any reservation missing that exact verified field.`,
 		page: "Page",
 		of: "of",
 		sar: "SAR",
@@ -142,6 +149,11 @@ const TEXT = {
 		exportFailed: "\u062a\u0639\u0630\u0631 \u062a\u0635\u062f\u064a\u0631 \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0631\u0628\u062d.",
 		noRowsToExport:
 			"\u0644\u0627 \u062a\u0648\u062c\u062f \u0635\u0641\u0648\u0641 \u0644\u0644\u062a\u0635\u062f\u064a\u0631.",
+		unavailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
+		commercialCoverage: (count) =>
+			`\u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u062a\u062c\u0627\u0631\u064a\u0629 \u0627\u0644\u0645\u0648\u062b\u0642\u0629 \u0645\u0646 HotelRunner \u063a\u064a\u0631 \u0645\u0643\u062a\u0645\u0644\u0629 \u0644\u0639\u062f\u062f ${count.toLocaleString(
+				"en-US",
+			)} \u0645\u0646 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a. \u064a\u0638\u0647\u0631 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\u060c \u0648\u062a\u0633\u062a\u0628\u0639\u062f \u0642\u064a\u0645 \u0627\u0644\u0635\u0627\u0641\u064a \u0648\u0645\u0635\u0627\u0631\u064a\u0641 OTA \u0648\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0648\u0627\u0644\u0631\u0628\u062d \u0623\u064a \u062d\u062c\u0632 \u064a\u0641\u062a\u0642\u062f \u0625\u0644\u0649 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0645\u0648\u062b\u0642\u0629 \u0627\u0644\u0645\u0642\u0627\u0628\u0644\u0629.`,
 		page: "\u0635\u0641\u062d\u0629",
 		of: "\u0645\u0646",
 		sar: "\u0631\u064a\u0627\u0644",
@@ -211,6 +223,9 @@ const profitMetricsForReservation = (reservation = {}) =>
 
 const moneyText = (value, labels) => `${formatMoney(value)} ${labels.sar}`;
 
+export const profitMoneyText = (value, available, labels) =>
+	available === false ? labels.unavailable : moneyText(value, labels);
+
 export const buildProfitExportRows = ({
 	rows = [],
 	labels = {},
@@ -235,11 +250,26 @@ export const buildProfitExportRows = ({
 			[labels.roomNumber]: roomSummary.roomNumberText,
 			[labels.source]: reservation.booking_source || "",
 			[labels.clientPaid]: safeNumber(metrics.clientTotal),
-			[labels.hotelTotal]: safeNumber(metrics.hotelTotal),
-			[labels.commission]: safeNumber(metrics.commission),
-			[labels.otaExpense]: safeNumber(metrics.otaExpense),
-			[labels.totalProfit]: safeNumber(metrics.profitMargin),
-			[labels.profitRate]: safeNumber(metrics.profitRate),
+			[labels.hotelTotal]:
+				metrics.hotelTotalAvailable === false
+					? labels.unavailable || "Unavailable"
+					: safeNumber(metrics.hotelTotal),
+			[labels.commission]:
+				metrics.commissionAvailable === false
+					? labels.unavailable || "Unavailable"
+					: safeNumber(metrics.commission),
+			[labels.otaExpense]:
+				metrics.otaExpenseAvailable === false
+					? labels.unavailable || "Unavailable"
+					: safeNumber(metrics.otaExpense),
+			[labels.totalProfit]:
+				metrics.profitAvailable === false
+					? labels.unavailable || "Unavailable"
+					: safeNumber(metrics.profitMargin),
+			[labels.profitRate]:
+				metrics.profitAvailable === false
+					? labels.unavailable || "Unavailable"
+					: safeNumber(metrics.profitRate),
 		};
 	});
 
@@ -520,6 +550,15 @@ const ProfitReportAdmin = () => {
 	}, [report.allHotels, report.hotels]);
 
 	const scorecards = report.scorecards || {};
+	const scorecardReservations = Math.max(
+		0,
+		safeNumber(scorecards.reservationsCount),
+	);
+	const coveredMoneyText = (value, unavailableCount) =>
+		scorecardReservations > 0 &&
+		safeNumber(unavailableCount) >= scorecardReservations
+			? labels.unavailable
+			: moneyText(value, labels);
 	const scorecardItems = [
 		{
 			key: "reservations",
@@ -538,28 +577,51 @@ const ProfitReportAdmin = () => {
 		{
 			key: "hotel",
 			label: labels.hotelTotal,
-			value: moneyText(scorecards.hotelTotal, labels),
+			value: coveredMoneyText(
+				scorecards.hotelTotal,
+				scorecards.hotelTotalUnavailableCount,
+			),
 			tone: "slate",
 			icon: <BankOutlined />,
 		},
 		{
 			key: "commission",
 			label: labels.commission,
-			value: moneyText(scorecards.commission, labels),
+			value: coveredMoneyText(
+				scorecards.commission,
+				scorecards.commissionUnavailableCount,
+			),
+			tone: "amber",
+			icon: <DollarCircleOutlined />,
+		},
+		{
+			key: "ota-expense",
+			label: labels.otaExpense,
+			value: coveredMoneyText(
+				scorecards.otaExpense,
+				scorecards.otaExpenseUnavailableCount,
+			),
 			tone: "amber",
 			icon: <DollarCircleOutlined />,
 		},
 		{
 			key: "profit",
 			label: labels.totalProfit,
-			value: moneyText(scorecards.profitMargin, labels),
+			value: coveredMoneyText(
+				scorecards.profitMargin,
+				scorecards.profitUnavailableCount,
+			),
 			tone: safeNumber(scorecards.profitMargin) < 0 ? "red" : "emerald",
 			icon: <DollarCircleOutlined />,
 		},
 		{
 			key: "rate",
 			label: labels.profitRate,
-			value: formatPercent(scorecards.profitRate),
+			value:
+				scorecardReservations > 0 &&
+				safeNumber(scorecards.profitUnavailableCount) >= scorecardReservations
+					? labels.unavailable
+					: formatPercent(scorecards.profitRate),
 			tone: "indigo",
 			icon: <BarChartOutlined />,
 		},
@@ -859,10 +921,11 @@ const ProfitReportAdmin = () => {
 		align: "center",
 		className: "profit-total-column",
 		render: (_value, row) => {
-			const value = profitMetricsForReservation(row).profitMargin;
+			const metrics = profitMetricsForReservation(row);
+			const value = metrics.profitMargin;
 			return (
 				<ProfitValue $negative={safeNumber(value) < 0}>
-					{moneyText(value, labels)}
+					{profitMoneyText(value, metrics.profitAvailable, labels)}
 				</ProfitValue>
 			);
 		},
@@ -946,15 +1009,40 @@ const ProfitReportAdmin = () => {
 			title: labels.hotelTotal,
 			width: 98,
 			align: "center",
-			render: (_value, row) =>
-				moneyText(profitMetricsForReservation(row).hotelTotal, labels),
+			render: (_value, row) => {
+				const metrics = profitMetricsForReservation(row);
+				return profitMoneyText(
+					metrics.hotelTotal,
+					metrics.hotelTotalAvailable,
+					labels,
+				);
+			},
 		},
 		{
 			title: labels.commission,
 			width: 78,
 			align: "center",
-			render: (_value, row) =>
-				moneyText(profitMetricsForReservation(row).commission, labels),
+			render: (_value, row) => {
+				const metrics = profitMetricsForReservation(row);
+				return profitMoneyText(
+					metrics.commission,
+					metrics.commissionAvailable,
+					labels,
+				);
+			},
+		},
+		{
+			title: labels.otaExpense,
+			width: 92,
+			align: "center",
+			render: (_value, row) => {
+				const metrics = profitMetricsForReservation(row);
+				return profitMoneyText(
+					metrics.otaExpense,
+					metrics.otaExpenseAvailable,
+					labels,
+				);
+			},
 		},
 	];
 	const columns = isArabic
@@ -1062,6 +1150,13 @@ const ProfitReportAdmin = () => {
 						</ScoreTile>
 					))}
 				</ScoreGrid>
+				{safeNumber(scorecards.commercialUnavailableCount) > 0 ? (
+					<CommercialCoverageNotice role="status">
+						{labels.commercialCoverage(
+							safeNumber(scorecards.commercialUnavailableCount),
+						)}
+					</CommercialCoverageNotice>
+				) : null}
 
 				<ChartsGrid>
 					<ChartPanel>
@@ -1293,7 +1388,7 @@ const scoreToneFor = (toneKey = "blue") => scoreTone[toneKey] || scoreTone.blue;
 
 const ScoreGrid = styled.section`
 	display: grid;
-	grid-template-columns: repeat(6, minmax(132px, 1fr));
+	grid-template-columns: repeat(7, minmax(122px, 1fr));
 	gap: 10px;
 	margin: 2px 0 4px;
 	padding: 10px;
@@ -1314,6 +1409,18 @@ const ScoreGrid = styled.section`
 		gap: 10px;
 		padding: 10px;
 	}
+`;
+
+const CommercialCoverageNotice = styled.p`
+	margin: -4px 0 2px;
+	padding: 9px 11px;
+	border: 1px solid #fdba74;
+	border-radius: 7px;
+	background: #fff7ed;
+	color: #9a3412;
+	font-size: 13px;
+	font-weight: 750;
+	line-height: 1.5;
 `;
 
 const ScoreTile = styled.div`

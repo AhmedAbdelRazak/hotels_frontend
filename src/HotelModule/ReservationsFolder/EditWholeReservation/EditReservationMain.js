@@ -46,6 +46,7 @@ import {
 	totalFromRoomPricingRows,
 } from "./reservationStayPricing";
 import { dateOnlyKey, datePickerValue } from "./reservationDateValues";
+import { protectHotelRunnerEditorPayload } from "../../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -1560,9 +1561,13 @@ export const EditReservationMain = ({
 					Object.assign(updateData, buildRoomPricingUpdatePayload());
 				}
 
+				const safeUpdateData = protectHotelRunnerEditorPayload(
+					initialReservationRef.current || reservation,
+					updateData,
+				);
 				const response = await updateHotelManagementReservation(
 					reservation._id,
-					updateData,
+					safeUpdateData,
 				);
 					if (!response || response.error) {
 						console.error(response?.error || response);
@@ -1636,9 +1641,13 @@ export const EditReservationMain = ({
 				}
 			}
 
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				initialReservationRef.current || reservation,
+				updateData,
+			);
 			const response = await updateHotelManagementReservation(
 				reservation._id,
-				updateData,
+				safeUpdateData,
 			);
 				if (!response || response.error) {
 					console.error(response?.error || response);

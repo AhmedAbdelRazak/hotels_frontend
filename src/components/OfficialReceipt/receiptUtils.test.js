@@ -38,6 +38,28 @@ describe("official receipt utilities", () => {
     expect(payment.method.en).toBe("Not captured");
   });
 
+  it("keeps missing HotelRunner canonical gross and remaining due unavailable", () => {
+    const payment = deriveReceiptPayment({
+      total_amount: 600,
+      paid_amount: 200,
+      adminPricing: { mode: "hotelrunner_api" },
+      supplierData: {
+        hotelRunner: {
+          transport: "hotelrunner_api",
+          reservationId: "hr-missing-gross",
+        },
+      },
+    });
+
+    expect(payment).toMatchObject({
+      totalAvailable: false,
+      total: null,
+      remaining: null,
+      fullyPaid: false,
+      partiallyPaid: false,
+    });
+  });
+
   it("groups a 20-room agency reservation without losing totals", () => {
     const pickedRoomsType = Array.from({ length: 20 }, () => ({
       room_type: "quadrupleRooms",

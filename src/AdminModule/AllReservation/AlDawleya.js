@@ -6,6 +6,7 @@ import { Input, Modal } from "antd";
 import { updateSingleReservation } from "../apiAdmin";
 import websiteLogo from "../../GeneralImages/websiteLogo.png";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import { buildHotelLicenseSupplierUpdatePayload } from "./hotelRunnerPricingEditPolicy";
 
 const PDF_CHILD_MODAL_Z = 60010;
 
@@ -397,14 +398,7 @@ const AlDawleya = forwardRef(({ reservation, hotelDetails }, ref) => {
 		setIsSavingLicense(true);
 		try {
 			if (reservation?._id) {
-				const updateData = {
-					supplierData: {
-						...(reservation?.supplierData || {}),
-						hotelLicenseNo: nextValue,
-						licenseNumber: nextValue,
-					},
-					sendEmail: false,
-				};
+				const updateData = buildHotelLicenseSupplierUpdatePayload(nextValue);
 				const resp = await updateSingleReservation(reservation._id, updateData);
 				if (resp?.error) {
 					console.error(resp.error);

@@ -109,6 +109,29 @@ function sumOfMeasure(dataArray, measure) {
 	return src.reduce((acc, item) => acc + getMeasureValue(item, measure), 0);
 }
 
+export function sumUnavailableHotelRunnerExpense(dataArray) {
+	const src = Array.isArray(dataArray) ? dataArray : [];
+	return src.reduce(
+		(acc, item) => acc + Math.max(0, Number(item?.commissionUnavailableCount) || 0),
+		0,
+	);
+}
+
+const commissionMeasureLabel = "Commission / Verified OTA Expense";
+
+const CommissionCoverageNotice = ({ data, measure }) => {
+	if (measure !== "commission") return null;
+	const unavailableCount = sumUnavailableHotelRunnerExpense(data);
+	if (unavailableCount <= 0) return null;
+	return (
+		<CommissionNotice role='status'>
+			Verified OTA expense is unavailable for {unavailableCount.toLocaleString("en-US")}{" "}
+			HotelRunner reservation{unavailableCount === 1 ? "" : "s"}; those reservations
+			 are excluded from this expense total.
+		</CommissionNotice>
+	);
+};
+
 /** 5) Filter data by "all" | "month" | "quarter" */
 function filterByRangeAndSelection(
 	dataArray,
@@ -186,11 +209,14 @@ function transformToMonthly(dataArray) {
 				reservationsCount: 0,
 				total_amount: 0,
 				commission: 0,
+				commissionUnavailableCount: 0,
 			};
 		}
 		monthlyMap[monthKey].reservationsCount += item.reservationsCount ?? 0;
 		monthlyMap[monthKey].total_amount += item.total_amount ?? 0;
 		monthlyMap[monthKey].commission += item.commission ?? 0;
+		monthlyMap[monthKey].commissionUnavailableCount +=
+			Math.max(0, Number(item.commissionUnavailableCount) || 0);
 	}
 	return Object.values(monthlyMap).sort((a, b) =>
 		a.groupKey.localeCompare(b.groupKey)
@@ -635,7 +661,7 @@ const ReservationsOverview = () => {
 						? "Reservations Count"
 						: measureDay === "total"
 						  ? "Total Amount"
-						  : "Commission",
+						  : commissionMeasureLabel,
 				data: daySeriesData,
 			},
 		],
@@ -725,7 +751,7 @@ const ReservationsOverview = () => {
 						? "Check-ins Count"
 						: measureCheckin === "total"
 						  ? "Total Amount"
-						  : "Commission",
+						  : commissionMeasureLabel,
 				data: checkinsSeriesData,
 			},
 		],
@@ -817,7 +843,7 @@ const ReservationsOverview = () => {
 						? "Check-outs Count"
 						: measureCheckout === "total"
 						  ? "Total Amount"
-						  : "Commission",
+						  : commissionMeasureLabel,
 				data: checkoutSeriesData,
 			},
 		],
@@ -1035,7 +1061,9 @@ const ReservationsOverview = () => {
 								>
 									<Radio.Button value='count'>Count</Radio.Button>
 									<Radio.Button value='total'>Total Amount</Radio.Button>
-									<Radio.Button value='commission'>Commission</Radio.Button>
+									<Radio.Button value='commission'>
+										{commissionMeasureLabel}
+									</Radio.Button>
 								</Radio.Group>
 
 								<Select
@@ -1086,7 +1114,7 @@ const ReservationsOverview = () => {
 										? "Reservations"
 										: measureDay === "total"
 										  ? "Amount"
-										  : "Commission"}
+										  : commissionMeasureLabel}
 									:
 								</b>{" "}
 								{formatForDisplay(
@@ -1094,6 +1122,10 @@ const ReservationsOverview = () => {
 									measureDay
 								)}
 							</Card>
+							<CommissionCoverageNotice
+								data={dayDataForChart}
+								measure={measureDay}
+							/>
 
 							<div className='chart-container container'>
 								{dayDataForChart.length === 0 ? (
@@ -1131,7 +1163,9 @@ const ReservationsOverview = () => {
 										>
 											<Radio.Button value='count'>Count</Radio.Button>
 											<Radio.Button value='total'>Total Amount</Radio.Button>
-											<Radio.Button value='commission'>Commission</Radio.Button>
+											<Radio.Button value='commission'>
+												{commissionMeasureLabel}
+											</Radio.Button>
 										</Radio.Group>
 
 										<Select
@@ -1182,6 +1216,10 @@ const ReservationsOverview = () => {
 											measureCheckin
 										)}
 									</Card>
+									<CommissionCoverageNotice
+										data={checkinDataForChart}
+										measure={measureCheckin}
+									/>
 
 									<div className='chart-container container'>
 										{checkinDataForChart.length === 0 ? (
@@ -1216,7 +1254,9 @@ const ReservationsOverview = () => {
 										>
 											<Radio.Button value='count'>Count</Radio.Button>
 											<Radio.Button value='total'>Total Amount</Radio.Button>
-											<Radio.Button value='commission'>Commission</Radio.Button>
+											<Radio.Button value='commission'>
+												{commissionMeasureLabel}
+											</Radio.Button>
 										</Radio.Group>
 
 										<Select
@@ -1267,6 +1307,10 @@ const ReservationsOverview = () => {
 											measureCheckout
 										)}
 									</Card>
+									<CommissionCoverageNotice
+										data={checkoutDataForChart}
+										measure={measureCheckout}
+									/>
 
 									<div className='chart-container container'>
 										{checkoutDataForChart.length === 0 ? (
@@ -1297,7 +1341,9 @@ const ReservationsOverview = () => {
 										>
 											<Radio.Button value='count'>Count</Radio.Button>
 											<Radio.Button value='total'>Total</Radio.Button>
-											<Radio.Button value='commission'>Commission</Radio.Button>
+											<Radio.Button value='commission'>
+												{commissionMeasureLabel}
+											</Radio.Button>
 										</Radio.Group>
 										<Select
 											value={rangeBookingStatus}
@@ -1344,6 +1390,10 @@ const ReservationsOverview = () => {
 											measureBookingStatus
 										)}
 									</Card>
+									<CommissionCoverageNotice
+										data={filteredStatus}
+										measure={measureBookingStatus}
+									/>
 
 									<div className='chart-container container'>
 										{filteredStatus.length === 0 ? (
@@ -1424,7 +1474,9 @@ const ReservationsOverview = () => {
 								>
 									<Radio.Button value='count'>Count</Radio.Button>
 									<Radio.Button value='total'>Total</Radio.Button>
-									<Radio.Button value='commission'>Commission</Radio.Button>
+									<Radio.Button value='commission'>
+										{commissionMeasureLabel}
+									</Radio.Button>
 								</Radio.Group>
 
 								<Select
@@ -1472,7 +1524,7 @@ const ReservationsOverview = () => {
 										? "Reservations"
 										: measureByHotel === "total"
 										  ? "Amount"
-										  : "Commission"}
+										  : commissionMeasureLabel}
 									:
 								</b>{" "}
 								{formatForDisplay(
@@ -1480,6 +1532,10 @@ const ReservationsOverview = () => {
 									measureByHotel
 								)}
 							</Card>
+							<CommissionCoverageNotice
+								data={sortedByHotel}
+								measure={measureByHotel}
+							/>
 
 							<div className='table-container container'>
 								{sortedByHotel.length === 0 ? (
@@ -1494,7 +1550,8 @@ const ReservationsOverview = () => {
 												<th>Hotel Name</th>
 												<th>Reservations</th>
 												<th>Total Amount (SAR)</th>
-												<th>Commission (SAR)</th>
+												<th>Commission / Verified OTA Expense (SAR)</th>
+												<th>HotelRunner Expense Unavailable</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -1510,12 +1567,18 @@ const ReservationsOverview = () => {
 													<td>
 														{formatForDisplay(item.total_amount ?? 0, "total")}
 													</td>
-													<td>
-														{formatForDisplay(
-															item.commission ?? 0,
-															"commission"
-														)}
-													</td>
+												<td>
+													{formatForDisplay(
+														item.commission ?? 0,
+														"commission"
+													)}
+												</td>
+												<td>
+													{formatForDisplay(
+														item.commissionUnavailableCount ?? 0,
+														"count",
+													)}
+												</td>
 												</tr>
 											))}
 										</tbody>
@@ -1727,6 +1790,17 @@ const ReservationsOverviewModalGlobalStyle = createGlobalStyle`
 	.reports-reservations-modal-root .ant-modal {
 		max-width: calc(100vw - 24px);
 	}
+`;
+
+const CommissionNotice = styled.p`
+	background: #fff7ed;
+	border: 1px solid #fdba74;
+	border-radius: 6px;
+	color: #9a3412;
+	font-size: 13px;
+	line-height: 1.45;
+	margin: -4px 0 12px;
+	padding: 8px 10px;
 `;
 
 const SummaryTable = styled.table`

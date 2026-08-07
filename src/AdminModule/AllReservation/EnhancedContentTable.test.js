@@ -127,6 +127,17 @@ const totalCellTextFor = (guest) => {
     .trim();
 };
 
+const cellTextFor = (guest, headerLabel) => {
+  const headers = screen
+    .getAllByRole("columnheader")
+    .map((header) => header.textContent.trim());
+  const index = headers.indexOf(headerLabel);
+  return within(screen.getByRole("row", { name: new RegExp(guest) }))
+    .getAllByRole("cell")[index]
+    .textContent.replace(/\s+/g, " ")
+    .trim();
+};
+
 describe("EnhancedContentTable total amount column", () => {
   it("shows net after expenses with a safe total_amount fallback on all reservations", () => {
     const netReservation = reservation({
@@ -197,6 +208,45 @@ describe("EnhancedContentTable total amount column", () => {
 	expect(screen.getByTestId("reservation-export").textContent).toContain(
 	  "REPORT",
 	);
+  });
+
+  it("uses canonical HotelRunner gross for total and price per day and shows unavailable when missing", () => {
+    const canonical = reservation({
+      id: "HR-CANONICAL",
+      guest: "Canonical Guest",
+      total: 700,
+      net: null,
+      mode: "hotelrunner_api",
+    });
+    canonical.supplierData = {
+      hotelRunner: {
+        transport: "hotelrunner_api",
+        reservationId: "hr-canonical",
+        pricing: { grandTotal: 1000 },
+      },
+    };
+    canonical.days_of_residence = 2;
+
+    const missing = reservation({
+      id: "HR-MISSING",
+      guest: "Missing Gross Guest",
+      total: 700,
+      net: null,
+      mode: "hotelrunner_api",
+    });
+    missing.supplierData = {
+      hotelRunner: {
+        transport: "hotelrunner_api",
+        reservationId: "hr-missing",
+      },
+    };
+
+    renderTable({ data: [canonical, missing], fromPage: "reports" });
+
+    expect(totalCellTextFor("Canonical Guest")).toBe("1000.00 SAR");
+    expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("500.00 SAR");
+    expect(totalCellTextFor("Missing Gross Guest")).toBe("—");
+    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("—");
   });
 
   it("uses Arabic table headers and passes Arabic to the direct report export", () => {

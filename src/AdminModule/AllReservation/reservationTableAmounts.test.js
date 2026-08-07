@@ -130,4 +130,57 @@ describe("admin reservation table total", () => {
       ),
     ).toBe(0);
   });
+
+  it("keeps HotelRunner gross total until the OTA payout is verified", () => {
+    expect(
+      getAdminReservationDisplayTotal(
+        {
+          total_amount: 1000,
+          adminPricing: {
+            mode: "hotelrunner_api",
+            commercialVerified: false,
+            netAfterExpensesTotal: 850,
+          },
+          supplierData: {
+            hotelRunner: {
+              transport: "hotelrunner_api",
+              pricing: { grandTotal: 1000 },
+            },
+          },
+        },
+        { preferNetAfterExpenses: true },
+      ),
+    ).toBe(1000);
+  });
+
+  it("keeps a missing canonical HotelRunner gross unavailable instead of using total_amount", () => {
+    expect(
+      getAdminReservationDisplayTotal({
+        total_amount: 1000,
+        adminPricing: { mode: "hotelrunner_api" },
+        supplierData: {
+          hotelRunner: { transport: "hotelrunner_api", reservationId: "hr-1" },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("uses a verified HotelRunner net total when net is requested", () => {
+    expect(
+      getAdminReservationDisplayTotal(
+        {
+          total_amount: 1000,
+          adminPricing: {
+            mode: "hotelrunner_api",
+            commercialVerified: true,
+            netAfterExpensesTotal: 850,
+          },
+          supplierData: {
+            hotelRunner: { transport: "hotelrunner_api" },
+          },
+        },
+        { preferNetAfterExpenses: true },
+      ),
+    ).toBe(850);
+  });
 });

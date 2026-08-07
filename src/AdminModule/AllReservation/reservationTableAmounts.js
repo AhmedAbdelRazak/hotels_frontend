@@ -1,3 +1,8 @@
+import {
+  getHotelRunnerPayoutDisplay,
+  getReservationGuestGrossDisplay,
+} from "./hotelRunnerPricingDisplay";
+
 const finiteMoneyOrNull = (value) => {
   if (value === null || value === undefined || typeof value === "boolean") {
     return null;
@@ -16,8 +21,18 @@ export const getAdminReservationDisplayTotal = (
   reservation = {},
   { preferNetAfterExpenses = false } = {},
 ) => {
-  const fallbackTotal = finiteMoneyOrNull(reservation?.total_amount) ?? 0;
+  const guestGross = getReservationGuestGrossDisplay(reservation);
+  const fallbackTotal = guestGross.isHotelRunner
+    ? guestGross.amount
+    : finiteMoneyOrNull(reservation?.total_amount) ?? 0;
   if (!preferNetAfterExpenses) return fallbackTotal;
+
+  const hotelRunnerPayout = getHotelRunnerPayoutDisplay(reservation);
+  if (hotelRunnerPayout.isHotelRunner) {
+    return hotelRunnerPayout.verified
+      ? hotelRunnerPayout.netAmount
+      : fallbackTotal;
+  }
 
   const netAfterExpenses = finiteMoneyOrNull(
     reservation?.adminPricing?.netAfterExpensesTotal,
