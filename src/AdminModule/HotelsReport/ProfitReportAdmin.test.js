@@ -8,7 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, Route, useLocation } from "react-router-dom";
-import ProfitReportAdmin, { buildProfitExportRows } from "./ProfitReportAdmin";
+import ProfitReportAdmin, {
+  buildProfitExportRows,
+  profitMoneyText,
+} from "./ProfitReportAdmin";
 import { getOverallProfitReport } from "../apiAdmin";
 import { DEFAULT_PROFIT_HOTEL_ID } from "./profitReportQuery";
 
@@ -100,9 +103,7 @@ it("includes room type and assigned room number in profit exports", () => {
         pickedRoomsType: [
           { room_type: "familyRooms", displayName: "Family Quintuple" },
         ],
-        roomDetails: [
-          { room_number: "424", room_type: "familyRooms" },
-        ],
+        roomDetails: [{ room_number: "424", room_type: "familyRooms" }],
       },
     ],
   });
@@ -111,6 +112,113 @@ it("includes room type and assigned room number in profit exports", () => {
   expect(row["Room Number"]).toBe("424");
   expect(row["Check In"]).toBe("July 24, 2026");
   expect(row["Check Out"]).toBe("July 25, 2026");
+});
+
+it("exports and formats unverified HotelRunner commercial values as unavailable", () => {
+  const labels = {
+    fullName: "Full Name",
+    reportDate: "Report Date",
+    confirmation: "Confirmation",
+    checkIn: "Check In",
+    checkOut: "Check Out",
+    hotel: "Hotel",
+    roomType: "Room Type",
+    roomNumber: "Room Number",
+    source: "Source",
+    clientPaid: "Client Paid",
+    hotelTotal: "Hotel Total",
+    commission: "Commission",
+    otaExpense: "OTA Expense",
+    totalProfit: "Total Profit",
+    profitRate: "Profit Rate",
+    unavailable: "Unavailable",
+    sar: "SAR",
+  };
+  const [row] = buildProfitExportRows({
+    labels,
+    rows: [
+      {
+        profitMetrics: {
+          clientTotal: 1000,
+          hotelTotal: 0,
+          hotelTotalAvailable: false,
+          commission: 0,
+          commissionAvailable: false,
+          otaExpense: 0,
+          otaExpenseAvailable: false,
+          profitMargin: 0,
+          profitAvailable: false,
+        },
+      },
+    ],
+  });
+
+  expect(row["Client Paid"]).toBe(1000);
+  expect(row["Hotel Total"]).toBe("Unavailable");
+  expect(row["Commission"]).toBe("Unavailable");
+  expect(row["OTA Expense"]).toBe("Unavailable");
+  expect(row["Total Profit"]).toBe("Unavailable");
+  expect(profitMoneyText(0, false, labels)).toBe("Unavailable");
+  expect(profitMoneyText(850, true, labels)).toBe("850.00 SAR");
+});
+
+it("shows a coverage notice and avoids presenting missing HotelRunner values as zero", async () => {
+  getOverallProfitReport.mockResolvedValueOnce({
+    reservations: [
+      {
+        _id: "reservation-1",
+        confirmation_number: "HR-1",
+        booking_source: "Trip.com",
+        profitMetrics: {
+          clientTotal: 1000,
+          hotelTotal: 0,
+          hotelTotalAvailable: false,
+          commission: 0,
+          commissionAvailable: false,
+          otaExpense: 0,
+          otaExpenseAvailable: false,
+          profitMargin: 0,
+          profitAvailable: false,
+        },
+      },
+    ],
+    scorecards: {
+      reservationsCount: 1,
+      clientTotal: 1000,
+      hotelTotal: 0,
+      commission: 0,
+      otaExpense: 0,
+      profitMargin: 0,
+      hotelTotalUnavailableCount: 1,
+      commissionUnavailableCount: 1,
+      otaExpenseUnavailableCount: 1,
+      profitUnavailableCount: 1,
+      commercialUnavailableCount: 1,
+    },
+    timeline: { day: [], week: [], month: [] },
+    bookingSources: [],
+    hotels: [],
+    allHotels: [{ _id: DEFAULT_PROFIT_HOTEL_ID, hotelName: "zad ajyad" }],
+    total: 1,
+    pages: 1,
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/admin/overall-hotel-reports?tab=Profit"]}>
+      <Route path="/admin/overall-hotel-reports">
+        <ProfitReportAdmin />
+      </Route>
+    </MemoryRouter>,
+  );
+  await settleReport();
+
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Verified HotelRunner commercial data is incomplete for 1 reservation",
+  );
+  expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+  expect(
+    screen.getByLabelText("Client paid / total: 1,000.00 SAR"),
+  ).toBeInTheDocument();
 });
 
 it("loads Zad Ajyad once and applies a UI filter without a request loop", async () => {
@@ -153,9 +261,7 @@ it("loads Zad Ajyad once and applies a UI filter without a request loop", async 
   expect(getOverallProfitReport).toHaveBeenCalledTimes(1);
 
   fireEvent.change(
-    screen.getByPlaceholderText(
-      "Search guest, confirmation, hotel, or source",
-    ),
+    screen.getByPlaceholderText("Search guest, confirmation, hotel, or source"),
     { target: { value: "Agoda" } },
   );
   expect(getOverallProfitReport).toHaveBeenCalledTimes(1);

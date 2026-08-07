@@ -70,11 +70,13 @@
 		"xlsx-js-style": "^1.2.0"
 	},
 	"scripts": {
-		"prestart": "node scripts/strip-bom.js",
+		"prestart": "node scripts/check-client-env.js --mode development && node scripts/strip-bom.js",
 		"start": "react-scripts start",
-		"prebuild": "node scripts/strip-bom.js",
+		"prebuild": "node scripts/check-client-env.js --mode production && node scripts/strip-bom.js",
 		"build": "react-scripts build",
 		"test": "react-scripts test",
+		"test:client-env": "node --test scripts/check-client-env.test.js",
+		"audit:build-server-values": "node scripts/check-build-server-values.js",
 		"eject": "react-scripts eject"
 	},
 	"eslintConfig": {

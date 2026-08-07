@@ -31,6 +31,7 @@ import HotelHeatMap from "./HotelHeatMap";
 import PendingConfirmationReport from "./PendingConfirmationReport";
 import { getStoredMenuCollapsed } from "../utils/menuState";
 import { normalizePaymentMethod } from "../utils/paymentMethods";
+import { protectHotelRunnerEditorPayload } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 
 const defaultAgentBookingSource = (user) =>
 	String(user?.companyName || user?.name || user?.email || "").trim();
@@ -1120,11 +1121,16 @@ const NewReservationMain = ({
 				housedBy: user,
 			};
 
-			updateSingleReservation(searchedReservation._id, {
-				...updatePayload,
-				inhouse_date: new Date(),
-				requestingUserId: user?._id,
-			}).then((data) => {
+			const safeUpdatePayload = protectHotelRunnerEditorPayload(
+				searchedReservation,
+				{
+					...updatePayload,
+					inhouse_date: new Date(),
+					requestingUserId: user?._id,
+				},
+			);
+
+			updateSingleReservation(searchedReservation._id, safeUpdatePayload).then((data) => {
 				if (data && data.error) {
 					toast.error(
 						chosenLanguage === "Arabic" && data.errorArabic

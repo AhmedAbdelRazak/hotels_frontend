@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
+import { Alert, Button, InputNumber, message, Modal, Table, Tooltip } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import { isAuthenticated } from "../../auth";
@@ -25,6 +25,14 @@ const firstNumber = (...values) => {
 const roundMoney = (value) => Number(safeParseFloat(value, 0).toFixed(2));
 
 const formatMoney = (value) => Number(value || 0).toFixed(2);
+const optionalMoney = (value) => {
+	const amount = firstNumber(value);
+	return amount === null ? null : roundMoney(amount);
+};
+const formatOptionalMoney = (value, unavailableLabel = "\u2014") => {
+	const amount = optionalMoney(value);
+	return amount === null ? unavailableLabel : amount.toFixed(2);
+};
 
 const TEXT = {
 	en: {
@@ -44,6 +52,15 @@ const TEXT = {
 		distributed: (label) => `${label} distributed across all days.`,
 		firstRowCopied: "First row values copied to all days.",
 		netTooHigh: "Net after expenses cannot exceed the client price.",
+		hotelRunnerPricingTitle: "HotelRunner source pricing is read-only",
+		hotelRunnerPricingDescription:
+			"Gross, local base, and nightly prices are synchronized by HotelRunner. Missing OTA expense, hotel payout, and platform margin values stay unavailable and are never calculated here.",
+		hotelRunnerCommissionApplied:
+			"The explicit platform commission review was applied in the editor. Click Submit/Update Reservation to save it permanently.",
+		hotelRunnerCommissionRequired:
+			"Enter an explicit non-negative commission amount to complete the review.",
+		applyCommission: "Apply Commission Review",
+		unavailable: "Unavailable",
 		columns: {
 			date: "Date",
 			clientPrice: "Client/Main Price",
@@ -155,7 +172,65 @@ const labelWithHelp = (label, help, ariaLabel) => (
 	</span>
 );
 
-const normalizePricingRow = (row = {}) => {
+export const normalizePricingRowForEditor = (
+	row = {},
+	{
+		hotelRunnerSourceOwned = false,
+		hotelRunnerCommercialVerified = false,
+	} = {},
+) => {
+	if (hotelRunnerSourceOwned) {
+		const clientPrice = optionalMoney(
+			firstNumber(
+				row.clientPrice,
+				row.mainPrice,
+				row.totalPriceWithCommission,
+				row.price,
+			),
+		);
+		const rootPrice = optionalMoney(
+			firstNumber(row.rootPrice, row.totalPriceWithoutCommission),
+		);
+		const netAfterExpenses = hotelRunnerCommercialVerified
+			? optionalMoney(
+					firstNumber(
+						row.netAfterExpenses,
+						row.netAfterOtaExpenses,
+						row.netAfterOtherExpenses,
+					),
+			  )
+			: null;
+		const otaExpenseAmount = hotelRunnerCommercialVerified
+			? optionalMoney(
+					firstNumber(
+						row.otaExpenseAmount,
+						row.otherExpenseAmount,
+						row.expenseAmount,
+					),
+			  )
+			: null;
+		const platformMargin = hotelRunnerCommercialVerified
+			? optionalMoney(
+					firstNumber(row.platformMargin, row.platformMarginAmount),
+			  )
+			: null;
+
+		return {
+			...row,
+			price: clientPrice,
+			clientPrice,
+			mainPrice: clientPrice,
+			rootPrice,
+			commissionRate: optionalMoney(row.commissionRate),
+			totalPriceWithCommission: clientPrice,
+			totalPriceWithoutCommission: rootPrice,
+			netAfterExpenses,
+			netAfterOtaExpenses: netAfterExpenses,
+			otaExpenseAmount,
+			platformMargin,
+		};
+	}
+
 	const clientPrice = roundMoney(
 		firstNumber(
 			row.clientPrice,
@@ -211,8 +286,37 @@ const normalizePricingRow = (row = {}) => {
 	};
 };
 
-const summarizePricingRows = (rows = []) =>
-	(Array.isArray(rows) ? rows : []).reduce(
+export const summarizePricingRowsForEditor = (
+	rows = [],
+	{ hotelRunnerSourceOwned = false } = {},
+) => {
+	const normalizedRows = Array.isArray(rows) ? rows : [];
+	if (hotelRunnerSourceOwned) {
+		const sumWhenComplete = (field) => {
+			if (
+				!normalizedRows.length ||
+				normalizedRows.some((row) => optionalMoney(row?.[field]) === null)
+			) {
+				return null;
+			}
+			return roundMoney(
+				normalizedRows.reduce(
+					(total, row) => total + optionalMoney(row?.[field]),
+					0,
+				),
+			);
+		};
+
+		return {
+			client: sumWhenComplete("clientPrice"),
+			root: sumWhenComplete("rootPrice"),
+			net: sumWhenComplete("netAfterExpenses"),
+			expense: sumWhenComplete("otaExpenseAmount"),
+			margin: sumWhenComplete("platformMargin"),
+		};
+	}
+
+	return normalizedRows.reduce(
 		(acc, row) => ({
 			client: roundMoney(acc.client + safeParseFloat(row.clientPrice, 0)),
 			root: roundMoney(acc.root + safeParseFloat(row.rootPrice, 0)),
@@ -220,6 +324,22 @@ const summarizePricingRows = (rows = []) =>
 		}),
 		{ client: 0, root: 0, net: 0 },
 	);
+};
+
+export const resolvePricingCommissionDraft = ({
+	hotelRunnerSourceOwned = false,
+	commissionDraftTouched = false,
+	commissionAmountIsOverride = false,
+	commissionDraft = null,
+	clientTotal = 0,
+	rootTotal = 0,
+} = {}) => {
+	if (commissionDraftTouched || commissionAmountIsOverride) {
+		return commissionDraft;
+	}
+	if (hotelRunnerSourceOwned) return null;
+	return roundMoney(Math.max(clientTotal - rootTotal, 0));
+};
 
 const distributeMoney = (total, count) => {
 	const totalCents = Math.round(safeParseFloat(total, 0) * 100);
@@ -244,6 +364,8 @@ const EditPricingModal = ({
 	commissionAmount = null,
 	commissionAmountIsOverride = false,
 	onCommissionChange = () => {},
+	hotelRunnerSourceOwned = false,
+	hotelRunnerCommercialVerified = false,
 }) => {
 	const { chosenLanguage } = useCartContext();
 	const auth = isAuthenticated() || {};
@@ -259,6 +381,15 @@ const EditPricingModal = ({
 		(isArabic
 			? "\u0627\u0644\u0639\u0645\u0648\u0644\u0629 \u0627\u0644\u0639\u0627\u0645\u0629 \u0644\u0644\u062d\u062c\u0632. \u064a\u062a\u0645 \u062d\u0641\u0638\u0647\u0627 \u0645\u0646\u0641\u0635\u0644\u0629 \u0639\u0646 \u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0644\u064a\u0627\u0644\u064a."
 			: "General reservation commission saved separately from nightly room pricing.");
+	const hotelRunnerPricingTitle =
+		t.hotelRunnerPricingTitle || TEXT.en.hotelRunnerPricingTitle;
+	const hotelRunnerPricingDescription =
+		t.hotelRunnerPricingDescription || TEXT.en.hotelRunnerPricingDescription;
+	const hotelRunnerCommissionApplied =
+		t.hotelRunnerCommissionApplied || TEXT.en.hotelRunnerCommissionApplied;
+	const hotelRunnerCommissionRequired =
+		t.hotelRunnerCommissionRequired || TEXT.en.hotelRunnerCommissionRequired;
+	const unavailableLabel = t.unavailable || TEXT.en.unavailable;
 	const [editableData, setEditableData] = useState([]);
 	const editableDataRef = useRef([]);
 	const [distributionTotals, setDistributionTotals] = useState({
@@ -272,10 +403,19 @@ const EditPricingModal = ({
 	useEffect(() => {
 		if (!visible) return;
 
-		const normalizedRows = (pricingByDay || []).map(normalizePricingRow);
+		const normalizedRows = (pricingByDay || []).map((row) =>
+			normalizePricingRowForEditor(row, {
+				hotelRunnerSourceOwned,
+				hotelRunnerCommercialVerified,
+			}),
+		);
 		editableDataRef.current = normalizedRows;
 		setEditableData(normalizedRows);
-		setDistributionTotals(summarizePricingRows(normalizedRows));
+		setDistributionTotals(
+			summarizePricingRowsForEditor(normalizedRows, {
+				hotelRunnerSourceOwned,
+			}),
+		);
 		setCommissionDraft(
 			showCommissionAmount && hasNumericInput(commissionAmount)
 				? roundMoney(commissionAmount)
@@ -288,49 +428,65 @@ const EditPricingModal = ({
 		commissionAmount,
 		commissionAmountIsOverride,
 		showCommissionAmount,
+		hotelRunnerSourceOwned,
+		hotelRunnerCommercialVerified,
 	]);
 
 	const totals = useMemo(
 		() =>
-			editableData.reduce(
-				(acc, row) => {
-					acc.client += safeParseFloat(row.clientPrice, 0);
-					acc.root += safeParseFloat(row.rootPrice, 0);
-					acc.net += safeParseFloat(row.netAfterExpenses, 0);
-					acc.expense += safeParseFloat(row.otaExpenseAmount, 0);
-					acc.margin += safeParseFloat(row.platformMargin, 0);
-					return acc;
-				},
-				{ client: 0, root: 0, net: 0, expense: 0, margin: 0 },
-			),
-		[editableData],
+			hotelRunnerSourceOwned
+				? summarizePricingRowsForEditor(editableData, {
+						hotelRunnerSourceOwned: true,
+				  })
+				: editableData.reduce(
+						(acc, row) => {
+							acc.client += safeParseFloat(row.clientPrice, 0);
+							acc.root += safeParseFloat(row.rootPrice, 0);
+							acc.net += safeParseFloat(row.netAfterExpenses, 0);
+							acc.expense += safeParseFloat(row.otaExpenseAmount, 0);
+							acc.margin += safeParseFloat(row.platformMargin, 0);
+							return acc;
+						},
+						{ client: 0, root: 0, net: 0, expense: 0, margin: 0 },
+				  ),
+		[editableData, hotelRunnerSourceOwned],
 	);
 	const resolvedNightCount = useMemo(() => {
 		const fromProp = Number(nightCount || 0);
 		if (Number.isFinite(fromProp) && fromProp > 0) return Math.round(fromProp);
 		return editableData.length;
 	}, [nightCount, editableData.length]);
-	const calculatedCommissionDraft = useMemo(
-		() => roundMoney(Math.max(totals.client - totals.root, 0)),
-		[totals.client, totals.root],
-	);
-	const displayedCommissionDraft =
-		commissionDraftTouched || commissionAmountIsOverride
-			? commissionDraft
-			: calculatedCommissionDraft;
+	const displayedCommissionDraft = resolvePricingCommissionDraft({
+		hotelRunnerSourceOwned,
+		commissionDraftTouched,
+		commissionAmountIsOverride,
+		commissionDraft,
+		clientTotal: totals.client,
+		rootTotal: totals.root,
+	});
 
 	const commitRows = (rows, { syncParent = false } = {}) => {
-		const normalizedRows = rows.map(normalizePricingRow);
+		const normalizedRows = rows.map((row) =>
+			normalizePricingRowForEditor(row, {
+				hotelRunnerSourceOwned,
+				hotelRunnerCommercialVerified,
+			}),
+		);
 		editableDataRef.current = normalizedRows;
 		setEditableData(normalizedRows);
-		setDistributionTotals(summarizePricingRows(normalizedRows));
-		if (syncParent) {
+		setDistributionTotals(
+			summarizePricingRowsForEditor(normalizedRows, {
+				hotelRunnerSourceOwned,
+			}),
+		);
+		if (syncParent && !hotelRunnerSourceOwned) {
 			onUpdate(normalizedRows);
 		}
 		return normalizedRows;
 	};
 
 	const handleInputChange = (val, rowIndex, field) => {
+		if (hotelRunnerSourceOwned) return;
 		const nextRows = editableData.map((row, index) => {
 			if (index !== rowIndex) return row;
 			const hadNoExpense =
@@ -361,6 +517,7 @@ const EditPricingModal = ({
 	};
 
 	const handleDistributionInput = (key, value) => {
+		if (hotelRunnerSourceOwned) return;
 		setDistributionTotals((current) => ({ ...current, [key]: value }));
 	};
 
@@ -394,6 +551,7 @@ const EditPricingModal = ({
 	};
 
 	const handleDistributeTotals = () => {
+		if (hotelRunnerSourceOwned) return;
 		if (!editableData.length) {
 			message.error(t.noDays);
 			return;
@@ -428,8 +586,9 @@ const EditPricingModal = ({
 	};
 
 	const handleInherit = () => {
+		if (hotelRunnerSourceOwned) return;
 		if (!editableData.length) return;
-		const first = normalizePricingRow(editableData[0]);
+		const first = normalizePricingRowForEditor(editableData[0]);
 		const nextRows = editableData.map((row) => ({
 			...row,
 			clientPrice: first.clientPrice,
@@ -448,6 +607,20 @@ const EditPricingModal = ({
 	};
 
 	const handleSave = () => {
+		if (hotelRunnerSourceOwned) {
+			if (showCommissionAmount && commissionDraftTouched) {
+				const explicitCommission = optionalMoney(commissionDraft);
+				if (explicitCommission === null || explicitCommission < 0) {
+					message.error(hotelRunnerCommissionRequired);
+					return;
+				}
+				onCommissionChange(explicitCommission);
+				message.success(hotelRunnerCommissionApplied, 5);
+			}
+			onClose();
+			return;
+		}
+
 		const rowsToSave = editableDataRef.current.length
 			? editableDataRef.current
 			: editableData;
@@ -482,6 +655,9 @@ const EditPricingModal = ({
 			onChange={(val) => handleInputChange(val, index, field)}
 		/>
 	);
+	const readOnlyMoney = (value) => (
+		<span>{formatOptionalMoney(value, unavailableLabel)}</span>
+	);
 
 	const columns = [
 		{
@@ -501,7 +677,9 @@ const EditPricingModal = ({
 			dataIndex: "clientPrice",
 			key: "clientPrice",
 			width: 165,
-			render: moneyInput("clientPrice"),
+			render: hotelRunnerSourceOwned
+				? readOnlyMoney
+				: moneyInput("clientPrice"),
 		},
 		{
 			title: labelWithHelp(
@@ -512,7 +690,9 @@ const EditPricingModal = ({
 			dataIndex: "rootPrice",
 			key: "rootPrice",
 			width: 145,
-			render: moneyInput("rootPrice"),
+			render: hotelRunnerSourceOwned
+				? readOnlyMoney
+				: moneyInput("rootPrice"),
 		},
 		{
 			title: labelWithHelp(
@@ -523,7 +703,9 @@ const EditPricingModal = ({
 			dataIndex: "netAfterExpenses",
 			key: "netAfterExpenses",
 			width: 170,
-			render: moneyInput("netAfterExpenses"),
+			render: hotelRunnerSourceOwned
+				? readOnlyMoney
+				: moneyInput("netAfterExpenses"),
 		},
 		{
 			title: labelWithHelp(
@@ -534,7 +716,13 @@ const EditPricingModal = ({
 			dataIndex: "otaExpenseAmount",
 			key: "otaExpenseAmount",
 			width: 160,
-			render: (value) => <span>{formatMoney(value)}</span>,
+			render: (value) => (
+				<span>
+					{hotelRunnerSourceOwned
+						? formatOptionalMoney(value, unavailableLabel)
+						: formatMoney(value)}
+				</span>
+			),
 		},
 		canViewPlatformProfit
 			? {
@@ -548,7 +736,9 @@ const EditPricingModal = ({
 			width: 150,
 			render: (value) => (
 				<span style={{ color: value < 0 ? "#b42318" : "#1a6d2f" }}>
-					{formatMoney(value)}
+					{hotelRunnerSourceOwned
+						? formatOptionalMoney(value, unavailableLabel)
+						: formatMoney(value)}
 				</span>
 			),
 		  }
@@ -558,21 +748,30 @@ const EditPricingModal = ({
 			dataIndex: "commissionRate",
 			key: "commissionRate",
 			width: 130,
-			render: (value, record, index) => (
-				<InputNumber
-					value={value}
-					min={0}
-					max={100}
-					step={0.1}
-					precision={2}
-					style={{ width: 105 }}
-					onChange={(val) => handleInputChange(val, index, "commissionRate")}
-				/>
-			),
+			render: (value, record, index) =>
+				hotelRunnerSourceOwned ? (
+					<span>
+						{optionalMoney(value) === null
+							? unavailableLabel
+							: `${formatOptionalMoney(value, unavailableLabel)}%`}
+					</span>
+				) : (
+					<InputNumber
+						value={value}
+						min={0}
+						max={100}
+						step={0.1}
+						precision={2}
+						style={{ width: 105 }}
+						onChange={(val) =>
+							handleInputChange(val, index, "commissionRate")
+						}
+					/>
+				),
 		},
 	].filter(Boolean);
 
-	const distributionControls = [
+	const distributionControls = hotelRunnerSourceOwned ? [] : [
 		{
 			key: "client",
 			field: "clientPrice",
@@ -626,13 +825,19 @@ const EditPricingModal = ({
 				<Button key='cancel' onClick={onClose}>
 					{t.cancel}
 				</Button>,
-				<Button key='inherit' onClick={handleInherit} type='dashed'>
-					{t.inherit}
-				</Button>,
-				<Button key='save' type='primary' onClick={handleSave}>
-					{t.save}
-				</Button>,
-			]}
+				!hotelRunnerSourceOwned ? (
+					<Button key='inherit' onClick={handleInherit} type='dashed'>
+						{t.inherit}
+					</Button>
+				) : null,
+				!hotelRunnerSourceOwned || showCommissionAmount ? (
+					<Button key='save' type='primary' onClick={handleSave}>
+						{hotelRunnerSourceOwned
+							? t.applyCommission || TEXT.en.applyCommission
+							: t.save}
+					</Button>
+				) : null,
+			].filter(Boolean)}
 		>
 			<div
 				className={`pricing-modal-body${isArabic ? " is-arabic" : ""}`}
@@ -779,6 +984,17 @@ const EditPricingModal = ({
 				}
 			`}</style>
 
+			{hotelRunnerSourceOwned ? (
+				<Alert
+					type='info'
+					showIcon
+					message={hotelRunnerPricingTitle}
+					description={hotelRunnerPricingDescription}
+					style={{ marginBottom: 16 }}
+				/>
+			) : null}
+
+			{!hotelRunnerSourceOwned || showCommissionAmount ? (
 			<div className='pricing-distribution-stack'>
 				<div className='pricing-distribution-fields'>
 					{distributionControls.map((control) => (
@@ -816,6 +1032,7 @@ const EditPricingModal = ({
 						</div>
 					) : null}
 				</div>
+				{!hotelRunnerSourceOwned ? (
 				<div className='pricing-distribution-actions'>
 					<Button
 						type='dashed'
@@ -825,7 +1042,9 @@ const EditPricingModal = ({
 						{distributeAllLabel}
 					</Button>
 				</div>
+				) : null}
 			</div>
+			) : null}
 
 			<Table
 				dataSource={editableData}
@@ -841,16 +1060,32 @@ const EditPricingModal = ({
 								<b>{t.columns.totals}</b>
 							</Table.Summary.Cell>
 							<Table.Summary.Cell>
-								<b>{formatMoney(totals.client)}</b>
+								<b>
+									{hotelRunnerSourceOwned
+										? formatOptionalMoney(totals.client, unavailableLabel)
+										: formatMoney(totals.client)}
+								</b>
 							</Table.Summary.Cell>
 							<Table.Summary.Cell>
-								<b>{formatMoney(totals.root)}</b>
+								<b>
+									{hotelRunnerSourceOwned
+										? formatOptionalMoney(totals.root, unavailableLabel)
+										: formatMoney(totals.root)}
+								</b>
 							</Table.Summary.Cell>
 							<Table.Summary.Cell>
-								<b>{formatMoney(totals.net)}</b>
+								<b>
+									{hotelRunnerSourceOwned
+										? formatOptionalMoney(totals.net, unavailableLabel)
+										: formatMoney(totals.net)}
+								</b>
 							</Table.Summary.Cell>
 							<Table.Summary.Cell>
-								<b>{formatMoney(totals.expense)}</b>
+								<b>
+									{hotelRunnerSourceOwned
+										? formatOptionalMoney(totals.expense, unavailableLabel)
+										: formatMoney(totals.expense)}
+								</b>
 							</Table.Summary.Cell>
 							{canViewPlatformProfit ? (
 								<Table.Summary.Cell>
@@ -859,7 +1094,12 @@ const EditPricingModal = ({
 											color: totals.margin < 0 ? "#b42318" : "#1a6d2f",
 										}}
 									>
-										{formatMoney(totals.margin)}
+										{hotelRunnerSourceOwned
+											? formatOptionalMoney(
+													totals.margin,
+													unavailableLabel,
+											  )
+											: formatMoney(totals.margin)}
 									</b>
 								</Table.Summary.Cell>
 							) : null}

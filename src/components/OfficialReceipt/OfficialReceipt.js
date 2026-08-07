@@ -360,17 +360,25 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
             <div className="payment-row payment-total">
               <BilingualLabel en="Total Amount" ar="السعر الإجمالي" />
               <span>:</span>
-              <strong>{money(payment.total)} SAR</strong>
+              <strong>
+                {payment.totalAvailable
+                  ? `${money(payment.total)} ${payment.currency}`
+                  : "—"}
+              </strong>
             </div>
             <div className="payment-row payment-deposit">
               <BilingualLabel en="Deposit" ar="عربون" />
               <span>:</span>
-              <strong>{money(payment.paid)} SAR</strong>
+              <strong>{money(payment.paid)} {payment.currency}</strong>
             </div>
             <div className="payment-row payment-remaining">
               <BilingualLabel en="Remaining Due" ar="المبلغ المتبقي" />
               <span>:</span>
-              <strong>{money(payment.remaining)} SAR</strong>
+              <strong>
+                {payment.totalAvailable
+                  ? `${money(payment.remaining)} ${payment.currency}`
+                  : "—"}
+              </strong>
             </div>
           </aside>
         </div>

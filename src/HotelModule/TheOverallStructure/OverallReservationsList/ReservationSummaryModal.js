@@ -10,6 +10,10 @@ import {
 	localizeStatus,
 	titleCase,
 } from "../overallShared";
+import {
+	getHotelRunnerPlatformFinanceDisplay,
+	getReservationGuestGrossDisplay,
+} from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const { RangePicker } = DatePicker;
 
@@ -38,6 +42,15 @@ const SUMMARY_TEXT = {
 		totalAmount: "Total amount",
 		paidAmount: "Paid amount",
 		commissions: "Commissions",
+		commissionAvailability: "Commission availability",
+		commissionAvailable: "Available",
+		commissionPartial: "Partial",
+		commissionUnavailable: "Unavailable",
+		commissionAwaitingReview: "Awaiting finance review",
+		commissionConflict: "Conflicting finance evidence",
+		commissionInvalid: "Invalid finance evidence",
+		commissionUnavailableReservation: "reservation without reviewed commission",
+		commissionUnavailableReservations: "reservations without reviewed commission",
 		allHotels: "All hotels",
 		allStatuses: "All statuses",
 		search: "Search",
@@ -98,6 +111,18 @@ const SUMMARY_TEXT = {
 	},
 };
 
+Object.assign(SUMMARY_TEXT.ar, {
+	commissionAvailability: "\u062d\u0627\u0644\u0629 \u0627\u0644\u0639\u0645\u0648\u0644\u0629",
+	commissionAvailable: "\u0645\u062a\u0627\u062d\u0629",
+	commissionPartial: "\u0645\u062a\u0627\u062d\u0629 \u062c\u0632\u0626\u064a\u0627\u064b",
+	commissionUnavailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629",
+	commissionAwaitingReview: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629",
+	commissionConflict: "\u0628\u064a\u0627\u0646\u0627\u062a \u0645\u0627\u0644\u064a\u0629 \u0645\u062a\u0639\u0627\u0631\u0636\u0629",
+	commissionInvalid: "\u0628\u064a\u0627\u0646\u0627\u062a \u0645\u0627\u0644\u064a\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629",
+	commissionUnavailableReservation: "\u062d\u062c\u0632 \u0628\u062f\u0648\u0646 \u0639\u0645\u0648\u0644\u0629 \u0645\u0639\u062a\u0645\u062f\u0629",
+	commissionUnavailableReservations: "\u062d\u062c\u0648\u0632\u0627\u062a \u0628\u062f\u0648\u0646 \u0639\u0645\u0648\u0644\u0629 \u0645\u0639\u062a\u0645\u062f\u0629",
+});
+
 export const summaryText = (chosenLanguage) =>
 	SUMMARY_TEXT[chosenLanguage === "Arabic" ? "ar" : "en"];
 
@@ -114,6 +139,11 @@ const numberValue = (value) => {
 };
 
 const roundMoney = (value) => Math.round(numberValue(value) * 100) / 100;
+
+const reservationGuestGross = (reservation = {}) => {
+	const gross = getReservationGuestGrossDisplay(reservation);
+	return gross.available ? roundMoney(gross.amount) : null;
+};
 
 const normalizeValueId = (value) => String(value?._id || value?.id || value || "");
 
@@ -134,14 +164,129 @@ const dateKey = (reservation = {}, dateBy = "createdAt", text = SUMMARY_TEXT.en)
 	return formatted === "-" ? text.noDate : formatted;
 };
 
-const reservationCommission = (reservation = {}) =>
-	roundMoney(
-		reservation.commission ||
-			reservation.commision ||
-			reservation?.financial_cycle?.commissionAmount ||
-			reservation?.commissionData?.commissionAmount ||
-			0
-	);
+export const reservationCommissionDisplay = (reservation = {}) => {
+	const finance = getHotelRunnerPlatformFinanceDisplay(reservation);
+	if (!finance.isHotelRunner) {
+		return {
+			available: true,
+			amount: roundMoney(
+				reservation.commission ||
+					reservation.commision ||
+					reservation?.financial_cycle?.commissionAmount ||
+					reservation?.commissionData?.commissionAmount ||
+					0
+			),
+			reason: "",
+		};
+	}
+	return {
+		available: finance.available === true,
+		amount: finance.available === true ? roundMoney(finance.amount) : null,
+		reason: finance.reason || "hotelrunner_platform_commission_unreviewed",
+	};
+};
+
+const finalizeCommissionSummary = (summary = {}) => {
+	if (!summary.commissionTrackedCount) return summary;
+	const available = Number(summary.commissionAvailableCount || 0);
+	const unavailable = Number(summary.commissionUnavailableCount || 0);
+	const commissionAvailability = unavailable
+		? available
+			? "partial"
+			: "unavailable"
+		: "available";
+	return {
+		...summary,
+		commissionAvailableCount: available,
+		commissionUnavailableCount: unavailable,
+		commissions:
+			commissionAvailability === "unavailable"
+				? null
+				: roundMoney(summary.commissions),
+		commissionAvailability,
+		commissionUnavailableReasons: Array.from(
+			new Set(summary.commissionUnavailableReasons || [])
+		),
+	};
+};
+
+const finalizeGuestGrossSummary = (summary = {}) => {
+	const available = Number(summary.totalAmountAvailableCount || 0);
+	const unavailable = Number(summary.totalAmountUnavailableCount || 0);
+	return {
+		...summary,
+		totalAmount:
+			unavailable > 0 && available === 0
+				? null
+				: roundMoney(summary.totalAmount),
+		totalAmountAvailableCount: available,
+		totalAmountUnavailableCount: unavailable,
+		totalAmountAvailability: unavailable
+			? available
+				? "partial"
+				: "unavailable"
+			: "available",
+	};
+};
+
+const trackGuestGross = (summary, amount, count = 1) => {
+	if (amount === null || amount === undefined) {
+		summary.totalAmountUnavailableCount =
+			Number(summary.totalAmountUnavailableCount || 0) + count;
+		return;
+	}
+	summary.totalAmount = roundMoney(summary.totalAmount + amount);
+	summary.totalAmountAvailableCount =
+		Number(summary.totalAmountAvailableCount || 0) + count;
+};
+
+const trackCommission = (summary, commission, count = 1) => {
+	if (!commission) return;
+	summary.commissionTrackedCount = Number(summary.commissionTrackedCount || 0) + count;
+	if (commission.available) {
+		summary.commissions = roundMoney(summary.commissions + commission.amount);
+		summary.commissionAvailableCount =
+			Number(summary.commissionAvailableCount || 0) + count;
+	} else if (count > 0) {
+		summary.commissionUnavailableCount =
+			Number(summary.commissionUnavailableCount || 0) + count;
+		summary.commissionUnavailableReasons = Array.from(
+			new Set([
+				...(summary.commissionUnavailableReasons || []),
+				commission.reason || "hotelrunner_platform_commission_unreviewed",
+			])
+		);
+	}
+};
+
+const commissionReasonLabel = (reasons = [], text = SUMMARY_TEXT.en) => {
+	const values = new Set(Array.isArray(reasons) ? reasons : [reasons]);
+	if (values.has("hotelrunner_platform_commission_conflict")) {
+		return text.commissionConflict;
+	}
+	if (values.has("hotelrunner_platform_commission_invalid")) {
+		return text.commissionInvalid;
+	}
+	return text.commissionAwaitingReview;
+};
+
+export const commissionAvailabilityLabel = (summary = {}, text = SUMMARY_TEXT.en) => {
+	if (summary.commissionAvailability === "partial") {
+		const count = summary.commissionUnavailableCount || 0;
+		const noun =
+			count === 1
+				? text.commissionUnavailableReservation
+				: text.commissionUnavailableReservations;
+		return `${text.commissionPartial} — ${count} ${noun}`;
+	}
+	if (summary.commissionAvailability === "unavailable") {
+		return `${text.commissionUnavailable} — ${commissionReasonLabel(
+			summary.commissionUnavailableReasons,
+			text
+		)}`;
+	}
+	return text.commissionAvailable;
+};
 
 const incrementSummary = (
 	map,
@@ -149,7 +294,8 @@ const incrementSummary = (
 	{
 		totalAmount = 0,
 		paidAmount = 0,
-		commission = 0,
+		commission,
+		commissionCount = 1,
 		reservationCount = 1,
 		roomCount = 0,
 	} = {}
@@ -164,20 +310,27 @@ const incrementSummary = (
 	};
 	previous.reservationCount += reservationCount;
 	previous.roomCount += roomCount;
-	previous.totalAmount = roundMoney(previous.totalAmount + totalAmount);
+	trackGuestGross(previous, totalAmount, reservationCount);
 	previous.paidAmount = roundMoney(previous.paidAmount + paidAmount);
-	previous.commissions = roundMoney(previous.commissions + commission);
+	trackCommission(previous, commission, commissionCount);
 	map.set(key, previous);
 };
 
-const sortedRows = (map, sortByKey = false) =>
-	Array.from(map.values()).sort((first, second) => {
+const sortedRows = (map, sortByKey = false, includeCommission = false) =>
+	Array.from(map.values())
+		.map((row) => {
+			const grossFinalized = finalizeGuestGrossSummary(row);
+			return includeCommission
+				? finalizeCommissionSummary(grossFinalized)
+				: grossFinalized;
+		})
+		.sort((first, second) => {
 		if (sortByKey) return String(first.key).localeCompare(String(second.key));
 		const amountDelta =
 			numberValue(second.totalAmount) - numberValue(first.totalAmount);
 		if (amountDelta) return amountDelta;
 		return String(first.key).localeCompare(String(second.key));
-	});
+		});
 
 const roomLineLabel = (line = {}, text = SUMMARY_TEXT.en) =>
 	String(
@@ -234,9 +387,10 @@ const buildRoomTypeRows = (reservations = [], text = SUMMARY_TEXT.en) => {
 	const grouped = new Map();
 
 	(Array.isArray(reservations) ? reservations : []).forEach((reservation) => {
-		const reservationAmount = roundMoney(reservation.total_amount);
+		const guestGross = getReservationGuestGrossDisplay(reservation);
+		const reservationAmount = reservationGuestGross(reservation);
 		const paidAmount = roundMoney(reservation.paid_amount);
-		const commission = reservationCommission(reservation);
+		const commission = reservationCommissionDisplay(reservation);
 		const lines = roomLinesForReservation(reservation);
 		const safeLines = lines.length ? lines : [{ displayName: text.noRoomType, count: 1 }];
 		const nights = Math.max(getReservationNights(reservation), 1);
@@ -259,11 +413,21 @@ const buildRoomTypeRows = (reservations = [], text = SUMMARY_TEXT.en) => {
 			const fallbackShare = totalRoomCount ? item.roomCount / totalRoomCount : 0;
 			const amountShare = totalLineAmount ? item.amount / totalLineAmount : fallbackShare;
 			incrementSummary(grouped, key, {
-				totalAmount: totalLineAmount
-					? item.amount
-					: reservationAmount * fallbackShare,
+				totalAmount: guestGross.isHotelRunner
+					? reservationAmount === null
+						? null
+						: reservationAmount * amountShare
+					: totalLineAmount
+						? item.amount
+						: reservationAmount * fallbackShare,
 				paidAmount: paidAmount * amountShare,
-				commission: commission * amountShare,
+				commission: {
+					...commission,
+					amount: commission.available
+						? roundMoney(commission.amount * amountShare)
+						: null,
+				},
+				commissionCount: seenInReservation.has(key) ? 0 : 1,
 				reservationCount: seenInReservation.has(key) ? 0 : 1,
 				roomCount: item.roomCount,
 			});
@@ -271,7 +435,7 @@ const buildRoomTypeRows = (reservations = [], text = SUMMARY_TEXT.en) => {
 		});
 	});
 
-	return sortedRows(grouped);
+	return sortedRows(grouped, false, true);
 };
 
 export const buildReservationSummary = ({
@@ -285,9 +449,9 @@ export const buildReservationSummary = ({
 	const byStatus = new Map();
 
 	(Array.isArray(reservations) ? reservations : []).forEach((reservation) => {
-		const totalAmount = roundMoney(reservation.total_amount);
+		const totalAmount = reservationGuestGross(reservation);
 		const paidAmount = roundMoney(reservation.paid_amount);
-		const commission = reservationCommission(reservation);
+		const commission = reservationCommissionDisplay(reservation);
 		incrementSummary(byDate, dateKey(reservation, dateBy, text), {
 			totalAmount,
 		});
@@ -306,21 +470,28 @@ export const buildReservationSummary = ({
 		);
 	});
 
-	const totals = (Array.isArray(reservations) ? reservations : []).reduce(
-		(acc, reservation) => ({
-			reservationCount: acc.reservationCount + 1,
-			totalAmount: roundMoney(acc.totalAmount + roundMoney(reservation.total_amount)),
-			paidAmount: roundMoney(acc.paidAmount + roundMoney(reservation.paid_amount)),
-			commissions: roundMoney(acc.commissions + reservationCommission(reservation)),
-		}),
-		{ reservationCount: 0, totalAmount: 0, paidAmount: 0, commissions: 0 }
+	const totals = finalizeCommissionSummary(
+		finalizeGuestGrossSummary(
+		(Array.isArray(reservations) ? reservations : []).reduce(
+			(acc, reservation) => {
+				acc.reservationCount += 1;
+				trackGuestGross(acc, reservationGuestGross(reservation));
+				acc.paidAmount = roundMoney(
+					acc.paidAmount + roundMoney(reservation.paid_amount)
+				);
+				trackCommission(acc, reservationCommissionDisplay(reservation));
+				return acc;
+			},
+			{ reservationCount: 0, totalAmount: 0, paidAmount: 0, commissions: 0 }
+		),
+		),
 	);
 
 	return {
 		totals,
 		dateRows: sortedRows(byDate, true),
-		sourceRows: sortedRows(bySource),
-		statusRows: sortedRows(byStatus),
+		sourceRows: sortedRows(bySource, false, true),
+		statusRows: sortedRows(byStatus, false, true),
 		roomTypeRows: buildRoomTypeRows(reservations, text),
 	};
 };
@@ -423,20 +594,30 @@ export const buildSummaryFilterRows = ({
 	];
 };
 
-const tableRows = ({ rows = [], type, text, labels }) =>
-	rows.map((row) => {
+const tableRows = ({ rows = [], type, text, labels }) => {
+	const includeAvailability =
+		type !== text.date &&
+		rows.some((row) => Number(row.commissionUnavailableCount || 0) > 0);
+	return rows.map((row) => {
 		const base = {
 			[type]: row.key,
 			[text.reservationCount]: row.reservationCount,
-			[text.totalAmount]: row.totalAmount,
+			[text.totalAmount]: row.totalAmount === null ? "" : row.totalAmount,
 		};
 		if (row.roomCount) base[text.roomCount] = row.roomCount;
 		if (type !== text.date) {
 			base[text.paidAmount] = row.paidAmount;
-			base[text.commissions] = row.commissions;
+			base[text.commissions] =
+				row.commissionAvailability === "unavailable" ? "" : row.commissions;
+			if (includeAvailability) {
+				base[text.commissionAvailability] = commissionAvailabilityLabel(row, text);
+			}
 		}
 		return base;
 	});
+};
+
+export const buildReservationSummaryTableRows = tableRows;
 
 const safeFileSegment = (value = "reservation-summary") =>
 	String(value || "reservation-summary")
@@ -568,9 +749,30 @@ export const exportReservationSummaryWorkbook = async ({
 
 const MoneyCell = ({ value, labels }) => (
 	<span className='money-cell'>
-		{formatMoney(value)} {labels.sar}
+		{value === null || value === undefined
+			? "—"
+			: `${formatMoney(value)} ${labels.sar}`}
 	</span>
 );
+
+const CommissionCell = ({ row, labels, text }) => {
+	if (row.commissionAvailability === "unavailable") {
+		return (
+			<span className='commission-cell commission-cell--unavailable'>
+				{commissionAvailabilityLabel(row, text)}
+			</span>
+		);
+	}
+	if (row.commissionAvailability !== "partial") {
+		return <MoneyCell value={row.commissions} labels={labels} />;
+	}
+	return (
+		<span className='commission-cell'>
+			<MoneyCell value={row.commissions} labels={labels} />
+			<small>{commissionAvailabilityLabel(row, text)}</small>
+		</span>
+	);
+};
 
 const SummaryTable = ({ title, typeLabel, rows, text, labels, showRoomCount = false, showFinancials = true }) => (
 	<section className='summary-section'>
@@ -604,7 +806,7 @@ const SummaryTable = ({ title, typeLabel, rows, text, labels, showRoomCount = fa
 								) : null}
 								{showFinancials ? (
 									<td>
-										<MoneyCell value={row.commissions} labels={labels} />
+										<CommissionCell row={row} labels={labels} text={text} />
 									</td>
 								) : null}
 							</tr>
@@ -1042,6 +1244,23 @@ const SummaryModalBody = styled.div`
 	.money-cell {
 		direction: ltr;
 		font-weight: 950;
+	}
+
+	.commission-cell {
+		display: inline-flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.18rem;
+		white-space: normal;
+	}
+
+	.commission-cell small,
+	.commission-cell--unavailable {
+		max-width: 210px;
+		color: #9a3412;
+		font-size: 0.68rem;
+		font-weight: 900;
+		line-height: 1.3;
 	}
 
 	.summary-loading {

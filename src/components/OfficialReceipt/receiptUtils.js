@@ -1,4 +1,5 @@
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import { getReceiptPricingDisplay } from "../../AdminModule/AllReservation/receiptPricingDisplay";
 
 export const safeNumber = (value) => {
   const number = Number(value);
@@ -276,7 +277,12 @@ export const buildReceiptRoomRows = (reservation, hotelDetails, nights) => {
 };
 
 export const deriveReceiptPayment = (reservation) => {
-  const total = safeNumber(reservation?.total_amount);
+  const pricing = getReceiptPricingDisplay(
+    reservation,
+    safeNumber(reservation?.total_amount),
+  );
+  const totalAvailable = pricing.available === true;
+  const total = totalAvailable ? pricing.amount : null;
   const normalizedStatus = String(reservation?.payment || "")
     .trim()
     .toLowerCase();
@@ -291,14 +297,17 @@ export const deriveReceiptPayment = (reservation) => {
     reservation?.payment_details?.onsite_paid_amount,
   );
   const paid = Math.max(0, onlinePaid + offlinePaid);
-  const remaining = Math.max(0, total - paid);
+  const remaining = totalAvailable ? Math.max(0, total - paid) : null;
   const toCents = (value) => Math.round(safeNumber(value) * 100);
-  const fullyPaid = paid > 0 && toCents(paid) >= toCents(total);
-  const partiallyPaid = paid > 0 && !fullyPaid;
+  const fullyPaid =
+    totalAvailable && paid > 0 && toCents(paid) >= toCents(total);
+  const partiallyPaid = totalAvailable && paid > 0 && !fullyPaid;
 
   let method = { en: "Not paid", ar: "غير مدفوع", tone: "unpaid" };
   if (isNotCaptured) {
     method = { en: "Not captured", ar: "غير محصل", tone: "pending" };
+  } else if (!totalAvailable && paid > 0) {
+    method = { en: "Payment recorded", ar: "Payment recorded", tone: "pending" };
   } else if (fullyPaid) {
     method = { en: "Paid", ar: "مدفوع", tone: "paid" };
   } else if (partiallyPaid) {
@@ -310,6 +319,8 @@ export const deriveReceiptPayment = (reservation) => {
 
   return {
     total,
+    totalAvailable,
+    currency: pricing.currency,
     paid,
     remaining,
     onlinePaid,

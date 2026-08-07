@@ -12,6 +12,7 @@ export const summarizeHotelRunnerStatus = (status = {}) => {
   const configuration = status.configuration || {};
   const queue = status.queue || {};
   const projections = status.projections || {};
+  const archive = status.archive || {};
   return {
     configurationReady: Boolean(
       configuration.tokenConfigured &&
@@ -20,9 +21,11 @@ export const summarizeHotelRunnerStatus = (status = {}) => {
     ),
     waiting: totalFor(queue, ["pending", "processing", "retry"]),
     needsMapping: count(queue.needs_mapping),
-    attention: totalFor(queue, ["quarantined", "failed"]),
+    attention: totalFor(queue, ["attention", "quarantined", "failed"]),
     processed: totalFor(queue, ["completed", "ignored"]),
     projected: totalFor(projections, ["created", "updated", "cancelled"]),
+    preActivationEventCount: count(archive.preActivationEventCount),
+    projectionNotBefore: configuration.projectionNotBefore || null,
   };
 };
 

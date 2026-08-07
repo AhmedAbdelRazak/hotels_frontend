@@ -51,6 +51,15 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { relocationArray1 } from "./ReservationAssets";
 import { canUseHotelReservationEditor } from "./hotelReservationEditPermissions";
+import {
+	getHotelRunnerPlatformFinanceDisplay,
+	getReservationGuestGrossDisplay,
+	isHotelRunnerReservation,
+} from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
+import {
+	canManageReservationFinanceCycle,
+	protectHotelRunnerEditorPayload,
+} from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 
 const PAYMENT_LINK_LANGUAGE_OPTIONS = [
 	{ value: "en", label: "English" },
@@ -4550,7 +4559,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const [financeCycleModalOpen, setFinanceCycleModalOpen] = useState(false);
 	const [cycleTrackerModalOpen, setCycleTrackerModalOpen] = useState(false);
 	const [financeCycleDraft, setFinanceCycleDraft] = useState({
-		commission: reservation?.commission || 0,
+		commission: (() => {
+			const finance = getHotelRunnerPlatformFinanceDisplay(reservation);
+			return finance.isHotelRunner
+				? finance.available
+					? finance.amount
+					: ""
+				: reservation?.commission || 0;
+		})(),
 		commissionPaid: !!reservation?.commissionPaid,
 		moneyTransferredToHotel: !!reservation?.moneyTransferredToHotel,
 		notes: reservation?.financial_cycle?.notes || "",
@@ -4589,6 +4605,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	// eslint-disable-next-line
 	const { user, token } = isAuthenticated();
+	const isConfiguredSuperAdmin = isSuperAdminUser(user);
 	const limitedOrderTakerAccount = isLimitedOrderTakerAccount(user);
 	const canEditHotelReservation = canUseHotelReservationEditor(user, {
 		isSuperAdmin: isSuperAdminUser(user),
@@ -4673,6 +4690,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		(value) => normalizeNumber(value, 0).toLocaleString(),
 		[normalizeNumber],
 	);
+	const formatOptionalMoney = useCallback(
+		(value) =>
+			value === null || value === undefined ? "—" : formatMoney(value),
+		[formatMoney],
+	);
 
 	const confirmDiscardChanges = useCallback(
 		(onDiscard) => {
@@ -4728,18 +4750,21 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	useEffect(() => {
 		if (!financeCycleModalOpen) return;
+		const hotelRunnerFinance =
+			getHotelRunnerPlatformFinanceDisplay(reservation);
 		setFinanceCycleDraft({
-			commission: reservation?.commission || 0,
+			commission: hotelRunnerFinance.isHotelRunner
+				? hotelRunnerFinance.available
+					? hotelRunnerFinance.amount
+					: ""
+				: reservation?.commission || 0,
 			commissionPaid: !!reservation?.commissionPaid,
 			moneyTransferredToHotel: !!reservation?.moneyTransferredToHotel,
 			notes: reservation?.financial_cycle?.notes || "",
 		});
 	}, [
 		financeCycleModalOpen,
-		reservation?.commission,
-		reservation?.commissionPaid,
-		reservation?.moneyTransferredToHotel,
-		reservation?.financial_cycle?.notes,
+		reservation,
 	]);
 
 	useEffect(() => {
@@ -4978,6 +5003,15 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		[reservation, summarizePayment],
 	);
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
+	const guestGrossDisplay = useMemo(
+		() => getReservationGuestGrossDisplay(reservation),
+		[reservation],
+	);
+	const financialTotalAmountAvailable =
+		!guestGrossDisplay.isHotelRunner || guestGrossDisplay.available;
+	const financialTotalAmountValue = guestGrossDisplay.isHotelRunner
+		? guestGrossDisplay.amount
+		: totalAmountValue;
 	const breakdownTotalsFromReservation = useMemo(
 		() =>
 			getPaymentBreakdownTotals(
@@ -4996,19 +5030,29 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	const totalPaid = hasBreakdownValues
 		? breakdownTotalsFromReservation.total
 		: paidOnline + paidOffline;
-	const assumePaidInFull = paymentSummary.assumePaidInFull && totalPaid === 0;
-	const amountDue = assumePaidInFull
-		? 0
-		: Math.max(totalAmountValue - totalPaid, 0);
-	const hasMeaningfulAmountDue = amountDue >= 1;
-	const displayedTotalPaid = assumePaidInFull ? totalAmountValue : totalPaid;
-	const breakdownRemainingAmount = Math.max(
-		totalAmountValue - breakdownTotalsFromReservation.total,
-		0,
-	);
+	const assumePaidInFull =
+		financialTotalAmountAvailable &&
+		paymentSummary.assumePaidInFull &&
+		totalPaid === 0;
+	const amountDue = financialTotalAmountAvailable
+		? assumePaidInFull
+			? 0
+			: Math.max(financialTotalAmountValue - totalPaid, 0)
+		: null;
+	const hasMeaningfulAmountDue = amountDue !== null && amountDue >= 1;
+	const displayedTotalPaid = assumePaidInFull
+		? financialTotalAmountValue
+		: totalPaid;
+	const breakdownRemainingAmount = financialTotalAmountAvailable
+		? Math.max(
+				financialTotalAmountValue - breakdownTotalsFromReservation.total,
+				0,
+			)
+		: null;
 	const isCashLocked =
 		isRestrictedCashUser &&
 		existingCashValue > 0 &&
+		financialTotalAmountAvailable &&
 		breakdownRemainingAmount <= 0;
 	const displayPaymentLabel =
 		reservation?.payment ||
@@ -5096,9 +5140,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		() => getPaymentBreakdownTotals(paymentBreakdownDraft, normalizeNumber),
 		[paymentBreakdownDraft, normalizeNumber],
 	);
-	const remainingPaymentAmount = Math.max(
-		totalAmountValue - breakdownDraftTotals.total,
-		0,
+	const remainingPaymentAmount = financialTotalAmountAvailable
+		? Math.max(financialTotalAmountValue - breakdownDraftTotals.total, 0)
+		: null;
+	const hotelRunnerPlatformFinance = useMemo(
+		() => getHotelRunnerPlatformFinanceDisplay(reservation),
+		[reservation],
+	);
+	const isHotelRunnerFinanceReservation = useMemo(
+		() => isHotelRunnerReservation(reservation),
+		[reservation],
 	);
 	const roomCommissionEstimate = useMemo(() => {
 		return (reservation?.pickedRoomsType || []).reduce((total, room) => {
@@ -5123,12 +5174,19 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			return total + dayCommission * count;
 		}, 0);
 	}, [reservation?.pickedRoomsType, normalizeNumber]);
-	const commissionAmount = normalizeNumber(
-		reservation?.commission ||
-			reservation?.financial_cycle?.commissionAmount ||
-			roomCommissionEstimate,
-		0,
-	);
+	const commissionAvailable =
+		!hotelRunnerPlatformFinance.isHotelRunner ||
+		hotelRunnerPlatformFinance.available;
+	const commissionAmount = hotelRunnerPlatformFinance.isHotelRunner
+		? hotelRunnerPlatformFinance.available
+			? hotelRunnerPlatformFinance.amount
+			: 0
+		: normalizeNumber(
+				reservation?.commission ||
+					reservation?.financial_cycle?.commissionAmount ||
+					roomCommissionEstimate,
+				0,
+		  );
 	const pmsCollectedAmount = useMemo(() => {
 		const breakdown = reservation?.paid_amount_breakdown || {};
 		return [
@@ -5163,24 +5221,30 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		}
 		const hotelPayoutDue =
 			collectionModel === "pms_collected" || collectionModel === "mixed"
-				? Math.max(totalAmountValue - commissionAmount, 0)
+				? commissionAvailable && financialTotalAmountAvailable
+					? Math.max(financialTotalAmountValue - commissionAmount, 0)
+					: null
 				: 0;
 		const commissionDueToPms =
 			collectionModel === "hotel_collected" || collectionModel === "mixed"
-				? commissionAmount
+				? commissionAvailable
+					? commissionAmount
+					: null
 				: 0;
-		const commissionReviewed =
-			reservation?.financial_cycle?.commissionAssigned === true ||
-			reservation?.commissionData?.assigned === true ||
-			["commission due", "commission paid", "no commission due"].includes(
-				String(reservation?.commissionStatus || "").trim().toLowerCase(),
-			) ||
-			commissionAmount > 0;
+		const commissionReviewed = hotelRunnerPlatformFinance.isHotelRunner
+			? hotelRunnerPlatformFinance.available
+			: reservation?.financial_cycle?.commissionAssigned === true ||
+			  reservation?.commissionData?.assigned === true ||
+			  ["commission due", "commission paid", "no commission due"].includes(
+					String(reservation?.commissionStatus || "").trim().toLowerCase(),
+			  ) ||
+			  commissionAmount > 0;
 		const commissionSideClosed =
 			!!reservation?.commissionPaid || (commissionReviewed && commissionAmount <= 0);
 		const isClosed =
 			collectionModel === "pms_collected"
-				? !!reservation?.moneyTransferredToHotel
+				? !!reservation?.moneyTransferredToHotel &&
+				  (!hotelRunnerPlatformFinance.isHotelRunner || commissionReviewed)
 				: collectionModel === "hotel_collected"
 				  ? commissionSideClosed
 				  : collectionModel === "mixed"
@@ -5255,14 +5319,23 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		pmsCollectedAmount,
 		hotelCollectedAmount,
 		paymentSummary.paidOffline,
-		totalAmountValue,
+		financialTotalAmountAvailable,
+		financialTotalAmountValue,
 		commissionAmount,
+		commissionAvailable,
+		hotelRunnerPlatformFinance.available,
+		hotelRunnerPlatformFinance.isHotelRunner,
 		chosenLanguage,
 	]);
-	const canManageFinanceCycle =
+	const hasLegacyFinanceCyclePermission =
 		canFullManageReservation &&
 		user?.activeUser !== false &&
 		canSeeReservationTracker;
+	const canManageFinanceCycle = canManageReservationFinanceCycle({
+		reservation,
+		hasLegacyPermission: hasLegacyFinanceCyclePermission,
+		isConfiguredSuperAdmin,
+	});
 	const agentWalletSnapshot = useMemo(() => {
 		if (reservation?.agentWalletSnapshot?.captured) {
 			return reservation.agentWalletSnapshot;
@@ -5365,11 +5438,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			const walletRequired = agentWalletSnapshot?.walletRequired !== false;
 			// The wallet before-balance is a fixed snapshot, but the reservation value
 			// must always reflect the latest edited stay/room pricing.
-			const reservationAmount = totalAmountValue;
-			const after = normalizeNumber(
-				before - (walletRequired ? reservationAmount : 0),
-				0,
-			);
+			const reservationAmount = financialTotalAmountValue;
+			const after = financialTotalAmountAvailable
+				? normalizeNumber(before - (walletRequired ? reservationAmount : 0), 0)
+				: null;
 			return [
 				{
 					label:
@@ -5390,6 +5462,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							: "Commission-only reservation value",
 					value: reservationAmount,
 					tone: "neutral",
+					available: financialTotalAmountAvailable,
 				},
 				{
 					label:
@@ -5401,7 +5474,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							? "Wallet after reservation"
 							: "Wallet unchanged",
 					value: after,
-					tone: after < 0 ? "negative" : "positive",
+					tone: after !== null && after < 0 ? "negative" : "positive",
+					available: financialTotalAmountAvailable,
 				},
 			];
 		}
@@ -5419,12 +5493,18 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 					chosenLanguage === "Arabic" ? AR_LABELS.amountDue : "Amount due",
 				value: amountDue,
 				tone: hasMeaningfulAmountDue ? "negative" : "positive",
+				available: financialTotalAmountAvailable,
 			},
 			{
 				label:
-					chosenLanguage === "Arabic" ? AR_LABELS.commission : "Commission",
+					chosenLanguage === "Arabic"
+						? AR_LABELS.commission
+						: commissionAvailable
+						  ? "Commission"
+						  : "Commission (finance review pending)",
 				value: commissionAmount,
 				tone: commissionAmount > 0 ? "neutral" : "positive",
+				available: commissionAvailable,
 			},
 		];
 	}, [
@@ -5432,11 +5512,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		amountDue,
 		chosenLanguage,
 		commissionAmount,
+		commissionAvailable,
 		displayedTotalPaid,
 		hasMeaningfulAmountDue,
 		isAgentReservationPreview,
 		normalizeNumber,
-		totalAmountValue,
+		financialTotalAmountAvailable,
+		financialTotalAmountValue,
 	]);
 	const updatePendingDecision = useCallback(
 		async (payload = {}) => {
@@ -5483,8 +5565,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				<div className='pending-decision-modal'>
 					<p>
 						{chosenLanguage === "Arabic"
-							? `\u0647\u0644 \u062a\u0631\u064a\u062f \u062a\u0623\u0643\u064a\u062f \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u062f\u0629 ${daysOfResidence} \u0644\u064a\u0644\u0629 / \u0644\u064a\u0627\u0644\u064a \u0628\u0625\u062c\u0645\u0627\u0644\u064a ${formatMoney(totalAmountValue)} SAR\u061f`
-							: `Would you like to confirm this reservation for ${daysOfResidence} night(s) at ${formatMoney(totalAmountValue)} SAR?`}
+							? `\u0647\u0644 \u062a\u0631\u064a\u062f \u062a\u0623\u0643\u064a\u062f \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u062f\u0629 ${daysOfResidence} \u0644\u064a\u0644\u0629 / \u0644\u064a\u0627\u0644\u064a \u0628\u0625\u062c\u0645\u0627\u0644\u064a ${formatOptionalMoney(financialTotalAmountValue)} SAR\u061f`
+							: `Would you like to confirm this reservation for ${daysOfResidence} night(s) at ${formatOptionalMoney(financialTotalAmountValue)} SAR?`}
 					</p>
 					<Input.TextArea
 						rows={3}
@@ -5511,8 +5593,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [
 		chosenLanguage,
 		daysOfResidence,
-		formatMoney,
-		totalAmountValue,
+		financialTotalAmountValue,
+		formatOptionalMoney,
 		updatePendingDecision,
 	]);
 	const openRejectDecisionModal = useCallback(() => {
@@ -5829,6 +5911,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	const handleSavePaymentBreakdown = () => {
 		if (!reservation?._id) return;
+		if (!financialTotalAmountAvailable) {
+			return toast.error(
+				"Canonical HotelRunner gross is unavailable; payment totals cannot be validated yet.",
+			);
+		}
 		const sanitizedBreakdown = buildPaymentBreakdown(
 			paymentBreakdownDraft,
 			normalizeNumber,
@@ -5847,7 +5934,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			normalizeNumber,
 		);
 		const nextPaidAmount = Number(nextTotals.total.toFixed(2));
-		if (nextPaidAmount > totalAmountValue) {
+		if (nextPaidAmount > financialTotalAmountValue) {
 			return toast.error("Paid total cannot exceed the total amount.");
 		}
 		setIsSavingPaymentBreakdown(true);
@@ -5875,6 +5962,23 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 
 	const handleSaveFinanceCycle = () => {
 		if (!reservation?._id) return;
+		if (!canManageFinanceCycle) {
+			return toast.error(
+				hotelRunnerPlatformFinance.isHotelRunner
+					? "Only the configured super administrator can review HotelRunner commission."
+					: "You are not authorized to update this finance cycle.",
+			);
+		}
+		if (
+			hotelRunnerPlatformFinance.isHotelRunner &&
+			String(financeCycleDraft.commission ?? "").trim() === ""
+		) {
+			return toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى إدخال العمولة التي راجعتها المالية، حتى لو كانت صفراً."
+					: "Enter the staff-reviewed commission, including an explicit zero.",
+			);
+		}
 		const nextCommission = normalizeNumber(financeCycleDraft.commission, 0);
 		const nextMoneyTransferred = !!financeCycleDraft.moneyTransferredToHotel;
 		const nextCommissionPaid = !!financeCycleDraft.commissionPaid;
@@ -5913,22 +6017,31 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				commissionAssigned: true,
 				pmsCollectedAmount,
 				hotelCollectedAmount,
-				hotelPayoutDue: Math.max(totalAmountValue - nextCommission, 0),
+				hotelPayoutDue: financialTotalAmountAvailable
+					? Math.max(financialTotalAmountValue - nextCommission, 0)
+					: null,
 				commissionDueToPms: nextCommission,
 				notes: financeCycleDraft.notes || "",
 			},
 			requestingUserId: user?._id,
 		};
+		const safeUpdateData = protectHotelRunnerEditorPayload(
+			reservation,
+			updateData,
+			{ allowExplicitCommission: isConfiguredSuperAdmin },
+		);
 
 		setIsSavingFinanceCycle(true);
-		updateSingleReservation(reservation._id, updateData).then((response) => {
+		updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 			setIsSavingFinanceCycle(false);
 			if (!response || response.error) {
 				console.error(response?.error || response);
 				return toast.error("Could not update the finance cycle.");
 			}
 			const updated = response?.reservation || response;
-			setReservation(updated?._id ? updated : { ...reservation, ...updateData });
+			setReservation(
+				updated?._id ? updated : { ...reservation, ...safeUpdateData },
+			);
 			setFinanceCycleModalOpen(false);
 			toast.success("Finance cycle was updated successfully.");
 		});
@@ -6280,15 +6393,21 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
-				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
-					(total, room) => total + room.count * parseFloat(room.chosenPrice),
-					0,
-				);
+				if (!isHotelRunnerFinanceReservation) {
+					const totalAmountPerDay = reservation.pickedRoomsType.reduce(
+						(total, room) => total + room.count * parseFloat(room.chosenPrice),
+						0,
+					);
 
-				updateData.total_amount = totalAmountPerDay * daysOfResidence;
+					updateData.total_amount = totalAmountPerDay * daysOfResidence;
+				}
 			}
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "An error occurred while updating the status");
@@ -6324,17 +6443,23 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				updateData.__reservationDateUpdateIntent = true;
 				updateData.days_of_residence = daysOfResidence;
 
-				const totalAmountPerDay = reservation.pickedRoomsType.reduce(
-					(total, room) => {
-						return total + room.count * parseFloat(room.chosenPrice);
-					},
-					0,
-				);
+				if (!isHotelRunnerFinanceReservation) {
+					const totalAmountPerDay = reservation.pickedRoomsType.reduce(
+						(total, room) => {
+							return total + room.count * parseFloat(room.chosenPrice);
+						},
+						0,
+					);
 
-				updateData.total_amount = totalAmountPerDay * daysOfResidence;
+					updateData.total_amount = totalAmountPerDay * daysOfResidence;
+				}
 			}
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "An error occurred while updating the status");
@@ -6366,7 +6491,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				requestingUserId: user?._id,
 			};
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "Reservation relocation failed.");
@@ -6492,7 +6621,9 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 							date: day?.date || day?.day || `#${dayIndex + 1}`,
 							rootPrice,
 							finalPrice,
-							commission: Math.max(finalPrice - rootPrice, 0),
+							commission: isHotelRunnerFinanceReservation
+								? null
+								: Math.max(finalPrice - rootPrice, 0),
 						};
 				  })
 				: [
@@ -6503,7 +6634,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									: "Average Night",
 							rootPrice: normalizeNumber(room?.chosenPrice, 0),
 							finalPrice: normalizeNumber(room?.chosenPrice, 0),
-							commission: 0,
+							commission: isHotelRunnerFinanceReservation ? null : 0,
 							isFallback: true,
 						},
 				  ];
@@ -6535,14 +6666,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 				...day,
 				rootTotal: day.rootPrice * section.count,
 				finalTotal: day.finalPrice * section.count,
-				commissionTotal: day.commission * section.count,
+				commissionTotal:
+					day.commission === null ? null : day.commission * section.count,
 			}));
 			const total = dayRows.reduce((sum, day) => sum + day.finalTotal, 0);
 			const rootTotal = dayRows.reduce((sum, day) => sum + day.rootTotal, 0);
-			const commissionTotal = dayRows.reduce(
-				(sum, day) => sum + day.commissionTotal,
-				0,
-			);
+			const commissionTotal = dayRows.some(
+				(day) => day.commissionTotal === null,
+			)
+				? null
+				: dayRows.reduce((sum, day) => sum + day.commissionTotal, 0);
 			return { ...section, dayRows, total, rootTotal, commissionTotal };
 		});
 
@@ -6550,10 +6683,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 			sections,
 			total: sections.reduce((sum, section) => sum + section.total, 0),
 			rootTotal: sections.reduce((sum, section) => sum + section.rootTotal, 0),
-			commissionTotal: sections.reduce(
-				(sum, section) => sum + section.commissionTotal,
-				0,
-			),
+			commissionTotal: sections.some(
+				(section) => section.commissionTotal === null,
+			)
+				? null
+				: sections.reduce(
+						(sum, section) => sum + section.commissionTotal,
+						0,
+				  ),
 			roomUnits: sections.reduce((sum, section) => sum + section.count, 0),
 			nights: Math.max(
 				daysOfResidence || 0,
@@ -6567,6 +6704,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	}, [
 		chosenLanguage,
 		daysOfResidence,
+		isHotelRunnerFinanceReservation,
 		normalizeNumber,
 		reservation?.pickedRoomsType,
 	]);
@@ -7235,7 +7373,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											Total Amount
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{formatMoney(totalAmountValue)} SAR
+											{formatOptionalMoney(financialTotalAmountValue)}
+											{financialTotalAmountAvailable ? " SAR" : ""}
 										</div>
 									</div>
 									<div className='col-md-4'>
@@ -7251,7 +7390,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											Remaining
 										</div>
 										<div style={{ fontWeight: "bold", color: "#1b6b34" }}>
-											{formatMoney(remainingPaymentAmount)} SAR
+											{formatOptionalMoney(remainingPaymentAmount)}
+											{remainingPaymentAmount === null ? "" : " SAR"}
 										</div>
 									</div>
 								</div>
@@ -7262,7 +7402,8 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									className='btn btn-primary'
 									disabled={
 										isSavingPaymentBreakdown ||
-										breakdownDraftTotals.total > totalAmountValue
+										!financialTotalAmountAvailable ||
+										breakdownDraftTotals.total > financialTotalAmountValue
 									}
 									onClick={handleSavePaymentBreakdown}
 								>
@@ -7558,7 +7699,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											: "PMS owes hotel"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(financeCycleSummary.hotelPayoutDue)} SAR
+										{financeCycleSummary.hotelPayoutDue === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${formatMoney(financeCycleSummary.hotelPayoutDue)} SAR`}
 									</strong>
 								</div>
 								<div className='cycle-mini-card'>
@@ -7568,7 +7713,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											: "Hotel owes PMS"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(financeCycleSummary.commissionDueToPms)} SAR
+										{financeCycleSummary.commissionDueToPms === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${formatMoney(financeCycleSummary.commissionDueToPms)} SAR`}
 									</strong>
 								</div>
 							</div>
@@ -7675,8 +7824,16 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											: "Total Amount"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(pricingBreakdownByDay.total || totalAmountValue)}{" "}
-										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+									{formatOptionalMoney(
+										guestGrossDisplay.isHotelRunner
+											? financialTotalAmountValue
+											: pricingBreakdownByDay.total || totalAmountValue,
+									)}{" "}
+									{financialTotalAmountAvailable
+										? chosenLanguage === "Arabic"
+											? AR_LABELS.currency
+											: "SAR"
+										: ""}
 									</strong>
 								</div>
 							</div>
@@ -7719,9 +7876,13 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 																: "Date"}
 														</th>
 														<th>
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.basePrice
-																: "Base Price"}
+															{isHotelRunnerFinanceReservation
+																? chosenLanguage === "Arabic"
+																	? "المبلغ المحلي المتعاقد عليه"
+																	: "Local Contracted"
+																: chosenLanguage === "Arabic"
+																  ? AR_LABELS.basePrice
+																  : "Base Price"}
 														</th>
 														<th>
 															{chosenLanguage === "Arabic"
@@ -8330,8 +8491,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 									</strong>
 								</div>
 								<div className='top-amount'>
-									{formatMoney(totalAmountValue)}{" "}
-									{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+									{formatOptionalMoney(financialTotalAmountValue)}{" "}
+									{financialTotalAmountAvailable
+										? chosenLanguage === "Arabic"
+											? AR_LABELS.currency
+											: "SAR"
+										: ""}
 								</div>
 							</Section>
 							<Section
@@ -8456,10 +8621,14 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: "Total Amount"}
 											</div>
 											<h4 className='mx-2'>
-												{reservation
-													? reservation.total_amount.toLocaleString()
-													: 0}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+											{reservation
+												? formatOptionalMoney(financialTotalAmountValue)
+												: "—"}{" "}
+											{financialTotalAmountAvailable
+												? chosenLanguage === "Arabic"
+													? AR_LABELS.currency
+													: "SAR"
+												: ""}
 											</h4>
 										</div>
 										<div className='col-md-12'>
@@ -9255,7 +9424,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													<div className='workflow-ledger-row' key={row.label}>
 														<span>{row.label}</span>
 														<strong className={`detail-value-ltr ${row.tone}`}>
-															{formatMoney(row.value)} SAR
+													{row.available === false
+														? chosenLanguage === "Arabic"
+															? "بانتظار مراجعة المالية"
+															: "Awaiting finance review"
+														: `${formatMoney(row.value)} SAR`}
 														</strong>
 													</div>
 												))
@@ -9384,7 +9557,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 															<div
 																className={`payment-preview-amount ${row.tone} detail-value-ltr`}
 															>
-																{formatMoney(row.value)} SAR
+														{row.available === false
+															? chosenLanguage === "Arabic"
+																? "بانتظار مراجعة المالية"
+																: "Awaiting finance review"
+															: `${formatMoney(row.value)} SAR`}
 															</div>
 															<div className='payment-preview-label'>
 																{row.label}
@@ -9746,7 +9923,11 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 										<div className='finance-cycle-meta'>
 											<span>{financeCycleSummary.collectionLabel}</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(commissionAmount)} SAR
+												{commissionAvailable
+													? `${formatMoney(commissionAmount)} SAR`
+													: chosenLanguage === "Arabic"
+													  ? "بانتظار مراجعة المالية"
+													  : "Awaiting finance review"}
 											</strong>
 										</div>
 										{canManageFinanceCycle ? (
@@ -9818,8 +9999,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: "Reservation Value"}
 											</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(totalAmountValue)}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{formatOptionalMoney(financialTotalAmountValue)}{" "}
+												{financialTotalAmountAvailable
+													? chosenLanguage === "Arabic"
+														? AR_LABELS.currency
+														: "SAR"
+													: ""}
 											</strong>
 										</div>
 										<div className='payment-total-card paid'>
@@ -9844,8 +10029,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 													: "Amount Due"}
 											</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(amountDue)}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+												{formatOptionalMoney(amountDue)}{" "}
+												{amountDue !== null
+													? chosenLanguage === "Arabic"
+														? AR_LABELS.currency
+														: "SAR"
+													: ""}
 											</strong>
 										</div>
 									</div>
@@ -9878,8 +10067,12 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												: "Total Amount"}
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{reservation && reservation.total_amount.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{reservation && formatOptionalMoney(financialTotalAmountValue)}{" "}
+											{financialTotalAmountAvailable
+												? chosenLanguage === "Arabic"
+													? AR_LABELS.currency
+													: "SAR"
+												: ""}
 										</div>
 									</div>
 								</div>
@@ -9917,7 +10110,10 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</h4>
 										</div>
 										<div className='col-md-5 mx-auto'>
-											<h3>{formatMoney(totalAmountValue)} SAR</h3>
+											<h3>
+												{formatOptionalMoney(financialTotalAmountValue)}
+												{financialTotalAmountAvailable ? " SAR" : ""}
+											</h3>
 										</div>
 
 										{displayPaymentLabel ? (
@@ -9982,7 +10178,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 											</div>
 										) : null}
 
-										{totalAmountValue > 0 ? (
+									{financialTotalAmountAvailable && financialTotalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
@@ -9991,7 +10187,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 												</h4>
 											</div>
 										) : null}
-										{totalAmountValue > 0 ? (
+									{financialTotalAmountAvailable && financialTotalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3 style={{ color: "darkgreen" }}>
 													{formatMoney(amountDue)} SAR

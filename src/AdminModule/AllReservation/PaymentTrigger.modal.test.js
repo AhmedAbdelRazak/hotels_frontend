@@ -443,3 +443,78 @@ test("an active checkout resumes the same bank amount instead of showing a block
 	);
 	fireEvent.click(screen.getByRole("button", { name: "Close window" }));
 });
+
+test("HotelRunner room prices cannot become chargeable commission without finance review", async () => {
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "hotelrunner-finance-unreviewed",
+				confirmation_number: "HR-SYNTHETIC-1",
+				checkin_date: "2026-08-10T00:00:00.000Z",
+				total_amount: 1000,
+				paid_amount: 0,
+				paypal_details: {
+					vault_id: "synthetic-vault",
+					bounds: { limit_usd: 500 },
+				},
+				supplierData: {
+					hotelRunner: { transport: "hotelrunner_api" },
+				},
+				pickedRoomsType: [
+					{
+						count: 1,
+						pricingByDay: [{ price: 1000, rootPrice: 700 }],
+					},
+				],
+			}}
+		/>,
+	);
+
+	fireEvent.click(
+		screen.getByRole("button", { name: "Capture Saved Payment" }),
+	);
+
+	expect(
+		await screen.findByText(/did not provide a verified commission or net payout/i),
+	).toBeInTheDocument();
+	expect(screen.getByLabelText(/Commission Only/i)).toBeDisabled();
+	expect(screen.getByLabelText(/Commission \+ 1 Night/i)).toBeDisabled();
+	expect(screen.getByLabelText(/Entire Amount/i)).toBeEnabled();
+});
+
+test("a legacy HotelRunner commission status alone cannot unlock a charge", async () => {
+	render(
+		<PaymentTrigger
+			reservation={{
+				_id: "hotelrunner-finance-status-only",
+				confirmation_number: "HR-SYNTHETIC-STATUS",
+				checkin_date: "2026-08-10T00:00:00.000Z",
+				total_amount: 1000,
+				commission: 300,
+				commissionStatus: "commission due",
+				paid_amount: 0,
+				paypal_details: {
+					vault_id: "synthetic-vault",
+					bounds: { limit_usd: 500 },
+				},
+				adminPricing: { mode: "hotelrunner_api" },
+				pickedRoomsType: [
+					{
+						count: 1,
+						pricingByDay: [{ price: 1000, rootPrice: 700 }],
+					},
+				],
+			}}
+		/>,
+	);
+
+	fireEvent.click(
+		screen.getByRole("button", { name: "Capture Saved Payment" }),
+	);
+
+	expect(
+		await screen.findByText(/did not provide a verified commission or net payout/i),
+	).toBeInTheDocument();
+	expect(screen.getByLabelText(/Commission Only/i)).toBeDisabled();
+	expect(screen.getByLabelText(/Commission \+ 1 Night/i)).toBeDisabled();
+});

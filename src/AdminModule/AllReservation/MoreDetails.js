@@ -66,6 +66,17 @@ import {
 	selectActiveReservation,
 } from "./reservationRoomDetails";
 import { getPaymentBreakdownTotalDisplay } from "./paymentBreakdownDisplay";
+import HotelRunnerPricingBreakdown from "./HotelRunnerPricingBreakdown";
+import {
+	getHotelRunnerPlatformFinanceDisplay,
+	getHotelRunnerPayoutDisplay,
+	getReservationGuestGrossDisplay,
+	isHotelRunnerReservation,
+} from "./hotelRunnerPricingDisplay";
+import {
+	canManageReservationFinanceCycle,
+	protectHotelRunnerEditorPayload,
+} from "./hotelRunnerPricingEditPolicy";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import "jspdf-autotable";
@@ -966,8 +977,12 @@ const AR_LABELS = {
 		"\u0642\u064a\u0645\u0629 \u0627\u0644\u062d\u062c\u0632",
 	hotelVisibleAmount:
 		"\u0645\u0627 \u064a\u0638\u0647\u0631 \u0644\u0644\u0641\u0646\u062f\u0642",
+	localContractedAmount:
+		"\u0627\u0644\u0645\u0628\u0644\u063a \u0627\u0644\u062a\u0639\u0627\u0642\u062f\u064a \u0627\u0644\u0645\u062d\u0644\u064a",
 	netAfterOtaExpenses:
 		"\u0628\u0639\u062f \u0645\u0635\u0627\u0631\u064a\u0641 OTA",
+	awaitingVerifiedOtaPayout:
+		"\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u062d\u0642\u0642 \u0645\u0628\u0644\u063a \u0627\u0644\u062a\u062d\u0648\u064a\u0644 \u0645\u0646 OTA",
 	platformProfit:
 		"\u0631\u0628\u062d \u0627\u0644\u0645\u0646\u0635\u0629",
 	platformProfitWithCommission:
@@ -4289,6 +4304,16 @@ const PricingBreakdownModalContent = styled.div`
 		margin-top: 2px;
 	}
 
+	.pricing-unavailable {
+		color: #92400e;
+		direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+		display: inline-block;
+		font-size: 0.72rem;
+		line-height: 1.3;
+		unicode-bidi: isolate;
+		white-space: normal;
+	}
+
 	.pricing-section-card {
 		overflow: hidden;
 	}
@@ -5113,7 +5138,14 @@ const ReservationDetail = ({
 	const [financeCycleModalOpen, setFinanceCycleModalOpen] = useState(false);
 	const [cycleTrackerModalOpen, setCycleTrackerModalOpen] = useState(false);
 	const [financeCycleDraft, setFinanceCycleDraft] = useState({
-		commission: reservation?.commission || 0,
+		commission: (() => {
+			const finance = getHotelRunnerPlatformFinanceDisplay(reservation);
+			return finance.isHotelRunner
+				? finance.available
+					? finance.amount
+					: ""
+				: reservation?.commission || 0;
+		})(),
 		commissionPaid: !!reservation?.commissionPaid,
 		moneyTransferredToHotel: !!reservation?.moneyTransferredToHotel,
 		notes: reservation?.financial_cycle?.notes || "",
@@ -5261,6 +5293,11 @@ const ReservationDetail = ({
 		(value) => normalizeNumber(value, 0).toLocaleString(),
 		[normalizeNumber],
 	);
+	const formatOptionalMoney = useCallback(
+		(value) =>
+			value === null || value === undefined ? "—" : formatMoney(value),
+		[formatMoney],
+	);
 
 	const confirmDiscardChanges = useCallback(
 		(onDiscard) => {
@@ -5316,18 +5353,21 @@ const ReservationDetail = ({
 
 	useEffect(() => {
 		if (!financeCycleModalOpen) return;
+		const hotelRunnerFinance =
+			getHotelRunnerPlatformFinanceDisplay(reservation);
 		setFinanceCycleDraft({
-			commission: reservation?.commission || 0,
+			commission: hotelRunnerFinance.isHotelRunner
+				? hotelRunnerFinance.available
+					? hotelRunnerFinance.amount
+					: ""
+				: reservation?.commission || 0,
 			commissionPaid: !!reservation?.commissionPaid,
 			moneyTransferredToHotel: !!reservation?.moneyTransferredToHotel,
 			notes: reservation?.financial_cycle?.notes || "",
 		});
 	}, [
 		financeCycleModalOpen,
-		reservation?.commission,
-		reservation?.commissionPaid,
-		reservation?.moneyTransferredToHotel,
-		reservation?.financial_cycle?.notes,
+		reservation,
 	]);
 
 	useEffect(() => {
@@ -5581,6 +5621,15 @@ const ReservationDetail = ({
 		[reservation, summarizePayment],
 	);
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
+	const guestGrossDisplay = useMemo(
+		() => getReservationGuestGrossDisplay(reservation),
+		[reservation],
+	);
+	const financialTotalAmountAvailable =
+		!guestGrossDisplay.isHotelRunner || guestGrossDisplay.available;
+	const financialTotalAmountValue = guestGrossDisplay.isHotelRunner
+		? guestGrossDisplay.amount
+		: totalAmountValue;
 	const breakdownTotalsFromReservation = useMemo(
 		() =>
 			getPaymentBreakdownTotals(
@@ -5599,19 +5648,29 @@ const ReservationDetail = ({
 	const totalPaid = hasBreakdownValues
 		? breakdownTotalsFromReservation.total
 		: paidOnline + paidOffline;
-	const assumePaidInFull = paymentSummary.assumePaidInFull && totalPaid === 0;
-	const amountDue = assumePaidInFull
-		? 0
-		: Math.max(totalAmountValue - totalPaid, 0);
-	const hasMeaningfulAmountDue = amountDue >= 1;
-	const displayedTotalPaid = assumePaidInFull ? totalAmountValue : totalPaid;
-	const breakdownRemainingAmount = Math.max(
-		totalAmountValue - breakdownTotalsFromReservation.total,
-		0,
-	);
+	const assumePaidInFull =
+		financialTotalAmountAvailable &&
+		paymentSummary.assumePaidInFull &&
+		totalPaid === 0;
+	const amountDue = financialTotalAmountAvailable
+		? assumePaidInFull
+			? 0
+			: Math.max(financialTotalAmountValue - totalPaid, 0)
+		: null;
+	const hasMeaningfulAmountDue = amountDue !== null && amountDue >= 1;
+	const displayedTotalPaid = assumePaidInFull
+		? financialTotalAmountValue
+		: totalPaid;
+	const breakdownRemainingAmount = financialTotalAmountAvailable
+		? Math.max(
+				financialTotalAmountValue - breakdownTotalsFromReservation.total,
+				0,
+			)
+		: null;
 	const isCashLocked =
 		isRestrictedCashUser &&
 		existingCashValue > 0 &&
+		financialTotalAmountAvailable &&
 		breakdownRemainingAmount <= 0;
 	const displayPaymentLabel =
 		reservation?.payment ||
@@ -5699,9 +5758,12 @@ const ReservationDetail = ({
 		() => getPaymentBreakdownTotals(paymentBreakdownDraft, normalizeNumber),
 		[paymentBreakdownDraft, normalizeNumber],
 	);
-	const remainingPaymentAmount = Math.max(
-		totalAmountValue - breakdownDraftTotals.total,
-		0,
+	const remainingPaymentAmount = financialTotalAmountAvailable
+		? Math.max(financialTotalAmountValue - breakdownDraftTotals.total, 0)
+		: null;
+	const hotelRunnerPlatformFinance = useMemo(
+		() => getHotelRunnerPlatformFinanceDisplay(reservation),
+		[reservation],
 	);
 	const roomCommissionEstimate = useMemo(() => {
 		return (reservation?.pickedRoomsType || []).reduce((total, room) => {
@@ -5747,10 +5809,14 @@ const ReservationDetail = ({
 		reservation?.commissionData?.commissionValue,
 		reservation?.financial_cycle?.commissionAmount,
 	]);
-	const commissionAmount = normalizeNumber(
-		explicitCommissionAmount || roomCommissionEstimate,
-		0,
-	);
+	const commissionAvailable =
+		!hotelRunnerPlatformFinance.isHotelRunner ||
+		hotelRunnerPlatformFinance.available;
+	const commissionAmount = hotelRunnerPlatformFinance.isHotelRunner
+		? hotelRunnerPlatformFinance.available
+			? hotelRunnerPlatformFinance.amount
+			: 0
+		: normalizeNumber(explicitCommissionAmount || roomCommissionEstimate, 0);
 	const pmsCollectedAmount = useMemo(() => {
 		const breakdown = reservation?.paid_amount_breakdown || {};
 		return [
@@ -5785,14 +5851,19 @@ const ReservationDetail = ({
 		}
 		const hotelPayoutDue =
 			collectionModel === "pms_collected" || collectionModel === "mixed"
-				? Math.max(totalAmountValue - commissionAmount, 0)
+				? commissionAvailable && financialTotalAmountAvailable
+				? Math.max(financialTotalAmountValue - commissionAmount, 0)
+					: null
 				: 0;
 		const commissionDueToPms =
 			collectionModel === "hotel_collected" || collectionModel === "mixed"
+				? commissionAvailable
 				? commissionAmount
+					: null
 				: 0;
-		const commissionReviewed =
-			reservation?.financial_cycle?.commissionAssigned === true ||
+		const commissionReviewed = hotelRunnerPlatformFinance.isHotelRunner
+			? hotelRunnerPlatformFinance.available
+			: reservation?.financial_cycle?.commissionAssigned === true ||
 			reservation?.commissionData?.assigned === true ||
 			["commission due", "commission paid", "no commission due"].includes(
 				String(reservation?.commissionStatus || "").trim().toLowerCase(),
@@ -5802,7 +5873,8 @@ const ReservationDetail = ({
 			!!reservation?.commissionPaid || (commissionReviewed && commissionAmount <= 0);
 		const isClosed =
 			collectionModel === "pms_collected"
-				? !!reservation?.moneyTransferredToHotel
+				? !!reservation?.moneyTransferredToHotel &&
+				  (!hotelRunnerPlatformFinance.isHotelRunner || commissionReviewed)
 				: collectionModel === "hotel_collected"
 				  ? commissionSideClosed
 				  : collectionModel === "mixed"
@@ -5877,14 +5949,23 @@ const ReservationDetail = ({
 		pmsCollectedAmount,
 		hotelCollectedAmount,
 		paymentSummary.paidOffline,
-		totalAmountValue,
+		financialTotalAmountAvailable,
+					financialTotalAmountValue,
 		commissionAmount,
+		commissionAvailable,
+		hotelRunnerPlatformFinance.available,
+		hotelRunnerPlatformFinance.isHotelRunner,
 		chosenLanguage,
 	]);
-	const canManageFinanceCycle =
+	const hasLegacyFinanceCyclePermission =
 		canFullManageReservation &&
 		user?.activeUser !== false &&
 		canSeeReservationTracker;
+	const canManageFinanceCycle = canManageReservationFinanceCycle({
+		reservation,
+		hasLegacyPermission: hasLegacyFinanceCyclePermission,
+		isConfiguredSuperAdmin,
+	});
 	const agentWalletSnapshot = useMemo(() => {
 		if (reservation?.agentWalletSnapshot?.captured) {
 			return reservation.agentWalletSnapshot;
@@ -5998,11 +6079,10 @@ const ReservationDetail = ({
 			const walletRequired = agentWalletSnapshot?.walletRequired !== false;
 			// The wallet before-balance is a fixed snapshot, but the reservation value
 			// must always reflect the latest edited stay/room pricing.
-			const reservationAmount = totalAmountValue;
-			const after = normalizeNumber(
-				before - (walletRequired ? reservationAmount : 0),
-				0,
-			);
+			const reservationAmount = financialTotalAmountValue;
+			const after = financialTotalAmountAvailable
+				? normalizeNumber(before - (walletRequired ? reservationAmount : 0), 0)
+				: null;
 			return [
 				{
 					label:
@@ -6023,6 +6103,7 @@ const ReservationDetail = ({
 							: "Commission-only reservation value",
 					value: reservationAmount,
 					tone: "neutral",
+					available: financialTotalAmountAvailable,
 				},
 				{
 					label:
@@ -6034,7 +6115,8 @@ const ReservationDetail = ({
 							? "Wallet after reservation"
 							: "Wallet unchanged",
 					value: after,
-					tone: after < 0 ? "negative" : "positive",
+					tone: after !== null && after < 0 ? "negative" : "positive",
+					available: financialTotalAmountAvailable,
 				},
 			];
 		}
@@ -6052,12 +6134,18 @@ const ReservationDetail = ({
 					chosenLanguage === "Arabic" ? AR_LABELS.amountDue : "Amount due",
 				value: amountDue,
 				tone: hasMeaningfulAmountDue ? "negative" : "positive",
+				available: financialTotalAmountAvailable,
 			},
 			{
 				label:
-					chosenLanguage === "Arabic" ? AR_LABELS.commission : "Commission",
+					chosenLanguage === "Arabic"
+						? AR_LABELS.commission
+						: commissionAvailable
+						  ? "Commission"
+						  : "Commission (finance review pending)",
 				value: commissionAmount,
 				tone: commissionAmount > 0 ? "neutral" : "positive",
+				available: commissionAvailable,
 			},
 		];
 	}, [
@@ -6065,11 +6153,13 @@ const ReservationDetail = ({
 		amountDue,
 		chosenLanguage,
 		commissionAmount,
+		commissionAvailable,
 		displayedTotalPaid,
 		hasMeaningfulAmountDue,
 		isAgentReservationPreview,
 		normalizeNumber,
-		totalAmountValue,
+		financialTotalAmountAvailable,
+		financialTotalAmountValue,
 	]);
 	const updatePendingDecision = useCallback(
 		async (payload = {}) => {
@@ -6116,8 +6206,8 @@ const ReservationDetail = ({
 				<div className='pending-decision-modal'>
 					<p>
 						{chosenLanguage === "Arabic"
-							? `\u0647\u0644 \u062a\u0631\u064a\u062f \u062a\u0623\u0643\u064a\u062f \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u062f\u0629 ${daysOfResidence} \u0644\u064a\u0644\u0629 / \u0644\u064a\u0627\u0644\u064a \u0628\u0625\u062c\u0645\u0627\u0644\u064a ${formatMoney(totalAmountValue)} SAR\u061f`
-							: `Would you like to confirm this reservation for ${daysOfResidence} night(s) at ${formatMoney(totalAmountValue)} SAR?`}
+							? `\u0647\u0644 \u062a\u0631\u064a\u062f \u062a\u0623\u0643\u064a\u062f \u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632 \u0644\u0645\u062f\u0629 ${daysOfResidence} \u0644\u064a\u0644\u0629 / \u0644\u064a\u0627\u0644\u064a \u0628\u0625\u062c\u0645\u0627\u0644\u064a ${formatOptionalMoney(financialTotalAmountValue)} SAR\u061f`
+							: `Would you like to confirm this reservation for ${daysOfResidence} night(s) at ${formatOptionalMoney(financialTotalAmountValue)} SAR?`}
 					</p>
 					<Input.TextArea
 						rows={3}
@@ -6144,8 +6234,8 @@ const ReservationDetail = ({
 	}, [
 		chosenLanguage,
 		daysOfResidence,
-		formatMoney,
-		totalAmountValue,
+		formatOptionalMoney,
+		financialTotalAmountValue,
 		updatePendingDecision,
 	]);
 	const openRejectDecisionModal = useCallback(() => {
@@ -6619,6 +6709,23 @@ const ReservationDetail = ({
 
 	const handleSaveFinanceCycle = () => {
 		if (!reservation?._id) return;
+		if (!canManageFinanceCycle) {
+			return toast.error(
+				hotelRunnerPlatformFinance.isHotelRunner
+					? "Only the configured super administrator can review HotelRunner commission."
+					: "You are not authorized to update this finance cycle.",
+			);
+		}
+		if (
+			hotelRunnerPlatformFinance.isHotelRunner &&
+			String(financeCycleDraft.commission ?? "").trim() === ""
+		) {
+			return toast.error(
+				chosenLanguage === "Arabic"
+					? "يرجى إدخال العمولة التي راجعتها المالية، حتى لو كانت صفراً."
+					: "Enter the staff-reviewed commission, including an explicit zero.",
+			);
+		}
 		const nextCommission = normalizeNumber(financeCycleDraft.commission, 0);
 		const nextMoneyTransferred = !!financeCycleDraft.moneyTransferredToHotel;
 		const nextCommissionPaid = !!financeCycleDraft.commissionPaid;
@@ -6657,22 +6764,31 @@ const ReservationDetail = ({
 				commissionAssigned: true,
 				pmsCollectedAmount,
 				hotelCollectedAmount,
-				hotelPayoutDue: Math.max(totalAmountValue - nextCommission, 0),
+				hotelPayoutDue: financialTotalAmountAvailable
+					? Math.max(financialTotalAmountValue - nextCommission, 0)
+					: null,
 				commissionDueToPms: nextCommission,
 				notes: financeCycleDraft.notes || "",
 			},
 			requestingUserId: user?._id,
 		};
+		const safeUpdateData = protectHotelRunnerEditorPayload(
+			reservation,
+			updateData,
+			{ allowExplicitCommission: isConfiguredSuperAdmin },
+		);
 
 		setIsSavingFinanceCycle(true);
-		updateSingleReservation(reservation._id, updateData).then((response) => {
+		updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 			setIsSavingFinanceCycle(false);
 			if (!response || response.error) {
 				console.error(response?.error || response);
 				return toast.error("Could not update the finance cycle.");
 			}
 			const updated = response?.reservation || response;
-			const merged = updated?._id ? updated : { ...reservation, ...updateData };
+			const merged = updated?._id
+				? updated
+				: { ...reservation, ...safeUpdateData };
 			setReservationAndNotify(merged);
 			setFinanceCycleModalOpen(false);
 			toast.success("Finance cycle was updated successfully.");
@@ -7159,7 +7275,11 @@ const ReservationDetail = ({
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
 			}
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "An error occurred while updating the status");
@@ -7208,7 +7328,11 @@ const ReservationDetail = ({
 				updateData.total_amount = totalAmountPerDay * daysOfResidence;
 			}
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "An error occurred while updating the status");
@@ -7240,7 +7364,11 @@ const ReservationDetail = ({
 				requestingUserId: user?._id,
 			};
 
-			updateSingleReservation(reservation._id, updateData).then((response) => {
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				reservation,
+				updateData,
+			);
+			updateSingleReservation(reservation._id, safeUpdateData).then((response) => {
 				if (!response || response.error) {
 					console.error(response?.error || response);
 					toast.error(response?.error || "Reservation relocation failed.");
@@ -7306,6 +7434,14 @@ const ReservationDetail = ({
 	);
 	const assignedRoomTypesDisplay = assignedRoomSummary.roomTypeText || "N/A";
 	const assignedRoomsDisplay = assignedRoomSummary.roomNumberText || "N/A";
+	const isHotelRunnerPricingReservation = useMemo(
+		() => isHotelRunnerReservation(reservation),
+		[reservation],
+	);
+	const hotelRunnerPayoutDisplay = useMemo(
+		() => getHotelRunnerPayoutDisplay(reservation),
+		[reservation],
+	);
 
 	const groupedPickedRoomsType = useMemo(() => {
 		const grouped = new Map();
@@ -7387,20 +7523,40 @@ const ReservationDetail = ({
 							day?.otaExpenseAmount ??
 							day?.otherExpenseAmount ??
 							day?.expenseAmount;
-						const netAfterExpenses = normalizeNumber(
+						const explicitNet =
 							day?.netAfterExpenses ??
 								day?.netAfterOtaExpenses ??
-								day?.netAfterOtherExpenses ??
-								(explicitExpense !== undefined && explicitExpense !== null
+							day?.netAfterOtherExpenses;
+						const explicitPlatformMargin =
+							day?.platformMargin ?? day?.platformProfit ?? day?.profit;
+						const netAfterExpenses = isHotelRunnerPricingReservation
+							? hotelRunnerPayoutDisplay.netAvailable &&
+							  hasExplicitMoney(explicitNet)
+								? normalizeNumber(explicitNet, 0)
+								: null
+							: normalizeNumber(
+									explicitNet ??
+										(explicitExpense !== undefined &&
+										explicitExpense !== null
 									? clientPrice - normalizeNumber(explicitExpense, 0)
 									: clientPrice),
 							clientPrice,
 						);
-						const otaExpense = normalizeNumber(
+						const otaExpense = isHotelRunnerPricingReservation
+							? hotelRunnerPayoutDisplay.otaExpenseAvailable &&
+							  hasExplicitMoney(explicitExpense)
+								? normalizeNumber(explicitExpense, 0)
+								: null
+							: normalizeNumber(
 							explicitExpense ?? clientPrice - netAfterExpenses,
 							clientPrice - netAfterExpenses,
 						);
-						const platformMargin = normalizeNumber(
+						const platformMargin = isHotelRunnerPricingReservation
+							? hotelRunnerPayoutDisplay.platformMarginAvailable &&
+							  hasExplicitMoney(explicitPlatformMargin)
+								? normalizeNumber(explicitPlatformMargin, 0)
+								: null
+							: normalizeNumber(
 							day?.platformMargin ?? netAfterExpenses - rootPrice,
 							netAfterExpenses - rootPrice,
 						);
@@ -7412,7 +7568,9 @@ const ReservationDetail = ({
 							netAfterExpenses,
 							otaExpense,
 							platformMargin,
-							commission: Math.max(clientPrice - rootPrice, 0),
+							commission: isHotelRunnerPricingReservation
+								? null
+								: Math.max(clientPrice - rootPrice, 0),
 						};
 				  })
 				: [
@@ -7424,10 +7582,12 @@ const ReservationDetail = ({
 							rootPrice: normalizeNumber(room?.chosenPrice, 0),
 							finalPrice: normalizeNumber(room?.chosenPrice, 0),
 							clientPrice: normalizeNumber(room?.chosenPrice, 0),
-							netAfterExpenses: normalizeNumber(room?.chosenPrice, 0),
-							otaExpense: 0,
-							platformMargin: 0,
-							commission: 0,
+							netAfterExpenses: isHotelRunnerPricingReservation
+								? null
+								: normalizeNumber(room?.chosenPrice, 0),
+							otaExpense: isHotelRunnerPricingReservation ? null : 0,
+							platformMargin: isHotelRunnerPricingReservation ? null : 0,
+							commission: isHotelRunnerPricingReservation ? null : 0,
 							isFallback: true,
 						},
 				  ];
@@ -7462,26 +7622,29 @@ const ReservationDetail = ({
 				rootTotal: day.rootPrice * section.count,
 				finalTotal: day.finalPrice * section.count,
 				clientTotal: day.clientPrice * section.count,
-				netTotal: day.netAfterExpenses * section.count,
-				otaExpenseTotal: day.otaExpense * section.count,
-				platformMarginTotal: day.platformMargin * section.count,
-				commissionTotal: day.commission * section.count,
+				netTotal:
+					day.netAfterExpenses === null
+						? null
+						: day.netAfterExpenses * section.count,
+				otaExpenseTotal:
+					day.otaExpense === null ? null : day.otaExpense * section.count,
+				platformMarginTotal:
+					day.platformMargin === null
+						? null
+						: day.platformMargin * section.count,
+				commissionTotal:
+					day.commission === null ? null : day.commission * section.count,
 			}));
 			const total = dayRows.reduce((sum, day) => sum + day.clientTotal, 0);
 			const rootTotal = dayRows.reduce((sum, day) => sum + day.rootTotal, 0);
-			const netTotal = dayRows.reduce((sum, day) => sum + day.netTotal, 0);
-			const otaExpenseTotal = dayRows.reduce(
-				(sum, day) => sum + day.otaExpenseTotal,
-				0,
-			);
-			const platformMarginTotal = dayRows.reduce(
-				(sum, day) => sum + day.platformMarginTotal,
-				0,
-			);
-			const commissionTotal = dayRows.reduce(
-				(sum, day) => sum + day.commissionTotal,
-				0,
-			);
+			const sumComplete = (field) =>
+				dayRows.some((day) => day[field] === null)
+					? null
+					: dayRows.reduce((sum, day) => sum + day[field], 0);
+			const netTotal = sumComplete("netTotal");
+			const otaExpenseTotal = sumComplete("otaExpenseTotal");
+			const platformMarginTotal = sumComplete("platformMarginTotal");
+			const commissionTotal = sumComplete("commissionTotal");
 			return {
 				...section,
 				dayRows,
@@ -7494,23 +7657,19 @@ const ReservationDetail = ({
 			};
 		});
 
+		const sumCompleteSections = (field) =>
+			sections.some((section) => section[field] === null)
+				? null
+				: sections.reduce((sum, section) => sum + section[field], 0);
+
 		return {
 			sections,
 			total: sections.reduce((sum, section) => sum + section.total, 0),
 			rootTotal: sections.reduce((sum, section) => sum + section.rootTotal, 0),
-			netTotal: sections.reduce((sum, section) => sum + section.netTotal, 0),
-			otaExpenseTotal: sections.reduce(
-				(sum, section) => sum + section.otaExpenseTotal,
-				0,
-			),
-			platformMarginTotal: sections.reduce(
-				(sum, section) => sum + section.platformMarginTotal,
-				0,
-			),
-			commissionTotal: sections.reduce(
-				(sum, section) => sum + section.commissionTotal,
-				0,
-			),
+			netTotal: sumCompleteSections("netTotal"),
+			otaExpenseTotal: sumCompleteSections("otaExpenseTotal"),
+			platformMarginTotal: sumCompleteSections("platformMarginTotal"),
+			commissionTotal: sumCompleteSections("commissionTotal"),
 			roomUnits: sections.reduce((sum, section) => sum + section.count, 0),
 			nights: Math.max(
 				daysOfResidence || 0,
@@ -7524,6 +7683,10 @@ const ReservationDetail = ({
 	}, [
 		chosenLanguage,
 		daysOfResidence,
+		hotelRunnerPayoutDisplay.netAvailable,
+		hotelRunnerPayoutDisplay.otaExpenseAvailable,
+		hotelRunnerPayoutDisplay.platformMarginAvailable,
+		isHotelRunnerPricingReservation,
 		normalizeNumber,
 		reservation?.adminPricing?.mode,
 		reservation?.adminPricingVisibility,
@@ -7630,7 +7793,9 @@ const ReservationDetail = ({
 					reservation?.sub_total,
 					totalAmountValue,
 			  );
-		const netAfterExpenses = firstPositiveMoney(
+		const netAfterExpenses = isHotelRunnerPricingReservation
+			? hotelRunnerPayoutDisplay.netAmount
+			: firstPositiveMoney(
 			...(preferAdminPricingTotals
 				? [
 						adminPricing.netAfterExpensesTotal,
@@ -7651,7 +7816,11 @@ const ReservationDetail = ({
 						totalAmountValue,
 				  ]),
 		);
-		const profit = firstMoney(
+		const profit = isHotelRunnerPricingReservation
+			? hotelRunnerPayoutDisplay.platformMarginAvailable
+				? hotelRunnerPayoutDisplay.platformMarginAmount
+				: null
+			: firstMoney(
 			...(preferAdminPricingTotals
 				? [
 						adminPricing.platformMarginTotal,
@@ -7669,18 +7838,42 @@ const ReservationDetail = ({
 				  ]),
 		);
 		const commissionToInclude =
-			explicitCommissionAmount > 0 ? explicitCommissionAmount : 0;
+			(!isHotelRunnerPricingReservation ||
+				(hotelRunnerPayoutDisplay.platformMarginAvailable &&
+					commissionAvailable)) &&
+			commissionAmount > 0
+				? commissionAmount
+				: 0;
 
 		return {
 			show: true,
 			hotelVisibleAmount,
 			netAfterExpenses,
 			profit,
+			netAvailable:
+				!isHotelRunnerPricingReservation ||
+				hotelRunnerPayoutDisplay.netAvailable,
+			expenseAvailable:
+				!isHotelRunnerPricingReservation ||
+				hotelRunnerPayoutDisplay.otaExpenseAvailable,
+			profitAvailable:
+				!isHotelRunnerPricingReservation ||
+				hotelRunnerPayoutDisplay.platformMarginAvailable,
+			payoutVerified: hotelRunnerPayoutDisplay.verified,
 			includesCommission: commissionToInclude > 0,
-			profitWithCommission: profit + commissionToInclude,
+			profitWithCommission:
+				profit === null ? null : profit + commissionToInclude,
 		};
 	}, [
-		explicitCommissionAmount,
+		commissionAmount,
+		commissionAvailable,
+		hotelRunnerPayoutDisplay.netAmount,
+		hotelRunnerPayoutDisplay.netAvailable,
+		hotelRunnerPayoutDisplay.otaExpenseAvailable,
+		hotelRunnerPayoutDisplay.platformMarginAmount,
+		hotelRunnerPayoutDisplay.platformMarginAvailable,
+		hotelRunnerPayoutDisplay.verified,
+		isHotelRunnerPricingReservation,
 		normalizeNumber,
 		pricingBreakdownByDay.hasDailyPricing,
 		pricingBreakdownByDay.netTotal,
@@ -7699,13 +7892,39 @@ const ReservationDetail = ({
 		totalAmountValue,
 	]);
 	const paymentBreakdownTotalDisplay = getPaymentBreakdownTotalDisplay({
-		grossTotal: totalAmountValue,
+		grossTotal: financialTotalAmountValue,
 		hasOtaPricing: otaPricingSummary.show,
 		adminPricing: reservation?.adminPricing,
 		otaFinancialSummary:
 			reservation?.ota_financial_summary || reservation?.otaFinancialSummary,
 		canViewPlatformProfit: isConfiguredSuperAdmin,
+		isHotelRunner: isHotelRunnerPricingReservation,
+		reservation,
 	});
+	const pricingCurrencyLabel =
+		chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR";
+	const renderGuestPricingAmount = (value) =>
+		isHotelRunnerPricingReservation && !financialTotalAmountAvailable ? (
+			<span className='pricing-unavailable'>Canonical gross unavailable</span>
+		) : (
+			<>
+				{formatMoney(value)} {pricingCurrencyLabel}
+			</>
+		);
+	const renderCommercialPricingAmount = (
+		value,
+		unavailableLabel = "Awaiting verified OTA payout",
+	) =>
+		isHotelRunnerPricingReservation &&
+		(value === null || value === undefined) ? (
+			<span className='pricing-unavailable'>
+				{chosenLanguage === "Arabic" ? "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d" : unavailableLabel}
+			</span>
+		) : (
+			<>
+				{formatMoney(value)} {pricingCurrencyLabel}
+			</>
+		);
 
 	const roomTypeAccommodationPricing = useMemo(() => {
 		const grouped = new Map();
@@ -8488,7 +8707,8 @@ const ReservationDetail = ({
 											Total Amount
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{formatMoney(paymentBreakdownTotalDisplay.amount)} SAR
+											{formatOptionalMoney(paymentBreakdownTotalDisplay.amount)}
+											{paymentBreakdownTotalDisplay.amount === null ? "" : " SAR"}
 										</div>
 										{paymentBreakdownTotalDisplay.usesPlatformAmount ? (
 											<div style={{ fontSize: "0.72rem", color: "#777" }}>
@@ -8514,7 +8734,8 @@ const ReservationDetail = ({
 											Remaining
 										</div>
 										<div style={{ fontWeight: "bold", color: "#1b6b34" }}>
-											{formatMoney(remainingPaymentAmount)} SAR
+											{formatOptionalMoney(remainingPaymentAmount)}
+											{remainingPaymentAmount === null ? "" : " SAR"}
 										</div>
 										{paymentBreakdownTotalDisplay.usesPlatformAmount ? (
 											<div style={{ fontSize: "0.72rem", color: "#777" }}>
@@ -8921,7 +9142,11 @@ const ReservationDetail = ({
 											: "PMS owes hotel"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(financeCycleSummary.hotelPayoutDue)} SAR
+										{financeCycleSummary.hotelPayoutDue === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${formatMoney(financeCycleSummary.hotelPayoutDue)} SAR`}
 									</strong>
 								</div>
 								<div className='cycle-mini-card'>
@@ -8931,7 +9156,11 @@ const ReservationDetail = ({
 											: "Hotel owes PMS"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(financeCycleSummary.commissionDueToPms)} SAR
+										{financeCycleSummary.commissionDueToPms === null
+											? chosenLanguage === "Arabic"
+												? "بانتظار مراجعة المالية"
+												: "Awaiting finance review"
+											: `${formatMoney(financeCycleSummary.commissionDueToPms)} SAR`}
 									</strong>
 								</div>
 							</div>
@@ -9038,13 +9267,20 @@ const ReservationDetail = ({
 											: "Client/Main Total"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(pricingBreakdownByDay.total || totalAmountValue)}{" "}
-										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+								{renderGuestPricingAmount(
+									isHotelRunnerPricingReservation
+										? financialTotalAmountValue
+										: pricingBreakdownByDay.total || financialTotalAmountValue,
+								)}
 									</strong>
 								</div>
 								<div className='pricing-summary-card'>
 									<span>
-										{chosenLanguage === "Arabic"
+										{isHotelRunnerPricingReservation
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.localContractedAmount
+												: "Local Contracted Amount"
+											: chosenLanguage === "Arabic"
 											? AR_LABELS.rootPrice
 											: "Root Total"}
 									</span>
@@ -9060,8 +9296,9 @@ const ReservationDetail = ({
 											: "Net After Expenses"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(pricingBreakdownByDay.netTotal)}{" "}
-										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{renderCommercialPricingAmount(
+											pricingBreakdownByDay.netTotal,
+										)}
 									</strong>
 								</div>
 								<div className='pricing-summary-card'>
@@ -9071,8 +9308,10 @@ const ReservationDetail = ({
 											: "OTA/Other Expenses"}
 									</span>
 									<strong className='detail-value-ltr'>
-										{formatMoney(pricingBreakdownByDay.otaExpenseTotal)}{" "}
-										{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{renderCommercialPricingAmount(
+											pricingBreakdownByDay.otaExpenseTotal,
+											"Awaiting verified OTA expense",
+										)}
 									</strong>
 								</div>
 								{isConfiguredSuperAdmin ? (
@@ -9083,8 +9322,10 @@ const ReservationDetail = ({
 												: "Platform Margin"}
 										</span>
 										<strong className='detail-value-ltr'>
-											{formatMoney(pricingBreakdownByDay.platformMarginTotal)}{" "}
-											{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{renderCommercialPricingAmount(
+											pricingBreakdownByDay.platformMarginTotal,
+											"Awaiting verified platform margin",
+										)}
 										</strong>
 									</div>
 								) : null}
@@ -9133,7 +9374,11 @@ const ReservationDetail = ({
 																: "Client/Main"}
 														</th>
 														<th>
-															{chosenLanguage === "Arabic"
+									{isHotelRunnerPricingReservation
+										? chosenLanguage === "Arabic"
+											? AR_LABELS.localContractedAmount
+											: "Local Contracted"
+										: chosenLanguage === "Arabic"
 																? AR_LABELS.rootPrice
 																: "Root"}
 														</th>
@@ -9147,7 +9392,7 @@ const ReservationDetail = ({
 																? AR_LABELS.otaOtherExpense
 																: "OTA/Other Expense"}
 														</th>
-														{isConfiguredSuperAdmin ? (
+								{isConfiguredSuperAdmin ? (
 															<th>
 																{chosenLanguage === "Arabic"
 																	? AR_LABELS.platformMargin
@@ -9176,10 +9421,7 @@ const ReservationDetail = ({
 															<tr key={`${section.key}-${dayIndex}`}>
 																<td>{dateLabel}</td>
 																<td className='detail-value-ltr'>
-																	{formatMoney(day.clientPrice)}{" "}
-																	{chosenLanguage === "Arabic"
-																		? AR_LABELS.currency
-																		: "SAR"}
+																			{renderGuestPricingAmount(day.clientPrice)}
 																</td>
 																<td className='detail-value-ltr'>
 																	{formatMoney(day.rootPrice)}{" "}
@@ -9188,31 +9430,27 @@ const ReservationDetail = ({
 																		: "SAR"}
 																</td>
 																<td className='detail-value-ltr'>
-																	{formatMoney(day.netAfterExpenses)}{" "}
-																	{chosenLanguage === "Arabic"
-																		? AR_LABELS.currency
-																		: "SAR"}
+									{renderCommercialPricingAmount(
+										day.netAfterExpenses,
+									)}
 																</td>
 																<td className='detail-value-ltr'>
-																	{formatMoney(day.otaExpense)}{" "}
-																	{chosenLanguage === "Arabic"
-																		? AR_LABELS.currency
-																		: "SAR"}
+									{renderCommercialPricingAmount(
+										day.otaExpense,
+										"Awaiting verified OTA expense",
+									)}
 																</td>
-																{isConfiguredSuperAdmin ? (
+								{isConfiguredSuperAdmin ? (
 																	<td className='detail-value-ltr'>
-																		{formatMoney(day.platformMargin)}{" "}
-																		{chosenLanguage === "Arabic"
-																			? AR_LABELS.currency
-																			: "SAR"}
+																				{renderCommercialPricingAmount(
+																					day.platformMargin,
+																					"Awaiting verified platform margin",
+																				)}
 																	</td>
 																) : null}
 																<td>{section.count}</td>
 																<td className='detail-value-ltr'>
-																	{formatMoney(day.clientTotal)}{" "}
-																	{chosenLanguage === "Arabic"
-																		? AR_LABELS.currency
-																		: "SAR"}
+																			{renderGuestPricingAmount(day.clientTotal)}
 																</td>
 															</tr>
 														);
@@ -9226,10 +9464,7 @@ const ReservationDetail = ({
 																: "Room Total"}
 														</td>
 														<td className='detail-value-ltr'>
-															{formatMoney(section.total)}{" "}
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.currency
-																: "SAR"}
+																	{renderGuestPricingAmount(section.total)}
 														</td>
 														<td className='detail-value-ltr'>
 															{formatMoney(section.rootTotal)}{" "}
@@ -9238,31 +9473,25 @@ const ReservationDetail = ({
 																: "SAR"}
 														</td>
 														<td className='detail-value-ltr'>
-															{formatMoney(section.netTotal)}{" "}
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.currency
-																: "SAR"}
+								{renderCommercialPricingAmount(section.netTotal)}
 														</td>
 														<td className='detail-value-ltr'>
-															{formatMoney(section.otaExpenseTotal)}{" "}
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.currency
-																: "SAR"}
+								{renderCommercialPricingAmount(
+									section.otaExpenseTotal,
+									"Awaiting verified OTA expense",
+								)}
 														</td>
-														{isConfiguredSuperAdmin ? (
+							{isConfiguredSuperAdmin ? (
 															<td className='detail-value-ltr'>
-																{formatMoney(section.platformMarginTotal)}{" "}
-																{chosenLanguage === "Arabic"
-																	? AR_LABELS.currency
-																	: "SAR"}
+																{renderCommercialPricingAmount(
+																	section.platformMarginTotal,
+																	"Awaiting verified platform margin",
+															)}
 															</td>
 														) : null}
 														<td>{section.count}</td>
 														<td className='detail-value-ltr'>
-															{formatMoney(section.total)}{" "}
-															{chosenLanguage === "Arabic"
-																? AR_LABELS.currency
-																: "SAR"}
+																	{renderGuestPricingAmount(section.total)}
 														</td>
 													</tr>
 												</tfoot>
@@ -9908,8 +10137,12 @@ const ReservationDetail = ({
 									</strong>
 								</div>
 								<div className='top-amount'>
-									{formatMoney(totalAmountValue)}{" "}
-									{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+									{formatOptionalMoney(financialTotalAmountValue)}{" "}
+									{financialTotalAmountAvailable
+										? chosenLanguage === "Arabic"
+											? AR_LABELS.currency
+											: "SAR"
+										: ""}
 								</div>
 							</Section>
 							<Section
@@ -10048,10 +10281,12 @@ const ReservationDetail = ({
 													: "Total Amount"}
 											</div>
 											<h4 className='mx-2'>
-												{reservation
-													? reservation.total_amount.toLocaleString()
-													: 0}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{formatOptionalMoney(financialTotalAmountValue)}{" "}
+										{financialTotalAmountAvailable
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.currency
+												: "SAR"
+											: ""}
 											</h4>
 										</div>
 										<div className='col-md-12'>
@@ -10859,7 +11094,11 @@ const ReservationDetail = ({
 													<div className='workflow-ledger-row' key={row.label}>
 														<span>{row.label}</span>
 														<strong className={`detail-value-ltr ${row.tone}`}>
-															{formatMoney(row.value)} SAR
+													{row.available === false
+														? chosenLanguage === "Arabic"
+															? "بانتظار مراجعة المالية"
+															: "Awaiting finance review"
+														: `${formatMoney(row.value)} SAR`}
 														</strong>
 													</div>
 												))
@@ -11022,7 +11261,11 @@ const ReservationDetail = ({
 															<div
 																className={`payment-preview-amount ${row.tone} detail-value-ltr`}
 															>
-																{formatMoney(row.value)} SAR
+														{row.available === false
+															? chosenLanguage === "Arabic"
+																? "بانتظار مراجعة المالية"
+																: "Awaiting finance review"
+															: `${formatMoney(row.value)} SAR`}
 															</div>
 															<div className='payment-preview-label'>
 																{row.label}
@@ -11398,7 +11641,11 @@ const ReservationDetail = ({
 										<div className='finance-cycle-meta'>
 											<span>{financeCycleSummary.collectionLabel}</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(commissionAmount)} SAR
+												{commissionAvailable
+													? `${formatMoney(commissionAmount)} SAR`
+													: chosenLanguage === "Arabic"
+													  ? "بانتظار مراجعة المالية"
+													  : "Awaiting finance review"}
 											</strong>
 										</div>
 										{canManageFinanceCycle ? (
@@ -11470,8 +11717,12 @@ const ReservationDetail = ({
 													: "Reservation Value"}
 											</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(totalAmountValue)}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{formatOptionalMoney(financialTotalAmountValue)}{" "}
+										{financialTotalAmountAvailable
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.currency
+												: "SAR"
+											: ""}
 											</strong>
 										</div>
 										<div className='payment-total-card paid'>
@@ -11496,15 +11747,23 @@ const ReservationDetail = ({
 													: "Amount Due"}
 											</span>
 											<strong className='detail-value-ltr'>
-												{formatMoney(amountDue)}{" "}
-												{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{formatOptionalMoney(amountDue)}{" "}
+										{amountDue !== null
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.currency
+												: "SAR"
+											: ""}
 											</strong>
 										</div>
 										{otaPricingSummary.show ? (
 											<>
 												<div className='payment-total-card hotel-visible'>
 													<span>
-														{chosenLanguage === "Arabic"
+										{isHotelRunnerPricingReservation
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.localContractedAmount
+												: "Local Contracted Amount"
+											: chosenLanguage === "Arabic"
 															? AR_LABELS.hotelVisibleAmount
 															: "Hotel Can See"}
 													</span>
@@ -11520,11 +11779,21 @@ const ReservationDetail = ({
 															: "After OTA Expenses"}
 													</span>
 													<strong className='detail-value-ltr'>
+										{otaPricingSummary.netAvailable ? (
+											<>
 														{formatMoney(otaPricingSummary.netAfterExpenses)}{" "}
-														{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+												{chosenLanguage === "Arabic"
+													? AR_LABELS.currency
+													: "SAR"}
+											</>
+										) : chosenLanguage === "Arabic" ? (
+											AR_LABELS.awaitingVerifiedOtaPayout
+										) : (
+											"Awaiting verified OTA payout"
+										)}
 													</strong>
 												</div>
-												{isConfiguredSuperAdmin ? (
+								{isConfiguredSuperAdmin ? (
 													<div className='payment-total-card profit'>
 														<span>
 															{chosenLanguage === "Arabic"
@@ -11536,18 +11805,23 @@ const ReservationDetail = ({
 																  : "Platform Profit"}
 														</span>
 														<strong className='detail-value-ltr'>
-															{formatMoney(
-																otaPricingSummary.includesCommission
-																	? otaPricingSummary.profitWithCommission
-																	: otaPricingSummary.profit,
-															)}{" "}
-															{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+																{renderCommercialPricingAmount(
+																	otaPricingSummary.includesCommission
+																		? otaPricingSummary.profitWithCommission
+																		: otaPricingSummary.profit,
+																	"Awaiting verified platform profit",
+																)}
 														</strong>
 													</div>
 												) : null}
 											</>
 										) : null}
 									</div>
+
+					<HotelRunnerPricingBreakdown
+						reservation={reservation}
+						chosenLanguage={chosenLanguage}
+					/>
 
 									<BofaCapturedPaymentSummary reservation={reservation} />
 								</div>
@@ -11579,8 +11853,12 @@ const ReservationDetail = ({
 												: "Total Amount"}
 										</div>
 										<div style={{ fontWeight: "bold" }}>
-											{reservation && reservation.total_amount.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{formatOptionalMoney(financialTotalAmountValue)}{" "}
+										{financialTotalAmountAvailable
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.currency
+												: "SAR"
+											: ""}
 										</div>
 									</div>
 								</div>
@@ -11600,10 +11878,14 @@ const ReservationDetail = ({
 											{chosenLanguage === "Arabic" ? "عمولة" : "Commision"}
 										</div>
 										<div className='col-md-5 mx-auto text-center my-2'>
-											{reservation &&
-												reservation.commission &&
-												reservation.commission.toLocaleString()}{" "}
-											{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
+										{commissionAvailable
+											? formatMoney(commissionAmount)
+											: "—"}{" "}
+										{commissionAvailable
+											? chosenLanguage === "Arabic"
+												? AR_LABELS.currency
+												: "SAR"
+											: ""}
 										</div>
 									</div>
 								</div>
@@ -11618,7 +11900,10 @@ const ReservationDetail = ({
 											</h4>
 										</div>
 										<div className='col-md-5 mx-auto'>
-											<h3>{formatMoney(totalAmountValue)} SAR</h3>
+											<h3>
+												{formatOptionalMoney(financialTotalAmountValue)}
+												{financialTotalAmountAvailable ? " SAR" : ""}
+											</h3>
 										</div>
 
 										{displayPaymentLabel ? (
@@ -11683,7 +11968,7 @@ const ReservationDetail = ({
 											</div>
 										) : null}
 
-										{totalAmountValue > 0 ? (
+									{financialTotalAmountAvailable && financialTotalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h4>
 													{chosenLanguage === "Arabic"
@@ -11692,10 +11977,10 @@ const ReservationDetail = ({
 												</h4>
 											</div>
 										) : null}
-										{totalAmountValue > 0 ? (
+									{financialTotalAmountAvailable && financialTotalAmountValue > 0 ? (
 											<div className='col-md-5 mx-auto'>
 												<h3 style={{ color: "darkgreen" }}>
-													{formatMoney(amountDue)} SAR
+											{formatOptionalMoney(amountDue)} SAR
 												</h3>
 											</div>
 										) : null}

@@ -3,6 +3,8 @@ import React, { forwardRef, useState } from "react";
 import styled from "styled-components";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { updateSingleReservation } from "../../HotelModule/apiAdmin";
+import { getReceiptPricingDisplay } from "./receiptPricingDisplay";
+import { buildReceiptSupplierUpdatePayload } from "./hotelRunnerPricingEditPolicy";
 
 const formatReceiptDate = (value) =>
 	formatSaudiGregorianDate(value, {
@@ -91,6 +93,16 @@ const ReceiptPDFB2B = forwardRef(
 					}, 0) || 0;
 				return acc + roomTotal;
 			}, 0) || 0;
+		const legacyAccommodationAmount =
+			hotelDetails?.wholeSaleHotel || reservation?.wholeSaleReservation
+				? safeNumber(reservation?.total_amount)
+				: totalRootPrice;
+		const receiptPricing = getReceiptPricingDisplay(
+			reservation,
+			legacyAccommodationAmount,
+		);
+		const accommodationAmount = receiptPricing.amount;
+		const accommodationAmountAvailable = receiptPricing.available === true;
 
 		const deposit =
 			reservation?.payment_details?.onsite_paid_amount > 0
@@ -109,18 +121,16 @@ const ReceiptPDFB2B = forwardRef(
 				  : 0;
 
 		// eslint-disable-next-line
-		const remainder = totalRootPrice - deposit;
+		const remainder = accommodationAmountAvailable
+			? accommodationAmount - deposit
+			: null;
 
 		const handleSupplierNameOk = async () => {
 			setSupplierName(tempSupplierName);
 			setIsModalVisible(false);
-			const updateData = {
-				supplierData: {
-					supplierName: tempSupplierName,
-					suppliedBookingNo: supplierBookingNo,
-				},
-				sendEmail: false,
-			};
+			const updateData = buildReceiptSupplierUpdatePayload({
+				supplierName: tempSupplierName,
+			});
 			updateSingleReservation(reservation._id, updateData).then((response) => {
 				if (response.error) console.error(response.error);
 			});
@@ -131,13 +141,9 @@ const ReceiptPDFB2B = forwardRef(
 		const handleSupplierBookingNoOk = async () => {
 			setSupplierBookingNo(tempSupplierBookingNo);
 			setIsBookingNoModalVisible(false);
-			const updateData = {
-				supplierData: {
-					supplierName,
-					suppliedBookingNo: tempSupplierBookingNo,
-				},
-				sendEmail: false,
-			};
+			const updateData = buildReceiptSupplierUpdatePayload({
+				suppliedBookingNo: tempSupplierBookingNo,
+			});
 			updateSingleReservation(reservation._id, updateData).then((response) => {
 				if (response.error) console.error(response.error);
 			});
@@ -194,14 +200,16 @@ const ReceiptPDFB2B = forwardRef(
 							{reservation?.payment_details?.onsite_paid_amount > 0
 								? "Paid Offline"
 								: hasCardNumber
-								  ? "Deposit Amount"
+								  ? receiptPricing.isHotelRunner
+									? "Local Contracted/Base Deposit"
+									: "Deposit Amount"
 								  : "Payment Status"}
 						</strong>
 						<div>
 							{reservation?.payment_details?.onsite_paid_amount > 0
 								? safeNumber(
 										reservation.payment_details.onsite_paid_amount
-								  ).toFixed(2) + " SAR"
+								  ).toFixed(2) + ` ${receiptPricing.currency}`
 								: hasCardNumber
 								  ? deposit.toFixed(2) + " SAR"
 								  : "Not Paid"}
@@ -248,7 +256,9 @@ const ReceiptPDFB2B = forwardRef(
 								{reservation?.payment_details?.onsite_paid_amount > 0
 									? "Paid Offline"
 									: hasCardNumber
-									  ? "Deposit Required"
+									  ? receiptPricing.isHotelRunner
+										? "Local Contracted/Base Deposit Required"
+										: "Deposit Required"
 									  : "Not Paid"}
 							</td>
 						</tr>
@@ -262,8 +272,16 @@ const ReceiptPDFB2B = forwardRef(
 							<th>Qty</th>
 							<th>Extras</th>
 							<th>Nights</th>
-							<th>Rate (Avg Root Price)</th>
-							<th>Total</th>
+							<th>
+								{receiptPricing.isHotelRunner
+									? "Rate (Local Contracted/Base)"
+									: "Rate (Avg Root Price)"}
+							</th>
+							<th>
+								{receiptPricing.isHotelRunner
+									? "Local Contracted/Base Total"
+									: "Total"}
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -287,48 +305,43 @@ const ReceiptPDFB2B = forwardRef(
 				</table>
 				<div className='summary'>
 					<div>
-						{/* 
-							-- If wholesale, always display reservation.total_amount as the Net 
-							-- to match your “1500.00” example exactly. Otherwise, normal root sum.
-						*/}
-						<strong>Net Accommodation Charge:</strong>{" "}
-						{(hotelDetails?.wholeSaleHotel || reservation?.wholeSaleReservation
-							? safeNumber(reservation?.total_amount)
-							: totalRootPrice
-						).toFixed(2)}{" "}
-						SAR
+						{/* Legacy reservations keep their original wholesale/root total.
+						    Direct HotelRunner reservations use the canonical guest gross. */}
+						<strong>{receiptPricing.accommodationLabel}:</strong>{" "}
+						{accommodationAmountAvailable
+							? `${accommodationAmount.toFixed(2)} ${receiptPricing.currency}`
+							: "—"}
 					</div>
 					{reservation?.payment_details?.onsite_paid_amount > 0 ? (
 						<div>
 							<strong>Total To Be Collected:</strong>{" "}
-							{Math.max(
-								0,
-								(hotelDetails?.wholeSaleHotel ||
-								reservation?.wholeSaleReservation
-									? safeNumber(reservation?.total_amount)
-									: totalRootPrice) -
-									safeNumber(reservation.payment_details.onsite_paid_amount)
-							).toFixed(2)}{" "}
-							SAR
+							{accommodationAmountAvailable
+								? `${Math.max(
+										0,
+										accommodationAmount -
+											safeNumber(
+												reservation.payment_details.onsite_paid_amount,
+											),
+									).toFixed(2)} ${receiptPricing.currency}`
+								: "—"}
 						</div>
 					) : hasCardNumber ? (
 						<>
 							<div>
-								<strong>Deposit (First Night):</strong> {deposit.toFixed(2)} SAR
+								<strong>
+									{receiptPricing.isHotelRunner
+										? "Deposit (First Night Local Contracted/Base)"
+										: "Deposit (First Night)"}
+									:
+								</strong>{" "}
+								{deposit.toFixed(2)} SAR
 							</div>
 							<div>
-								{/* 
-										-- “Remainder” = net - deposit, but never negative 
-									*/}
+								{/* Never expose a negative amount due. */}
 								<strong>Total To Be Collected:</strong>{" "}
-								{Math.max(
-									0,
-									(hotelDetails?.wholeSaleHotel ||
-									reservation?.wholeSaleReservation
-										? safeNumber(reservation?.total_amount)
-										: totalRootPrice) - deposit
-								).toFixed(2)}{" "}
-								SAR
+								{accommodationAmountAvailable
+									? `${Math.max(0, accommodationAmount - deposit).toFixed(2)} ${receiptPricing.currency}`
+									: "—"}
 							</div>
 						</>
 					) : (

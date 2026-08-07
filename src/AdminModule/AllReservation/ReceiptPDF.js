@@ -5,6 +5,11 @@ import { updateSingleReservation } from "../apiAdmin";
 import OfficialReceipt from "../../components/OfficialReceipt/OfficialReceipt";
 import ReceiptViewport from "../../components/OfficialReceipt/ReceiptViewport";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import { getReceiptPricingDisplay } from "./receiptPricingDisplay";
+import {
+	buildReceiptSupplierUpdatePayload,
+	protectHotelRunnerEditorPayload,
+} from "./hotelRunnerPricingEditPolicy";
 
 const dateTimeValue = (value) => {
 	const time = new Date(value || 0).getTime();
@@ -56,7 +61,12 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 		[localResv?.createdAt, reservation?.createdAt],
 	);
 
-	const totalAmount = safeNumber(localResv?.total_amount);
+	const receiptPricing = getReceiptPricingDisplay(
+		localResv,
+		safeNumber(localResv?.total_amount),
+	);
+	const totalAmount = receiptPricing.amount;
+	const totalAmountAvailable = receiptPricing.available === true;
 
 	const paymentStatus = (localResv?.payment || "").toLowerCase();
 	const isNotCapturedStatus =
@@ -77,12 +87,16 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 	const toCents = (n) => Math.round(Number(n || 0) * 100);
 
 	const isFullyPaid =
-		toCents(totalPaid) >= toCents(totalAmount) && totalPaid > 0;
+		totalAmountAvailable &&
+		toCents(totalPaid) >= toCents(totalAmount) &&
+		totalPaid > 0;
 
 	const isNotPaid = toCents(totalPaid) === 0 && paymentStatus === "not paid";
 
 	const depositPercentage =
-		totalAmount > 0 ? ((totalPaid / totalAmount) * 100).toFixed(0) : 0;
+		totalAmountAvailable && totalAmount > 0
+			? ((totalPaid / totalAmount) * 100).toFixed(0)
+			: null;
 
 	const calculateNights = (checkin, checkout) => {
 		const start = new Date(checkin);
@@ -147,16 +161,15 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 		const sameText = (left, right) =>
 			String(left || "").trim() === String(right || "").trim();
 
-		// Build base update payload
-		const updateData = {
-			supplierData: {
-				...(localResv?.supplierData || {}),
-				supplierName,
-				suppliedBookingNo: supplierBookingNo,
-			},
-			// Avoid auto emails from tiny edits; toggle if you like
-			sendEmail: false,
-		};
+		// Send only editable supplier leaves; never echo the supplier snapshot.
+		const supplierUpdates = {};
+		if (!sameText(supplierName, localResv?.supplierData?.supplierName)) {
+			supplierUpdates.supplierName = supplierName;
+		}
+		if (!sameText(supplierBookingNo, currentSupplierBookingNo)) {
+			supplierUpdates.suppliedBookingNo = supplierBookingNo;
+		}
+		const updateData = buildReceiptSupplierUpdatePayload(supplierUpdates);
 		const bookingSource = String(vals.bookingSource || "").trim();
 		if (!sameText(bookingSource, localResv?.booking_source)) {
 			updateData.booking_source = bookingSource;
@@ -241,7 +254,11 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 
 		setSaving(true);
 		try {
-			const resp = await updateSingleReservation(localResv._id, updateData);
+			const safeUpdateData = protectHotelRunnerEditorPayload(
+				localResv,
+				updateData,
+			);
+			const resp = await updateSingleReservation(localResv._id, safeUpdateData);
 			const updated = resp?.reservation || resp?.updatedReservation || resp;
 
 			if (updated && updated._id) {
@@ -259,7 +276,15 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 						...prev,
 						supplierData: {
 							...(prev?.supplierData || {}),
-							...updateData.supplierData,
+							...(updateData["supplierData.supplierName"] !== undefined
+								? { supplierName: updateData["supplierData.supplierName"] }
+								: {}),
+							...(updateData["supplierData.suppliedBookingNo"] !== undefined
+								? {
+										suppliedBookingNo:
+											updateData["supplierData.suppliedBookingNo"],
+								  }
+								: {}),
 						},
 						booking_source:
 							updateData.booking_source !== undefined
@@ -381,21 +406,29 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 							    ? "Not Paid"
 							    : isNotCapturedStatus
 							      ? "Not Captured"
-							      : `${depositPercentage}% Deposit`}
+							      : totalAmountAvailable
+							        ? `${depositPercentage}% Deposit`
+							        : "Total unavailable"}
 					</strong>
 
 					<div>
 						<Clickable onClick={openUpdateModal}>
 							{paidAmountOffline > 0 ? (
-								<>{Number((totalPaid / totalAmount) * 100).toFixed(2)}%</>
+								<>
+									{totalAmountAvailable
+										? `${Number((totalPaid / totalAmount) * 100).toFixed(2)}%`
+										: "Total unavailable"}
+								</>
 							) : isFullyPaid ? (
-								`${totalPaid.toFixed(2)} SAR`
+								`${totalPaid.toFixed(2)} ${receiptPricing.currency}`
 							) : isNotPaid ? (
 								"Not Paid"
 							) : isNotCapturedStatus ? (
 								"Not Captured"
 							) : (
-								`${depositPercentage}% Deposit`
+								totalAmountAvailable
+									? `${depositPercentage}% Deposit`
+									: "Total unavailable"
 							)}
 						</Clickable>
 					</div>
@@ -451,7 +484,9 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 									    ? "Not Paid"
 									    : isNotCapturedStatus
 									      ? "Not Captured"
-									      : `${depositPercentage}% Deposit`}
+								      : totalAmountAvailable
+								        ? `${depositPercentage}% Deposit`
+								        : "Total unavailable"}
 							</Clickable>
 						</td>
 					</tr>
@@ -486,9 +521,13 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 								<td>{room.count}</td>
 								<td>N/T</td>
 								<td>{nights}</td>
-								<td>{rate > 0 ? `${rate} SAR` : "N/A"}</td>
 								<td>
-									{totalPrice > 0 ? `${totalPrice.toFixed(2)} SAR` : "N/A"}
+									{rate > 0 ? `${rate} ${receiptPricing.currency}` : "N/A"}
+								</td>
+								<td>
+									{totalPrice > 0
+										? `${totalPrice.toFixed(2)} ${receiptPricing.currency}`
+										: "N/A"}
 								</td>
 							</tr>
 						);
@@ -499,18 +538,21 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 			{/* Payment Summary */}
 			<div className='summary'>
 				<div>
-					<strong>Net Accommodation Charge:</strong> {totalAmount.toFixed(2)}{" "}
-					SAR
+					<strong>{receiptPricing.accommodationLabel}:</strong>{" "}
+					{totalAmountAvailable
+						? `${totalAmount.toFixed(2)} ${receiptPricing.currency}`
+						: "—"}
 				</div>
 
 				{isFullyPaid ? (
 					<div>
-						<strong>Paid Amount:</strong> {totalPaid.toFixed(2)} SAR
+						<strong>Paid Amount:</strong> {totalPaid.toFixed(2)}{" "}
+						{receiptPricing.currency}
 					</div>
 				) : paidAmountOffline > 0 && paidAmountAuthorized === 0 ? (
 					<div>
 						<strong>Paid Amount Onsite:</strong> {paidAmountOffline.toFixed(2)}{" "}
-						SAR
+						{receiptPricing.currency}
 					</div>
 				) : isNotPaid ? (
 					<div>
@@ -522,18 +564,21 @@ const ReceiptPDF = forwardRef(function ReceiptPDF(
 					</div>
 				) : paidAmountAuthorized > 0 ? (
 					<div>
-						<strong>Deposit:</strong> {paidAmountAuthorized.toFixed(2)} SAR
+						<strong>Deposit:</strong> {paidAmountAuthorized.toFixed(2)}{" "}
+						{receiptPricing.currency}
 					</div>
 				) : null}
 
 				{(() => {
-					const remaining = Math.max(
-						0,
-						Number((totalAmount - totalPaid).toFixed(2)),
-					);
+					const remaining = totalAmountAvailable
+						? Math.max(0, Number((totalAmount - totalPaid).toFixed(2)))
+						: null;
 					return (
 						<div>
-							<strong>Total To Be Collected:</strong> {remaining.toFixed(2)} SAR
+							<strong>Total To Be Collected:</strong>{" "}
+							{remaining === null
+								? "—"
+								: `${remaining.toFixed(2)} ${receiptPricing.currency}`}
 						</div>
 					);
 				})()}

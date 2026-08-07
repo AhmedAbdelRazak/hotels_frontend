@@ -48,6 +48,8 @@ const TEXT = {
     property: "Connected PMS property",
     pullEnabled: "Safety reconciliation pull",
     projectionEnabled: "Local reservation projection",
+    projectionNotBefore: "Projection safety cutoff",
+    preActivationEvents: "Earlier events retained for audit only",
     callback: "Latest callback stored",
     processed: "Latest event processed",
     worker: "Worker state",
@@ -101,6 +103,10 @@ const TEXT = {
     property: "منشأة PMS المتصلة",
     pullEnabled: "مزامنة التسوية الاحتياطية",
     projectionEnabled: "إسقاط الحجوزات محلياً",
+    projectionNotBefore:
+      "\u0627\u0644\u062d\u062f \u0627\u0644\u0632\u0645\u0646\u064a \u0627\u0644\u0622\u0645\u0646 \u0644\u0644\u0625\u0633\u0642\u0627\u0637",
+    preActivationEvents:
+      "\u0627\u0644\u0623\u062d\u062f\u0627\u062b \u0627\u0644\u0623\u0642\u062f\u0645 \u0645\u062d\u0641\u0648\u0638\u0629 \u0644\u0644\u062a\u062f\u0642\u064a\u0642 \u0641\u0642\u0637",
     callback: "آخر callback محفوظ",
     processed: "آخر حدث تمت معالجته",
     worker: "حالة العامل",
@@ -147,6 +153,7 @@ const QUEUE_ORDER = [
   "processing",
   "retry",
   "needs_mapping",
+  "attention",
   "completed",
   "ignored",
   "quarantined",
@@ -182,6 +189,7 @@ const statusColor = (status) => {
     case "failed":
     case "quarantined":
     case "conflict":
+    case "attention":
       return "red";
     case "needs_mapping":
     case "retry":
@@ -508,6 +516,21 @@ const HotelRunnerMain = ({ chosenLanguage = "English" }) => {
                           {status.configuration?.projectionEnabled
                             ? copy.enabled
                             : copy.held}
+                        </Tag>
+                      </li>
+                      <li>
+                        <span>{copy.projectionNotBefore}</span>
+                        <strong>
+                          {formatDateTime(
+                            summary.projectionNotBefore,
+                            isArabic,
+                          ) || copy.never}
+                        </strong>
+                      </li>
+                      <li>
+                        <span>{copy.preActivationEvents}</span>
+                        <Tag color="default">
+                          {summary.preActivationEventCount}
                         </Tag>
                       </li>
                     </DetailList>

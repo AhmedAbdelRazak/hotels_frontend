@@ -162,4 +162,106 @@ describe("admin payment breakdown total display", () => {
       }),
     ).toEqual({ amount: 86.25, usesPlatformAmount: false });
   });
+
+  it("never substitutes an unverified HotelRunner commercial amount for gross", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: 1000,
+        hasOtaPricing: true,
+        adminPricing: {
+          mode: "hotelrunner_api",
+          rootTotal: 700,
+          netAfterExpensesTotal: 1000,
+          platformMarginTotal: 300,
+          commercialVerified: false,
+        },
+        canViewPlatformProfit: true,
+        isHotelRunner: true,
+        commercialVerified: false,
+      }),
+    ).toEqual({ amount: 1000, usesPlatformAmount: false });
+  });
+
+  it("permits a verified HotelRunner commercial amount", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: 1000,
+        hasOtaPricing: true,
+        adminPricing: {
+          commercialVerified: true,
+          rootTotal: 700,
+          netAfterExpensesTotal: 850,
+          platformMarginTotal: 150,
+        },
+        canViewPlatformProfit: true,
+        isHotelRunner: true,
+      }),
+    ).toEqual({ amount: 150, usesPlatformAmount: true });
+  });
+
+  it("preserves an explicitly reviewed HotelRunner zero margin", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: 1000,
+        hasOtaPricing: true,
+        adminPricing: {
+          commercialVerified: true,
+          platformMarginTotal: 0,
+        },
+        canViewPlatformProfit: true,
+        isHotelRunner: true,
+      }),
+    ).toEqual({ amount: 0, usesPlatformAmount: true });
+  });
+
+  it("does not treat verified net evidence as platform-margin verification", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: 1000,
+        hasOtaPricing: true,
+        adminPricing: {
+          commercialVerified: true,
+          netAfterExpensesTotal: 850,
+        },
+        canViewPlatformProfit: true,
+        isHotelRunner: true,
+      }),
+    ).toEqual({ amount: 1000, usesPlatformAmount: false });
+  });
+
+  it("fails closed on conflicting HotelRunner margin evidence", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: 1000,
+        hasOtaPricing: true,
+        reservation: {
+          adminPricing: {
+            mode: "hotelrunner_api",
+            commercialVerified: true,
+            netAfterExpensesTotal: 850,
+            platformMarginTotal: 150,
+          },
+          ota_financial_summary: {
+            commercialVerified: true,
+            netAfterExpenses: 850,
+            platformProfit: 140,
+          },
+        },
+        canViewPlatformProfit: true,
+        isHotelRunner: true,
+      }),
+    ).toEqual({ amount: 1000, usesPlatformAmount: false });
+  });
+
+  it("keeps a missing HotelRunner canonical gross unavailable", () => {
+    expect(
+      getPaymentBreakdownTotalDisplay({
+        grossTotal: null,
+        hasOtaPricing: true,
+        adminPricing: { mode: "hotelrunner_api" },
+        canViewPlatformProfit: false,
+        isHotelRunner: true,
+      }),
+    ).toEqual({ amount: null, usesPlatformAmount: false });
+  });
 });

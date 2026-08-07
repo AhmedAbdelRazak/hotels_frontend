@@ -175,9 +175,15 @@ const adminLocalizeStatus = (status = "", chosenLanguage = "English") => {
 };
 
 const formatAdminMoney = (value) => {
+	if (value === null || value === undefined) return "—";
 	const number = Number(value || 0);
 	return Number.isFinite(number) ? number.toFixed(2) : "0.00";
 };
+
+const formatAdminMoneyCell = (value, currency) =>
+	value === null || value === undefined
+		? "—"
+		: `${formatAdminMoney(value)} ${currency}`;
 
 const formatAdminDate = (value, chosenLanguage = "English") =>
 	formatSaudiGregorianDate(value, {
@@ -322,11 +328,16 @@ const EnhancedContentTable = ({
 			const { customer_details = {}, hotelId = {} } = reservation;
 			const roomSummary = getReservationRoomSummary(reservation);
 			const nights = getAdminReservationNights(reservation);
-			const totalAmount = Number(reservation.total_amount || 0);
+			const guestGrossAmount = getAdminReservationDisplayTotal(reservation);
 			const displayTotalAmount = getAdminReservationDisplayTotal(reservation, {
 				preferNetAfterExpenses: preferNetAfterExpensesTotal,
 			});
-			const pricePerDay = nights > 0 ? totalAmount / nights : totalAmount;
+			const pricePerDay =
+				guestGrossAmount === null
+					? null
+					: nights > 0
+						? guestGrossAmount / nights
+						: guestGrossAmount;
 			const paidAmount = getAdminPaidAmount(reservation);
 
 			const manualOverrideCaptured = capturedConfirmationNumbers.includes(
@@ -1298,13 +1309,19 @@ const EnhancedContentTable = ({
 										<td className='amount-cell'>{reservation.reservation_nights}</td>
 										<td className='amount-cell'>
 											<AdminTableTooltipText
-												value={`${formatAdminMoney(reservation.price_per_day)} ${tableLabels.sar}`}
+												value={formatAdminMoneyCell(
+													reservation.price_per_day,
+													tableLabels.sar,
+												)}
 												max={18}
 											/>
 										</td>
 										<td className='amount-cell'>
 											<AdminTableTooltipText
-												value={`${formatAdminMoney(reservation.display_total_amount)} ${tableLabels.sar}`}
+												value={formatAdminMoneyCell(
+													reservation.display_total_amount,
+													tableLabels.sar,
+												)}
 												max={18}
 											/>
 										</td>

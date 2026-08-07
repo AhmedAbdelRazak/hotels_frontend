@@ -1,7 +1,9 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import ReservationsOverview from "./ReservationsOverview";
+import ReservationsOverview, {
+	sumUnavailableHotelRunnerExpense,
+} from "./ReservationsOverview";
 import {
 	getReservationOverview,
 	getReservationsByDay,
@@ -187,5 +189,18 @@ describe("admin reservations overview chart details", () => {
 			expect(getReservationsByHotelNames).toHaveBeenCalledTimes(1);
 			expect(getTopHotelsByReservations).toHaveBeenCalledTimes(1);
 		});
+	});
+});
+
+describe("HotelRunner expense coverage", () => {
+	it("totals only explicit unavailable counters and ignores malformed values", () => {
+		expect(
+			sumUnavailableHotelRunnerExpense([
+				{ commissionUnavailableCount: 2 },
+				{ commissionUnavailableCount: "3" },
+				{ commissionUnavailableCount: -10 },
+				{ commissionUnavailableCount: "not-a-number" },
+			]),
+		).toBe(5);
 	});
 });

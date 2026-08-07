@@ -121,10 +121,106 @@ test("the redesigned receipt keeps the unified edit modal and saves passport and
 		expect(updateSingleReservation).toHaveBeenCalledWith(
 			"reservation-1",
 			expect.objectContaining({
-				supplierData: expect.objectContaining({ supplierName: "Updated Supplier" }),
+				"supplierData.supplierName": "Updated Supplier",
 				customerDetails: expect.objectContaining({ passport: "P998877" }),
 				sendEmail: false,
 			}),
 		);
 	});
+	const sentPayload = updateSingleReservation.mock.calls[0][1];
+	expect(sentPayload).not.toHaveProperty("supplierData");
+});
+
+test("a HotelRunner receipt presents the canonical guest gross without calling it net", () => {
+	const hotelRunnerReservation = {
+		...reservation,
+		total_amount: 900,
+		sub_total: 700,
+		adminPricing: {
+			mode: "hotelrunner_api",
+			rootTotal: 700,
+			commercialVerified: false,
+		},
+		supplierData: {
+			...reservation.supplierData,
+			hotelRunner: {
+				transport: "hotelrunner_api",
+				reservationId: "hr-receipt-1",
+				pricing: { currency: "SAR", grandTotal: 1000 },
+			},
+		},
+	};
+
+	const { container } = render(
+		<ReceiptPDF
+			reservation={hotelRunnerReservation}
+			hotelDetails={hotelDetails}
+		/>,
+	);
+	const summary = container.querySelector(".summary");
+
+	expect(summary).toBeTruthy();
+	expect(summary.textContent).toContain("Gross Reservation Total: 1000.00 SAR");
+	expect(summary.textContent).not.toContain("Net Accommodation Charge");
+});
+
+test("a HotelRunner receipt never substitutes total_amount when canonical gross is missing", () => {
+	const missingGross = {
+		...reservation,
+		total_amount: 900,
+		adminPricing: { mode: "hotelrunner_api" },
+		supplierData: {
+			...reservation.supplierData,
+			hotelRunner: {
+				transport: "hotelrunner_api",
+				reservationId: "hr-receipt-missing-gross",
+			},
+		},
+	};
+
+	const { container } = render(
+		<ReceiptPDF reservation={missingGross} hotelDetails={hotelDetails} />,
+	);
+	const summary = container.querySelector(".summary");
+
+	expect(summary.textContent).toContain("Gross Reservation Total: —");
+	expect(summary.textContent).not.toContain("900.00 SAR");
+});
+
+test("a HotelRunner receipt edit never resubmits its supplier snapshot", async () => {
+	const hotelRunnerReservation = {
+		...reservation,
+		adminPricing: { mode: "hotelrunner_api" },
+		supplierData: {
+			...reservation.supplierData,
+			hotelRunner: {
+				transport: "hotelrunner_api",
+				reservationId: "hr-receipt-edit",
+				pricing: { grandTotal: 1000 },
+			},
+		},
+	};
+	updateSingleReservation.mockResolvedValue({ reservation: hotelRunnerReservation });
+
+	render(
+		<ReceiptPDF reservation={hotelRunnerReservation} hotelDetails={hotelDetails} />,
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Ahmed Receipt Test" }));
+	const supplierInput = await screen.findByLabelText("Supplied By (Supplier)");
+	const bookingSourceInput = screen.getByLabelText("Booking Source");
+	fireEvent.change(supplierInput, { target: { value: "Updated HR Supplier" } });
+	fireEvent.change(bookingSourceInput, { target: { value: "Manual Override" } });
+	fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+	await waitFor(() => expect(updateSingleReservation).toHaveBeenCalled());
+	const sentPayload = updateSingleReservation.mock.calls[0][1];
+	expect(sentPayload).toEqual(
+		expect.objectContaining({
+			"supplierData.supplierName": "Updated HR Supplier",
+			sendEmail: false,
+		}),
+	);
+	expect(sentPayload).not.toHaveProperty("supplierData");
+	expect(sentPayload).not.toHaveProperty("booking_source");
+	expect(JSON.stringify(sentPayload)).not.toContain("hotelRunner");
 });

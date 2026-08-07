@@ -540,7 +540,7 @@ export default function PaymentSettings({
 		let mounted = true;
 		(async () => {
 			try {
-				const tok = await getOwnerPayPalClientToken({ debug: true });
+				const tok = await getOwnerPayPalClientToken({ debug: true, token });
 				const ct = tok?.clientToken;
 				let env = (tok?.env || "").toLowerCase();
 				if (!ct) throw new Error("Missing owner PayPal client token");
@@ -579,7 +579,7 @@ export default function PaymentSettings({
 		return () => {
 			mounted = false;
 		};
-	}, [isArabic, reloadKey]);
+	}, [isArabic, reloadKey, token]);
 
 	useEffect(() => {
 		refreshFromServer();

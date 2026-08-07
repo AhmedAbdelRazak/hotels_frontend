@@ -3,7 +3,10 @@ import CountUp from "react-countup";
 import styled from "styled-components";
 
 const ScoreCards = ({ scoreCardObject }) => {
-	const { total, total_amount, commission } = scoreCardObject;
+	const { total, total_amount, commission } = scoreCardObject || {};
+	const commissionUnavailableCount = Number(
+		scoreCardObject?.commissionUnavailableCount || 0
+	);
 
 	return (
 		<ScoreCardsWrapper>
@@ -33,7 +36,7 @@ const ScoreCards = ({ scoreCardObject }) => {
 				</Count>
 			</Card>
 			<Card bgColor='#376b2f'>
-				<Title>Commission</Title>
+				<Title>Commission / Verified OTA Expense</Title>
 				<Count>
 					<CountUp
 						start={0}
@@ -44,6 +47,13 @@ const ScoreCards = ({ scoreCardObject }) => {
 						suffix=' SAR'
 					/>
 				</Count>
+				{commissionUnavailableCount > 0 ? (
+					<AvailabilityNote>
+						Excluded for {commissionUnavailableCount} HotelRunner reservation
+						{commissionUnavailableCount === 1 ? "" : "s"} pending verified OTA
+						expense evidence
+					</AvailabilityNote>
+				) : null}
 			</Card>
 		</ScoreCardsWrapper>
 	);
@@ -81,4 +91,11 @@ const Title = styled.div`
 const Count = styled.div`
 	font-size: 1.7rem;
 	font-weight: bold;
+`;
+
+const AvailabilityNote = styled.div`
+	font-size: 0.72rem;
+	line-height: 1.25;
+	margin-top: 6px;
+	opacity: 0.92;
 `;

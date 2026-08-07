@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import styled from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
 import MoreDetails from "./MoreDetails";
+import { getReservationGuestGrossDisplay } from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 // import ExportToExcelButton from "./ExportToExcelButton";
 
 const hasPaidBreakdownCapture = (breakdown) => {
@@ -39,6 +40,7 @@ const EnhancedContentTable = ({
 
 	const formattedReservations = useMemo(() => {
 		return safeData.map((reservation) => {
+			const guestGross = getReservationGuestGrossDisplay(reservation);
 			const {
 				customer_details = {},
 				hotelId = {},
@@ -72,6 +74,7 @@ const EnhancedContentTable = ({
 				hotel_name: hotelId.hotelName || "Unknown Hotel",
 				createdAt: reservation.createdAt || null,
 				payment_status: computedPaymentStatus,
+				display_total_amount: guestGross.available ? guestGross.amount : null,
 			};
 		});
 	}, [safeData, capturedConfirmationNumbers]);
@@ -95,7 +98,7 @@ const EnhancedContentTable = ({
 			if (sortField === "checkin_date" || sortField === "checkout_date") {
 				valA = new Date(valA).getTime();
 				valB = new Date(valB).getTime();
-			} else if (sortField === "total_amount") {
+			} else if (sortField === "display_total_amount") {
 				valA = Number(valA) || 0;
 				valB = Number(valB) || 0;
 			} else if (sortField === "confirmation_number") {
@@ -353,10 +356,10 @@ const EnhancedContentTable = ({
 							</th>
 							<th>
 								<HeaderLabel
-									onClick={() => handleSortLabelClick("total_amount")}
+									onClick={() => handleSortLabelClick("display_total_amount")}
 								>
 									Total Amount
-									{sortConfig.sortField === "total_amount"
+									{sortConfig.sortField === "display_total_amount"
 										? sortConfig.direction === "asc"
 											? " ▲"
 											: " ▼"
@@ -438,7 +441,9 @@ const EnhancedContentTable = ({
 									<td style={payStatusStyles}>{reservation.payment_status}</td>
 
 									<td>
-										{Number(reservation.total_amount || 0).toFixed(2)} SAR
+										{reservation.display_total_amount === null
+											? "—"
+											: `${Number(reservation.display_total_amount).toFixed(2)} SAR`}
 									</td>
 									<td>
 										{reservation.createdAt

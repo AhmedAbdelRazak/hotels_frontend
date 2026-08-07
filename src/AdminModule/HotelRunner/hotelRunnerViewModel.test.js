@@ -14,26 +14,42 @@ describe("HotelRunner admin view model", () => {
           tokenConfigured: true,
           hrIdConfigured: true,
           supportedPropertyCount: 1,
+          projectionNotBefore: "2026-08-06T20:00:00.000Z",
         },
         queue: {
           pending: 2,
           processing: 1,
           retry: 3,
           needs_mapping: 4,
+          attention: 6,
           quarantined: 1,
           failed: 2,
           completed: 8,
           ignored: 5,
         },
         projections: { created: 5, updated: 2, cancelled: 1 },
+        archive: { preActivationEventCount: 11 },
       }),
     ).toEqual({
       configurationReady: true,
       waiting: 6,
       needsMapping: 4,
-      attention: 3,
+      attention: 9,
       processed: 13,
       projected: 8,
+      preActivationEventCount: 11,
+      projectionNotBefore: "2026-08-06T20:00:00.000Z",
+    });
+  });
+
+  test("includes applied events that need post-projection inventory attention", () => {
+    expect(
+      summarizeHotelRunnerStatus({
+        queue: { attention: 2, completed: 7 },
+      }),
+    ).toMatchObject({
+      attention: 2,
+      processed: 7,
     });
   });
 

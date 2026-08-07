@@ -8,6 +8,10 @@ import {
 } from "../../apiAdmin"; // Adjust the import path according to your project structure
 import ScoreCards from "../ScoreCards";
 import DownloadExcel from "../DownloadExcel";
+import {
+	formatHotelRunnerReportAmount as formatReportAmount,
+	getHotelRunnerReportPricingDisplay,
+} from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const GeneralReportMain = ({ hotelDetails, chosenLanguage }) => {
 	const [allReservations, setAllReservations] = useState([]);
@@ -103,6 +107,19 @@ const GeneralReportMain = ({ hotelDetails, chosenLanguage }) => {
 
 		return totalAmount;
 	};
+	const hotelRunnerLocalAndNet = (record) => {
+		const pricing = getHotelRunnerReportPricingDisplay(record);
+		if (!pricing.isHotelRunner) return null;
+		const localBase = formatReportAmount(pricing.localBaseAmount);
+		if (pricing.payoutVerified) {
+			return chosenLanguage === "Arabic"
+				? `الأساس المحلي: ${localBase} | صافي OTA الموثق: ${formatReportAmount(pricing.netAmount)}`
+				: `Local base: ${localBase} | Verified OTA net: ${formatReportAmount(pricing.netAmount)}`;
+		}
+		return chosenLanguage === "Arabic"
+			? `الأساس المحلي: ${localBase} | بانتظار توثيق صافي OTA`
+			: `Local base: ${localBase} | OTA net awaiting verification`;
+	};
 
 	const columns = [
 		{
@@ -161,23 +178,40 @@ const GeneralReportMain = ({ hotelDetails, chosenLanguage }) => {
 		},
 
 		{
-			title: chosenLanguage === "Arabic" ? " صافي البیع" : "Subtotal",
+			title:
+				chosenLanguage === "Arabic"
+					? "المجموع الفرعي / الأساس المحلي"
+					: "Subtotal / Local Base",
 			dataIndex: "sub_total",
 			key: "sub_total",
 			render: (total_amount, record) => {
+				const hotelRunnerDisplay = hotelRunnerLocalAndNet(record);
+				if (hotelRunnerDisplay) return hotelRunnerDisplay;
 				let displayAmount = total_amount;
 				if (record.payment === "expedia collect") {
 					displayAmount = calculateExpediaTotalAmount(record) - total_amount;
 				}
-				return `${displayAmount.toLocaleString()}`;
+				return formatReportAmount(displayAmount);
 			},
 		},
 
 		{
-			title: chosenLanguage === "Arabic" ? "اجمالي العمولة" : "Commission",
+			title:
+				chosenLanguage === "Arabic"
+					? "العمولة / مصروف OTA"
+					: "Commission / OTA Expense",
 			dataIndex: "commission",
 			key: "commission",
 			render: (commission, record) => {
+				const hotelRunnerPricing = getHotelRunnerReportPricingDisplay(record);
+				if (hotelRunnerPricing.isHotelRunner) {
+					return hotelRunnerPricing.payoutVerified &&
+						hotelRunnerPricing.otaExpenseAmount !== null
+						? formatReportAmount(hotelRunnerPricing.otaExpenseAmount)
+						: chosenLanguage === "Arabic"
+							? "بانتظار توثيق مصروف OTA"
+							: "Awaiting verified OTA expense";
+				}
 				let displayCommission = commission;
 				if (record.payment === "expedia collect") {
 					// displayCommission = record.total_amount;
@@ -187,7 +221,7 @@ const GeneralReportMain = ({ hotelDetails, chosenLanguage }) => {
 				} else {
 					displayCommission = record.total_amount - record.sub_total;
 				}
-				return `${displayCommission.toLocaleString()}`;
+				return formatReportAmount(displayCommission);
 			},
 		},
 
@@ -196,7 +230,12 @@ const GeneralReportMain = ({ hotelDetails, chosenLanguage }) => {
 			dataIndex: "total_amount",
 			key: "total_amount",
 			render: (total_amount, record) => {
-				return `${total_amount.toLocaleString()}`;
+				const hotelRunnerPricing = getHotelRunnerReportPricingDisplay(record);
+				return formatReportAmount(
+					hotelRunnerPricing.isHotelRunner
+						? hotelRunnerPricing.grossAmount
+						: total_amount
+				);
 			},
 		},
 
