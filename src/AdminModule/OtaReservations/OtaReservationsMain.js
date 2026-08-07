@@ -1401,7 +1401,8 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 													<td>
 														<StatusPill>
 															{formatOtaReservationStatus(
-																reservation.reservation_status
+																reservation.reservation_status,
+																reservation
 															)}
 														</StatusPill>
 													</td>
