@@ -40,6 +40,12 @@ import {
 	isHotelRunnerReservation,
 } from "./hotelRunnerPricingDisplay";
 import { protectHotelRunnerEditorPayload } from "./hotelRunnerPricingEditPolicy";
+import {
+	buildAdminPricingProjectionRooms,
+	preserveOtaPricingForRoomType,
+	projectSavedNightlyPricing,
+} from "./adminReservationPricingProjection";
+import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
 
 const { Option } = Select;
 
@@ -464,6 +470,7 @@ const normalizeSavedAdminPricingRooms = (sourceRows = [], reservation = {}) => {
 				: firstExplicitMoney(room?.chosenPrice) ?? 0;
 
 		return {
+			...room,
 			roomType: room.roomType || room.room_type || "",
 			displayName: room.displayName || room.display_name || "",
 			count,
@@ -605,6 +612,11 @@ const EditReservationMain = ({
 		() => isHotelRunnerReservation(reservation),
 		[reservation]
 	);
+	const superAdminOtaOverride =
+		isSuperUser &&
+		(directHotelRunnerReservation || isExternalSource(reservation?.booking_source));
+	const hotelRunnerSourceEditingLocked =
+		directHotelRunnerReservation && !superAdminOtaOverride;
 	const hotelRunnerPricingDisplay = useMemo(
 		() => getHotelRunnerReportPricingDisplay(reservation),
 		[reservation]
@@ -1003,52 +1015,8 @@ const EditReservationMain = ({
 	);
 
 	const buildPricingFromCurrentNightly = useCallback(
-		(room, expectedDates = []) => {
-			const rows = Array.isArray(room?.pricingByDay) ? room.pricingByDay : [];
-			const averageNight =
-				rows.length > 0
-					? rows.reduce(
-							(sum, day) =>
-								sum +
-								safeParseFloat(
-									day.totalPriceWithCommission ?? day.price,
-									0
-								),
-							0
-					  ) / rows.length
-					: 0;
-			const chosenNightly = safeParseFloat(room?.chosenPrice, 0);
-			const nightly = chosenNightly > 0 ? chosenNightly : averageNight;
-			if (!(nightly > 0) || expectedDates.length === 0) return [];
-			const firstTemplate = rows[0] || {};
-			return expectedDates.map((date, index) => {
-				const template =
-					rows.find(
-						(day) =>
-							(day?.date ? dayjs(day.date).format("YYYY-MM-DD") : "") ===
-							date
-					) ||
-					rows[index] ||
-					firstTemplate;
-				const totalPriceWithoutCommission = safeParseFloat(
-					template.rootPrice ?? template.totalPriceWithoutCommission ?? template.price,
-					nightly
-				);
-				const rootPrice = safeParseFloat(
-					template.rootPrice,
-					totalPriceWithoutCommission || nightly
-				);
-				return {
-					...template,
-					date,
-					price: nightly,
-					rootPrice,
-					commissionRate: safeParseFloat(template.commissionRate, 0),
-					totalPriceWithCommission: nightly,
-					totalPriceWithoutCommission: rootPrice,
-				};
-			});
-		},
+		(room, expectedDates = []) =>
+			projectSavedNightlyPricing(room, expectedDates),
 		[]
 	);
 	// ---------------------------------------------------------
@@ -1064,9 +1032,13 @@ const EditReservationMain = ({
 			let nights = endDate.diff(startDate, "day");
 			if (nights < 1) nights = 1;
 
-			if (directHotelRunnerReservation) {
+			if (
+				directHotelRunnerReservation &&
+				!(superAdminOtaOverride && (hasExplicitDateEdits || hasExplicitPricingEdits))
+			) {
 				const grossTotal =
 					firstExplicitMoney(
+						getAdminReservationDisplayTotal(reservation),
 						hotelRunnerPricingDisplay.grossAmount,
 						reservation?.total_amount
 					) ?? 0;
@@ -1281,6 +1253,7 @@ const EditReservationMain = ({
 			hotelRunnerPricingDisplay.localBaseAmount,
 			hotelRunnerPlatformFinance.available,
 			hotelRunnerPlatformFinance.amount,
+			superAdminOtaOverride,
 			getMatchedRoom,
 			buildPricingForRoom,
 			buildPricingFromCurrentNightly,
@@ -1325,6 +1298,7 @@ const EditReservationMain = ({
 
 	// ---------------- Date handlers ----------------
 	const handleCheckInDateChange = (value) => {
+		if (hotelRunnerSourceEditingLocked) return;
 		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckInDate(null);
@@ -1343,6 +1317,7 @@ const EditReservationMain = ({
 	};
 
 	const handleCheckOutDateChange = (value) => {
+		if (hotelRunnerSourceEditingLocked) return;
 		setHasExplicitDateEdits(true);
 		if (!value) {
 			setCheckOutDate(null);
@@ -1389,7 +1364,7 @@ const EditReservationMain = ({
 
 	// ---------------- Room selection ----------------
 	const handleRoomSelectionChange = (value, index) => {
-		if (directHotelRunnerReservation) {
+		if (hotelRunnerSourceEditingLocked) {
 			message.warning(
 				"HotelRunner room assignments and nightly pricing are source-controlled."
 			);
@@ -1410,15 +1385,27 @@ const EditReservationMain = ({
 		}
 
 		const [roomType, displayName] = value.split("|");
-		let nextRoom = {
-			...updated[index],
-			roomType: (roomType || "").trim(),
-			displayName: (displayName || "").trim(),
-			pricingByDay: [],
-		};
+		const preserveSavedOtaPricing = superAdminOtaOverride;
+		let nextRoom = preserveSavedOtaPricing
+			? preserveOtaPricingForRoomType(updated[index], {
+					roomType,
+					displayName,
+			  })
+			: {
+					...updated[index],
+					roomType: (roomType || "").trim(),
+					displayName: (displayName || "").trim(),
+					pricingByDay: [],
+			  };
 
-		// Pre-populate nightly pricing if dates exist
-		if (selectedHotel && checkInDate && checkOutDate) {
+		// A SUPER-admin OTA room correction is operational, not a reprice: keep
+		// every saved nightly amount. Other reservations retain calendar pricing.
+		if (
+			!preserveSavedOtaPricing &&
+			selectedHotel &&
+			checkInDate &&
+			checkOutDate
+		) {
 			const matched = getMatchedRoom(nextRoom.roomType, nextRoom.displayName);
 			if (matched) {
 				nextRoom.pricingByDay = buildPricingForRoom(
@@ -1427,6 +1414,13 @@ const EditReservationMain = ({
 					dayjs(checkOutDate).startOf("day")
 				);
 			}
+		} else if (preserveSavedOtaPricing) {
+			const matched = getMatchedRoom(nextRoom.roomType, nextRoom.displayName);
+			nextRoom = preserveOtaPricingForRoomType(nextRoom, {
+				roomType,
+				displayName,
+				hotelRoomConfigId: normalizeId(matched),
+			});
 		}
 
 		updated[index] = nextRoom;
@@ -1472,7 +1466,7 @@ const EditReservationMain = ({
 		setIsModalVisible(false);
 	};
 	const handlePricingUpdate = (updatedPricingByDay) => {
-		if (directHotelRunnerReservation) return;
+		if (hotelRunnerSourceEditingLocked) return;
 		if (editingRoomIndex === null || editingRoomIndex === undefined) return;
 		setHasExplicitPricingEdits(true);
 		setSelectedRooms((currentRooms) =>
@@ -1565,7 +1559,7 @@ const EditReservationMain = ({
 			!checkInDate ||
 			!checkOutDate ||
 			!selectedHotel ||
-			(!directHotelRunnerReservation &&
+			((!directHotelRunnerReservation || superAdminOtaOverride) &&
 				!selectedRooms.every(
 					(r) => r.roomType && r.displayName && r.count > 0
 				))
@@ -1574,7 +1568,7 @@ const EditReservationMain = ({
 			return;
 		}
 		if (
-			!directHotelRunnerReservation &&
+			(!directHotelRunnerReservation || superAdminOtaOverride) &&
 			!selectedRooms.every(
 				(r) => Array.isArray(r.pricingByDay) && r.pricingByDay.length > 0
 			)
@@ -1621,33 +1615,13 @@ const EditReservationMain = ({
 		}
 
 		// Flatten to pickedRoomsType
-		const pickedRoomsType = directHotelRunnerReservation
+		const pickedRoomsType = hotelRunnerSourceEditingLocked
 			? []
-			: selectedRooms.flatMap((room) =>
-				  Array.from({ length: room.count }, () => {
-				const pricingDetails = room.pricingByDay.map(resolveAdminPricingDay);
-				const totalWithComm = pricingDetails.reduce(
-					(acc, d) => acc + d.totalPriceWithCommission,
-					0
-				);
-				const avgNight =
-					pricingDetails.length > 0 ? totalWithComm / pricingDetails.length : 0;
-
-				return {
-					room_type: room.roomType.trim(),
-					displayName: room.displayName.trim(),
-					chosenPrice: avgNight.toFixed(2),
-					count: 1,
-					pricingByDay: pricingDetails,
-					totalPriceWithCommission: totalWithComm,
-					hotelShouldGet: pricingDetails.reduce(
-						(acc, d) => acc + d.rootPrice,
-						0
-					),
-				};
-			  })
-			);
-		const adminPricingTotals = directHotelRunnerReservation
+			: buildAdminPricingProjectionRooms(selectedRooms, {
+					preserveRoomMetadata: superAdminOtaOverride,
+					resolvePricingDay: resolveAdminPricingDay,
+			  });
+		const adminPricingTotals = hotelRunnerSourceEditingLocked
 			? null
 			: summarizeAdminPricingRooms(pickedRoomsType);
 
@@ -1679,8 +1653,10 @@ const EditReservationMain = ({
 			? savedReservationCommission
 			: totalCommission;
 		const pricingPayloadNeeded =
-			!directHotelRunnerReservation &&
-			(hotelChanged || hasExplicitPricingEdits);
+			(!directHotelRunnerReservation || superAdminOtaOverride) &&
+			(hotelChanged ||
+				hasExplicitPricingEdits ||
+				(superAdminOtaOverride && dateChanged));
 		const commissionPayloadNeeded = directHotelRunnerReservation
 			? isSuperUser &&
 			  hasExplicitCommissionEdit &&
@@ -1789,7 +1765,12 @@ const EditReservationMain = ({
 			};
 			reservationData.__adminPricingUpdateIntent = true;
 			reservationData.commission = commissionToSave;
-			reservationData.advancePayment = advancePaymentPayload;
+			if (
+				(!directHotelRunnerReservation && !superAdminOtaOverride) ||
+				hasExplicitAdvancePaymentEdit
+			) {
+				reservationData.advancePayment = advancePaymentPayload;
+			}
 		} else if (advancePaymentChanged) {
 			reservationData.advancePayment = advancePaymentPayload;
 		}
@@ -1811,7 +1792,17 @@ const EditReservationMain = ({
 		const protectedReservationData = protectHotelRunnerEditorPayload(
 			reservation,
 			reservationData,
-			{ allowExplicitCommission: commissionPayloadNeeded }
+			{
+				allowExplicitCommission: commissionPayloadNeeded,
+				allowExplicitPricing:
+					directHotelRunnerReservation &&
+					superAdminOtaOverride &&
+					(hasExplicitPricingEdits || hasExplicitDateEdits),
+				allowExplicitStay:
+					directHotelRunnerReservation &&
+					superAdminOtaOverride &&
+					hasExplicitDateEdits,
+			}
 		);
 
 		if (Object.keys(protectedReservationData).length <= 1) {
@@ -1969,8 +1960,16 @@ const EditReservationMain = ({
 					<Alert
 						type='info'
 						showIcon
-						message='HotelRunner source pricing is protected'
-						description='Hotel, room selection, gross/local-base totals, and nightly prices are synchronized in the background and are read-only here. Ordinary local reservation fields remain editable. A SUPER admin may explicitly review the separate PMS platform commission; missing OTA expense or hotel-net data is never inferred.'
+						message={
+							superAdminOtaOverride
+								? "SUPER admin local OTA correction"
+								: "HotelRunner source pricing is protected"
+						}
+						description={
+							superAdminOtaOverride
+								? "You may deliberately correct the local PMS stay, mapped room type, and saved nightly pricing. HotelRunner identity and its original source snapshot remain protected. Changing a room type keeps saved prices; extending a stay projects new nights from saved pricing."
+								: "Hotel, room selection, gross/local-base totals, and nightly prices are synchronized in the background and are read-only here. Ordinary local reservation fields remain editable. Missing OTA expense or hotel-net data is never inferred."
+						}
 						style={{ marginBottom: 12 }}
 					/>
 				)}
@@ -2055,7 +2054,9 @@ const EditReservationMain = ({
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={isLoading || !selectedHotel}
+								disabled={
+									isLoading || !selectedHotel || hotelRunnerSourceEditingLocked
+								}
 								disabledDate={disableCheckInDate}
 								value={checkInDate}
 								onChange={handleCheckInDateChange}
@@ -2069,7 +2070,12 @@ const EditReservationMain = ({
 							<DatePicker
 								className='w-100'
 								format='YYYY-MM-DD'
-								disabled={isLoading || !checkInDate || !selectedHotel}
+								disabled={
+									isLoading ||
+									!checkInDate ||
+									!selectedHotel ||
+									hotelRunnerSourceEditingLocked
+								}
 								disabledDate={disableCheckOutDate}
 								value={checkOutDate}
 								onChange={handleCheckOutDateChange}
@@ -2092,7 +2098,7 @@ const EditReservationMain = ({
 								}
 								onChange={(val) => handleRoomSelectionChange(val, index)}
 								disabled={
-									isLoading || !selectedHotel || directHotelRunnerReservation
+									isLoading || !selectedHotel || hotelRunnerSourceEditingLocked
 								}
 								getPopupContainer={resolvePopupContainer}
 								optionLabelProp='label'
@@ -2164,7 +2170,7 @@ const EditReservationMain = ({
 									disabled={isLoading}
 								>
 									<EditOutlined />{` `}
-									{directHotelRunnerReservation
+									{hotelRunnerSourceEditingLocked
 										? "View Pricing / Review Commission"
 										: "Edit Pricing"}
 								</Button>
@@ -2187,9 +2193,7 @@ const EditReservationMain = ({
 				<Button
 					type='dashed'
 					onClick={addRoomSelection}
-					disabled={
-						isLoading || !selectedHotel || directHotelRunnerReservation
-					}
+					disabled={isLoading || !selectedHotel || directHotelRunnerReservation}
 				>
 					Add Another Room
 				</Button>
@@ -2506,7 +2510,7 @@ const EditReservationMain = ({
 						: hasCommissionOverride ||
 						  (adminManagedPricing && savedReservationCommission !== null)
 				}
-				hotelRunnerSourceOwned={directHotelRunnerReservation}
+				hotelRunnerSourceOwned={hotelRunnerSourceEditingLocked}
 				hotelRunnerCommercialVerified={hotelRunnerPayoutDisplay.verified === true}
 				onCommissionChange={(value) => {
 					setHasExplicitCommissionEdit(true);

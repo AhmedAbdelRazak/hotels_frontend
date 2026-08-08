@@ -267,7 +267,6 @@ const EnhancedContentTable = ({
 
 	// ------------------ Payment isCaptured flags, for display only ------------------
 	const capturedConfirmationNumbers = useMemo(() => ["2944008828"], []);
-	const preferNetAfterExpensesTotal = fromPage === "AllReservations";
 
 	const summarizePayment = (reservation) => {
 		const pd = reservation?.paypal_details || {};
@@ -329,9 +328,7 @@ const EnhancedContentTable = ({
 			const roomSummary = getReservationRoomSummary(reservation);
 			const nights = getAdminReservationNights(reservation);
 			const guestGrossAmount = getAdminReservationDisplayTotal(reservation);
-			const displayTotalAmount = getAdminReservationDisplayTotal(reservation, {
-				preferNetAfterExpenses: preferNetAfterExpensesTotal,
-			});
+			const displayTotalAmount = getAdminReservationDisplayTotal(reservation);
 			const pricePerDay =
 				guestGrossAmount === null
 					? null
@@ -375,7 +372,7 @@ const EnhancedContentTable = ({
 				paid_amount_display: paidAmount,
 			};
 		});
-	}, [data, capturedConfirmationNumbers, preferNetAfterExpensesTotal]);
+	}, [data, capturedConfirmationNumbers]);
 
 	// ------------------ Sorting logic ------------------
 	const [sortConfig, setSortConfig] = useState({

@@ -28,6 +28,26 @@ const HOTELRUNNER_SOURCE_PRICING_FIELDS = [
 	"__adminPricingUpdateIntent",
 ];
 
+// A configured SUPER admin may deliberately correct the local PMS projection.
+// HotelRunner identity, ownership and its immutable source snapshot remain
+// protected even during that narrowly authorized operation.
+const HOTELRUNNER_SUPER_ADMIN_PRICING_FIELDS = new Set([
+	"pickedRoomsType",
+	"pickedRoomsPricing",
+	"total_rooms",
+	"total_amount",
+	"sub_total",
+	"adminPricing",
+	"__adminPricingUpdateIntent",
+]);
+
+const HOTELRUNNER_SUPER_ADMIN_STAY_FIELDS = new Set([
+	"checkin_date",
+	"checkout_date",
+	"days_of_residence",
+	"__reservationDateUpdateIntent",
+]);
+
 // These aliases identify the inbound OTA projection itself. They are separate
 // from editable guest identity/contact fields and local lifecycle state.
 const HOTELRUNNER_SOURCE_IDENTITY_FIELDS = [
@@ -76,12 +96,23 @@ const HOTELRUNNER_FINANCE_REVIEW_FIELDS = [
 export const protectHotelRunnerEditorPayload = (
 	reservation,
 	payload,
-	{ allowExplicitCommission = false } = {}
+	{
+		allowExplicitCommission = false,
+		allowExplicitPricing = false,
+		allowExplicitStay = false,
+	} = {}
 ) => {
 	if (!isHotelRunnerReservation(reservation)) return payload;
 
 	const protectedPayload = { ...(payload || {}) };
 	HOTELRUNNER_SOURCE_PRICING_FIELDS.forEach((field) => {
+		if (
+			(allowExplicitPricing &&
+				HOTELRUNNER_SUPER_ADMIN_PRICING_FIELDS.has(field)) ||
+			(allowExplicitStay && HOTELRUNNER_SUPER_ADMIN_STAY_FIELDS.has(field))
+		) {
+			return;
+		}
 		delete protectedPayload[field];
 	});
 	HOTELRUNNER_FINANCE_REVIEW_FIELDS.forEach((field) => {
