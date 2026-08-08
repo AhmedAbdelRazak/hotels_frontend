@@ -153,16 +153,53 @@ describe("admin reservation table total", () => {
     ).toBe(1000);
   });
 
-  it("keeps a missing canonical HotelRunner gross unavailable instead of using total_amount", () => {
+  it("falls back to the saved PMS total in the admin table when canonical HotelRunner gross is absent", () => {
     expect(
       getAdminReservationDisplayTotal({
-        total_amount: 1000,
+        total_amount: 91.14,
         adminPricing: { mode: "hotelrunner_api" },
         supplierData: {
           hotelRunner: { transport: "hotelrunner_api", reservationId: "hr-1" },
         },
       }),
-    ).toBeNull();
+    ).toBe(91.14);
+  });
+
+  it("keeps total_amount ahead of a conflicting HotelRunner source amount", () => {
+    expect(
+      getAdminReservationDisplayTotal({
+        total_amount: 91.14,
+        adminPricing: { mode: "hotelrunner_api" },
+        supplierData: {
+          hotelRunner: {
+            transport: "hotelrunner_api",
+            reservationId: "r071469597",
+            pricing: { grandTotal: 56.39 },
+          },
+        },
+      }),
+    ).toBe(91.14);
+  });
+
+  it("prefers the verified OTA client total over a raw HotelRunner amount that is actually the payout", () => {
+    expect(
+      getAdminReservationDisplayTotal({
+        total_amount: 91.14,
+        adminPricing: {
+          mode: "hotelrunner_api",
+          commercialVerified: true,
+          clientTotal: 91.14,
+          netAfterExpensesTotal: 56.39,
+        },
+        supplierData: {
+          hotelRunner: {
+            transport: "hotelrunner_api",
+            reservationId: "r071469597",
+            pricing: { grandTotal: 56.39 },
+          },
+        },
+      }),
+    ).toBe(91.14);
   });
 
   it("uses a verified HotelRunner net total when net is requested", () => {

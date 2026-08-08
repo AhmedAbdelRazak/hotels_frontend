@@ -139,7 +139,7 @@ const cellTextFor = (guest, headerLabel) => {
 };
 
 describe("EnhancedContentTable total amount column", () => {
-  it("shows net after expenses with a safe total_amount fallback on all reservations", () => {
+  it("shows the saved guest total in the Total column on all reservations", () => {
     const netReservation = reservation({
       id: "NET",
       guest: "Net Guest",
@@ -163,9 +163,9 @@ describe("EnhancedContentTable total amount column", () => {
       data: [netReservation, fallbackReservation, zeroReservation],
     });
 
-    expect(totalCellTextFor("Net Guest")).toBe("950.00 SAR");
+    expect(totalCellTextFor("Net Guest")).toBe("1200.00 SAR");
     expect(totalCellTextFor("Fallback Guest")).toBe("800.00 SAR");
-    expect(totalCellTextFor("Zero Guest")).toBe("0.00 SAR");
+    expect(totalCellTextFor("Zero Guest")).toBe("500.00 SAR");
     const headers = screen
       .getAllByRole("columnheader")
       .map((header) => header.textContent.trim());
@@ -210,7 +210,7 @@ describe("EnhancedContentTable total amount column", () => {
 	);
   });
 
-  it("uses canonical HotelRunner gross for total and price per day and shows unavailable when missing", () => {
+  it("uses the saved PMS total even when a different HotelRunner source amount is present", () => {
     const canonical = reservation({
       id: "HR-CANONICAL",
       guest: "Canonical Guest",
@@ -243,10 +243,42 @@ describe("EnhancedContentTable total amount column", () => {
 
     renderTable({ data: [canonical, missing], fromPage: "reports" });
 
-    expect(totalCellTextFor("Canonical Guest")).toBe("1000.00 SAR");
-    expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("500.00 SAR");
-    expect(totalCellTextFor("Missing Gross Guest")).toBe("—");
-    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("—");
+    expect(totalCellTextFor("Canonical Guest")).toBe("700.00 SAR");
+    expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("350.00 SAR");
+    expect(totalCellTextFor("Missing Gross Guest")).toBe("700.00 SAR");
+    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("700.00 SAR");
+  });
+
+  it("shows the saved Agoda guest total for HR-linked rows instead of the raw payout", () => {
+    const emailReservation = reservation({
+      id: "5285396222",
+      guest: "Nawaz Shahid",
+      total: 77.42,
+      net: 47.9,
+    });
+    const hotelRunnerReservation = reservation({
+      id: "1799546267",
+      guest: "Mays Mohmadi",
+      total: 91.14,
+      net: 56.39,
+      mode: "hotelrunner_api",
+    });
+    hotelRunnerReservation.adminPricing.commercialVerified = true;
+    hotelRunnerReservation.adminPricing.clientTotal = 91.14;
+    hotelRunnerReservation.supplierData = {
+      hotelRunner: {
+        transport: "hotelrunner_api",
+        reservationId: "r071469597",
+        pricing: { grandTotal: 56.39 },
+      },
+    };
+
+    renderTable({ data: [emailReservation, hotelRunnerReservation] });
+
+    expect(cellTextFor("Nawaz Shahid", "Price/Day")).toBe("77.42 SAR");
+    expect(totalCellTextFor("Nawaz Shahid")).toBe("77.42 SAR");
+    expect(cellTextFor("Mays Mohmadi", "Price/Day")).toBe("91.14 SAR");
+    expect(totalCellTextFor("Mays Mohmadi")).toBe("91.14 SAR");
   });
 
   it("uses Arabic table headers and passes Arabic to the direct report export", () => {
@@ -286,8 +318,8 @@ describe("EnhancedContentTable total amount column", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Total" }));
     const rows = screen.getAllByRole("row").slice(1, 3);
-    expect(rows[0].textContent).toContain("Low Net");
-    expect(rows[1].textContent).toContain("High Net");
-	expect(screen.getByTestId("reservation-export").textContent).toBe("LOW,HIGH");
+    expect(rows[0].textContent).toContain("High Net");
+    expect(rows[1].textContent).toContain("Low Net");
+	expect(screen.getByTestId("reservation-export").textContent).toBe("HIGH,LOW");
   });
 });

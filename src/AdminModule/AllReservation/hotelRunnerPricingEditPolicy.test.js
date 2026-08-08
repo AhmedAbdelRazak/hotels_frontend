@@ -257,6 +257,68 @@ test("permits only an explicitly authorized standalone HotelRunner commission", 
 	expect(result).toEqual({ userId: "super-admin", commission: 0 });
 });
 
+test("permits a SUPER admin pricing and stay correction without exposing HotelRunner identity or source snapshots", () => {
+	const pricingRows = [
+		{
+			room_type: "familyRooms",
+			displayName: "Spacious Six-Bed Room",
+			hotelRoomConfigId: "6a4a84216022cd7f31729011",
+			sourceRoomName: "Family - 6 Persons",
+			pricingByDay: [
+				{
+					date: "2026-08-07",
+					clientPrice: 91.14,
+					rootPrice: 75,
+				},
+			],
+		},
+	];
+	const result = protectHotelRunnerEditorPayload(
+		hotelRunnerReservation,
+		{
+			userId: "super-admin",
+			pickedRoomsType: pricingRows,
+			pickedRoomsPricing: pricingRows,
+			total_rooms: 1,
+			total_amount: 91.14,
+			sub_total: 75,
+			adminPricing: {
+				mode: "hotelrunner_api",
+				clientTotal: 91.14,
+				rootTotal: 75,
+			},
+			checkin_date: "2026-08-07",
+			checkout_date: "2026-08-09",
+			days_of_residence: 2,
+			__reservationDateUpdateIntent: true,
+			__adminPricingUpdateIntent: true,
+			hotelId: "different-hotel",
+			supplierData: { hotelRunner: { reservationId: "tampered" } },
+			commission_ota: 999,
+		},
+		{ allowExplicitPricing: true, allowExplicitStay: true },
+	);
+
+	expect(result).toEqual({
+		userId: "super-admin",
+		pickedRoomsType: pricingRows,
+		pickedRoomsPricing: pricingRows,
+		total_rooms: 1,
+		total_amount: 91.14,
+		sub_total: 75,
+		adminPricing: {
+			mode: "hotelrunner_api",
+			clientTotal: 91.14,
+			rootTotal: 75,
+		},
+		checkin_date: "2026-08-07",
+		checkout_date: "2026-08-09",
+		days_of_residence: 2,
+		__reservationDateUpdateIntent: true,
+		__adminPricingUpdateIntent: true,
+	});
+});
+
 test("keeps legacy finance permissions but gates HotelRunner finance to the configured super admin", () => {
 	expect(
 		canManageReservationFinanceCycle({
@@ -288,7 +350,7 @@ test("keeps legacy finance permissions but gates HotelRunner finance to the conf
 	).toBe(false);
 });
 
-test("the admin editor wires HotelRunner detection, source locking, and final payload protection", () => {
+test("the admin editor keeps source locking except for explicit SUPER admin OTA corrections", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "EditReservationMain.js"),
 		"utf8"
@@ -296,15 +358,23 @@ test("the admin editor wires HotelRunner detection, source locking, and final pa
 
 	expect(source).toMatch(/isHotelRunnerReservation\(reservation\)/);
 	expect(source).toMatch(
-		/pricingPayloadNeeded\s*=\s*!directHotelRunnerReservation/
+		/pricingPayloadNeeded\s*=\s*\(!directHotelRunnerReservation \|\| superAdminOtaOverride\)/
 	);
 	expect(source).toMatch(/protectHotelRunnerEditorPayload\(/);
 	expect(source).toMatch(
-		/hotelRunnerSourceOwned=\{directHotelRunnerReservation\}/
+		/hotelRunnerSourceOwned=\{hotelRunnerSourceEditingLocked\}/
+	);
+	expect(source).toMatch(/allowExplicitPricing:/);
+	expect(source).toMatch(/allowExplicitStay:/);
+	expect(source).toMatch(
+		/const handleRoomCountChange[\s\S]*?if \(directHotelRunnerReservation\) return;/
+	);
+	expect(source).toMatch(
+		/const addRoomSelection[\s\S]*?if \(directHotelRunnerReservation\) return;/
 	);
 	expect(source).toMatch(/hotelRunnerCommercialVerified=/);
 	expect(source).toMatch(
-		/\(!directHotelRunnerReservation \|\| hasExplicitAdvancePaymentEdit\)/,
+		/\(!directHotelRunnerReservation && !superAdminOtaOverride\) \|\|\s*hasExplicitAdvancePaymentEdit/,
 	);
 });
 
