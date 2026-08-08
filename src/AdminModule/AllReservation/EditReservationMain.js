@@ -1956,20 +1956,12 @@ const EditReservationMain = ({
 						style={{ marginBottom: 12, padding: 8 }}
 					/>
 				)}
-				{directHotelRunnerReservation && (
+				{directHotelRunnerReservation && !superAdminOtaOverride && (
 					<Alert
 						type='info'
 						showIcon
-						message={
-							superAdminOtaOverride
-								? "SUPER admin local OTA correction"
-								: "HotelRunner source pricing is protected"
-						}
-						description={
-							superAdminOtaOverride
-								? "You may deliberately correct the local PMS stay, mapped room type, and saved nightly pricing. HotelRunner identity and its original source snapshot remain protected. Changing a room type keeps saved prices; extending a stay projects new nights from saved pricing."
-								: "Hotel, room selection, gross/local-base totals, and nightly prices are synchronized in the background and are read-only here. Ordinary local reservation fields remain editable. Missing OTA expense or hotel-net data is never inferred."
-						}
+						message='HotelRunner source pricing is protected'
+						description='Hotel, room selection, gross/local-base totals, and nightly prices are synchronized in the background and are read-only here. Ordinary local reservation fields remain editable. Missing OTA expense or hotel-net data is never inferred.'
 						style={{ marginBottom: 12 }}
 					/>
 				)}
