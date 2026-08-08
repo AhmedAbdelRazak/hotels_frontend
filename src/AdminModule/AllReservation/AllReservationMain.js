@@ -744,6 +744,7 @@ const AllReservationMain = ({ chosenLanguage }) => {
 										allowAllReservedBy={allowAllReservedBy}
 										selfReservedBy={(getUser?.name || "").trim().toLowerCase()}
 										currentUserId={getUser?._id}
+										token={token}
 										onReservationUpdated={fetchReservations}
 										chosenLanguage={chosenLanguage}
 									/>

@@ -1,10 +1,18 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import EnhancedContentTable, {
   ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS,
   ADMIN_RESERVATION_TABLE_MIN_WIDTH,
 } from "./EnhancedContentTable";
+import { getAdminReservationById } from "../apiAdmin";
 
 jest.mock("@ant-design/icons", () => ({
   CalendarOutlined: () => <span aria-hidden="true" />,
@@ -32,13 +40,20 @@ jest.mock("antd", () => ({
     />
   ),
   Modal: ({ children, open }) => (open ? <div>{children}</div> : null),
+  Spin: () => <div data-testid="details-spinner" />,
   Tooltip: ({ children }) => children,
   Checkbox: ({ children }) => <label>{children}</label>,
   message: { error: jest.fn(), success: jest.fn(), warning: jest.fn() },
 }));
 
 jest.mock("./ScoreCards", () => () => null);
-jest.mock("./MoreDetails", () => () => null);
+jest.mock("./MoreDetails", () => ({ reservation }) => (
+  <div data-testid="hydrated-reservation-details">
+    {reservation?.pickedRoomsType?.[0]?.pricingByDay?.length || 0}:
+    {reservation?.pickedRoomsType?.[0]?.pricingByDay?.[0]?.clientPrice ??
+      "no-nightly-price"}
+  </div>
+));
 jest.mock("./ExportToExcelButton", () => ({
   data,
   exportCurrentData,
@@ -55,6 +70,7 @@ jest.mock("./ExportToExcelButton", () => ({
 jest.mock("./DateFilterModal", () => () => null);
 jest.mock("../apiAdmin", () => ({
   applyOtaReservationSyncJob: jest.fn(),
+  getAdminReservationById: jest.fn(),
   prepareOtaReservationSyncJob: jest.fn(),
   readOtaReservationSyncJob: jest.fn(),
   runOtaReservationSyncCollector: jest.fn(),
@@ -90,30 +106,38 @@ const reservation = ({
   adminPricing: { mode, netAfterExpensesTotal: net },
 });
 
-const renderTable = ({
+const tableElement = ({
   data,
   fromPage = "AllReservations",
   chosenLanguage = "English",
-}) =>
-  render(
-    <MemoryRouter>
-      <EnhancedContentTable
-        data={data}
-        totalDocuments={data.length}
-        currentPage={1}
-        pageSize={10}
-        setCurrentPage={jest.fn()}
-        setPageSize={jest.fn()}
-        searchTerm=""
-        setSearchTerm={jest.fn()}
-        handleSearch={jest.fn()}
-        fromPage={fromPage}
-        scorecardsObject={{}}
-        allHotelDetailsAdmin={[]}
-		chosenLanguage={chosenLanguage}
-      />
-    </MemoryRouter>,
-  );
+  token = "",
+  initialEntry = "/admin/all-reservations",
+}) => (
+  <MemoryRouter initialEntries={[initialEntry]}>
+    <EnhancedContentTable
+      data={data}
+      totalDocuments={data.length}
+      currentPage={1}
+      pageSize={10}
+      setCurrentPage={jest.fn()}
+      setPageSize={jest.fn()}
+      searchTerm=""
+      setSearchTerm={jest.fn()}
+      handleSearch={jest.fn()}
+      fromPage={fromPage}
+      scorecardsObject={{}}
+      allHotelDetailsAdmin={[]}
+      token={token}
+      chosenLanguage={chosenLanguage}
+    />
+  </MemoryRouter>
+);
+
+const renderTable = (options) => render(tableElement(options));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 const totalCellTextFor = (guest) => {
   const headers = screen
@@ -321,5 +345,223 @@ describe("EnhancedContentTable total amount column", () => {
     expect(rows[0].textContent).toContain("High Net");
     expect(rows[1].textContent).toContain("Low Net");
 	expect(screen.getByTestId("reservation-export").textContent).toBe("HIGH,LOW");
+  });
+});
+
+describe("EnhancedContentTable reservation detail hydration", () => {
+  const compactHotelRunnerReservation = () => {
+    const row = reservation({
+      id: "6a7739f18151a25e449582b0",
+      guest: "Trip.com Guest",
+      total: 65.03,
+      net: 52.02,
+      mode: "hotelrunner_api",
+    });
+    row.pickedRoomsType = [
+      {
+        roomType: "familyRooms",
+        displayName: "Family Quintuple Room",
+        count: 1,
+      },
+    ];
+    row.pickedRoomsPricing = row.pickedRoomsType;
+    return row;
+  };
+
+  const fullHotelRunnerReservation = () => {
+    const row = compactHotelRunnerReservation();
+    row.pickedRoomsType = [
+      {
+        ...row.pickedRoomsType[0],
+        pricingByDay: [
+          {
+            date: "2026-08-11",
+            clientPrice: 65.03,
+            rootPrice: 75,
+          },
+        ],
+      },
+    ];
+    row.pickedRoomsPricing = row.pickedRoomsType;
+    return row;
+  };
+
+  it("hydrates a compact row before mounting reservation details", async () => {
+    getAdminReservationById.mockResolvedValue(fullHotelRunnerReservation());
+    renderTable({
+      data: [compactHotelRunnerReservation()],
+      token: "admin-token",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "More Details" }));
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("65.03");
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+    expect(getAdminReservationById).toHaveBeenCalledWith(
+      "6a7739f18151a25e449582b0",
+      "admin-token",
+      expect.objectContaining({ signal: expect.any(Object) }),
+    );
+  });
+
+  it("hydrates the reservationId deep link before mounting reservation details", async () => {
+    getAdminReservationById.mockResolvedValue(fullHotelRunnerReservation());
+    renderTable({
+      data: [compactHotelRunnerReservation()],
+      token: "admin-token",
+      initialEntry:
+        "/admin/all-reservations?reservationId=6a7739f18151a25e449582b0",
+    });
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("65.03");
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+  });
+
+  it("hydrates a valid deep link even when the reservation is off the current page", async () => {
+    getAdminReservationById.mockResolvedValue(fullHotelRunnerReservation());
+    renderTable({
+      data: [],
+      token: "admin-token",
+      initialEntry:
+        "/admin/all-reservations?reservationId=6a7739f18151a25e449582b0",
+    });
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("1:65.03");
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+    expect(getAdminReservationById).toHaveBeenCalledWith(
+      "6a7739f18151a25e449582b0",
+      "admin-token",
+      expect.objectContaining({ signal: expect.any(Object) }),
+    );
+  });
+
+  it("keeps hydrated details visible when the compact list arrives afterward", async () => {
+    const initialEntry =
+      "/admin/all-reservations?reservationId=6a7739f18151a25e449582b0";
+    getAdminReservationById.mockResolvedValue(fullHotelRunnerReservation());
+    const view = renderTable({ data: [], token: "admin-token", initialEntry });
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("1:65.03");
+
+    view.rerender(
+      tableElement({
+        data: [compactHotelRunnerReservation()],
+        token: "admin-token",
+        initialEntry,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("admin-reservation-details-loading")).toBeNull();
+      expect(screen.getByTestId("hydrated-reservation-details").textContent).toContain(
+        "1:65.03",
+      );
+    });
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restart an in-flight deep-link request when the list row arrives", async () => {
+    const initialEntry =
+      "/admin/all-reservations?reservationId=6a7739f18151a25e449582b0";
+    let resolveDetails;
+    getAdminReservationById.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDetails = resolve;
+      }),
+    );
+    const view = renderTable({ data: [], token: "admin-token", initialEntry });
+
+    await waitFor(() => {
+      expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+    });
+    view.rerender(
+      tableElement({
+        data: [compactHotelRunnerReservation()],
+        token: "admin-token",
+        initialEntry,
+      }),
+    );
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveDetails(fullHotelRunnerReservation());
+    });
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("1:65.03");
+    expect(screen.queryByTestId("admin-reservation-details-loading")).toBeNull();
+    expect(getAdminReservationById).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not request an invalid off-page reservation key", () => {
+    renderTable({
+      data: [],
+      token: "admin-token",
+      initialEntry: "/admin/all-reservations?reservationId=not-a-reservation-id",
+    });
+
+    expect(getAdminReservationById).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("admin-reservation-details-loading")).toBeNull();
+  });
+
+  it("uses the employee reservation's saved nightly rows instead of rebuilding them", async () => {
+    const compact = reservation({
+      id: "6a7731368151a25e449571d1",
+      guest: "Employee Guest",
+      total: 150,
+      net: 150,
+      mode: "standard",
+    });
+    compact.pickedRoomsType = [
+      { roomType: "quadRooms", displayName: "Quadruple Room", count: 1 },
+    ];
+    getAdminReservationById.mockResolvedValue({
+      ...compact,
+      pickedRoomsType: [
+        {
+          ...compact.pickedRoomsType[0],
+          pricingByDay: [
+            { date: "2026-08-10", clientPrice: 75, rootPrice: 75 },
+            { date: "2026-08-11", clientPrice: 75, rootPrice: 75 },
+          ],
+        },
+      ],
+    });
+    renderTable({ data: [compact], token: "admin-token" });
+
+    fireEvent.click(screen.getByRole("button", { name: "More Details" }));
+
+    expect(
+      (await screen.findByTestId("hydrated-reservation-details")).textContent,
+    ).toContain("2:75");
+  });
+
+  it("rejects a mismatched reservation response instead of opening stale details", async () => {
+    getAdminReservationById.mockResolvedValue({
+      ...fullHotelRunnerReservation(),
+      _id: "6a7731368151a25e449571d1",
+    });
+    renderTable({
+      data: [compactHotelRunnerReservation()],
+      token: "admin-token",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "More Details" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Could not load complete reservation details",
+      );
+    });
+    expect(screen.queryByTestId("hydrated-reservation-details")).toBeNull();
   });
 });

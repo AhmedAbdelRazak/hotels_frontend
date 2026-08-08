@@ -1,7 +1,7 @@
 // client/src/AdminModule/AllReservation/EnhancedContentTable.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import styled, { createGlobalStyle } from "styled-components";
-import { Tooltip, Modal, Button, Input, message, Checkbox } from "antd";
+import { Tooltip, Modal, Button, Input, message, Checkbox, Spin } from "antd";
 import { CalendarOutlined, SyncOutlined } from "@ant-design/icons";
 import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
@@ -13,6 +13,7 @@ import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	applyOtaReservationSyncJob,
+	getAdminReservationById,
 	prepareOtaReservationSyncJob,
 	readOtaReservationSyncJob,
 	runOtaReservationSyncCollector,
@@ -80,6 +81,9 @@ const matchesReservationKey = (reservation, key) => {
 	}
 	return false;
 };
+
+const isReservationObjectId = (value) =>
+	/^[a-f\d]{24}$/i.test(String(value || "").trim());
 
 const isSameReservation = (a, b) => {
 	if (!a || !b) return false;
@@ -253,6 +257,7 @@ const EnhancedContentTable = ({
 	allowAllReservedBy = false, // super user id?
 	selfReservedBy = "", // lowercase current employee name
 	currentUserId, // not used here but passed through for future hooks
+	token = "",
 	onReservationUpdated = () => {},
 	chosenLanguage = "English",
 }) => {
@@ -429,6 +434,11 @@ const EnhancedContentTable = ({
 	// ------------------ Modal for "View Details" ------------------
 	const [isModalVisible, setIsModalVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [reservationDetailsLoading, setReservationDetailsLoading] =
+		useState(false);
+	const [reservationDetailsError, setReservationDetailsError] = useState("");
+	const [reservationDetailsTargetKey, setReservationDetailsTargetKey] =
+		useState("");
 	const [otaSyncPreparing, setOtaSyncPreparing] = useState(false);
 	const [otaSyncRunning, setOtaSyncRunning] = useState(false);
 	const [otaSyncApplying, setOtaSyncApplying] = useState(false);
@@ -467,12 +477,25 @@ const EnhancedContentTable = ({
 	};
 
 	const showDetailsModal = (reservation) => {
+		const reservationKey = getReservationKey(reservation);
+		const shouldLoadFullDetails =
+			fromPage === "AllReservations" &&
+			!!token &&
+			isReservationObjectId(reservationKey);
 		setSelectedReservation(reservation);
+		setReservationDetailsTargetKey(
+			shouldLoadFullDetails ? reservationKey : ""
+		);
+		setReservationDetailsError("");
+		setReservationDetailsLoading(shouldLoadFullDetails);
 		setIsModalVisible(true);
-		updateQueryParams({ reservationId: getReservationKey(reservation) });
+		updateQueryParams({ reservationId: reservationKey });
 	};
 	const handleModalClose = () => {
 		setSelectedReservation(null);
+		setReservationDetailsTargetKey("");
+		setReservationDetailsLoading(false);
+		setReservationDetailsError("");
 		setIsModalVisible(false);
 		updateQueryParams({ reservationId: "" });
 	};
@@ -491,21 +514,108 @@ const EnhancedContentTable = ({
 		const match = formattedReservations.find((reservation) =>
 			matchesReservationKey(reservation, reservationId)
 		);
-		if (!match) return;
+		if (!match) {
+			if (
+				fromPage === "AllReservations" &&
+				token &&
+				isReservationObjectId(reservationId)
+			) {
+				if (reservationDetailsTargetKey !== reservationId) {
+					setSelectedReservation(null);
+					setReservationDetailsTargetKey(reservationId);
+					setReservationDetailsError("");
+					setReservationDetailsLoading(true);
+				}
+				setIsModalVisible(true);
+			}
+			return;
+		}
+		const matchKey = getReservationKey(match);
+		const nextTargetKey =
+			fromPage === "AllReservations" &&
+			token &&
+			isReservationObjectId(matchKey)
+				? matchKey
+				: "";
+		if (reservationDetailsTargetKey !== nextTargetKey) {
+			setReservationDetailsTargetKey(nextTargetKey);
+			setReservationDetailsError("");
+			setReservationDetailsLoading(!!nextTargetKey);
+		}
 
 		setSelectedReservation((prev) => {
 			if (prev && isSameReservation(prev, match)) {
-				const merged = mergeReservationPreservingRefs(prev, match);
-				return reservationStateKey(prev) === reservationStateKey(merged)
-					? prev
-					: merged;
+				return prev;
 			}
 			return match;
 		});
 		if (!isModalVisible) {
 			setIsModalVisible(true);
 		}
-	}, [location.search, formattedReservations, isModalVisible]);
+	}, [
+		location.search,
+		formattedReservations,
+		fromPage,
+		isModalVisible,
+		reservationDetailsTargetKey,
+		token,
+	]);
+
+	useEffect(() => {
+		const shouldLoadFullDetails =
+			fromPage === "AllReservations" &&
+			isModalVisible &&
+			!!reservationDetailsTargetKey &&
+			!!token;
+		if (!shouldLoadFullDetails) {
+			setReservationDetailsLoading(false);
+			return undefined;
+		}
+
+		const controller = new AbortController();
+		let active = true;
+		setReservationDetailsLoading(true);
+		setReservationDetailsError("");
+		getAdminReservationById(reservationDetailsTargetKey, token, {
+			signal: controller.signal,
+		})
+			.then((fullReservation) => {
+				if (!active) return;
+				if (
+					!fullReservation?._id ||
+					String(fullReservation._id) !== String(reservationDetailsTargetKey) ||
+					fullReservation?.error
+				) {
+					throw new Error("Complete reservation details were not returned.");
+				}
+				setSelectedReservation((previous) => {
+					if (!previous) return fullReservation;
+					return isSameReservation(previous, fullReservation)
+						? mergeReservationPreservingRefs(previous, fullReservation)
+						: previous;
+				});
+			})
+			.catch((error) => {
+				if (!active || error?.name === "AbortError") return;
+				setReservationDetailsError(
+					"Could not load complete reservation details. Close and try again."
+				);
+				message.error("Could not load complete reservation details.");
+			})
+			.finally(() => {
+				if (active) setReservationDetailsLoading(false);
+			});
+
+		return () => {
+			active = false;
+			controller.abort();
+		};
+	}, [
+		fromPage,
+		isModalVisible,
+		reservationDetailsTargetKey,
+		token,
+	]);
 
 	// ------------------ Filter Button Handlers ------------------
 	const onFilterClick = (type) => {
@@ -1399,7 +1509,18 @@ const EnhancedContentTable = ({
 					},
 				}}
 			>
-				{selectedReservation ? (
+				{reservationDetailsLoading ? (
+					<div
+						data-testid='admin-reservation-details-loading'
+						style={{ padding: 48, textAlign: "center" }}
+					>
+						<Spin size='large' />
+					</div>
+				) : reservationDetailsError ? (
+					<div role='alert' style={{ padding: 32, textAlign: "center" }}>
+						{reservationDetailsError}
+					</div>
+				) : selectedReservation ? (
 					<MoreDetails
 						key={getReservationKey(selectedReservation)}
 						selectedReservation={selectedReservation}
