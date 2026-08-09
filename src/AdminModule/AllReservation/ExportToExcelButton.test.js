@@ -96,6 +96,9 @@ describe("ExportToExcelButton report export", () => {
 						booking_source: "airbnb",
 						reservation_status: "confirmed",
 						payment_status: "Not Captured",
+						gross_total_amount: 200,
+						net_total_amount: 170,
+						financial_totals_currency: "usd",
 					},
 				]}
 			/>,
@@ -107,6 +110,9 @@ describe("ExportToExcelButton report export", () => {
 			[
 				expect.arrayContaining([
 					"مصدر الحجز",
+					"إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+					"صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+					"العملة",
 					"نوع الغرفة",
 					"رقم الغرفة",
 				]),
@@ -117,7 +123,10 @@ describe("ExportToExcelButton report export", () => {
 		expect(rows[0]["Booking Source"]).toBe("airbnb");
 		expect(rows[0].Status).toBe("مؤكد");
 		expect(rows[0]["Payment Status"]).toBe("لم يتم التحصيل");
-		expect(XLSX.utils.sheet_add_aoa.mock.calls[0][0]["!cols"]).toHaveLength(16);
+		expect(rows[0]["Gross Total (Before OTA Deductions)"]).toBe(200);
+		expect(rows[0]["Net Total (After OTA Deductions)"]).toBe(170);
+		expect(rows[0].Currency).toBe("USD");
+		expect(XLSX.utils.sheet_add_aoa.mock.calls[0][0]["!cols"]).toHaveLength(18);
 		expect(XLSX.utils.book_append_sheet).toHaveBeenCalledWith(
 			expect.any(Object),
 			expect.any(Object),
@@ -131,7 +140,18 @@ describe("ExportToExcelButton report export", () => {
 
 	it("preserves the configurable API export on non-report reservation pages", async () => {
 		getExportToExcelList.mockResolvedValue([
-			{ confirmation_number: "CONFIGURABLE-EXPORT" },
+			{
+				confirmation_number: "CONFIGURABLE-EXPORT",
+				booking_source: "agoda",
+				gross_total_amount: 73.5,
+				net_total_amount: 45.47,
+				financial_totals_currency: "usd",
+			},
+			{
+				confirmation_number: "LEGACY-OTA-WITHOUT-NET",
+				booking_source: "agoda",
+				total_amount: 500,
+			},
 		]);
 		render(<ExportToExcelButton data={[{ confirmation_number: "TABLE-ROW" }]} />);
 
@@ -148,6 +168,13 @@ describe("ExportToExcelButton report export", () => {
 		const [rows] = XLSX.utils.json_to_sheet.mock.calls[0];
 		expect(rows.map((row) => row["Confirmation Number"])).toEqual([
 			"CONFIGURABLE-EXPORT",
+			"LEGACY-OTA-WITHOUT-NET",
 		]);
+		expect(rows[0]["Gross Total (Before OTA Deductions)"]).toBe(73.5);
+		expect(rows[0]["Net Total (After OTA Deductions)"]).toBe(45.47);
+		expect(rows[0].Currency).toBe("USD");
+		expect(rows[1]["Gross Total (Before OTA Deductions)"]).toBe(500);
+		expect(rows[1]["Net Total (After OTA Deductions)"]).toBe("");
+		expect(rows[1].Currency).toBe("SAR");
 	});
 });

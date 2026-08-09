@@ -200,7 +200,9 @@ const ExportToExcelButton = ({
 			{ wch: 15 }, // Checkin Date
 			{ wch: 15 }, // Checkout Date
 			{ wch: 15 }, // Payment Status
-			{ wch: 15 }, // Total Amount
+			{ wch: 18 }, // Gross Total
+			{ wch: 18 }, // Net Total
+			{ wch: 12 }, // Currency
 			{ wch: 15 }, // Paid Amount
 			{ wch: 15 }, // Room Type
 			{ wch: 18 }, // Room Number

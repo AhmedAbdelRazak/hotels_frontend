@@ -168,7 +168,8 @@ const ROOM_FIELDS = [
 ];
 
 const formatAmount = (amount, language) =>
-  new Intl.NumberFormat(language === "Arabic" ? "ar-SA" : "en-US", {
+  new Intl.NumberFormat("en-US", {
+    numberingSystem: "latn",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);

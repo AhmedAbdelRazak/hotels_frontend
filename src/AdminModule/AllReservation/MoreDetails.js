@@ -669,7 +669,9 @@ const formatAuditScalar = (
 	if (typeof value === "number") {
 		const normalized = Number(value.toFixed(2));
 		return AUDIT_MONEY_PATH_PATTERN.test(path)
-			? `${normalized.toLocaleString()} SAR`
+			? `${normalized.toLocaleString("en-US", {
+					numberingSystem: "latn",
+			  })} SAR`
 			: String(normalized);
 	}
 	if (typeof value === "string") {
@@ -5291,7 +5293,10 @@ const ReservationDetail = ({
 	}, []);
 
 	const formatMoney = useCallback(
-		(value) => normalizeNumber(value, 0).toLocaleString(),
+		(value) =>
+			normalizeNumber(value, 0).toLocaleString("en-US", {
+				numberingSystem: "latn",
+			}),
 		[normalizeNumber],
 	);
 	const formatOptionalMoney = useCallback(
@@ -11923,7 +11928,10 @@ const ReservationDetail = ({
 												<div className='col-md-4 mt-2'>{/* Date */}</div>
 												<div className='col-md-4 mt-2'>{room.room_type}</div>
 												<div className='col-md-4 mt-2'>
-													{room.chosenPrice.toLocaleString() * room.count}{" "}
+											{formatMoney(
+												normalizeNumber(room.chosenPrice, 0) *
+													normalizeNumber(room.count, 1),
+											)}{" "}
 													{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 												</div>
 											</React.Fragment>
@@ -12094,9 +12102,11 @@ const ReservationDetail = ({
 											<div className='col-md-5 mx-auto'>
 												<h5>
 													{getTotalAmountPerDay(reservation.pickedRoomsType) &&
-														getTotalAmountPerDay(
-															reservation.pickedRoomsType,
-														).toLocaleString()}{" "}
+												formatMoney(
+													getTotalAmountPerDay(
+														reservation.pickedRoomsType,
+													),
+												)}{" "}
 													{chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR"}
 												</h5>
 											</div>

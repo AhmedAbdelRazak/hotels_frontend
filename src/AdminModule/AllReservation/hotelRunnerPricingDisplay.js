@@ -1257,7 +1257,9 @@ export const getReservationPropertyGuestGrossDisplay = (reservation = {}) => {
 
 export const formatHotelRunnerReportAmount = (value) => {
   const amount = finiteMoneyOrNull(value);
-  return amount === null ? "—" : amount.toLocaleString();
+  return amount === null
+    ? "—"
+    : amount.toLocaleString("en-US", { numberingSystem: "latn" });
 };
 
 export { finiteMoneyOrNull };

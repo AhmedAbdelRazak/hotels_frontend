@@ -143,7 +143,7 @@ const totalCellTextFor = (guest) => {
   const headers = screen
     .getAllByRole("columnheader")
     .map((header) => header.textContent.trim());
-  const totalIndex = headers.indexOf("Total");
+  const totalIndex = headers.indexOf("Gross Total");
   const row = screen.getByRole("row", { name: new RegExp(guest) });
   return within(row)
     .getAllByRole("cell")[totalIndex]
@@ -163,7 +163,7 @@ const cellTextFor = (guest, headerLabel) => {
 };
 
 describe("EnhancedContentTable total amount column", () => {
-  it("shows the saved guest total in the Total column on all reservations", () => {
+  it("shows explicit Gross Total and Net Total columns on all reservations", () => {
     const netReservation = reservation({
       id: "NET",
       guest: "Net Guest",
@@ -190,6 +190,9 @@ describe("EnhancedContentTable total amount column", () => {
     expect(totalCellTextFor("Net Guest")).toBe("1200.00 SAR");
     expect(totalCellTextFor("Fallback Guest")).toBe("800.00 SAR");
     expect(totalCellTextFor("Zero Guest")).toBe("500.00 SAR");
+    expect(cellTextFor("Net Guest", "Net Total")).toBe("950.00 SAR");
+    expect(cellTextFor("Fallback Guest", "Net Total")).toBe("800.00 SAR");
+    expect(cellTextFor("Zero Guest", "Net Total")).toBe("0.00 SAR");
     const headers = screen
       .getAllByRole("columnheader")
       .map((header) => header.textContent.trim());
@@ -200,7 +203,7 @@ describe("EnhancedContentTable total amount column", () => {
     expect(netGuestCells[roomNumberIndex].textContent).toBe("101");
 	expect(headers).not.toContain("Room Type");
 	expect(ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS).toHaveLength(headers.length);
-	expect(ADMIN_RESERVATION_TABLE_MIN_WIDTH).toBe(1588);
+	expect(ADMIN_RESERVATION_TABLE_MIN_WIDTH).toBe(1796);
 	expect(container.querySelectorAll("colgroup col")).toHaveLength(headers.length);
     expect(
       netGuestCells[priceIndex]
@@ -278,8 +281,10 @@ describe("EnhancedContentTable total amount column", () => {
 
     expect(totalCellTextFor("Canonical Guest")).toBe("700.00 SAR");
     expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("350.00 SAR");
-    expect(totalCellTextFor("Missing Gross Guest")).toBe("—");
-    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("—");
+    expect(cellTextFor("Canonical Guest", "Net Total")).toBe("Not available");
+    expect(totalCellTextFor("Missing Gross Guest")).toBe("Not available");
+    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("Not available");
+    expect(cellTextFor("Missing Gross Guest", "Net Total")).toBe("Not available");
   });
 
   it("shows the verified Agoda guest total for HR-linked rows instead of the raw payout", () => {
@@ -298,6 +303,7 @@ describe("EnhancedContentTable total amount column", () => {
     });
     hotelRunnerReservation.adminPricing.commercialVerified = true;
     hotelRunnerReservation.adminPricing.clientTotal = 91.14;
+    hotelRunnerReservation.net_total_amount = 56.39;
     hotelRunnerReservation.supplierData = {
       hotelRunner: {
         transport: "hotelrunner_api",
@@ -319,8 +325,10 @@ describe("EnhancedContentTable total amount column", () => {
 
     expect(cellTextFor("Nawaz Shahid", "Price/Day")).toBe("77.42 SAR");
     expect(totalCellTextFor("Nawaz Shahid")).toBe("77.42 SAR");
+    expect(cellTextFor("Nawaz Shahid", "Net Total")).toBe("47.90 SAR");
     expect(cellTextFor("Mays Mohmadi", "Price/Day")).toBe("91.14 SAR");
     expect(totalCellTextFor("Mays Mohmadi")).toBe("91.14 SAR");
+    expect(cellTextFor("Mays Mohmadi", "Net Total")).toBe("56.39 SAR");
   });
 
   it("uses Arabic table headers and passes Arabic to the direct report export", () => {
@@ -343,6 +351,8 @@ describe("EnhancedContentTable total amount column", () => {
 	expect(headers).toContain("الفندق");
 	expect(headers).toContain("رقم التأكيد");
 	expect(headers).toContain("رقم الغرفة");
+	expect(headers).toContain("إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)");
+	expect(headers).toContain("صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)");
 	expect(headers).toContain("التفاصيل");
 	expect(headers).not.toContain("Hotel");
 	expect(
@@ -350,7 +360,7 @@ describe("EnhancedContentTable total amount column", () => {
 	).toBe("Arabic");
   });
 
-  it("sorts the Total column by the value shown to the admin", () => {
+  it("sorts the Gross Total column by the value shown to the admin", () => {
     renderTable({
       data: [
         reservation({ id: "HIGH", guest: "High Net", total: 900, net: 800 }),
@@ -358,11 +368,101 @@ describe("EnhancedContentTable total amount column", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Total" }));
+    fireEvent.click(screen.getByRole("button", { name: "Gross Total" }));
     const rows = screen.getAllByRole("row").slice(1, 3);
     expect(rows[0].textContent).toContain("High Net");
     expect(rows[1].textContent).toContain("Low Net");
 	expect(screen.getByTestId("reservation-export").textContent).toBe("HIGH,LOW");
+  });
+
+  it("renders Arabic-Indic and Persian digits as Latin digits in every language", () => {
+	renderTable({
+	  chosenLanguage: "Arabic",
+	  data: [
+		reservation({
+		  id: "OTA-\u0661\u0662\u06f3",
+		  guest: "Digit Guest",
+		  total: 250,
+		  net: 200,
+		}),
+	  ],
+	});
+
+	const row = screen.getByRole("row", { name: /Digit Guest/ });
+	expect(row.textContent).toContain("OTA-123");
+	expect(row.textContent).not.toContain("OTA-\u0661\u0662\u06f3");
+  });
+
+  it("sorts Net Total independently from Gross Total", () => {
+    renderTable({
+      data: [
+        reservation({ id: "HIGH", guest: "High Net", total: 900, net: 800 }),
+        reservation({ id: "LOW", guest: "Low Net", total: 1000, net: 100 }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Net Total" }));
+    const rows = screen.getAllByRole("row").slice(1, 3);
+    expect(rows[0].textContent).toContain("Low Net");
+    expect(rows[1].textContent).toContain("High Net");
+  });
+
+  it("renders backend-resolved OTA gross and net scalars with Latin numerals", () => {
+    const ota = reservation({
+      id: "6623173078",
+      guest: "Agoda Guest",
+      total: 75,
+      net: null,
+      mode: "hotelrunner_api",
+    });
+    ota.booking_source = "agoda";
+    ota.gross_total_amount = 73.5;
+    ota.net_total_amount = 45.47;
+
+    renderTable({ data: [ota], chosenLanguage: "Arabic" });
+
+    expect(
+      cellTextFor(
+        "Agoda Guest",
+        "إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+      ),
+    ).toBe("73.50 SAR");
+    expect(
+      cellTextFor(
+        "Agoda Guest",
+        "صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+      ),
+    ).toBe("45.47 SAR");
+  });
+
+  it("uses each row's financial currency for gross, net, and derived price/day", () => {
+    const usd = reservation({
+      id: "USD-ROW",
+      guest: "USD Guest",
+      total: 100,
+      net: 80,
+    });
+    usd.gross_total_amount = 100;
+    usd.net_total_amount = 80;
+    usd.financial_totals_currency = "usd";
+    usd.days_of_residence = 2;
+
+    const defaultSar = reservation({
+      id: "SAR-ROW",
+      guest: "SAR Guest",
+      total: 90,
+      net: 70,
+    });
+    defaultSar.gross_total_amount = 90;
+    defaultSar.net_total_amount = 70;
+
+    renderTable({ data: [usd, defaultSar] });
+
+    expect(cellTextFor("USD Guest", "Price/Day")).toBe("50.00 USD");
+    expect(cellTextFor("USD Guest", "Gross Total")).toBe("100.00 USD");
+    expect(cellTextFor("USD Guest", "Net Total")).toBe("80.00 USD");
+    expect(cellTextFor("SAR Guest", "Gross Total")).toBe("90.00 SAR");
+    expect(cellTextFor("SAR Guest", "Net Total")).toBe("70.00 SAR");
   });
 });
 

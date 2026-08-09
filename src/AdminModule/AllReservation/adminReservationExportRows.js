@@ -3,6 +3,12 @@ import {
 	getRoomTypeDisplayLabel,
 } from "./reservationRoomDetails";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import { toLatinDigits } from "../../utils/latinDigits";
+import {
+	getAdminReservationFinancialCurrency,
+	getAdminReservationGrossTotal,
+	getAdminReservationNetTotal,
+} from "./reservationTableAmounts";
 
 export const ADMIN_RESERVATION_EXPORT_HEADERS = Object.freeze([
 	"Confirmation Number",
@@ -14,7 +20,9 @@ export const ADMIN_RESERVATION_EXPORT_HEADERS = Object.freeze([
 	"Checkin Date",
 	"Checkout Date",
 	"Payment Status",
-	"Total Amount",
+	"Gross Total (Before OTA Deductions)",
+	"Net Total (After OTA Deductions)",
+	"Currency",
 	"Paid Amount (Online)",
 	"Room Type",
 	"Room Number",
@@ -33,7 +41,9 @@ export const ADMIN_RESERVATION_EXPORT_ARABIC_HEADERS = Object.freeze([
 	"تاريخ الوصول",
 	"تاريخ المغادرة",
 	"حالة الدفع",
-	"المبلغ الإجمالي",
+	"إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+	"صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+	"العملة",
 	"المبلغ المدفوع إلكترونيًا",
 	"نوع الغرفة",
 	"رقم الغرفة",
@@ -94,6 +104,18 @@ const firstAvailable = (...values) =>
 		(value) => value !== undefined && value !== null && String(value).trim() !== "",
 	);
 
+const numericMoneyOrBlank = (value) => {
+	if (value === null || value === undefined || typeof value === "boolean") {
+		return "";
+	}
+	if (typeof value !== "number" && typeof value !== "string") return "";
+	const normalized =
+		typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+	if (normalized === "") return "";
+	const number = Number(normalized);
+	return Number.isFinite(number) ? number : "";
+};
+
 const blankUnavailableRoomValue = (value) => {
 	const text = String(value === undefined || value === null ? "" : value).trim();
 	return text
@@ -145,21 +167,31 @@ export const buildAdminReservationExportRows = (
 			item.room_number_display,
 			roomSummary.roomNumberText,
 		);
+		const grossTotal = getAdminReservationGrossTotal(item);
+		const netTotal = getAdminReservationNetTotal(item);
+		const financialTotalsCurrency =
+			getAdminReservationFinancialCurrency(item);
 
 		return {
-			"Confirmation Number": item.confirmation_number || "",
-			Name: firstAvailable(item.customer_name, customerDetails.name) || "",
-			Phone: firstAvailable(item.customer_phone, customerDetails.phone) || "",
-			"Hotel Name": firstAvailable(item.hotel_name, hotelDetails.hotelName) || "",
-			"Booking Source": firstAvailable(
+			"Confirmation Number": toLatinDigits(item.confirmation_number || ""),
+			Name: toLatinDigits(
+				firstAvailable(item.customer_name, customerDetails.name) || "",
+			),
+			Phone: toLatinDigits(
+				firstAvailable(item.customer_phone, customerDetails.phone) || "",
+			),
+			"Hotel Name": toLatinDigits(
+				firstAvailable(item.hotel_name, hotelDetails.hotelName) || "",
+			),
+			"Booking Source": toLatinDigits(firstAvailable(
 				item.booking_source,
 				item.customer_booking_source,
 				customerDetails.booking_source,
-			) || "",
-			Status: localizeReservationStatus(
+			) || ""),
+			Status: toLatinDigits(localizeReservationStatus(
 				item.reservation_status,
 				chosenLanguage,
-			),
+			)),
 			"Checkin Date": exportDate(
 				item.checkin_date,
 				localeForDate,
@@ -170,25 +202,26 @@ export const buildAdminReservationExportRows = (
 				localeForDate,
 				chosenLanguage,
 			),
-			"Payment Status": localizePaymentStatus(
+			"Payment Status": toLatinDigits(localizePaymentStatus(
 				item.payment_status,
 				chosenLanguage,
+			)),
+			"Gross Total (Before OTA Deductions)":
+				numericMoneyOrBlank(grossTotal),
+			"Net Total (After OTA Deductions)": numericMoneyOrBlank(netTotal),
+			Currency: financialTotalsCurrency,
+			"Paid Amount (Online)": numericMoneyOrBlank(
+				firstAvailable(item.paid_amount_display, item.paid_amount),
 			),
-			"Total Amount": firstAvailable(
-				item.display_total_amount,
-				item.total_amount,
-			) || 0,
-			"Paid Amount (Online)": firstAvailable(
-				item.paid_amount_display,
-				item.paid_amount,
-			) || 0,
-			"Room Type": roomType,
-			"Room Number": roomNumber,
+			"Room Type": toLatinDigits(roomType),
+			"Room Number": toLatinDigits(roomNumber),
 			"Room Count": getReservedRoomCount(item),
-			"Paid Offline": firstAvailable(
-				item.paid_offline,
-				item.payment_details?.onsite_paid_amount,
-			) || 0,
+			"Paid Offline": numericMoneyOrBlank(
+				firstAvailable(
+					item.paid_offline,
+					item.payment_details?.onsite_paid_amount,
+				),
+			),
 			"Created At": exportDate(
 				firstAvailable(item.booked_at, item.createdAt),
 				localeForDate,

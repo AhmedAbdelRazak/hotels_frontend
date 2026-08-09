@@ -1,6 +1,57 @@
-import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
+import {
+  getAdminReservationDisplayTotal,
+  getAdminReservationFinancialCurrency,
+  getAdminReservationGrossTotal,
+  getAdminReservationNetTotal,
+} from "./reservationTableAmounts";
 
 describe("admin reservation table total", () => {
+  it("uses the backend financial currency and safely defaults to SAR", () => {
+    expect(
+      getAdminReservationFinancialCurrency({
+        financial_totals_currency: " usd ",
+      }),
+    ).toBe("USD");
+    expect(getAdminReservationFinancialCurrency({})).toBe("SAR");
+    expect(
+      getAdminReservationFinancialCurrency({
+        financial_totals_currency: "not-a-currency",
+      }),
+    ).toBe("SAR");
+  });
+
+  it("prefers backend-resolved gross and net roles for compact OTA rows", () => {
+    const reservation = {
+      booking_source: "agoda",
+      gross_total_amount: " 73.50 ",
+      net_total_amount: "45.47",
+      total_amount: 75,
+      paid_amount: 73.5,
+      adminPricing: {
+        mode: "hotelrunner_api",
+        commercialVerified: false,
+        rootTotal: 75,
+      },
+    };
+
+    expect(getAdminReservationGrossTotal(reservation)).toBe(73.5);
+    expect(getAdminReservationNetTotal(reservation)).toBe(45.47);
+  });
+
+  it("preserves explicit unavailable backend roles instead of using raw totals", () => {
+    const reservation = {
+      booking_source: "agoda",
+      gross_total_amount: null,
+      net_total_amount: null,
+      total_amount: 500,
+      paid_amount: 500,
+      sub_total: 550,
+    };
+
+    expect(getAdminReservationGrossTotal(reservation)).toBeNull();
+    expect(getAdminReservationNetTotal(reservation)).toBeNull();
+  });
+
   it("keeps the client total when net preference is not requested", () => {
     expect(
       getAdminReservationDisplayTotal({
@@ -34,13 +85,14 @@ describe("admin reservation table total", () => {
     ).toBe(-10);
   });
 
-  it("uses only the canonical saved field, never a derived summary value", () => {
+  it("uses only a commercially verified saved OTA net, never a derived summary", () => {
     expect(
       getAdminReservationDisplayTotal(
         {
           total_amount: 1200,
           adminPricing: {
             mode: "ota_platform_sync",
+            commercialVerified: true,
             netAfterExpensesTotal: 1050,
           },
           ota_financial_summary: {
@@ -64,6 +116,22 @@ describe("admin reservation table total", () => {
         { preferNetAfterExpenses: true },
       ),
     ).toBe(1200);
+  });
+
+  it("does not invent an OTA net from gross, paid amount, or root total", () => {
+    expect(
+      getAdminReservationNetTotal({
+        booking_source: "trip.com",
+        total_amount: 120.45,
+        paid_amount: 120.45,
+        sub_total: 125,
+        adminPricing: {
+          mode: "ota_platform_sync",
+          rootTotal: 125,
+          commercialVerified: false,
+        },
+      }),
+    ).toBeNull();
   });
 
   it("falls back when the API marks an uncalculated net total unavailable", () => {
