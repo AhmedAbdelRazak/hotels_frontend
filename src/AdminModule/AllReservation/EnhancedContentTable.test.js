@@ -234,7 +234,7 @@ describe("EnhancedContentTable total amount column", () => {
 	);
   });
 
-  it("uses the saved PMS total even when a different HotelRunner source amount is present", () => {
+  it("uses only a verified HotelRunner property gross and fails closed for unverified PMS totals", () => {
     const canonical = reservation({
       id: "HR-CANONICAL",
       guest: "Canonical Guest",
@@ -247,6 +247,15 @@ describe("EnhancedContentTable total amount column", () => {
         transport: "hotelrunner_api",
         reservationId: "hr-canonical",
         pricing: { grandTotal: 1000 },
+      },
+      hotelRunnerEmailCommercialEvidence: {
+        version: 2,
+        verified: true,
+        source: "authenticated_ota_email",
+        provider: "agoda",
+        grossTotalSar: 700,
+        currency: "SAR",
+        evidenceHash: "a".repeat(64),
       },
     };
     canonical.days_of_residence = 2;
@@ -269,11 +278,11 @@ describe("EnhancedContentTable total amount column", () => {
 
     expect(totalCellTextFor("Canonical Guest")).toBe("700.00 SAR");
     expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("350.00 SAR");
-    expect(totalCellTextFor("Missing Gross Guest")).toBe("700.00 SAR");
-    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("700.00 SAR");
+    expect(totalCellTextFor("Missing Gross Guest")).toBe("—");
+    expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("—");
   });
 
-  it("shows the saved Agoda guest total for HR-linked rows instead of the raw payout", () => {
+  it("shows the verified Agoda guest total for HR-linked rows instead of the raw payout", () => {
     const emailReservation = reservation({
       id: "5285396222",
       guest: "Nawaz Shahid",
@@ -294,6 +303,15 @@ describe("EnhancedContentTable total amount column", () => {
         transport: "hotelrunner_api",
         reservationId: "r071469597",
         pricing: { grandTotal: 56.39 },
+      },
+      hotelRunnerEmailCommercialEvidence: {
+        version: 2,
+        verified: true,
+        source: "authenticated_ota_email",
+        provider: "agoda",
+        grossTotalSar: 91.14,
+        currency: "SAR",
+        evidenceHash: "b".repeat(64),
       },
     };
 

@@ -1,6 +1,6 @@
 import {
   getHotelRunnerPayoutDisplay,
-  getReservationGuestGrossDisplay,
+  getReservationPropertyGuestGrossDisplay,
 } from "./hotelRunnerPricingDisplay";
 
 const finiteMoneyOrNull = (value) => {
@@ -38,24 +38,24 @@ export const getAdminReservationDisplayTotal = (
   reservation = {},
   { preferNetAfterExpenses = false } = {},
 ) => {
-  const guestGross = getReservationGuestGrossDisplay(reservation);
+  const guestGross = getReservationPropertyGuestGrossDisplay(reservation);
+  if (guestGross.isHotelRunner) {
+    const fallbackTotal = guestGross.available ? guestGross.amount : null;
+    if (!preferNetAfterExpenses) return fallbackTotal;
+    const hotelRunnerPayout = getHotelRunnerPayoutDisplay(reservation);
+    // A caller asking for payout/net must never receive the guest gross as a
+    // semantic fallback. Unknown HotelRunner payout remains unavailable.
+    return hotelRunnerPayout.verified ? hotelRunnerPayout.netAmount : null;
+  }
   const verifiedClientTotal = verifiedOtaClientTotal(reservation);
-  // The admin table's Total column is the PMS reservation total. HotelRunner's
-  // raw `grandTotal` may represent a payout for some channel payloads, so it is
-  // only a last-resort fallback when the local reservation has no saved total.
+  // Preserve the legacy table precedence outside HotelRunner. The HotelRunner
+  // branch above has already failed closed to verified property roles only.
   const fallbackTotal =
     finiteMoneyOrNull(reservation?.total_amount) ??
     verifiedClientTotal ??
     guestGross.amount ??
     0;
   if (!preferNetAfterExpenses) return fallbackTotal;
-
-  const hotelRunnerPayout = getHotelRunnerPayoutDisplay(reservation);
-  if (hotelRunnerPayout.isHotelRunner) {
-    return hotelRunnerPayout.verified
-      ? hotelRunnerPayout.netAmount
-      : fallbackTotal;
-  }
 
   const netAfterExpenses = finiteMoneyOrNull(
     reservation?.adminPricing?.netAfterExpensesTotal,

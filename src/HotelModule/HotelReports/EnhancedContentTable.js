@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import styled from "styled-components";
 import { Tooltip, Modal, Button, Input } from "antd";
 import MoreDetails from "./MoreDetails";
-import { getReservationGuestGrossDisplay } from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
+import { getReservationPropertyGuestGrossDisplay } from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 // import ExportToExcelButton from "./ExportToExcelButton";
 
 const hasPaidBreakdownCapture = (breakdown) => {
@@ -40,7 +40,8 @@ const EnhancedContentTable = ({
 
 	const formattedReservations = useMemo(() => {
 		return safeData.map((reservation) => {
-			const guestGross = getReservationGuestGrossDisplay(reservation);
+			const guestGross =
+				getReservationPropertyGuestGrossDisplay(reservation);
 			const {
 				customer_details = {},
 				hotelId = {},

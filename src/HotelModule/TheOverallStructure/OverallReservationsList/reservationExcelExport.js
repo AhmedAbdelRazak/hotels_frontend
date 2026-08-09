@@ -8,7 +8,7 @@ import {
 } from "../overallShared";
 import {
 	getHotelRunnerPlatformFinanceDisplay,
-	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 } from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const commissionExportText = (chosenLanguage) =>
@@ -76,7 +76,8 @@ export const buildReservationExportRows = ({
 }) =>
 	(Array.isArray(reservations) ? reservations : []).map((reservation, index) => {
 		const finance = getHotelRunnerPlatformFinanceDisplay(reservation);
-		const guestGross = getReservationGuestGrossDisplay(reservation);
+		const guestGross = getReservationPropertyGuestGrossDisplay(reservation);
+		const exportableGuestGross = guestGross.available ? guestGross.amount : null;
 		const nights = getReservationNights(reservation);
 		const commissionText = commissionExportText(chosenLanguage);
 		const row = {
@@ -97,13 +98,13 @@ export const buildReservationExportRows = ({
 			[labels.checkOut]: formatDate(reservation.checkout_date, chosenLanguage),
 			[labels.nights]: nights,
 			[labels.pricePerDay]: guestGross.isHotelRunner
-				? guestGross.available && nights > 0
-					? Number((guestGross.amount / nights).toFixed(2))
+				? exportableGuestGross !== null && nights > 0
+					? Number((exportableGuestGross / nights).toFixed(2))
 					: ""
 				: Number(getReservationPricePerDay(reservation) || 0),
 			[labels.totalAmount]: guestGross.isHotelRunner
-				? guestGross.available
-					? guestGross.amount
+				? exportableGuestGross !== null
+					? exportableGuestGross
 					: ""
 				: Number(reservation.total_amount || 0),
 			[labels.paidAmount]: Number(reservation.paid_amount || 0),

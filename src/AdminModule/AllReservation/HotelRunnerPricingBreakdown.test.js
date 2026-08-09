@@ -27,8 +27,8 @@ const hotelRunnerReservation = {
   },
 };
 
-describe("HotelRunner gross pricing breakdown", () => {
-  test("shows gross and reported-paid values while net remains explicitly unverified", () => {
+describe("HotelRunner reported pricing breakdown", () => {
+  test("shows the raw total with an unverified role while net remains explicitly unverified", () => {
     render(
       <HotelRunnerPricingBreakdown
         reservation={hotelRunnerReservation}
@@ -38,10 +38,15 @@ describe("HotelRunner gross pricing breakdown", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "HotelRunner gross pricing breakdown",
+        name: "HotelRunner reported pricing breakdown",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Gross reservation total")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "HotelRunner reported total (commercial role unverified)",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Gross reservation total")).not.toBeInTheDocument();
     expect(screen.getByText("Amount reported paid")).toBeInTheDocument();
 
     const netLabel = screen.getByText("Hotel net after OTA expenses");

@@ -8,9 +8,21 @@ describe("Admin MoreDetails HotelRunner display guards", () => {
     expect(source).toMatch(/financialTotalAmountAvailable/);
     expect(source).toMatch(/financialTotalAmountValue/);
     expect(source).toMatch(/formatOptionalMoney\(financialTotalAmountValue\)/);
+		expect(source).toMatch(/totalAmount: financialTotalAmountValue/);
+		expect(source).toMatch(
+			/breakdownDraftTotals\.total > financialTotalAmountValue/,
+		);
+		expect(source).not.toMatch(
+			/breakdownDraftTotals\.total > totalAmountValue/,
+		);
   });
 
   it("gates each daily commercial metric on its own verified consensus", () => {
+		expect(source).toMatch(/hotelRunnerClientRowsVerified/);
+		expect(source).toMatch(
+			/propertyGuestGrossDisplay\.available[\s\S]*?rawClientTotal[\s\S]*?propertyGuestGrossDisplay\.amount/,
+		);
+		expect(source).toMatch(/renderGuestPricingAmount\(section\.total\)/);
     expect(source).toMatch(
       /hotelRunnerPayoutDisplay\.netAvailable\s*&&\s*hasExplicitMoney\(explicitNet\)/,
     );

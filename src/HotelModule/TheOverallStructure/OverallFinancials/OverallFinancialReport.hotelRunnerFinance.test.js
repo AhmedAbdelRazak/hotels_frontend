@@ -23,20 +23,33 @@ const hotelRunnerReservation = (overrides = {}) => ({
 });
 
 describe("overall financial HotelRunner commission guard", () => {
-	it("exports and renders only canonical HotelRunner gross", () => {
-		const canonical = hotelRunnerReservation({
-			total_amount: 700,
+	it("exports and renders only verified HotelRunner guest gross", () => {
+		const verified = hotelRunnerReservation({
+			adminPricing: {
+				mode: "hotelrunner_api",
+				commercialVerified: true,
+				clientTotal: 1000,
+			},
 			supplierData: {
 				hotelRunner: {
 					transport: "hotelrunner_api",
 					reservationId: "hr-report-canonical",
 					pricing: { grandTotal: 1000 },
 				},
+				hotelRunnerEmailCommercialEvidence: {
+					version: 2,
+					verified: true,
+					source: "authenticated_ota_email",
+					provider: "agoda",
+					grossTotalSar: 1000,
+					currency: "SAR",
+					evidenceHash: "a".repeat(64),
+				},
 			},
 		});
 		const missing = hotelRunnerReservation({ total_amount: 700 });
 
-		expect(getFinancialReportGross(canonical)).toMatchObject({
+		expect(getFinancialReportGross(verified)).toMatchObject({
 			available: true,
 			amount: 1000,
 		});
@@ -44,7 +57,7 @@ describe("overall financial HotelRunner commission guard", () => {
 			available: false,
 			amount: null,
 		});
-		expect(buildReservationExportRows([canonical, missing])).toEqual([
+		expect(buildReservationExportRows([verified, missing])).toEqual([
 			expect.objectContaining({ Amount: 1000 }),
 			expect.objectContaining({ Amount: "" }),
 		]);

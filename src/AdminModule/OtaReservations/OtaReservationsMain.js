@@ -38,18 +38,19 @@ import {
 import { SUPER_USER_IDS } from "../utils/superUsers";
 import {
 	copyFirstOtaPricingRowValues,
-	otaPricingRoomCount as roomCount,
 	recalculateOtaPricingDay as recalcDay,
-	summarizeOtaPricingRooms as summarizeRooms,
 } from "./otaPricingEditor";
 import {
 	applyTouchedOtaDistributions,
+	formatOtaPricingModalGuestGross,
+	normalizeOtaPricingRoomsForModal,
 	otaPricingInitializationDecision,
 	otaPricingNumberValue,
 	parseLocalizedMoney,
-	preferredOtaPricingRooms,
 	prepareOtaPricingSave,
 	resolveInitialOtaCommissionInput,
+	resolveOtaPricingModalSavedTotals,
+	summarizeOtaPricingRoomsForModal,
 	touchedOtaDistributionFields,
 } from "./otaPricingModalModel";
 import { formatOtaReservationStatus } from "./otaReservationPresentation";
@@ -60,7 +61,10 @@ const numberValue = (value) => {
 
 const money = (value) => numberValue(value).toFixed(2);
 
-const round2 = (value) => Number(numberValue(value).toFixed(2));
+const optionalMoney = (value) => {
+	const parsed = parseLocalizedMoney(value);
+	return parsed.status === "valid" ? parsed.value.toFixed(2) : "\u2014";
+};
 
 const titleCaseText = (value = "") =>
 	String(value || "")
@@ -88,6 +92,7 @@ const OTA_PRICING_TEXT = {
 		distribute: "Distribute",
 		distributeAll: "Distribute totals",
 		savedTotalPlaceholder: "Saved total to distribute",
+		sourceCurrencySuffix: "source currency",
 		enterTotalPlaceholder: "Enter total to distribute",
 		generalCommissionPlaceholder: "Enter general commission",
 		noDailyPricing: "No daily pricing rows were found.",
@@ -152,6 +157,7 @@ const OTA_PRICING_TEXT = {
 		save: "حفظ",
 		distribute: "توزيع",
 		savedTotalPlaceholder: "الإجمالي المحفوظ للتوزيع",
+		sourceCurrencySuffix: "عملة المصدر",
 		enterTotalPlaceholder: "أدخل الإجمالي للتوزيع",
 		noDailyPricing: "لا توجد صفوف أسعار يومية لهذا الحجز.",
 		noDistributionValues: "أدخل إجمالياً واحداً على الأقل للتوزيع.",
@@ -215,38 +221,6 @@ const OTA_PRICING_TEXT = {
 	},
 };
 
-const firstExplicitNumber = (...values) => {
-	for (const value of values) {
-		const parsed = parseLocalizedMoney(value);
-		if (parsed.status === "valid") return parsed.value;
-	}
-	return null;
-};
-
-const savedClientTotalForReservation = (reservation = {}) => {
-	const value = firstExplicitNumber(
-		reservation?.adminPricing?.clientTotal,
-		reservation?.total_amount
-	);
-	return value !== null ? round2(value) : 0;
-};
-
-const savedRootTotalForReservation = (reservation = {}) => {
-	const value = firstExplicitNumber(
-		reservation?.adminPricing?.rootTotal,
-		reservation?.sub_total,
-		reservation?.hotel_visible_amount
-	);
-	return value !== null ? round2(value) : 0;
-};
-
-const savedNetTotalForReservation = (reservation = {}) => {
-	const value = firstExplicitNumber(
-		reservation?.adminPricing?.netAfterExpensesTotal
-	);
-	return value !== null ? round2(value) : 0;
-};
-
 const formatDate = (value, chosenLanguage = "English") =>
 	formatSaudiGregorianDate(value, {
 		language: chosenLanguage,
@@ -288,67 +262,6 @@ const stayNightsForReservation = (reservation = {}) => {
 			Date.UTC(inYear, inMonth - 1, inDay)) /
 		86400000;
 	return Number.isFinite(diff) && diff > 0 ? Math.round(diff) : 0;
-};
-
-const normalizeDay = (day = {}) => {
-	const clientPrice = round2(
-		day.clientPrice ??
-			day.mainPrice ??
-			day.totalPriceWithCommission ??
-			day.price
-	);
-	const explicitRootPrice = firstExplicitNumber(
-		day.rootPrice,
-		day.totalPriceWithoutCommission,
-		day.basePrice
-	);
-	const rootPrice = explicitRootPrice !== null ? round2(explicitRootPrice) : 0;
-	const explicitNet =
-		day.netAfterExpenses ??
-		day.netAfterOtaExpenses ??
-		day.netAfterOtherExpenses ??
-		null;
-	const explicitExpense =
-		day.otaExpenseAmount ?? day.otherExpenseAmount ?? day.expenseAmount ?? null;
-	const netAfterExpenses =
-		explicitNet !== null && explicitNet !== undefined && explicitNet !== ""
-			? round2(explicitNet)
-			: explicitExpense !== null &&
-			  explicitExpense !== undefined &&
-			  explicitExpense !== ""
-			? round2(clientPrice - numberValue(explicitExpense))
-			: clientPrice;
-	const otaExpenseAmount = round2(clientPrice - netAfterExpenses);
-	const platformMargin = round2(netAfterExpenses - rootPrice);
-	const platformMarginRate =
-		netAfterExpenses > 0 ? round2((platformMargin / netAfterExpenses) * 100) : 0;
-
-	return {
-		...day,
-		date: dateKey(day.date || day.day || day.pricingDate),
-		price: clientPrice,
-		clientPrice,
-		mainPrice: clientPrice,
-		rootPrice,
-		totalPriceWithCommission: clientPrice,
-		totalPriceWithoutCommission: rootPrice,
-		netAfterExpenses,
-		netAfterOtaExpenses: netAfterExpenses,
-		otaExpenseAmount,
-		platformMargin,
-		platformMarginRate,
-	};
-};
-
-const normalizeRoomsForEdit = (reservation = {}) => {
-	const source = preferredOtaPricingRooms(reservation);
-	return JSON.parse(JSON.stringify(source || [])).map((room) => ({
-		...room,
-		count: roomCount(room),
-		pricingByDay: Array.isArray(room.pricingByDay)
-			? room.pricingByDay.map(normalizeDay)
-			: [],
-	}));
 };
 
 const getReservationKey = (reservation = {}) =>
@@ -471,6 +384,10 @@ const OtaPricingModal = ({
 	const distributionTouchedRef = useRef(emptyDistributionTouched());
 	const commissionValueRef = useRef("");
 	const initializedReservationIdRef = useRef("");
+	const savedPricingRoles = useMemo(
+		() => resolveOtaPricingModalSavedTotals(reservation || {}),
+		[reservation],
+	);
 
 	useEffect(() => {
 		const initialization = otaPricingInitializationDecision({
@@ -482,18 +399,26 @@ const OtaPricingModal = ({
 		if (!initialization.initialize) return;
 		if (!reservation) return;
 
-		const savedClientTotal = savedClientTotalForReservation(reservation);
-		const savedRootTotal = savedRootTotalForReservation(reservation);
-		const savedNetTotal = savedNetTotalForReservation(reservation);
 		const initialCommission = resolveInitialOtaCommissionInput(
 			reservation,
-			savedRootTotal,
+			savedPricingRoles.rootTotal,
 		);
-		const nextRooms = normalizeRoomsForEdit(reservation);
+		const nextRooms = normalizeOtaPricingRoomsForModal(reservation);
 		const nextDistributionValues = {
-			client: savedClientTotal > 0 ? money(savedClientTotal) : "",
-			root: savedRootTotal >= 0 ? money(savedRootTotal) : "",
-			net: savedNetTotal >= 0 ? money(savedNetTotal) : "",
+			client:
+				savedPricingRoles.clientTotal !== null &&
+				savedPricingRoles.clientTotal > 0
+					? money(savedPricingRoles.clientTotal)
+					: "",
+			root:
+				savedPricingRoles.rootTotal !== null && savedPricingRoles.rootTotal >= 0
+					? money(savedPricingRoles.rootTotal)
+					: "",
+			net:
+				savedPricingRoles.netAfterExpensesTotal !== null &&
+				savedPricingRoles.netAfterExpensesTotal >= 0
+					? money(savedPricingRoles.netAfterExpensesTotal)
+					: "",
 		};
 		const nextTouched = emptyDistributionTouched();
 		roomsRef.current = nextRooms;
@@ -504,25 +429,24 @@ const OtaPricingModal = ({
 		setDistributeValues(nextDistributionValues);
 		setDistributionTouched(nextTouched);
 		setCommissionValue(initialCommission.inputValue);
-	}, [open, reservation]);
+	}, [open, reservation, savedPricingRoles]);
 
-	const totals = useMemo(() => {
-		const summary = summarizeRooms(rooms);
-		return {
-			clientTotal: round2(summary.clientTotal),
-			rootTotal: round2(summary.rootTotal),
-			netAfterExpensesTotal: round2(summary.netAfterExpensesTotal),
-			otaExpenseTotal: round2(summary.otaExpenseTotal),
-			platformMarginTotal: round2(summary.platformMarginTotal),
-			totalRooms: summary.totalRooms,
-		};
-	}, [rooms]);
+	const totals = useMemo(
+		() => summarizeOtaPricingRoomsForModal(rooms),
+		[rooms],
+	);
 	const parsedCommission = useMemo(
 		() => parseLocalizedMoney(commissionValue),
 		[commissionValue],
 	);
 	const displayedCommission =
 		parsedCommission.status === "valid" ? money(parsedCommission.value) : "";
+	const displayedClientTotal =
+		totals.clientTotal !== null
+			? optionalMoney(totals.clientTotal)
+			: formatOtaPricingModalGuestGross(savedPricingRoles, {
+					sourceCurrencyLabel: t.sourceCurrencySuffix,
+				});
 
 	const flatDays = useMemo(() => {
 		const days = [];
@@ -724,7 +648,7 @@ const OtaPricingModal = ({
 									help={t.help.totalClientPrice}
 								/>
 							</strong>
-							<Input value={money(totals.clientTotal)} readOnly />
+							<Input value={displayedClientTotal} readOnly />
 							<Input
 								placeholder={t.savedTotalPlaceholder}
 								value={distributeValues.client}
@@ -742,7 +666,7 @@ const OtaPricingModal = ({
 									help={t.help.totalBaseHotelPrice}
 								/>
 							</strong>
-							<Input value={money(totals.rootTotal)} readOnly />
+							<Input value={optionalMoney(totals.rootTotal)} readOnly />
 							<Input
 								placeholder={t.enterTotalPlaceholder}
 								value={distributeValues.root}
@@ -760,7 +684,10 @@ const OtaPricingModal = ({
 									help={t.help.netAfterOtaExpenses}
 								/>
 							</strong>
-							<Input value={money(totals.netAfterExpensesTotal)} readOnly />
+							<Input
+								value={optionalMoney(totals.netAfterExpensesTotal)}
+								readOnly
+							/>
 							<Input
 								placeholder={t.enterTotalPlaceholder}
 								value={distributeValues.net}
@@ -862,7 +789,7 @@ const OtaPricingModal = ({
 										<td>
 											<Input
 												type='number'
-												value={day.clientPrice}
+												value={day.clientPrice ?? ""}
 												onChange={(event) =>
 													updateDay(roomIndex, dayIndex, {
 														clientPrice: event.target.value,
@@ -873,7 +800,7 @@ const OtaPricingModal = ({
 										<td>
 											<Input
 												type='number'
-												value={day.rootPrice}
+												value={day.rootPrice ?? ""}
 												onChange={(event) =>
 													updateDay(roomIndex, dayIndex, {
 														rootPrice: event.target.value,
@@ -884,7 +811,7 @@ const OtaPricingModal = ({
 										<td>
 											<Input
 												type='number'
-												value={day.netAfterExpenses}
+												value={day.netAfterExpenses ?? ""}
 												onChange={(event) =>
 													updateDay(roomIndex, dayIndex, {
 														netAfterExpenses: event.target.value,
@@ -892,11 +819,15 @@ const OtaPricingModal = ({
 												}
 											/>
 										</td>
-										<td>{money(day.otaExpenseAmount)}</td>
+										<td>{optionalMoney(day.otaExpenseAmount)}</td>
 										{canViewPlatformProfit ? (
 											<>
-												<td>{money(day.platformMargin)}</td>
-												<td>{money(day.platformMarginRate)}%</td>
+												<td>{optionalMoney(day.platformMargin)}</td>
+												<td>
+													{day.platformMarginRate === null
+														? "\u2014"
+														: `${optionalMoney(day.platformMarginRate)}%`}
+												</td>
 											</>
 										) : null}
 									</tr>
@@ -912,13 +843,13 @@ const OtaPricingModal = ({
 						<tfoot>
 							<tr>
 								<th>{t.labels.total}</th>
-								<th>{money(totals.clientTotal)}</th>
-								<th>{money(totals.rootTotal)}</th>
-								<th>{money(totals.netAfterExpensesTotal)}</th>
-								<th>{money(totals.otaExpenseTotal)}</th>
+								<th>{optionalMoney(totals.clientTotal)}</th>
+								<th>{optionalMoney(totals.rootTotal)}</th>
+								<th>{optionalMoney(totals.netAfterExpensesTotal)}</th>
+								<th>{optionalMoney(totals.otaExpenseTotal)}</th>
 								{canViewPlatformProfit ? (
 									<>
-										<th>{money(totals.platformMarginTotal)}</th>
+										<th>{optionalMoney(totals.platformMarginTotal)}</th>
 										<th />
 									</>
 								) : null}

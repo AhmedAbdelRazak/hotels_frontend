@@ -131,18 +131,28 @@ test("the redesigned receipt keeps the unified edit modal and saves passport and
 	expect(sentPayload).not.toHaveProperty("supplierData");
 });
 
-test("a HotelRunner receipt presents the canonical guest gross without calling it net", () => {
+test("a HotelRunner receipt presents verified guest gross without calling it net", () => {
 	const hotelRunnerReservation = {
 		...reservation,
-		total_amount: 900,
+		total_amount: 1000,
 		sub_total: 700,
 		adminPricing: {
 			mode: "hotelrunner_api",
 			rootTotal: 700,
-			commercialVerified: false,
+			commercialVerified: true,
+			clientTotal: 1000,
 		},
 		supplierData: {
 			...reservation.supplierData,
+			hotelRunnerEmailCommercialEvidence: {
+				version: 2,
+				verified: true,
+				source: "authenticated_ota_email",
+				provider: "agoda",
+				grossTotalSar: 1000,
+				currency: "SAR",
+				evidenceHash: "a".repeat(64),
+			},
 			hotelRunner: {
 				transport: "hotelrunner_api",
 				reservationId: "hr-receipt-1",

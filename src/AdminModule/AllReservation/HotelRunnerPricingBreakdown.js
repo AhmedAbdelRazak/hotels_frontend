@@ -7,7 +7,7 @@ import {
 
 const COPY = {
   English: {
-    title: "HotelRunner gross pricing breakdown",
+    title: "HotelRunner reported pricing breakdown",
     sourceNote:
       "Amounts below are the reservation, room, tax, extra, discount, and payment figures reported by HotelRunner.",
     netTitle: "Hotel net after OTA expenses",
@@ -20,6 +20,8 @@ const COPY = {
     itemTotal: "Item total",
     taxTotal: "Taxes",
     grandTotal: "Gross reservation total",
+    reportedGrandTotal:
+      "HotelRunner reported total (commercial role unverified)",
     paidAmount: "Amount reported paid",
     rooms: "HotelRunner room pricing",
     room: "Room",
@@ -57,7 +59,7 @@ const COPY = {
     exchangedAmount: "Exchanged amount",
     exchangeRate: "Exchange rate",
     noDetailedBreakdown:
-      "The gross total is available, but HotelRunner did not supply a more detailed pricing snapshot for this record.",
+      "A HotelRunner total is available, but its commercial role or detailed pricing breakdown is unavailable.",
   },
   Arabic: {
     title:
@@ -79,6 +81,8 @@ const COPY = {
     taxTotal: "\u0627\u0644\u0636\u0631\u0627\u0626\u0628",
     grandTotal:
       "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062d\u062c\u0632",
+    reportedGrandTotal:
+      "\u0625\u062c\u0645\u0627\u0644\u064a HotelRunner \u0627\u0644\u0645\u0628\u0644\u063a \u0639\u0646\u0647 (\u0627\u0644\u062f\u0648\u0631 \u0627\u0644\u062a\u062c\u0627\u0631\u064a \u063a\u064a\u0631 \u0645\u062a\u062d\u0642\u0642)",
     paidAmount:
       "\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0645\u0628\u0644\u063a \u0639\u0646\u0647\u0627 \u0643\u0645\u062f\u0641\u0648\u0639\u0629",
     rooms: "\u062a\u0633\u0639\u064a\u0631 \u063a\u0631\u0641 HotelRunner",
@@ -145,6 +149,7 @@ const SUMMARY_FIELDS = [
   ["itemTotal", "itemTotal"],
   ["taxTotal", "taxTotal"],
   ["grandTotal", "grandTotal"],
+  ["reportedGrandTotal", "reportedGrandTotal"],
   ["paidAmount", "paidAmount"],
 ];
 
@@ -220,6 +225,11 @@ const HotelRunnerPricingBreakdown = ({
     ].some((field) => pricing.summary[field] !== null) ||
     pricing.rooms.length > 0 ||
     pricing.payments.length > 0;
+  const displayedSummary = {
+    ...pricing.summary,
+    reportedGrandTotal:
+      pricing.summary.grandTotal === null ? pricing.sourceGrandTotal : null,
+  };
 
   return (
     <Breakdown $isArabic={language === "Arabic"}>
@@ -233,7 +243,7 @@ const HotelRunnerPricingBreakdown = ({
 
       <AmountGrid
         fields={SUMMARY_FIELDS}
-        source={pricing.summary}
+        source={displayedSummary}
         copy={copy}
         currency={pricing.currency}
         language={language}

@@ -53,7 +53,7 @@ import { relocationArray1 } from "./ReservationAssets";
 import { canUseHotelReservationEditor } from "./hotelReservationEditPermissions";
 import {
 	getHotelRunnerPlatformFinanceDisplay,
-	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 	isHotelRunnerReservation,
 } from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 import {
@@ -5004,7 +5004,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 	);
 	const totalAmountValue = normalizeNumber(reservation?.total_amount, 0);
 	const guestGrossDisplay = useMemo(
-		() => getReservationGuestGrossDisplay(reservation),
+		() => getReservationPropertyGuestGrossDisplay(reservation),
 		[reservation],
 	);
 	const financialTotalAmountAvailable =

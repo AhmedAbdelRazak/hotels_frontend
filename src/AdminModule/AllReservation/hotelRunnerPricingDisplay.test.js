@@ -5,6 +5,7 @@ import {
   getHotelRunnerPricingDisplay,
   getHotelRunnerReportPricingDisplay,
   getReservationGuestGrossDisplay,
+  getReservationPropertyGuestGrossDisplay,
   isHotelRunnerReservation,
 } from "./hotelRunnerPricingDisplay";
 
@@ -25,6 +26,19 @@ const hotelRunnerReservation = (overrides = {}) => ({
   ...overrides,
 });
 
+const verifiedEmailEvidence = (overrides = {}) => ({
+  version: 2,
+  verified: true,
+  source: "authenticated_ota_email",
+  provider: "agoda",
+  otaIdentityKey: "agoda:provider-confirmation",
+  grossTotalSar: 1000,
+  payoutTotalSar: 850,
+  currency: "SAR",
+  evidenceHash: "a".repeat(64),
+  ...overrides,
+});
+
 describe("HotelRunner pricing display", () => {
   it("recognizes direct and linked HotelRunner reservations without relying on booking-source text", () => {
     expect(isHotelRunnerReservation(hotelRunnerReservation())).toBe(true);
@@ -39,7 +53,7 @@ describe("HotelRunner pricing display", () => {
     ).toBe(false);
   });
 
-  it("preserves the complete canonical gross breakdown and room/night detail", () => {
+  it("preserves the complete canonical source breakdown without assigning a gross role", () => {
     const reservation = hotelRunnerReservation({
       supplierData: {
         hotelRunner: {
@@ -121,9 +135,11 @@ describe("HotelRunner pricing display", () => {
         adjustmentsTotal: -20,
         itemTotal: 850,
         taxTotal: 150,
-        grandTotal: 1000,
+        grandTotal: null,
         paidAmount: 250,
       },
+      sourceGrandTotal: 1000,
+      sourceSummary: { grandTotal: 1000 },
     });
     expect(display.rooms[0]).toMatchObject({
       priceBeforeTax: 850,
@@ -179,7 +195,7 @@ describe("HotelRunner pricing display", () => {
     });
   });
 
-  it("uses canonical HotelRunner grandTotal for guest gross and keeps legacy totals", () => {
+  it("keeps an unverified HotelRunner grandTotal unavailable as guest gross and preserves legacy totals", () => {
     const reservation = hotelRunnerReservation({
       total_amount: 700,
       supplierData: {
@@ -192,8 +208,8 @@ describe("HotelRunner pricing display", () => {
 
     expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
       isHotelRunner: true,
-      available: true,
-      amount: 1000,
+      available: false,
+      amount: null,
     });
     expect(
       getReservationGuestGrossDisplay({ total_amount: 700, currency: "SAR" }),
@@ -201,6 +217,232 @@ describe("HotelRunner pricing display", () => {
       isHotelRunner: false,
       available: true,
       amount: 700,
+    });
+  });
+
+  it("accepts the existing authenticated-email evidence only when materialized commercial state agrees", () => {
+    const reservation = hotelRunnerReservation({
+      total_amount: 1000,
+      adminPricing: {
+        mode: "hotelrunner_api",
+        commercialVerified: true,
+        clientTotal: 1000,
+        netAfterExpensesTotal: 850,
+      },
+      supplierData: {
+        hotelRunner: {
+          transport: "hotelrunner_api",
+          pricing: { currency: "SAR", grandTotal: 1000 },
+        },
+        hotelRunnerEmailCommercialEvidence: verifiedEmailEvidence(),
+      },
+    });
+
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      isHotelRunner: true,
+      available: true,
+      verified: true,
+      amount: 1000,
+      currency: "SAR",
+    });
+    expect(getHotelRunnerPricingDisplay(reservation)).toMatchObject({
+      summary: { grandTotal: 1000 },
+      sourceGrandTotal: 1000,
+    });
+
+    reservation.adminPricing.clientTotal = 999;
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      amount: null,
+    });
+  });
+
+  it("supports an explicit provider-neutral verified guestGross role and fails closed on currency mismatch", () => {
+    const reservation = hotelRunnerReservation({
+      total_amount: 1200,
+      currency: "SAR",
+      adminPricing: {
+        mode: "hotelrunner_api",
+        commercialVerified: true,
+        clientTotal: 1200,
+        netAfterExpensesTotal: 423.45,
+      },
+      supplierData: {
+        hotelRunner: {
+          transport: "hotelrunner_api",
+          pricing: { currency: "SAR", grandTotal: 423.45 },
+        },
+        otaCommercialEvidence: {
+          contractVersion: 1,
+          verificationState: "partial",
+          sourceType: "authenticated_ota_email",
+          provider: "expedia",
+          evidenceHash: "b".repeat(64),
+          sourceCurrency: "SAR",
+          propertyCurrency: "SAR",
+          bookingBasis: "reservation_total",
+          provenance: {
+            primary: {
+              provider: "expedia",
+              sourceType: "authenticated_ota_email",
+              sourceHash: "c".repeat(64),
+              sourceTimestamp: "2026-08-08T00:00:00.000Z",
+              sourceId: "expedia-email-1",
+            },
+          },
+          roles: {
+            guestGross: {
+              verified: true,
+              sourceAmount: 1200,
+              sourceCurrency: "SAR",
+              propertyAmount: 1200,
+              propertyCurrency: "SAR",
+              bookingBasis: "reservation_total",
+              evidenceType: "authenticated_source",
+              sourceRef: "primary",
+            },
+          },
+        },
+      },
+    });
+
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: true,
+      amount: 1200,
+      currency: "SAR",
+    });
+    // The unmatched HotelRunner total remains raw evidence, never semantic gross.
+    expect(getHotelRunnerPricingDisplay(reservation)).toMatchObject({
+      summary: { grandTotal: null },
+      sourceGrandTotal: 423.45,
+    });
+    expect(getHotelRunnerPayoutDisplay(reservation)).toMatchObject({
+      verified: false,
+      netAvailable: false,
+      netAmount: null,
+    });
+
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyCurrency =
+      "USD";
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      amount: null,
+    });
+
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyCurrency =
+      "SAR";
+    reservation.supplierData.otaCommercialEvidence.sourceType =
+      "authenticated_unregistered_source";
+    reservation.supplierData.otaCommercialEvidence.provenance.primary.sourceType =
+      "authenticated_unregistered_source";
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      amount: null,
+    });
+  });
+
+  it("shows a verified source-currency guest gross without inventing a property-currency conversion", () => {
+    const reservation = hotelRunnerReservation({
+      total_amount: null,
+      currency: "SAR",
+      adminPricing: {
+        mode: "hotelrunner_api",
+        commercialVerified: false,
+        propertyCurrency: "SAR",
+        clientTotal: null,
+        rootTotal: 534,
+        netAfterExpensesTotal: null,
+      },
+      supplierData: {
+        hotelRunner: {
+          transport: "hotelrunner_api",
+          pricing: { currency: "USD", grandTotal: 112.92 },
+        },
+        otaCommercialEvidence: {
+          contractVersion: 1,
+          provider: "expedia",
+          sourceType: "authenticated_provider_portal",
+          sourceCurrency: "USD",
+          propertyCurrency: "SAR",
+          bookingBasis: "reservation_total",
+          verificationState: "partial",
+          evidenceHash: "d".repeat(64),
+          provenance: {
+            primary: {
+              provider: "expedia",
+              sourceType: "authenticated_provider_portal",
+              sourceHash: "e".repeat(64),
+              sourceTimestamp: "2026-08-08T00:00:00.000Z",
+              sourceId: "expedia-portal-1",
+            },
+          },
+          roles: {
+            guestGross: {
+              verified: true,
+              sourceAmount: 146.46,
+              sourceCurrency: "USD",
+              propertyAmount: null,
+              propertyCurrency: null,
+              bookingBasis: "reservation_total",
+              evidenceType: "authenticated_source",
+              sourceRef: "primary",
+            },
+          },
+          hotelRunnerReportedAmount: {
+            amount: 112.92,
+            currency: "USD",
+            role: "unknown",
+            roleVerified: false,
+          },
+        },
+      },
+    });
+
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: true,
+      verified: true,
+      amount: 146.46,
+      currency: "USD",
+      displayBasis: "source",
+      sourceAmount: 146.46,
+      sourceCurrency: "USD",
+      propertyAvailable: false,
+      propertyAmount: null,
+      propertyCurrency: "SAR",
+    });
+    expect(getReservationPropertyGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      amount: null,
+      currency: "SAR",
+      sourceAmount: 146.46,
+      sourceCurrency: "USD",
+    });
+    expect(getHotelRunnerPricingDisplay(reservation)).toMatchObject({
+      summary: { grandTotal: null },
+      sourceGrandTotal: 112.92,
+    });
+    expect(getHotelRunnerReportPricingDisplay(reservation)).toMatchObject({
+      grossAmount: null,
+      currency: "SAR",
+      grossDisplayBasis: "source",
+      grossSourceAmount: 146.46,
+      grossSourceCurrency: "USD",
+      grossPropertyAmount: null,
+      localBaseAmount: 534,
+      netAmount: null,
+    });
+
+    // A fallback-derived SAR projection without the contract's trusted
+    // conversion evidence invalidates the commercial role instead of exposing
+    // the familiar but unverified 146.46 * 3.75 value.
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyAmount =
+      549.23;
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyCurrency =
+      "SAR";
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      amount: null,
+      propertyAvailable: false,
     });
   });
 
@@ -564,7 +806,7 @@ describe("HotelRunner pricing display", () => {
       ),
     ).toMatchObject({
       isHotelRunner: true,
-      grossAmount: 1000,
+      grossAmount: null,
       localBaseAmount: 700,
       payoutVerified: false,
       netAmount: null,
