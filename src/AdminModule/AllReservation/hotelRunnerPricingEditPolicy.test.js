@@ -154,6 +154,20 @@ test("keeps HotelRunner check-in operations but strips echoed source projection 
 	});
 });
 
+test("keeps explicit local physical-room assignment intent for HotelRunner reservations", () => {
+	expect(
+		protectHotelRunnerEditorPayload(hotelRunnerReservation, {
+			roomId: ["room-606"],
+			__roomAssignmentUpdateIntent: true,
+			pickedRoomsType: [{ room_type: "familyRooms" }],
+			total_amount: 150,
+		}),
+	).toEqual({
+		roomId: ["room-606"],
+		__roomAssignmentUpdateIntent: true,
+	});
+});
+
 test("receipt supplier updates contain only editable dotted leaves", () => {
 	const payload = buildReceiptSupplierUpdatePayload({
 		supplierName: "Updated Supplier",

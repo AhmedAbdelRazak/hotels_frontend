@@ -31,7 +31,14 @@ import HotelHeatMap from "./HotelHeatMap";
 import PendingConfirmationReport from "./PendingConfirmationReport";
 import { getStoredMenuCollapsed } from "../utils/menuState";
 import { normalizePaymentMethod } from "../utils/paymentMethods";
+import {
+	buildSearchedReservationUpdate,
+	mergeUpdatedReservationIntoList,
+} from "../ReservationsFolder/EditWholeReservation/roomAssignmentUpdate";
+import { canUseHotelReservationEditor } from "../ReservationsFolder/hotelReservationEditPermissions";
 import { protectHotelRunnerEditorPayload } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
+import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
+import { canAccessReservationWorkspaceTab } from "./reservationWorkspaceAccess";
 
 const defaultAgentBookingSource = (user) =>
 	String(user?.companyName || user?.name || user?.email || "").trim();
@@ -171,6 +178,7 @@ const NewReservationMain = ({
 	const [activeTab, setActiveTab] = useState(
 		forceNewReservation ? "newReservation" : "list",
 	);
+	const [isSubmittingReservation, setIsSubmittingReservation] = useState(false);
 	const [sendEmail, setSendEmail] = useState(false);
 	const [total_guests, setTotalGuests] = useState("");
 	const [allReservationsHeatMap, setAllReservationsHeatMap] = useState([]);
@@ -191,6 +199,7 @@ const NewReservationMain = ({
 	const [isBoss] = useBoss();
 	const lastReservationKeyRef = useRef(null);
 	const lastInhouseAppliedRef = useRef(null);
+	const reservationSubmitInFlightRef = useRef(false);
 
 	const [start_date, setStart_date] = useState("");
 	const [end_date, setEnd_date] = useState("");
@@ -231,11 +240,6 @@ const NewReservationMain = ({
 		!roleDescriptions.includes("ordertaker") &&
 		!roleDescriptions.includes("reservationemployee");
 	const agentDefaultBookingSource = defaultAgentBookingSource(user);
-	const canShowReservationTab = (tab) => {
-		if (limitedOrderTakerAccount) return ["newReservation", "list"].includes(tab);
-		if (tab === "housingreport") return canConfirmReservations;
-		return true;
-	};
 	const isRoomMapWorkspace =
 		activeTab === "heatmap" || activeTab === "reserveARoom";
 	const orderTakerSnapshot = {
@@ -265,6 +269,18 @@ const NewReservationMain = ({
 		selectedHotelLocalStorage,
 		ownerIdOverride || routeOwnerId || (user?.role === 2000 ? user?._id : ""),
 	);
+	const canAssignPhysicalRooms = canUseHotelReservationEditor(user, {
+		isSuperAdmin: isSuperAdminUser(user),
+		hotelOwnerId: hotelDetails?.belongsTo || effectiveOwnerId,
+	});
+	const canShowReservationTab = (tab) =>
+		canAccessReservationWorkspaceTab({
+			tab,
+			limitedOrderTakerAccount,
+			financeOnlyReservationView,
+			canConfirmReservations,
+			canAssignPhysicalRooms,
+		});
 	const navigationOwnerId =
 		effectiveOwnerId || normalizeReservationId(user?._id);
 	const navigationHotelId =
@@ -323,47 +339,26 @@ const NewReservationMain = ({
 			return;
 		}
 
-		if (
-			limitedOrderTakerAccount &&
-			!isOrderTakerReservationSearchAllowed(location.search)
-		) {
-			if (location.search !== "?newReservation") {
-				history.replace({
-					pathname: location.pathname,
-					search: "?newReservation",
-				});
-			}
-			if (activeTab !== "newReservation") {
-				setActiveTab("newReservation");
-			}
-			return;
-		}
-
 		const nextTab = getReservationTabFromSearch(location.search);
-		if (
-			limitedOrderTakerAccount &&
-			!["newReservation", "list"].includes(nextTab)
-		) {
-			if (location.search !== "?newReservation") {
+		const canAccessNextTab = canAccessReservationWorkspaceTab({
+			tab: nextTab,
+			limitedOrderTakerAccount,
+			financeOnlyReservationView,
+			canConfirmReservations,
+			canAssignPhysicalRooms,
+		});
+		if (!canAccessNextTab) {
+			const fallbackTab = limitedOrderTakerAccount ? "newReservation" : "list";
+			const fallbackSearch =
+				fallbackTab === "newReservation" ? "?newReservation" : "?list=&page=1";
+			if (location.search !== fallbackSearch) {
 				history.replace({
 					pathname: location.pathname,
-					search: "?newReservation",
+					search: fallbackSearch,
 				});
 			}
-			if (activeTab !== "newReservation") {
-				setActiveTab("newReservation");
-			}
-			return;
-		}
-		if (nextTab === "housingreport" && !canConfirmReservations) {
-			if (location.search !== "?list=&page=1") {
-				history.replace({
-					pathname: location.pathname,
-					search: "?list=&page=1",
-				});
-			}
-			if (activeTab !== "list") {
-				setActiveTab("list");
+			if (activeTab !== fallbackTab) {
+				setActiveTab(fallbackTab);
 			}
 			return;
 		}
@@ -373,7 +368,9 @@ const NewReservationMain = ({
 		}
 	}, [
 		activeTab,
+		canAssignPhysicalRooms,
 		canConfirmReservations,
+		financeOnlyReservationView,
 		forceNewReservation,
 		history,
 		limitedOrderTakerAccount,
@@ -875,7 +872,17 @@ const NewReservationMain = ({
 		}
 	};
 
+	const handleHeatMapReservationUpdate = (updatedReservation) => {
+		setAllReservationsHeatMap((reservations) =>
+			mergeUpdatedReservationIntoList(reservations, updatedReservation),
+		);
+		setAllReservations((reservations) =>
+			mergeUpdatedReservationIntoList(reservations, updatedReservation),
+		);
+	};
+
 	const clickSubmit = () => {
+		if (reservationSubmitInFlightRef.current) return;
 		if (!customer_details.name) return toast.error("Name is required");
 		if (!customer_details.phone) return toast.error("Phone is required");
 		if (!limitedOrderTakerAccount && !customer_details.passport)
@@ -1121,17 +1128,30 @@ const NewReservationMain = ({
 				housedBy: user,
 			};
 
+			const explicitAssignmentPayload = buildSearchedReservationUpdate({
+				reservation: searchedReservation,
+				nextRooms: pickedHotelRooms,
+				checkInUpdate: updatePayload,
+				requestingUserId: user?._id,
+			});
+			if (!explicitAssignmentPayload) {
+				return toast.info(
+					chosenLanguage === "Arabic"
+						? "الحجز مسكّن بالفعل في الغرفة المحددة."
+						: "This reservation is already housed in the selected room.",
+				);
+			}
 			const safeUpdatePayload = protectHotelRunnerEditorPayload(
 				searchedReservation,
-				{
-					...updatePayload,
-					inhouse_date: new Date(),
-					requestingUserId: user?._id,
-				},
+				explicitAssignmentPayload,
 			);
 
+			reservationSubmitInFlightRef.current = true;
+			setIsSubmittingReservation(true);
 			updateSingleReservation(searchedReservation._id, safeUpdatePayload).then((data) => {
 				if (data && data.error) {
+					reservationSubmitInFlightRef.current = false;
+					setIsSubmittingReservation(false);
 					toast.error(
 						chosenLanguage === "Arabic" && data.errorArabic
 							? data.errorArabic
@@ -1145,19 +1165,23 @@ const NewReservationMain = ({
 				}
 			});
 		} else {
+			reservationSubmitInFlightRef.current = true;
+			setIsSubmittingReservation(true);
 			createNewReservation(
 				effectiveOwnerId || user._id,
 				hotelDetails._id,
 				token,
 				new_reservation,
 			).then((data) => {
-				if (data && data.error) {
+				if (!data || data.error) {
+					reservationSubmitInFlightRef.current = false;
+					setIsSubmittingReservation(false);
 					toast.error(
-						chosenLanguage === "Arabic" && data.errorArabic
+						chosenLanguage === "Arabic" && data?.errorArabic
 							? data.errorArabic
-							: data.error
+							: data?.error || "Network error while creating reservation."
 					);
-					console.log(data.error, "error create new reservation");
+					console.log(data?.error, "error create new reservation");
 				} else {
 					showReservationWarnings(data?.warnings);
 					toast.success("Reservation Was Successfully Booked!");
@@ -1284,6 +1308,7 @@ const NewReservationMain = ({
 
 								<Tab
 									type='button'
+									$isHidden={!canShowReservationTab("newReservation")}
 									$isActive={activeTab === "newReservation"}
 									onClick={() => {
 										navigateReservationTab("newReservation", "?newReservation");
@@ -1357,6 +1382,7 @@ const NewReservationMain = ({
 												hotelRooms={hotelRooms}
 												values={values}
 												clickSubmit={clickSubmit}
+												isSubmittingReservation={isSubmittingReservation}
 												pickedHotelRooms={pickedHotelRooms}
 												setPickedHotelRooms={setPickedHotelRooms}
 												payment_status={payment_status}
@@ -1421,6 +1447,7 @@ const NewReservationMain = ({
 									start_date_Map={start_date_Map}
 									end_date_Map={end_date_Map}
 									allReservations={allReservationsHeatMap}
+									onReservationUpdate={handleHeatMapReservationUpdate}
 									chosenLanguage={chosenLanguage}
 									useCurrentOccupancy
 								/>
@@ -1438,6 +1465,7 @@ const NewReservationMain = ({
 								setDays_of_residence={setDays_of_residence}
 								chosenLanguage={chosenLanguage}
 								clickSubmit2={clickSubmit}
+								isSubmittingReservation={isSubmittingReservation}
 								paymentStatus={payment_status}
 								setPaymentStatus={setPaymentStatus}
 								total_amount={total_amount}
@@ -1517,11 +1545,6 @@ function getReservationTabFromSearch(search = "") {
 	if (params.has("pendingConfirmation")) return "housingreport";
 	if (params.has("housingreport")) return "housingreport";
 	return "list";
-}
-
-function isOrderTakerReservationSearchAllowed(search = "") {
-	const params = new URLSearchParams(search || "");
-	return params.has("newReservation") || params.has("list");
 }
 
 function getAccountRoleNumbers(account = {}) {

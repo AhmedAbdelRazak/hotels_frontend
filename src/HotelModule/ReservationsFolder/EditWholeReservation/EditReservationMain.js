@@ -47,6 +47,11 @@ import {
 } from "./reservationStayPricing";
 import { dateOnlyKey, datePickerValue } from "./reservationDateValues";
 import { protectHotelRunnerEditorPayload } from "../../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
+import {
+	areSameRoomAssignments,
+	normalizeRoomAssignmentIds,
+	withExplicitRoomAssignmentIntent,
+} from "./roomAssignmentUpdate";
 
 const buildRoomKey = (roomType, displayName) =>
 	`${roomType || ""}|${displayName || ""}`;
@@ -316,18 +321,7 @@ export const EditReservationMain = ({
 		return parsed.isValid() ? parsed.startOf("day") : null;
 	}, []);
 
-	const getReservationRoomIds = useCallback((roomIdValue) => {
-		if (!Array.isArray(roomIdValue)) return [];
-		return roomIdValue
-			.map((room) => {
-				if (!room) return null;
-				if (typeof room === "string") return room;
-				if (typeof room === "object" && room._id) return room._id;
-				return room;
-			})
-			.filter(Boolean)
-			.map((id) => String(id));
-	}, []);
+	const getReservationRoomIds = useCallback(normalizeRoomAssignmentIds, []);
 	if (initialRoomIdsRef.current === null) {
 		initialRoomIdsRef.current = getReservationRoomIds(reservation?.roomId);
 	}
@@ -1255,24 +1249,6 @@ export const EditReservationMain = ({
 		setHasRoomLineEdits(true);
 	};
 
-	const normalizeRoomSelection = useCallback((values) => {
-		if (!Array.isArray(values)) return [];
-		return values
-			.map((value) =>
-				value && typeof value === "object" ? value.value : value,
-			)
-			.filter(Boolean)
-			.map((id) => String(id));
-	}, []);
-
-	const areSameRoomSelection = useCallback((left, right) => {
-		if (!Array.isArray(left) || !Array.isArray(right)) return false;
-		if (left.length !== right.length) return false;
-		const leftSorted = [...left].map(String).sort();
-		const rightSorted = [...right].map(String).sort();
-		return leftSorted.every((id, index) => id === rightSorted[index]);
-	}, []);
-
 	const applyRoomSelection = useCallback(
 		(roomIds) => {
 			setSelectedRoomIds(roomIds);
@@ -1285,10 +1261,10 @@ export const EditReservationMain = ({
 	);
 
 	const handleRoomSelectionChange = (values) => {
-		const nextValues = normalizeRoomSelection(values);
+		const nextValues = normalizeRoomAssignmentIds(values);
 		if (
 			selectedRoomIds.length > 0 &&
-			!areSameRoomSelection(selectedRoomIds, nextValues)
+			!areSameRoomAssignments(selectedRoomIds, nextValues)
 		) {
 			setPendingRoomIds(nextValues);
 			setIsRoomChangeConfirmVisible(true);
@@ -1596,7 +1572,7 @@ export const EditReservationMain = ({
 			const existingRoomIds = Array.isArray(initialRoomIdsRef.current)
 				? initialRoomIdsRef.current
 				: [];
-			const updateData = {
+			let updateData = {
 				customer_details: reservation.customer_details || {},
 				total_guests: reservation.total_guests,
 				adults: reservation.adults,
@@ -1607,9 +1583,11 @@ export const EditReservationMain = ({
 				hotelName: hotelDetails.hotelName,
 				sendEmail: sendEmail,
 			};
-			if (!areSameRoomSelection(existingRoomIds, normalizedRoomIds)) {
-				updateData.roomId = normalizedRoomIds;
-			}
+			updateData = withExplicitRoomAssignmentIntent(
+				updateData,
+				existingRoomIds,
+				normalizedRoomIds,
+			);
 			if (
 				String(reservation.booking_source || "") !==
 				String(initialReservationRef.current?.booking_source || "")
