@@ -2,14 +2,18 @@
 
 import {
 	applyTouchedOtaDistributions,
+	formatOtaPricingModalGuestGross,
+	normalizeOtaPricingRoomsForModal,
 	otaPricingInitializationDecision,
 	otaPricingNumberValue,
 	parseLocalizedMoney,
 	preferredOtaPricingRooms,
 	prepareOtaPricingSave,
 	resolveInitialOtaCommissionInput,
+	resolveOtaPricingModalSavedTotals,
 	resolveSavedOtaCommission,
 	roundOtaMoney,
+	summarizeOtaPricingRoomsForModal,
 } from "./otaPricingModalModel";
 import { recalculateOtaPricingDay } from "./otaPricingEditor";
 
@@ -179,6 +183,306 @@ describe("OTA pricing draft initialization", () => {
 			}),
 		).toEqual({ initialize: false, nextInitializedKey: "" });
 	});
+
+	test("keeps unresolved HotelRunner client/net null while preserving protected root rows", () => {
+		const netRows = [70.58, 70.58, 70.58, 70.57, 70.57, 70.57];
+		const reservation = {
+			total_amount: 423.45,
+			sub_total: 534,
+			currency: "SAR",
+			adminPricing: {
+				mode: "hotelrunner_api",
+				commercialVerified: false,
+				clientTotal: 423.45,
+				rootTotal: 534,
+				netAfterExpensesTotal: 423.45,
+			},
+			supplierData: {
+				hotelRunner: {
+					transport: "hotelrunner_api",
+					pricing: { currency: "SAR", grandTotal: 423.45 },
+				},
+			},
+			pickedRoomsPricing: [
+				{
+					count: 1,
+					pricingByDay: netRows.map((amount, index) => ({
+						date: `2026-10-${String(index + 5).padStart(2, "0")}`,
+						clientPrice: amount,
+						rootPrice: 89,
+						netAfterExpenses: amount,
+					})),
+				},
+			],
+		};
+
+		expect(resolveOtaPricingModalSavedTotals(reservation)).toEqual({
+			isHotelRunner: true,
+			guestGrossAvailable: false,
+			guestGrossAmount: null,
+			guestGrossCurrency: "",
+			guestGrossDisplayBasis: "",
+			clientAvailable: false,
+			rootAvailable: true,
+			netAvailable: false,
+			clientTotal: null,
+			rootTotal: 534,
+			netAfterExpensesTotal: null,
+		});
+
+		const rooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(rooms[0].pricingByDay.map((row) => row.rootPrice)).toEqual([
+			89, 89, 89, 89, 89, 89,
+		]);
+		expect(rooms[0].pricingByDay.map((row) => row.clientPrice)).toEqual([
+			null, null, null, null, null, null,
+		]);
+		expect(rooms[0].pricingByDay.map((row) => row.netAfterExpenses)).toEqual([
+			null, null, null, null, null, null,
+		]);
+		expect(summarizeOtaPricingRoomsForModal(rooms)).toMatchObject({
+			clientTotal: null,
+			rootTotal: 534,
+			netAfterExpensesTotal: null,
+			otaExpenseTotal: null,
+			platformMarginTotal: null,
+		});
+
+		const changedRoot = recalculateOtaPricingDay(rooms[0].pricingByDay[0], {
+			rootPrice: "90",
+		});
+		expect(changedRoot).toMatchObject({
+			clientPrice: null,
+			rootPrice: 90,
+			netAfterExpenses: null,
+			otaExpenseAmount: null,
+		});
+		const distributedRoot = applyTouchedOtaDistributions({
+			rooms,
+			distributionValues: { root: "540" },
+			distributionTouched: { root: true },
+		});
+		expect(distributedRoot.ok).toBe(true);
+		expect(
+			distributedRoot.rooms[0].pricingByDay.map((row) => row.clientPrice),
+		).toEqual([null, null, null, null, null, null]);
+		expect(
+			distributedRoot.rooms[0].pricingByDay.map(
+				(row) => row.netAfterExpenses,
+			),
+		).toEqual([null, null, null, null, null, null]);
+	});
+
+	test("keeps a verified USD source gross visible but non-distributable without trusted SAR conversion", () => {
+		const reservation = {
+			total_amount: null,
+			sub_total: 534,
+			currency: "SAR",
+			adminPricing: {
+				mode: "hotelrunner_api",
+				commercialVerified: false,
+				propertyCurrency: "SAR",
+				clientTotal: null,
+				rootTotal: 534,
+				netAfterExpensesTotal: null,
+			},
+			supplierData: {
+				hotelRunner: {
+					transport: "hotelrunner_api",
+					pricing: { currency: "USD", grandTotal: 112.92 },
+				},
+				otaCommercialEvidence: {
+					contractVersion: 1,
+					provider: "expedia",
+					sourceType: "authenticated_provider_portal",
+					sourceCurrency: "USD",
+					propertyCurrency: "SAR",
+					bookingBasis: "reservation_total",
+					verificationState: "partial",
+					evidenceHash: "f".repeat(64),
+					provenance: {
+						primary: {
+							provider: "expedia",
+							sourceType: "authenticated_provider_portal",
+							sourceHash: "1".repeat(64),
+							sourceTimestamp: "2026-08-08T00:00:00.000Z",
+							sourceId: "expedia-portal-modal-1",
+						},
+					},
+					roles: {
+						guestGross: {
+							verified: true,
+							sourceAmount: 146.46,
+							sourceCurrency: "USD",
+							propertyAmount: null,
+							propertyCurrency: null,
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
+					},
+				},
+			},
+			pickedRoomsPricing: [
+				{
+					count: 1,
+					pricingByDay: [
+						{ date: "2026-10-05", clientPrice: 70.58, rootPrice: 89 },
+					],
+				},
+			],
+		};
+
+		expect(resolveOtaPricingModalSavedTotals(reservation)).toMatchObject({
+			guestGrossAvailable: true,
+			guestGrossAmount: 146.46,
+			guestGrossCurrency: "USD",
+			guestGrossDisplayBasis: "source",
+			clientAvailable: false,
+			clientTotal: null,
+			rootTotal: 534,
+			netAfterExpensesTotal: null,
+		});
+		expect(
+			formatOtaPricingModalGuestGross(
+				resolveOtaPricingModalSavedTotals(reservation),
+			),
+		).toBe("146.46 USD (source currency)");
+		const rooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(rooms[0].pricingByDay[0]).toMatchObject({
+			clientPrice: null,
+			rootPrice: 89,
+			netAfterExpenses: null,
+		});
+	});
+
+	test("shows verified HotelRunner roles only when nightly materialization reconciles", () => {
+		const reservation = {
+			total_amount: 600,
+			sub_total: 534,
+			currency: "SAR",
+			adminPricing: {
+				mode: "hotelrunner_api",
+				commercialVerified: true,
+				clientTotal: 600,
+				rootTotal: 534,
+				netAfterExpensesTotal: 423.45,
+			},
+			supplierData: {
+				hotelRunner: {
+					transport: "hotelrunner_api",
+					pricing: { currency: "SAR", grandTotal: 423.45 },
+				},
+				otaCommercialEvidence: {
+					contractVersion: 1,
+					verificationState: "verified",
+					sourceType: "authenticated_ota_email",
+					provider: "expedia",
+					evidenceHash: "c".repeat(64),
+					sourceCurrency: "SAR",
+					propertyCurrency: "SAR",
+					bookingBasis: "reservation_total",
+					provenance: {
+						primary: {
+							provider: "expedia",
+							sourceType: "authenticated_ota_email",
+							sourceHash: "d".repeat(64),
+							sourceTimestamp: "2026-08-08T00:00:00.000Z",
+							sourceId: "expedia-email-modal-1",
+						},
+					},
+					roles: {
+						guestGross: {
+							verified: true,
+							sourceAmount: 600,
+							sourceCurrency: "SAR",
+							propertyAmount: 600,
+							propertyCurrency: "SAR",
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
+						hotelPayout: {
+							verified: true,
+							sourceAmount: 423.45,
+							sourceCurrency: "SAR",
+							propertyAmount: 423.45,
+							propertyCurrency: "SAR",
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
+					},
+				},
+			},
+			pickedRoomsPricing: [
+				{
+					count: 1,
+					pricingByDay: [
+						day("2026-10-05", 300, 267, 211.73),
+						day("2026-10-06", 300, 267, 211.72),
+					],
+				},
+			],
+		};
+
+		const rooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(summarizeOtaPricingRoomsForModal(rooms)).toMatchObject({
+			clientTotal: 600,
+			rootTotal: 534,
+			netAfterExpensesTotal: 423.45,
+			otaExpenseTotal: 176.55,
+			platformMarginTotal: -110.55,
+		});
+
+		reservation.pickedRoomsPricing[0].pricingByDay[0].clientPrice = 211.73;
+		reservation.pickedRoomsPricing[0].pricingByDay[0].mainPrice = 211.73;
+		reservation.pickedRoomsPricing[0].pricingByDay[0].price = 211.73;
+		reservation.pickedRoomsPricing[0].pricingByDay[0].totalPriceWithCommission =
+			211.73;
+		reservation.pickedRoomsPricing[0].pricingByDay[1].clientPrice = 211.72;
+		reservation.pickedRoomsPricing[0].pricingByDay[1].mainPrice = 211.72;
+		reservation.pickedRoomsPricing[0].pricingByDay[1].price = 211.72;
+		reservation.pickedRoomsPricing[0].pricingByDay[1].totalPriceWithCommission =
+			211.72;
+		const staleRooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(staleRooms[0].pricingByDay.map((row) => row.clientPrice)).toEqual([
+			null,
+			null,
+		]);
+		expect(staleRooms[0].pricingByDay.map((row) => row.netAfterExpenses)).toEqual([
+			211.73,
+			211.72,
+		]);
+	});
+
+	test("preserves legacy modal fallbacks outside HotelRunner", () => {
+		const reservation = {
+			total_amount: 100,
+			sub_total: 50,
+			adminPricing: { mode: "ota_review" },
+			pickedRoomsPricing: [
+				{
+					count: 1,
+					pricingByDay: [{ date: "2026-10-05", price: 100, rootPrice: 50 }],
+				},
+			],
+		};
+
+		expect(resolveOtaPricingModalSavedTotals(reservation)).toMatchObject({
+			isHotelRunner: false,
+			clientTotal: 100,
+			rootTotal: 50,
+			netAfterExpensesTotal: 0,
+		});
+		const rooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(rooms[0].pricingByDay[0]).toMatchObject({
+			clientPrice: 100,
+			rootPrice: 50,
+			netAfterExpenses: 100,
+			otaExpenseAmount: 0,
+		});
+	});
 });
 
 describe("touched OTA pricing distributions", () => {
@@ -235,6 +539,9 @@ describe("touched OTA pricing distributions", () => {
 				commissionAmount: 82.5,
 			},
 		});
+		expect(JSON.stringify(result.payload)).not.toContain(
+			"pricingRoleAvailability",
+		);
 	});
 
 	test("builds the screenshot totals without floating-point loss", () => {

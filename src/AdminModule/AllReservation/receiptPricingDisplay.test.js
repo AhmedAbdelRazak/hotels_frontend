@@ -21,6 +21,27 @@ const hotelRunnerReservation = (overrides = {}) => ({
   ...overrides,
 });
 
+const withVerifiedGross = (reservation = hotelRunnerReservation()) => ({
+  ...reservation,
+  adminPricing: {
+    ...reservation.adminPricing,
+    commercialVerified: true,
+    clientTotal: 1000,
+  },
+  supplierData: {
+    ...reservation.supplierData,
+    hotelRunnerEmailCommercialEvidence: {
+      version: 2,
+      verified: true,
+      source: "authenticated_ota_email",
+      provider: "agoda",
+      grossTotalSar: 1000,
+      currency: "SAR",
+      evidenceHash: "a".repeat(64),
+    },
+  },
+});
+
 test("preserves the legacy receipt amount and wording for non-HotelRunner reservations", () => {
   expect(
     getReceiptPricingDisplay(
@@ -36,8 +57,8 @@ test("preserves the legacy receipt amount and wording for non-HotelRunner reserv
   });
 });
 
-test("labels HotelRunner total as guest gross and never substitutes the local base", () => {
-  const display = getReceiptPricingDisplay(hotelRunnerReservation(), 700);
+test("labels only verified HotelRunner guest gross and never substitutes the local base", () => {
+	const display = getReceiptPricingDisplay(withVerifiedGross(), 700);
 
   expect(display).toEqual({
     isHotelRunner: true,
@@ -66,7 +87,7 @@ test("keeps HotelRunner gross unavailable when the canonical total is absent", (
     available: false,
     accommodationLabel: "Gross Reservation Total",
     amount: null,
-    currency: "USD",
+    currency: "SAR",
   });
 });
 
@@ -84,6 +105,7 @@ test("verified commercial net evidence never replaces the guest gross on a recei
     700,
   );
 
-  expect(display.amount).toBe(1000);
-  expect(display.accommodationLabel).toBe("Gross Reservation Total");
+	expect(display.available).toBe(false);
+	expect(display.amount).toBeNull();
+	expect(display.accommodationLabel).toBe("Gross Reservation Total");
 });

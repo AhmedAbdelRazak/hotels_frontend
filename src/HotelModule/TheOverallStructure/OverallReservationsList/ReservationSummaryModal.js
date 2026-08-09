@@ -12,7 +12,7 @@ import {
 } from "../overallShared";
 import {
 	getHotelRunnerPlatformFinanceDisplay,
-	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 } from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const { RangePicker } = DatePicker;
@@ -141,7 +141,7 @@ const numberValue = (value) => {
 const roundMoney = (value) => Math.round(numberValue(value) * 100) / 100;
 
 const reservationGuestGross = (reservation = {}) => {
-	const gross = getReservationGuestGrossDisplay(reservation);
+	const gross = getReservationPropertyGuestGrossDisplay(reservation);
 	return gross.available ? roundMoney(gross.amount) : null;
 };
 
@@ -387,7 +387,7 @@ const buildRoomTypeRows = (reservations = [], text = SUMMARY_TEXT.en) => {
 	const grouped = new Map();
 
 	(Array.isArray(reservations) ? reservations : []).forEach((reservation) => {
-		const guestGross = getReservationGuestGrossDisplay(reservation);
+		const guestGross = getReservationPropertyGuestGrossDisplay(reservation);
 		const reservationAmount = reservationGuestGross(reservation);
 		const paidAmount = roundMoney(reservation.paid_amount);
 		const commission = reservationCommissionDisplay(reservation);

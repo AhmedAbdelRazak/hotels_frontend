@@ -39,16 +39,29 @@ const summaryExportRow = (row) => {
 };
 
 describe("HotelRunner reservation summary commission availability", () => {
-  it("aggregates canonical HotelRunner guest gross instead of local total_amount", () => {
+  it("aggregates verified HotelRunner guest gross", () => {
     const summary = buildReservationSummary({
       reservations: [
         hotelRunnerReservation({
-          total_amount: 700,
+          adminPricing: {
+            mode: "hotelrunner_api",
+            commercialVerified: true,
+            clientTotal: 1000,
+          },
           supplierData: {
             hotelRunner: {
               transport: "hotelrunner_api",
               reservationId: "hotelrunner-1",
               pricing: { grandTotal: 1000 },
+            },
+            hotelRunnerEmailCommercialEvidence: {
+              version: 2,
+              verified: true,
+              source: "authenticated_ota_email",
+              provider: "agoda",
+              grossTotalSar: 1000,
+              currency: "SAR",
+              evidenceHash: "a".repeat(64),
             },
           },
         }),

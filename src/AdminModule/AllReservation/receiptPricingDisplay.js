@@ -1,4 +1,7 @@
-import { getHotelRunnerPricingDisplay } from "./hotelRunnerPricingDisplay";
+import {
+  getReservationPropertyGuestGrossDisplay,
+  isHotelRunnerReservation,
+} from "./hotelRunnerPricingDisplay";
 
 const finiteAmountOrNull = (value) => {
   if (value === null || value === undefined || typeof value === "boolean") {
@@ -12,17 +15,18 @@ const finiteAmountOrNull = (value) => {
 
 /**
  * Keeps receipt totals truthful without changing any legacy reservation output.
- * HotelRunner's reservation total is the guest gross. It is not an OTA payout
- * or hotel net amount, even when a local contracted/base value also exists.
+ * A HotelRunner receipt uses only a verified property-currency guest-gross
+ * role. The generic HotelRunner total, source-only gross, local base, and OTA
+ * payout are never substitutes in receipt arithmetic.
  */
 export const getReceiptPricingDisplay = (
   reservation = {},
   legacyAmount = 0,
 ) => {
-  const hotelRunnerPricing = getHotelRunnerPricingDisplay(reservation);
+  const isHotelRunner = isHotelRunnerReservation(reservation);
   const safeLegacyAmount = finiteAmountOrNull(legacyAmount) ?? 0;
 
-  if (!hotelRunnerPricing.isHotelRunner) {
+  if (!isHotelRunner) {
     return {
       isHotelRunner: false,
       available: true,
@@ -32,13 +36,14 @@ export const getReceiptPricingDisplay = (
     };
   }
 
+  const guestGross = getReservationPropertyGuestGrossDisplay(reservation);
+
   return {
     isHotelRunner: true,
-    available:
-      finiteAmountOrNull(hotelRunnerPricing.summary?.grandTotal) !== null,
+    available: guestGross.available === true,
     accommodationLabel: "Gross Reservation Total",
-    amount: finiteAmountOrNull(hotelRunnerPricing.summary?.grandTotal),
-    currency: hotelRunnerPricing.currency || "SAR",
+    amount: guestGross.available ? finiteAmountOrNull(guestGross.amount) : null,
+    currency: guestGross.currency || "SAR",
   };
 };
 

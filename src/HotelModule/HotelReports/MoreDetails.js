@@ -23,6 +23,7 @@ import {
 	getHotelRunnerPlatformFinanceDisplay,
 	getHotelRunnerPricingDisplay,
 	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 } from "../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 import { protectHotelRunnerEditorPayload } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 
@@ -122,7 +123,11 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 		getHotelRunnerPlatformFinanceDisplay(reservation);
 	const hotelRunnerPricing = getHotelRunnerPricingDisplay(reservation);
 	const guestGross = getReservationGuestGrossDisplay(reservation);
-	const displayedReservationTotal = guestGross.amount;
+	const propertyGuestGross =
+		getReservationPropertyGuestGrossDisplay(reservation);
+	const displayedReservationTotal = propertyGuestGross.available
+		? propertyGuestGross.amount
+		: null;
 	const displayedReservationTotalText = guestGross.available
 		? guestGross.amount.toLocaleString()
 		: "—";
@@ -801,7 +806,9 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 														background: "darkred",
 														border: "1px darkred solid",
 													}}
+													disabled={displayedReservationTotal === null}
 													onClick={() => {
+														if (displayedReservationTotal === null) return;
 														setLinkGenerated(
 															`${process.env.REACT_APP_MAIN_URL_JANNAT}/client-payment/${reservation._id}/${reservation.confirmation_number}`
 														);
@@ -877,7 +884,7 @@ const MoreDetails = ({ reservation, setReservation, hotelDetails }) => {
 															}/roomTypes/${reservation._id}/${
 																reservation._id
 															}/${reservation.days_of_residence}/${Number(
-																reservation.total_amount
+																		displayedReservationTotal
 															).toFixed(2)}`
 														);
 													}}

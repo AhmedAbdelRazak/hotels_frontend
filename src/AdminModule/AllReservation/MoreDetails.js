@@ -71,6 +71,7 @@ import {
 	getHotelRunnerPlatformFinanceDisplay,
 	getHotelRunnerPayoutDisplay,
 	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 	isHotelRunnerReservation,
 } from "./hotelRunnerPricingDisplay";
 import {
@@ -5625,10 +5626,15 @@ const ReservationDetail = ({
 		() => getReservationGuestGrossDisplay(reservation),
 		[reservation],
 	);
+	const propertyGuestGrossDisplay = useMemo(
+		() => getReservationPropertyGuestGrossDisplay(reservation),
+		[reservation],
+	);
 	const financialTotalAmountAvailable =
-		!guestGrossDisplay.isHotelRunner || guestGrossDisplay.available;
-	const financialTotalAmountValue = guestGrossDisplay.isHotelRunner
-		? guestGrossDisplay.amount
+		!propertyGuestGrossDisplay.isHotelRunner ||
+		propertyGuestGrossDisplay.available;
+	const financialTotalAmountValue = propertyGuestGrossDisplay.isHotelRunner
+		? propertyGuestGrossDisplay.amount
 		: totalAmountValue;
 	const breakdownTotalsFromReservation = useMemo(
 		() =>
@@ -6659,7 +6665,12 @@ const ReservationDetail = ({
 			normalizeNumber,
 		);
 		const nextPaidAmount = Number(nextTotals.total.toFixed(2));
-		if (nextPaidAmount > totalAmountValue) {
+		if (!financialTotalAmountAvailable || financialTotalAmountValue === null) {
+			return toast.error(
+				"Verified property-currency guest gross is unavailable.",
+			);
+		}
+		if (nextPaidAmount > financialTotalAmountValue) {
 			return toast.error("Paid total cannot exceed the total amount.");
 		}
 		setIsSavingPaymentBreakdown(true);
@@ -6836,13 +6847,23 @@ const ReservationDetail = ({
 	}, [hotelDetails, reservation]);
 
 	const createPaymentLink = useCallback(
-		(overrides = {}) =>
-			buildPublicPaymentLink({
+		(overrides = {}) => {
+			if (!financialTotalAmountAvailable || financialTotalAmountValue === null) {
+				return "";
+			}
+			return buildPublicPaymentLink({
 				reservation,
 				language: overrides.language || paymentLinkLanguage,
 				currency: overrides.currency || paymentLinkCurrency,
-			}),
-		[reservation, paymentLinkCurrency, paymentLinkLanguage],
+			});
+		},
+		[
+			financialTotalAmountAvailable,
+			financialTotalAmountValue,
+			reservation,
+			paymentLinkCurrency,
+			paymentLinkLanguage,
+		],
 	);
 
 	const refreshPaymentLink = useCallback(
@@ -6855,9 +6876,17 @@ const ReservationDetail = ({
 	);
 
 	const openPaymentLinkModal = useCallback(() => {
+		if (!financialTotalAmountAvailable || financialTotalAmountValue === null) {
+			toast.error("Verified property-currency guest gross is unavailable.");
+			return;
+		}
 		refreshPaymentLink();
 		setLinkModalVisible(true);
-	}, [refreshPaymentLink]);
+	}, [
+		financialTotalAmountAvailable,
+		financialTotalAmountValue,
+		refreshPaymentLink,
+	]);
 
 	const handlePaymentLinkLanguageChange = (value) => {
 		const nextLanguage = normalizePaymentLinkLanguage(value);
@@ -6873,6 +6902,11 @@ const ReservationDetail = ({
 
 	const copyPaymentLink = async () => {
 		const nextLink = linkGenerate || refreshPaymentLink();
+		if (!nextLink) {
+			return toast.error(
+				"Verified property-currency guest gross is unavailable.",
+			);
+		}
 		try {
 			await navigator.clipboard.writeText(nextLink);
 			toast.success("Payment link copied.");
@@ -7022,7 +7056,7 @@ const ReservationDetail = ({
 		guestName: reservation?.customer_details?.name || "",
 		hotelName: hotelDetails?.hotelName || "",
 		confirmationNumber: reservation?.confirmation_number || "",
-		totalAmount: reservation?.total_amount,
+		totalAmount: financialTotalAmountValue,
 		paidAmount: reservation?.paid_amount,
 		currency: reservation?.currency || "SAR",
 		linkLanguage: paymentLinkLanguage,
@@ -7616,7 +7650,7 @@ const ReservationDetail = ({
 			grouped.set(key, existing);
 		});
 
-		const sections = Array.from(grouped.values()).map((section) => {
+		let sections = Array.from(grouped.values()).map((section) => {
 			const dayRows = section.dayRows.map((day) => ({
 				...day,
 				rootTotal: day.rootPrice * section.count,
@@ -7661,10 +7695,31 @@ const ReservationDetail = ({
 			sections.some((section) => section[field] === null)
 				? null
 				: sections.reduce((sum, section) => sum + section[field], 0);
+		const rawClientTotal = sumCompleteSections("total");
+		const hotelRunnerClientRowsVerified =
+			!isHotelRunnerPricingReservation ||
+			(propertyGuestGrossDisplay.available &&
+				sections.length > 0 &&
+				sections.every((section) => section.hasDailyPricing) &&
+				rawClientTotal !== null &&
+				Math.abs(rawClientTotal - propertyGuestGrossDisplay.amount) <= 0.009);
+		if (!hotelRunnerClientRowsVerified) {
+			sections = sections.map((section) => ({
+				...section,
+				total: null,
+				dayRows: section.dayRows.map((day) => ({
+					...day,
+					finalPrice: null,
+					clientPrice: null,
+					finalTotal: null,
+					clientTotal: null,
+				})),
+			}));
+		}
 
 		return {
 			sections,
-			total: sections.reduce((sum, section) => sum + section.total, 0),
+			total: sumCompleteSections("total"),
 			rootTotal: sections.reduce((sum, section) => sum + section.rootTotal, 0),
 			netTotal: sumCompleteSections("netTotal"),
 			otaExpenseTotal: sumCompleteSections("otaExpenseTotal"),
@@ -7688,6 +7743,8 @@ const ReservationDetail = ({
 		hotelRunnerPayoutDisplay.platformMarginAvailable,
 		isHotelRunnerPricingReservation,
 		normalizeNumber,
+		propertyGuestGrossDisplay.amount,
+		propertyGuestGrossDisplay.available,
 		reservation?.adminPricing?.mode,
 		reservation?.adminPricingVisibility,
 		reservation?.pickedRoomsType,
@@ -7901,14 +7958,41 @@ const ReservationDetail = ({
 		isHotelRunner: isHotelRunnerPricingReservation,
 		reservation,
 	});
-	const pricingCurrencyLabel =
-		chosenLanguage === "Arabic" ? AR_LABELS.currency : "SAR";
-	const renderGuestPricingAmount = (value) =>
-		isHotelRunnerPricingReservation && !financialTotalAmountAvailable ? (
+	const guestPricingCurrencyLabel = guestGrossDisplay.isHotelRunner
+		? guestGrossDisplay.currency
+		: chosenLanguage === "Arabic"
+			? AR_LABELS.currency
+			: "SAR";
+	const propertyPricingCurrency =
+		reservation?.adminPricing?.propertyCurrency ||
+		reservation?.ota_financial_summary?.propertyCurrency ||
+		reservation?.otaFinancialSummary?.propertyCurrency ||
+		"SAR";
+	const propertyPricingCurrencyLabel =
+		chosenLanguage === "Arabic" && propertyPricingCurrency === "SAR"
+			? AR_LABELS.currency
+			: propertyPricingCurrency;
+	const renderGuestPricingAmount = (value, { aggregate = false } = {}) =>
+		isHotelRunnerPricingReservation &&
+		(!(aggregate
+			? guestGrossDisplay.available
+			: propertyGuestGrossDisplay.available) ||
+			(guestGrossDisplay.displayBasis === "source" && !aggregate) ||
+			value === null ||
+			value === undefined ||
+			!Number.isFinite(Number(value))) ? (
 			<span className='pricing-unavailable'>Canonical gross unavailable</span>
 		) : (
 			<>
-				{formatMoney(value)} {pricingCurrencyLabel}
+				{formatMoney(value)} {guestPricingCurrencyLabel}
+				{guestGrossDisplay.isHotelRunner &&
+				guestGrossDisplay.displayBasis === "source" ? (
+					<small>
+						{" "}(
+						{chosenLanguage === "Arabic" ? "عملة المصدر" : "source currency"}
+						)
+					</small>
+				) : null}
 			</>
 		);
 	const renderCommercialPricingAmount = (
@@ -7922,7 +8006,7 @@ const ReservationDetail = ({
 			</span>
 		) : (
 			<>
-				{formatMoney(value)} {pricingCurrencyLabel}
+				{formatMoney(value)} {propertyPricingCurrencyLabel}
 			</>
 		);
 
@@ -8751,7 +8835,9 @@ const ReservationDetail = ({
 									className='btn btn-primary'
 									disabled={
 										isSavingPaymentBreakdown ||
-										breakdownDraftTotals.total > totalAmountValue
+										!financialTotalAmountAvailable ||
+										financialTotalAmountValue === null ||
+										breakdownDraftTotals.total > financialTotalAmountValue
 									}
 									onClick={handleSavePaymentBreakdown}
 								>
@@ -9269,8 +9355,9 @@ const ReservationDetail = ({
 									<strong className='detail-value-ltr'>
 								{renderGuestPricingAmount(
 									isHotelRunnerPricingReservation
-										? financialTotalAmountValue
+										? guestGrossDisplay.amount
 										: pricingBreakdownByDay.total || financialTotalAmountValue,
+									{ aggregate: true },
 								)}
 									</strong>
 								</div>
@@ -9353,10 +9440,7 @@ const ReservationDetail = ({
 												<strong>{section.title}</strong>
 											</div>
 											<span className='pricing-count-pill'>
-												x {section.count} | {formatMoney(section.total)}{" "}
-												{chosenLanguage === "Arabic"
-													? AR_LABELS.currency
-													: "SAR"}
+												x {section.count} | {renderGuestPricingAmount(section.total)}
 											</span>
 										</div>
 										<div className='pricing-day-table-wrap'>

@@ -131,7 +131,7 @@ describe("admin reservation table total", () => {
     ).toBe(0);
   });
 
-  it("keeps HotelRunner gross total until the OTA payout is verified", () => {
+  it("keeps an unverified HotelRunner total unavailable", () => {
     expect(
       getAdminReservationDisplayTotal(
         {
@@ -150,10 +150,10 @@ describe("admin reservation table total", () => {
         },
         { preferNetAfterExpenses: true },
       ),
-    ).toBe(1000);
+    ).toBeNull();
   });
 
-  it("falls back to the saved PMS total in the admin table when canonical HotelRunner gross is absent", () => {
+  it("does not treat a saved legacy HotelRunner total as verified guest gross", () => {
     expect(
       getAdminReservationDisplayTotal({
         total_amount: 91.14,
@@ -162,10 +162,10 @@ describe("admin reservation table total", () => {
           hotelRunner: { transport: "hotelrunner_api", reservationId: "hr-1" },
         },
       }),
-    ).toBe(91.14);
+    ).toBeNull();
   });
 
-  it("keeps total_amount ahead of a conflicting HotelRunner source amount", () => {
+  it("fails closed when HotelRunner source and legacy totals have unknown roles", () => {
     expect(
       getAdminReservationDisplayTotal({
         total_amount: 91.14,
@@ -178,7 +178,7 @@ describe("admin reservation table total", () => {
           },
         },
       }),
-    ).toBe(91.14);
+    ).toBeNull();
   });
 
   it("prefers the verified OTA client total over a raw HotelRunner amount that is actually the payout", () => {
@@ -192,6 +192,15 @@ describe("admin reservation table total", () => {
           netAfterExpensesTotal: 56.39,
         },
         supplierData: {
+          hotelRunnerEmailCommercialEvidence: {
+            version: 2,
+            verified: true,
+            source: "authenticated_ota_email",
+            provider: "agoda",
+            grossTotalSar: 91.14,
+            currency: "SAR",
+            evidenceHash: "a".repeat(64),
+          },
           hotelRunner: {
             transport: "hotelrunner_api",
             reservationId: "r071469597",
@@ -219,5 +228,35 @@ describe("admin reservation table total", () => {
         { preferNetAfterExpenses: true },
       ),
     ).toBe(850);
+  });
+
+  it("does not copy a verified HotelRunner guest gross into an unknown net role", () => {
+    expect(
+      getAdminReservationDisplayTotal(
+        {
+          total_amount: 1000,
+          adminPricing: {
+            mode: "hotelrunner_api",
+            commercialVerified: false,
+          },
+          supplierData: {
+            hotelRunner: {
+              transport: "hotelrunner_api",
+              pricing: { currency: "SAR", grandTotal: 1000 },
+            },
+            hotelRunnerEmailCommercialEvidence: {
+              version: 2,
+              verified: true,
+              source: "authenticated_ota_email",
+              provider: "agoda",
+              grossTotalSar: 1000,
+              currency: "SAR",
+              evidenceHash: "c".repeat(64),
+            },
+          },
+        },
+        { preferNetAfterExpenses: true },
+      ),
+    ).toBeNull();
   });
 });

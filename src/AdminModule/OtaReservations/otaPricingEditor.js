@@ -152,43 +152,98 @@ export const hasCurrentOtaRoomMapping = (room = {}, options = []) => {
 
 export const recalculateOtaPricingDay = (day = {}, patch = {}) => {
 	const merged = { ...day, ...patch };
+	const priorRoleAvailability = day?.pricingRoleAvailability;
+	const hasExplicitPatch = (field) =>
+		Object.prototype.hasOwnProperty.call(patch || {}, field) &&
+		patch[field] !== null &&
+		patch[field] !== undefined;
+	const preserveUnavailableClient = Boolean(
+		priorRoleAvailability?.client === false &&
+			!["clientPrice", "mainPrice", "totalPriceWithCommission", "price"].some(
+				hasExplicitPatch,
+			),
+	);
+	const preserveUnavailableNet = Boolean(
+		priorRoleAvailability?.net === false &&
+			!["netAfterExpenses", "netAfterOtaExpenses", "netAfterOtherExpenses"].some(
+				hasExplicitPatch,
+			),
+	);
+	const preserveUnavailableRoot = Boolean(
+		priorRoleAvailability?.root === false &&
+			!["rootPrice", "totalPriceWithoutCommission"].some(hasExplicitPatch),
+	);
 	const rawClientPrice =
 		merged.clientPrice ??
 		merged.mainPrice ??
 		merged.totalPriceWithCommission ??
 		merged.price;
 	const clientDraft = editableMoneyValue(rawClientPrice);
-	const clientPrice = round2(clientDraft.value);
+	const clientPrice = preserveUnavailableClient
+		? null
+		: round2(clientDraft.value);
 	const rawRootPrice =
 		merged.rootPrice ?? merged.totalPriceWithoutCommission;
 	const rootDraft = editableMoneyValue(rawRootPrice);
-	const rootPrice = round2(rootDraft.value);
+	const rootPrice = preserveUnavailableRoot ? null : round2(rootDraft.value);
 	const rawNetAfterExpenses =
-		merged.netAfterExpenses ??
-		clientPrice - numberValue(merged.otaExpenseAmount);
+		preserveUnavailableNet
+			? null
+			: merged.netAfterExpenses ??
+				clientPrice - numberValue(merged.otaExpenseAmount);
 	const netDraft = editableMoneyValue(rawNetAfterExpenses);
-	const netAfterExpenses = round2(netDraft.value);
-	const otaExpenseAmount = round2(clientPrice - netAfterExpenses);
-	const platformMargin = round2(netAfterExpenses - rootPrice);
+	const netAfterExpenses = preserveUnavailableNet
+		? null
+		: round2(netDraft.value);
+	const otaExpenseAmount =
+		typeof clientPrice === "number" && typeof netAfterExpenses === "number"
+			? round2(clientPrice - netAfterExpenses)
+			: null;
+	const platformMargin =
+		typeof netAfterExpenses === "number" && typeof rootPrice === "number"
+			? round2(netAfterExpenses - rootPrice)
+			: null;
 	const platformMarginRate =
-		netAfterExpenses > 0
+		typeof platformMargin === "number" && netAfterExpenses > 0
 			? round2((platformMargin / netAfterExpenses) * 100)
-			: 0;
+			: platformMargin === null
+				? null
+				: 0;
 	return {
 		...merged,
-		price: clientPrice,
-		clientPrice: clientDraft.valid ? clientPrice : rawClientPrice,
-		mainPrice: clientPrice,
-		totalPriceWithCommission: clientPrice,
-		rootPrice: rootDraft.valid ? rootPrice : rawRootPrice,
-		totalPriceWithoutCommission: rootPrice,
-		netAfterExpenses: netDraft.valid
-			? netAfterExpenses
-			: rawNetAfterExpenses,
-		netAfterOtaExpenses: netAfterExpenses,
+		price: preserveUnavailableClient ? null : clientPrice,
+		clientPrice: preserveUnavailableClient
+			? null
+			: clientDraft.valid
+				? clientPrice
+				: rawClientPrice,
+		mainPrice: preserveUnavailableClient ? null : clientPrice,
+		totalPriceWithCommission: preserveUnavailableClient ? null : clientPrice,
+		rootPrice: preserveUnavailableRoot
+			? null
+			: rootDraft.valid
+				? rootPrice
+				: rawRootPrice,
+		totalPriceWithoutCommission: preserveUnavailableRoot ? null : rootPrice,
+		netAfterExpenses: preserveUnavailableNet
+			? null
+			: netDraft.valid
+				? netAfterExpenses
+				: rawNetAfterExpenses,
+		netAfterOtaExpenses: preserveUnavailableNet ? null : netAfterExpenses,
 		otaExpenseAmount,
 		platformMargin,
 		platformMarginRate,
+		...(priorRoleAvailability
+			? {
+					pricingRoleAvailability: {
+						...priorRoleAvailability,
+						client: preserveUnavailableClient ? false : true,
+						root: preserveUnavailableRoot ? false : true,
+						net: preserveUnavailableNet ? false : true,
+					},
+				}
+			: {}),
 	};
 };
 

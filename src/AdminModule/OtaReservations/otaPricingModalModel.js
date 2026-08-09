@@ -6,6 +6,11 @@ import {
 	recalculateOtaPricingDay,
 	summarizeOtaPricingRooms,
 } from "./otaPricingEditor";
+import {
+	getHotelRunnerPayoutDisplay,
+	getReservationGuestGrossDisplay,
+	isHotelRunnerReservation,
+} from "../AllReservation/hotelRunnerPricingDisplay";
 
 const LOCALIZED_MONEY_DIGITS = Object.freeze({
 	"\u0660": "0",
@@ -288,6 +293,330 @@ export const preferredOtaPricingRooms = (reservation = {}) => {
 	return pricingRooms || typeRooms || [];
 };
 
+const firstExplicitOtaMoney = (...values) => {
+	for (const value of values) {
+		const parsed = parseLocalizedMoney(value);
+		if (parsed.status === "valid") return roundOtaMoney(parsed.value);
+	}
+	return null;
+};
+
+const otaPricingDateKey = (value) => {
+	if (!value) return "";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+		return value.slice(0, 10);
+	}
+	const parsed = new Date(value);
+	return Number.isNaN(parsed.getTime())
+		? ""
+		: parsed.toISOString().slice(0, 10);
+};
+
+/**
+ * HotelRunner modal totals are semantic financial roles. Unknown client/net
+ * roles remain null. Legacy reservations retain the previous zero fallback.
+ */
+export const resolveOtaPricingModalSavedTotals = (reservation = {}) => {
+	const isHotelRunner = isHotelRunnerReservation(reservation);
+	const guestGross = getReservationGuestGrossDisplay(reservation);
+	const payout = getHotelRunnerPayoutDisplay(reservation);
+	const rootTotal = firstExplicitOtaMoney(
+		reservation?.adminPricing?.rootTotal,
+		reservation?.sub_total,
+		reservation?.hotel_visible_amount,
+	);
+
+	if (isHotelRunner) {
+		return {
+			isHotelRunner: true,
+			guestGrossAvailable: guestGross.available === true,
+			guestGrossAmount: guestGross.available ? guestGross.amount : null,
+			guestGrossCurrency: guestGross.available ? guestGross.currency : "",
+			guestGrossDisplayBasis: guestGross.displayBasis || "",
+			clientAvailable: guestGross.propertyAvailable === true,
+			rootAvailable: rootTotal !== null,
+			netAvailable: payout.netAvailable === true,
+			clientTotal: guestGross.propertyAvailable
+				? roundOtaMoney(guestGross.propertyAmount)
+				: null,
+			rootTotal,
+			netAfterExpensesTotal: payout.netAvailable
+				? roundOtaMoney(payout.netAmount)
+				: null,
+		};
+	}
+
+	return {
+		isHotelRunner: false,
+		guestGrossAvailable: true,
+		guestGrossAmount:
+			firstExplicitOtaMoney(
+				reservation?.adminPricing?.clientTotal,
+				reservation?.total_amount,
+			) ?? 0,
+		guestGrossCurrency: "",
+		guestGrossDisplayBasis: "property",
+		clientAvailable: true,
+		rootAvailable: true,
+		netAvailable: true,
+		clientTotal:
+			firstExplicitOtaMoney(
+				reservation?.adminPricing?.clientTotal,
+				reservation?.total_amount,
+			) ?? 0,
+		rootTotal: rootTotal ?? 0,
+		netAfterExpensesTotal:
+			firstExplicitOtaMoney(
+				reservation?.adminPricing?.netAfterExpensesTotal,
+			) ?? 0,
+	};
+};
+
+export const formatOtaPricingModalGuestGross = (
+	savedTotals = {},
+	{ sourceCurrencyLabel = "source currency", unavailableLabel = "\u2014" } = {},
+) => {
+	if (
+		savedTotals.guestGrossAvailable !== true ||
+		typeof savedTotals.guestGrossAmount !== "number" ||
+		!Number.isFinite(savedTotals.guestGrossAmount) ||
+		!String(savedTotals.guestGrossCurrency || "").trim()
+	) {
+		return unavailableLabel;
+	}
+	const sourceSuffix =
+		savedTotals.guestGrossDisplayBasis === "source"
+			? ` (${sourceCurrencyLabel})`
+			: "";
+	return `${savedTotals.guestGrossAmount.toFixed(2)} ${String(
+		savedTotals.guestGrossCurrency,
+	).toUpperCase()}${sourceSuffix}`;
+};
+
+const normalizeLegacyOtaPricingDay = (day = {}) => {
+	const clientPrice = roundOtaMoney(
+		otaPricingNumberValue(
+			day.clientPrice ??
+				day.mainPrice ??
+				day.totalPriceWithCommission ??
+				day.price,
+		),
+	);
+	const rootPrice =
+		firstExplicitOtaMoney(
+			day.rootPrice,
+			day.totalPriceWithoutCommission,
+			day.basePrice,
+		) ?? 0;
+	const explicitNet = firstExplicitOtaMoney(
+		day.netAfterExpenses,
+		day.netAfterOtaExpenses,
+		day.netAfterOtherExpenses,
+	);
+	const explicitExpense = firstExplicitOtaMoney(
+		day.otaExpenseAmount,
+		day.otherExpenseAmount,
+		day.expenseAmount,
+	);
+	const netAfterExpenses =
+		explicitNet !== null
+			? explicitNet
+			: explicitExpense !== null
+				? roundOtaMoney(clientPrice - explicitExpense)
+				: clientPrice;
+	const otaExpenseAmount = roundOtaMoney(clientPrice - netAfterExpenses);
+	const platformMargin = roundOtaMoney(netAfterExpenses - rootPrice);
+	const platformMarginRate =
+		netAfterExpenses > 0
+			? roundOtaMoney((platformMargin / netAfterExpenses) * 100)
+			: 0;
+
+	return {
+		...day,
+		date: otaPricingDateKey(day.date || day.day || day.pricingDate),
+		price: clientPrice,
+		clientPrice,
+		mainPrice: clientPrice,
+		rootPrice,
+		totalPriceWithCommission: clientPrice,
+		totalPriceWithoutCommission: rootPrice,
+		netAfterExpenses,
+		netAfterOtaExpenses: netAfterExpenses,
+		otaExpenseAmount,
+		platformMargin,
+		platformMarginRate,
+	};
+};
+
+const normalizeHotelRunnerOtaPricingDay = (day = {}, availability = {}) => {
+	const clientPrice = availability.clientAvailable
+		? firstExplicitOtaMoney(
+				day.clientPrice,
+				day.mainPrice,
+				day.totalPriceWithCommission,
+				day.price,
+			)
+		: null;
+	const rootPrice = firstExplicitOtaMoney(
+		day.rootPrice,
+		day.totalPriceWithoutCommission,
+		day.basePrice,
+	);
+	const netAfterExpenses = availability.netAvailable
+		? firstExplicitOtaMoney(
+				day.netAfterExpenses,
+				day.netAfterOtaExpenses,
+				day.netAfterOtherExpenses,
+			)
+		: null;
+
+	return {
+		...day,
+		pricingRoleAvailability: {
+			client: clientPrice !== null,
+			root: rootPrice !== null,
+			net: netAfterExpenses !== null,
+		},
+		date: otaPricingDateKey(day.date || day.day || day.pricingDate),
+		price: clientPrice,
+		clientPrice,
+		mainPrice: clientPrice,
+		rootPrice,
+		totalPriceWithCommission: clientPrice,
+		totalPriceWithoutCommission: rootPrice,
+		netAfterExpenses,
+		netAfterOtaExpenses: netAfterExpenses,
+	};
+};
+
+const weightedOtaFieldTotal = (rooms = [], field) => {
+	let amount = 0;
+	let dayCount = 0;
+	for (const room of rooms) {
+		const count = otaPricingRoomCount(room);
+		for (const day of room?.pricingByDay || []) {
+			dayCount += 1;
+			if (typeof day?.[field] !== "number" || !Number.isFinite(day[field])) {
+				return null;
+			}
+			amount += day[field] * count;
+		}
+	}
+	return dayCount ? roundOtaMoney(amount) : null;
+};
+
+const clearHotelRunnerRole = (rooms = [], role) => {
+	const aliases =
+		role === "clientPrice"
+			? ["price", "clientPrice", "mainPrice", "totalPriceWithCommission"]
+			: ["netAfterExpenses", "netAfterOtaExpenses"];
+	return rooms.map((room) => ({
+		...room,
+		pricingByDay: (room?.pricingByDay || []).map((day) => ({
+			...day,
+			...Object.fromEntries(aliases.map((field) => [field, null])),
+			pricingRoleAvailability: {
+				...(day?.pricingRoleAvailability || {}),
+				[role === "clientPrice" ? "client" : "net"]: false,
+			},
+		})),
+	}));
+};
+
+const withNullableHotelRunnerDerivedValues = (rooms = []) =>
+	rooms.map((room) => ({
+		...room,
+		pricingByDay: (room?.pricingByDay || []).map((day) => {
+			const hasClient =
+				typeof day.clientPrice === "number" && Number.isFinite(day.clientPrice);
+			const hasRoot =
+				typeof day.rootPrice === "number" && Number.isFinite(day.rootPrice);
+			const hasNet =
+				typeof day.netAfterExpenses === "number" &&
+				Number.isFinite(day.netAfterExpenses);
+			const otaExpenseAmount =
+				hasClient && hasNet
+					? roundOtaMoney(day.clientPrice - day.netAfterExpenses)
+					: null;
+			const platformMargin =
+				hasNet && hasRoot
+					? roundOtaMoney(day.netAfterExpenses - day.rootPrice)
+					: null;
+			const platformMarginRate =
+				platformMargin !== null && day.netAfterExpenses > 0
+					? roundOtaMoney((platformMargin / day.netAfterExpenses) * 100)
+					: null;
+			return {
+				...day,
+				otaExpenseAmount,
+				platformMargin,
+				platformMarginRate,
+			};
+		}),
+	}));
+
+/**
+ * Builds a modal-only draft. It never writes the reservation. Verified
+ * aggregate roles authorize existing nightly rows only when their weighted sum
+ * reconciles exactly; stale or ambiguous rows are blanked instead of inferred.
+ */
+export const normalizeOtaPricingRoomsForModal = (reservation = {}) => {
+	const source = JSON.parse(
+		JSON.stringify(preferredOtaPricingRooms(reservation) || []),
+	);
+	const saved = resolveOtaPricingModalSavedTotals(reservation);
+	let rooms = source.map((room) => ({
+		...room,
+		count: otaPricingRoomCount(room),
+		pricingByDay: Array.isArray(room?.pricingByDay)
+			? room.pricingByDay.map((day) =>
+					saved.isHotelRunner
+						? normalizeHotelRunnerOtaPricingDay(day, saved)
+						: normalizeLegacyOtaPricingDay(day),
+				)
+			: [],
+	}));
+
+	if (!saved.isHotelRunner) return rooms;
+	if (
+		!saved.clientAvailable ||
+		weightedOtaFieldTotal(rooms, "clientPrice") !== saved.clientTotal
+	) {
+		rooms = clearHotelRunnerRole(rooms, "clientPrice");
+	}
+	if (
+		!saved.netAvailable ||
+		weightedOtaFieldTotal(rooms, "netAfterExpenses") !==
+			saved.netAfterExpensesTotal
+	) {
+		rooms = clearHotelRunnerRole(rooms, "netAfterExpenses");
+	}
+	return withNullableHotelRunnerDerivedValues(rooms);
+};
+
+export const summarizeOtaPricingRoomsForModal = (rooms = []) => {
+	const fields = {
+		clientTotal: "clientPrice",
+		rootTotal: "rootPrice",
+		netAfterExpensesTotal: "netAfterExpenses",
+		otaExpenseTotal: "otaExpenseAmount",
+		platformMarginTotal: "platformMargin",
+	};
+	const summary = Object.fromEntries(
+		Object.entries(fields).map(([totalField, dayField]) => [
+			totalField,
+			weightedOtaFieldTotal(rooms, dayField),
+		]),
+	);
+	return {
+		...summary,
+		totalRooms: (Array.isArray(rooms) ? rooms : []).reduce(
+			(total, room) => total + otaPricingRoomCount(room),
+			0,
+		),
+	};
+};
+
 export const otaPricingInitializationDecision = ({
 	open = false,
 	reservationKey = "",
@@ -414,6 +743,15 @@ export const validateOtaPricingRows = (rooms = []) => {
 	return { ok: true };
 };
 
+const stripOtaPricingModalMetadata = (rooms = []) =>
+	(Array.isArray(rooms) ? rooms : []).map((room) => ({
+		...room,
+		pricingByDay: (room?.pricingByDay || []).map((day) => {
+			const { pricingRoleAvailability, ...persistedDay } = day || {};
+			return persistedDay;
+		}),
+	}));
+
 export const prepareOtaPricingSave = ({
 	rooms = [],
 	distributionValues = {},
@@ -447,6 +785,7 @@ export const prepareOtaPricingSave = ({
 
 	const commissionAmount = roundOtaMoney(commission.value);
 	const summary = summarizeOtaPricingRooms(distributed.rooms);
+	const persistedRooms = stripOtaPricingModalMetadata(distributed.rooms);
 	const totals = {
 		clientTotal: roundOtaMoney(summary.clientTotal),
 		rootTotal: roundOtaMoney(summary.rootTotal),
@@ -461,8 +800,8 @@ export const prepareOtaPricingSave = ({
 		appliedFields: distributed.appliedFields,
 		payload: {
 			allowOtaClientTotalOverride: true,
-			pickedRoomsType: distributed.rooms,
-			pickedRoomsPricing: distributed.rooms,
+			pickedRoomsType: persistedRooms,
+			pickedRoomsPricing: persistedRooms,
 			total_rooms: totals.totalRooms,
 			total_amount: totals.clientTotal,
 			sub_total: totals.rootTotal,

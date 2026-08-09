@@ -27,7 +27,7 @@ import {
 } from "../overallShared";
 import {
 	getHotelRunnerPlatformFinanceDisplay,
-	getReservationGuestGrossDisplay,
+	getReservationPropertyGuestGrossDisplay,
 } from "../../../AdminModule/AllReservation/hotelRunnerPricingDisplay";
 
 const TEXT = {
@@ -216,7 +216,7 @@ export const getFinancialReportCommission = (reservation = {}) => {
 };
 
 export const getFinancialReportGross = (reservation = {}) => {
-	const gross = getReservationGuestGrossDisplay(reservation);
+	const gross = getReservationPropertyGuestGrossDisplay(reservation);
 	if (gross.isHotelRunner) return gross;
 	return {
 		...gross,
