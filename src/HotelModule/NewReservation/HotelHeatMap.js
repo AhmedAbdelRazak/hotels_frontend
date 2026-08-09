@@ -63,6 +63,7 @@ const HotelHeatMap = ({
 	start_date_Map,
 	end_date_Map,
 	allReservations,
+	onReservationUpdate,
 	chosenLanguage,
 	useCurrentOccupancy = false,
 	mapSummary,
@@ -82,6 +83,15 @@ const HotelHeatMap = ({
 		useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
 	const [reservationModalKey, setReservationModalKey] = useState(0);
+	const handleSelectedReservationUpdate = useCallback(
+		(updatedReservation) => {
+			setSelectedReservation(updatedReservation);
+			if (updatedReservation?._id && onReservationUpdate) {
+				onReservationUpdate(updatedReservation);
+			}
+		},
+		[onReservationUpdate],
+	);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -1230,7 +1240,7 @@ const HotelHeatMap = ({
 				{selectedReservation && (
 					<ReservationDetail
 						reservation={selectedReservation}
-						setReservation={setSelectedReservation}
+						setReservation={handleSelectedReservationUpdate}
 						hotelDetails={hotelDetails}
 					/>
 				)}

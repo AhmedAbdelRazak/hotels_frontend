@@ -211,6 +211,7 @@ const ZReservationForm2 = ({
 	hotelDetails,
 	chosenLanguage,
 	clickSubmit2,
+	isSubmittingReservation = false,
 	days_of_residence,
 	setDays_of_residence,
 	setBookingComment,
@@ -2025,6 +2026,8 @@ const ZReservationForm2 = ({
 									<Button
 										className='cta'
 										type='primary'
+										loading={isSubmittingReservation}
+										disabled={isSubmittingReservation}
 										onClick={() => {
 											clickSubmit2();
 										}}

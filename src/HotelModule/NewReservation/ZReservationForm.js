@@ -89,6 +89,7 @@ const ZReservationForm = ({
 	setPickedHotelRooms,
 	pickedHotelRooms,
 	clickSubmit,
+	isSubmittingReservation = false,
 	total_amount,
 	setTotal_Amount,
 	days_of_residence,
@@ -1621,6 +1622,8 @@ const ZReservationForm = ({
 								<div className='px-5 py-1' style={{ marginRight: "25%" }}>
 									<button
 										className='btn btn-success px-5 py-0'
+										disabled={isSubmittingReservation}
+										aria-busy={isSubmittingReservation}
 										onClick={() => {
 											clickSubmit();
 										}}
@@ -1734,6 +1737,8 @@ const ZReservationForm = ({
 							>
 								<button
 									className='btn btn-success'
+									disabled={isSubmittingReservation}
+									aria-busy={isSubmittingReservation}
 									onClick={() => {
 										clickSubmit();
 									}}
