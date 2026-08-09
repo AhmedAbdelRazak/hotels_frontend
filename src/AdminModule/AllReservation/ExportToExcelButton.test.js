@@ -174,7 +174,7 @@ describe("ExportToExcelButton report export", () => {
 		expect(rows[0]["Net Total (After OTA Deductions)"]).toBe(45.47);
 		expect(rows[0].Currency).toBe("USD");
 		expect(rows[1]["Gross Total (Before OTA Deductions)"]).toBe(500);
-		expect(rows[1]["Net Total (After OTA Deductions)"]).toBe("");
+		expect(rows[1]["Net Total (After OTA Deductions)"]).toBe(500);
 		expect(rows[1].Currency).toBe("SAR");
 	});
 });

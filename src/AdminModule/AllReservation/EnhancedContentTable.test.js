@@ -281,7 +281,7 @@ describe("EnhancedContentTable total amount column", () => {
 
     expect(totalCellTextFor("Canonical Guest")).toBe("700.00 SAR");
     expect(cellTextFor("Canonical Guest", "Price/Day")).toBe("350.00 SAR");
-    expect(cellTextFor("Canonical Guest", "Net Total")).toBe("Not available");
+    expect(cellTextFor("Canonical Guest", "Net Total")).toBe("700.00 SAR");
     expect(totalCellTextFor("Missing Gross Guest")).toBe("Not available");
     expect(cellTextFor("Missing Gross Guest", "Price/Day")).toBe("Not available");
     expect(cellTextFor("Missing Gross Guest", "Net Total")).toBe("Not available");

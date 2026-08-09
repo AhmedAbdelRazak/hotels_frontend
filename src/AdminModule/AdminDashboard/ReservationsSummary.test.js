@@ -20,6 +20,26 @@ jest.mock("../apiAdmin", () => ({
 	getAdminReservationExecutiveSummary: jest.fn(),
 }));
 
+jest.mock("antd", () => {
+	const actual = jest.requireActual("antd");
+	return {
+		...actual,
+		message: {
+			info: jest.fn(),
+			success: jest.fn(),
+			error: jest.fn(),
+		},
+	};
+});
+
+jest.mock("rc-table/lib/stickyScrollBar", () => {
+	const ReactForMock = require("react");
+	return {
+		__esModule: true,
+		default: ReactForMock.forwardRef(() => null),
+	};
+});
+
 jest.mock("../AllReservation/MoreDetails", () => () => (
 	<div>Complete reservation details</div>
 ));
@@ -27,6 +47,7 @@ jest.mock("../AllReservation/MoreDetails", () => () => (
 jest.mock("xlsx", () => ({
 	utils: {
 		json_to_sheet: jest.fn(() => ({})),
+		sheet_add_aoa: jest.fn(),
 		book_new: jest.fn(() => ({})),
 		book_append_sheet: jest.fn(),
 	},
@@ -109,6 +130,11 @@ beforeEach(() => {
 				rooms: 1,
 				guests: 2,
 				totalAmount: 560,
+				grossTotalAmount: 560,
+				netTotalAmount: 510,
+				grossTotalAvailable: true,
+				netTotalAvailable: true,
+				financialTotalsCurrency: "SAR",
 				nights: 2,
 				averageNightlyAmount: 280,
 				amountQuality: { status: "verified" },
@@ -145,6 +171,9 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 	expect(screen.getByTestId("reservation-index-507f1f77bcf86cd799439011").textContent).toBe("1");
 	expect(screen.getByRole("button", { name: /More details/i })).toBeTruthy();
 	expect(screen.getByText("confirmed")).toBeTruthy();
+	expect(
+		screen.queryByRole("columnheader", { name: /Gross Total|Net Total/i }),
+	).toBeNull();
 	expect(container.querySelector(".ant-table-cell-fix-left, .ant-table-cell-fix-right")).toBeNull();
 	expect(container.querySelector(".ant-table-cell-ellipsis")).toBeNull();
 	await waitFor(() => {
@@ -183,6 +212,11 @@ test("toggles and combines activity filters, then exports only the visible reser
 		rooms: 1,
 		guests: 2,
 		totalAmount: 560,
+		grossTotalAmount: 560,
+		netTotalAmount: 510,
+		grossTotalAvailable: true,
+		netTotalAvailable: true,
+		financialTotalsCurrency: "SAR",
 		nights: 2,
 		averageNightlyAmount: 280,
 		amountQuality: { status: "verified" },
@@ -273,6 +307,25 @@ test("toggles and combines activity filters, then exports only the visible reser
 	const exportedRows = sheetCalls[sheetCalls.length - 1][0];
 	expect(exportedRows).toHaveLength(1);
 	expect(exportedRows[0]["Confirmation Number"]).toBe("DEPARTURE-ONLY");
+	expect(exportedRows[0]["Total Amount"]).toBe(560);
+	expect(exportedRows[0]["Gross Total (Before OTA Deductions)"]).toBe(560);
+	expect(exportedRows[0]["Net Total (After OTA Deductions)"]).toBe(510);
+	expect(exportedRows[0].Currency).toBe("SAR");
+	expect(sheetCalls[sheetCalls.length - 1][1].header).toHaveLength(20);
+	expect(XLSX.utils.sheet_add_aoa).toHaveBeenLastCalledWith(
+		expect.any(Object),
+		[
+			expect.arrayContaining([
+				"Total Amount",
+				"Gross Total (Before OTA Deductions)",
+				"Net Total (After OTA Deductions)",
+				"Currency",
+			]),
+		],
+		{ origin: "A1" },
+	);
+	expect(XLSX.utils.sheet_add_aoa.mock.calls.at(-1)[0]["!cols"]).toHaveLength(20);
+	expect(getAdminReservationExecutiveSummary).toHaveBeenCalledTimes(1);
 
 	fireEvent.click(departureFilter);
 	expect(departureFilter.getAttribute("aria-pressed")).toBe("false");
@@ -295,6 +348,20 @@ test("renders Arabic Gregorian table dates with the localized month first", asyn
 	expect(screen.getAllByText("يوليو 19، 2026").length).toBeGreaterThanOrEqual(2);
 	expect(screen.getByText("يوليو 21، 2026")).toBeTruthy();
 	expect(screen.queryByText(/19[/-]07[/-]2026/)).toBeNull();
+
+	fireEvent.click(screen.getByRole("button", { name: "تصدير Excel" }));
+	expect(XLSX.utils.sheet_add_aoa).toHaveBeenLastCalledWith(
+		expect.any(Object),
+		[
+			expect.arrayContaining([
+				"إجمالي المبلغ",
+				"إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+				"صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+				"العملة",
+			]),
+		],
+		{ origin: "A1" },
+	);
 });
 
 test("opens the permission-checked complete details modal from a shareable reservation id", async () => {

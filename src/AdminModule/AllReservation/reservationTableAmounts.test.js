@@ -38,6 +38,43 @@ describe("admin reservation table total", () => {
     expect(getAdminReservationNetTotal(reservation)).toBe(45.47);
   });
 
+  it.each([0, -12.5])(
+    "preserves an authoritative explicit net total: %p",
+    (netTotal) => {
+      expect(
+        getAdminReservationNetTotal({
+          gross_total_amount: 73.5,
+          net_total_amount: netTotal,
+        }),
+      ).toBe(netTotal);
+    },
+  );
+
+  it("falls back to gross when the backend marks net unavailable", () => {
+    expect(
+      getAdminReservationNetTotal({
+        gross_total_amount: 73.5,
+        net_total_amount: 999,
+        net_total_available: false,
+      }),
+    ).toBe(73.5);
+  });
+
+  it("falls back to gross when an explicit net scalar is null or invalid", () => {
+    expect(
+      getAdminReservationNetTotal({
+        gross_total_amount: 73.5,
+        net_total_amount: null,
+      }),
+    ).toBe(73.5);
+    expect(
+      getAdminReservationNetTotal({
+        gross_total_amount: 73.5,
+        net_total_amount: "not money",
+      }),
+    ).toBe(73.5);
+  });
+
   it("preserves explicit unavailable backend roles instead of using raw totals", () => {
     const reservation = {
       booking_source: "agoda",
@@ -118,12 +155,12 @@ describe("admin reservation table total", () => {
     ).toBe(1200);
   });
 
-  it("does not invent an OTA net from gross, paid amount, or root total", () => {
+  it("falls unavailable OTA net back to gross without using paid or root totals", () => {
     expect(
       getAdminReservationNetTotal({
         booking_source: "trip.com",
         total_amount: 120.45,
-        paid_amount: 120.45,
+        paid_amount: 99,
         sub_total: 125,
         adminPricing: {
           mode: "ota_platform_sync",
@@ -131,7 +168,7 @@ describe("admin reservation table total", () => {
           commercialVerified: false,
         },
       }),
-    ).toBeNull();
+    ).toBe(120.45);
   });
 
   it("falls back when the API marks an uncalculated net total unavailable", () => {
@@ -298,11 +335,12 @@ describe("admin reservation table total", () => {
     ).toBe(850);
   });
 
-  it("does not copy a verified HotelRunner guest gross into an unknown net role", () => {
+  it("falls an unknown HotelRunner net back to verified guest gross", () => {
     expect(
       getAdminReservationDisplayTotal(
         {
           total_amount: 1000,
+          gross_total_amount: 1000,
           adminPricing: {
             mode: "hotelrunner_api",
             commercialVerified: false,
@@ -325,6 +363,6 @@ describe("admin reservation table total", () => {
         },
         { preferNetAfterExpenses: true },
       ),
-    ).toBeNull();
+    ).toBe(1000);
   });
 });
