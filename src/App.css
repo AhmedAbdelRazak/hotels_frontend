@@ -175,21 +175,6 @@ table tbody td.number-cell,
 	z-index: 19051 !important;
 }
 
-.ant-modal-root.hotel-edit-reservation-confirm-modal .ant-modal-mask {
-	z-index: 19099 !important;
-}
-
-.ant-modal-root.hotel-edit-reservation-confirm-modal .ant-modal-wrap,
-.ant-modal-wrap.hotel-edit-reservation-confirm-modal,
-.ant-modal-root.hotel-edit-reservation-confirm-modal .ant-modal {
-	z-index: 19100 !important;
-}
-
-.ant-modal-root.hotel-edit-reservation-confirm-modal .ant-modal-content,
-.ant-modal-wrap.hotel-edit-reservation-confirm-modal .ant-modal-content {
-	z-index: 19101 !important;
-}
-
 .hotel-edit-reservation-child-modal .ant-modal {
 	max-width: calc(100vw - 24px);
 }

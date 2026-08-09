@@ -5,9 +5,7 @@ import {
 	mergePersistedRoomAssignment,
 	mergeUpdatedReservationIntoList,
 	normalizeRoomAssignmentIds,
-	resolveRoomAssignmentSelection,
 	roomAssignmentOptionMatchesSearch,
-	shouldStageMultiRoomReplacement,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 import fs from "fs";
@@ -52,71 +50,6 @@ test("treats a reordered selection as the same physical-room assignment", () => 
 			["room-606", "room-419"],
 		),
 	).toBe(true);
-});
-
-test("turns an unambiguous one-room append into a replacement", () => {
-	expect(
-		resolveRoomAssignmentSelection({
-			currentRooms: [{ _id: "room-606" }],
-			nextRooms: [
-				{ value: "room-606", label: "606" },
-				{ value: "room-419", label: "419" },
-			],
-			requestedRoomCount: 1,
-		}),
-	).toEqual({ roomIds: ["room-419"], blocked: false, replaced: true });
-});
-
-test("keeps an explicit one-room clear available for confirmation", () => {
-	expect(
-		resolveRoomAssignmentSelection({
-			currentRooms: ["room-606"],
-			nextRooms: [],
-			requestedRoomCount: 1,
-		}),
-	).toEqual({ roomIds: [], blocked: false, replaced: false });
-});
-
-test("blocks an ambiguous over-capacity multi-room selection", () => {
-	expect(
-		resolveRoomAssignmentSelection({
-			currentRooms: ["room-301", "room-302"],
-			nextRooms: ["room-301", "room-302", "room-303"],
-			requestedRoomCount: 2,
-		}),
-	).toEqual({
-		roomIds: ["room-301", "room-302"],
-		blocked: true,
-		replaced: false,
-	});
-});
-
-test("allows a legacy over-capacity assignment to be reduced safely", () => {
-	expect(
-		resolveRoomAssignmentSelection({
-			currentRooms: ["room-301", "room-302", "room-303"],
-			nextRooms: ["room-301", "room-302"],
-			requestedRoomCount: 1,
-		}),
-	).toEqual({
-		roomIds: ["room-301", "room-302"],
-		blocked: false,
-		replaced: false,
-	});
-});
-
-test("does not infer a room limit when the booked count is unavailable", () => {
-	expect(
-		resolveRoomAssignmentSelection({
-			currentRooms: ["room-606"],
-			nextRooms: ["room-606", "room-419"],
-			requestedRoomCount: 0,
-		}),
-	).toEqual({
-		roomIds: ["room-606", "room-419"],
-		blocked: false,
-		replaced: false,
-	});
 });
 
 test("refreshes the changed reservation in a heat-map list without losing projection fields", () => {
@@ -287,81 +220,43 @@ test("the searched-reservation flow guards duplicate submissions", () => {
 	expect(source).toMatch(/reservationSubmitInFlightRef\.current = true;/);
 });
 
-test("the modal closes the room popup before showing a higher confirmation layer", () => {
-	const source = fs.readFileSync(
-		path.resolve(__dirname, "EditReservationMain.js"),
-		"utf8",
-	);
-	expect(source).toMatch(/setIsRoomSelectOpen\(false\);[\s\S]*setPendingRoomIds/);
-	expect(source).toMatch(/open=\{isRoomSelectOpen\}/);
-	expect(source).toMatch(/onDropdownVisibleChange=\{setIsRoomSelectOpen\}/);
-	expect(source).toMatch(
-		/childModalProps\(100, "hotel-edit-reservation-confirm-modal"\)/,
-	);
-	const appStyles = fs.readFileSync(
-		path.resolve(__dirname, "../../../App.css"),
-		"utf8",
-	);
-	expect(appStyles).toMatch(
-		/hotel-edit-reservation-confirm-modal[\s\S]*z-index:\s*19100\s*!important/,
-	);
-});
-
-test("stages one removal from a complete multi-room assignment", () => {
-	expect(
-		shouldStageMultiRoomReplacement({
-			persistedRooms: ["room-301", "room-302"],
-			currentRooms: ["room-301", "room-302"],
-			nextRooms: ["room-302"],
-			requestedRoomCount: 2,
-		}),
-	).toBe(true);
-	expect(
-		buildRoomAssignmentSavePayload(
-			["room-301", "room-302"],
-			["room-302", "room-303"],
-		),
-	).toEqual({
-		roomId: ["room-302", "room-303"],
-		__roomAssignmentUpdateIntent: true,
-	});
-
-	for (const scenario of [
-		{
-			persistedRooms: ["room-301"],
-			currentRooms: ["room-301"],
-			nextRooms: [],
-			requestedRoomCount: 1,
-		},
-		{
-			persistedRooms: ["room-301", "room-302"],
-			currentRooms: ["room-302"],
-			nextRooms: [],
-			requestedRoomCount: 2,
-		},
-		{
-			persistedRooms: ["room-301"],
-			currentRooms: ["room-301"],
-			nextRooms: [],
-			requestedRoomCount: 2,
-		},
-	]) {
-		expect(shouldStageMultiRoomReplacement(scenario)).toBe(false);
-	}
-});
-
-test("the modal confirmation saves the room immediately through the strict endpoint", () => {
+test("the modal applies removal and multi-room selection immediately", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "EditReservationMain.js"),
 		"utf8",
 	);
 	const handler = source.match(
-		/const handleConfirmRoomChange = async \(\) => \{([\s\S]*?)\n\t\};\n\tconst handleCancelRoomChange/,
+		/const handleRoomSelectionChange = \(values\) => \{([\s\S]*?)\n\t\};/,
 	)?.[1];
 
 	expect(handler).toBeTruthy();
-	expect(handler).toMatch(/if \(isSaving \|\| savingRef\.current\) return;/);
-	expect(handler).toMatch(/savingRef\.current = true;/);
+	expect(handler).toMatch(
+		/applyRoomSelection\(normalizeRoomAssignmentIds\(values\)\)/,
+	);
+	expect(source).not.toMatch(/pendingRoomIds|isRoomChangeConfirmVisible/);
+	expect(source).not.toMatch(
+		/resolveRoomAssignmentSelection|shouldStageMultiRoomReplacement/,
+	);
+	expect(source).toMatch(/mode='multiple'/);
+	expect(source).toMatch(
+		/const \[selectedRoomIds, setSelectedRoomIds\] = useState\(\(\) =>[\s\S]*normalizeRoomAssignmentIds\(reservation\?\.roomId\)/,
+	);
+});
+
+test("the inline room button sends one exact room-only update", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "EditReservationMain.js"),
+		"utf8",
+	);
+	const handler = source.match(
+		/const handleSaveRoomAssignment = async \(\) => \{([\s\S]*?)\n\t\};/,
+	)?.[1];
+
+	expect(handler).toBeTruthy();
+	expect(handler).toMatch(
+		/if \(isSaving \|\| savingRef\.current \|\| !hasUnsavedRoomAssignment\) return;/,
+	);
+	expect(handler).toMatch(/normalizeRoomAssignmentIds\(selectedRoomIds\)/);
 	expect(handler).toMatch(/buildRoomAssignmentSavePayload\(/);
 	expect(handler).toMatch(/updateHotelManagementReservation\(/);
 	expect(handler).toMatch(/onRoomAssignmentSaved\(updatedReservation\)/);
@@ -370,23 +265,13 @@ test("the modal confirmation saves the room immediately through the strict endpo
 	expect(handler).toMatch(
 		/Object\.prototype\.hasOwnProperty\.call\(updatedReservation, "roomId"\)/,
 	);
-	expect(source).toMatch(/confirmLoading=\{isSaving\}/);
-	expect(source).toMatch(/okText=.*"Save Room"/);
-});
-
-test("the modal stages multi-room replacement without an intermediate save", () => {
-	const source = fs.readFileSync(
-		path.resolve(__dirname, "EditReservationMain.js"),
-		"utf8",
-	);
-	expect(source).toMatch(/shouldStageMultiRoomReplacement\(\{/);
-	expect(source).toMatch(/setHasStagedMultiRoomReplacement\(true\)/);
-	expect(source).toMatch(/nothing has been saved yet/);
+	expect(source).toMatch(/onClick=\{handleSaveRoomAssignment\}/);
+	expect(source).toMatch(/disabled=\{isSaving\}[\s\S]*value=\{selectedRoomValues\}/);
+	expect(source).toMatch(/: "Save Room Assignment"/);
 	expect(source).toMatch(
-		/if \(hasStagedMultiRoomReplacement\) \{[\s\S]*Finish selecting the replacement room/,
+		/if \(hasUnsavedRoomAssignment\) \{[\s\S]*Save the room assignment with the button above/,
 	);
 });
-
 test("builds an exact room-only save payload and skips unchanged assignments", () => {
 	expect(
 		buildRoomAssignmentSavePayload(["room-606"], [
@@ -394,6 +279,19 @@ test("builds an exact room-only save payload and skips unchanged assignments", (
 		]),
 	).toEqual({
 		roomId: ["room-419"],
+		__roomAssignmentUpdateIntent: true,
+	});
+	expect(buildRoomAssignmentSavePayload(["room-606"], [])).toEqual({
+		roomId: [],
+		__roomAssignmentUpdateIntent: true,
+	});
+	expect(
+		buildRoomAssignmentSavePayload(["room-606"], [
+			"room-419",
+			"room-312",
+		]),
+	).toEqual({
+		roomId: ["room-419", "room-312"],
 		__roomAssignmentUpdateIntent: true,
 	});
 	expect(

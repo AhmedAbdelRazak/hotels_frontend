@@ -52,9 +52,7 @@ import {
 	buildRoomAssignmentSavePayload,
 	mergePersistedRoomAssignment,
 	normalizeRoomAssignmentIds,
-	resolveRoomAssignmentSelection,
 	roomAssignmentOptionMatchesSearch,
-	shouldStageMultiRoomReplacement,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 
@@ -130,14 +128,10 @@ export const EditReservationMain = ({
 	const [totalDistribute, setTotalDistribute] = useState("");
 	const [roomInventory, setRoomInventory] = useState([]);
 	const [hotelRooms, setHotelRooms] = useState([]);
-	const [selectedRoomIds, setSelectedRoomIds] = useState([]);
-	const [isRoomSelectOpen, setIsRoomSelectOpen] = useState(false);
+	const [selectedRoomIds, setSelectedRoomIds] = useState(() =>
+		normalizeRoomAssignmentIds(reservation?.roomId),
+	);
 	const [bookedRoomIds, setBookedRoomIds] = useState([]);
-	const [isRoomChangeConfirmVisible, setIsRoomChangeConfirmVisible] =
-		useState(false);
-	const [pendingRoomIds, setPendingRoomIds] = useState([]);
-	const [hasStagedMultiRoomReplacement, setHasStagedMultiRoomReplacement] =
-		useState(false);
 	const [hasRoomLineEdits, setHasRoomLineEdits] = useState(false);
 	const [hasDateEdits, setHasDateEdits] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
@@ -203,12 +197,6 @@ export const EditReservationMain = ({
 		"";
 	const belongsToId =
 		reservation?.belongsTo?._id || reservation?.belongsTo || user?._id || "";
-	const requestedRoomsCount = Array.isArray(reservation.pickedRoomsType)
-		? reservation.pickedRoomsType.reduce(
-				(sum, room) => sum + (Number(room.count) || 1),
-				0,
-		  )
-		: 0;
 
 	const roomDetails = useMemo(
 		() =>
@@ -592,7 +580,6 @@ export const EditReservationMain = ({
 		lastDateKeyRef.current = "";
 		initialReservationRef.current = reservation;
 		initialRoomIdsRef.current = getReservationRoomIds(reservation?.roomId);
-		setHasStagedMultiRoomReplacement(false);
 		setHasRoomLineEdits(false);
 		setHasDateEdits(false);
 	}, [reservation, getReservationRoomIds]);
@@ -1279,70 +1266,26 @@ export const EditReservationMain = ({
 	);
 
 	const handleRoomSelectionChange = (values) => {
-		const selection = resolveRoomAssignmentSelection({
-			currentRooms: selectedRoomIds,
-			nextRooms: values,
-			requestedRoomCount: requestedRoomsCount,
-		});
-		if (selection.blocked) {
-			setIsRoomSelectOpen(false);
-			toast.error(
-				successMessage(
-					`This reservation allows ${requestedRoomsCount} physical room${
-						requestedRoomsCount === 1 ? "" : "s"
-					}. Remove an assigned room before adding another one.`,
-					`يسمح هذا الحجز بتخصيص ${requestedRoomsCount} غرفة فعلية فقط. قم بإزالة غرفة مخصصة قبل إضافة غرفة أخرى.`,
-				),
-			);
-			return;
-		}
-		const nextValues = selection.roomIds;
-		if (
-			shouldStageMultiRoomReplacement({
-				persistedRooms: initialRoomIdsRef.current,
-				currentRooms: selectedRoomIds,
-				nextRooms: nextValues,
-				requestedRoomCount: requestedRoomsCount,
-			})
-		) {
-			applyRoomSelection(nextValues);
-			setHasStagedMultiRoomReplacement(true);
-			setIsRoomSelectOpen(true);
-			toast.info(
-				successMessage(
-					"Room removed from this draft only. Select its replacement; nothing has been saved yet.",
-					"\u062a\u0645\u062a \u0625\u0632\u0627\u0644\u0629 \u0627\u0644\u063a\u0631\u0641\u0629 \u0645\u0646 \u0647\u0630\u0647 \u0627\u0644\u0645\u0633\u0648\u062f\u0629 \u0641\u0642\u0637. \u0627\u062e\u062a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0628\u062f\u064a\u0644\u0629\u061b \u0644\u0645 \u064a\u062a\u0645 \u062d\u0641\u0638 \u0623\u064a \u062a\u063a\u064a\u064a\u0631 \u0628\u0639\u062f.",
-				),
-			);
-			return;
-		}
-		if (!areSameRoomAssignments(selectedRoomIds, nextValues)) {
-			setIsRoomSelectOpen(false);
-			setPendingRoomIds(nextValues);
-			setIsRoomChangeConfirmVisible(true);
-			return;
-		}
-		applyRoomSelection(nextValues);
+		applyRoomSelection(normalizeRoomAssignmentIds(values));
 	};
-	const handleConfirmRoomChange = async () => {
-		if (isSaving || savingRef.current) return;
+
+	const hasUnsavedRoomAssignment = !areSameRoomAssignments(
+		Array.isArray(initialRoomIdsRef.current) ? initialRoomIdsRef.current : [],
+		selectedRoomIds,
+	);
+
+	const handleSaveRoomAssignment = async () => {
+		if (isSaving || savingRef.current || !hasUnsavedRoomAssignment) return;
 
 		const persistedRoomIds = Array.isArray(initialRoomIdsRef.current)
 			? initialRoomIdsRef.current
 			: [];
-		const nextRoomIds = normalizeRoomAssignmentIds(pendingRoomIds);
+		const nextRoomIds = normalizeRoomAssignmentIds(selectedRoomIds);
 		const roomAssignmentUpdate = buildRoomAssignmentSavePayload(
 			persistedRoomIds,
 			nextRoomIds,
 		);
-
-		if (!roomAssignmentUpdate) {
-			applyRoomSelection(nextRoomIds);
-			setHasStagedMultiRoomReplacement(false);
-			setPendingRoomIds([]);
-			setIsRoomChangeConfirmVisible(false);
-			return;
-		}
+		if (!roomAssignmentUpdate) return;
 
 		savingRef.current = true;
 		setIsSaving(true);
@@ -1360,11 +1303,11 @@ export const EditReservationMain = ({
 						? apiErrorMessage(
 								response,
 								"The room assignment could not be saved.",
-								"\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u063a\u0631\u0641\u0629.",
+								"تعذر حفظ تخصيص الغرف.",
 						  )
 						: successMessage(
 								"The connection ended before the room change could be confirmed. Reload the reservation before retrying.",
-								"\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0642\u0628\u0644 \u062a\u0623\u0643\u064a\u062f \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+								"انتهى الاتصال قبل تأكيد تغيير الغرف. يرجى إعادة تحميل الحجز قبل إعادة المحاولة.",
 						  ),
 				);
 				return;
@@ -1377,8 +1320,8 @@ export const EditReservationMain = ({
 			) {
 				toast.error(
 					successMessage(
-						"The server did not return the updated reservation. Please reload before trying again.",
-						"\u0644\u0645 \u064a\u064f\u0631\u062c\u0639 \u0627\u0644\u062e\u0627\u062f\u0645 \u0627\u0644\u062d\u062c\u0632 \u0627\u0644\u0645\u062d\u062f\u0651\u062b. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u062a\u062d\u0645\u064a\u0644 \u0642\u0628\u0644 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.",
+						"The server did not return the updated reservation. Reload before retrying.",
+						"لم يُرجع الخادم الحجز المحدّث. يرجى إعادة التحميل قبل المحاولة مرة أخرى.",
 					),
 				);
 				return;
@@ -1406,22 +1349,19 @@ export const EditReservationMain = ({
 			} else if (typeof onReservationSaved === "function") {
 				onReservationSaved(updatedReservation);
 			}
-			setPendingRoomIds([]);
-			setHasStagedMultiRoomReplacement(false);
-			setIsRoomChangeConfirmVisible(false);
 
 			if (assignmentWasConfirmed) {
 				toast.success(
 					successMessage(
 						"Room assignment saved successfully.",
-						"\u062a\u0645 \u062d\u0641\u0638 \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u063a\u0631\u0641\u0629 \u0628\u0646\u062c\u0627\u062d.",
+						"تم حفظ تخصيص الغرف بنجاح.",
 					),
 				);
 			} else {
 				toast.error(
 					successMessage(
-						"The server did not confirm the requested room. The displayed assignment was refreshed; please review it before retrying.",
-						"\u0644\u0645 \u064a\u0624\u0643\u062f \u0627\u0644\u062e\u0627\u062f\u0645 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629. \u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u0645\u0639\u0631\u0648\u0636\u061b \u064a\u0631\u062c\u0649 \u0645\u0631\u0627\u062c\u0639\u062a\u0647 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+						"The server returned a different room assignment. The displayed rooms were refreshed.",
+						"أرجع الخادم تخصيص غرف مختلفاً. تم تحديث الغرف المعروضة.",
 					),
 				);
 			}
@@ -1430,7 +1370,7 @@ export const EditReservationMain = ({
 			toast.error(
 				successMessage(
 					"The connection ended before the room change could be confirmed. Reload the reservation before retrying.",
-					"\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0642\u0628\u0644 \u062a\u0623\u0643\u064a\u062f \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+					"انتهى الاتصال قبل تأكيد تغيير الغرف. يرجى إعادة تحميل الحجز قبل إعادة المحاولة.",
 				),
 			);
 		} finally {
@@ -1439,12 +1379,6 @@ export const EditReservationMain = ({
 			if (typeof onSavingChange === "function") onSavingChange(false);
 		}
 	};
-	const handleCancelRoomChange = () => {
-		if (savingRef.current) return;
-		setPendingRoomIds([]);
-		setIsRoomChangeConfirmVisible(false);
-	};
-
 	const removeRoom = () => {
 		if (selectedRoomIndex !== null) {
 			setReservation((currentReservation) => ({
@@ -1633,11 +1567,11 @@ export const EditReservationMain = ({
 
 	const UpdateReservation = async () => {
 		if (isSaving || savingRef.current) return;
-		if (hasStagedMultiRoomReplacement) {
+		if (hasUnsavedRoomAssignment) {
 			toast.error(
 				successMessage(
-					"Finish selecting the replacement room before saving the reservation.",
-					"\u064a\u0631\u062c\u0649 \u0625\u0643\u0645\u0627\u0644 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0628\u062f\u064a\u0644\u0629 \u0642\u0628\u0644 \u062d\u0641\u0638 \u0627\u0644\u062d\u062c\u0632.",
+					"Save the room assignment with the button above before saving other reservation changes.",
+					"احفظ تخصيص الغرف باستخدام الزر أعلاه قبل حفظ تغييرات الحجز الأخرى.",
 				),
 			);
 			return;
@@ -2224,32 +2158,6 @@ export const EditReservationMain = ({
 					</div>
 				</Modal>
 
-				<Modal
-					title={
-						chosenLanguage === "Arabic"
-							? "تأكيد تغيير الغرفة"
-							: "Confirm Room Change"
-					}
-					open={isRoomChangeConfirmVisible}
-					onOk={handleConfirmRoomChange}
-					onCancel={handleCancelRoomChange}
-					confirmLoading={isSaving}
-					okButtonProps={{ disabled: isSaving }}
-					cancelButtonProps={{ disabled: isSaving }}
-					closable={!isSaving}
-					maskClosable={!isSaving}
-					keyboard={!isSaving}
-					okText={chosenLanguage === "Arabic" ? "حفظ الغرفة" : "Save Room"}
-					cancelText={chosenLanguage === "Arabic" ? "إلغاء" : "Cancel"}
-					{...childModalProps(100, "hotel-edit-reservation-confirm-modal")}
-				>
-					<p>
-						{chosenLanguage === "Arabic"
-							? "هل تريد حفظ تغيير الغرفة لهذا الضيف الآن؟ سيتم تحديث تخصيص الغرفة فقط."
-							: "Save this room change now? Only the room assignment will be updated."}
-					</p>
-				</Modal>
-
 				<h6 className='warn'>
 					{chosenLanguage === "Arabic"
 						? "تحذير... هذا حجز أولي"
@@ -2792,10 +2700,9 @@ export const EditReservationMain = ({
 													? "\u0627\u062e\u062a\u0631 \u0623\u0631\u0642\u0627\u0645 \u0627\u0644\u063a\u0631\u0641"
 													: "Select room numbers"
 											}
+											disabled={isSaving}
 											value={selectedRoomValues}
 											onChange={handleRoomSelectionChange}
-											open={isRoomSelectOpen}
-											onDropdownVisibleChange={setIsRoomSelectOpen}
 											optionLabelProp='label'
 											optionFilterProp='label'
 											filterOption={roomAssignmentOptionMatchesSearch}
@@ -2846,21 +2753,31 @@ export const EditReservationMain = ({
 												);
 											})}
 										</Select>
-										{requestedRoomsCount > 0 ? (
-											<RoomManagementHint
-												style={{
-													color:
-														selectedRoomIds.length === requestedRoomsCount
-															? "#1f7a1f"
-															: "#b45f06",
-												}}
-											>
-												{chosenLanguage === "Arabic"
-													? "\u0627\u0644\u063a\u0631\u0641 \u0627\u0644\u0645\u062e\u062a\u0627\u0631\u0629"
-													: "Selected Rooms"}{" "}
-												{selectedRoomIds.length} / {requestedRoomsCount}
-											</RoomManagementHint>
-										) : null}
+										<Button
+											type='primary'
+											block
+											style={{ marginTop: 10 }}
+											loading={isSaving}
+											disabled={isSaving || !hasUnsavedRoomAssignment}
+											onClick={handleSaveRoomAssignment}
+										>
+											{chosenLanguage === "Arabic"
+												? "حفظ تخصيص الغرف"
+												: "Save Room Assignment"}
+										</Button>
+										<RoomManagementHint
+											style={{
+												color: hasUnsavedRoomAssignment ? "#b45f06" : "#1f7a1f",
+											}}
+										>
+											{chosenLanguage === "Arabic"
+												? `الغرف المحددة: ${selectedRoomIds.length}${
+														hasUnsavedRoomAssignment ? " — لم يتم الحفظ بعد" : " — محفوظ"
+												  }`
+												: `Selected physical rooms: ${selectedRoomIds.length}${
+														hasUnsavedRoomAssignment ? " — not saved yet" : " — saved"
+												  }`}
+										</RoomManagementHint>
 									</div>
 								) : null}
 							</RoomManagementRow>
