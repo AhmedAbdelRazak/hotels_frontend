@@ -2,7 +2,9 @@
 
 import {
 	applyTouchedOtaDistributions,
+	formatOtaAdminListGuestGross,
 	formatOtaPricingModalGuestGross,
+	formatOtaPricingModalPayout,
 	normalizeOtaPricingRoomsForModal,
 	otaPricingInitializationDecision,
 	otaPricingNumberValue,
@@ -228,7 +230,19 @@ describe("OTA pricing draft initialization", () => {
 			clientTotal: null,
 			rootTotal: 534,
 			netAfterExpensesTotal: null,
+			netCurrency: "",
 		});
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("\u2014");
+		expect(
+			formatOtaPricingModalGuestGross(
+				resolveOtaPricingModalSavedTotals(reservation),
+			),
+		).toBe("\u2014");
+		expect(
+			formatOtaPricingModalPayout(
+				resolveOtaPricingModalSavedTotals(reservation),
+			),
+		).toBe("\u2014");
 
 		const rooms = normalizeOtaPricingRoomsForModal(reservation);
 		expect(rooms[0].pricingByDay.map((row) => row.rootPrice)).toEqual([
@@ -273,7 +287,7 @@ describe("OTA pricing draft initialization", () => {
 		).toEqual([null, null, null, null, null, null]);
 	});
 
-	test("keeps a verified USD source gross visible but non-distributable without trusted SAR conversion", () => {
+	test("keeps source-only USD evidence out of UI and shows trusted SAR projections", () => {
 		const reservation = {
 			total_amount: null,
 			sub_total: 534,
@@ -320,6 +334,16 @@ describe("OTA pricing draft initialization", () => {
 							evidenceType: "authenticated_source",
 							sourceRef: "primary",
 						},
+						hotelPayout: {
+							verified: true,
+							sourceAmount: 112.92,
+							sourceCurrency: "USD",
+							propertyAmount: null,
+							propertyCurrency: null,
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
 					},
 				},
 			},
@@ -334,25 +358,75 @@ describe("OTA pricing draft initialization", () => {
 		};
 
 		expect(resolveOtaPricingModalSavedTotals(reservation)).toMatchObject({
-			guestGrossAvailable: true,
-			guestGrossAmount: 146.46,
-			guestGrossCurrency: "USD",
-			guestGrossDisplayBasis: "source",
+			guestGrossAvailable: false,
+			guestGrossAmount: null,
+			guestGrossCurrency: "",
+			guestGrossDisplayBasis: "",
 			clientAvailable: false,
 			clientTotal: null,
 			rootTotal: 534,
+			netAvailable: false,
 			netAfterExpensesTotal: null,
+			netCurrency: "",
 		});
 		expect(
 			formatOtaPricingModalGuestGross(
 				resolveOtaPricingModalSavedTotals(reservation),
 			),
-		).toBe("146.46 USD (source currency)");
+		).toBe("\u2014");
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("\u2014");
+		expect(
+			formatOtaPricingModalPayout(
+				resolveOtaPricingModalSavedTotals(reservation),
+			),
+		).toBe("\u2014");
+
+		const evidence = reservation.supplierData.otaCommercialEvidence;
+		evidence.roles.guestGross.propertyAmount = 549.23;
+		evidence.roles.guestGross.propertyCurrency = "SAR";
+		evidence.roles.hotelPayout.propertyAmount = 423.45;
+		evidence.roles.hotelPayout.propertyCurrency = "SAR";
+		evidence.currencyConversion = {
+			verified: true,
+			sourceCurrency: "USD",
+			propertyCurrency: "SAR",
+			rate: 3.75,
+			sourceRef: "conversion",
+		};
+		evidence.provenance.conversion = {
+			provider: "trusted-fx",
+			sourceType: "trusted_exchange_evidence",
+			sourceHash: "2".repeat(64),
+			sourceTimestamp: "2026-08-08T00:00:00.000Z",
+			sourceId: "usd-sar-modal-2026-08-08",
+		};
+		const convertedTotals = resolveOtaPricingModalSavedTotals(reservation);
+		expect(convertedTotals).toMatchObject({
+			guestGrossAvailable: true,
+			guestGrossAmount: 549.23,
+			guestGrossCurrency: "SAR",
+			guestGrossDisplayBasis: "property",
+			clientAvailable: true,
+			clientTotal: 549.23,
+			netAvailable: true,
+			netAfterExpensesTotal: 423.45,
+			netCurrency: "SAR",
+		});
+		expect(formatOtaPricingModalGuestGross(convertedTotals)).toBe(
+			"549.23 SAR",
+		);
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("549.23 SAR");
+		expect(formatOtaPricingModalPayout(convertedTotals)).toBe("423.45 SAR");
 		const rooms = normalizeOtaPricingRoomsForModal(reservation);
 		expect(rooms[0].pricingByDay[0]).toMatchObject({
 			clientPrice: null,
 			rootPrice: 89,
 			netAfterExpenses: null,
+		});
+		expect(summarizeOtaPricingRoomsForModal(rooms)).toMatchObject({
+			netAfterExpensesTotal: null,
+			otaExpenseTotal: null,
+			platformMarginTotal: null,
 		});
 	});
 
@@ -434,6 +508,10 @@ describe("OTA pricing draft initialization", () => {
 			otaExpenseTotal: 176.55,
 			platformMarginTotal: -110.55,
 		});
+		const savedTotals = resolveOtaPricingModalSavedTotals(reservation);
+		expect(formatOtaPricingModalGuestGross(savedTotals)).toBe("600.00 SAR");
+		expect(formatOtaPricingModalPayout(savedTotals)).toBe("423.45 SAR");
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("600.00 SAR");
 
 		reservation.pickedRoomsPricing[0].pricingByDay[0].clientPrice = 211.73;
 		reservation.pickedRoomsPricing[0].pricingByDay[0].mainPrice = 211.73;
@@ -475,6 +553,31 @@ describe("OTA pricing draft initialization", () => {
 			rootTotal: 50,
 			netAfterExpensesTotal: 0,
 		});
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("100.00 SAR");
+		expect(
+			formatOtaAdminListGuestGross({
+				total_amount: null,
+				adminPricing: { mode: "ota_review" },
+			}),
+		).toBe("\u2014");
+		expect(
+			formatOtaAdminListGuestGross({
+				total_amount: "not-a-number",
+				adminPricing: { mode: "ota_review" },
+			}),
+		).toBe("\u2014");
+		expect(
+			formatOtaAdminListGuestGross({
+				total_amount: Number.POSITIVE_INFINITY,
+				adminPricing: { mode: "ota_review" },
+			}),
+		).toBe("\u2014");
+		expect(
+			formatOtaAdminListGuestGross({
+				total_amount: 0,
+				adminPricing: { mode: "ota_review" },
+			}),
+		).toBe("0.00 SAR");
 		const rooms = normalizeOtaPricingRoomsForModal(reservation);
 		expect(rooms[0].pricingByDay[0]).toMatchObject({
 			clientPrice: 100,

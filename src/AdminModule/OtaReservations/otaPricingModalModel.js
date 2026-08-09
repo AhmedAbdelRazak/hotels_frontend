@@ -327,22 +327,29 @@ export const resolveOtaPricingModalSavedTotals = (reservation = {}) => {
 	);
 
 	if (isHotelRunner) {
+		const guestGrossIsSar =
+			guestGross.propertyAvailable === true &&
+			String(guestGross.propertyCurrency || "").toUpperCase() === "SAR";
+		const payoutIsSar =
+			payout.netAvailable === true &&
+			String(payout.propertyCurrency || "").toUpperCase() === "SAR";
 		return {
 			isHotelRunner: true,
-			guestGrossAvailable: guestGross.available === true,
-			guestGrossAmount: guestGross.available ? guestGross.amount : null,
-			guestGrossCurrency: guestGross.available ? guestGross.currency : "",
-			guestGrossDisplayBasis: guestGross.displayBasis || "",
-			clientAvailable: guestGross.propertyAvailable === true,
+			guestGrossAvailable: guestGrossIsSar,
+			guestGrossAmount: guestGrossIsSar ? guestGross.propertyAmount : null,
+			guestGrossCurrency: guestGrossIsSar ? "SAR" : "",
+			guestGrossDisplayBasis: guestGrossIsSar ? "property" : "",
+			clientAvailable: guestGrossIsSar,
 			rootAvailable: rootTotal !== null,
-			netAvailable: payout.netAvailable === true,
-			clientTotal: guestGross.propertyAvailable
+			netAvailable: payoutIsSar,
+			clientTotal: guestGrossIsSar
 				? roundOtaMoney(guestGross.propertyAmount)
 				: null,
 			rootTotal,
-			netAfterExpensesTotal: payout.netAvailable
+			netAfterExpensesTotal: payoutIsSar
 				? roundOtaMoney(payout.netAmount)
 				: null,
+			netCurrency: payoutIsSar ? "SAR" : "",
 		};
 	}
 
@@ -374,23 +381,55 @@ export const resolveOtaPricingModalSavedTotals = (reservation = {}) => {
 
 export const formatOtaPricingModalGuestGross = (
 	savedTotals = {},
-	{ sourceCurrencyLabel = "source currency", unavailableLabel = "\u2014" } = {},
+	{ unavailableLabel = "\u2014" } = {},
 ) => {
 	if (
 		savedTotals.guestGrossAvailable !== true ||
 		typeof savedTotals.guestGrossAmount !== "number" ||
 		!Number.isFinite(savedTotals.guestGrossAmount) ||
-		!String(savedTotals.guestGrossCurrency || "").trim()
+		String(savedTotals.guestGrossCurrency || "").toUpperCase() !== "SAR" ||
+		savedTotals.guestGrossDisplayBasis !== "property"
 	) {
 		return unavailableLabel;
 	}
-	const sourceSuffix =
-		savedTotals.guestGrossDisplayBasis === "source"
-			? ` (${sourceCurrencyLabel})`
-			: "";
-	return `${savedTotals.guestGrossAmount.toFixed(2)} ${String(
-		savedTotals.guestGrossCurrency,
-	).toUpperCase()}${sourceSuffix}`;
+	return `${savedTotals.guestGrossAmount.toFixed(2)} SAR`;
+};
+
+export const formatOtaAdminListGuestGross = (
+	reservation = {},
+	{ unavailableLabel = "\u2014" } = {},
+) => {
+	const guestGross = getReservationGuestGrossDisplay(reservation);
+	if (!guestGross.isHotelRunner) {
+		const legacyAmount = firstExplicitOtaMoney(reservation?.total_amount);
+		return legacyAmount === null
+			? unavailableLabel
+			: `${legacyAmount.toFixed(2)} SAR`;
+	}
+	if (
+		guestGross.propertyAvailable !== true ||
+		typeof guestGross.propertyAmount !== "number" ||
+		!Number.isFinite(guestGross.propertyAmount) ||
+		String(guestGross.propertyCurrency || "").toUpperCase() !== "SAR"
+	) {
+		return unavailableLabel;
+	}
+	return `${guestGross.propertyAmount.toFixed(2)} SAR`;
+};
+
+export const formatOtaPricingModalPayout = (
+	savedTotals = {},
+	{ unavailableLabel = "\u2014" } = {},
+) => {
+	if (
+		savedTotals.netAvailable !== true ||
+		typeof savedTotals.netAfterExpensesTotal !== "number" ||
+		!Number.isFinite(savedTotals.netAfterExpensesTotal) ||
+		String(savedTotals.netCurrency || "").toUpperCase() !== "SAR"
+	) {
+		return unavailableLabel;
+	}
+	return `${savedTotals.netAfterExpensesTotal.toFixed(2)} SAR`;
 };
 
 const normalizeLegacyOtaPricingDay = (day = {}) => {

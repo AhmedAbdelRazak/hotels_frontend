@@ -42,7 +42,9 @@ import {
 } from "./otaPricingEditor";
 import {
 	applyTouchedOtaDistributions,
+	formatOtaAdminListGuestGross,
 	formatOtaPricingModalGuestGross,
+	formatOtaPricingModalPayout,
 	normalizeOtaPricingRoomsForModal,
 	otaPricingInitializationDecision,
 	otaPricingNumberValue,
@@ -443,10 +445,12 @@ const OtaPricingModal = ({
 		parsedCommission.status === "valid" ? money(parsedCommission.value) : "";
 	const displayedClientTotal =
 		totals.clientTotal !== null
-			? optionalMoney(totals.clientTotal)
-			: formatOtaPricingModalGuestGross(savedPricingRoles, {
-					sourceCurrencyLabel: t.sourceCurrencySuffix,
-				});
+			? `${optionalMoney(totals.clientTotal)} SAR`
+			: formatOtaPricingModalGuestGross(savedPricingRoles);
+	const displayedNetTotal =
+		totals.netAfterExpensesTotal !== null
+			? `${optionalMoney(totals.netAfterExpensesTotal)} SAR`
+			: formatOtaPricingModalPayout(savedPricingRoles);
 
 	const flatDays = useMemo(() => {
 		const days = [];
@@ -685,7 +689,7 @@ const OtaPricingModal = ({
 								/>
 							</strong>
 							<Input
-								value={optionalMoney(totals.netAfterExpensesTotal)}
+								value={displayedNetTotal}
 								readOnly
 							/>
 							<Input
@@ -1346,7 +1350,9 @@ const OtaReservationsMain = ({ chosenLanguage }) => {
 													<td>{formatDate(reservation.checkin_date, chosenLanguage)}</td>
 													<td>{formatDate(reservation.checkout_date, chosenLanguage)}</td>
 													<td>{reservation.days_of_residence || "-"}</td>
-													<td>{money(reservation.total_amount)} SAR</td>
+													<td>
+														{formatOtaAdminListGuestGross(reservation)}
+													</td>
 													<td>
 														<strong>{money(reservation.hotel_visible_amount)} SAR</strong>
 													</td>
