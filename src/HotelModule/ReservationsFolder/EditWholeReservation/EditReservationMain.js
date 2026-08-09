@@ -51,6 +51,7 @@ import {
 	areSameRoomAssignments,
 	normalizeRoomAssignmentIds,
 	resolveRoomAssignmentSelection,
+	roomAssignmentOptionMatchesSearch,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 
@@ -2634,6 +2635,7 @@ export const EditReservationMain = ({
 										<Select
 											mode='multiple'
 											labelInValue
+											showSearch
 											className='ant-field'
 											style={{ width: "100%" }}
 											placeholder={
@@ -2646,6 +2648,8 @@ export const EditReservationMain = ({
 											open={isRoomSelectOpen}
 											onDropdownVisibleChange={setIsRoomSelectOpen}
 											optionLabelProp='label'
+											optionFilterProp='label'
+											filterOption={roomAssignmentOptionMatchesSearch}
 											getPopupContainer={() => document.body}
 											dropdownStyle={{ zIndex: Z_TOP + 80 }}
 										>

@@ -4,6 +4,7 @@ import {
 	mergeUpdatedReservationIntoList,
 	normalizeRoomAssignmentIds,
 	resolveRoomAssignmentSelection,
+	roomAssignmentOptionMatchesSearch,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 import fs from "fs";
@@ -17,6 +18,28 @@ test("normalizes populated room records and Ant Design label values", () => {
 			{ value: "room-301", label: "301" },
 		]),
 	).toEqual(["room-419", "room-606", "room-301"]);
+});
+
+test("finds a physical room by its visible room number instead of its database id", () => {
+	const option = {
+		value: "6a4e15b4ee33f79097e35d8b",
+		label: "419 | Spacious Six-Bed Room",
+	};
+
+	expect(roomAssignmentOptionMatchesSearch("41", option)).toBe(true);
+	expect(roomAssignmentOptionMatchesSearch("spacious six-bed", option)).toBe(
+		true,
+	);
+	expect(roomAssignmentOptionMatchesSearch("606", option)).toBe(false);
+});
+
+test("keeps room search available when the search field is blank", () => {
+	expect(
+		roomAssignmentOptionMatchesSearch("   ", {
+			value: "room-419",
+			label: "419 | Spacious Six-Bed Room",
+		}),
+	).toBe(true);
 });
 
 test("treats a reordered selection as the same physical-room assignment", () => {
@@ -278,5 +301,22 @@ test("the modal closes the room popup before showing a higher confirmation layer
 	);
 	expect(appStyles).toMatch(
 		/hotel-edit-reservation-confirm-modal[\s\S]*z-index:\s*19100\s*!important/,
+	);
+});
+
+test("the modal room selector searches its visible labels", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "EditReservationMain.js"),
+		"utf8",
+	);
+	const roomAssignmentSelector = source.match(
+		/"Room Assignment"\}[\s\S]*?<Select[\s\S]*?<\/Select>/,
+	)?.[0];
+
+	expect(roomAssignmentSelector).toBeTruthy();
+	expect(roomAssignmentSelector).toMatch(/showSearch/);
+	expect(roomAssignmentSelector).toMatch(/optionFilterProp='label'/);
+	expect(roomAssignmentSelector).toMatch(
+		/filterOption=\{roomAssignmentOptionMatchesSearch\}/,
 	);
 });
