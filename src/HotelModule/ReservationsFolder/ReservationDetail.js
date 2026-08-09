@@ -60,6 +60,7 @@ import {
 	canManageReservationFinanceCycle,
 	protectHotelRunnerEditorPayload,
 } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
+import { mergePersistedRoomAssignment } from "./EditWholeReservation/roomAssignmentUpdate";
 
 const PAYMENT_LINK_LANGUAGE_OPTIONS = [
 	{ value: "en", label: "English" },
@@ -6280,6 +6281,25 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 		setIsModalVisible2(false);
 	};
 
+	const handleRoomAssignmentSaved = (updatedReservation) => {
+		if (!updatedReservation?._id) return;
+
+		let persistedSnapshot = {};
+		try {
+			persistedSnapshot = JSON.parse(editModalSnapshotRef.current || "{}");
+		} catch (error) {
+			persistedSnapshot = cloneReservationDraft(reservationRef.current);
+		}
+		editModalSnapshotRef.current = JSON.stringify(
+			mergePersistedRoomAssignment(
+				persistedSnapshot,
+				updatedReservation,
+			),
+		);
+		setReservation(updatedReservation);
+		reservationRef.current = updatedReservation;
+	};
+
 	const handleStatusModalOpen = () => {
 		if (!canFullManageReservation) {
 			toast.info(
@@ -7161,6 +7181,7 @@ const ReservationDetail = ({ reservation, setReservation, hotelDetails }) => {
 								chosenLanguage={chosenLanguage}
 								hotelDetails={hotelDetails}
 								onReservationSaved={handleEditReservationSaved}
+								onRoomAssignmentSaved={handleRoomAssignmentSaved}
 								onSavingChange={setIsEditReservationSaving}
 								basicEditOnly={limitedOrderTakerAccount}
 							/>
