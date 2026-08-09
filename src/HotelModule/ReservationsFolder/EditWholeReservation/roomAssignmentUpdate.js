@@ -7,6 +7,15 @@ const roomAssignmentId = (room) => {
 export const normalizeRoomAssignmentIds = (rooms) =>
 	(Array.isArray(rooms) ? rooms : []).map(roomAssignmentId).filter(Boolean);
 
+export const roomAssignmentOptionMatchesSearch = (input, option = {}) => {
+	const searchText = String(input || "").trim().toLowerCase();
+	if (!searchText) return true;
+
+	const visibleLabel = String(option?.label || "").toLowerCase();
+	const optionValue = String(option?.value || "").toLowerCase();
+	return visibleLabel.includes(searchText) || optionValue.includes(searchText);
+};
+
 const uniqueRoomAssignmentIds = (rooms) => [
 	...new Set(normalizeRoomAssignmentIds(rooms)),
 ];
