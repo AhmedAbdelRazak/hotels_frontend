@@ -855,6 +855,7 @@ const providerNeutralPayoutEvidence = (reservation = {}) => {
     present: true,
     available: true,
     amount: projection.propertyAmount,
+    propertyCurrency: projection.propertyCurrency,
   };
 };
 
@@ -884,7 +885,7 @@ const legacyEmailPayoutEvidence = (reservation = {}) => {
   if (amount === null || amount < 0 || !currency) {
     return unavailableVerifiedPayoutEvidence(true);
   }
-  return { present: true, available: true, amount };
+  return { present: true, available: true, amount, propertyCurrency: currency };
 };
 
 export const getHotelRunnerPayoutDisplay = (reservation = {}) => {
@@ -986,9 +987,17 @@ export const getHotelRunnerPayoutDisplay = (reservation = {}) => {
         materializedMetricsReconciled && platformMargin.available
           ? platformMargin.amount
           : null,
+      ...(netAvailable && authoritativePayout.propertyCurrency
+        ? { propertyCurrency: authoritativePayout.propertyCurrency }
+        : {}),
     };
   }
 
+  const propertyCurrency = explicitCurrency(
+    adminPricing.propertyCurrency,
+    snakeSummary.propertyCurrency,
+    camelSummary.propertyCurrency,
+  );
   return {
     isHotelRunner: true,
     // `verified` remains the backwards-compatible net/payout flag. Optional
@@ -1003,6 +1012,7 @@ export const getHotelRunnerPayoutDisplay = (reservation = {}) => {
     platformMarginAmount: platformMargin.available
       ? platformMargin.amount
       : null,
+    ...(net.available && propertyCurrency ? { propertyCurrency } : {}),
   };
 };
 
@@ -1180,9 +1190,10 @@ export const getHotelRunnerReportPricingDisplay = (reservation = {}) => {
 };
 
 /**
- * Resolves the amount charged to the guest without confusing HotelRunner's
- * canonical gross with the local reservation amount. Legacy reservations keep
- * their existing total_amount behavior.
+ * Resolves the UI amount charged to the guest without confusing HotelRunner's
+ * canonical gross with the local reservation amount. HotelRunner's primary
+ * display is property-currency-only; source values remain provenance fields.
+ * Legacy reservations keep their existing total_amount behavior.
  */
 export const getReservationGuestGrossDisplay = (reservation = {}) => {
   const isHotelRunner = isHotelRunnerReservation(reservation);
@@ -1190,8 +1201,8 @@ export const getReservationGuestGrossDisplay = (reservation = {}) => {
     ? resolveVerifiedHotelRunnerGuestGross(reservation)
     : null;
   const amount = isHotelRunner
-    ? verifiedGuestGross.available
-      ? verifiedGuestGross.amount
+    ? verifiedGuestGross.propertyAvailable
+      ? verifiedGuestGross.propertyAmount
       : null
     : finiteMoneyOrNull(reservation?.total_amount);
 
@@ -1199,17 +1210,16 @@ export const getReservationGuestGrossDisplay = (reservation = {}) => {
     isHotelRunner,
     available: amount !== null,
     amount,
-    verified: isHotelRunner ? verifiedGuestGross.available : false,
+    verified: isHotelRunner ? verifiedGuestGross.propertyAvailable : false,
     source: isHotelRunner ? verifiedGuestGross.source : "",
     currency: isHotelRunner
-      ? verifiedGuestGross.currency ||
+      ? verifiedGuestGross.propertyCurrency ||
         normalizedCurrency(
           reservation?.adminPricing?.propertyCurrency,
           reservation?.currency,
-          reservation?.supplierData?.hotelRunner?.pricing?.currency,
         )
       : normalizedCurrency(reservation?.currency),
-    displayBasis: isHotelRunner ? verifiedGuestGross.displayBasis : "property",
+    displayBasis: isHotelRunner && amount !== null ? "property" : "",
     sourceAvailable: isHotelRunner
       ? verifiedGuestGross.sourceAvailable
       : amount !== null,
@@ -1229,8 +1239,8 @@ export const getReservationGuestGrossDisplay = (reservation = {}) => {
 
 /**
  * Currency-homogeneous reports and exports must use only a verified property
- * amount. Source-currency gross remains available through the display resolver
- * above for UI surfaces that label its currency explicitly.
+ * amount. Source-currency gross remains available only through the source*
+ * provenance fields above.
  */
 export const getReservationPropertyGuestGrossDisplay = (reservation = {}) => {
   const gross = getReservationGuestGrossDisplay(reservation);

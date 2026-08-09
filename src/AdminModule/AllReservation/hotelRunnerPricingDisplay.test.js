@@ -341,7 +341,7 @@ describe("HotelRunner pricing display", () => {
     });
   });
 
-  it("shows a verified source-currency guest gross without inventing a property-currency conversion", () => {
+  it("shows only a trusted SAR guest-gross projection while retaining USD as provenance", () => {
     const reservation = hotelRunnerReservation({
       total_amount: null,
       currency: "SAR",
@@ -375,14 +375,28 @@ describe("HotelRunner pricing display", () => {
               sourceTimestamp: "2026-08-08T00:00:00.000Z",
               sourceId: "expedia-portal-1",
             },
+            conversion: {
+              provider: "trusted-fx",
+              sourceType: "trusted_exchange_evidence",
+              sourceHash: "f".repeat(64),
+              sourceTimestamp: "2026-08-08T00:00:00.000Z",
+              sourceId: "usd-sar-2026-08-08",
+            },
+          },
+          currencyConversion: {
+            verified: true,
+            sourceCurrency: "USD",
+            propertyCurrency: "SAR",
+            rate: 3.75,
+            sourceRef: "conversion",
           },
           roles: {
             guestGross: {
               verified: true,
               sourceAmount: 146.46,
               sourceCurrency: "USD",
-              propertyAmount: null,
-              propertyCurrency: null,
+              propertyAmount: 549.23,
+              propertyCurrency: "SAR",
               bookingBasis: "reservation_total",
               evidenceType: "authenticated_source",
               sourceRef: "primary",
@@ -401,18 +415,18 @@ describe("HotelRunner pricing display", () => {
     expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
       available: true,
       verified: true,
-      amount: 146.46,
-      currency: "USD",
-      displayBasis: "source",
+      amount: 549.23,
+      currency: "SAR",
+      displayBasis: "property",
       sourceAmount: 146.46,
       sourceCurrency: "USD",
-      propertyAvailable: false,
-      propertyAmount: null,
+      propertyAvailable: true,
+      propertyAmount: 549.23,
       propertyCurrency: "SAR",
     });
     expect(getReservationPropertyGuestGrossDisplay(reservation)).toMatchObject({
-      available: false,
-      amount: null,
+      available: true,
+      amount: 549.23,
       currency: "SAR",
       sourceAmount: 146.46,
       sourceCurrency: "USD",
@@ -422,28 +436,149 @@ describe("HotelRunner pricing display", () => {
       sourceGrandTotal: 112.92,
     });
     expect(getHotelRunnerReportPricingDisplay(reservation)).toMatchObject({
-      grossAmount: null,
+      grossAmount: 549.23,
       currency: "SAR",
-      grossDisplayBasis: "source",
+      grossDisplayBasis: "property",
       grossSourceAmount: 146.46,
       grossSourceCurrency: "USD",
-      grossPropertyAmount: null,
+      grossPropertyAmount: 549.23,
       localBaseAmount: 534,
       netAmount: null,
     });
 
-    // A fallback-derived SAR projection without the contract's trusted
-    // conversion evidence invalidates the commercial role instead of exposing
-    // the familiar but unverified 146.46 * 3.75 value.
-    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyAmount =
-      549.23;
-    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyCurrency =
-      "SAR";
+    // A property projection without the contract's trusted conversion
+    // evidence is rejected instead of being labelled SAR.
+    delete reservation.supplierData.otaCommercialEvidence.currencyConversion;
+    delete reservation.supplierData.otaCommercialEvidence.provenance.conversion;
     expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
       available: false,
       amount: null,
       propertyAvailable: false,
     });
+
+    // Valid USD-only evidence remains available as provenance, never as the
+    // primary UI amount and never under a SAR label.
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyAmount =
+      null;
+    reservation.supplierData.otaCommercialEvidence.roles.guestGross.propertyCurrency =
+      null;
+    expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+      available: false,
+      verified: false,
+      amount: null,
+      currency: "SAR",
+      displayBasis: "",
+      sourceAvailable: true,
+      sourceAmount: 146.46,
+      sourceCurrency: "USD",
+      propertyAvailable: false,
+      propertyAmount: null,
+      propertyCurrency: "SAR",
+    });
+  });
+
+  it("authorizes a v1 payout only after a trusted SAR projection", () => {
+    const reservation = hotelRunnerReservation({
+      total_amount: null,
+      currency: "SAR",
+      adminPricing: {
+        mode: "hotelrunner_api",
+        commercialVerified: false,
+        propertyCurrency: "SAR",
+        rootTotal: 534,
+        netAfterExpensesTotal: null,
+      },
+      supplierData: {
+        hotelRunner: {
+          transport: "hotelrunner_api",
+          pricing: { currency: "USD", grandTotal: 112.92 },
+        },
+        otaCommercialEvidence: {
+          contractVersion: 1,
+          provider: "expedia",
+          sourceType: "authenticated_provider_portal",
+          sourceCurrency: "USD",
+          propertyCurrency: "SAR",
+          bookingBasis: "reservation_total",
+          verificationState: "partial",
+          evidenceHash: "7".repeat(64),
+          provenance: {
+            primary: {
+              provider: "expedia",
+              sourceType: "authenticated_provider_portal",
+              sourceHash: "8".repeat(64),
+              sourceTimestamp: "2026-08-08T00:00:00.000Z",
+              sourceId: "expedia-portal-payout-display-1",
+            },
+          },
+          roles: {
+            hotelPayout: {
+              verified: true,
+              sourceAmount: 112.92,
+              sourceCurrency: "USD",
+              propertyAmount: null,
+              propertyCurrency: null,
+              bookingBasis: "reservation_total",
+              evidenceType: "authenticated_source",
+              sourceRef: "primary",
+            },
+          },
+        },
+      },
+    });
+
+    expect(getHotelRunnerPayoutDisplay(reservation)).toMatchObject({
+      verified: false,
+      netAvailable: false,
+      netAmount: null,
+      otaExpenseAvailable: false,
+      platformMarginAvailable: false,
+    });
+    expect(getHotelRunnerReportPricingDisplay(reservation)).toMatchObject({
+      payoutVerified: false,
+      netAmount: null,
+      otaExpenseAmount: null,
+    });
+
+    reservation.supplierData.otaCommercialEvidence.currencyConversion = {
+      verified: true,
+      sourceCurrency: "USD",
+      propertyCurrency: "SAR",
+      rate: 3.75,
+      sourceRef: "conversion",
+    };
+    reservation.supplierData.otaCommercialEvidence.provenance.conversion = {
+      provider: "trusted-fx",
+      sourceType: "trusted_exchange_evidence",
+      sourceHash: "9".repeat(64),
+      sourceTimestamp: "2026-08-08T00:00:00.000Z",
+      sourceId: "usd-sar-payout-2026-08-08",
+    };
+    reservation.supplierData.otaCommercialEvidence.roles.hotelPayout.propertyAmount =
+      423.45;
+    reservation.supplierData.otaCommercialEvidence.roles.hotelPayout.propertyCurrency =
+      "SAR";
+    expect(getHotelRunnerPayoutDisplay(reservation)).toMatchObject({
+      verified: true,
+      netAvailable: true,
+      netAmount: 423.45,
+      propertyCurrency: "SAR",
+      otaExpenseAvailable: false,
+      platformMarginAvailable: false,
+    });
+    expect(getHotelRunnerReportPricingDisplay(reservation)).toMatchObject({
+      payoutVerified: true,
+      netAmount: 423.45,
+      otaExpenseAmount: null,
+    });
+
+    // A numerically familiar projection is not authority once its conversion
+    // evidence disappears.
+    delete reservation.supplierData.otaCommercialEvidence.currencyConversion;
+    delete reservation.supplierData.otaCommercialEvidence.provenance.conversion;
+    const unsafeProjection = getHotelRunnerPayoutDisplay(reservation);
+    expect(unsafeProjection.netAvailable).toBe(false);
+    expect(unsafeProjection.netAmount).toBeNull();
   });
 
   it("formats missing report money as unavailable while preserving zero", () => {
