@@ -50,6 +50,7 @@ import { protectHotelRunnerEditorPayload } from "../../../AdminModule/AllReserva
 import {
 	areSameRoomAssignments,
 	normalizeRoomAssignmentIds,
+	resolveRoomAssignmentSelection,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 
@@ -125,6 +126,7 @@ export const EditReservationMain = ({
 	const [roomInventory, setRoomInventory] = useState([]);
 	const [hotelRooms, setHotelRooms] = useState([]);
 	const [selectedRoomIds, setSelectedRoomIds] = useState([]);
+	const [isRoomSelectOpen, setIsRoomSelectOpen] = useState(false);
 	const [bookedRoomIds, setBookedRoomIds] = useState([]);
 	const [isRoomChangeConfirmVisible, setIsRoomChangeConfirmVisible] =
 		useState(false);
@@ -194,6 +196,12 @@ export const EditReservationMain = ({
 		"";
 	const belongsToId =
 		reservation?.belongsTo?._id || reservation?.belongsTo || user?._id || "";
+	const requestedRoomsCount = Array.isArray(reservation.pickedRoomsType)
+		? reservation.pickedRoomsType.reduce(
+				(sum, room) => sum + (Number(room.count) || 1),
+				0,
+		  )
+		: 0;
 
 	const roomDetails = useMemo(
 		() =>
@@ -1103,10 +1111,12 @@ export const EditReservationMain = ({
 	);
 
 	const Z_TOP = 19000;
-	const childModalProps = (layer) => ({
+	const childModalProps = (layer, rootClassName = "") => ({
 		zIndex: Z_TOP + layer,
 		getContainer: () => document.body,
-		rootClassName: "hotel-edit-reservation-child-modal",
+		rootClassName: ["hotel-edit-reservation-child-modal", rootClassName]
+			.filter(Boolean)
+			.join(" "),
 		styles: { mask: { zIndex: Z_TOP + layer - 1 } },
 	});
 
@@ -1261,11 +1271,29 @@ export const EditReservationMain = ({
 	);
 
 	const handleRoomSelectionChange = (values) => {
-		const nextValues = normalizeRoomAssignmentIds(values);
+		const selection = resolveRoomAssignmentSelection({
+			currentRooms: selectedRoomIds,
+			nextRooms: values,
+			requestedRoomCount: requestedRoomsCount,
+		});
+		if (selection.blocked) {
+			setIsRoomSelectOpen(false);
+			toast.error(
+				successMessage(
+					`This reservation allows ${requestedRoomsCount} physical room${
+						requestedRoomsCount === 1 ? "" : "s"
+					}. Remove an assigned room before adding another one.`,
+					`يسمح هذا الحجز بتخصيص ${requestedRoomsCount} غرفة فعلية فقط. قم بإزالة غرفة مخصصة قبل إضافة غرفة أخرى.`,
+				),
+			);
+			return;
+		}
+		const nextValues = selection.roomIds;
 		if (
 			selectedRoomIds.length > 0 &&
 			!areSameRoomAssignments(selectedRoomIds, nextValues)
 		) {
+			setIsRoomSelectOpen(false);
 			setPendingRoomIds(nextValues);
 			setIsRoomChangeConfirmVisible(true);
 			return;
@@ -1810,12 +1838,6 @@ export const EditReservationMain = ({
 			return { value: String(id), label };
 		});
 	}, [selectedRoomIds, roomLookup, getRoomLabel]);
-	const requestedRoomsCount = Array.isArray(reservation.pickedRoomsType)
-		? reservation.pickedRoomsType.reduce(
-				(sum, room) => sum + (Number(room.count) || 1),
-				0,
-		  )
-		: 0;
 	const selectedRoomLine =
 		Array.isArray(reservation.pickedRoomsType) && selectedRoomIndex != null
 			? reservation.pickedRoomsType[selectedRoomIndex]
@@ -2069,7 +2091,7 @@ export const EditReservationMain = ({
 					onCancel={handleCancelRoomChange}
 					okText={chosenLanguage === "Arabic" ? "نعم" : "Yes"}
 					cancelText={chosenLanguage === "Arabic" ? "إلغاء" : "Cancel"}
-					{...childModalProps(30)}
+					{...childModalProps(100, "hotel-edit-reservation-confirm-modal")}
 				>
 					<p>
 						{chosenLanguage === "Arabic"
@@ -2621,6 +2643,8 @@ export const EditReservationMain = ({
 											}
 											value={selectedRoomValues}
 											onChange={handleRoomSelectionChange}
+											open={isRoomSelectOpen}
+											onDropdownVisibleChange={setIsRoomSelectOpen}
 											optionLabelProp='label'
 											getPopupContainer={() => document.body}
 											dropdownStyle={{ zIndex: Z_TOP + 80 }}
