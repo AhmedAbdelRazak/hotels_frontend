@@ -49,9 +49,12 @@ import { dateOnlyKey, datePickerValue } from "./reservationDateValues";
 import { protectHotelRunnerEditorPayload } from "../../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 import {
 	areSameRoomAssignments,
+	buildRoomAssignmentSavePayload,
+	mergePersistedRoomAssignment,
 	normalizeRoomAssignmentIds,
 	resolveRoomAssignmentSelection,
 	roomAssignmentOptionMatchesSearch,
+	shouldStageMultiRoomReplacement,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 
@@ -114,6 +117,7 @@ export const EditReservationMain = ({
 	setReservation,
 	hotelDetails,
 	onReservationSaved,
+	onRoomAssignmentSaved,
 	onSavingChange,
 	basicEditOnly = false,
 }) => {
@@ -132,6 +136,8 @@ export const EditReservationMain = ({
 	const [isRoomChangeConfirmVisible, setIsRoomChangeConfirmVisible] =
 		useState(false);
 	const [pendingRoomIds, setPendingRoomIds] = useState([]);
+	const [hasStagedMultiRoomReplacement, setHasStagedMultiRoomReplacement] =
+		useState(false);
 	const [hasRoomLineEdits, setHasRoomLineEdits] = useState(false);
 	const [hasDateEdits, setHasDateEdits] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
@@ -586,6 +592,7 @@ export const EditReservationMain = ({
 		lastDateKeyRef.current = "";
 		initialReservationRef.current = reservation;
 		initialRoomIdsRef.current = getReservationRoomIds(reservation?.roomId);
+		setHasStagedMultiRoomReplacement(false);
 		setHasRoomLineEdits(false);
 		setHasDateEdits(false);
 	}, [reservation, getReservationRoomIds]);
@@ -1291,9 +1298,25 @@ export const EditReservationMain = ({
 		}
 		const nextValues = selection.roomIds;
 		if (
-			selectedRoomIds.length > 0 &&
-			!areSameRoomAssignments(selectedRoomIds, nextValues)
+			shouldStageMultiRoomReplacement({
+				persistedRooms: initialRoomIdsRef.current,
+				currentRooms: selectedRoomIds,
+				nextRooms: nextValues,
+				requestedRoomCount: requestedRoomsCount,
+			})
 		) {
+			applyRoomSelection(nextValues);
+			setHasStagedMultiRoomReplacement(true);
+			setIsRoomSelectOpen(true);
+			toast.info(
+				successMessage(
+					"Room removed from this draft only. Select its replacement; nothing has been saved yet.",
+					"\u062a\u0645\u062a \u0625\u0632\u0627\u0644\u0629 \u0627\u0644\u063a\u0631\u0641\u0629 \u0645\u0646 \u0647\u0630\u0647 \u0627\u0644\u0645\u0633\u0648\u062f\u0629 \u0641\u0642\u0637. \u0627\u062e\u062a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0628\u062f\u064a\u0644\u0629\u061b \u0644\u0645 \u064a\u062a\u0645 \u062d\u0641\u0638 \u0623\u064a \u062a\u063a\u064a\u064a\u0631 \u0628\u0639\u062f.",
+				),
+			);
+			return;
+		}
+		if (!areSameRoomAssignments(selectedRoomIds, nextValues)) {
 			setIsRoomSelectOpen(false);
 			setPendingRoomIds(nextValues);
 			setIsRoomChangeConfirmVisible(true);
@@ -1301,12 +1324,123 @@ export const EditReservationMain = ({
 		}
 		applyRoomSelection(nextValues);
 	};
-	const handleConfirmRoomChange = () => {
-		applyRoomSelection(pendingRoomIds);
-		setPendingRoomIds([]);
-		setIsRoomChangeConfirmVisible(false);
+	const handleConfirmRoomChange = async () => {
+		if (isSaving || savingRef.current) return;
+
+		const persistedRoomIds = Array.isArray(initialRoomIdsRef.current)
+			? initialRoomIdsRef.current
+			: [];
+		const nextRoomIds = normalizeRoomAssignmentIds(pendingRoomIds);
+		const roomAssignmentUpdate = buildRoomAssignmentSavePayload(
+			persistedRoomIds,
+			nextRoomIds,
+		);
+
+		if (!roomAssignmentUpdate) {
+			applyRoomSelection(nextRoomIds);
+			setHasStagedMultiRoomReplacement(false);
+			setPendingRoomIds([]);
+			setIsRoomChangeConfirmVisible(false);
+			return;
+		}
+
+		savingRef.current = true;
+		setIsSaving(true);
+		if (typeof onSavingChange === "function") onSavingChange(true);
+		try {
+			const response = await updateHotelManagementReservation(
+				reservation._id,
+				roomAssignmentUpdate,
+			);
+			if (!response || response.error) {
+				const responseHasHttpStatus =
+					response?.status !== undefined && response?.status !== null;
+				toast.error(
+					responseHasHttpStatus
+						? apiErrorMessage(
+								response,
+								"The room assignment could not be saved.",
+								"\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u063a\u0631\u0641\u0629.",
+						  )
+						: successMessage(
+								"The connection ended before the room change could be confirmed. Reload the reservation before retrying.",
+								"\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0642\u0628\u0644 \u062a\u0623\u0643\u064a\u062f \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+						  ),
+				);
+				return;
+			}
+
+			const updatedReservation = response?.reservation || response;
+			if (
+				!updatedReservation?._id ||
+				!Object.prototype.hasOwnProperty.call(updatedReservation, "roomId")
+			) {
+				toast.error(
+					successMessage(
+						"The server did not return the updated reservation. Please reload before trying again.",
+						"\u0644\u0645 \u064a\u064f\u0631\u062c\u0639 \u0627\u0644\u062e\u0627\u062f\u0645 \u0627\u0644\u062d\u062c\u0632 \u0627\u0644\u0645\u062d\u062f\u0651\u062b. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u062a\u062d\u0645\u064a\u0644 \u0642\u0628\u0644 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.",
+					),
+				);
+				return;
+			}
+
+			const confirmedRoomIds = getReservationRoomIds(
+				updatedReservation.roomId,
+			);
+			const assignmentWasConfirmed = areSameRoomAssignments(
+				confirmedRoomIds,
+				nextRoomIds,
+			);
+
+			initialRoomIdsRef.current = confirmedRoomIds;
+			initialReservationRef.current = updatedReservation;
+			setSelectedRoomIds(confirmedRoomIds);
+			setReservation((currentReservation) =>
+				mergePersistedRoomAssignment(
+					currentReservation,
+					updatedReservation,
+				),
+			);
+			if (typeof onRoomAssignmentSaved === "function") {
+				onRoomAssignmentSaved(updatedReservation);
+			} else if (typeof onReservationSaved === "function") {
+				onReservationSaved(updatedReservation);
+			}
+			setPendingRoomIds([]);
+			setHasStagedMultiRoomReplacement(false);
+			setIsRoomChangeConfirmVisible(false);
+
+			if (assignmentWasConfirmed) {
+				toast.success(
+					successMessage(
+						"Room assignment saved successfully.",
+						"\u062a\u0645 \u062d\u0641\u0638 \u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u063a\u0631\u0641\u0629 \u0628\u0646\u062c\u0627\u062d.",
+					),
+				);
+			} else {
+				toast.error(
+					successMessage(
+						"The server did not confirm the requested room. The displayed assignment was refreshed; please review it before retrying.",
+						"\u0644\u0645 \u064a\u0624\u0643\u062f \u0627\u0644\u062e\u0627\u062f\u0645 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629. \u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062a\u062e\u0635\u064a\u0635 \u0627\u0644\u0645\u0639\u0631\u0648\u0636\u061b \u064a\u0631\u062c\u0649 \u0645\u0631\u0627\u062c\u0639\u062a\u0647 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+					),
+				);
+			}
+		} catch (error) {
+			console.error("Failed to save room assignment", error);
+			toast.error(
+				successMessage(
+					"The connection ended before the room change could be confirmed. Reload the reservation before retrying.",
+					"\u0627\u0646\u062a\u0647\u0649 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0642\u0628\u0644 \u062a\u0623\u0643\u064a\u062f \u062a\u063a\u064a\u064a\u0631 \u0627\u0644\u063a\u0631\u0641\u0629. \u064a\u0631\u062c\u0649 \u0625\u0639\u0627\u062f\u0629 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062d\u062c\u0632 \u0642\u0628\u0644 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.",
+				),
+			);
+		} finally {
+			savingRef.current = false;
+			setIsSaving(false);
+			if (typeof onSavingChange === "function") onSavingChange(false);
+		}
 	};
 	const handleCancelRoomChange = () => {
+		if (savingRef.current) return;
 		setPendingRoomIds([]);
 		setIsRoomChangeConfirmVisible(false);
 	};
@@ -1499,6 +1633,15 @@ export const EditReservationMain = ({
 
 	const UpdateReservation = async () => {
 		if (isSaving || savingRef.current) return;
+		if (hasStagedMultiRoomReplacement) {
+			toast.error(
+				successMessage(
+					"Finish selecting the replacement room before saving the reservation.",
+					"\u064a\u0631\u062c\u0649 \u0625\u0643\u0645\u0627\u0644 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u063a\u0631\u0641\u0629 \u0627\u0644\u0628\u062f\u064a\u0644\u0629 \u0642\u0628\u0644 \u062d\u0641\u0638 \u0627\u0644\u062d\u062c\u0632.",
+				),
+			);
+			return;
+		}
 		const dateStart = normalizeDate(reservation.checkin_date);
 		const dateEnd = normalizeDate(reservation.checkout_date);
 		if (!dateStart || !dateEnd || !dateEnd.isAfter(dateStart, "day")) {
@@ -2090,14 +2233,20 @@ export const EditReservationMain = ({
 					open={isRoomChangeConfirmVisible}
 					onOk={handleConfirmRoomChange}
 					onCancel={handleCancelRoomChange}
-					okText={chosenLanguage === "Arabic" ? "نعم" : "Yes"}
+					confirmLoading={isSaving}
+					okButtonProps={{ disabled: isSaving }}
+					cancelButtonProps={{ disabled: isSaving }}
+					closable={!isSaving}
+					maskClosable={!isSaving}
+					keyboard={!isSaving}
+					okText={chosenLanguage === "Arabic" ? "حفظ الغرفة" : "Save Room"}
 					cancelText={chosenLanguage === "Arabic" ? "إلغاء" : "Cancel"}
 					{...childModalProps(100, "hotel-edit-reservation-confirm-modal")}
 				>
 					<p>
 						{chosenLanguage === "Arabic"
-							? "هل تريد تغيير الغرفة لهذا الضيف؟"
-							: "Do you want to change the room for this guest?"}
+							? "هل تريد حفظ تغيير الغرفة لهذا الضيف الآن؟ سيتم تحديث تخصيص الغرفة فقط."
+							: "Save this room change now? Only the room assignment will be updated."}
 					</p>
 				</Modal>
 

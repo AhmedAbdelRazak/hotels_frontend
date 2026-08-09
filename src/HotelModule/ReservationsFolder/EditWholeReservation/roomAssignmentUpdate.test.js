@@ -1,10 +1,13 @@
 import {
 	areSameRoomAssignments,
+	buildRoomAssignmentSavePayload,
 	buildSearchedReservationUpdate,
+	mergePersistedRoomAssignment,
 	mergeUpdatedReservationIntoList,
 	normalizeRoomAssignmentIds,
 	resolveRoomAssignmentSelection,
 	roomAssignmentOptionMatchesSearch,
+	shouldStageMultiRoomReplacement,
 	withExplicitRoomAssignmentIntent,
 } from "./roomAssignmentUpdate";
 import fs from "fs";
@@ -302,6 +305,130 @@ test("the modal closes the room popup before showing a higher confirmation layer
 	expect(appStyles).toMatch(
 		/hotel-edit-reservation-confirm-modal[\s\S]*z-index:\s*19100\s*!important/,
 	);
+});
+
+test("stages one removal from a complete multi-room assignment", () => {
+	expect(
+		shouldStageMultiRoomReplacement({
+			persistedRooms: ["room-301", "room-302"],
+			currentRooms: ["room-301", "room-302"],
+			nextRooms: ["room-302"],
+			requestedRoomCount: 2,
+		}),
+	).toBe(true);
+	expect(
+		buildRoomAssignmentSavePayload(
+			["room-301", "room-302"],
+			["room-302", "room-303"],
+		),
+	).toEqual({
+		roomId: ["room-302", "room-303"],
+		__roomAssignmentUpdateIntent: true,
+	});
+
+	for (const scenario of [
+		{
+			persistedRooms: ["room-301"],
+			currentRooms: ["room-301"],
+			nextRooms: [],
+			requestedRoomCount: 1,
+		},
+		{
+			persistedRooms: ["room-301", "room-302"],
+			currentRooms: ["room-302"],
+			nextRooms: [],
+			requestedRoomCount: 2,
+		},
+		{
+			persistedRooms: ["room-301"],
+			currentRooms: ["room-301"],
+			nextRooms: [],
+			requestedRoomCount: 2,
+		},
+	]) {
+		expect(shouldStageMultiRoomReplacement(scenario)).toBe(false);
+	}
+});
+
+test("the modal confirmation saves the room immediately through the strict endpoint", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "EditReservationMain.js"),
+		"utf8",
+	);
+	const handler = source.match(
+		/const handleConfirmRoomChange = async \(\) => \{([\s\S]*?)\n\t\};\n\tconst handleCancelRoomChange/,
+	)?.[1];
+
+	expect(handler).toBeTruthy();
+	expect(handler).toMatch(/if \(isSaving \|\| savingRef\.current\) return;/);
+	expect(handler).toMatch(/savingRef\.current = true;/);
+	expect(handler).toMatch(/buildRoomAssignmentSavePayload\(/);
+	expect(handler).toMatch(/updateHotelManagementReservation\(/);
+	expect(handler).toMatch(/onRoomAssignmentSaved\(updatedReservation\)/);
+	expect(handler).toMatch(/responseHasHttpStatus/);
+	expect(handler).toMatch(/Reload the reservation before retrying/);
+	expect(handler).toMatch(
+		/Object\.prototype\.hasOwnProperty\.call\(updatedReservation, "roomId"\)/,
+	);
+	expect(source).toMatch(/confirmLoading=\{isSaving\}/);
+	expect(source).toMatch(/okText=.*"Save Room"/);
+});
+
+test("the modal stages multi-room replacement without an intermediate save", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "EditReservationMain.js"),
+		"utf8",
+	);
+	expect(source).toMatch(/shouldStageMultiRoomReplacement\(\{/);
+	expect(source).toMatch(/setHasStagedMultiRoomReplacement\(true\)/);
+	expect(source).toMatch(/nothing has been saved yet/);
+	expect(source).toMatch(
+		/if \(hasStagedMultiRoomReplacement\) \{[\s\S]*Finish selecting the replacement room/,
+	);
+});
+
+test("builds an exact room-only save payload and skips unchanged assignments", () => {
+	expect(
+		buildRoomAssignmentSavePayload(["room-606"], [
+			{ value: "room-419", label: "419" },
+		]),
+	).toEqual({
+		roomId: ["room-419"],
+		__roomAssignmentUpdateIntent: true,
+	});
+	expect(
+		buildRoomAssignmentSavePayload(
+			["room-606", "room-419"],
+			["room-419", "room-606"],
+		),
+	).toBeNull();
+});
+
+test("refreshes persisted room metadata without discarding other draft edits", () => {
+	const draft = {
+		_id: "reservation-1",
+		roomId: ["room-606"],
+		customer_details: { name: "Unsaved corrected name" },
+		comment: "Unsaved late arrival note",
+		__v: 11,
+		updatedAt: "before",
+	};
+	const persisted = {
+		_id: "reservation-1",
+		roomId: [{ _id: "room-419", room_number: "419" }],
+		customer_details: { name: "Original name" },
+		comment: "Original note",
+		__v: 12,
+		updatedAt: "after",
+	};
+
+	expect(mergePersistedRoomAssignment(draft, persisted)).toEqual({
+		...draft,
+		roomId: persisted.roomId,
+		__v: 12,
+		updatedAt: "after",
+	});
+	expect(draft.roomId).toEqual(["room-606"]);
 });
 
 test("the modal room selector searches its visible labels", () => {

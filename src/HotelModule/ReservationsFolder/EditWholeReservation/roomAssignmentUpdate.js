@@ -67,6 +67,39 @@ export const resolveRoomAssignmentSelection = ({
 	return { roomIds: currentIds, blocked: true, replaced: false };
 };
 
+/**
+ * A full multi-room assignment needs one local remove step before a replacement
+ * can be selected. Stage exactly that one-room removal without writing it, so
+ * the eventual old-set -> replacement-set update is atomic.
+ */
+export const shouldStageMultiRoomReplacement = ({
+	persistedRooms = [],
+	currentRooms = [],
+	nextRooms = [],
+	requestedRoomCount = 0,
+} = {}) => {
+	const parsedLimit = Number(requestedRoomCount);
+	const roomLimit =
+		Number.isFinite(parsedLimit) && parsedLimit > 1
+			? Math.trunc(parsedLimit)
+			: 0;
+	if (!roomLimit) return false;
+
+	const persistedIds = uniqueRoomAssignmentIds(persistedRooms);
+	const currentIds = uniqueRoomAssignmentIds(currentRooms);
+	const nextIds = uniqueRoomAssignmentIds(nextRooms);
+	const currentIdSet = new Set(currentIds);
+
+	return (
+		persistedIds.length === roomLimit &&
+		currentIds.length === roomLimit &&
+		areSameRoomAssignments(persistedIds, currentIds) &&
+		nextIds.length === roomLimit - 1 &&
+		nextIds.length > 0 &&
+		nextIds.every((roomId) => currentIdSet.has(roomId))
+	);
+};
+
 export const mergeUpdatedReservationIntoList = (
 	reservations,
 	updatedReservation,
@@ -110,6 +143,42 @@ export const withExplicitRoomAssignmentIntent = (
 		roomId: normalizeRoomAssignmentIds(nextRooms),
 		__roomAssignmentUpdateIntent: true,
 	};
+};
+
+/**
+ * Build the smallest possible request for the dedicated room-assignment save.
+ * Returning null for an unchanged assignment prevents duplicate/no-op writes.
+ */
+export const buildRoomAssignmentSavePayload = (currentRooms, nextRooms) => {
+	if (areSameRoomAssignments(currentRooms, nextRooms)) return null;
+
+	return {
+		roomId: normalizeRoomAssignmentIds(nextRooms),
+		__roomAssignmentUpdateIntent: true,
+	};
+};
+
+/**
+ * Apply only fields advanced by a successful room-assignment write. This lets
+ * the editor keep unrelated unsaved form changes while moving its persisted
+ * baseline (room assignment + optimistic-concurrency metadata) forward.
+ */
+export const mergePersistedRoomAssignment = (
+	reservationDraft,
+	persistedReservation,
+) => {
+	const draft = reservationDraft || {};
+	if (!persistedReservation || typeof persistedReservation !== "object") {
+		return draft;
+	}
+
+	const nextDraft = { ...draft };
+	["roomId", "__v", "updatedAt"].forEach((field) => {
+		if (Object.prototype.hasOwnProperty.call(persistedReservation, field)) {
+			nextDraft[field] = persistedReservation[field];
+		}
+	});
+	return nextDraft;
 };
 
 const isInHouseStatus = (status) =>
