@@ -7,9 +7,14 @@ import ScoreCards from "./ScoreCards";
 import MoreDetails from "./MoreDetails";
 import ExportToExcelButton from "./ExportToExcelButton";
 import DateFilterModal from "./DateFilterModal";
-import { getAdminReservationDisplayTotal } from "./reservationTableAmounts";
+import {
+	getAdminReservationFinancialCurrency,
+	getAdminReservationGrossTotal,
+	getAdminReservationNetTotal,
+} from "./reservationTableAmounts";
 import { getReservationRoomSummary } from "./reservationRoomDetails";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import { toLatinDigits } from "../../utils/latinDigits";
 import { useHistory, useLocation } from "react-router-dom";
 import {
 	applyOtaReservationSyncJob,
@@ -40,7 +45,8 @@ export const ADMIN_RESERVATION_TABLE_COLUMN_WIDTHS = Object.freeze([
 	132, // check-out
 	56, // nights
 	100, // price per day
-	100, // total
+	154, // gross total
+	154, // net total
 	100, // paid amount
 	76, // more details
 ]);
@@ -127,8 +133,9 @@ const mergeReservationPreservingRefs = (previous = {}, incoming = {}) => {
 };
 
 const AdminTableTooltipText = ({ value, max = 20, className = "" }) => {
-	const text =
-		value === null || value === undefined || value === "" ? "-" : String(value);
+	const text = toLatinDigits(
+		value === null || value === undefined || value === "" ? "-" : value,
+	);
 	const display = text.length > max ? `${text.slice(0, max)}...` : text;
 	const content = (
 		<span className={className} dir='auto'>
@@ -184,9 +191,9 @@ const formatAdminMoney = (value) => {
 	return Number.isFinite(number) ? number.toFixed(2) : "0.00";
 };
 
-const formatAdminMoneyCell = (value, currency) =>
+const formatAdminMoneyCell = (value, currency, unavailableLabel = "Not available") =>
 	value === null || value === undefined
-		? "—"
+		? unavailableLabel
 		: `${formatAdminMoney(value)} ${currency}`;
 
 const formatAdminDate = (value, chosenLanguage = "English") =>
@@ -332,14 +339,16 @@ const EnhancedContentTable = ({
 			const { customer_details = {}, hotelId = {} } = reservation;
 			const roomSummary = getReservationRoomSummary(reservation);
 			const nights = getAdminReservationNights(reservation);
-			const guestGrossAmount = getAdminReservationDisplayTotal(reservation);
-			const displayTotalAmount = getAdminReservationDisplayTotal(reservation);
+			const grossTotalAmount = getAdminReservationGrossTotal(reservation);
+			const netTotalAmount = getAdminReservationNetTotal(reservation);
+			const financialTotalsCurrency =
+				getAdminReservationFinancialCurrency(reservation);
 			const pricePerDay =
-				guestGrossAmount === null
+				grossTotalAmount === null
 					? null
 					: nights > 0
-						? guestGrossAmount / nights
-						: guestGrossAmount;
+						? grossTotalAmount / nights
+						: grossTotalAmount;
 			const paidAmount = getAdminPaidAmount(reservation);
 
 			const manualOverrideCaptured = capturedConfirmationNumbers.includes(
@@ -373,7 +382,12 @@ const EnhancedContentTable = ({
 				payment_status_hint: paypalAware.hint || "",
 				reservation_nights: nights,
 				price_per_day: pricePerDay,
-				display_total_amount: displayTotalAmount,
+				gross_total_amount: grossTotalAmount,
+				net_total_amount: netTotalAmount,
+				financial_totals_currency: financialTotalsCurrency,
+				// Keep the legacy alias for consumers outside this table while all
+				// visible/exported financial columns use explicit commercial roles.
+				display_total_amount: grossTotalAmount,
 				paid_amount_display: paidAmount,
 			};
 		});
@@ -409,7 +423,8 @@ const EnhancedContentTable = ({
 
 			if (
 				sortField === "total_amount" ||
-				sortField === "display_total_amount" ||
+				sortField === "gross_total_amount" ||
+				sortField === "net_total_amount" ||
 				sortField === "reservation_nights" ||
 				sortField === "price_per_day" ||
 				sortField === "paid_amount_display"
@@ -946,10 +961,16 @@ const EnhancedContentTable = ({
 				checkOut: "المغادرة",
 				nights: "الليالي",
 				pricePerDay: "سعر الليلة",
-				total: "الإجمالي",
+				grossTotal: "إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+				netTotal: "صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+				grossTotalDescription:
+					"إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+				netTotalDescription:
+					"صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
 				paidAmount: "المدفوع",
 				moreDetails: "التفاصيل",
 				sar: "ريال",
+				notAvailable: "غير متاح",
 				noReservationsFound: "لا توجد حجوزات",
 		  }
 		: {
@@ -966,10 +987,14 @@ const EnhancedContentTable = ({
 				checkOut: "Check Out",
 				nights: "Nights",
 				pricePerDay: "Price/Day",
-				total: "Total",
+				grossTotal: "Gross Total",
+				netTotal: "Net Total",
+				grossTotalDescription: "Gross Total before OTA deductions",
+				netTotalDescription: "Net Total after OTA deductions",
 				paidAmount: "Paid Amount",
 				moreDetails: "More Details",
 				sar: "SAR",
+				notAvailable: "Not available",
 				noReservationsFound: "No reservations found",
 		  };
 	const otaSyncTargetHotels = otaSyncJob?.targetHotels || [];
@@ -1035,12 +1060,13 @@ const EnhancedContentTable = ({
 		if (sortConfig.sortField !== field) return "";
 		return sortConfig.direction === "asc" ? "^" : "v";
 	};
-	const sortableHeader = (label, field) => (
+	const sortableHeader = (label, field, description = "") => (
 		<button
 			type='button'
 			className='sortable-heading'
 			onClick={() => handleSortLabelClick(field)}
 			aria-pressed={sortConfig.sortField === field}
+			title={description || undefined}
 		>
 			<span>{label}</span>
 			{sortArrow(field) ? (
@@ -1284,7 +1310,20 @@ const EnhancedContentTable = ({
 							<th>{sortableHeader(tableLabels.checkOut, "checkout_date")}</th>
 							<th>{sortableHeader(tableLabels.nights, "reservation_nights")}</th>
 							<th>{sortableHeader(tableLabels.pricePerDay, "price_per_day")}</th>
-							<th>{sortableHeader(tableLabels.total, "display_total_amount")}</th>
+							<th className='financial-header'>
+								{sortableHeader(
+									tableLabels.grossTotal,
+									"gross_total_amount",
+									tableLabels.grossTotalDescription,
+								)}
+							</th>
+							<th className='financial-header'>
+								{sortableHeader(
+									tableLabels.netTotal,
+									"net_total_amount",
+									tableLabels.netTotalDescription,
+								)}
+							</th>
 							<th>{sortableHeader(tableLabels.paidAmount, "paid_amount_display")}</th>
 							<th>{tableLabels.moreDetails}</th>
 						</tr>
@@ -1360,7 +1399,7 @@ const EnhancedContentTable = ({
 												{showOriginalBookingSource ? (
 													<small>
 														Original:{" "}
-														<span>{originalBookingSource}</span>
+												<span>{toLatinDigits(originalBookingSource)}</span>
 													</small>
 												) : null}
 											</div>
@@ -1418,24 +1457,40 @@ const EnhancedContentTable = ({
 											<AdminTableTooltipText
 												value={formatAdminMoneyCell(
 													reservation.price_per_day,
-													tableLabels.sar,
+													reservation.financial_totals_currency,
+													tableLabels.notAvailable,
 												)}
 												max={18}
+												className='amount-latin'
 											/>
 										</td>
 										<td className='amount-cell'>
 											<AdminTableTooltipText
 												value={formatAdminMoneyCell(
-													reservation.display_total_amount,
-													tableLabels.sar,
+													reservation.gross_total_amount,
+													reservation.financial_totals_currency,
+													tableLabels.notAvailable,
 												)}
 												max={18}
+												className='amount-latin'
+											/>
+										</td>
+										<td className='amount-cell'>
+											<AdminTableTooltipText
+												value={formatAdminMoneyCell(
+													reservation.net_total_amount,
+													reservation.financial_totals_currency,
+													tableLabels.notAvailable,
+												)}
+												max={18}
+												className='amount-latin'
 											/>
 										</td>
 										<td className='amount-cell'>
 											<AdminTableTooltipText
 												value={`${formatAdminMoney(reservation.paid_amount_display)} ${tableLabels.sar}`}
 												max={18}
+												className='amount-latin'
 											/>
 										</td>
 										<td>
@@ -1452,7 +1507,7 @@ const EnhancedContentTable = ({
 							})
 						) : (
 							<tr>
-								<td colSpan='16'>{tableLabels.noReservationsFound}</td>
+								<td colSpan='17'>{tableLabels.noReservationsFound}</td>
 							</tr>
 						)}
 					</tbody>
@@ -2050,6 +2105,18 @@ const StyledTable = styled.table`
 		text-overflow: ellipsis;
 	}
 
+	th.financial-header .sortable-heading {
+		width: 100%;
+		white-space: normal;
+		line-height: 1.18;
+	}
+
+	th.financial-header .sortable-heading > span:first-child {
+		overflow: visible;
+		text-overflow: clip;
+		white-space: normal;
+	}
+
 	.sort-arrow {
 		color: #f4c84f;
 		font-size: 0.72rem;
@@ -2085,10 +2152,16 @@ const StyledTable = styled.table`
 
 	.amount-cell {
 		direction: ltr;
+		unicode-bidi: isolate;
 		font-weight: 950;
 		overflow: hidden !important;
 		text-overflow: ellipsis !important;
 		white-space: nowrap;
+	}
+
+	.amount-latin {
+		direction: ltr;
+		unicode-bidi: isolate;
 	}
 
 	button.link-btn,

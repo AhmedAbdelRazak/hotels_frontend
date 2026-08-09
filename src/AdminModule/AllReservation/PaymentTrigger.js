@@ -176,9 +176,15 @@ const PaymentTrigger = ({ reservation, onReservationUpdated }) => {
 	const option2_USD = (depositWithOneNight * exchangeRateUSD).toFixed(2);
 	const option3_USD = (optionFullAmountSAR * exchangeRateUSD).toFixed(2);
 
-	const option1_SAR = optionCommissionSAR.toLocaleString();
-	const option2_SAR = depositWithOneNight.toLocaleString();
-	const option3_SAR = optionFullAmountSAR.toLocaleString();
+	const option1_SAR = optionCommissionSAR.toLocaleString("en-US", {
+		numberingSystem: "latn",
+	});
+	const option2_SAR = depositWithOneNight.toLocaleString("en-US", {
+		numberingSystem: "latn",
+	});
+	const option3_SAR = optionFullAmountSAR.toLocaleString("en-US", {
+		numberingSystem: "latn",
+	});
 
 	// Decide final amounts
 	const getChargeAmount = useMemo(

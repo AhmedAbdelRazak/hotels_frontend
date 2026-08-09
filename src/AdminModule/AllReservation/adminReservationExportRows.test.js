@@ -20,6 +20,13 @@ test("shared admin export includes room type and assigned room number", () => {
 	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Room Type");
 	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Room Number");
 	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Booking Source");
+	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain(
+		"Gross Total (Before OTA Deductions)",
+	);
+	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain(
+		"Net Total (After OTA Deductions)",
+	);
+	expect(ADMIN_RESERVATION_EXPORT_HEADERS).toContain("Currency");
 	expect(row["Room Type"]).toBe("Family Quintuple Room");
 	expect(row["Room Number"]).toBe("424");
 	expect(row["Paid Amount (Online)"]).toBe(125);
@@ -60,6 +67,7 @@ test("shared admin export uses the exact formatted table values and populated ro
 			display_total_amount: 750,
 			paid_amount: 100,
 			paid_amount_display: 225,
+			net_total_amount: 600,
 			roomDetails: [
 				{
 					room_type: "familyRooms",
@@ -74,7 +82,9 @@ test("shared admin export uses the exact formatted table values and populated ro
 		Name: "Filtered Guest",
 		Phone: "500000000",
 		"Hotel Name": "Filtered Hotel",
-		"Total Amount": 750,
+		"Gross Total (Before OTA Deductions)": 750,
+		"Net Total (After OTA Deductions)": 600,
+		Currency: "SAR",
 		"Paid Amount (Online)": 225,
 		"Room Type": "Family Suite",
 		"Room Number": "424",
@@ -132,6 +142,9 @@ test("filtered rows round-trip through the real XLSX library without changing ro
 	expect(restoredRows[1]["Room Number"]).toBe("");
 	expect(restoredRows[0]).toHaveProperty("Room Type");
 	expect(restoredRows[0]).toHaveProperty("Booking Source");
+	expect(restoredRows[0]).toHaveProperty("Gross Total (Before OTA Deductions)");
+	expect(restoredRows[0]).toHaveProperty("Net Total (After OTA Deductions)");
+	expect(restoredRows[0]).toHaveProperty("Currency");
 });
 
 test("Arabic export localizes headers and known status values while preserving booking source", () => {
@@ -144,6 +157,9 @@ test("Arabic export localizes headers and known status values while preserving b
 				reservation_status: "inhouse",
 				payment_status: "Captured",
 				room_number: "424",
+				gross_total_amount: 73.5,
+				net_total_amount: 45.47,
+				financial_totals_currency: "usd",
 			},
 		],
 		"en-US",
@@ -166,10 +182,71 @@ test("Arabic export localizes headers and known status values while preserving b
 	expect(headers).toContain("مصدر الحجز");
 	expect(headers).toContain("نوع الغرفة");
 	expect(headers).toContain("رقم الغرفة");
+	expect(headers).toContain("إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)");
+	expect(headers).toContain("صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)");
+	expect(headers).toContain("العملة");
 	expect(restoredRows).toHaveLength(1);
 	expect(restoredRows[0]["رقم التأكيد"]).toBe("AR-FILTER");
 	expect(restoredRows[0]["مصدر الحجز"]).toBe("booking.com");
 	expect(restoredRows[0]["حالة الحجز"]).toBe("داخل الفندق");
 	expect(restoredRows[0]["حالة الدفع"]).toBe("تم التحصيل");
 	expect(restoredRows[0]["رقم الغرفة"]).toBe("424");
+	expect(
+		restoredRows[0]["إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)"],
+	).toBe(73.5);
+	expect(
+		restoredRows[0]["صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)"],
+	).toBe(45.47);
+	expect(restoredRows[0]["العملة"]).toBe("USD");
+});
+
+test("gross and net amount cells remain numeric in the generated worksheet", () => {
+	const rows = buildAdminReservationExportRows([
+		{
+			booking_source: "agoda",
+			gross_total_amount: "1,234.50",
+			net_total_amount: "987.25",
+			financial_totals_currency: "eur",
+		},
+		{
+			booking_source: "agoda",
+			gross_total_amount: null,
+			net_total_amount: null,
+			total_amount: 500,
+			paid_amount: 500,
+		},
+	]);
+	const worksheet = XLSX.utils.json_to_sheet(rows, {
+		header: ADMIN_RESERVATION_EXPORT_HEADERS,
+	});
+
+	expect(rows[0]["Gross Total (Before OTA Deductions)"]).toBe(1234.5);
+	expect(rows[0]["Net Total (After OTA Deductions)"]).toBe(987.25);
+	expect(rows[0].Currency).toBe("EUR");
+	expect(rows[1]["Gross Total (Before OTA Deductions)"]).toBe("");
+	expect(rows[1]["Net Total (After OTA Deductions)"]).toBe("");
+	expect(rows[1].Currency).toBe("SAR");
+	expect(worksheet.J2.t).toBe("n");
+	expect(worksheet.K2.t).toBe("n");
+	expect(worksheet.L2.v).toBe("EUR");
+});
+
+test("export identifiers and room numbers always use Latin digits", () => {
+	const [row] = buildAdminReservationExportRows(
+		[
+			{
+				confirmation_number: "OTA-\u0661\u0662\u06f3",
+				customer_phone: "+\u0669\u0666\u0666\u0665\u0660",
+				room_number: "\u06f4\u06f2\u06f4",
+				gross_total_amount: 73.5,
+				net_total_amount: 45.47,
+			},
+		],
+		"en-US",
+		"Arabic",
+	);
+
+	expect(row["Confirmation Number"]).toBe("OTA-123");
+	expect(row.Phone).toBe("+96650");
+	expect(row["Room Number"]).toBe("424");
 });
