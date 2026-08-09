@@ -3,6 +3,58 @@ import {
 	formatSaudiGregorianDate,
 	formatSaudiHijriDate,
 } from "../../utils/saudiDates";
+import { toLatinDigits } from "../../utils/latinDigits";
+
+export const RESERVATION_SUMMARY_EXPORT_HEADERS = Object.freeze([
+	"Activity",
+	"Confirmation Number",
+	"Hotel",
+	"Guest",
+	"Room Type",
+	"Room Number",
+	"Check-in",
+	"Check-out",
+	"Created",
+	"Status",
+	"Rooms",
+	"Guests",
+	"Nights",
+	"Average Per Night",
+	"Total Amount",
+	"Gross Total (Before OTA Deductions)",
+	"Net Total (After OTA Deductions)",
+	"Amount Verification",
+	"Currency",
+	"Booking Source",
+]);
+
+export const RESERVATION_SUMMARY_EXPORT_ARABIC_HEADERS = Object.freeze([
+	"النشاط",
+	"رقم التأكيد",
+	"الفندق",
+	"الضيف",
+	"نوع الغرفة",
+	"رقم الغرفة",
+	"تاريخ الوصول",
+	"تاريخ المغادرة",
+	"تاريخ الإنشاء",
+	"الحالة",
+	"عدد الغرف",
+	"عدد الضيوف",
+	"عدد الليالي",
+	"متوسط المبلغ لكل ليلة",
+	"إجمالي المبلغ",
+	"إجمالي الحجز قبل خصم مصاريف منصات الحجز (OTA)",
+	"صافي الحجز بعد خصم مصاريف منصات الحجز (OTA)",
+	"حالة التحقق من المبلغ",
+	"العملة",
+	"مصدر الحجز",
+]);
+
+export const getReservationSummaryExportHeaders = (locale = "en-US") =>
+	String(locale).toLowerCase().startsWith("ar")
+		? RESERVATION_SUMMARY_EXPORT_ARABIC_HEADERS
+		: RESERVATION_SUMMARY_EXPORT_HEADERS;
 
 export const formatReservationSummaryDate = (
 	value,
@@ -37,8 +89,52 @@ export const reservationActivityText = (types = [], labels = {}) =>
 
 // Prevent user-controlled text from being interpreted as a formula by Excel.
 export const spreadsheetSafeText = (value, fallback = "") => {
-	const text = String(value ?? fallback);
+	const text = toLatinDigits(String(value ?? fallback));
 	return /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+};
+
+const numericFinancialTotalOrBlank = (value, available) => {
+	if (
+		available === false ||
+		value === null ||
+		value === undefined ||
+		typeof value === "boolean"
+	) {
+		return "";
+	}
+	const normalized =
+		typeof value === "string" ? value.replace(/,/g, "").trim() : value;
+	if (normalized === "") return "";
+	const number = Number(normalized);
+	return Number.isFinite(number) ? number : "";
+};
+
+const exportGrossTotal = (reservation = {}) => {
+	const authoritativeGross = numericFinancialTotalOrBlank(
+		reservation.grossTotalAmount,
+		reservation.grossTotalAvailable,
+	);
+	if (authoritativeGross !== "") return authoritativeGross;
+	return numericFinancialTotalOrBlank(reservation.totalAmount, true);
+};
+
+const exportNetTotal = (reservation = {}) => {
+	const authoritativeNet = numericFinancialTotalOrBlank(
+		reservation.netTotalAmount,
+		reservation.netTotalAvailable,
+	);
+	return authoritativeNet !== ""
+		? authoritativeNet
+		: exportGrossTotal(reservation);
+};
+
+const exportCurrency = (reservation = {}) => {
+	const normalized = String(
+		reservation.financialTotalsCurrency || reservation.currency || "SAR",
+	)
+		.trim()
+		.toUpperCase();
+	return /^[A-Z]{3}$/.test(normalized) ? normalized : "SAR";
 };
 
 export const buildReservationSummaryExportRows = (
@@ -72,10 +168,12 @@ export const buildReservationSummaryExportRows = (
 		Nights: Number(reservation.nights) || 0,
 		"Average Per Night": Number(reservation.averageNightlyAmount) || 0,
 		"Total Amount": Number(reservation.totalAmount) || 0,
+		"Gross Total (Before OTA Deductions)": exportGrossTotal(reservation),
+		"Net Total (After OTA Deductions)": exportNetTotal(reservation),
 		"Amount Verification": spreadsheetSafeText(
 			reservation.amountQuality?.status,
 			"unverified"
 		),
-		Currency: spreadsheetSafeText(reservation.currency, "SAR"),
+		Currency: exportCurrency(reservation),
 		"Booking Source": spreadsheetSafeText(reservation.bookingSource, "N/A"),
 	}));

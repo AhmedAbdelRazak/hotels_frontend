@@ -121,8 +121,14 @@ export const getAdminReservationGrossTotal = (reservation = {}) => {
 };
 
 export const getAdminReservationNetTotal = (reservation = {}) => {
+  const grossTotal = () => getAdminReservationGrossTotal(reservation);
+
+  if (reservation?.net_total_available === false) {
+    return grossTotal();
+  }
+
   if (hasOwn(reservation, "net_total_amount")) {
-    return finiteMoneyOrNull(reservation.net_total_amount);
+    return finiteMoneyOrNull(reservation.net_total_amount) ?? grossTotal();
   }
 
   const formattedTableNet = finiteMoneyOrNull(
@@ -133,21 +139,23 @@ export const getAdminReservationNetTotal = (reservation = {}) => {
   const guestGross = getReservationPropertyGuestGrossDisplay(reservation);
   if (guestGross.isHotelRunner) {
     const hotelRunnerPayout = getHotelRunnerPayoutDisplay(reservation);
-    // Guest gross and property payout are different commercial roles. Never
-    // copy the gross into an unknown HotelRunner payout role.
-    return hotelRunnerPayout.verified ? hotelRunnerPayout.netAmount : null;
+    const verifiedPayout = hotelRunnerPayout.verified
+      ? finiteMoneyOrNull(hotelRunnerPayout.netAmount)
+      : null;
+    return verifiedPayout ?? grossTotal();
   }
 
   if (isOtaManagedReservation(reservation)) {
     // Older full-record responses can still provide a commercially verified
-    // net total. Unverified OTA rows wait for the backend-resolved safe scalar.
-    return verifiedOtaNetTotal(reservation);
+    // net total. The reservation-list policy displays gross when net is not
+    // available, while preserving every valid explicit zero or negative net.
+    return verifiedOtaNetTotal(reservation) ?? grossTotal();
   }
 
   const savedNet = finiteMoneyOrNull(
     reservation?.adminPricing?.netAfterExpensesTotal,
   );
-  return savedNet ?? getAdminReservationGrossTotal(reservation);
+  return savedNet ?? grossTotal();
 };
 
 export const getAdminReservationDisplayTotal = (

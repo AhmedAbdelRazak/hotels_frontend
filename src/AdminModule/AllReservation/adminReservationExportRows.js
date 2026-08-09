@@ -169,6 +169,13 @@ export const buildAdminReservationExportRows = (
 		);
 		const grossTotal = getAdminReservationGrossTotal(item);
 		const netTotal = getAdminReservationNetTotal(item);
+		const savedTotal = numericMoneyOrBlank(item.total_amount);
+		const resolvedGrossTotal = numericMoneyOrBlank(grossTotal);
+		const exportGrossTotal =
+			resolvedGrossTotal === "" ? savedTotal : resolvedGrossTotal;
+		const resolvedNetTotal = numericMoneyOrBlank(netTotal);
+		const exportNetTotal =
+			resolvedNetTotal === "" ? exportGrossTotal : resolvedNetTotal;
 		const financialTotalsCurrency =
 			getAdminReservationFinancialCurrency(item);
 
@@ -207,8 +214,8 @@ export const buildAdminReservationExportRows = (
 				chosenLanguage,
 			)),
 			"Gross Total (Before OTA Deductions)":
-				numericMoneyOrBlank(grossTotal),
-			"Net Total (After OTA Deductions)": numericMoneyOrBlank(netTotal),
+				exportGrossTotal,
+			"Net Total (After OTA Deductions)": exportNetTotal,
 			Currency: financialTotalsCurrency,
 			"Paid Amount (Online)": numericMoneyOrBlank(
 				firstAvailable(item.paid_amount_display, item.paid_amount),

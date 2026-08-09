@@ -215,6 +215,12 @@ test("gross and net amount cells remain numeric in the generated worksheet", () 
 			total_amount: 500,
 			paid_amount: 500,
 		},
+		{
+			booking_source: "agoda",
+			gross_total_amount: 0,
+			net_total_amount: -12.5,
+			total_amount: 500,
+		},
 	]);
 	const worksheet = XLSX.utils.json_to_sheet(rows, {
 		header: ADMIN_RESERVATION_EXPORT_HEADERS,
@@ -223,9 +229,11 @@ test("gross and net amount cells remain numeric in the generated worksheet", () 
 	expect(rows[0]["Gross Total (Before OTA Deductions)"]).toBe(1234.5);
 	expect(rows[0]["Net Total (After OTA Deductions)"]).toBe(987.25);
 	expect(rows[0].Currency).toBe("EUR");
-	expect(rows[1]["Gross Total (Before OTA Deductions)"]).toBe("");
-	expect(rows[1]["Net Total (After OTA Deductions)"]).toBe("");
+	expect(rows[1]["Gross Total (Before OTA Deductions)"]).toBe(500);
+	expect(rows[1]["Net Total (After OTA Deductions)"]).toBe(500);
 	expect(rows[1].Currency).toBe("SAR");
+	expect(rows[2]["Gross Total (Before OTA Deductions)"]).toBe(0);
+	expect(rows[2]["Net Total (After OTA Deductions)"]).toBe(-12.5);
 	expect(worksheet.J2.t).toBe("n");
 	expect(worksheet.K2.t).toBe("n");
 	expect(worksheet.L2.v).toBe("EUR");

@@ -31,6 +31,8 @@ import {
 	buildReservationSummaryExportRows,
 	formatReservationSummaryDate,
 	formatReservationSummaryNumber,
+	getReservationSummaryExportHeaders,
+	RESERVATION_SUMMARY_EXPORT_HEADERS,
 } from "./reservationSummaryUtils";
 import { getRoomTypeDisplayLabel } from "../AllReservation/reservationRoomDetails";
 
@@ -704,7 +706,14 @@ const ReservationsSummary = ({
 			locale,
 			activityLabels,
 		});
-		const worksheet = XLSX.utils.json_to_sheet(exportRows);
+		const worksheet = XLSX.utils.json_to_sheet(exportRows, {
+			header: RESERVATION_SUMMARY_EXPORT_HEADERS,
+		});
+		XLSX.utils.sheet_add_aoa(
+			worksheet,
+			[getReservationSummaryExportHeaders(locale)],
+			{ origin: "A1" },
+		);
 		worksheet["!cols"] = [
 			{ wch: 28 },
 			{ wch: 22 },
@@ -721,6 +730,8 @@ const ReservationsSummary = ({
 			{ wch: 10 },
 			{ wch: 18 },
 			{ wch: 16 },
+			{ wch: 24 },
+			{ wch: 24 },
 			{ wch: 20 },
 			{ wch: 12 },
 			{ wch: 24 },
