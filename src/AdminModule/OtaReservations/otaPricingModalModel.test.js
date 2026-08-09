@@ -18,6 +18,7 @@ import {
 	summarizeOtaPricingRoomsForModal,
 } from "./otaPricingModalModel";
 import { recalculateOtaPricingDay } from "./otaPricingEditor";
+import { getReservationGuestGrossDisplay } from "../AllReservation/hotelRunnerPricingDisplay";
 
 const day = (date, clientPrice, rootPrice, netAfterExpenses) => ({
 	date,
@@ -285,6 +286,269 @@ describe("OTA pricing draft initialization", () => {
 				(row) => row.netAfterExpenses,
 			),
 		).toEqual([null, null, null, null, null, null]);
+	});
+
+	test("renders saved Trip 1653715890546842 totals when v1 USD roles and legacy SAR evidence coexist", () => {
+		const reservation = {
+			_id: "6a78c81038854c10efabfda8",
+			reservation_id: "1653715890546842",
+			confirmation_number: "3251687269",
+			total_amount: 131.93,
+			sub_total: 178,
+			currency: "sar",
+			adminPricing: {
+				mode: "hotelrunner_api",
+				commercialVerified: true,
+				clientTotal: 131.93,
+				rootTotal: 178,
+				netAfterExpensesTotal: 124.57,
+				otaExpenseTotal: 7.36,
+				platformMarginTotal: -53.43,
+				sourceCurrency: "USD",
+				propertyCurrency: "SAR",
+			},
+			ota_financial_summary: {
+				commercialVerified: true,
+				clientTotal: 131.93,
+				hotelVisibleAmount: 178,
+				netAfterExpenses: 124.57,
+				netAfterOtaExpenses: 124.57,
+				otaExpenseTotal: 7.36,
+				platformProfit: -53.43,
+				sourceCurrency: "USD",
+				propertyCurrency: "SAR",
+			},
+			supplierData: {
+				hotelRunner: {
+					transport: "hotelrunner_api",
+					reservationId: "40385935",
+					pricing: { currency: "USD", grandTotal: 33.22 },
+				},
+				otaCommercialEvidence: {
+					contractVersion: 1,
+					provider: "trip",
+					sourceType: "authenticated_ota_email",
+					sourceCurrency: "USD",
+					propertyCurrency: "SAR",
+					bookingBasis: "reservation_total",
+					verificationState: "verified",
+					evidenceHash:
+						"ad25d05f8f0039af49915743b24064be8dc78448b88e4939a4288cbc973dd9db",
+					provenance: {
+						primary: {
+							provider: "trip",
+							sourceType: "authenticated_ota_email",
+							sourceHash: "a".repeat(64),
+							sourceTimestamp: "2026-08-09T00:00:00.000Z",
+							sourceId: "trip-email-1653715890546842",
+						},
+						conversion: {
+							provider: "trusted-fx",
+							sourceType: "trusted_exchange_evidence",
+							sourceHash: "b".repeat(64),
+							sourceTimestamp: "2026-08-09T00:00:00.000Z",
+							sourceId: "trip-usd-sar-1653715890546842",
+						},
+					},
+					currencyConversion: {
+						verified: true,
+						sourceCurrency: "USD",
+						propertyCurrency: "SAR",
+						rate: 3.75,
+						sourceRef: "conversion",
+					},
+					roles: {
+						guestGross: {
+							verified: true,
+							sourceAmount: 35.18,
+							sourceCurrency: "USD",
+							propertyAmount: 131.93,
+							propertyCurrency: "SAR",
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
+						hotelPayout: {
+							verified: true,
+							sourceAmount: 33.22,
+							sourceCurrency: "USD",
+							propertyAmount: 124.57,
+							propertyCurrency: "SAR",
+							bookingBasis: "reservation_total",
+							evidenceType: "authenticated_source",
+							sourceRef: "primary",
+						},
+					},
+				},
+				hotelRunnerEmailCommercialEvidence: {
+					version: 2,
+					verified: true,
+					source: "authenticated_ota_email",
+					provider: "trip",
+					grossTotalSar: 131.93,
+					payoutTotalSar: 124.57,
+					otaExpenseTotalSar: 7.36,
+					currency: "SAR",
+					evidenceHash:
+						"e580ceb5b37962e71156e58bb40a8e0ddcb312f3efc542ced89c3c2a71345c88",
+				},
+			},
+			pickedRoomsPricing: [
+				{
+					count: 1,
+					pricingByDay: [
+						day("2026-10-06", 65.97, 89, 62.29),
+						day("2026-10-07", 65.96, 89, 62.28),
+					],
+				},
+			],
+		};
+		const clone = () => JSON.parse(JSON.stringify(reservation));
+
+		expect(getReservationGuestGrossDisplay(reservation)).toMatchObject({
+			available: true,
+			verified: true,
+			amount: 131.93,
+			currency: "SAR",
+			sourceAmount: 35.18,
+			sourceCurrency: "USD",
+			propertyAvailable: true,
+			propertyAmount: 131.93,
+			propertyCurrency: "SAR",
+			source:
+				"supplierData.otaCommercialEvidence,supplierData.hotelRunnerEmailCommercialEvidence",
+		});
+		expect(formatOtaAdminListGuestGross(reservation)).toBe("131.93 SAR");
+
+		const savedTotals = resolveOtaPricingModalSavedTotals(reservation);
+		expect(savedTotals).toEqual({
+			isHotelRunner: true,
+			guestGrossAvailable: true,
+			guestGrossAmount: 131.93,
+			guestGrossCurrency: "SAR",
+			guestGrossDisplayBasis: "property",
+			clientAvailable: true,
+			rootAvailable: true,
+			netAvailable: true,
+			clientTotal: 131.93,
+			rootTotal: 178,
+			netAfterExpensesTotal: 124.57,
+			netCurrency: "SAR",
+		});
+		expect(formatOtaPricingModalGuestGross(savedTotals)).toBe("131.93 SAR");
+		expect(formatOtaPricingModalPayout(savedTotals)).toBe("124.57 SAR");
+
+		const rooms = normalizeOtaPricingRoomsForModal(reservation);
+		expect(
+			rooms[0].pricingByDay.map(
+				({ date, clientPrice, rootPrice, netAfterExpenses }) => ({
+					date,
+					clientPrice,
+					rootPrice,
+					netAfterExpenses,
+				}),
+			),
+		).toEqual([
+			{
+				date: "2026-10-06",
+				clientPrice: 65.97,
+				rootPrice: 89,
+				netAfterExpenses: 62.29,
+			},
+			{
+				date: "2026-10-07",
+				clientPrice: 65.96,
+				rootPrice: 89,
+				netAfterExpenses: 62.28,
+			},
+		]);
+		expect(summarizeOtaPricingRoomsForModal(rooms)).toMatchObject({
+			clientTotal: 131.93,
+			rootTotal: 178,
+			netAfterExpensesTotal: 124.57,
+			otaExpenseTotal: 7.36,
+			platformMarginTotal: -53.43,
+		});
+
+		const grossConflict = clone();
+		grossConflict.supplierData.hotelRunnerEmailCommercialEvidence.grossTotalSar = 131.92;
+		expect(formatOtaAdminListGuestGross(grossConflict)).toBe("\u2014");
+		expect(resolveOtaPricingModalSavedTotals(grossConflict)).toMatchObject({
+			clientAvailable: false,
+			clientTotal: null,
+			netAvailable: true,
+			netAfterExpensesTotal: 124.57,
+		});
+
+		const payoutConflict = clone();
+		payoutConflict.supplierData.hotelRunnerEmailCommercialEvidence.payoutTotalSar = 124.56;
+		expect(resolveOtaPricingModalSavedTotals(payoutConflict)).toMatchObject({
+			clientAvailable: true,
+			clientTotal: 131.93,
+			netAvailable: false,
+			netAfterExpensesTotal: null,
+		});
+
+		const sourceOnlyContract = clone();
+		for (const roleName of ["guestGross", "hotelPayout"]) {
+			sourceOnlyContract.supplierData.otaCommercialEvidence.roles[
+				roleName
+			].propertyAmount = null;
+			sourceOnlyContract.supplierData.otaCommercialEvidence.roles[
+				roleName
+			].propertyCurrency = null;
+		}
+		expect(getReservationGuestGrossDisplay(sourceOnlyContract)).toMatchObject({
+			available: false,
+			sourceAvailable: true,
+			sourceAmount: 35.18,
+			sourceCurrency: "USD",
+			propertyAvailable: false,
+			propertyAmount: null,
+		});
+		expect(resolveOtaPricingModalSavedTotals(sourceOnlyContract)).toMatchObject(
+			{
+				clientAvailable: false,
+				clientTotal: null,
+				netAvailable: false,
+				netAfterExpensesTotal: null,
+			},
+		);
+
+		const missingCanonicalGrossRole = clone();
+		delete missingCanonicalGrossRole.supplierData.otaCommercialEvidence.roles
+			.guestGross;
+		expect(formatOtaAdminListGuestGross(missingCanonicalGrossRole)).toBe(
+			"\u2014",
+		);
+		expect(
+			resolveOtaPricingModalSavedTotals(missingCanonicalGrossRole),
+		).toMatchObject({
+			clientAvailable: false,
+			clientTotal: null,
+		});
+
+		const invalidCanonicalConversion = clone();
+		delete invalidCanonicalConversion.supplierData.otaCommercialEvidence
+			.provenance.conversion;
+		expect(formatOtaAdminListGuestGross(invalidCanonicalConversion)).toBe(
+			"\u2014",
+		);
+		expect(
+			resolveOtaPricingModalSavedTotals(invalidCanonicalConversion),
+		).toMatchObject({
+			clientAvailable: false,
+			clientTotal: null,
+			netAvailable: false,
+			netAfterExpensesTotal: null,
+		});
+
+		const misplacedV1Contract = clone();
+		delete misplacedV1Contract.supplierData.otaCommercialEvidence.roles
+			.guestGross;
+		misplacedV1Contract.supplierData.hotelRunnerEmailCommercialEvidence =
+			clone().supplierData.otaCommercialEvidence;
+		expect(formatOtaAdminListGuestGross(misplacedV1Contract)).toBe("\u2014");
 	});
 
 	test("keeps source-only USD evidence out of UI and shows trusted SAR projections", () => {

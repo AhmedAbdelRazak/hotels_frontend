@@ -471,11 +471,26 @@ const resolveVerifiedHotelRunnerGuestGross = (reservation = {}) => {
     return unavailableGuestGross();
   }
 
+  const providerNeutralContract =
+    reservation?.supplierData?.otaCommercialEvidence;
+  const hasVerifiedProviderNeutralContract = Boolean(
+    providerNeutralContract &&
+      typeof providerNeutralContract === "object" &&
+      !Array.isArray(providerNeutralContract) &&
+      Number(providerNeutralContract.contractVersion) === 1 &&
+      evidenceIsVerified(providerNeutralContract),
+  );
   const candidates = [];
   for (const [source, evidence] of commercialEvidenceCandidates(reservation)) {
     if (
       source === "supplierData.otaCommercialEvidence" &&
       Number(evidence.contractVersion) !== 1
+    ) {
+      continue;
+    }
+    if (
+      source === "supplierData.hotelRunnerEmailCommercialEvidence" &&
+      Number(evidence.contractVersion) === 1
     ) {
       continue;
     }
@@ -488,21 +503,48 @@ const resolveVerifiedHotelRunnerGuestGross = (reservation = {}) => {
     if (!role || role.sourceAmount < 0) continue;
     candidates.push({ ...role, source });
   }
+  if (
+    hasVerifiedProviderNeutralContract &&
+    !candidates.some(
+      ({ contractType, source }) =>
+        contractType === "provider_neutral_v1" &&
+        source === "supplierData.otaCommercialEvidence",
+    )
+  ) {
+    return unavailableGuestGross();
+  }
   if (!candidates.length) {
     return unavailableGuestGross();
   }
 
+  // A provider-neutral v1 contract owns source-role provenance. Legacy email
+  // `*Sar` fields are property-currency compatibility projections: they may
+  // corroborate the v1 SAR result, but must not turn that result into a false
+  // USD/SAR source conflict or supply a property projection missing from v1.
+  const canonicalCandidates = candidates.filter(
+    ({ contractType, source }) =>
+      contractType === "provider_neutral_v1" &&
+      source === "supplierData.otaCommercialEvidence",
+  );
+  const authoritativeCandidates = canonicalCandidates.length
+    ? canonicalCandidates
+    : candidates;
   const sourceCurrencies = new Set(
-    candidates.map(({ sourceCurrency }) => sourceCurrency),
+    authoritativeCandidates.map(({ sourceCurrency }) => sourceCurrency),
   );
   const sourceAmounts = new Set(
-    candidates.map(({ sourceAmount }) => Number(sourceAmount).toFixed(2)),
+    authoritativeCandidates.map(({ sourceAmount }) =>
+      Number(sourceAmount).toFixed(2),
+    ),
   );
   if (sourceCurrencies.size !== 1 || sourceAmounts.size !== 1) {
     return unavailableGuestGross();
   }
 
-  const propertyCandidates = candidates.filter(
+  const corroboratingPropertyCandidates = candidates.filter(
+    ({ propertyAmount }) => propertyAmount !== null,
+  );
+  const propertyCandidates = authoritativeCandidates.filter(
     ({ propertyAmount }) => propertyAmount !== null,
   );
   const propertyCurrenciesFromEvidence = new Set(
@@ -511,7 +553,7 @@ const resolveVerifiedHotelRunnerGuestGross = (reservation = {}) => {
       .filter(Boolean),
   );
   const propertyAmounts = new Set(
-    propertyCandidates.map(({ propertyAmount }) =>
+    corroboratingPropertyCandidates.map(({ propertyAmount }) =>
       Number(propertyAmount).toFixed(2),
     ),
   );
@@ -543,8 +585,8 @@ const resolveVerifiedHotelRunnerGuestGross = (reservation = {}) => {
   }
 
   const propertyAvailable = propertyCandidates.length > 0;
-  const sourceAmount = candidates[0].sourceAmount;
-  const sourceCurrency = candidates[0].sourceCurrency;
+  const sourceAmount = authoritativeCandidates[0].sourceAmount;
+  const sourceCurrency = authoritativeCandidates[0].sourceCurrency;
   const propertyAmount = propertyAvailable
     ? propertyCandidates[0].propertyAmount
     : null;
@@ -565,7 +607,7 @@ const resolveVerifiedHotelRunnerGuestGross = (reservation = {}) => {
     propertyAmount,
     propertyCurrency,
     source: candidates.map(({ source }) => source).join(","),
-    hotelRunnerRoleVerified: candidates.some(
+    hotelRunnerRoleVerified: authoritativeCandidates.some(
       ({ hotelRunnerRoleVerified }) => hotelRunnerRoleVerified,
     ),
   };
@@ -950,13 +992,22 @@ export const getHotelRunnerPayoutDisplay = (reservation = {}) => {
         reservation.supplierData.otaCommercialEvidence.contractVersion,
       ) === 1,
   );
-  const authoritativePayout = providerNeutral.present
-    ? providerNeutral
-    : legacyEmail.present
-      ? legacyEmail
-      : unresolvedProviderNeutralContract
-        ? unavailableVerifiedPayoutEvidence(true)
-        : null;
+  const corroboratingPayoutConflict = Boolean(
+    providerNeutral.available &&
+      legacyEmail.available &&
+      (!sameMoney(providerNeutral.amount, legacyEmail.amount) ||
+        explicitCurrency(providerNeutral.propertyCurrency) !==
+          explicitCurrency(legacyEmail.propertyCurrency)),
+  );
+  const authoritativePayout = corroboratingPayoutConflict
+    ? unavailableVerifiedPayoutEvidence(true)
+    : providerNeutral.present
+      ? providerNeutral
+      : legacyEmail.present
+        ? legacyEmail
+        : unresolvedProviderNeutralContract
+          ? unavailableVerifiedPayoutEvidence(true)
+          : null;
 
   if (authoritativePayout) {
     const conflictsWithMaterializedNet = Boolean(
