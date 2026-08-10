@@ -24,6 +24,8 @@ import {
 	CreditCardOutlined,
 	DollarCircleOutlined,
 	EditOutlined,
+	FileImageOutlined,
+	FilePdfOutlined,
 	FileTextOutlined,
 	HomeOutlined,
 	IdcardOutlined,
@@ -53,7 +55,11 @@ import { toast } from "react-toastify";
 import EditReservationMain from "./EditReservationMain";
 import ReceiptPDF from "./ReceiptPDF";
 import ReceiptPDFB2B from "./ReceiptPDFB2B";
-import { captureReceiptCanvas } from "../../components/OfficialReceipt/captureReceiptCanvas";
+import {
+	captureReceiptCanvas,
+	downloadReceiptCanvasAsPng,
+} from "../../components/OfficialReceipt/captureReceiptCanvas";
+import { getReceiptConfirmationDisplay } from "../../components/OfficialReceipt/receiptConfirmation";
 import AlDawleya from "./AlDawleya";
 import GuestCardModal from "./GuestCard/GuestCardModal";
 import PaymentTrigger from "./PaymentTrigger";
@@ -1245,6 +1251,67 @@ const ReservationDetailGlobalStyles = createGlobalStyle`
 		z-index: ${RESERVATION_CHILD_MODAL_Z_INDEX + 1} !important;
 	}
 
+	.receipt-download-actions {
+		align-items: center;
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 12px;
+		justify-content: center;
+		margin: 14px auto 18px;
+		max-width: 650px;
+		padding: 0 12px;
+	}
+
+	.receipt-download-actions .receipt-download-button {
+		align-items: center;
+		border: 0;
+		border-radius: 9px;
+		box-shadow: 0 8px 18px rgba(15, 118, 134, 0.18);
+		color: #ffffff;
+		cursor: pointer;
+		display: inline-flex;
+		flex: 1 1 0;
+		font-size: 1rem;
+		font-weight: 900;
+		gap: 8px;
+		justify-content: center;
+		min-height: 44px;
+		padding: 9px 18px;
+		transition: box-shadow 160ms ease, filter 160ms ease, transform 160ms ease;
+		white-space: nowrap;
+	}
+
+	.receipt-download-actions .receipt-download-pdf {
+		background: linear-gradient(135deg, #0e7490, #0891b2);
+	}
+
+	.receipt-download-actions .receipt-download-png {
+		background: linear-gradient(135deg, #1d4ed8, #2563eb);
+		box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+	}
+
+	.receipt-download-actions .receipt-download-button:hover,
+	.receipt-download-actions .receipt-download-button:focus-visible {
+		box-shadow: 0 11px 22px rgba(15, 23, 42, 0.22);
+		filter: brightness(1.04);
+		outline: 3px solid rgba(37, 99, 235, 0.18);
+		outline-offset: 2px;
+		transform: translateY(-1px);
+	}
+
+	@media (max-width: 520px) {
+		.receipt-download-actions {
+			gap: 8px;
+			padding: 0 4px;
+		}
+
+		.receipt-download-actions .receipt-download-button {
+			font-size: 0.78rem;
+			gap: 5px;
+			padding: 8px 7px;
+		}
+	}
+
 	.${RESERVATION_CHILD_MODAL_ROOT_CLASS}.reservation-detail-confirm-modal .ant-modal-mask,
 	.${RESERVATION_CHILD_MODAL_ROOT_CLASS} .reservation-detail-confirm-modal .ant-modal-mask {
 		background: rgba(15, 23, 42, 0.66) !important;
@@ -2218,22 +2285,27 @@ const Header = styled.div`
 		font-size: 0.88rem;
 		font-weight: 900;
 		text-transform: uppercase;
+		white-space: nowrap;
 	}
 
 	.top-confirm-line {
 		align-items: baseline;
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		gap: 8px;
 		justify-content: center;
+		min-width: 0;
 	}
 
 	.top-confirm-number {
-		font-size: clamp(1.12rem, 1.75vw, 1.56rem);
+		font-size: clamp(0.82rem, 1.35vw, 1.3rem);
 		font-weight: 950;
 		line-height: 1.12;
 		margin: 0;
-		overflow-wrap: anywhere;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.top-amount {
@@ -8200,6 +8272,12 @@ const ReservationDetail = ({
 		});
 	};
 
+	const downloadPNG = () => {
+		captureReceiptCanvas(pdfRef.current).then((canvas) => {
+			downloadReceiptCanvasAsPng(canvas, "receipt.png");
+		});
+	};
+
 	const downloadAlDawleyaPDF = () => {
 		html2canvas(alDawleyaPdfRef.current, { scale: 1 }).then((canvas) => {
 			const imgData = canvas.toDataURL("image/png");
@@ -9908,13 +9986,22 @@ const ReservationDetail = ({
 							wrapClassName='receipt-modal'
 							rootClassName={childModalRootClassName("receipt-modal")}
 						>
-							<div className='text-center my-3 '>
+							<div className='receipt-download-actions'>
 								<button
-									className='btn btn-info w-50'
-									style={{ fontWeight: "bold", fontSize: "1.1rem" }}
+									type='button'
+									className='receipt-download-button receipt-download-pdf'
 									onClick={downloadPDF}
 								>
-									Print To PDF
+									<FilePdfOutlined />
+									Download PDF
+								</button>
+								<button
+									type='button'
+									className='receipt-download-button receipt-download-png'
+									onClick={downloadPNG}
+								>
+									<FileImageOutlined />
+									Download PNG
 								</button>
 							</div>
 
@@ -10286,9 +10373,12 @@ const ReservationDetail = ({
 											: "Confirmation No"}
 										:
 									</span>
-									<strong className='top-confirm-number top-ltr-value'>
-										{reservation?.confirmation_number || "N/A"}
-									</strong>
+								<strong
+									className='top-confirm-number top-ltr-value'
+									title={getReceiptConfirmationDisplay(reservation)}
+								>
+									{getReceiptConfirmationDisplay(reservation)}
+								</strong>
 								</div>
 								<div className='top-amount'>
 									{formatOptionalMoney(financialTotalAmountValue)}{" "}

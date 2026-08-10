@@ -1,5 +1,8 @@
 import html2canvas from "html2canvas";
-import { captureReceiptCanvas } from "./captureReceiptCanvas";
+import {
+  captureReceiptCanvas,
+  downloadReceiptCanvasAsPng,
+} from "./captureReceiptCanvas";
 
 jest.mock("html2canvas", () => jest.fn());
 
@@ -29,4 +32,20 @@ test("PDF capture uses a detached natural-width clone and cleans it up", async (
   expect(document.querySelector('[data-receipt-capture-host="true"]')).toBeNull();
 
   receipt.remove();
+});
+
+test("PNG download preserves the captured image and cleans up its link", () => {
+  const click = jest
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+  const canvas = document.createElement("canvas");
+  canvas.toDataURL = jest.fn(() => "data:image/png;base64,receipt-image");
+
+  downloadReceiptCanvasAsPng(canvas, "booking-receipt.png");
+
+  expect(canvas.toDataURL).toHaveBeenCalledWith("image/png");
+  expect(click).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('a[download="booking-receipt.png"]')).toBeNull();
+
+  click.mockRestore();
 });

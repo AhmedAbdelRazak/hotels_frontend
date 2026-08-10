@@ -13,6 +13,7 @@ import {
   formatReceiptDate,
   receiptStatus,
 } from "./receiptUtils";
+import { getReceiptConfirmationDisplay } from "./receiptConfirmation";
 
 const money = (value) =>
   new Intl.NumberFormat("en-US", {
@@ -117,6 +118,7 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
       reservation?.belongsTo?.name ||
       "N/A",
   ).trim();
+  const bookingNo = String(reservation?.confirmation_number || "N/A").trim();
   const supplierBookingNo = String(
     reservation?.supplierData?.suppliedBookingNo ||
       reservation?.supplierData?.supplierBookingNo ||
@@ -124,7 +126,7 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
       reservation?.confirmation_number ||
       "N/A",
   ).trim();
-  const bookingNo = String(reservation?.confirmation_number || "N/A").trim();
+  const bookingConfirmationDisplay = getReceiptConfirmationDisplay(reservation);
   const nationality = String(customer?.nationality || "N/A").trim();
   const countryCode = countryCodeFromNationality(nationality);
   const nationalityLabel = displayNationality(nationality, countryCode);
@@ -163,9 +165,11 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
       <section className="booking-band">
         <div>
           <strong>Booking No:</strong>{" "}
-          <EditValue onClick={onEdit} className="ltr-value">
-            {bookingNo}
-            {supplierBookingNo !== bookingNo ? ` / ${supplierBookingNo}` : ""}
+          <EditValue
+            onClick={onEdit}
+            className="ltr-value receipt-booking-number"
+          >
+            {bookingConfirmationDisplay}
           </EditValue>
         </div>
         <div>
@@ -236,10 +240,10 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
         <table className="stay-table">
           <thead>
             <tr>
-              <th>
+              <th className="receipt-date-label">
                 <BilingualLabel en="Check-in Date" ar="تاريخ الوصول" />
               </th>
-              <td>
+              <td className="receipt-date-value">
                 <strong>{formatReceiptDate(reservation?.checkin_date)}</strong>
                 <span dir="rtl" lang="ar">
                   {formatReceiptDate(reservation?.checkin_date, "ar-EG")}
@@ -258,10 +262,10 @@ const OfficialReceipt = forwardRef(function OfficialReceipt(
           </thead>
           <tbody>
             <tr>
-              <th>
+              <th className="receipt-date-label">
                 <BilingualLabel en="Checkout Date" ar="تاريخ المغادرة" />
               </th>
-              <td>
+              <td className="receipt-date-value">
                 <strong>{formatReceiptDate(reservation?.checkout_date)}</strong>
                 <span dir="rtl" lang="ar">
                   {formatReceiptDate(reservation?.checkout_date, "ar-EG")}
@@ -492,6 +496,15 @@ const ReceiptCanvas = styled.article`
     font-size: 18px;
     line-height: 1.55;
   }
+  .receipt-booking-number {
+    display: inline-block;
+    max-width: 100%;
+    font-size: 0.96em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    white-space: nowrap;
+  }
   .receipt-body {
     padding: 24px 34px 0;
   }
@@ -657,6 +670,16 @@ const ReceiptCanvas = styled.article`
   .stay-table td > span,
   .stay-table td > strong {
     display: block;
+  }
+  .stay-table .receipt-date-label {
+    font-size: 16px;
+  }
+  .stay-table .receipt-date-value {
+    font-size: 16px;
+    line-height: 1.28;
+  }
+  .stay-table .receipt-date-value > strong {
+    font-size: 17px;
   }
   .stay-table .large-value,
   .rooms-table .large-value {
