@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import { Modal } from "antd";
 import styled from "styled-components";
 import {
   getHotelRunnerPayoutDisplay,
@@ -202,9 +203,11 @@ const AmountGrid = ({ fields, source, copy, currency, language }) => (
 const HotelRunnerPricingBreakdown = ({
   reservation,
   chosenLanguage = "English",
+  modalProps = {},
 }) => {
   const language = chosenLanguage === "Arabic" ? "Arabic" : "English";
   const copy = COPY[language];
+  const [open, setOpen] = useState(false);
   const pricing = useMemo(
     () => getHotelRunnerPricingDisplay(reservation),
     [reservation],
@@ -232,49 +235,81 @@ const HotelRunnerPricingBreakdown = ({
       pricing.summary.grandTotal === null ? pricing.sourceGrandTotal : null,
   };
 
+  const isArabic = language === "Arabic";
+
   return (
-    <Breakdown $isArabic={language === "Arabic"}>
-      <header>
-        <div>
-          <h4>{copy.title}</h4>
-          <p>{copy.sourceNote}</p>
-        </div>
-        <span className="hr-source-pill">HotelRunner API</span>
-      </header>
+    <>
+      <BreakdownTrigger $isArabic={isArabic}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={() => setOpen(true)}
+        >
+          <span>{copy.title}</span>
+          <span className="hr-trigger-arrow" aria-hidden="true">
+            {isArabic ? "‹" : "›"}
+          </span>
+        </button>
+      </BreakdownTrigger>
 
-      <AmountGrid
-        fields={SUMMARY_FIELDS}
-        source={displayedSummary}
-        copy={copy}
-        currency={pricing.currency}
-        language={language}
-      />
-
-      <div
-        className={`hr-net-status ${payout.verified ? "verified" : "pending"}`}
+      <Modal
+        title={<span dir={isArabic ? "rtl" : "ltr"}>{copy.title}</span>}
+        open={open}
+        onCancel={() => setOpen(false)}
+        footer={null}
+        centered
+        destroyOnClose
+        width="min(96vw, 1180px)"
+        {...modalProps}
+        styles={{
+          ...modalProps.styles,
+          body: {
+            maxHeight: "78vh",
+            overflowY: "auto",
+            ...modalProps.styles?.body,
+          },
+        }}
       >
-        <div>
-          <span>{copy.netTitle}</span>
-          <strong>
-            {payout.verified ? (
-              <MoneyValue
-                amount={payout.netAmount}
-                currency={pricing.currency}
-                language={language}
-              />
-            ) : (
-              copy.netPending
-            )}
-          </strong>
-        </div>
-        {!payout.verified ? <p>{copy.netPendingHelp}</p> : null}
-      </div>
+        <Breakdown $isArabic={isArabic} dir={isArabic ? "rtl" : "ltr"}>
+          <header>
+            <p>{copy.sourceNote}</p>
+            <span className="hr-source-pill">HotelRunner API</span>
+          </header>
 
-      {!hasDetailedBreakdown ? (
-        <p className="hr-empty">{copy.noDetailedBreakdown}</p>
-      ) : null}
+          <AmountGrid
+            fields={SUMMARY_FIELDS}
+            source={displayedSummary}
+            copy={copy}
+            currency={pricing.currency}
+            language={language}
+          />
 
-      {pricing.rooms.length ? (
+          <div
+            className={`hr-net-status ${payout.verified ? "verified" : "pending"}`}
+          >
+            <div>
+              <span>{copy.netTitle}</span>
+              <strong>
+                {payout.verified ? (
+                  <MoneyValue
+                    amount={payout.netAmount}
+                    currency={pricing.currency}
+                    language={language}
+                  />
+                ) : (
+                  copy.netPending
+                )}
+              </strong>
+            </div>
+            {!payout.verified ? <p>{copy.netPendingHelp}</p> : null}
+          </div>
+
+          {!hasDetailedBreakdown ? (
+            <p className="hr-empty">{copy.noDetailedBreakdown}</p>
+          ) : null}
+
+          {pricing.rooms.length ? (
         <section>
           <h5>{copy.rooms}</h5>
           {pricing.rooms.map((room, roomIndex) => (
@@ -395,9 +430,9 @@ const HotelRunnerPricingBreakdown = ({
             </article>
           ))}
         </section>
-      ) : null}
+          ) : null}
 
-      {pricing.payments.length ? (
+          {pricing.payments.length ? (
         <section>
           <h5>{copy.payments}</h5>
           <div className="hr-payment-list">
@@ -457,14 +492,57 @@ const HotelRunnerPricingBreakdown = ({
             ))}
           </div>
         </section>
-      ) : null}
-    </Breakdown>
+          ) : null}
+        </Breakdown>
+      </Modal>
+    </>
   );
 };
 
-const Breakdown = styled.div`
+const BreakdownTrigger = styled.div`
   direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
   margin-top: 14px;
+
+  button {
+    width: 100%;
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid #bfdbfe;
+    border-radius: 11px;
+    background: #f8fbff;
+    color: #0f2742;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 900;
+    text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+    transition: border-color 0.18s ease, background 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  button:hover,
+  button:focus-visible {
+    border-color: #60a5fa;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    outline: none;
+  }
+
+  .hr-trigger-arrow {
+    flex: 0 0 auto;
+    color: #2563eb;
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+`;
+
+const Breakdown = styled.div`
+  direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
+  margin-top: 2px;
   padding: 14px;
   border: 1px solid #bfdbfe;
   border-radius: 14px;
@@ -479,23 +557,16 @@ const Breakdown = styled.div`
     margin-bottom: 12px;
   }
 
-  h4,
   h5,
   h6,
   p {
     margin: 0;
   }
 
-  h4,
   h5,
   h6,
   strong {
     color: #0f2742;
-  }
-
-  h4 {
-    font-size: 1rem;
-    font-weight: 950;
   }
 
   header p,

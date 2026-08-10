@@ -11910,6 +11910,9 @@ const ReservationDetail = ({
 					<HotelRunnerPricingBreakdown
 						reservation={reservation}
 						chosenLanguage={chosenLanguage}
+						modalProps={childModalProps(
+							"hotelrunner-pricing-breakdown-modal",
+						)}
 					/>
 
 									<BofaCapturedPaymentSummary reservation={reservation} />
