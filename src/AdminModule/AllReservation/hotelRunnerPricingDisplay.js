@@ -40,7 +40,9 @@ const explicitCurrency = (...values) => {
 
 const roundMoney = (value) => {
   const amount = finiteMoneyOrNull(value);
-  return amount === null ? null : Number(amount.toFixed(2));
+  return amount === null
+    ? null
+    : Math.round((amount + Number.EPSILON) * 100) / 100;
 };
 
 const sameMoney = (left, right) => {
