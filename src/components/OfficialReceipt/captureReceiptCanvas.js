@@ -46,3 +46,20 @@ export const captureReceiptCanvas = async (receiptNode) => {
     captureHost.remove();
   }
 };
+
+export const downloadReceiptCanvasAsPng = (
+  canvas,
+  filename = "receipt.png",
+) => {
+  if (!canvas || typeof canvas.toDataURL !== "function") {
+    throw new Error("Receipt image is not available for download.");
+  }
+
+  const downloadLink = document.createElement("a");
+  downloadLink.href = canvas.toDataURL("image/png");
+  downloadLink.download = filename;
+  downloadLink.style.display = "none";
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+};

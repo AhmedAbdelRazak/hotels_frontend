@@ -131,6 +131,21 @@ test("the redesigned receipt keeps the unified edit modal and saves passport and
 	expect(sentPayload).not.toHaveProperty("supplierData");
 });
 
+test("the receipt keeps paired confirmations on one line and enlarges stay dates", () => {
+	const { container } = render(
+		<ReceiptPDF reservation={reservation} hotelDetails={hotelDetails} />,
+	);
+	const pairedConfirmation = container.querySelector(".receipt-booking-number");
+	const dateValue = container.querySelector(".receipt-date-value");
+
+	expect(pairedConfirmation.textContent).toBe("6116125761 / HMREF3NWRJ");
+	expect(pairedConfirmation.classList.contains("receipt-booking-number")).toBe(
+		true,
+	);
+	expect(window.getComputedStyle(pairedConfirmation).whiteSpace).toBe("nowrap");
+	expect(window.getComputedStyle(dateValue).fontSize).toBe("16px");
+});
+
 test("a HotelRunner receipt presents verified guest gross without calling it net", () => {
 	const hotelRunnerReservation = {
 		...reservation,
