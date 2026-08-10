@@ -67,6 +67,7 @@ import {
 } from "./reservationRoomDetails";
 import { getPaymentBreakdownTotalDisplay } from "./paymentBreakdownDisplay";
 import HotelRunnerPricingBreakdown from "./HotelRunnerPricingBreakdown";
+import ReservationCommentCard from "./ReservationCommentCard";
 import {
 	getHotelRunnerPlatformFinanceDisplay,
 	getHotelRunnerPayoutDisplay,
@@ -2775,6 +2776,70 @@ const ContentSection = styled.div`
 		grid-column: auto;
 		margin-top: 0;
 		min-height: 58px;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger {
+		appearance: none;
+		background: transparent !important;
+		border: 0 !important;
+		border-radius: 5px !important;
+		box-shadow: none !important;
+		color: var(--pms-text) !important;
+		display: grid;
+		gap: 3px;
+		font-family: inherit;
+		margin: 2px 0 0;
+		max-width: 100%;
+		min-height: auto !important;
+		padding: 0 !important;
+		text-align: center;
+		transform: none !important;
+		width: 100%;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger:not(:disabled) {
+		cursor: pointer;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger:not(:disabled):hover {
+		background: transparent !important;
+		border-color: transparent !important;
+		box-shadow: none !important;
+		transform: none !important;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger:not(:disabled):hover
+		.guest-comment-preview {
+		color: #1d4ed8;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger:disabled {
+		cursor: default;
+		opacity: 1;
+	}
+
+	.guest-action-comment-row .guest-comment-card .guest-comment-trigger:focus-visible {
+		outline: 2px solid #2563eb;
+		outline-offset: 3px;
+	}
+
+	.guest-comment-preview {
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		display: -webkit-box;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+		unicode-bidi: plaintext;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	.guest-comment-more {
+		color: #1d4ed8;
+		font-size: 0.67rem;
+		font-weight: 900;
+		line-height: 1;
+		margin-top: 3px;
 	}
 
 	.platform-review-inline-action {
@@ -10802,19 +10867,12 @@ const ReservationDetail = ({
 												</AssignRoomHint>
 											</AssignRoomCallout>
 										) : null}
-											<div className='detail-item guest-comment-card'>
-												<span className='detail-icon'>
-													<FileTextOutlined />
-												</span>
-												<span className='detail-label'>
-													{chosenLanguage === "Arabic"
-														? AR_LABELS.comment
-														: "Comment"}
-												</span>
-												<strong className='detail-value'>
-													{reservation?.comment || "N/A"}
-												</strong>
-											</div>
+											<ReservationCommentCard
+												comment={reservation?.comment}
+												icon={<FileTextOutlined />}
+												isArabic={chosenLanguage === "Arabic"}
+												modalProps={childModalProps("reservation-comment-modal")}
+											/>
 										</div>
 									</div>
 								</div>
