@@ -3247,6 +3247,7 @@ export const getBookingSourcePaymentSummary = (
 		paymentStatuses,
 		dateBasis,
 		bookingSources,
+		totalMode,
 	} = {},
 ) => {
 	const params = new URLSearchParams();
@@ -3267,6 +3268,7 @@ export const getBookingSourcePaymentSummary = (
 	if (bookingSources?.length) {
 		params.set("bookingSources", bookingSources.join(","));
 	}
+	if (totalMode) params.set("totalMode", totalMode);
 
 	const query = params.toString();
 	const suffix = query ? `?${query}` : "";
@@ -3310,6 +3312,7 @@ export const getCheckoutDatePaymentSummary = (
 		paymentStatuses,
 		bookingSources,
 		dateBasis,
+		totalMode,
 	} = {},
 ) => {
 	const params = new URLSearchParams();
@@ -3330,6 +3333,7 @@ export const getCheckoutDatePaymentSummary = (
 		params.set("bookingSources", bookingSources.join(","));
 	}
 	if (dateBasis) params.set("dateBasis", dateBasis);
+	if (totalMode) params.set("totalMode", totalMode);
 
 	const query = params.toString();
 	const suffix = query ? `?${query}` : "";
@@ -3440,6 +3444,41 @@ export const getAdminReservationExecutiveSummary = async (
 	return payload;
 };
 
+const PAID_REPORT_DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export const serializePaidReportDateRanges = (dateRanges = []) => {
+	if (!Array.isArray(dateRanges) || dateRanges.length === 0) return "";
+
+	const normalizedRanges = dateRanges.map((range, index) => {
+		const dateFrom = String(range?.dateFrom || "").trim();
+		const dateTo = String(range?.dateTo || "").trim();
+		if (
+			!PAID_REPORT_DATE_KEY_PATTERN.test(dateFrom) ||
+			!PAID_REPORT_DATE_KEY_PATTERN.test(dateTo) ||
+			dateFrom > dateTo
+		) {
+			throw new Error(`Invalid paid report date range at index ${index}`);
+		}
+		return { dateFrom, dateTo };
+	});
+
+	return Array.from(
+		new Map(
+			normalizedRanges.map((range) => [
+				`${range.dateFrom}|${range.dateTo}`,
+				range,
+			]),
+		).values(),
+	)
+		.sort(
+			(left, right) =>
+				left.dateFrom.localeCompare(right.dateFrom) ||
+				left.dateTo.localeCompare(right.dateTo),
+		)
+		.map((range) => `${range.dateFrom}..${range.dateTo}`)
+		.join(",");
+};
+
 export const getPaidBreakdownReportAdmin = (
 	userId,
 	token,
@@ -3449,16 +3488,26 @@ export const getPaidBreakdownReportAdmin = (
 		dateBy = "",
 		dateFrom = "",
 		dateTo = "",
+		dateRanges = [],
+		totalMode = "",
+		includeScorecards,
 		page = 1,
 		limit = 200,
 	} = {},
 ) => {
 	const params = new URLSearchParams();
+	const serializedDateRanges = serializePaidReportDateRanges(dateRanges);
 	if (hotelId) params.set("hotelId", hotelId);
 	if (searchQuery) params.set("searchQuery", searchQuery);
 	if (dateBy) params.set("dateBy", dateBy);
-	if (dateFrom) params.set("dateFrom", dateFrom);
-	if (dateTo) params.set("dateTo", dateTo);
+	if (serializedDateRanges) {
+		params.set("dateRanges", serializedDateRanges);
+	} else {
+		if (dateFrom) params.set("dateFrom", dateFrom);
+		if (dateTo) params.set("dateTo", dateTo);
+	}
+	if (totalMode) params.set("totalMode", totalMode);
+	if (includeScorecards === false) params.set("includeScorecards", "false");
 	if (page) params.set("page", String(page));
 	if (limit) params.set("limit", String(limit));
 
@@ -3549,6 +3598,7 @@ export const getHotelOccupancyCalendar = (
 		display = "roomType",
 		paymentStatuses,
 		bookingSources,
+		totalMode,
 	} = {},
 ) => {
 	if (!hotelId) {
@@ -3567,6 +3617,7 @@ export const getHotelOccupancyCalendar = (
 	if (bookingSources?.length) {
 		params.set("bookingSources", bookingSources.join(","));
 	}
+	if (totalMode) params.set("totalMode", totalMode);
 
 	return fetch(
 		`${

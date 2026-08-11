@@ -53,6 +53,43 @@ describe("admin paid breakdown report API", () => {
     expect(url.searchParams.has("dateBy")).toBe(false);
     expect(url.searchParams.has("dateFrom")).toBe(false);
     expect(url.searchParams.has("dateTo")).toBe(false);
+    expect(url.searchParams.has("includeScorecards")).toBe(false);
+  });
+
+  it("serializes sorted non-contiguous ranges with Net/Gross mode and no scalar envelope", async () => {
+    await getPaidBreakdownReportAdmin("admin-1", "token-1", {
+      hotelId: "hotel-1",
+      dateBy: "checkout_date",
+      dateFrom: "2026-01-01",
+      dateTo: "2026-12-31",
+      dateRanges: [
+        { dateFrom: "2026-08-15", dateTo: "2026-09-12" },
+        { dateFrom: "2026-06-16", dateTo: "2026-07-14" },
+        { dateFrom: "2026-08-15", dateTo: "2026-09-12" },
+      ],
+      totalMode: "net",
+      includeScorecards: false,
+    });
+
+    const [requestUrl] = global.fetch.mock.calls[0];
+    const url = new URL(requestUrl);
+    expect(url.searchParams.get("dateRanges")).toBe(
+      "2026-06-16..2026-07-14,2026-08-15..2026-09-12",
+    );
+    expect(url.searchParams.get("totalMode")).toBe("net");
+    expect(url.searchParams.get("includeScorecards")).toBe("false");
+    expect(url.searchParams.has("dateFrom")).toBe(false);
+    expect(url.searchParams.has("dateTo")).toBe(false);
+  });
+
+  it("rejects malformed client ranges before issuing a request", async () => {
+    expect(() =>
+      getPaidBreakdownReportAdmin("admin-1", "token-1", {
+        hotelId: "hotel-1",
+        dateRanges: [{ dateFrom: "2026-02-30", dateTo: "2026-02-01" }],
+      }),
+    ).toThrow("Invalid paid report date range at index 0");
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects a server validation error instead of replacing the report with a false empty result", async () => {

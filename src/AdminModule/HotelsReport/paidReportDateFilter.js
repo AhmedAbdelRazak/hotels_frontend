@@ -174,6 +174,23 @@ export const getPaidReportCurrentYear = (
   return Number.isInteger(year) ? year : null;
 };
 
+export const getPaidReportCurrentMonth = (
+  calendarType = "gregorian",
+  referenceDate = new Date(),
+) => {
+  const normalizedCalendar = normalizePaidReportCalendarType(calendarType);
+  const probe = getReferenceMoment(referenceDate);
+  if (!normalizedCalendar || !probe) return null;
+
+  const month =
+    normalizedCalendar === "hijri"
+      ? probe.iMonth() + 1
+      : Number(probe.format("M"));
+  return Number.isInteger(month) && month >= 1 && month <= 12
+    ? String(month)
+    : null;
+};
+
 export const getPaidReportYearValues = (
   calendarType = "gregorian",
   referenceDate = new Date(),
@@ -301,22 +318,216 @@ export const resolvePaidReportPeriod = ({
   );
 };
 
+const emptyPeriodsResult = (error) => ({
+  dateFrom: "",
+  dateTo: "",
+  dateRanges: [],
+  ...(error ? { error } : {}),
+});
+
+const normalizePeriodMonths = (months) => {
+  const values = Array.isArray(months)
+    ? months
+    : months === undefined || months === null || months === ""
+      ? [PAID_REPORT_ALL_PERIODS]
+      : [months];
+  if (!values.length) return [PAID_REPORT_ALL_PERIODS];
+
+  return Array.from(
+    new Set(
+      values.map((month) => normalizeDateDigits(month).trim().toLowerCase()),
+    ),
+  );
+};
+
+export const resolvePaidReportPeriods = ({
+  calendarType = "gregorian",
+  year = PAID_REPORT_ALL_PERIODS,
+  months = [PAID_REPORT_ALL_PERIODS],
+  referenceDate = new Date(),
+} = {}) => {
+  const normalizedCalendar = normalizePaidReportCalendarType(calendarType);
+  if (!normalizedCalendar) {
+    return emptyPeriodsResult(PAID_REPORT_DATE_ERRORS.INVALID_CALENDAR);
+  }
+
+  const normalizedYear = normalizeDateDigits(year).trim().toLowerCase();
+  const allYears =
+    !normalizedYear || normalizedYear === PAID_REPORT_ALL_PERIODS;
+  const normalizedMonths = normalizePeriodMonths(months);
+  const hasAllMonths = normalizedMonths.includes(PAID_REPORT_ALL_PERIODS);
+
+  if (hasAllMonths && normalizedMonths.length > 1) {
+    return emptyPeriodsResult(PAID_REPORT_DATE_ERRORS.INVALID_MONTH);
+  }
+  if (allYears) {
+    return hasAllMonths
+      ? emptyPeriodsResult()
+      : emptyPeriodsResult(PAID_REPORT_DATE_ERRORS.YEAR_REQUIRED);
+  }
+
+  const allowedYears = getPaidReportYearValues(
+    normalizedCalendar,
+    referenceDate,
+  );
+  if (
+    !/^\d{4}$/.test(normalizedYear) ||
+    !allowedYears.includes(normalizedYear)
+  ) {
+    return emptyPeriodsResult(PAID_REPORT_DATE_ERRORS.INVALID_YEAR);
+  }
+
+  if (hasAllMonths) {
+    const resolved = resolvePaidReportPeriod({
+      calendarType: normalizedCalendar,
+      year: normalizedYear,
+      month: PAID_REPORT_ALL_PERIODS,
+      referenceDate,
+    });
+    return resolved.error
+      ? emptyPeriodsResult(resolved.error)
+      : { ...resolved, dateRanges: [] };
+  }
+
+  if (
+    !normalizedMonths.length ||
+    normalizedMonths.some((month) => !/^(?:[1-9]|1[0-2])$/.test(month))
+  ) {
+    return emptyPeriodsResult(PAID_REPORT_DATE_ERRORS.INVALID_MONTH);
+  }
+
+  const sortedMonths = normalizedMonths
+    .map(Number)
+    .sort((left, right) => left - right);
+  const dateRanges = sortedMonths.map((month) =>
+    resolvePaidReportPeriod({
+      calendarType: normalizedCalendar,
+      year: normalizedYear,
+      month: String(month),
+      referenceDate,
+    }),
+  );
+  const error = dateRanges.find((range) => range.error)?.error;
+  if (error) return emptyPeriodsResult(error);
+
+  if (dateRanges.length === 1) {
+    return { ...dateRanges[0], dateRanges: [] };
+  }
+
+  return {
+    dateFrom: "",
+    dateTo: "",
+    dateRanges,
+  };
+};
+
+const periodSelection = (
+  year = PAID_REPORT_ALL_PERIODS,
+  months = [PAID_REPORT_ALL_PERIODS],
+) => {
+  const normalizedMonths = normalizePeriodMonths(months);
+  return {
+    year,
+    month:
+      normalizedMonths.length === 1
+        ? normalizedMonths[0]
+        : PAID_REPORT_ALL_PERIODS,
+    months: normalizedMonths,
+  };
+};
+
+const normalizedInferenceRanges = (dateRanges) => {
+  if (!Array.isArray(dateRanges) || !dateRanges.length) return [];
+
+  const normalized = [];
+  for (const range of dateRanges) {
+    if (!range || typeof range !== "object" || Array.isArray(range))
+      return null;
+    const dateFrom = normalizeGregorianDateKey(range.dateFrom);
+    const dateTo = normalizeGregorianDateKey(range.dateTo);
+    if (!dateFrom || !dateTo || dateFrom > dateTo) return null;
+    normalized.push({ dateFrom, dateTo });
+  }
+
+  return Array.from(
+    new Map(
+      normalized.map((range) => [`${range.dateFrom}|${range.dateTo}`, range]),
+    ).values(),
+  ).sort(
+    (left, right) =>
+      left.dateFrom.localeCompare(right.dateFrom) ||
+      left.dateTo.localeCompare(right.dateTo),
+  );
+};
+
 export const inferPaidReportPeriodSelection = ({
   calendarType = "gregorian",
   dateFrom = "",
   dateTo = "",
+  dateRanges = [],
   referenceDate = new Date(),
 } = {}) => {
-  const emptySelection = {
-    year: PAID_REPORT_ALL_PERIODS,
-    month: PAID_REPORT_ALL_PERIODS,
-  };
+  const emptySelection = periodSelection();
+  const normalizedRanges = normalizedInferenceRanges(dateRanges);
+  if (normalizedRanges === null) return emptySelection;
+
+  const years = getPaidReportYearValues(calendarType, referenceDate);
+  if (normalizedRanges.length) {
+    const matchedPeriods = normalizedRanges.map((range) => {
+      for (const year of years) {
+        const fullYear = resolvePaidReportPeriod({
+          calendarType,
+          year,
+          month: PAID_REPORT_ALL_PERIODS,
+          referenceDate,
+        });
+        if (
+          fullYear.dateFrom === range.dateFrom &&
+          fullYear.dateTo === range.dateTo
+        ) {
+          return { year, month: PAID_REPORT_ALL_PERIODS };
+        }
+
+        for (let month = 1; month <= 12; month += 1) {
+          const fullMonth = resolvePaidReportPeriod({
+            calendarType,
+            year,
+            month: String(month),
+            referenceDate,
+          });
+          if (
+            fullMonth.dateFrom === range.dateFrom &&
+            fullMonth.dateTo === range.dateTo
+          ) {
+            return { year, month: String(month) };
+          }
+        }
+      }
+      return null;
+    });
+    if (matchedPeriods.some((period) => !period)) return emptySelection;
+
+    const matchedYears = new Set(matchedPeriods.map((period) => period.year));
+    if (matchedYears.size !== 1) return emptySelection;
+    if (
+      matchedPeriods.some((period) => period.month === PAID_REPORT_ALL_PERIODS)
+    ) {
+      return matchedPeriods.length === 1
+        ? periodSelection(matchedPeriods[0].year)
+        : emptySelection;
+    }
+
+    const months = Array.from(
+      new Set(matchedPeriods.map((period) => period.month)),
+    ).sort((left, right) => Number(left) - Number(right));
+    return periodSelection(matchedPeriods[0].year, months);
+  }
+
   const normalizedFrom = normalizeGregorianDateKey(dateFrom);
   const normalizedTo = normalizeGregorianDateKey(dateTo);
   if (!normalizedFrom && !normalizedTo) return emptySelection;
   if (!normalizedFrom || !normalizedTo) return emptySelection;
 
-  const years = getPaidReportYearValues(calendarType, referenceDate);
   for (const year of years) {
     const fullYear = resolvePaidReportPeriod({
       calendarType,
@@ -328,7 +539,7 @@ export const inferPaidReportPeriodSelection = ({
       fullYear.dateFrom === normalizedFrom &&
       fullYear.dateTo === normalizedTo
     ) {
-      return { year, month: PAID_REPORT_ALL_PERIODS };
+      return periodSelection(year);
     }
 
     for (let month = 1; month <= 12; month += 1) {
@@ -342,7 +553,7 @@ export const inferPaidReportPeriodSelection = ({
         fullMonth.dateFrom === normalizedFrom &&
         fullMonth.dateTo === normalizedTo
       ) {
-        return { year, month: String(month) };
+        return periodSelection(year, [String(month)]);
       }
     }
   }
