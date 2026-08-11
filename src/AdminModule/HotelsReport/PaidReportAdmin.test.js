@@ -38,7 +38,24 @@ jest.mock("../apiAdmin", () => ({
   getPaidBreakdownReportAdmin: jest.fn(),
 }));
 
-jest.mock("../AllReservation/MoreDetails", () => () => null);
+jest.mock(
+  "../AllReservation/MoreDetails",
+  () =>
+    ({ onReservationUpdated, reservation }) => (
+      <button
+        type="button"
+        onClick={() =>
+          onReservationUpdated?.({
+            _id: reservation?._id,
+            paid_amount_breakdown: { paid_at_hotel_cash: 99 },
+            paid_breakdown_total: 99,
+          })
+        }
+      >
+        Simulate paid edit
+      </button>
+    ),
+);
 
 jest.mock("./PaidReportDateControls", () => ({ disabled, onApply, value }) => (
   <div data-testid="paid-date-control" data-value={JSON.stringify(value)}>
@@ -166,7 +183,14 @@ const activeAjyadHotel = () => ({
 
 const reportPayload = (
   confirmationNumber,
-  { reportTotal = 100, paidTotal = 25, available = true } = {},
+  {
+    reportTotal = 100,
+    paidTotal = 25,
+    available = true,
+    netFallback = false,
+    currency = "SAR",
+    reportMode = "net",
+  } = {},
 ) => ({
   data: [
     {
@@ -182,6 +206,9 @@ const reportPayload = (
       total_amount: 999999,
       report_total_amount: available ? reportTotal : null,
       report_total_available: available,
+      report_total_net_fallback: netFallback,
+      financial_totals_currency: currency,
+      report_total_mode: reportMode,
       pickedRoomsType: [
         { room_type: "familyRooms", displayName: "Family Quintuple" },
       ],
@@ -196,19 +223,35 @@ const reportPayload = (
     paidAmount: paidTotal,
     breakdownTotals: { paid_at_hotel_cash: paidTotal },
     financialMetadata: {
-      netFallback: 0,
+      netFallback: netFallback ? 1 : 0,
       unavailable: available ? 0 : 1,
       foreignCurrency: 0,
     },
     financialIncludedCount: available ? 1 : 0,
+    totalMode: reportMode,
   },
+  totalMode: reportMode,
 });
 
 const reservationRow = (
   confirmationNumber,
-  { reportTotal = 10, paidTotal = 2 } = {},
+  {
+    reportTotal = 10,
+    paidTotal = 2,
+    available = true,
+    netFallback = false,
+    currency = "SAR",
+    reportMode = "net",
+  } = {},
 ) =>
-  reportPayload(confirmationNumber, { reportTotal, paidTotal }).data[0];
+  reportPayload(confirmationNumber, {
+    reportTotal,
+    paidTotal,
+    available,
+    netFallback,
+    currency,
+    reportMode,
+  }).data[0];
 
 const pagedReportPayload = ({
   data,
@@ -216,20 +259,75 @@ const pagedReportPayload = ({
   page,
   limit = 500,
   scorecards,
+  totalMode = "net",
 }) => ({
   data,
   totalDocuments,
   page,
   limit,
+  totalMode,
   ...(scorecards ? { scorecards } : {}),
 });
 
-const paidScorecards = ({ count, reportTotal = 10, paidTotal = 2 }) => ({
+const paidScorecards = ({
+  count,
+  reportTotal = 10,
+  paidTotal = 2,
+  totalMode = "net",
+}) => ({
   totalAmount: count * reportTotal,
   paidAmount: count * paidTotal,
   breakdownTotals: { paid_at_hotel_cash: count * paidTotal },
   financialMetadata: { netFallback: 0, unavailable: 0, foreignCurrency: 0 },
   financialIncludedCount: count,
+  totalMode,
+});
+
+const partialReportPayload = ({
+  availableConfirmation = "AVAILABLE",
+  excludedConfirmation = "EXCLUDED",
+  reportTotal = 100.1,
+  availablePaid = 20.05,
+  excludedPaid = 12.02,
+  unavailableCount = 1,
+  foreignCurrencyCount = 0,
+  financialIncludedCount = 1,
+  netFallbackCount = 0,
+  reportMode = "net",
+} = {}) => ({
+  data: [
+    reservationRow(availableConfirmation, {
+      reportTotal,
+      paidTotal: availablePaid,
+      netFallback: netFallbackCount > 0,
+      reportMode,
+    }),
+    reservationRow(excludedConfirmation, {
+      reportTotal: null,
+      paidTotal: excludedPaid,
+      available: false,
+      currency: foreignCurrencyCount > 0 ? "USD" : "SAR",
+      reportMode,
+    }),
+  ],
+  totalDocuments: 2,
+  page: 1,
+  limit: 500,
+  scorecards: {
+    totalAmount: reportTotal,
+    paidAmount: availablePaid + excludedPaid,
+    breakdownTotals: {
+      paid_at_hotel_cash: availablePaid + excludedPaid,
+    },
+    financialMetadata: {
+      netFallback: netFallbackCount,
+      unavailable: unavailableCount,
+      foreignCurrency: foreignCurrencyCount,
+    },
+    financialIncludedCount,
+    totalMode: reportMode,
+  },
+  totalMode: reportMode,
 });
 
 const cellsForConfirmation = (confirmationNumber) =>
@@ -398,7 +496,12 @@ describe("PaidReportAdmin paid overview integration", () => {
     );
 
     await act(async () => {
-      grossRequest.resolve(reportPayload("LATEST-GROSS", { reportTotal: 120 }));
+      grossRequest.resolve(
+        reportPayload("LATEST-GROSS", {
+          reportTotal: 120,
+          reportMode: "gross",
+        }),
+      );
       await grossRequest.promise;
     });
     expect(await screen.findByText("LATEST-GROSS")).toBeTruthy();
@@ -419,7 +522,11 @@ describe("PaidReportAdmin paid overview integration", () => {
         reportPayload("MODE-RESULT", { reportTotal: 80, paidTotal: 23 }),
       )
       .mockResolvedValueOnce(
-        reportPayload("MODE-RESULT", { reportTotal: 100, paidTotal: 23 }),
+        reportPayload("MODE-RESULT", {
+          reportTotal: 100,
+          paidTotal: 23,
+          reportMode: "gross",
+        }),
       );
 
     render(<PaidReportAdmin />);
@@ -440,6 +547,38 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(cells[15].textContent).toBe("77.00");
     expect(getPaidBreakdownReportAdmin.mock.calls[1][2].totalMode).toBe(
       "gross",
+    );
+  });
+
+  it("refetches rows and scorecards after a payment edit from reservation details", async () => {
+    getPaidBreakdownReportAdmin
+      .mockResolvedValueOnce(
+        reportPayload("EDITED-PAYMENT", { reportTotal: 100, paidTotal: 10 }),
+      )
+      .mockResolvedValueOnce(
+        reportPayload("EDITED-PAYMENT", { reportTotal: 100, paidTotal: 30 }),
+      );
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("EDITED-PAYMENT")).toBeTruthy();
+    let paidCard = screen
+      .getByText("Paid Amount (SAR)", { selector: "span" })
+      .closest("div");
+    expect(paidCard.querySelector("strong").textContent).toBe("10.00");
+
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Simulate paid edit" }));
+
+    await waitFor(() =>
+      expect(getPaidBreakdownReportAdmin).toHaveBeenCalledTimes(2),
+    );
+    expect(await screen.findByText("EDITED-PAYMENT")).toBeTruthy();
+    paidCard = screen
+      .getByText("Paid Amount (SAR)", { selector: "span" })
+      .closest("div");
+    expect(paidCard.querySelector("strong").textContent).toBe("30.00");
+    expect(cellsForConfirmation("EDITED-PAYMENT")[13].textContent).toBe(
+      "30.00",
     );
   });
 
@@ -545,6 +684,7 @@ describe("PaidReportAdmin paid overview integration", () => {
             reportPayload("LATEST-PAGED-GROSS", {
               reportTotal: 120,
               paidTotal: 20,
+              reportMode: "gross",
             }),
           );
         }
@@ -619,6 +759,44 @@ describe("PaidReportAdmin paid overview integration", () => {
     }
   });
 
+  it("rejects a Gross response that arrives for the active Net request", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(
+      reportPayload("MISMATCHED-MODE", { reportMode: "gross" }),
+    );
+
+    try {
+      render(<PaidReportAdmin />);
+      await waitFor(() => expect(message.error).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText("MISMATCHED-MODE")).toBeNull();
+      expect(screen.queryByText("100.00")).toBeNull();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it.each(["root", "scorecard", "row"])(
+    "rejects a paid response with a missing %s total-mode echo",
+    async (missingMode) => {
+      const consoleError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const payload = reportPayload("MISSING-MODE");
+      if (missingMode === "root") delete payload.totalMode;
+      if (missingMode === "scorecard") delete payload.scorecards.totalMode;
+      if (missingMode === "row") delete payload.data[0].report_total_mode;
+      getPaidBreakdownReportAdmin.mockResolvedValueOnce(payload);
+
+      try {
+        render(<PaidReportAdmin />);
+        await waitFor(() => expect(message.error).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText("MISSING-MODE")).toBeNull();
+      } finally {
+        consoleError.mockRestore();
+      }
+    },
+  );
+
   it("localizes every paid money heading to SAR and pins the mobile RTL first column to the right", async () => {
     mockChosenLanguage = "Arabic";
     getPaidBreakdownReportAdmin.mockResolvedValueOnce(reportPayload("ARABIC-SAR"));
@@ -676,6 +854,17 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(cells[13].textContent).toBe("12.00");
     expect(cells[14].textContent).toBe("N/A");
     expect(cells[15].textContent).toBe("N/A");
+    const scorecard = screen
+      .getByText("Net Total (SAR)", { selector: "span" })
+      .closest("div");
+    expect(scorecard.querySelector("strong").textContent).toBe("N/A");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("0/1 reservations");
+    const footerCells = screen.getByRole("table").querySelector("tfoot tr").children;
+    expect(footerCells[13].textContent).toBe("12.00");
+    expect(footerCells[14].textContent).toBe("N/A");
+    expect(footerCells[15].textContent).toBe("N/A");
 
     fireEvent.click(screen.getByRole("button", { name: "Export Excel" }));
     await waitFor(() => expect(XLSX.utils.json_to_sheet).toHaveBeenCalled());
@@ -684,6 +873,279 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(exportRows[0]["Net Total (SAR)"]).toBe("");
     expect(exportRows[0]["Remaining (SAR)"]).toBe("");
     expect(exportRows[0]["Total Paid (SAR)"]).toBe(12);
+  });
+
+  it("shows the verified available subtotal while excluded rows stay N/A and paid cash stays complete", async () => {
+    getPaidBreakdownReportAdmin
+      .mockResolvedValueOnce(partialReportPayload())
+      .mockResolvedValueOnce(
+        partialReportPayload({
+          reportTotal: 120.2,
+          availablePaid: 20.05,
+          reportMode: "gross",
+        }),
+      );
+    XLSX.utils.json_to_sheet.mockReturnValue({});
+    XLSX.utils.book_new.mockReturnValue({});
+    XLSX.utils.encode_range.mockReturnValue("A1:Z4");
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("EXCLUDED")).toBeTruthy();
+
+    const subtotalCard = screen
+      .getByText("Available Net Subtotal (SAR)", { selector: "span" })
+      .closest("div");
+    expect(subtotalCard.querySelector("strong").textContent).toBe("100.10");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("1/2 reservations");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("Paid amounts are unchanged");
+    expect(
+      screen.getByTestId("paid-table-coverage-notice").textContent,
+    ).toContain("available SAR rows only (1/2)");
+
+    const excludedCells = cellsForConfirmation("EXCLUDED");
+    expect(excludedCells[13].textContent).toBe("12.02");
+    expect(excludedCells[14].textContent).toBe("N/A");
+    expect(excludedCells[15].textContent).toBe("N/A");
+
+    const footerCells = screen.getByRole("table").querySelector("tfoot tr").children;
+    expect(footerCells[13].textContent).toBe("32.07");
+    expect(footerCells[14].textContent).toBe("100.10");
+    expect(footerCells[15].textContent).toBe("80.05");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Excel" }));
+    await waitFor(() => expect(XLSX.utils.json_to_sheet).toHaveBeenCalled());
+    const [exportRows] = XLSX.utils.json_to_sheet.mock.calls[0];
+    expect(exportRows[1]["Net Total (SAR)"]).toBe("");
+    expect(exportRows[1]["Remaining (SAR)"]).toBe("");
+    expect(exportRows[2]["Name"]).toBe(
+      "Totals — selected total/remaining available rows: 1/2",
+    );
+    expect(exportRows[2]["Total Paid (SAR)"]).toBeCloseTo(32.07, 8);
+    expect(exportRows[2]["Net Total (SAR)"]).toBe(100.1);
+    expect(exportRows[2]["Remaining (SAR)"]).toBe(80.05);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gross Total" }));
+    const grossSubtotalCard = await screen.findByText(
+      "Available Gross Subtotal (SAR)",
+      { selector: "span" },
+    );
+    expect(grossSubtotalCard.closest("div").querySelector("strong").textContent).toBe(
+      "120.20",
+    );
+    expect(cellsForConfirmation("EXCLUDED")[13].textContent).toBe("12.02");
+  });
+
+  it("reports the current 388/389 verified coverage without hiding the SAR subtotal", async () => {
+    const payload = partialReportPayload({
+      reportTotal: 69305.35,
+      financialIncludedCount: 388,
+      netFallbackCount: 1,
+    });
+    payload.data = [
+      payload.data[0],
+      ...Array.from({ length: 387 }, (_value, index) =>
+        reservationRow(`AVAILABLE-ZERO-${index + 2}`, {
+          reportTotal: 0,
+          paidTotal: 0,
+        }),
+      ),
+      payload.data[1],
+    ];
+    payload.totalDocuments = 389;
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(payload);
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("EXCLUDED")).toBeTruthy();
+    const subtotalCard = screen
+      .getByText("Available Net Subtotal (SAR)", { selector: "span" })
+      .closest("div");
+    expect(subtotalCard.querySelector("strong").textContent).toBe("69,305.35");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("388/389 reservations");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("Gross was used when Net was unavailable for 1");
+    const footerCells = screen.getByRole("table").querySelector("tfoot tr").children;
+    expect(footerCells[0].textContent).toBe("Available subtotal");
+    expect(footerCells[14].textContent).toBe("69,305.35");
+  });
+
+  it("preserves valid zero and negative canonical totals without changing raw paid aggregation", async () => {
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce({
+      data: [
+        reservationRow("ZERO-TOTAL", { reportTotal: 0, paidTotal: 0.005 }),
+        reservationRow("ONE-TENTH", { reportTotal: 0.1, paidTotal: 0.005 }),
+        reservationRow("TWO-TENTHS", { reportTotal: 0.2, paidTotal: 0.005 }),
+        reservationRow("NEGATIVE-TOTAL", {
+          reportTotal: -0.3,
+          paidTotal: 0.005,
+        }),
+      ],
+      totalDocuments: 4,
+      page: 1,
+      limit: 500,
+      totalMode: "net",
+      scorecards: {
+        totalAmount: 0,
+        paidAmount: 0.02,
+        breakdownTotals: { paid_at_hotel_cash: 0.02 },
+        financialMetadata: {
+          netFallback: 0,
+          unavailable: 0,
+          foreignCurrency: 0,
+        },
+        financialIncludedCount: 4,
+        totalMode: "net",
+      },
+    });
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("NEGATIVE-TOTAL")).toBeTruthy();
+    expect(cellsForConfirmation("ZERO-TOTAL")[14].textContent).toBe("0.00");
+    expect(cellsForConfirmation("NEGATIVE-TOTAL")[14].textContent).toBe("-0.30");
+    const footerCells = screen.getByRole("table").querySelector("tfoot tr").children;
+    expect(footerCells[13].textContent).toBe("0.02");
+    expect(footerCells[14].textContent).toBe("0.00");
+    expect(footerCells[15].textContent).toBe("0.28");
+    expect(screen.queryByTestId("paid-scorecard-coverage-notice")).toBeNull();
+  });
+
+  it("explains partial SAR coverage in Arabic, including a foreign-currency exclusion", async () => {
+    mockChosenLanguage = "Arabic";
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(
+      partialReportPayload({ unavailableCount: 0, foreignCurrencyCount: 1 }),
+    );
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("EXCLUDED")).toBeTruthy();
+    expect(
+      screen.getByText("المجموع الفرعي الصافي المتاح (ر.س)", {
+        selector: "span",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("1/2 حجزًا ضمن نطاق الفندق والتاريخ");
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("استُبعد 1 من هذا المجموع الفرعي");
+    expect(cellsForConfirmation("EXCLUDED")[14].textContent).toBe("غير متاح");
+  });
+
+  it("discloses the verified Gross fallback when Net is unavailable", async () => {
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(
+      reportPayload("NET-FALLBACK", {
+        reportTotal: 80,
+        paidTotal: 20,
+        netFallback: true,
+      }),
+    );
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("NET-FALLBACK")).toBeTruthy();
+    expect(
+      screen.getByTestId("paid-scorecard-coverage-notice").textContent,
+    ).toContain("Verified Gross was used when Net was unavailable for 1");
+    expect(
+      screen.getByTestId("paid-table-coverage-notice").textContent,
+    ).toContain("Verified Gross was used when Net was unavailable in 1 row");
+    expect(cellsForConfirmation("NET-FALLBACK")[14].textContent).toBe("80.00");
+  });
+
+  it("fails the scorecard closed when financial coverage counts are malformed", async () => {
+    const payload = reportPayload("MISSING-COVERAGE", {
+      reportTotal: 125,
+      paidTotal: 25,
+    });
+    payload.scorecards = {
+      ...payload.scorecards,
+      financialIncludedCount: "1",
+    };
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(payload);
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("MISSING-COVERAGE")).toBeTruthy();
+    const totalCard = screen
+      .getByText("Net Total (SAR)", { selector: "span" })
+      .closest("div");
+    expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+    expect(screen.queryByTestId("paid-scorecard-coverage-notice")).toBeNull();
+    expect(cellsForConfirmation("MISSING-COVERAGE")[14].textContent).toBe(
+      "125.00",
+    );
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+  ])(
+    "fails the scorecard closed when financial metadata is %s",
+    async (_case, financialMetadata) => {
+      const payload = reportPayload("ABSENT-COVERAGE", {
+        reportTotal: 125,
+        paidTotal: 25,
+      });
+      payload.scorecards = { ...payload.scorecards, financialMetadata };
+      getPaidBreakdownReportAdmin.mockResolvedValueOnce(payload);
+
+      render(<PaidReportAdmin />);
+      expect(await screen.findByText("ABSENT-COVERAGE")).toBeTruthy();
+      const totalCard = screen
+        .getByText("Net Total (SAR)", { selector: "span" })
+        .closest("div");
+      expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+      expect(screen.queryByTestId("paid-scorecard-coverage-notice")).toBeNull();
+    },
+  );
+
+  it.each([true, "125"])(
+    "does not coerce malformed canonical money value %p into SAR",
+    async (reportTotal) => {
+      getPaidBreakdownReportAdmin.mockResolvedValueOnce(
+        reportPayload("MALFORMED-MONEY", { reportTotal, paidTotal: 25 }),
+      );
+
+      render(<PaidReportAdmin />);
+      expect(await screen.findByText("MALFORMED-MONEY")).toBeTruthy();
+      const totalCard = screen
+        .getByText("Net Total (SAR)", { selector: "span" })
+        .closest("div");
+      expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+      expect(cellsForConfirmation("MALFORMED-MONEY")[14].textContent).toBe(
+        "N/A",
+      );
+    },
+  );
+
+  it("rejects a nonzero subtotal for an explicitly empty financial scope", async () => {
+    const payload = reportPayload("EMPTY-SCOPE");
+    payload.data = [];
+    payload.totalDocuments = 0;
+    payload.scorecards = {
+      ...payload.scorecards,
+      totalAmount: 99,
+      paidAmount: 0,
+      breakdownTotals: {},
+      financialMetadata: {
+        netFallback: 0,
+        unavailable: 0,
+        foreignCurrency: 0,
+      },
+      financialIncludedCount: 0,
+    };
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(payload);
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("No paid breakdown records found.")).toBeTruthy();
+    const totalCard = screen
+      .getByText("Net Total (SAR)", { selector: "span" })
+      .closest("div");
+    expect(totalCard.querySelector("strong").textContent).toBe("N/A");
   });
 
   it("includes room details and booking source in paid exports", async () => {

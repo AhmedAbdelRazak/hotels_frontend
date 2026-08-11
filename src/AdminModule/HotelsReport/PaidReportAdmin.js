@@ -47,6 +47,7 @@ const EMPTY_SCORECARDS = Object.freeze({
 	totalAmount: null,
 	paidAmount: 0,
 	breakdownTotals: {},
+	financialCoverage: null,
 });
 
 const safeNumber = (value) => {
@@ -60,14 +61,22 @@ const formatMoney = (value, locale = "en-US") =>
 		maximumFractionDigits: 2,
 	});
 
+const finiteMoneyCentsOrNull = (value) => {
+	if (typeof value !== "number" || !Number.isFinite(value)) return null;
+	const cents = Math.round(value * 100);
+	return Number.isSafeInteger(cents) ? cents : null;
+};
+
 const finiteMoneyOrNull = (value) => {
-	if (value === null || value === undefined || value === "") return null;
-	const parsed = Number(value);
-	return Number.isFinite(parsed) ? parsed : null;
+	const cents = finiteMoneyCentsOrNull(value);
+	return cents === null ? null : cents / 100;
 };
 
 const reportTotalAmountOrNull = (reservation) => {
 	if (reservation?.report_total_available !== true) return null;
+	if (String(reservation?.financial_totals_currency || "").toUpperCase() !== "SAR") {
+		return null;
+	}
 	return finiteMoneyOrNull(reservation?.report_total_amount);
 };
 
@@ -75,6 +84,73 @@ const formatOptionalMoney = (value, locale, unavailableLabel) =>
 	value === null || value === undefined
 		? unavailableLabel
 		: formatMoney(value, locale);
+
+const nonNegativeIntegerOrNull = (value) => {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+		? value
+		: null;
+};
+
+const resolveScorecardFinancialCoverage = (
+	scorecardPayload,
+	expectedScopeCount = null,
+) => {
+	const metadata = scorecardPayload?.financialMetadata;
+	if (!metadata || typeof metadata !== "object") return null;
+
+	const includedCount = nonNegativeIntegerOrNull(
+		scorecardPayload?.financialIncludedCount,
+	);
+	const unavailableCount = nonNegativeIntegerOrNull(metadata.unavailable);
+	const foreignCurrencyCount = nonNegativeIntegerOrNull(
+		metadata.foreignCurrency,
+	);
+	const netFallbackCount = nonNegativeIntegerOrNull(metadata.netFallback);
+	if (
+		includedCount === null ||
+		unavailableCount === null ||
+		foreignCurrencyCount === null ||
+		netFallbackCount === null
+	) {
+		return null;
+	}
+
+	const excludedCount = unavailableCount + foreignCurrencyCount;
+	const scopeCount = includedCount + excludedCount;
+	if (!Number.isSafeInteger(excludedCount) || !Number.isSafeInteger(scopeCount)) {
+		return null;
+	}
+	if (netFallbackCount > includedCount + foreignCurrencyCount) return null;
+	if (expectedScopeCount !== null && scopeCount !== expectedScopeCount) return null;
+	return {
+		includedCount,
+		unavailableCount,
+		foreignCurrencyCount,
+		excludedCount,
+		scopeCount,
+		netFallbackCount,
+	};
+};
+
+const sumMoneyValues = (values) => {
+	let totalCents = 0;
+	for (const value of values) {
+		const cents = finiteMoneyCentsOrNull(value);
+		if (cents === null || !Number.isSafeInteger(totalCents + cents)) return null;
+		totalCents += cents;
+	}
+	return totalCents / 100;
+};
+
+const responseTotalModesMatch = (payload, rows, expectedMode) => {
+	const modeMatches = (mode) =>
+		typeof mode === "string" && mode.trim().toLowerCase() === expectedMode;
+	return (
+		modeMatches(payload?.totalMode) &&
+		modeMatches(payload?.scorecards?.totalMode) &&
+		rows.every((row) => modeMatches(row?.report_total_mode))
+	);
+};
 
 const normalizeAppliedDateRanges = (dateRanges) => {
 	if (!Array.isArray(dateRanges) || !dateRanges.length) return [];
@@ -307,6 +383,71 @@ const PaidReportAdmin = () => {
 			totalPaid: isArabic ? "إجمالي المدفوع (ر.س)" : "Total Paid (SAR)",
 			grossTotal: isArabic ? "الإجمالي (ر.س)" : "Gross Total (SAR)",
 			netTotal: isArabic ? "الصافي (ر.س)" : "Net Total (SAR)",
+			availableGrossSubtotal: isArabic
+				? "المجموع الفرعي الإجمالي المتاح (ر.س)"
+				: "Available Gross Subtotal (SAR)",
+			availableNetSubtotal: isArabic
+				? "المجموع الفرعي الصافي المتاح (ر.س)"
+				: "Available Net Subtotal (SAR)",
+			financialCoverage: ({
+				includedCount,
+				scopeCount,
+				excludedCount,
+				netFallbackCount,
+			}) => {
+				const fallbackNote = netFallbackCount
+					? isArabic
+						? ` استُخدم الإجمالي الموثوق بدلاً من الصافي في ${netFallbackCount} حجز.`
+						: ` Verified Gross was used when Net was unavailable for ${netFallbackCount} reservation(s).`
+					: "";
+				const coverageNote = excludedCount
+					? isArabic
+						? `تغطية الإجماليات الموثوقة بالريال السعودي: ${includedCount}/${scopeCount} حجزًا ضمن نطاق الفندق والتاريخ. استُبعد ${excludedCount} من هذا المجموع الفرعي لعدم توفر الإجمالي المحدد.`
+						: `Verified SAR total coverage: ${includedCount}/${scopeCount} reservations in this hotel/date scope. ${excludedCount} excluded from this subtotal because the selected total is unavailable.`
+					: "";
+				return `${coverageNote}${fallbackNote} ${
+					isArabic ? "المبالغ المدفوعة لم تتغير." : "Paid amounts are unchanged."
+				}`.trim();
+			},
+			tableFinancialCoverage: ({
+				includedCount,
+				rowCount,
+				excludedCount,
+				netFallbackCount,
+			}) => {
+				const selectedNote = excludedCount
+					? isArabic
+						? `يعتمد المجموع الفرعي والمتبقي على الصفوف المتاحة بالريال السعودي فقط (${includedCount}/${rowCount})؛ وتظل الصفوف المستبعدة «غير متاح».`
+						: `Selected subtotal and remaining use available SAR rows only (${includedCount}/${rowCount}); excluded rows remain N/A.`
+					: "";
+				const fallbackNote = netFallbackCount
+					? isArabic
+						? ` استُخدم الإجمالي الموثوق بدلاً من الصافي في ${netFallbackCount} صف.`
+						: ` Verified Gross was used when Net was unavailable in ${netFallbackCount} row(s).`
+					: "";
+				return `${selectedNote}${fallbackNote} ${
+					isArabic ? "تشمل المبالغ المدفوعة جميع الصفوف." : "Paid amounts include all rows."
+				}`.trim();
+			},
+			exportPartialTotalsRow: ({
+				includedCount,
+				rowCount,
+				netFallbackCount,
+			}) =>
+				isArabic
+					? `الإجماليات — الصفوف المتاحة للإجمالي المحدد والمتبقي: ${includedCount}/${rowCount}${
+							netFallbackCount
+								? `؛ استُخدم الإجمالي بدل الصافي: ${netFallbackCount}`
+								: ""
+						  }`
+					: `Totals — selected total/remaining available rows: ${includedCount}/${rowCount}${
+							netFallbackCount
+								? `; Gross fallback for Net: ${netFallbackCount}`
+								: ""
+						  }`,
+			availableSubtotalRow: isArabic
+				? "المجموع الفرعي المتاح"
+				: "Available subtotal",
 			remaining: isArabic ? "المتبقي (ر.س)" : "Remaining (SAR)",
 			details: isArabic ? "التفاصيل" : "Details",
 			viewDetails: isArabic ? "عرض التفاصيل" : "View Details",
@@ -328,6 +469,10 @@ const PaidReportAdmin = () => {
 		totalMode === REPORT_TOTAL_MODES.GROSS
 			? labels.grossTotal
 			: labels.netTotal;
+	const selectedAvailableSubtotalLabel =
+		totalMode === REPORT_TOTAL_MODES.GROSS
+			? labels.availableGrossSubtotal
+			: labels.availableNetSubtotal;
 	const appliedDateRangesSignature = useMemo(
 		() => dateRangesKey(appliedDateFilter.dateRanges),
 		[appliedDateFilter.dateRanges],
@@ -426,14 +571,10 @@ const PaidReportAdmin = () => {
 			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
 				return;
 			}
+			if (!responseTotalModesMatch(firstPayload, list, totalMode)) {
+				throw new Error("Paid report total mode mismatch");
+			}
 			const scorecardPayload = firstPayload.scorecards;
-			const fallbackReportTotals = list.map(reportTotalAmountOrNull);
-			const fallbackTotalAvailable = fallbackReportTotals.every(
-				(amount) => amount !== null,
-			);
-			const fallbackTotalAmount = fallbackTotalAvailable
-				? fallbackReportTotals.reduce((sum, amount) => sum + amount, 0)
-				: null;
 			const fallbackPaidAmount = list.reduce(
 				(sum, reservation) =>
 					sum +
@@ -448,19 +589,23 @@ const PaidReportAdmin = () => {
 					),
 				0,
 			);
-			const financialMetadata = scorecardPayload?.financialMetadata;
-			const hasUnavailableScorecardTotals =
-				safeNumber(financialMetadata?.unavailable) > 0 ||
-				safeNumber(financialMetadata?.foreignCurrency) > 0 ||
-				!fallbackTotalAvailable;
+			const financialCoverage = resolveScorecardFinancialCoverage(
+				scorecardPayload,
+				searchTerm ? null : firstPage.totalDocuments,
+			);
 			const hasApiTotalAmount =
 				scorecardPayload &&
 				Object.prototype.hasOwnProperty.call(scorecardPayload, "totalAmount");
-			const scorecardTotalAmount = hasApiTotalAmount
-				? hasUnavailableScorecardTotals
-					? null
-					: finiteMoneyOrNull(scorecardPayload.totalAmount)
-				: fallbackTotalAmount;
+			const apiTotalAmount = hasApiTotalAmount
+				? finiteMoneyOrNull(scorecardPayload.totalAmount)
+				: null;
+			const scorecardTotalAmount = financialCoverage
+				? financialCoverage.includedCount > 0
+					? apiTotalAmount
+					: financialCoverage.scopeCount === 0 && apiTotalAmount === 0
+						? 0
+						: null
+				: null;
 			setReservations(list);
 			setScorecards({
 				totalAmount: scorecardTotalAmount,
@@ -468,6 +613,7 @@ const PaidReportAdmin = () => {
 					scorecardPayload?.paidAmount ?? fallbackPaidAmount,
 				),
 				breakdownTotals: scorecardPayload?.breakdownTotals || {},
+				financialCoverage,
 			});
 		} catch (err) {
 			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
@@ -572,14 +718,18 @@ const PaidReportAdmin = () => {
 					: breakdownKeys.reduce(
 							(sum, key) => sum + safeNumber(breakdown[key]),
 							0,
-					  );
+						  );
 			const totalAmount = reportTotalAmountOrNull(reservation);
+			const totalAmountCents = finiteMoneyCentsOrNull(totalAmount);
+			const paidTotalCents = finiteMoneyCentsOrNull(paidTotal);
 			return {
 				...reservation,
 				paidTotal,
 				totalAmount,
 				remainingAmount:
-					totalAmount === null ? null : Math.max(totalAmount - paidTotal, 0),
+					totalAmountCents === null || paidTotalCents === null
+						? null
+						: Math.max(totalAmountCents - paidTotalCents, 0) / 100,
 			};
 		});
 	}, [reservations]);
@@ -597,17 +747,34 @@ const PaidReportAdmin = () => {
 			(sum, reservation) => sum + safeNumber(reservation?.paidTotal),
 			0,
 		);
-		const totalAmountAvailable = rows.every(
+		const availableRows = rows.filter(
 			(reservation) => reservation?.totalAmount !== null,
 		);
-		const totalAmount = totalAmountAvailable
-			? rows.reduce((sum, reservation) => sum + reservation.totalAmount, 0)
+		const hasAvailableRows = availableRows.length > 0 || rows.length === 0;
+		const totalAmount = hasAvailableRows
+			? sumMoneyValues(availableRows.map((reservation) => reservation.totalAmount))
 			: null;
-		const remainingAmount = totalAmountAvailable
-			? rows.reduce((sum, reservation) => sum + reservation.remainingAmount, 0)
+		const remainingAmount = hasAvailableRows
+			? sumMoneyValues(
+					availableRows.map((reservation) => reservation.remainingAmount),
+			  )
 			: null;
-		return { breakdownTotals, totalPaid, totalAmount, remainingAmount };
-	}, [rows]);
+		return {
+			breakdownTotals,
+			totalPaid,
+			totalAmount,
+			remainingAmount,
+			includedCount: availableRows.length,
+			excludedCount: rows.length - availableRows.length,
+			netFallbackCount:
+				totalMode === REPORT_TOTAL_MODES.NET
+					? rows.filter(
+							(reservation) =>
+								reservation?.report_total_net_fallback === true,
+						  ).length
+					: 0,
+		};
+	}, [rows, totalMode]);
 
 	const breakdownSummary = useMemo(() => {
 		const fromApi = scorecards.breakdownTotals;
@@ -619,6 +786,37 @@ const PaidReportAdmin = () => {
 		}
 		return tableTotals.breakdownTotals;
 	}, [scorecards.breakdownTotals, tableTotals]);
+
+	const hasPartialScorecardCoverage =
+		scorecards.financialCoverage?.includedCount > 0 &&
+		scorecards.financialCoverage?.excludedCount > 0;
+	const scorecardTotalLabel = hasPartialScorecardCoverage
+		? selectedAvailableSubtotalLabel
+		: selectedTotalLabel;
+	const scorecardCoverage = scorecards.financialCoverage
+		? {
+				...scorecards.financialCoverage,
+				netFallbackCount:
+					totalMode === REPORT_TOTAL_MODES.NET
+						? scorecards.financialCoverage.netFallbackCount
+						: 0,
+			  }
+		: null;
+	const scorecardCoverageMessage =
+		scorecardCoverage &&
+		(scorecardCoverage.excludedCount > 0 ||
+			scorecardCoverage.netFallbackCount > 0)
+			? labels.financialCoverage(scorecardCoverage)
+			: "";
+	const tableCoverageMessage =
+		tableTotals.excludedCount > 0 || tableTotals.netFallbackCount > 0
+			? labels.tableFinancialCoverage({
+					includedCount: tableTotals.includedCount,
+					rowCount: rows.length,
+					excludedCount: tableTotals.excludedCount,
+					netFallbackCount: tableTotals.netFallbackCount,
+			  })
+			: "";
 
 	const selectedHotelName = useMemo(() => {
 		if (!selectedHotelId) return "";
@@ -685,7 +883,14 @@ const PaidReportAdmin = () => {
 		});
 
 		const totalsRow = {
-			[labels.name]: labels.totalRow,
+			[labels.name]:
+				tableTotals.excludedCount > 0 || tableTotals.netFallbackCount > 0
+					? labels.exportPartialTotalsRow({
+							includedCount: tableTotals.includedCount,
+							rowCount: rows.length,
+							netFallbackCount: tableTotals.netFallbackCount,
+						  })
+					: labels.totalRow,
 			[labels.confirmation]: "",
 			[labels.hotel]: "",
 			[labels.roomType]: "",
@@ -759,6 +964,7 @@ const PaidReportAdmin = () => {
 		setSelectedReservation((prev) =>
 			prev && prev._id === updated._id ? { ...prev, ...updated } : prev,
 		);
+		fetchReport();
 	};
 
 	return (
@@ -823,7 +1029,7 @@ const PaidReportAdmin = () => {
 				<>
 					<ScorecardsRow>
 						<Scorecard>
-							<span>{selectedTotalLabel}</span>
+							<span>{scorecardTotalLabel}</span>
 							<strong>
 								{formatOptionalMoney(
 									scorecards.totalAmount,
@@ -837,6 +1043,14 @@ const PaidReportAdmin = () => {
 							<strong>{formatMoney(scorecards.paidAmount, numberLocale)}</strong>
 						</Scorecard>
 					</ScorecardsRow>
+					{scorecardCoverageMessage ? (
+						<FinancialCoverageNotice
+							data-testid='paid-scorecard-coverage-notice'
+							role='status'
+						>
+							{scorecardCoverageMessage}
+						</FinancialCoverageNotice>
+					) : null}
 					<BreakdownTotals>
 						<BreakdownTotalsTitle>
 							{labels.breakdownTotalsTitle}
@@ -855,6 +1069,15 @@ const PaidReportAdmin = () => {
 					{rows.length === 0 ? (
 						<EmptyState>{labels.emptyData}</EmptyState>
 					) : (
+						<>
+							{tableCoverageMessage ? (
+								<FinancialCoverageNotice
+									data-testid='paid-table-coverage-notice'
+									role='status'
+								>
+									{tableCoverageMessage}
+								</FinancialCoverageNotice>
+							) : null}
 						<TableWrapper>
 							<StyledTable $isArabic={isArabic}>
 						<thead>
@@ -947,7 +1170,11 @@ const PaidReportAdmin = () => {
 						</tbody>
 						<tfoot>
 							<tr>
-								<td>{labels.totalRow}</td>
+								<td>
+									{tableTotals.excludedCount > 0
+										? labels.availableSubtotalRow
+										: labels.totalRow}
+								</td>
 								<td></td>
 								<td></td>
 								<td></td>
@@ -980,6 +1207,7 @@ const PaidReportAdmin = () => {
 						</tfoot>
 							</StyledTable>
 						</TableWrapper>
+						</>
 					)}
 				</>
 			)}
@@ -1155,6 +1383,18 @@ const ScorecardsRow = styled.div`
 	flex-wrap: wrap;
 	gap: 12px;
 	margin-bottom: 16px;
+`;
+
+const FinancialCoverageNotice = styled.div`
+	margin: -6px 0 16px;
+	padding: 8px 12px;
+	border: 1px solid #e5c16c;
+	border-radius: 8px;
+	background: #fff9e8;
+	color: #6b4f0d;
+	font-size: 0.82rem;
+	font-weight: 600;
+	line-height: 1.55;
 `;
 
 const Scorecard = styled.div`
