@@ -5,12 +5,23 @@ import * as XLSX from "xlsx";
 import { isAuthenticated } from "../../auth";
 import { useCartContext } from "../../cart_context";
 import {
-	gettingHotelDetailsForAdmin,
+	gettingHotelDetailsForAdminAll,
 	getPaidBreakdownReportAdmin,
 } from "../apiAdmin";
 import MoreDetails from "../AllReservation/MoreDetails";
 import { getReservationRoomSummary } from "../AllReservation/reservationRoomDetails";
 import PaidReportDateControls from "./PaidReportDateControls";
+import ReportTotalModeToggle from "./ReportTotalModeToggle";
+import {
+	DEFAULT_REPORT_TOTAL_MODE,
+	REPORT_TOTAL_MODES,
+	normalizeReportTotalMode,
+} from "./reportTotalMode";
+import {
+	getPaidReportCurrentMonth,
+	getPaidReportCurrentYear,
+	resolvePaidReportPeriods,
+} from "./paidReportDateFilter";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 
 const { Option } = Select;
@@ -26,14 +37,14 @@ const breakdownKeys = [
 	"paid_no_show",
 ];
 
-const EMPTY_DATE_FILTER = Object.freeze({
-	dateBy: "checkin_date",
-	dateFrom: "",
-	dateTo: "",
-});
+const PREFERRED_PAID_REPORT_HOTEL_ID = "6a40b6a1a6efe70450536038";
+const PAID_REPORT_PAGE_LIMIT = 500;
+const MAX_PAID_REPORT_PAGES = 100;
+const MAX_PAID_REPORT_DOCUMENTS =
+	PAID_REPORT_PAGE_LIMIT * MAX_PAID_REPORT_PAGES;
 
 const EMPTY_SCORECARDS = Object.freeze({
-	totalAmount: 0,
+	totalAmount: null,
 	paidAmount: 0,
 	breakdownTotals: {},
 });
@@ -48,6 +59,130 @@ const formatMoney = (value, locale = "en-US") =>
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	});
+
+const finiteMoneyOrNull = (value) => {
+	if (value === null || value === undefined || value === "") return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+};
+
+const reportTotalAmountOrNull = (reservation) => {
+	if (reservation?.report_total_available !== true) return null;
+	return finiteMoneyOrNull(reservation?.report_total_amount);
+};
+
+const formatOptionalMoney = (value, locale, unavailableLabel) =>
+	value === null || value === undefined
+		? unavailableLabel
+		: formatMoney(value, locale);
+
+const normalizeAppliedDateRanges = (dateRanges) => {
+	if (!Array.isArray(dateRanges) || !dateRanges.length) return [];
+	return Array.from(
+		new Map(
+			dateRanges
+				.filter((range) => range && typeof range === "object")
+				.map((range) => ({
+					dateFrom: String(range.dateFrom || "").trim(),
+					dateTo: String(range.dateTo || "").trim(),
+				}))
+				.filter((range) => range.dateFrom && range.dateTo)
+				.map((range) => [`${range.dateFrom}|${range.dateTo}`, range]),
+		).values(),
+	).sort(
+		(left, right) =>
+			left.dateFrom.localeCompare(right.dateFrom) ||
+			left.dateTo.localeCompare(right.dateTo),
+	);
+};
+
+const dateRangesKey = (dateRanges) =>
+	normalizeAppliedDateRanges(dateRanges)
+		.map((range) => `${range.dateFrom}..${range.dateTo}`)
+		.join(",");
+
+const invalidPaidReportPagination = () =>
+	new Error("Invalid or excessive paid report pagination metadata");
+
+const validatePaidReportPage = (
+	payload,
+	requestedPage,
+	expectedPagination = null,
+) => {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+		throw invalidPaidReportPagination();
+	}
+
+	const { data, totalDocuments, page, limit } = payload;
+	if (
+		!Array.isArray(data) ||
+		!Number.isSafeInteger(totalDocuments) ||
+		totalDocuments < 0 ||
+		totalDocuments > MAX_PAID_REPORT_DOCUMENTS ||
+		!Number.isSafeInteger(page) ||
+		page !== requestedPage ||
+		!Number.isSafeInteger(limit) ||
+		limit < 1 ||
+		limit > PAID_REPORT_PAGE_LIMIT ||
+		data.length > limit
+	) {
+		throw invalidPaidReportPagination();
+	}
+
+	const totalPages = Math.max(1, Math.ceil(totalDocuments / limit));
+	if (totalPages > MAX_PAID_REPORT_PAGES) {
+		throw invalidPaidReportPagination();
+	}
+	if (
+		expectedPagination &&
+		(totalDocuments !== expectedPagination.totalDocuments ||
+			limit !== expectedPagination.limit ||
+			totalPages !== expectedPagination.totalPages)
+	) {
+		throw invalidPaidReportPagination();
+	}
+
+	return { data, totalDocuments, limit, totalPages };
+};
+
+const mergePaidReportPages = (pageLists, expectedTotalDocuments) => {
+	const reservationsById = new Map();
+	pageLists.forEach((pageList) => {
+		pageList.forEach((reservation) => {
+			const reservationId = String(reservation?._id || "").trim();
+			if (!reservationId) throw invalidPaidReportPagination();
+			if (!reservationsById.has(reservationId)) {
+				reservationsById.set(reservationId, reservation);
+			}
+		});
+	});
+
+	const merged = Array.from(reservationsById.values());
+	if (merged.length !== expectedTotalDocuments) {
+		throw invalidPaidReportPagination();
+	}
+	return merged;
+};
+
+const createInitialPaidReportDateFilter = (referenceDate = new Date()) => {
+	const year = getPaidReportCurrentYear("hijri", referenceDate);
+	const month = getPaidReportCurrentMonth("hijri", referenceDate);
+	const resolved = resolvePaidReportPeriods({
+		calendarType: "hijri",
+		year: year == null ? "all" : String(year),
+		months: month == null ? ["all"] : [String(month)],
+		referenceDate,
+	});
+
+	return {
+		dateBy: "checkin_date",
+		dateFrom: resolved.error ? "" : resolved.dateFrom,
+		dateTo: resolved.error ? "" : resolved.dateTo,
+		dateRanges: resolved.error
+			? []
+			: normalizeAppliedDateRanges(resolved.dateRanges),
+	};
+};
 
 const formatDate = (value, locale = "en-US", fallback = "N/A") =>
 	formatSaudiGregorianDate(value, {
@@ -98,7 +233,10 @@ const PaidReportAdmin = () => {
 	const [selectedHotelId, setSelectedHotelId] = useState("");
 	const [searchTerm, setSearchTerm] = useState("");
 	const [searchBoxValue, setSearchBoxValue] = useState("");
-	const [appliedDateFilter, setAppliedDateFilter] = useState(EMPTY_DATE_FILTER);
+	const [appliedDateFilter, setAppliedDateFilter] = useState(() =>
+		createInitialPaidReportDateFilter(),
+	);
+	const [totalMode, setTotalMode] = useState(DEFAULT_REPORT_TOTAL_MODE);
 	const [loading, setLoading] = useState(false);
 	const [reservations, setReservations] = useState([]);
 	const [scorecards, setScorecards] = useState(EMPTY_SCORECARDS);
@@ -138,40 +276,44 @@ const PaidReportAdmin = () => {
 			source: isArabic ? "\u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632" : "Booking Source",
 			breakdown: {
 				paid_online_via_link: isArabic
-					? "مدفوع أونلاين (رابط الدفع)"
-					: "Paid Online (Link)",
+					? "مدفوع أونلاين (رابط الدفع) (ر.س)"
+					: "Paid Online (Link) (SAR)",
 				paid_at_hotel_cash: isArabic
-					? "مدفوع في الفندق (نقداً)"
-					: "Paid at Hotel (Cash)",
+					? "مدفوع في الفندق (نقداً) (ر.س)"
+					: "Paid at Hotel (Cash) (SAR)",
 				paid_at_hotel_card: isArabic
-					? "مدفوع في الفندق (بطاقة)"
-					: "Paid at Hotel (Card)",
+					? "مدفوع في الفندق (بطاقة) (ر.س)"
+					: "Paid at Hotel (Card) (SAR)",
 				paid_to_hotel: isArabic
-					? "\u0645\u062f\u0641\u0648\u0639 \u0625\u0644\u0649 \u0627\u0644\u0641\u0646\u062f\u0642"
-					: "Paid To Hotel",
+					? "\u0645\u062f\u0641\u0648\u0639 \u0625\u0644\u0649 \u0627\u0644\u0641\u0646\u062f\u0642 (ر.س)"
+					: "Paid To Hotel (SAR)",
 				paid_online_jannatbooking: isArabic
-					? "مدفوع أونلاين (جنات بوكينغ)"
-					: "Paid Online (Jannat Booking)",
+					? "مدفوع أونلاين (جنات بوكينغ) (ر.س)"
+					: "Paid Online (Jannat Booking) (SAR)",
 				paid_online_other_platforms: isArabic
-					? "مدفوع أونلاين (منصات أخرى)"
-					: "Paid Online (Other Platforms)",
+					? "مدفوع أونلاين (منصات أخرى) (ر.س)"
+					: "Paid Online (Other Platforms) (SAR)",
 				paid_online_via_instapay: isArabic
-					? "مدفوع أونلاين (إنستاباي)"
-					: "Paid Online (InstaPay)",
-				paid_no_show: isArabic ? "مدفوع عدم حضور" : "Paid No Show",
+					? "مدفوع أونلاين (إنستاباي) (ر.س)"
+					: "Paid Online (InstaPay) (SAR)",
+				paid_no_show: isArabic
+					? "مدفوع عدم حضور (ر.س)"
+					: "Paid No Show (SAR)",
 			},
 			paidBreakdown: isArabic ? "تفاصيل الدفع" : "Paid Breakdown",
 			breakdownTotalsTitle: isArabic
-				? "إجمالي تفاصيل الدفع"
-				: "Breakdown Totals",
-			totalPaid: isArabic ? "إجمالي المدفوع" : "Total Paid",
-			totalAmount: isArabic ? "إجمالي المبلغ" : "Total Amount",
-			remaining: isArabic ? "المتبقي" : "Remaining",
+				? "إجمالي تفاصيل الدفع (ر.س)"
+				: "Breakdown Totals (SAR)",
+			totalPaid: isArabic ? "إجمالي المدفوع (ر.س)" : "Total Paid (SAR)",
+			grossTotal: isArabic ? "الإجمالي (ر.س)" : "Gross Total (SAR)",
+			netTotal: isArabic ? "الصافي (ر.س)" : "Net Total (SAR)",
+			remaining: isArabic ? "المتبقي (ر.س)" : "Remaining (SAR)",
 			details: isArabic ? "التفاصيل" : "Details",
 			viewDetails: isArabic ? "عرض التفاصيل" : "View Details",
 			totalRow: isArabic ? "الإجمالي" : "Total",
-			scoreTotalAmount: isArabic ? "إجمالي المبلغ" : "Total Amount",
-			scorePaidAmount: isArabic ? "إجمالي المدفوع" : "Paid Amount",
+			scorePaidAmount: isArabic
+				? "إجمالي المدفوع (ر.س)"
+				: "Paid Amount (SAR)",
 			na: isArabic ? "غير متاح" : "N/A",
 			missingHotel: isArabic
 				? "بيانات الفندق غير متوفرة لهذا الحجز."
@@ -181,6 +323,14 @@ const PaidReportAdmin = () => {
 				: "Failed to load paid breakdown report",
 		}),
 		[isArabic],
+	);
+	const selectedTotalLabel =
+		totalMode === REPORT_TOTAL_MODES.GROSS
+			? labels.grossTotal
+			: labels.netTotal;
+	const appliedDateRangesSignature = useMemo(
+		() => dateRangesKey(appliedDateFilter.dateRanges),
+		[appliedDateFilter.dateRanges],
 	);
 
 	useEffect(() => {
@@ -193,7 +343,7 @@ const PaidReportAdmin = () => {
 
 	const fetchHotels = useCallback(() => {
 		if (!user?._id || !token) return;
-		gettingHotelDetailsForAdmin(user._id, token)
+		gettingHotelDetailsForAdminAll(user._id, token, "summary=true")
 			.then((data) => {
 				const list = extractHotels(data)
 					.filter(Boolean)
@@ -202,11 +352,23 @@ const PaidReportAdmin = () => {
 							sensitivity: "base",
 						}),
 					);
+				if (!mountedRef.current) return;
 				setHotels(list);
+				const preferredHotel = list.find(
+					(hotel) =>
+						String(hotel?._id) === PREFERRED_PAID_REPORT_HOTEL_ID &&
+						hotel?.activateHotel === true &&
+						hotel?.xHotelProActive !== false,
+				);
+				if (preferredHotel) {
+					setSelectedHotelId((currentHotelId) =>
+						currentHotelId ? currentHotelId : PREFERRED_PAID_REPORT_HOTEL_ID,
+					);
+				}
 			})
 			.catch((err) => {
 				console.error("Failed to load hotels", err);
-				setHotels([]);
+				if (mountedRef.current) setHotels([]);
 			});
 	}, [user?._id, token]);
 
@@ -220,27 +382,58 @@ const PaidReportAdmin = () => {
 		reportRequestSequence.current = requestId;
 		setLoading(true);
 		try {
-			const data = await getPaidBreakdownReportAdmin(user._id, token, {
+			const requestFilters = {
 				hotelId: selectedHotelId,
 				searchQuery: searchTerm,
 				dateBy: appliedDateFilter.dateBy,
 				dateFrom: appliedDateFilter.dateFrom,
 				dateTo: appliedDateFilter.dateTo,
-			});
+				dateRanges: normalizeAppliedDateRanges(appliedDateFilter.dateRanges),
+				totalMode,
+				limit: PAID_REPORT_PAGE_LIMIT,
+			};
+			const firstPayload = await getPaidBreakdownReportAdmin(
+				user._id,
+				token,
+				{ ...requestFilters, page: 1 },
+			);
 			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
 				return;
 			}
 
-			const list = Array.isArray(data?.data)
-				? data.data
-				: Array.isArray(data)
-				  ? data
-				  : [];
-			const scorecardPayload = data?.scorecards;
-			const fallbackTotalAmount = list.reduce(
-				(sum, reservation) => sum + safeNumber(reservation?.total_amount),
-				0,
+			const firstPage = validatePaidReportPage(firstPayload, 1);
+			const pageLists = [firstPage.data];
+			for (let page = 2; page <= firstPage.totalPages; page += 1) {
+				if (!mountedRef.current || requestId !== reportRequestSequence.current) {
+					return;
+				}
+				const pagePayload = await getPaidBreakdownReportAdmin(
+					user._id,
+					token,
+					{ ...requestFilters, page, includeScorecards: false },
+				);
+				if (!mountedRef.current || requestId !== reportRequestSequence.current) {
+					return;
+				}
+				const validatedPage = validatePaidReportPage(pagePayload, page, firstPage);
+				pageLists.push(validatedPage.data);
+			}
+
+			const list = mergePaidReportPages(
+				pageLists,
+				firstPage.totalDocuments,
 			);
+			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
+				return;
+			}
+			const scorecardPayload = firstPayload.scorecards;
+			const fallbackReportTotals = list.map(reportTotalAmountOrNull);
+			const fallbackTotalAvailable = fallbackReportTotals.every(
+				(amount) => amount !== null,
+			);
+			const fallbackTotalAmount = fallbackTotalAvailable
+				? fallbackReportTotals.reduce((sum, amount) => sum + amount, 0)
+				: null;
 			const fallbackPaidAmount = list.reduce(
 				(sum, reservation) =>
 					sum +
@@ -255,10 +448,25 @@ const PaidReportAdmin = () => {
 					),
 				0,
 			);
+			const financialMetadata = scorecardPayload?.financialMetadata;
+			const hasUnavailableScorecardTotals =
+				safeNumber(financialMetadata?.unavailable) > 0 ||
+				safeNumber(financialMetadata?.foreignCurrency) > 0 ||
+				!fallbackTotalAvailable;
+			const hasApiTotalAmount =
+				scorecardPayload &&
+				Object.prototype.hasOwnProperty.call(scorecardPayload, "totalAmount");
+			const scorecardTotalAmount = hasApiTotalAmount
+				? hasUnavailableScorecardTotals
+					? null
+					: finiteMoneyOrNull(scorecardPayload.totalAmount)
+				: fallbackTotalAmount;
 			setReservations(list);
 			setScorecards({
-				totalAmount: safeNumber(scorecardPayload?.totalAmount ?? fallbackTotalAmount),
-				paidAmount: safeNumber(scorecardPayload?.paidAmount ?? fallbackPaidAmount),
+				totalAmount: scorecardTotalAmount,
+				paidAmount: safeNumber(
+					scorecardPayload?.paidAmount ?? fallbackPaidAmount,
+				),
 				breakdownTotals: scorecardPayload?.breakdownTotals || {},
 			});
 		} catch (err) {
@@ -282,6 +490,8 @@ const PaidReportAdmin = () => {
 		appliedDateFilter.dateBy,
 		appliedDateFilter.dateFrom,
 		appliedDateFilter.dateTo,
+		appliedDateFilter.dateRanges,
+		totalMode,
 		labels.loadError,
 	]);
 
@@ -314,22 +524,41 @@ const PaidReportAdmin = () => {
 		setSelectedHotelId(value || "");
 	};
 
+	const handleTotalModeChange = useCallback(
+		(nextMode) => {
+			const normalizedMode = normalizeReportTotalMode(nextMode);
+			if (normalizedMode === totalMode) return;
+			reportRequestSequence.current += 1;
+			setTotalMode(normalizedMode);
+		},
+		[totalMode],
+	);
+
 	const handleApplyDateFilter = useCallback(
 		(nextFilter) => {
+			const nextDateRanges = normalizeAppliedDateRanges(nextFilter?.dateRanges);
+			const nextAppliedFilter = {
+				dateBy: nextFilter?.dateBy || "checkin_date",
+				dateFrom: nextDateRanges.length ? "" : nextFilter?.dateFrom || "",
+				dateTo: nextDateRanges.length ? "" : nextFilter?.dateTo || "",
+				dateRanges: nextDateRanges,
+			};
 			if (
-				appliedDateFilter.dateBy === nextFilter.dateBy &&
-				appliedDateFilter.dateFrom === nextFilter.dateFrom &&
-				appliedDateFilter.dateTo === nextFilter.dateTo
+				appliedDateFilter.dateBy === nextAppliedFilter.dateBy &&
+				appliedDateFilter.dateFrom === nextAppliedFilter.dateFrom &&
+				appliedDateFilter.dateTo === nextAppliedFilter.dateTo &&
+				appliedDateRangesSignature === dateRangesKey(nextDateRanges)
 			) {
 				return;
 			}
 			reportRequestSequence.current += 1;
-			setAppliedDateFilter(nextFilter);
+			setAppliedDateFilter(nextAppliedFilter);
 		},
 		[
 			appliedDateFilter.dateBy,
 			appliedDateFilter.dateFrom,
 			appliedDateFilter.dateTo,
+			appliedDateRangesSignature,
 		],
 	);
 
@@ -344,12 +573,13 @@ const PaidReportAdmin = () => {
 							(sum, key) => sum + safeNumber(breakdown[key]),
 							0,
 					  );
-			const totalAmount = safeNumber(reservation?.total_amount);
+			const totalAmount = reportTotalAmountOrNull(reservation);
 			return {
 				...reservation,
 				paidTotal,
 				totalAmount,
-				remainingAmount: Math.max(totalAmount - paidTotal, 0),
+				remainingAmount:
+					totalAmount === null ? null : Math.max(totalAmount - paidTotal, 0),
 			};
 		});
 	}, [reservations]);
@@ -367,14 +597,15 @@ const PaidReportAdmin = () => {
 			(sum, reservation) => sum + safeNumber(reservation?.paidTotal),
 			0,
 		);
-		const totalAmount = rows.reduce(
-			(sum, reservation) => sum + safeNumber(reservation?.totalAmount),
-			0,
+		const totalAmountAvailable = rows.every(
+			(reservation) => reservation?.totalAmount !== null,
 		);
-		const remainingAmount = rows.reduce(
-			(sum, reservation) => sum + safeNumber(reservation?.remainingAmount),
-			0,
-		);
+		const totalAmount = totalAmountAvailable
+			? rows.reduce((sum, reservation) => sum + reservation.totalAmount, 0)
+			: null;
+		const remainingAmount = totalAmountAvailable
+			? rows.reduce((sum, reservation) => sum + reservation.remainingAmount, 0)
+			: null;
 		return { breakdownTotals, totalPaid, totalAmount, remainingAmount };
 	}, [rows]);
 
@@ -413,7 +644,7 @@ const PaidReportAdmin = () => {
 			...breakdownKeys.map((key) => labels.breakdown[key] || key),
 			labels.paidBreakdown,
 			labels.totalPaid,
-			labels.totalAmount,
+			selectedTotalLabel,
 			labels.remaining,
 		];
 
@@ -440,8 +671,8 @@ const PaidReportAdmin = () => {
 				[labels.paidBreakdown]:
 					reservation?.paid_amount_breakdown?.payment_comments || "",
 				[labels.totalPaid]: safeNumber(reservation?.paidTotal),
-				[labels.totalAmount]: safeNumber(reservation?.totalAmount),
-				[labels.remaining]: safeNumber(reservation?.remainingAmount),
+				[selectedTotalLabel]: reservation?.totalAmount ?? "",
+				[labels.remaining]: reservation?.remainingAmount ?? "",
 			};
 
 			breakdownKeys.forEach((key) => {
@@ -464,8 +695,8 @@ const PaidReportAdmin = () => {
 			[labels.checkout]: "",
 			[labels.paidBreakdown]: "",
 			[labels.totalPaid]: safeNumber(tableTotals.totalPaid),
-			[labels.totalAmount]: safeNumber(tableTotals.totalAmount),
-			[labels.remaining]: safeNumber(tableTotals.remainingAmount),
+			[selectedTotalLabel]: tableTotals.totalAmount ?? "",
+			[labels.remaining]: tableTotals.remainingAmount ?? "",
 		};
 
 		breakdownKeys.forEach((key) => {
@@ -496,6 +727,7 @@ const PaidReportAdmin = () => {
 	}, [
 		rows,
 		labels,
+		selectedTotalLabel,
 		selectedHotelName,
 		numberLocale,
 		tableTotals,
@@ -545,13 +777,6 @@ const PaidReportAdmin = () => {
 					))}
 				</Select>
 
-				<PaidReportDateControls
-					isArabic={isArabic}
-					disabled={!selectedHotelId}
-					value={appliedDateFilter}
-					onApply={handleApplyDateFilter}
-				/>
-
 				<SearchRow>
 					<Input
 						placeholder={labels.searchPlaceholder}
@@ -573,6 +798,20 @@ const PaidReportAdmin = () => {
 					</Button>
 				</SearchRow>
 			</ControlsRow>
+			<ReportFilterRow data-testid='paid-report-date-total-row'>
+				<PaidReportDateControls
+					isArabic={isArabic}
+					disabled={!selectedHotelId}
+					value={appliedDateFilter}
+					onApply={handleApplyDateFilter}
+				/>
+				<ReportTotalModeToggle
+					value={totalMode}
+					onChange={handleTotalModeChange}
+					isArabic={isArabic}
+					disabled={!selectedHotelId}
+				/>
+			</ReportFilterRow>
 
 			{!selectedHotelId ? (
 				<EmptyState>{labels.emptySelect}</EmptyState>
@@ -584,8 +823,14 @@ const PaidReportAdmin = () => {
 				<>
 					<ScorecardsRow>
 						<Scorecard>
-							<span>{labels.scoreTotalAmount}</span>
-							<strong>{formatMoney(scorecards.totalAmount, numberLocale)}</strong>
+							<span>{selectedTotalLabel}</span>
+							<strong>
+								{formatOptionalMoney(
+									scorecards.totalAmount,
+									numberLocale,
+									labels.na,
+								)}
+							</strong>
 						</Scorecard>
 						<Scorecard>
 							<span>{labels.scorePaidAmount}</span>
@@ -623,7 +868,7 @@ const PaidReportAdmin = () => {
 								))}
 								<th>{labels.paidBreakdown}</th>
 								<th>{labels.totalPaid}</th>
-								<th>{labels.totalAmount}</th>
+								<th>{selectedTotalLabel}</th>
 								<th>{labels.remaining}</th>
 								<th>{labels.details}</th>
 							</tr>
@@ -677,9 +922,19 @@ const PaidReportAdmin = () => {
 										</EllipsisText>
 									</td>
 									<td>{formatMoney(reservation?.paidTotal, numberLocale)}</td>
-									<td>{formatMoney(reservation?.totalAmount, numberLocale)}</td>
 									<td>
-										{formatMoney(reservation?.remainingAmount, numberLocale)}
+										{formatOptionalMoney(
+											reservation?.totalAmount,
+											numberLocale,
+											labels.na,
+										)}
+									</td>
+									<td>
+										{formatOptionalMoney(
+											reservation?.remainingAmount,
+											numberLocale,
+											labels.na,
+										)}
 									</td>
 									<td>
 										<Button onClick={() => handleOpenDetails(reservation)}>
@@ -706,8 +961,20 @@ const PaidReportAdmin = () => {
 								))}
 								<td></td>
 								<td>{formatMoney(tableTotals.totalPaid, numberLocale)}</td>
-								<td>{formatMoney(tableTotals.totalAmount, numberLocale)}</td>
-								<td>{formatMoney(tableTotals.remainingAmount, numberLocale)}</td>
+								<td>
+									{formatOptionalMoney(
+										tableTotals.totalAmount,
+										numberLocale,
+										labels.na,
+									)}
+								</td>
+								<td>
+									{formatOptionalMoney(
+										tableTotals.remainingAmount,
+										numberLocale,
+										labels.na,
+									)}
+								</td>
 								<td></td>
 							</tr>
 						</tfoot>
@@ -751,11 +1018,23 @@ const ControlsRow = styled.div`
 	flex-wrap: wrap;
 	gap: 10px;
 	align-items: center;
-	margin-bottom: 16px;
+	margin-bottom: 10px;
 
 	@media (max-width: 992px) {
 		align-items: stretch;
 		gap: 10px;
+	}
+`;
+
+const ReportFilterRow = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	margin-bottom: 16px;
+
+	@media (max-width: 992px) {
+		align-items: stretch;
 	}
 `;
 
@@ -833,7 +1112,8 @@ const StyledTable = styled.table`
 		th:first-child,
 		td:first-child {
 			position: sticky;
-			left: 0;
+			left: ${(props) => (props.$isArabic ? "auto" : "0")};
+			right: ${(props) => (props.$isArabic ? "0" : "auto")};
 			background: #fff;
 			z-index: 2;
 		}

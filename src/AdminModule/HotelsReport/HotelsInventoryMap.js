@@ -54,6 +54,13 @@ import {
 	distinctBookingSources as getDistinctBookingSources,
 } from "../apiAdmin";
 import WarningsModal from "./WarningsModal";
+import ReportTotalModeToggle from "./ReportTotalModeToggle";
+import {
+	DEFAULT_REPORT_TOTAL_MODE,
+	REPORT_TOTAL_MODES,
+	normalizeReportTotalMode,
+	reportTotalModeQueryValue,
+} from "./reportTotalMode";
 import {
 	formatSaudiGregorianDate,
 	formatSaudiHijriDate,
@@ -243,6 +250,17 @@ const extractHotels = (payload) => {
 	return firstArray || [];
 };
 
+const extractAggregatePayload = (payload) => {
+	if (
+		payload &&
+		typeof payload === "object" &&
+		Object.prototype.hasOwnProperty.call(payload, "data")
+	) {
+		return payload.data;
+	}
+	return payload;
+};
+
 const hijriMonthsEn = [
 	"Muharram",
 	"Safar",
@@ -324,12 +342,20 @@ const INVENTORY_TEXT = {
 			"Paid Offline": "Paid Offline",
 		},
 		totalAmountSar: "Total Amount (SAR)",
+		grossTotalSar: "Gross Total (SAR)",
+		netTotalSar: "Net Total (SAR)",
+		selectedTotalsUnavailable: "Selected booking totals are unavailable",
+		selectedTotalsUnavailableDescription:
+			"One or more reservations has an unavailable or non-SAR booking total. Gross/Net amounts are shown as N/A; paid and onsite-paid amounts remain unchanged.",
+		notAvailable: "N/A",
 		grossCheckoutBasis: "Gross (checkout-date basis)",
+		netCheckoutBasis: "Net (checkout-date basis)",
 		reservationsCheckedOut: "Reservations checked out",
 		checkinReservationsSelectedPeriod:
 			"Check-in Reservations (Selected Period)",
 		totalCheckins: "Total check-ins",
 		checkinGrossSar: "Check-in gross (SAR)",
+		checkinNetSar: "Check-in net (SAR)",
 		averageOccupancyCapped: "Average Occupancy (capped)",
 		occupiedFormula: "Occupied = min(booked, capacity) per day / room.",
 		roomNights: "Room Nights",
@@ -361,6 +387,10 @@ const INVENTORY_TEXT = {
 		paymentStatusBreakdown: "Payment status breakdown",
 		bookingSourceTotalsCheckoutSar:
 			"Booking source totals by checkout date (SAR)",
+		bookingSourceGrossTotalsCheckoutSar:
+			"Booking source gross totals by checkout date (SAR)",
+		bookingSourceNetTotalsCheckoutSar:
+			"Booking source net totals by checkout date (SAR)",
 		bookingSourceHeader: "Booking source",
 		totalSar: "Total (SAR)",
 		unknown: "Unknown",
@@ -373,9 +403,17 @@ const INVENTORY_TEXT = {
 		onsitePaid: "Onsite paid",
 		noPaymentData: "No payment data in this range",
 		checkinDateTotalsSar: "Checkin date totals by payment status (SAR)",
+		checkinDateGrossTotalsSar:
+			"Check-in date gross totals by payment status (SAR)",
+		checkinDateNetTotalsSar:
+			"Check-in date net totals by payment status (SAR)",
 		checkinDate: "Checkin date",
 		noCheckinPaymentData: "No checkin-date payment data in this range",
 		checkoutDateTotalsSar: "Checkout date totals by payment status (SAR)",
+		checkoutDateGrossTotalsSar:
+			"Checkout date gross totals by payment status (SAR)",
+		checkoutDateNetTotalsSar:
+			"Checkout date net totals by payment status (SAR)",
 		checkoutDate: "Checkout date",
 		noCheckoutPaymentData: "No checkout-date payment data in this range",
 		detailedReservationsList: "Detailed Reservations List",
@@ -401,6 +439,10 @@ const INVENTORY_TEXT = {
 		loadingReservationDetails: "Loading reservation details...",
 	},
 	ar: {
+		netCheckoutBasis:
+			"\u0627\u0644\u0635\u0627\u0641\u064a \u062d\u0633\u0628 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+		checkinNetSar:
+			"\u0635\u0627\u0641\u064a \u0627\u0644\u0648\u0635\u0648\u0644 (\u0631.\u0633)",
 		date: "\u0627\u0644\u062a\u0627\u0631\u064a\u062e",
 		total: "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a",
 		availableShort: "\u0645\u062a\u0627\u062d",
@@ -459,6 +501,15 @@ const INVENTORY_TEXT = {
 			"Paid Offline": "\u0645\u062f\u0641\u0648\u0639 \u062e\u0627\u0631\u062c\u064a\u0627\u064b",
 		},
 		totalAmountSar: "إجمالي المبلغ (ر.س)",
+		grossTotalSar:
+			"\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u062e\u0635\u0648\u0645\u0627\u062a (\u0631.\u0633)",
+		netTotalSar:
+			"\u0627\u0644\u0635\u0627\u0641\u064a \u0628\u0639\u062f \u0627\u0644\u062e\u0635\u0648\u0645\u0627\u062a (\u0631.\u0633)",
+		selectedTotalsUnavailable:
+			"\u0625\u062c\u0645\u0627\u0644\u064a\u0627\u062a \u0627\u0644\u062d\u062c\u0632 \u0627\u0644\u0645\u062d\u062f\u062f\u0629 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629",
+		selectedTotalsUnavailableDescription:
+			"\u064a\u0648\u062c\u062f \u062d\u062c\u0632 \u0648\u0627\u062d\u062f \u0623\u0648 \u0623\u0643\u062b\u0631 \u0628\u0625\u062c\u0645\u0627\u0644\u064a \u063a\u064a\u0631 \u0645\u062a\u0627\u062d \u0623\u0648 \u0628\u0639\u0645\u0644\u0629 \u063a\u064a\u0631 \u0627\u0644\u0631\u064a\u0627\u0644 \u0627\u0644\u0633\u0639\u0648\u062f\u064a. \u062a\u0638\u0647\u0631 \u0645\u0628\u0627\u0644\u063a \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a/\u0627\u0644\u0635\u0627\u0641\u064a \u0643\u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629\u060c \u0628\u064a\u0646\u0645\u0627 \u062a\u0628\u0642\u0649 \u0645\u0628\u0627\u0644\u063a \u0627\u0644\u0645\u062f\u0641\u0648\u0639 \u0648\u0627\u0644\u0645\u062f\u0641\u0648\u0639 \u0641\u064a \u0627\u0644\u0641\u0646\u062f\u0642 \u0643\u0645\u0627 \u0647\u064a.",
+		notAvailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
 		grossCheckoutBasis: "الإجمالي حسب تاريخ المغادرة",
 		reservationsCheckedOut: "حجوزات تمت مغادرتها",
 		checkinReservationsSelectedPeriod: "حجوزات الوصول في المدى المحدد",
@@ -494,6 +545,10 @@ const INVENTORY_TEXT = {
 		paymentStatusBreakdown: "تفصيل حالات الدفع",
 		bookingSourceTotalsCheckoutSar:
 			"إجماليات مصدر الحجز حسب تاريخ المغادرة (ر.س)",
+		bookingSourceGrossTotalsCheckoutSar:
+			"\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u062e\u0635\u0648\u0645\u0627\u062a \u062d\u0633\u0628 \u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632 \u0648\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 (\u0631.\u0633)",
+		bookingSourceNetTotalsCheckoutSar:
+			"\u0627\u0644\u0635\u0627\u0641\u064a \u062d\u0633\u0628 \u0645\u0635\u062f\u0631 \u0627\u0644\u062d\u062c\u0632 \u0648\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 (\u0631.\u0633)",
 		bookingSourceHeader: "مصدر الحجز",
 		totalSar: "الإجمالي (ر.س)",
 		unknown: "غير معروف",
@@ -506,9 +561,17 @@ const INVENTORY_TEXT = {
 		onsitePaid: "المدفوع في الفندق",
 		noPaymentData: "لا توجد بيانات دفع في هذا المدى",
 		checkinDateTotalsSar: "إجماليات تاريخ الوصول حسب حالة الدفع (ر.س)",
+		checkinDateGrossTotalsSar:
+			"\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u062e\u0635\u0648\u0645\u0627\u062a \u062d\u0633\u0628 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639 (\u0631.\u0633)",
+		checkinDateNetTotalsSar:
+			"\u0627\u0644\u0635\u0627\u0641\u064a \u062d\u0633\u0628 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639 (\u0631.\u0633)",
 		checkinDate: "تاريخ الوصول",
 		noCheckinPaymentData: "لا توجد بيانات دفع حسب تاريخ الوصول في هذا المدى",
 		checkoutDateTotalsSar: "إجماليات تاريخ المغادرة حسب حالة الدفع (ر.س)",
+		checkoutDateGrossTotalsSar:
+			"\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0642\u0628\u0644 \u0627\u0644\u062e\u0635\u0648\u0645\u0627\u062a \u062d\u0633\u0628 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639 (\u0631.\u0633)",
+		checkoutDateNetTotalsSar:
+			"\u0627\u0644\u0635\u0627\u0641\u064a \u062d\u0633\u0628 \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u062f\u0641\u0639 (\u0631.\u0633)",
 		checkoutDate: "تاريخ المغادرة",
 		noCheckoutPaymentData:
 			"لا توجد بيانات دفع حسب تاريخ المغادرة في هذا المدى",
@@ -670,6 +733,7 @@ const QUERY_KEYS = {
 	includeCancelled: "invIncCancelled",
 	paymentStatuses: "invPayStatuses",
 	bookingSources: "invBookingSources",
+	totalMode: "invTotal",
 	displayMode: "invDisplay",
 	warningsOpen: "invWarnOpen",
 	dayOpen: "invDayOpen",
@@ -864,6 +928,10 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 	const initialBookingSources = normalizeBookingSourcesList(
 		normalizeCsvList(initialQueryParams.get(QUERY_KEYS.bookingSources)),
 	);
+	const initialTotalMode = normalizeReportTotalMode(
+		initialQueryParams.get(QUERY_KEYS.totalMode),
+		DEFAULT_REPORT_TOTAL_MODE,
+	);
 	const initialWarningsOpen = normalizeBoolFlag(
 		initialQueryParams.get(QUERY_KEYS.warningsOpen),
 	);
@@ -931,6 +999,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		initialPaymentStatuses,
 	);
 	const [bookingSources, setBookingSources] = useState(initialBookingSources);
+	const [totalMode, setTotalMode] = useState(initialTotalMode);
 	const [allBookingSources, setAllBookingSources] = useState([]);
 	const [displayMode, setDisplayMode] = useState(initialDisplayMode);
 
@@ -975,6 +1044,10 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 	const dayRestoreKeyRef = useRef("");
 	const reportRestoreKeyRef = useRef("");
 	const detailsRestoreKeyRef = useRef("");
+	const occupancyRequestSequenceRef = useRef(0);
+	const totalModeQueryHydratingRef = useRef(false);
+	const currentTotalModeRef = useRef(totalMode);
+	currentTotalModeRef.current = totalMode;
 
 	const formatInt = (val = 0) => Number(val || 0).toLocaleString("en-US");
 	const formatCurrency = (val = 0) =>
@@ -1138,16 +1211,61 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 	const checkoutDateOverallReservations = Number(
 		checkoutDateMatrix.overallReservationsCount || 0,
 	);
-	const checkoutGrossAmount = checkoutDateOverallTotal;
+	const selectedBasisAggregateMissing =
+		!data?.summary ||
+		!bookingSourceSummary ||
+		!checkinDateSummary ||
+		!checkoutDateSummary;
+	const selectedBasisTotalsUnavailable =
+		selectedBasisAggregateMissing ||
+		[
+			summary.financialMetadata,
+			bookingSourceMatrix.financialMetadata,
+			checkinDateMatrix.financialMetadata,
+			checkoutDateMatrix.financialMetadata,
+		].some(
+			(metadata) =>
+				Number(metadata?.unavailable || 0) > 0 ||
+				Number(metadata?.foreignCurrency || 0) > 0,
+		);
+	const formatSelectedCurrency = (value = 0) =>
+		selectedBasisTotalsUnavailable
+			? tableLabels.notAvailable
+			: formatCurrency(value);
+	const checkoutTotalAmount = checkoutDateOverallTotal;
 	const checkoutReservationsCount = checkoutDateOverallReservations;
 	const checkinReservationsCount = Number(
 		checkinDateMatrix.overallReservationsCount ??
 			summary.checkinReservationsCount ??
 			0,
 	);
-	const checkinGrossAmount = Number(
-		checkinDateMatrix.overallTotal ?? summary.checkinGrossTotal ?? 0,
+	const checkinTotalAmount = Number(
+		checkinDateMatrix.overallTotal ??
+			summary.checkinTotal ??
+			summary.checkinGrossTotal ??
+			0,
 	);
+	const checkoutBasisLabel =
+		totalMode === REPORT_TOTAL_MODES.NET
+			? tableLabels.netCheckoutBasis
+			: tableLabels.grossCheckoutBasis;
+	const checkinBasisLabel =
+		totalMode === REPORT_TOTAL_MODES.NET
+			? tableLabels.checkinNetSar
+			: tableLabels.checkinGrossSar;
+	const isNetTotalMode = totalMode === REPORT_TOTAL_MODES.NET;
+	const selectedTotalSarLabel = isNetTotalMode
+		? tableLabels.netTotalSar
+		: tableLabels.grossTotalSar;
+	const bookingSourceTotalsTitle = isNetTotalMode
+		? tableLabels.bookingSourceNetTotalsCheckoutSar
+		: tableLabels.bookingSourceGrossTotalsCheckoutSar;
+	const checkinDateTotalsTitle = isNetTotalMode
+		? tableLabels.checkinDateNetTotalsSar
+		: tableLabels.checkinDateGrossTotalsSar;
+	const checkoutDateTotalsTitle = isNetTotalMode
+		? tableLabels.checkoutDateNetTotalsSar
+		: tableLabels.checkoutDateGrossTotalsSar;
 
 	const selectedHotelName = useMemo(() => {
 		const byId = sortedHotels.find(
@@ -1327,7 +1445,13 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 
 	// ------------------ Fetch occupancy ------------------
 	const fetchOccupancy = useCallback(async () => {
-		if (!user?._id || !token || !selectedHotelId) return;
+		if (!user?._id || !token || !selectedHotelId) {
+			occupancyRequestSequenceRef.current += 1;
+			setLoading(false);
+			return;
+		}
+		const requestId = occupancyRequestSequenceRef.current + 1;
+		occupancyRequestSequenceRef.current = requestId;
 
 		setLoading(true);
 		setError("");
@@ -1348,6 +1472,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 					display: displayMode,
 					paymentStatuses,
 					bookingSources,
+					totalMode,
 				}),
 				getBookingSourcePaymentSummary(user._id, token, {
 					hotelId: selectedHotelId,
@@ -1358,6 +1483,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 					paymentStatuses,
 					dateBasis: "checkout",
 					bookingSources,
+					totalMode,
 				}),
 				getCheckoutDatePaymentSummary(user._id, token, {
 					hotelId: selectedHotelId,
@@ -1368,6 +1494,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 					paymentStatuses,
 					bookingSources,
 					dateBasis: "checkout",
+					totalMode,
 				}),
 				getCheckoutDatePaymentSummary(user._id, token, {
 					hotelId: selectedHotelId,
@@ -1378,8 +1505,10 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 					paymentStatuses,
 					bookingSources,
 					dateBasis: "checkin",
+					totalMode,
 				}),
 			]);
+			if (requestId !== occupancyRequestSequenceRef.current) return;
 
 			if (occupancyResult.status === "fulfilled") {
 				setData(occupancyResult.value);
@@ -1390,33 +1519,36 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 
 			if (bookingSourceResult.status === "fulfilled") {
 				setBookingSourceSummary(
-					bookingSourceResult.value?.data || bookingSourceResult.value || null,
+					extractAggregatePayload(bookingSourceResult.value) || null,
 				);
 			} else {
 				setBookingSourceSummary(null);
 			}
 			if (checkoutDateResult.status === "fulfilled") {
 				setCheckoutDateSummary(
-					checkoutDateResult.value?.data || checkoutDateResult.value || null,
+					extractAggregatePayload(checkoutDateResult.value) || null,
 				);
 			} else {
 				setCheckoutDateSummary(null);
 			}
 			if (checkinDateResult.status === "fulfilled") {
 				setCheckinDateSummary(
-					checkinDateResult.value?.data || checkinDateResult.value || null,
+					extractAggregatePayload(checkinDateResult.value) || null,
 				);
 			} else {
 				setCheckinDateSummary(null);
 			}
 		} catch (err) {
+			if (requestId !== occupancyRequestSequenceRef.current) return;
 			setError(err?.message || "Failed to load occupancy");
 			setData(null);
 			setBookingSourceSummary(null);
 			setCheckoutDateSummary(null);
 			setCheckinDateSummary(null);
 		} finally {
-			setLoading(false);
+			if (requestId === occupancyRequestSequenceRef.current) {
+				setLoading(false);
+			}
 		}
 	}, [
 		displayMode,
@@ -1428,11 +1560,19 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		token,
 		user?._id,
 		paymentStatuses,
+		totalMode,
 	]);
 
 	useEffect(() => {
 		fetchOccupancy();
 	}, [fetchOccupancy]);
+
+	useEffect(
+		() => () => {
+			occupancyRequestSequenceRef.current += 1;
+		},
+		[],
+	);
 
 	const onMonthChange = (val) => {
 		if (val) {
@@ -1495,6 +1635,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		const nextBookingSources = normalizeBookingSourcesList(
 			normalizeCsvList(params.get(QUERY_KEYS.bookingSources)),
 		);
+		const nextTotalMode = normalizeReportTotalMode(
+			params.get(QUERY_KEYS.totalMode),
+		);
+		if (currentTotalModeRef.current !== nextTotalMode) {
+			totalModeQueryHydratingRef.current = true;
+			occupancyRequestSequenceRef.current += 1;
+			setLoading(true);
+		}
 		const nextWarningsOpen = normalizeBoolFlag(
 			params.get(QUERY_KEYS.warningsOpen),
 		);
@@ -1550,6 +1698,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		setBookingSources((prev) =>
 			isSameArray(prev, nextBookingSources) ? prev : nextBookingSources,
 		);
+		setTotalMode((prev) => (prev === nextTotalMode ? prev : nextTotalMode));
 		setWarningsModalOpen((prev) =>
 			prev === nextWarningsOpen ? prev : nextWarningsOpen,
 		);
@@ -1663,6 +1812,17 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		}
 	}, [defaultHijriMonth, defaultHijriYear, location.search, supportsHijri]);
 
+	const handleTotalModeChange = useCallback(
+		(nextMode) => {
+			const normalizedMode = normalizeReportTotalMode(nextMode);
+			if (normalizedMode === totalMode) return;
+			occupancyRequestSequenceRef.current += 1;
+			setLoading(true);
+			setTotalMode(normalizedMode);
+		},
+		[totalMode],
+	);
+
 	useEffect(() => {
 		const params = new URLSearchParams(location.search || "");
 		let changed = false;
@@ -1748,6 +1908,11 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 			QUERY_KEYS.bookingSources,
 			normalizedBookingSources.length ? normalizedBookingSources.join(",") : "",
 		);
+		if (totalModeQueryHydratingRef.current) {
+			totalModeQueryHydratingRef.current = false;
+		} else {
+			setParam(QUERY_KEYS.totalMode, reportTotalModeQueryValue(totalMode));
+		}
 		setParam(
 			QUERY_KEYS.displayMode,
 			displayMode === "roomType" ? "roomType" : "",
@@ -1817,6 +1982,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 		location.search,
 		monthValue,
 		paymentStatuses,
+		totalMode,
 		rangeOverride?.end,
 		rangeOverride?.start,
 		reportCurrentPage,
@@ -2488,6 +2654,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 							)}
 						</div>
 					</div>
+
+					<div className='filter-panel total-mode-panel'>
+						<ReportTotalModeToggle
+							value={totalMode}
+							onChange={handleTotalModeChange}
+							isArabic={isArabic}
+						/>
+					</div>
 				</div>
 
 				<div className='hint muted'>
@@ -2516,15 +2690,24 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 				/>
 			) : (
 				<>
+					{selectedBasisTotalsUnavailable ? (
+						<Alert
+							type='warning'
+							message={tableLabels.selectedTotalsUnavailable}
+							description={tableLabels.selectedTotalsUnavailableDescription}
+							showIcon
+							style={{ marginBottom: 12 }}
+						/>
+					) : null}
 					<FinancialSummaryRow>
 						<MetricCard
 							size='small'
 							$tone='money'
-							title={renderMetricTitle(DollarCircleOutlined, tableLabels.totalAmountSar)}
+							title={renderMetricTitle(DollarCircleOutlined, selectedTotalSarLabel)}
 						>
 							<div className='metric'>
-								<span>{tableLabels.grossCheckoutBasis}</span>
-								<b>{formatCurrency(checkoutGrossAmount)}</b>
+								<span>{checkoutBasisLabel}</span>
+								<b>{formatSelectedCurrency(checkoutTotalAmount)}</b>
 							</div>
 							<div className='metric muted'>
 								<span>{tableLabels.reservationsCheckedOut}</span>
@@ -2545,8 +2728,8 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 								<b>{formatInt(checkinReservationsCount)}</b>
 							</div>
 							<div className='metric muted'>
-								<span>{tableLabels.checkinGrossSar}</span>
-								<b>{formatCurrency(checkinGrossAmount)}</b>
+								<span>{checkinBasisLabel}</span>
+								<b>{formatSelectedCurrency(checkinTotalAmount)}</b>
 							</div>
 						</MetricCard>
 					</FinancialSummaryRow>
@@ -3084,7 +3267,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 						<BreakdownTablesRow>
 							<BreakdownTable>
 								<div className='table-title'>
-									{tableLabels.bookingSourceTotalsCheckoutSar}
+									{bookingSourceTotalsTitle}
 								</div>
 								<table>
 									<thead>
@@ -3095,23 +3278,23 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 													{tableLabels.paymentStatusLabels?.[status] || status}
 												</th>
 											))}
-											<th>{tableLabels.totalSar}</th>
+											<th>{selectedTotalSarLabel}</th>
 										</tr>
 									</thead>
 									<tbody>
 										{bookingSourceRows.length ? (
-											bookingSourceRows.map((row) => (
-												<tr key={row.booking_source || tableLabels.unknown}>
-													<td>{row.booking_source || tableLabels.unknown}</td>
-													{paymentStatusHeaders.map((status) => (
-														<td key={`${row.booking_source}-${status}`}>
-															{formatCurrency(
-																row?.totalsByStatus?.[status] || 0,
-															)}
-														</td>
-													))}
-													<td>{formatCurrency(row.rowTotal || 0)}</td>
-												</tr>
+										bookingSourceRows.map((row) => (
+											<tr key={row.booking_source || tableLabels.unknown}>
+												<td>{row.booking_source || tableLabels.unknown}</td>
+												{paymentStatusHeaders.map((status) => (
+													<td key={`${row.booking_source}-${status}`}>
+														{formatSelectedCurrency(
+															row?.totalsByStatus?.[status] || 0,
+														)}
+													</td>
+												))}
+												<td>{formatSelectedCurrency(row.rowTotal || 0)}</td>
+											</tr>
 											))
 										) : (
 											<tr>
@@ -3130,12 +3313,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 												<td>{tableLabels.total}</td>
 												{paymentStatusHeaders.map((status) => (
 													<td key={`total-${status}`}>
-														{formatCurrency(
+														{formatSelectedCurrency(
 															bookingSourceColumnTotals?.[status] || 0,
 														)}
 													</td>
 												))}
-												<td>{formatCurrency(bookingSourceOverallTotal)}</td>
+												<td>
+													{formatSelectedCurrency(bookingSourceOverallTotal)}
+												</td>
 											</tr>
 										</tfoot>
 									) : null}
@@ -3151,7 +3336,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 										<tr>
 											<th>{tableLabels.status}</th>
 											<th>{tableLabels.reservations}</th>
-											<th>{tableLabels.totalAmountSar}</th>
+											<th>{selectedTotalSarLabel}</th>
 											<th>{tableLabels.paidAmount}</th>
 											<th>{tableLabels.onsitePaid}</th>
 										</tr>
@@ -3165,7 +3350,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 															paymentLabel(pmt.status, pmt.label)}
 													</td>
 													<td>{formatInt(pmt.count)}</td>
-													<td>{formatCurrency(pmt.totalAmount)}</td>
+													<td>{formatSelectedCurrency(pmt.totalAmount)}</td>
 													<td>{formatCurrency(pmt.paidAmount)}</td>
 													<td>{formatCurrency(pmt.onsitePaidAmount)}</td>
 												</tr>
@@ -3185,7 +3370,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 						<BreakdownTablesRow style={{ marginTop: 12 }}>
 							<BreakdownTable>
 								<div className='table-title'>
-									{tableLabels.checkinDateTotalsSar}
+									{checkinDateTotalsTitle}
 								</div>
 								<table>
 									<thead>
@@ -3197,7 +3382,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 													{tableLabels.paymentStatusLabels?.[status] || status}
 												</th>
 											))}
-											<th>{tableLabels.totalSar}</th>
+											<th>{selectedTotalSarLabel}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -3237,14 +3422,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 															<div className='greg-date'>{gregDate}</div>
 														</td>
 														<td>{formatInt(row?.reservationsCount || 0)}</td>
-														{paymentStatusHeaders.map((status) => (
-															<td key={`checkin-${dateKey}-${status}`}>
-																{formatCurrency(
-																	row?.totalsByStatus?.[status] || 0,
-																)}
-															</td>
-														))}
-														<td>{formatCurrency(row?.rowTotal || 0)}</td>
+												{paymentStatusHeaders.map((status) => (
+													<td key={`checkin-${dateKey}-${status}`}>
+														{formatSelectedCurrency(
+															row?.totalsByStatus?.[status] || 0,
+														)}
+													</td>
+												))}
+												<td>{formatSelectedCurrency(row?.rowTotal || 0)}</td>
 													</tr>
 												);
 											})
@@ -3264,14 +3449,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 											<tr className='totals'>
 												<td>{tableLabels.total}</td>
 												<td>{formatInt(checkinDateOverallReservations)}</td>
-												{paymentStatusHeaders.map((status) => (
-													<td key={`checkin-date-total-${status}`}>
-														{formatCurrency(
-															checkinDateColumnTotals?.[status] || 0,
-														)}
-													</td>
-												))}
-												<td>{formatCurrency(checkinDateOverallTotal)}</td>
+										{paymentStatusHeaders.map((status) => (
+											<td key={`checkin-date-total-${status}`}>
+												{formatSelectedCurrency(
+													checkinDateColumnTotals?.[status] || 0,
+												)}
+											</td>
+										))}
+										<td>{formatSelectedCurrency(checkinDateOverallTotal)}</td>
 											</tr>
 										</tfoot>
 									) : null}
@@ -3280,7 +3465,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 
 							<BreakdownTable>
 								<div className='table-title'>
-									{tableLabels.checkoutDateTotalsSar}
+									{checkoutDateTotalsTitle}
 								</div>
 								<table>
 									<thead>
@@ -3292,7 +3477,7 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 													{tableLabels.paymentStatusLabels?.[status] || status}
 												</th>
 											))}
-											<th>{tableLabels.totalSar}</th>
+											<th>{selectedTotalSarLabel}</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -3332,14 +3517,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 															<div className='greg-date'>{gregDate}</div>
 														</td>
 														<td>{formatInt(row?.reservationsCount || 0)}</td>
-														{paymentStatusHeaders.map((status) => (
-															<td key={`checkout-${dateKey}-${status}`}>
-																{formatCurrency(
-																	row?.totalsByStatus?.[status] || 0,
-																)}
-															</td>
-														))}
-														<td>{formatCurrency(row?.rowTotal || 0)}</td>
+												{paymentStatusHeaders.map((status) => (
+													<td key={`checkout-${dateKey}-${status}`}>
+														{formatSelectedCurrency(
+															row?.totalsByStatus?.[status] || 0,
+														)}
+													</td>
+												))}
+												<td>{formatSelectedCurrency(row?.rowTotal || 0)}</td>
 													</tr>
 												);
 											})
@@ -3359,14 +3544,14 @@ const HotelsInventoryMap = ({ chosenLanguage = "English" }) => {
 											<tr className='totals'>
 												<td>{tableLabels.total}</td>
 												<td>{formatInt(checkoutDateOverallReservations)}</td>
-												{paymentStatusHeaders.map((status) => (
-													<td key={`checkout-date-total-${status}`}>
-														{formatCurrency(
-															checkoutDateColumnTotals?.[status] || 0,
-														)}
-													</td>
-												))}
-												<td>{formatCurrency(checkoutDateOverallTotal)}</td>
+										{paymentStatusHeaders.map((status) => (
+											<td key={`checkout-date-total-${status}`}>
+												{formatSelectedCurrency(
+													checkoutDateColumnTotals?.[status] || 0,
+												)}
+											</td>
+										))}
+										<td>{formatSelectedCurrency(checkoutDateOverallTotal)}</td>
 											</tr>
 										</tfoot>
 									) : null}
@@ -3829,7 +4014,10 @@ const PaymentStatusBar = styled.div`
 
 	.filters-row {
 		display: grid;
-		grid-template-columns: minmax(360px, 1.05fr) minmax(420px, 1.25fr);
+		grid-template-columns:
+			minmax(340px, 1.05fr)
+			minmax(360px, 1.2fr)
+			minmax(240px, 0.72fr);
 		gap: 12px;
 		align-items: start;
 	}
@@ -3863,6 +4051,10 @@ const PaymentStatusBar = styled.div`
 	.source-controls .ant-select {
 		flex: 1;
 		min-width: 220px;
+	}
+
+	.total-mode-panel {
+		justify-content: flex-start;
 	}
 
 	.hint {

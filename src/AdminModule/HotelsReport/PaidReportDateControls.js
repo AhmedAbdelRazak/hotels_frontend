@@ -5,12 +5,16 @@ import { ClearOutlined, FilterOutlined } from "@ant-design/icons";
 import {
   PAID_REPORT_ALL_PERIODS,
   PAID_REPORT_DATE_ERRORS,
+  getPaidReportCurrentMonth,
+  getPaidReportCurrentYear,
   getPaidReportYearValues,
   inferPaidReportPeriodSelection,
-  resolvePaidReportPeriod,
+  resolvePaidReportPeriods,
 } from "./paidReportDateFilter";
 
 const DEFAULT_DATE_FIELD = "checkin_date";
+const DEFAULT_CALENDAR_TYPE = "hijri";
+const ALL_MONTHS_SELECTION = [PAID_REPORT_ALL_PERIODS];
 
 const TEXT = {
   en: {
@@ -125,6 +129,29 @@ const errorMessageFor = (error, labels) =>
     ? labels.selectYearFirst
     : labels.invalidSelection;
 
+const dateRangesSignature = (dateRanges) =>
+  Array.isArray(dateRanges)
+    ? dateRanges
+        .map(
+          (range) =>
+            `${String(range?.dateFrom || "")}:${String(range?.dateTo || "")}`,
+        )
+        .join(",")
+    : "";
+
+const currentPeriodSelection = (calendarType, referenceDate) => {
+  const year = getPaidReportCurrentYear(calendarType, referenceDate);
+  const month = getPaidReportCurrentMonth(calendarType, referenceDate);
+  if (!Number.isInteger(year) || !month) {
+    return {
+      year: PAID_REPORT_ALL_PERIODS,
+      month: PAID_REPORT_ALL_PERIODS,
+      months: ALL_MONTHS_SELECTION,
+    };
+  }
+  return { year: String(year), month, months: [month] };
+};
+
 const PaidReportDateControls = ({
   isArabic = false,
   disabled = false,
@@ -140,23 +167,33 @@ const PaidReportDateControls = ({
   const stableReferenceDate = referenceDateRef.current;
   const initialSelectionRef = useRef(null);
   if (!initialSelectionRef.current) {
-    initialSelectionRef.current = inferPaidReportPeriodSelection({
-      calendarType: "gregorian",
-      dateFrom: value.dateFrom || "",
-      dateTo: value.dateTo || "",
-      referenceDate: stableReferenceDate,
-    });
+    const hasAppliedPeriod = Boolean(
+      value.dateFrom ||
+        value.dateTo ||
+        (Array.isArray(value.dateRanges) && value.dateRanges.length),
+    );
+    initialSelectionRef.current = hasAppliedPeriod
+      ? inferPaidReportPeriodSelection({
+          calendarType: DEFAULT_CALENDAR_TYPE,
+          dateFrom: value.dateFrom || "",
+          dateTo: value.dateTo || "",
+          dateRanges: value.dateRanges,
+          referenceDate: stableReferenceDate,
+        })
+      : currentPeriodSelection(DEFAULT_CALENDAR_TYPE, stableReferenceDate);
   }
   const initialSelection = initialSelectionRef.current;
   const [dateField, setDateField] = useState(
     value.dateBy || DEFAULT_DATE_FIELD,
   );
-  const [calendarType, setCalendarType] = useState("gregorian");
+  const [calendarType, setCalendarType] = useState(DEFAULT_CALENDAR_TYPE);
   const [selectedYear, setSelectedYear] = useState(initialSelection.year);
-  const [selectedMonth, setSelectedMonth] = useState(initialSelection.month);
+  const [selectedMonths, setSelectedMonths] = useState(
+    initialSelection.months || [initialSelection.month],
+  );
   const appliedSignature = `${value.dateBy || DEFAULT_DATE_FIELD}|${
     value.dateFrom || ""
-  }|${value.dateTo || ""}`;
+  }|${value.dateTo || ""}|${dateRangesSignature(value.dateRanges)}`;
   const syncedSignatureRef = useRef(appliedSignature);
 
   useEffect(() => {
@@ -167,16 +204,18 @@ const PaidReportDateControls = ({
       calendarType,
       dateFrom: value.dateFrom || "",
       dateTo: value.dateTo || "",
+      dateRanges: value.dateRanges,
       referenceDate: stableReferenceDate,
     });
     setSelectedYear(selection.year);
-    setSelectedMonth(selection.month);
+    setSelectedMonths(selection.months || [selection.month]);
   }, [
     appliedSignature,
     calendarType,
     stableReferenceDate,
     value.dateBy,
     value.dateFrom,
+    value.dateRanges,
     value.dateTo,
   ]);
 
@@ -220,17 +259,21 @@ const PaidReportDateControls = ({
     [calendarType, isArabic, labels.allMonths],
   );
 
-  const hasAppliedRange = Boolean(value.dateFrom || value.dateTo);
+  const hasAppliedRange = Boolean(
+    value.dateFrom ||
+      value.dateTo ||
+      (Array.isArray(value.dateRanges) && value.dateRanges.length),
+  );
   const hasDraftPeriod = selectedYear !== PAID_REPORT_ALL_PERIODS;
   const monthDisabled = disabled || !hasDraftPeriod;
 
   const handleCalendarChange = (nextCalendar) => {
     if (nextCalendar === calendarType) return;
 
-    const resolved = resolvePaidReportPeriod({
+    const resolved = resolvePaidReportPeriods({
       calendarType,
       year: selectedYear,
-      month: selectedMonth,
+      months: selectedMonths,
       referenceDate: stableReferenceDate,
     });
     if (resolved.error) {
@@ -242,25 +285,50 @@ const PaidReportDateControls = ({
       calendarType: nextCalendar,
       dateFrom: resolved.dateFrom,
       dateTo: resolved.dateTo,
+      dateRanges: resolved.dateRanges,
       referenceDate: stableReferenceDate,
     });
     setCalendarType(nextCalendar);
     setSelectedYear(selection.year);
-    setSelectedMonth(selection.month);
+    setSelectedMonths(selection.months || [selection.month]);
   };
 
   const handleYearChange = (nextYear) => {
     setSelectedYear(nextYear);
     if (nextYear === PAID_REPORT_ALL_PERIODS) {
-      setSelectedMonth(PAID_REPORT_ALL_PERIODS);
+      setSelectedMonths(ALL_MONTHS_SELECTION);
     }
   };
 
+  const handleMonthsChange = (nextMonths) => {
+    const normalized = Array.from(
+      new Set(
+        (Array.isArray(nextMonths) ? nextMonths : [nextMonths])
+          .map((month) => String(month || "").trim())
+          .filter(Boolean),
+      ),
+    );
+    const hadAllMonths = selectedMonths.includes(PAID_REPORT_ALL_PERIODS);
+    const hasAllMonths = normalized.includes(PAID_REPORT_ALL_PERIODS);
+
+    if (hasAllMonths && !hadAllMonths) {
+      setSelectedMonths(ALL_MONTHS_SELECTION);
+      return;
+    }
+
+    const concreteMonths = normalized.filter(
+      (month) => month !== PAID_REPORT_ALL_PERIODS,
+    );
+    setSelectedMonths(
+      concreteMonths.length ? concreteMonths : ALL_MONTHS_SELECTION,
+    );
+  };
+
   const handleApply = () => {
-    const resolved = resolvePaidReportPeriod({
+    const resolved = resolvePaidReportPeriods({
       calendarType,
       year: selectedYear,
-      month: selectedMonth,
+      months: selectedMonths,
       referenceDate: stableReferenceDate,
     });
     if (resolved.error) {
@@ -272,13 +340,19 @@ const PaidReportDateControls = ({
       dateBy: dateField,
       dateFrom: resolved.dateFrom,
       dateTo: resolved.dateTo,
+      dateRanges: resolved.dateRanges,
     });
   };
 
   const handleClear = () => {
     setSelectedYear(PAID_REPORT_ALL_PERIODS);
-    setSelectedMonth(PAID_REPORT_ALL_PERIODS);
-    onApply?.({ dateBy: dateField, dateFrom: "", dateTo: "" });
+    setSelectedMonths(ALL_MONTHS_SELECTION);
+    onApply?.({
+      dateBy: dateField,
+      dateFrom: "",
+      dateTo: "",
+      dateRanges: [],
+    });
   };
 
   return (
@@ -313,13 +387,15 @@ const PaidReportDateControls = ({
         className="year-select"
       />
       <Select
-        value={selectedMonth}
-        onChange={setSelectedMonth}
+        mode="multiple"
+        value={selectedMonths}
+        onChange={handleMonthsChange}
         options={monthOptions}
         disabled={monthDisabled}
         aria-label={labels.month}
         title={!hasDraftPeriod ? labels.selectYearFirst : labels.month}
         className="month-select"
+        maxTagCount="responsive"
       />
       <Button
         type="primary"
@@ -371,7 +447,7 @@ const FilterGroup = styled.div`
   }
 
   .month-select {
-    width: 130px;
+    width: 180px;
   }
 
   button {

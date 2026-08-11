@@ -1,6 +1,7 @@
 import {
   PAID_REPORT_ALL_PERIODS,
   PAID_REPORT_DATE_ERRORS,
+  getPaidReportCurrentMonth,
   getPaidReportCurrentYear,
   getPaidReportYearValues,
   gregorianDateToCalendarKey,
@@ -12,6 +13,7 @@ import {
   normalizePaidReportCalendarType,
   resolvePaidReportDateRange,
   resolvePaidReportPeriod,
+  resolvePaidReportPeriods,
 } from "./paidReportDateFilter";
 
 const REFERENCE_DATE = new Date("2026-07-14T12:00:00.000Z");
@@ -175,6 +177,12 @@ describe("paid report date filter helpers", () => {
     expect(
       getPaidReportCurrentYear("hijri", new Date("2026-06-15T21:00:00.000Z")),
     ).toBe(1448);
+    expect(
+      getPaidReportCurrentMonth("hijri", new Date("2026-06-15T20:59:59.000Z")),
+    ).toBe("12");
+    expect(
+      getPaidReportCurrentMonth("hijri", new Date("2026-06-15T21:00:00.000Z")),
+    ).toBe("1");
   });
 
   it("resolves complete Gregorian months and years without clamping to today", () => {
@@ -277,6 +285,75 @@ describe("paid report date filter helpers", () => {
     ).toBe(PAID_REPORT_DATE_ERRORS.INVALID_MONTH);
   });
 
+  it("resolves all dates, full years, and one selected month compatibly", () => {
+    expect(
+      resolvePaidReportPeriods({
+        calendarType: "hijri",
+        year: PAID_REPORT_ALL_PERIODS,
+        months: [PAID_REPORT_ALL_PERIODS],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({ dateFrom: "", dateTo: "", dateRanges: [] });
+    expect(
+      resolvePaidReportPeriods({
+        calendarType: "hijri",
+        year: "1448",
+        months: [PAID_REPORT_ALL_PERIODS],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({
+      dateFrom: "2026-06-16",
+      dateTo: "2027-06-05",
+      dateRanges: [],
+    });
+    expect(
+      resolvePaidReportPeriods({
+        calendarType: "hijri",
+        year: "1448",
+        months: ["2"],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({
+      dateFrom: "2026-07-15",
+      dateTo: "2026-08-13",
+      dateRanges: [],
+    });
+  });
+
+  it("keeps non-contiguous selected months as sorted, deduped exact ranges", () => {
+    expect(
+      resolvePaidReportPeriods({
+        calendarType: "hijri",
+        year: "1448",
+        months: ["3", "1", "3"],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({
+      dateFrom: "",
+      dateTo: "",
+      dateRanges: [
+        { dateFrom: "2026-06-16", dateTo: "2026-07-14" },
+        { dateFrom: "2026-08-14", dateTo: "2026-09-11" },
+      ],
+    });
+  });
+
+  it("rejects mixed All-month and concrete month selections", () => {
+    expect(
+      resolvePaidReportPeriods({
+        calendarType: "hijri",
+        year: "1448",
+        months: [PAID_REPORT_ALL_PERIODS, "2"],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({
+      dateFrom: "",
+      dateTo: "",
+      dateRanges: [],
+      error: PAID_REPORT_DATE_ERRORS.INVALID_MONTH,
+    });
+  });
+
   it("infers only exact selectable full calendar periods", () => {
     expect(
       inferPaidReportPeriodSelection({
@@ -285,7 +362,7 @@ describe("paid report date filter helpers", () => {
         dateTo: "2026-07-31",
         referenceDate: REFERENCE_DATE,
       }),
-    ).toEqual({ year: "2026", month: "7" });
+    ).toEqual({ year: "2026", month: "7", months: ["7"] });
     expect(
       inferPaidReportPeriodSelection({
         calendarType: "hijri",
@@ -293,7 +370,11 @@ describe("paid report date filter helpers", () => {
         dateTo: "2027-06-05",
         referenceDate: REFERENCE_DATE,
       }),
-    ).toEqual({ year: "1448", month: PAID_REPORT_ALL_PERIODS });
+    ).toEqual({
+      year: "1448",
+      month: PAID_REPORT_ALL_PERIODS,
+      months: [PAID_REPORT_ALL_PERIODS],
+    });
     expect(
       inferPaidReportPeriodSelection({
         calendarType: "hijri",
@@ -304,6 +385,24 @@ describe("paid report date filter helpers", () => {
     ).toEqual({
       year: PAID_REPORT_ALL_PERIODS,
       month: PAID_REPORT_ALL_PERIODS,
+      months: [PAID_REPORT_ALL_PERIODS],
+    });
+  });
+
+  it("infers exact non-contiguous ranges while preserving the legacy month", () => {
+    expect(
+      inferPaidReportPeriodSelection({
+        calendarType: "hijri",
+        dateRanges: [
+          { dateFrom: "2026-08-14", dateTo: "2026-09-11" },
+          { dateFrom: "2026-06-16", dateTo: "2026-07-14" },
+        ],
+        referenceDate: REFERENCE_DATE,
+      }),
+    ).toEqual({
+      year: "1448",
+      month: PAID_REPORT_ALL_PERIODS,
+      months: ["1", "3"],
     });
   });
 });
