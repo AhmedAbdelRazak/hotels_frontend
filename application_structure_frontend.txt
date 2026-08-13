@@ -2412,3 +2412,19 @@ Future TODO Backlog - Added 2026-05-26
     text, or use English dashboard while entering Arabic terms.
   - Do not force all policy field values to RTL just because the surrounding
     UI is Arabic; punctuation and question marks become visually wrong.
+
+2026-08-13 HotelRunner Frontend Removal And OTA Email-Only Mode
+- Reason:
+  - The HotelRunner API subscription was cancelled for cost reasons. The
+    application must rely solely on OTA inbound emails until the subscription
+    is intentionally restored in a future documented change.
+- Removed frontend surface:
+  - Removed the /admin/hotelrunner route and its English and Arabic sidebar
+    items, including the related route/sidebar permission mapping.
+  - Removed the HotelRunner page, frontend API client code, and HotelRunner
+    response view-model/mapping code so the UI cannot invoke the service.
+- Regression and build expectation:
+  - Production builds must complete cleanly, and route/menu/import/reference
+    scans must find no runnable HotelRunner UI or API path.
+  - Existing OTA inbound-email reservation flows and unrelated admin routes
+    must continue to work without attempting or falling back to HotelRunner.

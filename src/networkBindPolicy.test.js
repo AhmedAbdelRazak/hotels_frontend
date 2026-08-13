@@ -3,7 +3,7 @@ import path from "path";
 
 test("the production frontend origin is loopback-bound by default", () => {
 	const source = fs.readFileSync(
-		path.resolve(__dirname, "../../../server.js"),
+		path.resolve(__dirname, "../server.js"),
 		"utf8"
 	);
 

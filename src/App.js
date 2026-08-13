@@ -21,7 +21,6 @@ import AddOwnerAccount from "./AdminModule/AddOwner/AddOwnerAccount";
 import IntegratorMain from "./AdminModule/ElIntegrator/IntegratorMain";
 import AllReservationMain from "./AdminModule/AllReservation/AllReservationMain";
 import OtaReservationsMain from "./AdminModule/OtaReservations/OtaReservationsMain";
-import HotelRunnerMain from "./AdminModule/HotelRunner/HotelRunnerMain";
 import AdminRejectedReservationsMain from "./AdminModule/RejectedReservations/AdminRejectedReservationsMain";
 import JannatBookingToolsMain from "./AdminModule/JannatTools/JannatBookingToolsMain";
 import HotelReportsMainAdmin from "./AdminModule/HotelsReport/HotelReportsMainAdmin";
@@ -193,11 +192,6 @@ function App() {
 					path='/admin/ota-reservations'
 					exact
 					component={OtaReservationsMain}
-				/>
-				<AdminRoute
-					path='/admin/hotelrunner'
-					exact
-					component={HotelRunnerMain}
 				/>
 				<AdminRoute
 					path='/admin/rejected-reservations'

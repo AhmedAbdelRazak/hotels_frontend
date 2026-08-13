@@ -4,7 +4,6 @@ import styled from "styled-components";
 import { Redirect, Link } from "react-router-dom";
 import {
 	AreaChartOutlined,
-	ApiOutlined,
 	MenuFoldOutlined,
 	MenuUnfoldOutlined,
 	PieChartOutlined,
@@ -57,14 +56,6 @@ const canAccessOtaReservations = (user = {}) =>
 		Array.isArray(user?.accessTo) &&
 		user.accessTo.includes("OTAReservations"));
 
-const canAccessHotelRunner = (user = {}) =>
-	isConfiguredSuperAdminUser(user) ||
-	(hasPlatformAdminRole(user) &&
-		Array.isArray(user?.accessTo) &&
-		["HotelRunnerIntegration", "AdminDashboard"].some((permission) =>
-			user.accessTo.includes(permission)
-		));
-
 const items = [
 	getItem(
 		<Link to='/admin/dashboard'>Admin Dashboard</Link>,
@@ -94,11 +85,6 @@ getItem(
 	<Link to='/admin/ota-reservations'>OTA Reservations</Link>,
 	"sub19",
 	<InboxOutlined />
-),
-getItem(
-	<Link to='/admin/hotelrunner'>HotelRunner</Link>,
-	"sub21",
-	<ApiOutlined />
 ),
 
 	getItem(
@@ -237,10 +223,8 @@ const AdminNavbar = ({
 	const history = useHistory();
 	const authUser = (isAuthenticated() || {}).user || {};
 	const canSeeOtaReservations = canAccessOtaReservations(authUser);
-	const canSeeHotelRunner = canAccessHotelRunner(authUser);
 	const visibleItems = items.filter((item) => {
 		if (item.key === "sub19") return canSeeOtaReservations;
-		if (item.key === "sub21") return canSeeHotelRunner;
 		return true;
 	});
 	const isMobile = () =>
@@ -288,8 +272,6 @@ const AdminNavbar = ({
 							      ? "sub4"
 							      : fromPage === "OTAReservations"
 							        ? "sub19"
-							        : fromPage === "HotelRunner"
-							          ? "sub21"
 							          : fromPage === "StoreBilling"
 							          ? "sub5"
 							          : fromPage === "Tools"
