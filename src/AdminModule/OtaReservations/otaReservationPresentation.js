@@ -16,37 +16,16 @@ const STATUS_LABELS = {
 	rejected: "Rejected",
 };
 
-const normalizedToken = (value = "") =>
-	String(value || "")
-		.trim()
-		.toLowerCase();
-
-const isHotelRunnerManaged = (reservation = {}) => {
-	const hotelRunner = reservation?.supplierData?.hotelRunner || {};
-	return (
-		normalizedToken(reservation?.otaPlatformReview?.source) ===
-			"hotelrunner_api" ||
-		normalizedToken(hotelRunner?.transport) === "hotelrunner_api" ||
-		reservation?.otaPlatformReview?.hotelRunnerManaged === true
-	);
-};
-
 const titleCase = (value = "") =>
 	String(value || "")
 		.trim()
 		.toLowerCase()
 		.replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase());
 
-export const formatOtaReservationStatus = (value = "", reservation = {}) => {
+export const formatOtaReservationStatus = (value = "") => {
 	const normalized = String(value || "")
 		.trim()
 		.toLowerCase()
 		.replace(/\s+/g, " ");
-	if (
-		normalized === "ota platform review" &&
-		isHotelRunnerManaged(reservation)
-	) {
-		return "OTA Platform Review HotelRunner";
-	}
 	return STATUS_LABELS[normalized] || titleCase(normalized || "ota review");
 };
