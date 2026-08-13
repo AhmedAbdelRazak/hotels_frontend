@@ -2428,3 +2428,17 @@ Future TODO Backlog - Added 2026-05-26
     scans must find no runnable HotelRunner UI or API path.
   - Existing OTA inbound-email reservation flows and unrelated admin routes
     must continue to work without attempting or falling back to HotelRunner.
+
+2026-08-13 Unified OTA Platform Review Status Label
+- Route:
+  - /admin/ota-reservations
+- Files:
+  - src/AdminModule/OtaReservations/otaReservationPresentation.js
+  - src/AdminModule/OtaReservations/otaReservationPresentation.test.js
+- Behavior:
+  - The Status column displays OTA Platform Review for every reservation in
+    that state, including historical reservations carrying HotelRunner source,
+    transport, or management markers.
+  - This is a presentation-only normalization. Stored reservation status,
+    historical supplier provenance, queue membership, and filtering behavior
+    remain unchanged.
