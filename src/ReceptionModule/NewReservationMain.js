@@ -25,6 +25,10 @@ import HotelRunnerReservationList from "./HotelRunnerReservationList";
 import HotelHeatMap from "./HotelHeatMap";
 import WorldClocks from "./WorldClocks";
 import InHouseReport from "../HotelModule/NewReservation/InHouseReport";
+import {
+	otaProviderForReservationSource,
+	withReservationCreateIdentity,
+} from "../HotelModule/NewReservation/reservationCreateIdentity";
 
 const handleSignout = (history) => {
 	signout(() => {
@@ -349,6 +353,13 @@ const NewReservationMain = () => {
 		if (!booking_source) {
 			return toast.error("Booking Source is required");
 		}
+		if (
+			!searchedReservation?._id &&
+			otaProviderForReservationSource(booking_source) &&
+			!String(confirmation_number || "").trim()
+		) {
+			return toast.error("OTA Confirmation # is required");
+		}
 
 		if (
 			total_amount === 0 &&
@@ -442,11 +453,14 @@ const NewReservationMain = () => {
 				}
 			});
 		} else {
+			const createPayload = otaProviderForReservationSource(booking_source)
+				? withReservationCreateIdentity(new_reservation, confirmation_number)
+				: new_reservation;
 			createNewReservation(
 				user._id,
 				hotelDetails._id,
 				token,
-				new_reservation
+				createPayload
 			).then((data) => {
 				if (data && data.error) {
 					console.log(data.error, "error create new reservation");

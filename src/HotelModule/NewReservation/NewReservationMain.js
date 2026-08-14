@@ -39,6 +39,10 @@ import { canUseHotelReservationEditor } from "../ReservationsFolder/hotelReserva
 import { protectHotelRunnerEditorPayload } from "../../AdminModule/AllReservation/hotelRunnerPricingEditPolicy";
 import { isSuperAdminUser } from "../../AdminModule/utils/superUsers";
 import { canAccessReservationWorkspaceTab } from "./reservationWorkspaceAccess";
+import {
+	otaProviderForReservationSource,
+	withReservationCreateIdentity,
+} from "./reservationCreateIdentity";
 
 const defaultAgentBookingSource = (user) =>
 	String(user?.companyName || user?.name || user?.email || "").trim();
@@ -901,6 +905,13 @@ const NewReservationMain = ({
 		const resolvedBookingSource =
 			booking_source || (limitedOrderTakerAccount ? agentDefaultBookingSource : "");
 		if (!resolvedBookingSource) return toast.error("Booking Source is required");
+		if (
+			!searchedReservation?._id &&
+			otaProviderForReservationSource(resolvedBookingSource) &&
+			!String(confirmation_number || "").trim()
+		) {
+			return toast.error("OTA Confirmation # is required");
+		}
 
 		if (
 			total_amount === 0 &&
@@ -972,7 +983,7 @@ const NewReservationMain = ({
 			? agentAssignedPricingCommission.amount
 			: 0;
 
-		const new_reservation = {
+		const reservationDraft = {
 			customer_details,
 			calculateTotalAmountWithRooms: calculateTotalAmountWithRooms(),
 			checkin_date: start_date,
@@ -1030,9 +1041,13 @@ const NewReservationMain = ({
 				searchedReservation.confirmation_number
 					? user
 					: "",
-
-			confirmation_number: confirmation_number,
 		};
+		const new_reservation = searchedReservation?._id
+			? reservationDraft
+			: withReservationCreateIdentity(
+					reservationDraft,
+					confirmation_number,
+			  );
 
 		if (limitedOrderTakerAccount) {
 			const collectionModel =

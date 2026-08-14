@@ -699,9 +699,11 @@ const ZReservationForm = ({
 											<option value='janat'>Janat</option>
 											<option value='affiliate'>Affiliate</option>
 											<option value='manual'>Manual Reservation</option>
+											<option value='agoda'>Agoda</option>
 											<option value='booking.com'>Booking.com</option>
 											<option value='trivago'>Trivago</option>
 											<option value='expedia'>Expedia</option>
+											<option value='trip.com'>Trip.com</option>
 											<option value='hotel.com'>Hotel.com</option>
 											<option value='airbnb'>Airbnb</option>
 										</select>
