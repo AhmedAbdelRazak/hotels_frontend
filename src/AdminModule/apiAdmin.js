@@ -3541,6 +3541,113 @@ export const getPaidBreakdownReportAdmin = (
 		});
 };
 
+const parseReconciliationResponse = async (response, fallbackMessage) => {
+	let payload;
+	try {
+		payload = await response.json();
+	} catch {
+		throw new Error("Could not read the reconciliation response");
+	}
+	if (!response.ok) {
+		const error = new Error(
+			payload?.error || payload?.message || fallbackMessage,
+		);
+		error.payload = payload;
+		error.status = response.status;
+		throw error;
+	}
+	return payload;
+};
+
+export const getReconciliationReportAdmin = (
+	userId,
+	token,
+	{
+		hotelId,
+		searchQuery = "",
+		dateBy = "",
+		dateFrom = "",
+		dateTo = "",
+		dateRanges = [],
+		paymentBreakdownKeys = [],
+		reconciliationStatus = "all",
+		includeScorecards,
+		page = 1,
+		limit = 500,
+	} = {},
+) => {
+	const params = new URLSearchParams();
+	const serializedDateRanges = serializePaidReportDateRanges(dateRanges);
+	if (hotelId) params.set("hotelId", hotelId);
+	if (searchQuery) params.set("searchQuery", searchQuery);
+	if (dateBy) params.set("dateBy", dateBy);
+	if (serializedDateRanges) {
+		params.set("dateRanges", serializedDateRanges);
+	} else {
+		if (dateFrom) params.set("dateFrom", dateFrom);
+		if (dateTo) params.set("dateTo", dateTo);
+	}
+	const selectedKeys = Array.isArray(paymentBreakdownKeys)
+		? paymentBreakdownKeys.filter(Boolean)
+		: String(paymentBreakdownKeys || "")
+				.split(",")
+				.map((key) => key.trim())
+				.filter(Boolean);
+	if (selectedKeys.length) {
+		params.set("paymentBreakdownKeys", selectedKeys.join(","));
+	}
+	if (reconciliationStatus) {
+		params.set("reconciliationStatus", reconciliationStatus);
+	}
+	if (includeScorecards === false) params.set("includeScorecards", "false");
+	if (page) params.set("page", String(page));
+	if (limit) params.set("limit", String(limit));
+
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reconciliation/report/${userId}?${params.toString()}`,
+		{
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+		},
+	).then((response) =>
+		parseReconciliationResponse(
+			response,
+			"Could not load the reconciliation report",
+		),
+	);
+};
+
+export const updateReconciliationStatusAdmin = (
+	userId,
+	token,
+	payload = {},
+) =>
+	fetch(
+		`${process.env.REACT_APP_API_URL}/reconciliation/status/${userId}`,
+		{
+			method: "PATCH",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(payload),
+		},
+	).then((response) =>
+		parseReconciliationResponse(
+			response,
+			"Could not update reconciliation status",
+		),
+	);
+
+export const getPaymentReconciliationReportAdmin =
+	getReconciliationReportAdmin;
+export const updatePaymentReconciliationStatusAdmin =
+	updateReconciliationStatusAdmin;
+
 const buildAdminUrlSearch = (params = {}) => {
 	const query = new URLSearchParams();
 	Object.entries(params || {}).forEach(([key, value]) => {

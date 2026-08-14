@@ -23,19 +23,16 @@ import {
 	resolvePaidReportPeriods,
 } from "./paidReportDateFilter";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
+import {
+	PAYMENT_BREAKDOWN_KEYS,
+	RECONCILIATION_STATUSES,
+	moneyCents,
+	summarizeReservationReconciliation,
+} from "./paymentReconciliation";
 
 const { Option } = Select;
 
-const breakdownKeys = [
-	"paid_online_via_link",
-	"paid_at_hotel_cash",
-	"paid_at_hotel_card",
-	"paid_to_hotel",
-	"paid_online_jannatbooking",
-	"paid_online_other_platforms",
-	"paid_online_via_instapay",
-	"paid_no_show",
-];
+const breakdownKeys = PAYMENT_BREAKDOWN_KEYS;
 
 const PREFERRED_PAID_REPORT_HOTEL_ID = "6a40b6a1a6efe70450536038";
 const PAID_REPORT_PAGE_LIMIT = 500;
@@ -48,12 +45,27 @@ const EMPTY_SCORECARDS = Object.freeze({
 	paidAmount: 0,
 	breakdownTotals: {},
 	financialCoverage: null,
+	reconciliationSummary: null,
 });
 
 const safeNumber = (value) => {
 	const parsed = Number(value);
 	return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const RECONCILIATION_FILTERS = RECONCILIATION_STATUSES;
+
+const summarizeRowsReconciliation = (rows = []) =>
+	rows.reduce(
+		(summary, reservation) => {
+			const row = summarizeReservationReconciliation(reservation);
+			summary.totalCents += row.totalCents;
+			summary.reconciledCents += row.reconciledCents;
+			summary.waitingCents += row.waitingCents;
+			return summary;
+		},
+		{ totalCents: 0, reconciledCents: 0, waitingCents: 0 },
+	);
 
 const formatMoney = (value, locale = "en-US") =>
 	safeNumber(value).toLocaleString(locale, {
@@ -318,6 +330,10 @@ const PaidReportAdmin = () => {
 	const [scorecards, setScorecards] = useState(EMPTY_SCORECARDS);
 	const [detailsVisible, setDetailsVisible] = useState(false);
 	const [selectedReservation, setSelectedReservation] = useState(null);
+	const [activeBreakdownKey, setActiveBreakdownKey] = useState("");
+	const [reconciliationFilter, setReconciliationFilter] = useState(
+		RECONCILIATION_FILTERS.ALL,
+	);
 
 	const isArabic = chosenLanguage === "Arabic";
 	const numberLocale = "en-US";
@@ -455,6 +471,24 @@ const PaidReportAdmin = () => {
 			scorePaidAmount: isArabic
 				? "إجمالي المدفوع (ر.س)"
 				: "Paid Amount (SAR)",
+			reconciledAmount: isArabic
+				? "تمت تسويته (ر.س)"
+				: "Reconciled (SAR)",
+			waitingAmount: isArabic
+				? "بانتظار التسوية (ر.س)"
+				: "Awaiting Reconciliation (SAR)",
+			reconciliationStatus: isArabic
+				? "حالة التسوية"
+				: "Reconciliation Status",
+			reconciliationAll: isArabic ? "الكل" : "All",
+			reconciled: isArabic ? "تمت التسوية" : "Reconciled",
+			waiting: isArabic ? "بانتظار التسوية" : "Awaiting Reconciliation",
+			filterByPaymentMethod: isArabic
+				? "اضغط على بند دفع لتصفية الجدول"
+				: "Click a payment method to filter the table",
+			clearPaymentFilter: isArabic
+				? "إظهار جميع بنود الدفع"
+				: "Show all payment methods",
 			na: isArabic ? "غير متاح" : "N/A",
 			missingHotel: isArabic
 				? "بيانات الفندق غير متوفرة لهذا الحجز."
@@ -469,10 +503,6 @@ const PaidReportAdmin = () => {
 		totalMode === REPORT_TOTAL_MODES.GROSS
 			? labels.grossTotal
 			: labels.netTotal;
-	const selectedAvailableSubtotalLabel =
-		totalMode === REPORT_TOTAL_MODES.GROSS
-			? labels.availableGrossSubtotal
-			: labels.availableNetSubtotal;
 	const appliedDateRangesSignature = useMemo(
 		() => dateRangesKey(appliedDateFilter.dateRanges),
 		[appliedDateFilter.dateRanges],
@@ -614,6 +644,10 @@ const PaidReportAdmin = () => {
 				),
 				breakdownTotals: scorecardPayload?.breakdownTotals || {},
 				financialCoverage,
+				reconciliationSummary:
+					scorecardPayload?.reconciliationSummary ||
+					scorecardPayload?.reconciliation ||
+					null,
 			});
 		} catch (err) {
 			if (!mountedRef.current || requestId !== reportRequestSequence.current) {
@@ -734,23 +768,66 @@ const PaidReportAdmin = () => {
 		});
 	}, [reservations]);
 
+	const displayRows = useMemo(
+		() =>
+			rows.filter((reservation) => {
+				const selectedKeys = activeBreakdownKey
+					? [activeBreakdownKey]
+					: breakdownKeys;
+				if (
+					activeBreakdownKey &&
+					moneyCents(
+						reservation?.paid_amount_breakdown?.[activeBreakdownKey],
+					) <= 0
+				) {
+					return false;
+				}
+				if (reconciliationFilter === RECONCILIATION_FILTERS.ALL) {
+					return true;
+				}
+				return (
+					summarizeReservationReconciliation(reservation, selectedKeys).status ===
+					reconciliationFilter
+				);
+			}),
+		[rows, activeBreakdownKey, reconciliationFilter],
+	);
+
+	const reconciliationTotals = useMemo(() => {
+		const fallback = summarizeRowsReconciliation(rows);
+		const apiSummary = scorecards.reconciliationSummary;
+		if (!apiSummary || typeof apiSummary !== "object") return fallback;
+		const reconciledCents = moneyCents(
+			apiSummary.reconciledAmount ?? apiSummary.reconciledPaidAmount,
+		);
+		const waitingCents = moneyCents(
+			apiSummary.waitingAmount ?? apiSummary.awaitingAmount,
+		);
+		const totalCents = moneyCents(
+			apiSummary.totalPaidAmount ?? apiSummary.totalAmount,
+		);
+		if (totalCents !== reconciledCents + waitingCents) return fallback;
+		return { totalCents, reconciledCents, waitingCents };
+	}, [rows, scorecards.reconciliationSummary]);
+
 	const tableTotals = useMemo(() => {
 		const breakdownTotals = breakdownKeys.reduce((acc, key) => {
-			acc[key] = rows.reduce(
+			acc[key] = displayRows.reduce(
 				(sum, reservation) =>
 					sum + safeNumber(reservation?.paid_amount_breakdown?.[key]),
 				0,
 			);
 			return acc;
 		}, {});
-		const totalPaid = rows.reduce(
+		const totalPaid = displayRows.reduce(
 			(sum, reservation) => sum + safeNumber(reservation?.paidTotal),
 			0,
 		);
-		const availableRows = rows.filter(
+		const availableRows = displayRows.filter(
 			(reservation) => reservation?.totalAmount !== null,
 		);
-		const hasAvailableRows = availableRows.length > 0 || rows.length === 0;
+		const hasAvailableRows =
+			availableRows.length > 0 || displayRows.length === 0;
 		const totalAmount = hasAvailableRows
 			? sumMoneyValues(availableRows.map((reservation) => reservation.totalAmount))
 			: null;
@@ -765,16 +842,16 @@ const PaidReportAdmin = () => {
 			totalAmount,
 			remainingAmount,
 			includedCount: availableRows.length,
-			excludedCount: rows.length - availableRows.length,
+			excludedCount: displayRows.length - availableRows.length,
 			netFallbackCount:
 				totalMode === REPORT_TOTAL_MODES.NET
-					? rows.filter(
+					? displayRows.filter(
 							(reservation) =>
 								reservation?.report_total_net_fallback === true,
 						  ).length
 					: 0,
 		};
-	}, [rows, totalMode]);
+	}, [displayRows, totalMode]);
 
 	const breakdownSummary = useMemo(() => {
 		const fromApi = scorecards.breakdownTotals;
@@ -787,12 +864,6 @@ const PaidReportAdmin = () => {
 		return tableTotals.breakdownTotals;
 	}, [scorecards.breakdownTotals, tableTotals]);
 
-	const hasPartialScorecardCoverage =
-		scorecards.financialCoverage?.includedCount > 0 &&
-		scorecards.financialCoverage?.excludedCount > 0;
-	const scorecardTotalLabel = hasPartialScorecardCoverage
-		? selectedAvailableSubtotalLabel
-		: selectedTotalLabel;
 	const scorecardCoverage = scorecards.financialCoverage
 		? {
 				...scorecards.financialCoverage,
@@ -808,11 +879,12 @@ const PaidReportAdmin = () => {
 			scorecardCoverage.netFallbackCount > 0)
 			? labels.financialCoverage(scorecardCoverage)
 			: "";
+
 	const tableCoverageMessage =
 		tableTotals.excludedCount > 0 || tableTotals.netFallbackCount > 0
 			? labels.tableFinancialCoverage({
 					includedCount: tableTotals.includedCount,
-					rowCount: rows.length,
+					rowCount: displayRows.length,
 					excludedCount: tableTotals.excludedCount,
 					netFallbackCount: tableTotals.netFallbackCount,
 			  })
@@ -824,8 +896,21 @@ const PaidReportAdmin = () => {
 		return hotel?.hotelName || "";
 	}, [hotels, selectedHotelId]);
 
+	const reconciliationStatusForRow = useCallback(
+		(reservation) => {
+			const selectedKeys = activeBreakdownKey
+				? [activeBreakdownKey]
+				: breakdownKeys;
+			return summarizeReservationReconciliation(reservation, selectedKeys)
+				.status === RECONCILIATION_FILTERS.RECONCILED
+				? labels.reconciled
+				: labels.waiting;
+		},
+		[activeBreakdownKey, labels.reconciled, labels.waiting],
+	);
+
 	const handleExportExcel = useCallback(() => {
-		if (!rows.length) {
+		if (!displayRows.length) {
 			message.info(labels.noDataToExport);
 			return;
 		}
@@ -844,9 +929,10 @@ const PaidReportAdmin = () => {
 			labels.totalPaid,
 			selectedTotalLabel,
 			labels.remaining,
+			labels.reconciliationStatus,
 		];
 
-		const exportRows = rows.map((reservation) => {
+		const exportRows = displayRows.map((reservation) => {
 			const roomSummary = getReservationRoomSummary(reservation);
 			const row = {
 				[labels.name]: reservation?.customer_details?.name || "",
@@ -871,6 +957,8 @@ const PaidReportAdmin = () => {
 				[labels.totalPaid]: safeNumber(reservation?.paidTotal),
 				[selectedTotalLabel]: reservation?.totalAmount ?? "",
 				[labels.remaining]: reservation?.remainingAmount ?? "",
+				[labels.reconciliationStatus]:
+					reconciliationStatusForRow(reservation),
 			};
 
 			breakdownKeys.forEach((key) => {
@@ -887,7 +975,7 @@ const PaidReportAdmin = () => {
 				tableTotals.excludedCount > 0 || tableTotals.netFallbackCount > 0
 					? labels.exportPartialTotalsRow({
 							includedCount: tableTotals.includedCount,
-							rowCount: rows.length,
+							rowCount: displayRows.length,
 							netFallbackCount: tableTotals.netFallbackCount,
 						  })
 					: labels.totalRow,
@@ -902,6 +990,7 @@ const PaidReportAdmin = () => {
 			[labels.totalPaid]: safeNumber(tableTotals.totalPaid),
 			[selectedTotalLabel]: tableTotals.totalAmount ?? "",
 			[labels.remaining]: tableTotals.remainingAmount ?? "",
+			[labels.reconciliationStatus]: "",
 		};
 
 		breakdownKeys.forEach((key) => {
@@ -930,12 +1019,13 @@ const PaidReportAdmin = () => {
 		const fileName = `paid-breakdown-admin-${hotelSegment}-${fileDate}.xlsx`;
 		XLSX.writeFile(workbook, fileName);
 	}, [
-		rows,
+		displayRows,
 		labels,
 		selectedTotalLabel,
 		selectedHotelName,
 		numberLocale,
 		tableTotals,
+		reconciliationStatusForRow,
 	]);
 
 	const handleOpenDetails = (reservation) => {
@@ -997,7 +1087,7 @@ const PaidReportAdmin = () => {
 					</Button>
 					<Button
 						onClick={handleExportExcel}
-						disabled={!selectedHotelId || loading || rows.length === 0}
+						disabled={!selectedHotelId || loading || displayRows.length === 0}
 						className='report-export-btn'
 					>
 						{labels.exportExcel}
@@ -1029,18 +1119,26 @@ const PaidReportAdmin = () => {
 				<>
 					<ScorecardsRow>
 						<Scorecard>
-							<span>{scorecardTotalLabel}</span>
+							<span>{labels.scorePaidAmount}</span>
+							<strong>{formatMoney(scorecards.paidAmount, numberLocale)}</strong>
+						</Scorecard>
+						<Scorecard $tone='green'>
+							<span>{labels.reconciledAmount}</span>
 							<strong>
-								{formatOptionalMoney(
-									scorecards.totalAmount,
+								{formatMoney(
+									reconciliationTotals.reconciledCents / 100,
 									numberLocale,
-									labels.na,
 								)}
 							</strong>
 						</Scorecard>
-						<Scorecard>
-							<span>{labels.scorePaidAmount}</span>
-							<strong>{formatMoney(scorecards.paidAmount, numberLocale)}</strong>
+						<Scorecard $tone='amber'>
+							<span>{labels.waitingAmount}</span>
+							<strong>
+								{formatMoney(
+									reconciliationTotals.waitingCents / 100,
+									numberLocale,
+								)}
+							</strong>
 						</Scorecard>
 					</ScorecardsRow>
 					{scorecardCoverageMessage ? (
@@ -1051,13 +1149,46 @@ const PaidReportAdmin = () => {
 							{scorecardCoverageMessage}
 						</FinancialCoverageNotice>
 					) : null}
+					<StatusFilterBar aria-label={labels.reconciliationStatus}>
+						{[
+							[RECONCILIATION_FILTERS.ALL, labels.reconciliationAll],
+							[RECONCILIATION_FILTERS.RECONCILED, labels.reconciled],
+							[RECONCILIATION_FILTERS.WAITING, labels.waiting],
+						].map(([value, label]) => (
+							<button
+								key={value}
+								type='button'
+								aria-pressed={reconciliationFilter === value}
+								className={reconciliationFilter === value ? "active" : ""}
+								onClick={() => setReconciliationFilter(value)}
+							>
+								{label}
+							</button>
+						))}
+					</StatusFilterBar>
 					<BreakdownTotals>
 						<BreakdownTotalsTitle>
-							{labels.breakdownTotalsTitle}
+							<span>{labels.breakdownTotalsTitle}</span>
+							<small>{labels.filterByPaymentMethod}</small>
+							{activeBreakdownKey ? (
+								<button type='button' onClick={() => setActiveBreakdownKey("")}>
+									{labels.clearPaymentFilter}
+								</button>
+							) : null}
 						</BreakdownTotalsTitle>
 						<BreakdownTotalsGrid>
 							{breakdownKeys.map((key) => (
-								<BreakdownTotalsItem key={key}>
+								<BreakdownTotalsItem
+									key={key}
+									type='button'
+									aria-pressed={activeBreakdownKey === key}
+									className={activeBreakdownKey === key ? "active" : ""}
+									onClick={() =>
+										setActiveBreakdownKey((current) =>
+											current === key ? "" : key,
+										)
+									}
+								>
 									<span>{labels.breakdown[key]}</span>
 									<strong>
 										{formatMoney(breakdownSummary[key], numberLocale)}
@@ -1066,7 +1197,7 @@ const PaidReportAdmin = () => {
 							))}
 						</BreakdownTotalsGrid>
 					</BreakdownTotals>
-					{rows.length === 0 ? (
+					{displayRows.length === 0 ? (
 						<EmptyState>{labels.emptyData}</EmptyState>
 					) : (
 						<>
@@ -1093,11 +1224,12 @@ const PaidReportAdmin = () => {
 								<th>{labels.totalPaid}</th>
 								<th>{selectedTotalLabel}</th>
 								<th>{labels.remaining}</th>
+								<th>{labels.reconciliationStatus}</th>
 								<th>{labels.details}</th>
 							</tr>
 						</thead>
 						<tbody>
-							{rows.map((reservation) => {
+							{displayRows.map((reservation) => {
 								const nameValue =
 									reservation?.customer_details?.name || labels.na;
 								const confirmationValue =
@@ -1160,6 +1292,20 @@ const PaidReportAdmin = () => {
 										)}
 									</td>
 									<td>
+										<ReconciliationPill
+											$status={
+												summarizeReservationReconciliation(
+													reservation,
+													activeBreakdownKey
+														? [activeBreakdownKey]
+														: breakdownKeys,
+												).status
+											}
+										>
+											{reconciliationStatusForRow(reservation)}
+										</ReconciliationPill>
+									</td>
+									<td>
 										<Button onClick={() => handleOpenDetails(reservation)}>
 											{labels.viewDetails}
 										</Button>
@@ -1203,6 +1349,7 @@ const PaidReportAdmin = () => {
 									)}
 								</td>
 								<td></td>
+								<td></td>
 							</tr>
 						</tfoot>
 							</StyledTable>
@@ -1239,6 +1386,20 @@ const Wrapper = styled.div`
 	width: 100%;
 	direction: ${(props) => (props.$isArabic ? "rtl" : "ltr")};
 	text-align: ${(props) => (props.$isArabic ? "right" : "left")};
+
+	.report-export-btn {
+		border-color: #16845b;
+		background: linear-gradient(180deg, #19a66d 0%, #0c7049 100%);
+		color: #fff;
+		font-weight: 800;
+		box-shadow: 0 6px 14px rgba(12, 112, 73, 0.2);
+	}
+
+	.report-export-btn:hover:not(:disabled) {
+		border-color: #0b6b46;
+		background: linear-gradient(180deg, #159762 0%, #095f3d 100%);
+		color: #fff;
+	}
 `;
 
 const ControlsRow = styled.div`
@@ -1398,8 +1559,19 @@ const FinancialCoverageNotice = styled.div`
 `;
 
 const Scorecard = styled.div`
-	background: #f7f9fc;
-	border: 1px solid #dfe6f1;
+	background: ${(props) =>
+		props.$tone === "green"
+			? "#f0fdf4"
+			: props.$tone === "amber"
+				? "#fffbeb"
+				: "#f2f8ff"};
+	border: 1px solid
+		${(props) =>
+			props.$tone === "green"
+				? "#bbf7d0"
+				: props.$tone === "amber"
+					? "#fde68a"
+					: "#cfe5fb"};
 	border-radius: 10px;
 	padding: 12px 18px;
 	min-width: 220px;
@@ -1432,9 +1604,31 @@ const BreakdownTotals = styled.div`
 `;
 
 const BreakdownTotalsTitle = styled.div`
-	font-weight: 600;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	font-weight: 700;
 	margin-bottom: 8px;
 	color: #1f2933;
+
+	small {
+		color: #64748b;
+		font-size: 0.76rem;
+		font-weight: 600;
+	}
+
+	button {
+		appearance: none;
+		border: 1px solid #9cc9ec;
+		border-radius: 999px;
+		background: #eef7ff;
+		color: #14527a;
+		cursor: pointer;
+		font-size: 0.76rem;
+		font-weight: 800;
+		padding: 5px 10px;
+	}
 `;
 
 const BreakdownTotalsGrid = styled.div`
@@ -1447,7 +1641,10 @@ const BreakdownTotalsGrid = styled.div`
 	}
 `;
 
-const BreakdownTotalsItem = styled.div`
+const BreakdownTotalsItem = styled.button`
+	appearance: none;
+	font: inherit;
+	text-align: inherit;
 	background: #ffffff;
 	border: 1px solid #e2e8f0;
 	border-radius: 10px;
@@ -1455,6 +1652,21 @@ const BreakdownTotalsItem = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
+	cursor: pointer;
+	transition: transform 0.16s ease, border-color 0.16s ease,
+		box-shadow 0.16s ease;
+
+	&:hover {
+		transform: translateY(-1px);
+		border-color: #79bce8;
+		box-shadow: 0 8px 18px rgba(13, 83, 128, 0.12);
+	}
+
+	&.active {
+		border-color: #1176ad;
+		background: linear-gradient(180deg, #eef9ff 0%, #e4f3ff 100%);
+		box-shadow: 0 0 0 3px rgba(31, 137, 190, 0.12);
+	}
 
 	span {
 		font-size: 0.82rem;
@@ -1465,4 +1677,56 @@ const BreakdownTotalsItem = styled.div`
 		font-size: 1rem;
 		color: #1a202c;
 	}
+`;
+
+const StatusFilterBar = styled.div`
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 16px;
+	padding: 5px;
+	border: 1px solid #cfe5fb;
+	border-radius: 10px;
+	background: #f5faff;
+
+	button {
+		appearance: none;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		background: transparent;
+		color: #36556f;
+		cursor: pointer;
+		font-weight: 800;
+		padding: 7px 13px;
+	}
+
+	button.active {
+		border-color: #116b9e;
+		background: linear-gradient(180deg, #1977aa 0%, #0b456d 100%);
+		color: #fff;
+		box-shadow: 0 5px 12px rgba(13, 80, 122, 0.2);
+	}
+`;
+
+const ReconciliationPill = styled.span`
+	display: inline-flex;
+	align-items: center;
+	min-height: 25px;
+	padding: 3px 9px;
+	border: 1px solid
+		${(props) =>
+			props.$status === RECONCILIATION_FILTERS.RECONCILED
+				? "#86d6a5"
+				: "#f2c66d"};
+	border-radius: 999px;
+	background: ${(props) =>
+		props.$status === RECONCILIATION_FILTERS.RECONCILED
+			? "#ecfdf3"
+			: "#fff8df"};
+	color: ${(props) =>
+		props.$status === RECONCILIATION_FILTERS.RECONCILED
+			? "#17643a"
+			: "#7a5207"};
+	font-size: 0.75rem;
+	font-weight: 800;
 `;

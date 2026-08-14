@@ -10,14 +10,21 @@ import { isAuthenticated } from "../../auth";
 import ReservationsOverview from "./ReservationsOverview";
 import HotelsInventoryMap from "./HotelsInventoryMap";
 import PaidReportAdmin from "./PaidReportAdmin";
-import ProfitReportAdmin from "./ProfitReportAdmin";
+import ReconciliationReportAdmin from "./ReconciliationReportAdmin";
 import { isSuperAdminUser } from "../utils/superUsers";
 import { twoColumnPhoneTopTabs } from "../../components/ResponsiveTopTabs";
 
-const VALID_REPORT_TABS = ["reservations", "inventory", "paid-overview", "Profit"];
+const VALID_REPORT_TABS = [
+	"reservations",
+	"inventory",
+	"paid-overview",
+	"reconciliation",
+];
 const normalizeReportTab = (tab) => {
 	const normalized = String(tab || "").trim();
-	if (normalized.toLowerCase() === "profit") return "Profit";
+	if (["profit", "reconciliation"].includes(normalized.toLowerCase())) {
+		return "reconciliation";
+	}
 	return VALID_REPORT_TABS.includes(normalized) ? normalized : "reservations";
 };
 
@@ -31,7 +38,7 @@ const HOTEL_REPORTS_TEXT = {
 		reservations: "Reservations Overview",
 		inventory: "Hotels Inventory",
 		paidOverview: "Paid Reservations Overview",
-		profit: "Profit",
+		reconciliation: "Reconciliation",
 	},
 	ar: {
 		passwordTitle: "\u0623\u062f\u062e\u0644 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631",
@@ -47,7 +54,7 @@ const HOTEL_REPORTS_TEXT = {
 			"\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0641\u0646\u0627\u062f\u0642",
 		paidOverview:
 			"\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0629",
-		profit: "\u0627\u0644\u0631\u0628\u062d",
+		reconciliation: "\u0627\u0644\u062a\u0633\u0648\u064a\u0629",
 	},
 };
 
@@ -208,7 +215,7 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 		{ key: "reservations", label: L.reservations },
 		{ key: "inventory", label: L.inventory },
 		{ key: "paid-overview", label: L.paidOverview },
-		{ key: "Profit", label: L.profit },
+		{ key: "reconciliation", label: L.reconciliation },
 	];
 
 	return (
@@ -305,10 +312,10 @@ const HotelReportsMainAdmin = ({ chosenLanguage }) => {
 								</div>
 							)}
 
-							{activeTab === "Profit" && (
+							{activeTab === "reconciliation" && (
 								<div className='report-section'>
-									<h3 className='report-heading'>{L.profit}</h3>
-									<ProfitReportAdmin />
+									<h3 className='report-heading'>{L.reconciliation}</h3>
+									<ReconciliationReportAdmin />
 								</div>
 							)}
 						</div>

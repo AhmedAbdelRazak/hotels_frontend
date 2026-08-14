@@ -174,6 +174,11 @@ const deferred = () => {
   return { promise, reject, resolve };
 };
 
+const scorecardValue = (label) =>
+  screen.getByText(label, { selector: "span" }).closest("div").querySelector(
+    "strong",
+  ).textContent;
+
 const activeAjyadHotel = () => ({
   _id: AJYAD_HOTEL_ID,
   hotelName: "Ajyad Hotel",
@@ -649,10 +654,10 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(footerCells[13].textContent).toBe("1,002.00");
     expect(footerCells[14].textContent).toBe("5,010.00");
     expect(footerCells[15].textContent).toBe("4,008.00");
-    const totalScorecard = screen
-      .getByText("Net Total (SAR)", { selector: "span" })
-      .closest("div");
-    expect(totalScorecard.querySelector("strong").textContent).toBe("5,010.00");
+    expect(screen.queryByText("Net Total (SAR)", { selector: "span" })).toBeNull();
+    expect(scorecardValue("Paid Amount (SAR)")).toBe("1,002.00");
+    expect(scorecardValue("Reconciled (SAR)")).toBe("0.00");
+    expect(scorecardValue("Awaiting Reconciliation (SAR)")).toBe("1,002.00");
     expect(
       screen.getAllByText("Paid at Hotel (Cash) (SAR)").length,
     ).toBeGreaterThanOrEqual(2);
@@ -854,10 +859,8 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(cells[13].textContent).toBe("12.00");
     expect(cells[14].textContent).toBe("N/A");
     expect(cells[15].textContent).toBe("N/A");
-    const scorecard = screen
-      .getByText("Net Total (SAR)", { selector: "span" })
-      .closest("div");
-    expect(scorecard.querySelector("strong").textContent).toBe("N/A");
+    expect(screen.queryByText("Net Total (SAR)", { selector: "span" })).toBeNull();
+    expect(scorecardValue("Paid Amount (SAR)")).toBe("12.00");
     expect(
       screen.getByTestId("paid-scorecard-coverage-notice").textContent,
     ).toContain("0/1 reservations");
@@ -892,10 +895,10 @@ describe("PaidReportAdmin paid overview integration", () => {
     render(<PaidReportAdmin />);
     expect(await screen.findByText("EXCLUDED")).toBeTruthy();
 
-    const subtotalCard = screen
-      .getByText("Available Net Subtotal (SAR)", { selector: "span" })
-      .closest("div");
-    expect(subtotalCard.querySelector("strong").textContent).toBe("100.10");
+    expect(
+      screen.queryByText("Available Net Subtotal (SAR)", { selector: "span" }),
+    ).toBeNull();
+    expect(scorecardValue("Paid Amount (SAR)")).toBe("32.07");
     expect(
       screen.getByTestId("paid-scorecard-coverage-notice").textContent,
     ).toContain("1/2 reservations");
@@ -929,13 +932,17 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(exportRows[2]["Remaining (SAR)"]).toBe(80.05);
 
     fireEvent.click(screen.getByRole("button", { name: "Gross Total" }));
-    const grossSubtotalCard = await screen.findByText(
-      "Available Gross Subtotal (SAR)",
-      { selector: "span" },
+    await waitFor(() =>
+      expect(getPaidBreakdownReportAdmin).toHaveBeenLastCalledWith(
+        "admin-1",
+        "token-1",
+        expect.objectContaining({ totalMode: "gross" }),
+      ),
     );
-    expect(grossSubtotalCard.closest("div").querySelector("strong").textContent).toBe(
-      "120.20",
-    );
+    expect(
+      screen.queryByText("Available Gross Subtotal (SAR)", { selector: "span" }),
+    ).toBeNull();
+    expect(await screen.findByText("EXCLUDED")).toBeTruthy();
     expect(cellsForConfirmation("EXCLUDED")[13].textContent).toBe("12.02");
   });
 
@@ -960,10 +967,9 @@ describe("PaidReportAdmin paid overview integration", () => {
 
     render(<PaidReportAdmin />);
     expect(await screen.findByText("EXCLUDED")).toBeTruthy();
-    const subtotalCard = screen
-      .getByText("Available Net Subtotal (SAR)", { selector: "span" })
-      .closest("div");
-    expect(subtotalCard.querySelector("strong").textContent).toBe("69,305.35");
+    expect(
+      screen.queryByText("Available Net Subtotal (SAR)", { selector: "span" }),
+    ).toBeNull();
     expect(
       screen.getByTestId("paid-scorecard-coverage-notice").textContent,
     ).toContain("388/389 reservations");
@@ -1024,10 +1030,11 @@ describe("PaidReportAdmin paid overview integration", () => {
     render(<PaidReportAdmin />);
     expect(await screen.findByText("EXCLUDED")).toBeTruthy();
     expect(
-      screen.getByText("المجموع الفرعي الصافي المتاح (ر.س)", {
+      screen.queryByText("المجموع الفرعي الصافي المتاح (ر.س)", {
         selector: "span",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(scorecardValue("إجمالي المدفوع (ر.س)")).toBe("32.07");
     expect(
       screen.getByTestId("paid-scorecard-coverage-notice").textContent,
     ).toContain("1/2 حجزًا ضمن نطاق الفندق والتاريخ");
@@ -1070,10 +1077,8 @@ describe("PaidReportAdmin paid overview integration", () => {
 
     render(<PaidReportAdmin />);
     expect(await screen.findByText("MISSING-COVERAGE")).toBeTruthy();
-    const totalCard = screen
-      .getByText("Net Total (SAR)", { selector: "span" })
-      .closest("div");
-    expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+    expect(screen.queryByText("Net Total (SAR)", { selector: "span" })).toBeNull();
+    expect(scorecardValue("Paid Amount (SAR)")).toBe("25.00");
     expect(screen.queryByTestId("paid-scorecard-coverage-notice")).toBeNull();
     expect(cellsForConfirmation("MISSING-COVERAGE")[14].textContent).toBe(
       "125.00",
@@ -1095,10 +1100,10 @@ describe("PaidReportAdmin paid overview integration", () => {
 
       render(<PaidReportAdmin />);
       expect(await screen.findByText("ABSENT-COVERAGE")).toBeTruthy();
-      const totalCard = screen
-        .getByText("Net Total (SAR)", { selector: "span" })
-        .closest("div");
-      expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+      expect(
+        screen.queryByText("Net Total (SAR)", { selector: "span" }),
+      ).toBeNull();
+      expect(scorecardValue("Paid Amount (SAR)")).toBe("25.00");
       expect(screen.queryByTestId("paid-scorecard-coverage-notice")).toBeNull();
     },
   );
@@ -1112,10 +1117,10 @@ describe("PaidReportAdmin paid overview integration", () => {
 
       render(<PaidReportAdmin />);
       expect(await screen.findByText("MALFORMED-MONEY")).toBeTruthy();
-      const totalCard = screen
-        .getByText("Net Total (SAR)", { selector: "span" })
-        .closest("div");
-      expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+      expect(
+        screen.queryByText("Net Total (SAR)", { selector: "span" }),
+      ).toBeNull();
+      expect(scorecardValue("Paid Amount (SAR)")).toBe("25.00");
       expect(cellsForConfirmation("MALFORMED-MONEY")[14].textContent).toBe(
         "N/A",
       );
@@ -1142,10 +1147,81 @@ describe("PaidReportAdmin paid overview integration", () => {
 
     render(<PaidReportAdmin />);
     expect(await screen.findByText("No paid breakdown records found.")).toBeTruthy();
-    const totalCard = screen
-      .getByText("Net Total (SAR)", { selector: "span" })
-      .closest("div");
-    expect(totalCard.querySelector("strong").textContent).toBe("N/A");
+    expect(screen.queryByText("Net Total (SAR)", { selector: "span" })).toBeNull();
+    expect(scorecardValue("Paid Amount (SAR)")).toBe("0.00");
+  });
+
+  it("filters the table from a clickable payment card and applies category-specific reconciliation status", async () => {
+    const otherPlatforms = reservationRow("OTHER-PLATFORMS", {
+      reportTotal: 100,
+      paidTotal: 60,
+    });
+    otherPlatforms.paid_amount_breakdown = {
+      paid_at_hotel_cash: 10,
+      paid_online_other_platforms: 50,
+    };
+    otherPlatforms.paid_breakdown_total = 60;
+    otherPlatforms.payment_reconciliation = {
+      breakdown: {
+        paid_online_other_platforms: {
+          status: "reconciled",
+          amountCents: 5000,
+        },
+      },
+    };
+    const cashOnly = reservationRow("CASH-ONLY", {
+      reportTotal: 80,
+      paidTotal: 20,
+    });
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce({
+      data: [otherPlatforms, cashOnly],
+      totalDocuments: 2,
+      page: 1,
+      limit: 500,
+      totalMode: "net",
+      scorecards: {
+        totalAmount: 180,
+        paidAmount: 80,
+        breakdownTotals: {
+          paid_at_hotel_cash: 30,
+          paid_online_other_platforms: 50,
+        },
+        financialMetadata: {
+          netFallback: 0,
+          unavailable: 0,
+          foreignCurrency: 0,
+        },
+        financialIncludedCount: 2,
+        totalMode: "net",
+        reconciliationSummary: {
+          totalPaidAmount: 80,
+          reconciledAmount: 50,
+          waitingAmount: 30,
+        },
+      },
+    });
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("OTHER-PLATFORMS")).toBeTruthy();
+    expect(screen.getByText("CASH-ONLY")).toBeTruthy();
+    expect(scorecardValue("Reconciled (SAR)")).toBe("50.00");
+    expect(scorecardValue("Awaiting Reconciliation (SAR)")).toBe("30.00");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Paid Online \(Other Platforms\) \(SAR\)/,
+      }),
+    );
+    expect(screen.getByText("OTHER-PLATFORMS")).toBeTruthy();
+    expect(screen.queryByText("CASH-ONLY")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reconciled" }));
+    expect(screen.getByText("OTHER-PLATFORMS")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Awaiting Reconciliation" }),
+    );
+    expect(screen.queryByText("OTHER-PLATFORMS")).toBeNull();
+    expect(screen.getByText("No paid breakdown records found.")).toBeTruthy();
   });
 
   it("includes room details and booking source in paid exports", async () => {
