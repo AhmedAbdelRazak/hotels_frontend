@@ -483,6 +483,9 @@ const PaidReportAdmin = () => {
 			reconciliationAll: isArabic ? "الكل" : "All",
 			reconciled: isArabic ? "تمت التسوية" : "Reconciled",
 			waiting: isArabic ? "بانتظار التسوية" : "Awaiting Reconciliation",
+			mixed: isArabic
+				? "\u062a\u0645\u062a \u062a\u0633\u0648\u064a\u0629 \u062c\u0632\u0621"
+				: "Partially reconciled",
 			filterByPaymentMethod: isArabic
 				? "اضغط على بند دفع لتصفية الجدول"
 				: "Click a payment method to filter the table",
@@ -785,10 +788,13 @@ const PaidReportAdmin = () => {
 				if (reconciliationFilter === RECONCILIATION_FILTERS.ALL) {
 					return true;
 				}
-				return (
-					summarizeReservationReconciliation(reservation, selectedKeys).status ===
-					reconciliationFilter
+				const summary = summarizeReservationReconciliation(
+					reservation,
+					selectedKeys,
 				);
+				return reconciliationFilter === RECONCILIATION_FILTERS.RECONCILED
+					? summary.hasReconciled
+					: summary.hasWaiting;
 			}),
 		[rows, activeBreakdownKey, reconciliationFilter],
 	);
@@ -901,12 +907,17 @@ const PaidReportAdmin = () => {
 			const selectedKeys = activeBreakdownKey
 				? [activeBreakdownKey]
 				: breakdownKeys;
-			return summarizeReservationReconciliation(reservation, selectedKeys)
-				.status === RECONCILIATION_FILTERS.RECONCILED
-				? labels.reconciled
-				: labels.waiting;
+			const status = summarizeReservationReconciliation(
+				reservation,
+				selectedKeys,
+			).status;
+			return status === "mixed"
+				? labels.mixed
+				: status === RECONCILIATION_FILTERS.RECONCILED
+					? labels.reconciled
+					: labels.waiting;
 		},
-		[activeBreakdownKey, labels.reconciled, labels.waiting],
+		[activeBreakdownKey, labels.mixed, labels.reconciled, labels.waiting],
 	);
 
 	const handleExportExcel = useCallback(() => {
@@ -1118,11 +1129,28 @@ const PaidReportAdmin = () => {
 			) : (
 				<>
 					<ScorecardsRow>
-						<Scorecard>
+						<Scorecard
+							type='button'
+							aria-pressed={reconciliationFilter === RECONCILIATION_FILTERS.ALL}
+							$active={reconciliationFilter === RECONCILIATION_FILTERS.ALL}
+							onClick={() => setReconciliationFilter(RECONCILIATION_FILTERS.ALL)}
+						>
 							<span>{labels.scorePaidAmount}</span>
 							<strong>{formatMoney(scorecards.paidAmount, numberLocale)}</strong>
 						</Scorecard>
-						<Scorecard $tone='green'>
+						<Scorecard
+							type='button'
+							$tone='green'
+							aria-pressed={
+								reconciliationFilter === RECONCILIATION_FILTERS.RECONCILED
+							}
+							$active={
+								reconciliationFilter === RECONCILIATION_FILTERS.RECONCILED
+							}
+							onClick={() =>
+								setReconciliationFilter(RECONCILIATION_FILTERS.RECONCILED)
+							}
+						>
 							<span>{labels.reconciledAmount}</span>
 							<strong>
 								{formatMoney(
@@ -1131,7 +1159,19 @@ const PaidReportAdmin = () => {
 								)}
 							</strong>
 						</Scorecard>
-						<Scorecard $tone='amber'>
+						<Scorecard
+							type='button'
+							$tone='amber'
+							aria-pressed={
+								reconciliationFilter === RECONCILIATION_FILTERS.WAITING
+							}
+							$active={
+								reconciliationFilter === RECONCILIATION_FILTERS.WAITING
+							}
+							onClick={() =>
+								setReconciliationFilter(RECONCILIATION_FILTERS.WAITING)
+							}
+						>
 							<span>{labels.waitingAmount}</span>
 							<strong>
 								{formatMoney(
@@ -1558,7 +1598,11 @@ const FinancialCoverageNotice = styled.div`
 	line-height: 1.55;
 `;
 
-const Scorecard = styled.div`
+const Scorecard = styled.button`
+	appearance: none;
+	font: inherit;
+	text-align: inherit;
+	cursor: pointer;
 	background: ${(props) =>
 		props.$tone === "green"
 			? "#f0fdf4"
@@ -1578,6 +1622,17 @@ const Scorecard = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	box-shadow: ${(props) =>
+		props.$active ? "0 0 0 3px rgba(26, 111, 156, 0.18)" : "none"};
+	transform: ${(props) => (props.$active ? "translateY(-1px)" : "none")};
+	transition: box-shadow 0.18s ease, transform 0.18s ease;
+
+	&:hover,
+	&:focus-visible {
+		box-shadow: 0 0 0 3px rgba(26, 111, 156, 0.18);
+		transform: translateY(-1px);
+		outline: none;
+	}
 
 	span {
 		font-size: 0.85rem;

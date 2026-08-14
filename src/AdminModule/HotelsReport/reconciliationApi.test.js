@@ -1,4 +1,6 @@
 import {
+  gettingHotelDetailsForAdminAll,
+  getReconciliationClosestMatchAdmin,
   getReconciliationReportAdmin,
   updateReconciliationStatusAdmin,
 } from "../apiAdmin";
@@ -22,20 +24,26 @@ describe("admin reconciliation API", () => {
   });
 
   it("serializes all reconciliation report filters without losing date ranges", async () => {
-    await getReconciliationReportAdmin("admin-1", "token-1", {
-      hotelId: "hotel-1",
-      searchQuery: "CONF-20",
-      dateBy: "checkout_date",
-      dateRanges: [
-        { dateFrom: "2026-08-01", dateTo: "2026-08-07" },
-        { dateFrom: "2026-07-01", dateTo: "2026-07-31" },
-      ],
-      paymentBreakdownKeys: ["paid_at_hotel_cash", "paid_at_hotel_card"],
-      reconciliationStatus: "waiting",
-      includeScorecards: false,
-      page: 2,
-      limit: 500,
-    });
+    const controller = new AbortController();
+    await getReconciliationReportAdmin(
+      "admin-1",
+      "token-1",
+      {
+        hotelId: "hotel-1",
+        searchQuery: "CONF-20",
+        dateBy: "checkout_date",
+        dateRanges: [
+          { dateFrom: "2026-08-01", dateTo: "2026-08-07" },
+          { dateFrom: "2026-07-01", dateTo: "2026-07-31" },
+        ],
+        paymentBreakdownKeys: ["paid_at_hotel_cash", "paid_at_hotel_card"],
+        reconciliationStatus: "waiting",
+        includeScorecards: false,
+        page: 2,
+        limit: 500,
+      },
+      { signal: controller.signal },
+    );
 
     const [requestUrl, options] = global.fetch.mock.calls[0];
     const url = new URL(requestUrl);
@@ -54,6 +62,7 @@ describe("admin reconciliation API", () => {
     expect(options).toEqual(
       expect.objectContaining({
         method: "GET",
+        signal: controller.signal,
         headers: expect.objectContaining({
           Authorization: "Bearer token-1",
         }),
@@ -61,11 +70,31 @@ describe("admin reconciliation API", () => {
     );
   });
 
-  it("sends version and displayed-cent assertions unchanged in a PATCH", async () => {
+  it("passes an optional abort signal through accessible-hotel bootstrap", async () => {
+    const controller = new AbortController();
+    await gettingHotelDetailsForAdminAll("admin-1", "token-1", "summary=true", {
+      signal: controller.signal,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.example.test/api/all/hotel-details/admin/admin-1?summary=true",
+      expect.objectContaining({
+        signal: controller.signal,
+        headers: { Authorization: "Bearer token-1" },
+      }),
+    );
+  });
+
+  it("sends exact assertions in multipart payload JSON and an optional attachment", async () => {
+    const attachment = new File(["receipt"], "receipt.pdf", {
+      type: "application/pdf",
+    });
     const payload = {
       hotelId: "hotel-1",
-      status: "reconciled",
+      action: "reconcile",
       paymentBreakdownKeys: ["paid_at_hotel_cash"],
+      expectedActionAmountCents: 728500,
+      payoutPurpose: "paid_out_to_zad",
       reservations: [
         {
           reservationId: "reservation-1",
@@ -74,6 +103,7 @@ describe("admin reconciliation API", () => {
           displayedAmountsCents: { paid_at_hotel_cash: 728500 },
         },
       ],
+      attachment,
     };
 
     await updateReconciliationStatusAdmin("admin-1", "token-1", payload);
@@ -83,8 +113,41 @@ describe("admin reconciliation API", () => {
       "/api/reconciliation/status/admin-1",
     );
     expect(options.method).toBe("PATCH");
-    expect(options.headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(options.body)).toEqual(payload);
+    expect(options.headers["Content-Type"]).toBeUndefined();
+    expect(options.body).toBeInstanceOf(FormData);
+    expect(JSON.parse(options.body.get("payload"))).toEqual({
+      ...payload,
+      attachment: undefined,
+    });
+    expect(options.body.get("attachment")).toBe(attachment);
+  });
+
+  it("posts the exact closest-match scope without mutating reservations", async () => {
+    const controller = new AbortController();
+    const payload = {
+      hotelId: "hotel-1",
+      paymentBreakdownKey: "paid_at_hotel_cash",
+      targetAmountCents: 2000000,
+      dateBy: "checkin_date",
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-31",
+      dateRanges: [],
+      searchQuery: "",
+    };
+    await getReconciliationClosestMatchAdmin("admin-1", "token-1", payload, {
+      signal: controller.signal,
+    });
+    const [requestUrl, options] = global.fetch.mock.calls[0];
+    expect(new URL(requestUrl).pathname).toBe(
+      "/api/reconciliation/closest-match/admin-1",
+    );
+    expect(options).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        signal: controller.signal,
+      }),
+    );
+    expect(JSON.parse(options.body)).toEqual({ ...payload, dateRanges: "" });
   });
 
   it("surfaces conflict payloads for a safe refresh", async () => {

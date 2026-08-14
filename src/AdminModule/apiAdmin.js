@@ -182,17 +182,26 @@ export const gettingHotelDetailsForAdmin = (userId, token, query = "") =>
 		.then((res) => res.json())
 		.catch((err) => console.error(err));
 
-export const gettingHotelDetailsForAdminAll = (userId, token, query = "") =>
+export const gettingHotelDetailsForAdminAll = (
+	userId,
+	token,
+	query = "",
+	options = {},
+) =>
 	fetch(
 		`${process.env.REACT_APP_API_URL}/all/hotel-details/admin/${userId}${
 			query ? "?" + query : ""
 		}`,
 		{
 			headers: { Authorization: `Bearer ${token}` },
+			signal: options.signal,
 		},
 	)
 		.then((res) => res.json())
-		.catch((err) => console.error(err));
+		.catch((err) => {
+			console.error(err);
+			if (options.signal) throw err;
+		});
 
 export const updateAdminHotelActivation = (
 	hotelId,
@@ -3575,6 +3584,7 @@ export const getReconciliationReportAdmin = (
 		page = 1,
 		limit = 500,
 	} = {},
+	options = {},
 ) => {
 	const params = new URLSearchParams();
 	const serializedDateRanges = serializePaidReportDateRanges(dateRanges);
@@ -3611,6 +3621,7 @@ export const getReconciliationReportAdmin = (
 				Accept: "application/json",
 				Authorization: `Bearer ${token}`,
 			},
+			signal: options.signal,
 		},
 	).then((response) =>
 		parseReconciliationResponse(
@@ -3624,17 +3635,22 @@ export const updateReconciliationStatusAdmin = (
 	userId,
 	token,
 	payload = {},
-) =>
-	fetch(
+	options = {},
+) => {
+	const formData = new FormData();
+	const { attachment, ...jsonPayload } = payload || {};
+	formData.append("payload", JSON.stringify(jsonPayload));
+	if (attachment) formData.append("attachment", attachment);
+	return fetch(
 		`${process.env.REACT_APP_API_URL}/reconciliation/status/${userId}`,
 		{
 			method: "PATCH",
 			headers: {
 				Accept: "application/json",
-				"Content-Type": "application/json",
 				Authorization: `Bearer ${token}`,
 			},
-			body: JSON.stringify(payload),
+			body: formData,
+			signal: options.signal,
 		},
 	).then((response) =>
 		parseReconciliationResponse(
@@ -3642,11 +3658,44 @@ export const updateReconciliationStatusAdmin = (
 			"Could not update reconciliation status",
 		),
 	);
+};
+
+export const getReconciliationClosestMatchAdmin = (
+	userId,
+	token,
+	payload = {},
+	options = {},
+) => {
+	const serializedPayload = {
+		...payload,
+		dateRanges: serializePaidReportDateRanges(payload?.dateRanges),
+	};
+	return fetch(
+		`${process.env.REACT_APP_API_URL}/reconciliation/closest-match/${userId}`,
+		{
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify(serializedPayload),
+			signal: options.signal,
+		},
+	).then((response) =>
+		parseReconciliationResponse(
+			response,
+			"Could not find a closest reconciliation match",
+		),
+	);
+};
 
 export const getPaymentReconciliationReportAdmin =
 	getReconciliationReportAdmin;
 export const updatePaymentReconciliationStatusAdmin =
 	updateReconciliationStatusAdmin;
+export const getPaymentReconciliationClosestMatchAdmin =
+	getReconciliationClosestMatchAdmin;
 
 const buildAdminUrlSearch = (params = {}) => {
 	const query = new URLSearchParams();

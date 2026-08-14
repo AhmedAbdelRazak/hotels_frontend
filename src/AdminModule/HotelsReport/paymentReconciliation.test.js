@@ -3,6 +3,7 @@ import {
   RECONCILIATION_STATUSES,
   amountForPaymentKey,
   filterReservationsByReconciliation,
+  hasStoredReconciliationEntry,
   isPaymentKeyReconciled,
   moneyCents,
   normalizePaymentBreakdownKeys,
@@ -66,7 +67,7 @@ describe("payment reconciliation helpers", () => {
     expect(isPaymentKeyReconciled(row, "paid_at_hotel_cash")).toBe(false);
   });
 
-  it("requires every positive selected method for a reservation to be reconciled", () => {
+  it("marks partial multi-method reconciliation as mixed", () => {
     const row = reservation({
       reconciliation: {
         paid_at_hotel_cash: { status: "reconciled", amountCents: 1010 },
@@ -76,7 +77,9 @@ describe("payment reconciliation helpers", () => {
       "paid_at_hotel_cash",
       "paid_at_hotel_card",
     ]);
-    expect(partial.status).toBe(RECONCILIATION_STATUSES.WAITING);
+    expect(partial.status).toBe("mixed");
+    expect(partial.hasReconciled).toBe(true);
+    expect(partial.hasWaiting).toBe(true);
     expect(partial.reconciledCents).toBe(1010);
     expect(partial.waitingCents).toBe(2020);
 
@@ -132,5 +135,46 @@ describe("payment reconciliation helpers", () => {
         "waiting",
       ),
     ).toEqual([legacy]);
+  });
+
+  it("includes mixed rows in both filters and trusts only the safe stored-entry flag", () => {
+    const mixed = reservation({
+      reconciliation: {
+        paid_at_hotel_cash: { status: "reconciled", amountCents: 1010 },
+      },
+    });
+    expect(
+      filterReservationsByReconciliation(
+        [mixed],
+        ["paid_at_hotel_cash", "paid_at_hotel_card"],
+        "reconciled",
+      ),
+    ).toEqual([mixed]);
+    expect(
+      filterReservationsByReconciliation(
+        [mixed],
+        ["paid_at_hotel_cash", "paid_at_hotel_card"],
+        "waiting",
+      ),
+    ).toEqual([mixed]);
+
+    const safe = {
+      reconciliation_by_breakdown: {
+        paid_at_hotel_cash: {
+          status: "waiting",
+          amountCents: 0,
+          hasStoredEntry: true,
+        },
+        paid_at_hotel_card: {
+          status: "reconciled",
+          amountCents: 0,
+          hasStoredEntry: false,
+        },
+      },
+    };
+    expect(hasStoredReconciliationEntry(safe, "paid_at_hotel_cash")).toBe(true);
+    expect(hasStoredReconciliationEntry(safe, "paid_at_hotel_card")).toBe(
+      false,
+    );
   });
 });

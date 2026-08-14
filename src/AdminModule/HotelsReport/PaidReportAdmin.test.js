@@ -175,7 +175,7 @@ const deferred = () => {
 };
 
 const scorecardValue = (label) =>
-  screen.getByText(label, { selector: "span" }).closest("div").querySelector(
+  screen.getByText(label, { selector: "span" }).closest("button").querySelector(
     "strong",
   ).textContent;
 
@@ -1215,13 +1215,84 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(screen.getByText("OTHER-PLATFORMS")).toBeTruthy();
     expect(screen.queryByText("CASH-ONLY")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reconciled" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Reconciled \(SAR\)/ }),
+    );
     expect(screen.getByText("OTHER-PLATFORMS")).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("button", { name: "Awaiting Reconciliation" }),
+      screen.getByRole("button", { name: /^Awaiting Reconciliation \(SAR\)/ }),
     );
     expect(screen.queryByText("OTHER-PLATFORMS")).toBeNull();
     expect(screen.getByText("No paid breakdown records found.")).toBeTruthy();
+  });
+
+  it("shows a mixed row in both reconciliation card filters and exports its honest status", async () => {
+    const mixed = reservationRow("MIXED-PAYMENTS", {
+      reportTotal: 100,
+      paidTotal: 60,
+    });
+    mixed.paid_amount_breakdown = {
+      paid_at_hotel_cash: 10,
+      paid_online_other_platforms: 50,
+    };
+    mixed.payment_reconciliation = {
+      breakdown: {
+        paid_online_other_platforms: {
+          status: "reconciled",
+          amountCents: 5000,
+        },
+      },
+    };
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce({
+      data: [mixed],
+      totalDocuments: 1,
+      page: 1,
+      limit: 500,
+      totalMode: "net",
+      scorecards: {
+        totalAmount: 100,
+        paidAmount: 60,
+        breakdownTotals: {
+          paid_at_hotel_cash: 10,
+          paid_online_other_platforms: 50,
+        },
+        financialMetadata: {
+          netFallback: 0,
+          unavailable: 0,
+          foreignCurrency: 0,
+        },
+        financialIncludedCount: 1,
+        totalMode: "net",
+        reconciliationSummary: {
+          totalPaidAmount: 60,
+          reconciledAmount: 50,
+          waitingAmount: 10,
+        },
+      },
+    });
+    XLSX.utils.json_to_sheet.mockReturnValue({});
+    XLSX.utils.book_new.mockReturnValue({});
+    XLSX.utils.encode_range.mockReturnValue("A1:Z3");
+
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("MIXED-PAYMENTS")).toBeTruthy();
+    expect(screen.getByText("Partially reconciled")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Reconciled \(SAR\)/ }),
+    );
+    expect(screen.getByText("MIXED-PAYMENTS")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Awaiting Reconciliation \(SAR\)/ }),
+    );
+    expect(screen.getByText("MIXED-PAYMENTS")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export Excel" }));
+    await waitFor(() => expect(XLSX.utils.json_to_sheet).toHaveBeenCalled());
+    const [exportRows] = XLSX.utils.json_to_sheet.mock.calls[0];
+    expect(exportRows[0]["Reconciliation Status"]).toBe(
+      "Partially reconciled",
+    );
   });
 
   it("includes room details and booking source in paid exports", async () => {

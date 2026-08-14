@@ -111,6 +111,20 @@ const reconciliationEntryForKey = (reservation, key) =>
   reservation?.payment_reconciliation?.breakdown?.[key] ||
   null;
 
+export const hasStoredReconciliationEntry = (reservation = {}, key) => {
+  if (!PAYMENT_BREAKDOWN_KEY_SET.has(key)) return false;
+  const safeEntry = reservation?.reconciliation_by_breakdown?.[key];
+  if (
+    safeEntry &&
+    typeof safeEntry === "object" &&
+    Object.prototype.hasOwnProperty.call(safeEntry, "hasStoredEntry")
+  ) {
+    return safeEntry.hasStoredEntry === true;
+  }
+  const legacyEntry = reservation?.payment_reconciliation?.breakdown?.[key];
+  return Boolean(legacyEntry && typeof legacyEntry === "object");
+};
+
 const entryAmountCents = (entry) => {
   if (!entry || typeof entry !== "object") return null;
   for (const field of [
@@ -174,10 +188,14 @@ export const summarizeReservationReconciliation = (
   });
 
   const waitingCents = Math.max(totalCents - reconciledCents, 0);
+  const hasReconciled = reconciledCents > 0;
+  const hasWaiting = waitingCents > 0;
   const status =
-    positiveKeys.length > 0 && reconciledCents === totalCents
-      ? RECONCILIATION_STATUSES.RECONCILED
-      : RECONCILIATION_STATUSES.WAITING;
+    hasReconciled && hasWaiting
+      ? "mixed"
+      : hasReconciled
+        ? RECONCILIATION_STATUSES.RECONCILED
+        : RECONCILIATION_STATUSES.WAITING;
 
   return {
     status,
@@ -190,6 +208,8 @@ export const summarizeReservationReconciliation = (
     reconciledAmount: reconciledCents / 100,
     waitingCents,
     waitingAmount: waitingCents / 100,
+    hasReconciled,
+    hasWaiting,
   };
 };
 
@@ -200,9 +220,10 @@ export const filterReservationsByReconciliation = (
 ) => {
   const normalizedStatus = normalizeReconciliationStatus(status);
   if (normalizedStatus === RECONCILIATION_STATUSES.ALL) return [...rows];
-  return rows.filter(
-    (reservation) =>
-      summarizeReservationReconciliation(reservation, keys).status ===
-      normalizedStatus,
-  );
+  return rows.filter((reservation) => {
+    const summary = summarizeReservationReconciliation(reservation, keys);
+    return normalizedStatus === RECONCILIATION_STATUSES.RECONCILED
+      ? summary.hasReconciled
+      : summary.hasWaiting;
+  });
 };
