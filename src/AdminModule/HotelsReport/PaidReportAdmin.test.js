@@ -1340,7 +1340,10 @@ describe("PaidReportAdmin paid overview integration", () => {
         totalMode: "net",
       });
 
-      const requestUrl = new URL(global.fetch.mock.calls[0][0]);
+      const requestUrl = new URL(
+        global.fetch.mock.calls[0][0],
+        "https://xhotelpro.test",
+      );
       expect(requestUrl.searchParams.get("dateRanges")).toBe(
         "2026-06-16..2026-07-14,2026-08-15..2026-09-12",
       );
