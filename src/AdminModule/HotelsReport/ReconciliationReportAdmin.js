@@ -197,6 +197,15 @@ const TEXT = {
     selectionLimitWarning:
       "The 500-reservation limit affected this search. Review this bounded proposal carefully before confirming.",
     proposedReservations: "Proposed reservations",
+    adjustedSelection: "Adjusted selection",
+    proposalSelectionHint:
+      "Uncheck any reservation you do not want to include before confirming.",
+    proposalExport: "Export proposal to Excel",
+    proposalExportDone: "Proposal exported to Excel.",
+    proposalExportTitle: "Miscellaneous Reconciliation Proposal",
+    includedInReconciliation: "Selected for reconciliation",
+    yes: "Yes",
+    no: "No",
     previewOnly: "Preview only - no reservation has been changed.",
     noProposal:
       "No awaiting reservations can match this category and date scope.",
@@ -240,6 +249,7 @@ const TEXT = {
     otaTotal: "Total OTA amount (SAR)",
     pricingTotal: "Price breakdown total (SAR)",
     status: "Reconciliation status",
+    bookingStatus: "Reservation status",
     unavailable: "N/A",
     exportTitle: "Payment Reconciliation Report",
     generatedAt: "Generated at",
@@ -392,6 +402,20 @@ const TEXT = {
       "\u0623\u062b\u0651\u0631 \u062d\u062f 500 \u062d\u062c\u0632 \u0639\u0644\u0649 \u0647\u0630\u0627 \u0627\u0644\u0628\u062d. \u0631\u0627\u062c\u0639 \u0647\u0630\u0627 \u0627\u0644\u0627\u0642\u062a\u0631\u0627\u062d \u0627\u0644\u062a\u0642\u0631\u064a\u0628\u064a \u0628\u0639\u0646\u0627\u064a\u0629 \u0642\u0628\u0644 \u0627\u0644\u062a\u0623\u0643\u064a\u062f.",
     proposedReservations:
       "\u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0627\u0644\u0645\u0642\u062a\u0631\u062d\u0629",
+    adjustedSelection:
+      "\u0627\u062e\u062a\u064a\u0627\u0631 \u0645\u0639\u062f\u0651\u0644",
+    proposalSelectionHint:
+      "\u0623\u0632\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062f \u0639\u0646 \u0623\u064a \u062d\u062c\u0632 \u0644\u0627 \u062a\u0631\u064a\u062f \u0625\u062f\u0631\u0627\u062c\u0647 \u0642\u0628\u0644 \u0627\u0644\u062a\u0623\u0643\u064a\u062f.",
+    proposalExport:
+      "\u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0627\u0642\u062a\u0631\u0627\u062d \u0625\u0644\u0649 Excel",
+    proposalExportDone:
+      "\u062a\u0645 \u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0627\u0642\u062a\u0631\u0627\u062d \u0625\u0644\u0649 Excel.",
+    proposalExportTitle:
+      "\u0627\u0642\u062a\u0631\u0627\u062d \u062a\u0633\u0648\u064a\u0629 \u0645\u062a\u0641\u0631\u0642\u0629",
+    includedInReconciliation:
+      "\u0645\u062d\u062f\u062f \u0644\u0644\u062a\u0633\u0648\u064a\u0629",
+    yes: "\u0646\u0639\u0645",
+    no: "\u0644\u0627",
     previewOnly:
       "\u0645\u0639\u0627\u064a\u0646\u0629 \u0641\u0642\u0637 \u2014 \u0644\u0645 \u064a\u062a\u0645 \u062a\u063a\u064a\u064a\u0631 \u0623\u064a \u062d\u062c\u0632.",
     noProposal:
@@ -456,6 +480,7 @@ const TEXT = {
       "\u0625\u062c\u0645\u0627\u0644\u064a \u062a\u0641\u0635\u064a\u0644 \u0627\u0644\u0633\u0639\u0631 (\u0631.\u0633)",
     status:
       "\u062d\u0627\u0644\u0629 \u0627\u0644\u062a\u0633\u0648\u064a\u0629",
+    bookingStatus: "\u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u062c\u0632",
     unavailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
     exportTitle:
       "\u062a\u0642\u0631\u064a\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u0645\u062f\u0641\u0648\u0639\u0627\u062a",
@@ -553,7 +578,8 @@ export const validateReconciliationReportPage = (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
     limit > PAGE_LIMIT ||
-    data.length > limit
+    data.length > limit ||
+    data.some((reservation) => isCancelledReservation(reservation))
   ) {
     throw paginationError();
   }
@@ -690,6 +716,35 @@ const reservationName = (reservation = {}) =>
   reservation?.customer_details?.guestName ||
   reservation?.customer_name ||
   "";
+
+const isCancelledReservation = (reservation = {}) =>
+  /cancel/i.test(
+    `${reservation?.reservation_status || ""} ${reservation?.state || ""}`,
+  );
+
+const reservationStatusText = (reservation = {}, isArabic, fallback) => {
+  const raw = String(
+    reservation?.reservation_status || reservation?.state || "",
+  ).trim();
+  if (!raw) return fallback;
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels = {
+    checked_out: [
+      "Checked out",
+      "\u062a\u0645\u062a \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+    ],
+    checkedout: [
+      "Checked out",
+      "\u062a\u0645\u062a \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629",
+    ],
+    inhouse: ["In house", "\u0645\u0642\u064a\u0645"],
+    in_house: ["In house", "\u0645\u0642\u064a\u0645"],
+    no_show: ["No-show", "\u0639\u062f\u0645 \u062d\u0636\u0648\u0631"],
+    noshow: ["No-show", "\u0639\u062f\u0645 \u062d\u0636\u0648\u0631"],
+    confirmed: ["Confirmed", "\u0645\u0624\u0643\u062f"],
+  };
+  return labels[normalized]?.[isArabic ? 1 : 0] || raw.replace(/_/g, " ");
+};
 
 const reservationNights = (reservation = {}) => {
   const explicit = Number(
@@ -887,6 +942,7 @@ export const validateClosestMatchProposal = ({
       !reservationId ||
       rowsById.has(reservationId) ||
       amountCents <= 0 ||
+      isCancelledReservation(row) ||
       isPaymentKeyReconciled(row, category) ||
       !Number.isSafeInteger(recomputedAmountCents + amountCents)
     ) {
@@ -1043,6 +1099,9 @@ const ReconciliationReportAdmin = () => {
   const [miscellaneousComment, setMiscellaneousComment] = useState("");
   const [miscellaneousAttachment, setMiscellaneousAttachment] = useState(null);
   const [miscellaneousProposal, setMiscellaneousProposal] = useState(null);
+  const [miscellaneousSelectedIds, setMiscellaneousSelectedIds] = useState(
+    () => new Set(),
+  );
   const [findingClosest, setFindingClosest] = useState(false);
 
   const methodsKey = methods.join(",");
@@ -1363,6 +1422,38 @@ const ReconciliationReportAdmin = () => {
   const allSelected =
     reservations.length > 0 && selectedRows.length === reservations.length;
   const partiallySelected = selectedRows.length > 0 && !allSelected;
+
+  const miscellaneousRows = useMemo(
+    () => miscellaneousProposal?.data || [],
+    [miscellaneousProposal],
+  );
+  const miscellaneousSelectedRows = useMemo(
+    () =>
+      miscellaneousRows.filter((row) =>
+        miscellaneousSelectedIds.has(String(row?._id || "")),
+      ),
+    [miscellaneousRows, miscellaneousSelectedIds],
+  );
+  const miscellaneousSelectedAmountCents = useMemo(
+    () =>
+      miscellaneousSelectedRows.reduce(
+        (total, row) =>
+          total + paymentAmountCentsForKey(row, miscellaneousCategory),
+        0,
+      ),
+    [miscellaneousCategory, miscellaneousSelectedRows],
+  );
+  const miscellaneousDifferenceCents = miscellaneousProposal
+    ? miscellaneousSelectedAmountCents -
+      Number(miscellaneousProposal.targetAmountCents)
+    : 0;
+  const miscellaneousAllSelected =
+    miscellaneousRows.length > 0 &&
+    miscellaneousSelectedRows.length === miscellaneousRows.length;
+  const miscellaneousPartiallySelected =
+    miscellaneousSelectedRows.length > 0 && !miscellaneousAllSelected;
+  const miscellaneousSelectionAdjusted =
+    Boolean(miscellaneousProposal) && !miscellaneousAllSelected;
 
   const selectedHotelName = useMemo(
     () =>
@@ -1787,6 +1878,7 @@ const ReconciliationReportAdmin = () => {
     setMiscellaneousComment("");
     setMiscellaneousAttachment(null);
     setMiscellaneousProposal(null);
+    setMiscellaneousSelectedIds(new Set());
     if (miscellaneousFileInputRef.current) {
       miscellaneousFileInputRef.current.value = "";
     }
@@ -1830,6 +1922,24 @@ const ReconciliationReportAdmin = () => {
     closestInFlightRef.current = false;
     setFindingClosest(false);
     setMiscellaneousProposal(null);
+    setMiscellaneousSelectedIds(new Set());
+  };
+
+  const toggleAllMiscellaneousRows = (checked) => {
+    setMiscellaneousSelectedIds(
+      checked
+        ? new Set(miscellaneousRows.map((row) => String(row?._id || "")))
+        : new Set(),
+    );
+  };
+
+  const toggleMiscellaneousRow = (reservationId, checked) => {
+    setMiscellaneousSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(String(reservationId));
+      else next.delete(String(reservationId));
+      return next;
+    });
   };
 
   const findClosestReservations = async () => {
@@ -1910,6 +2020,9 @@ const ReconciliationReportAdmin = () => {
         return;
       }
       setMiscellaneousProposal(validatedProposal);
+      setMiscellaneousSelectedIds(
+        new Set(validatedProposal.data.map((row) => String(row?._id || ""))),
+      );
     } catch (error) {
       if (deadlineReached) {
         if (mountedRef.current) message.error(labels.closestTimeout);
@@ -1962,6 +2075,10 @@ const ReconciliationReportAdmin = () => {
       message.error(labels.choosePurpose);
       return;
     }
+    if (!miscellaneousSelectedRows.length) {
+      message.error(labels.selectRowsFirst);
+      return;
+    }
     if (miscellaneousComment.trim().length > MAX_COMMENT_LENGTH) {
       message.error(labels.commentTooLong);
       return;
@@ -1970,15 +2087,23 @@ const ReconciliationReportAdmin = () => {
       message.error(labels.invalidAttachment);
       return;
     }
+    const snapshotsById = new Map(
+      miscellaneousProposal.reservations.map((snapshot) => [
+        String(snapshot?.reservationId || ""),
+        snapshot,
+      ]),
+    );
     const successful = await runReconciliationAction({
       action: "reconcile",
-      rows: miscellaneousProposal.data,
+      rows: miscellaneousSelectedRows,
       category: miscellaneousCategory,
-      expectedActionAmountCents: miscellaneousProposal.matchedAmountCents,
+      expectedActionAmountCents: miscellaneousSelectedAmountCents,
       payoutPurpose: miscellaneousPurpose,
       comment: miscellaneousComment,
       attachment: miscellaneousAttachment,
-      snapshots: miscellaneousProposal.reservations,
+      snapshots: miscellaneousSelectedRows.map((row) =>
+        snapshotsById.get(String(row?._id || "")),
+      ),
     });
     if (successful && mountedRef.current) closeMiscellaneous();
     else if (mountedRef.current) setMiscellaneousProposal(null);
@@ -2011,6 +2136,7 @@ const ReconciliationReportAdmin = () => {
         labels.checkin,
         labels.checkout,
         labels.source,
+        labels.bookingStatus,
         labels.nights,
         labels.roomNumber,
         labels.otaTotal,
@@ -2041,6 +2167,7 @@ const ReconciliationReportAdmin = () => {
             labels.unavailable,
           ),
           reservation?.booking_source || "",
+          reservationStatusText(reservation, isArabic, labels.unavailable),
           reservationNights(reservation),
           rooms.roomNumberText,
           ota.available ? ota.amount : labels.unavailable,
@@ -2056,7 +2183,7 @@ const ReconciliationReportAdmin = () => {
       const totalRow = Array(headers.length).fill("");
       totalRow[1] = labels.exportTotal;
       methods.forEach((key, methodIndex) => {
-        totalRow[10 + methodIndex] =
+        totalRow[11 + methodIndex] =
           reservations.reduce(
             (total, reservation) =>
               total + paymentAmountCentsForKey(reservation, key),
@@ -2143,7 +2270,7 @@ const ReconciliationReportAdmin = () => {
         }
       }
       for (let row = 6; row < 6 + dataRows.length; row += 1) {
-        for (let column = 8; column < 10 + methods.length; column += 1) {
+        for (let column = 9; column < 11 + methods.length; column += 1) {
           const address = XLSX.utils.encode_cell({ r: row, c: column });
           if (worksheet[address] && typeof worksheet[address].v === "number") {
             worksheet[address].z = "#,##0.00";
@@ -2166,6 +2293,168 @@ const ReconciliationReportAdmin = () => {
       message.success(labels.exportDone);
     } catch (error) {
       console.error("Failed to export reconciliation workbook", error);
+      message.error(labels.exportFailed);
+    }
+  };
+
+  const exportMiscellaneousExcel = async () => {
+    if (!miscellaneousRows.length) {
+      message.info(labels.noRowsToExport);
+      return;
+    }
+    let XLSX;
+    try {
+      const spreadsheetModule = await import("xlsx-js-style");
+      XLSX = spreadsheetModule?.utils
+        ? spreadsheetModule
+        : spreadsheetModule.default;
+    } catch (error) {
+      console.error("Failed to load proposal Excel exporter", error);
+      message.error(labels.exportFailed);
+      return;
+    }
+    try {
+      const headers = [
+        labels.includedInReconciliation,
+        labels.index,
+        labels.customer,
+        labels.confirmation,
+        labels.bookingStatus,
+        labels.checkin,
+        labels.checkout,
+        labels.source,
+        labels.nights,
+        labels.roomNumber,
+        PAYMENT_METHOD_LABELS[miscellaneousCategory]?.[
+          isArabic ? "ar" : "en"
+        ] || miscellaneousCategory,
+      ];
+      const dataRows = miscellaneousRows.map((reservation, index) => {
+        const id = String(reservation?._id || "");
+        const room = getReservationRoomSummary(reservation);
+        return [
+          miscellaneousSelectedIds.has(id) ? labels.yes : labels.no,
+          index + 1,
+          reservationName(reservation),
+          reservation?.confirmation_number || "",
+          reservationStatusText(reservation, isArabic, labels.unavailable),
+          formatReportDate(
+            reservation?.checkin_date,
+            isArabic,
+            labels.unavailable,
+          ),
+          formatReportDate(
+            reservation?.checkout_date,
+            isArabic,
+            labels.unavailable,
+          ),
+          reservation?.booking_source || "",
+          reservationNights(reservation),
+          room.roomNumberText,
+          amountForPaymentKey(reservation, miscellaneousCategory),
+        ];
+      });
+      const totalRow = Array(headers.length).fill("");
+      totalRow[2] = labels.selectedAmount;
+      totalRow[headers.length - 1] = miscellaneousSelectedAmountCents / 100;
+      const rows = [
+        [labels.proposalExportTitle],
+        [`${labels.hotel}: ${selectedHotelName}`],
+        [
+          `${labels.targetAmount}: ${moneyText(
+            Number(miscellaneousProposal?.targetAmountCents || 0),
+          )} ${labels.currency}`,
+        ],
+        [
+          `${labels.selectedAmount}: ${moneyText(
+            miscellaneousSelectedAmountCents,
+          )} ${labels.currency}`,
+        ],
+        [],
+        headers,
+        ...dataRows,
+        totalRow,
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      const lastColumn = headers.length - 1;
+      worksheet["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: lastColumn } },
+      ];
+      worksheet["!autofilter"] = {
+        ref: XLSX.utils.encode_range({
+          s: { r: 5, c: 0 },
+          e: { r: 5 + dataRows.length, c: lastColumn },
+        }),
+      };
+      worksheet["!views"] = [
+        { state: "frozen", ySplit: 6, rightToLeft: isArabic },
+      ];
+      worksheet["!cols"] = headers.map((header, columnIndex) => ({
+        wch: Math.min(
+          Math.max(
+            String(header).length + 3,
+            ...dataRows.map((row) => String(row[columnIndex] ?? "").length + 2),
+            12,
+          ),
+          38,
+        ),
+      }));
+      if (worksheet.A1) {
+        worksheet.A1.s = {
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 16 },
+          fill: { fgColor: { rgb: "0B4F71" } },
+          alignment: { horizontal: "center", vertical: "center" },
+        };
+      }
+      for (let column = 0; column <= lastColumn; column += 1) {
+        const address = XLSX.utils.encode_cell({ r: 5, c: column });
+        if (worksheet[address]) {
+          worksheet[address].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "1677A6" } },
+            alignment: {
+              horizontal: "center",
+              vertical: "center",
+              wrapText: true,
+            },
+          };
+        }
+      }
+      const totalRowIndex = rows.length - 1;
+      for (let column = 0; column <= lastColumn; column += 1) {
+        const address = XLSX.utils.encode_cell({
+          r: totalRowIndex,
+          c: column,
+        });
+        if (worksheet[address]) {
+          worksheet[address].s = {
+            font: { bold: true, color: { rgb: "17324D" } },
+            fill: { fgColor: { rgb: "E8F2F8" } },
+          };
+        }
+      }
+      for (let row = 6; row < 6 + dataRows.length; row += 1) {
+        const address = XLSX.utils.encode_cell({ r: row, c: lastColumn });
+        if (worksheet[address] && typeof worksheet[address].v === "number") {
+          worksheet[address].z = "#,##0.00";
+        }
+      }
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Proposal");
+      const hotelSegment =
+        String(selectedHotelName || "hotel")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "hotel";
+      XLSX.writeFile(
+        workbook,
+        `reconciliation-proposal-${hotelSegment}-${new Date()
+          .toISOString()
+          .slice(0, 10)}.xlsx`,
+      );
+      message.success(labels.proposalExportDone);
+    } catch (error) {
+      console.error("Failed to export reconciliation proposal workbook", error);
       message.error(labels.exportFailed);
     }
   };
@@ -2390,12 +2679,13 @@ const ReconciliationReportAdmin = () => {
                         onChange={(event) => toggleAll(event.target.checked)}
                       />
                     </th>
-                    <th>{labels.index}</th>
-                    <th>{labels.customer}</th>
-                    <th>{labels.confirmation}</th>
+                    <th className="index-cell">{labels.index}</th>
+                    <th className="customer-cell">{labels.customer}</th>
+                    <th className="confirmation-cell">{labels.confirmation}</th>
                     <th>{labels.checkin}</th>
                     <th>{labels.checkout}</th>
                     <th>{labels.source}</th>
+                    <th>{labels.bookingStatus}</th>
                     <th>{labels.nights}</th>
                     <th>{labels.roomNumber}</th>
                     <th>{labels.otaTotal}</th>
@@ -2442,13 +2732,13 @@ const ReconciliationReportAdmin = () => {
                             }
                           />
                         </td>
-                        <td>{index + 1}</td>
-                        <td>
+                        <td className="index-cell">{index + 1}</td>
+                        <td className="customer-cell">
                           <CellText title={reservationName(reservation)}>
                             {reservationName(reservation) || labels.unavailable}
                           </CellText>
                         </td>
-                        <td>
+                        <td className="confirmation-cell">
                           <CellText title={reservation?.confirmation_number}>
                             {reservation?.confirmation_number ||
                               labels.unavailable}
@@ -2472,6 +2762,15 @@ const ReconciliationReportAdmin = () => {
                           <CellText title={reservation?.booking_source}>
                             {reservation?.booking_source || labels.unavailable}
                           </CellText>
+                        </td>
+                        <td>
+                          <BookingStatusPill>
+                            {reservationStatusText(
+                              reservation,
+                              isArabic,
+                              labels.unavailable,
+                            )}
+                          </BookingStatusPill>
                         </td>
                         <td>{reservationNights(reservation)}</td>
                         <td>{room.roomNumberText || labels.unavailable}</td>
@@ -2974,15 +3273,24 @@ const ReconciliationReportAdmin = () => {
                   <strong>{labels.proposal}</strong>
                   <span>{labels.previewOnly}</span>
                 </div>
-                <ProposalBadge
-                  $exact={miscellaneousProposal.exactMatch === true}
-                >
-                  {miscellaneousProposal.exactMatch === true
-                    ? labels.exactMatch
-                    : miscellaneousProposal.optimalityGuaranteed === true
-                      ? labels.closestMatch
-                      : labels.approximateMatch}
-                </ProposalBadge>
+                <ProposalHeadingActions>
+                  <ProposalBadge $exact={miscellaneousDifferenceCents === 0}>
+                    {miscellaneousDifferenceCents === 0
+                      ? labels.exactMatch
+                      : miscellaneousSelectionAdjusted
+                        ? labels.adjustedSelection
+                        : miscellaneousProposal.optimalityGuaranteed === true
+                          ? labels.closestMatch
+                          : labels.approximateMatch}
+                  </ProposalBadge>
+                  <Button
+                    icon={<FileExcelOutlined />}
+                    onClick={exportMiscellaneousExcel}
+                    disabled={updating}
+                  >
+                    {labels.proposalExport}
+                  </Button>
+                </ProposalHeadingActions>
               </ProposalHeading>
               <ProposalMetrics>
                 <div>
@@ -2995,26 +3303,20 @@ const ReconciliationReportAdmin = () => {
                 <div>
                   <span>{labels.matchedAmount}</span>
                   <strong>
-                    {moneyText(miscellaneousProposal.matchedAmountCents)}{" "}
+                    {moneyText(miscellaneousSelectedAmountCents)}{" "}
                     {labels.currency}
                   </strong>
                 </div>
                 <div>
                   <span>{labels.difference}</span>
                   <strong>
-                    {moneyText(
-                      Math.abs(
-                        Number(miscellaneousProposal.differenceCents) ||
-                          miscellaneousProposal.matchedAmountCents -
-                            Number(miscellaneousProposal.targetAmountCents),
-                      ),
-                    )}{" "}
+                    {moneyText(Math.abs(miscellaneousDifferenceCents))}{" "}
                     {labels.currency}
                   </strong>
                   <small>
-                    {miscellaneousProposal.direction === "over"
+                    {miscellaneousDifferenceCents > 0
                       ? labels.targetDirectionOver
-                      : miscellaneousProposal.direction === "under"
+                      : miscellaneousDifferenceCents < 0
                         ? labels.targetDirectionUnder
                         : labels.targetDirectionExact}
                   </small>
@@ -3022,9 +3324,7 @@ const ReconciliationReportAdmin = () => {
                 <div>
                   <span>{labels.proposedReservations}</span>
                   <strong>
-                    {miscellaneousProposal.selectedCount.toLocaleString(
-                      "en-US",
-                    )}
+                    {miscellaneousSelectedRows.length.toLocaleString("en-US")}
                   </strong>
                 </div>
                 <div>
@@ -3040,32 +3340,112 @@ const ReconciliationReportAdmin = () => {
                   {labels.selectionLimitWarning}
                 </ProposalWarning>
               ) : null}
-              <ProposalRows>
-                {miscellaneousProposal.data.map((reservation, index) => (
-                  <div key={String(reservation?._id || index)}>
-                    <span>{index + 1}</span>
-                    <strong>
-                      {reservation?.confirmation_number || labels.unavailable}
-                    </strong>
-                    <span>
-                      {formatReportDate(
-                        reservation?.checkin_date,
-                        isArabic,
-                        labels.unavailable,
-                      )}
-                    </span>
-                    <b>
-                      {moneyText(
-                        paymentAmountCentsForKey(
-                          reservation,
-                          miscellaneousCategory,
-                        ),
-                      )}{" "}
-                      {labels.currency}
-                    </b>
-                  </div>
-                ))}
-              </ProposalRows>
+              <ProposalSelectionHint>
+                {labels.proposalSelectionHint}
+              </ProposalSelectionHint>
+              <ProposalTableFrame>
+                <ProposalTable $isArabic={isArabic}>
+                  <thead>
+                    <tr>
+                      <th className="checkbox-cell">
+                        <Checkbox
+                          aria-label={labels.selectAll}
+                          checked={miscellaneousAllSelected}
+                          indeterminate={miscellaneousPartiallySelected}
+                          disabled={updating}
+                          onChange={(event) =>
+                            toggleAllMiscellaneousRows(event.target.checked)
+                          }
+                        />
+                      </th>
+                      <th>{labels.index}</th>
+                      <th>{labels.customer}</th>
+                      <th>{labels.confirmation}</th>
+                      <th>{labels.bookingStatus}</th>
+                      <th>{labels.checkin}</th>
+                      <th>{labels.checkout}</th>
+                      <th>{labels.source}</th>
+                      <th>{labels.roomNumber}</th>
+                      <th>{labels.matchedAmount}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {miscellaneousRows.map((reservation, index) => {
+                      const id = String(reservation?._id || "");
+                      const room = getReservationRoomSummary(reservation);
+                      const selected = miscellaneousSelectedIds.has(id);
+                      return (
+                        <tr
+                          key={id || index}
+                          className={selected ? "selected-row" : ""}
+                        >
+                          <td className="checkbox-cell">
+                            <Checkbox
+                              aria-label={labels.selectReservation(
+                                reservation?.confirmation_number,
+                              )}
+                              checked={selected}
+                              disabled={updating}
+                              onChange={(event) =>
+                                toggleMiscellaneousRow(id, event.target.checked)
+                              }
+                            />
+                          </td>
+                          <td>{index + 1}</td>
+                          <td>
+                            <CellText title={reservationName(reservation)}>
+                              {reservationName(reservation) ||
+                                labels.unavailable}
+                            </CellText>
+                          </td>
+                          <td>
+                            <CellText title={reservation?.confirmation_number}>
+                              {reservation?.confirmation_number ||
+                                labels.unavailable}
+                            </CellText>
+                          </td>
+                          <td>
+                            <BookingStatusPill>
+                              {reservationStatusText(
+                                reservation,
+                                isArabic,
+                                labels.unavailable,
+                              )}
+                            </BookingStatusPill>
+                          </td>
+                          <td className="date-cell">
+                            {formatReportDate(
+                              reservation?.checkin_date,
+                              isArabic,
+                              labels.unavailable,
+                            )}
+                          </td>
+                          <td className="date-cell">
+                            {formatReportDate(
+                              reservation?.checkout_date,
+                              isArabic,
+                              labels.unavailable,
+                            )}
+                          </td>
+                          <td>
+                            {reservation?.booking_source || labels.unavailable}
+                          </td>
+                          <td>{room.roomNumberText || labels.unavailable}</td>
+                          <td className="money-cell">
+                            {moneyText(
+                              paymentAmountCentsForKey(
+                                reservation,
+                                miscellaneousCategory,
+                              ),
+                            )}{" "}
+                            {labels.currency}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </ProposalTable>
+              </ProposalTableFrame>
             </ProposalPanel>
           ) : null}
 
@@ -3079,7 +3459,10 @@ const ReconciliationReportAdmin = () => {
             {miscellaneousProposal ? (
               <>
                 <Button
-                  onClick={() => setMiscellaneousProposal(null)}
+                  onClick={() => {
+                    setMiscellaneousProposal(null);
+                    setMiscellaneousSelectedIds(new Set());
+                  }}
                   disabled={updating || loading}
                 >
                   {labels.backToAmount}
@@ -3088,7 +3471,9 @@ const ReconciliationReportAdmin = () => {
                   type="primary"
                   className="reconcile-confirm"
                   loading={updating}
-                  disabled={updating || loading}
+                  disabled={
+                    updating || loading || !miscellaneousSelectedRows.length
+                  }
                   onClick={confirmMiscellaneousProposal}
                 >
                   {labels.miscConfirm}
@@ -3360,25 +3745,26 @@ const TableFrame = styled.div`
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  border: 1px solid #cfdde6;
-  border-radius: 12px;
-  box-shadow: 0 7px 20px rgba(24, 70, 96, 0.08);
+  border: 1px solid #bdd2df;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(24, 70, 96, 0.11);
 `;
 
 const ReportTable = styled.table`
   width: 100%;
   min-width: ${({ $methodCount }) =>
-    `${Math.max(1180, 1070 + Number($methodCount || 1) * 115)}px`};
+    `${Math.max(1480, 1360 + Number($methodCount || 1) * 120)}px`};
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
   th,
   td {
-    padding: 7px 8px;
+    padding: 10px 9px;
     border-bottom: 1px solid #e4edf2;
     border-inline-end: 1px solid #edf2f5;
-    font-size: 12px;
+    font-size: 12.5px;
     white-space: nowrap;
     text-align: ${({ $isArabic }) => ($isArabic ? "right" : "left")};
     vertical-align: middle;
@@ -3393,13 +3779,26 @@ const ReportTable = styled.table`
     line-height: 1.35;
     white-space: normal;
     overflow-wrap: anywhere;
+    min-height: 48px;
+    box-shadow: inset 0 -1px rgba(255, 255, 255, 0.16);
   }
-  tbody tr:nth-child(even) {
-    background: #f8fbfd;
+  tbody tr {
+    transition: background-color 0.16s ease;
   }
-  tbody tr:hover,
-  tbody tr.selected-row {
-    background: #e8f4fa;
+  tbody td {
+    background: #fff;
+  }
+  tbody tr:nth-child(even) > td {
+    background: #f7fafc;
+  }
+  tbody tr:hover > td {
+    background: #edf7fb;
+  }
+  tbody tr.selected-row > td {
+    background: #dff1f8;
+  }
+  tbody tr.selected-row > td:first-child {
+    box-shadow: inset 4px 0 #0b789f;
   }
   .checkbox-cell {
     width: 44px;
@@ -3408,10 +3807,37 @@ const ReportTable = styled.table`
     position: sticky;
     inset-inline-start: 0;
     z-index: 2;
-    background: #fff;
   }
   thead .checkbox-cell {
     z-index: 5;
+    background: linear-gradient(180deg, #0e648c, #0a5376);
+  }
+  .index-cell,
+  .customer-cell,
+  .confirmation-cell {
+    position: sticky;
+    z-index: 2;
+  }
+  .index-cell {
+    inset-inline-start: 44px;
+    width: 52px;
+    text-align: center;
+  }
+  .customer-cell {
+    inset-inline-start: 96px;
+    width: 190px;
+  }
+  .confirmation-cell {
+    inset-inline-start: 286px;
+    width: 150px;
+    font-weight: 750;
+    color: #104f70;
+  }
+  thead .index-cell,
+  thead .customer-cell,
+  thead .confirmation-cell {
+    z-index: 5;
+    color: #fff;
     background: linear-gradient(180deg, #0e648c, #0a5376);
   }
   .money-cell {
@@ -3426,14 +3852,27 @@ const ReportTable = styled.table`
   }
   .actions-cell {
     width: 190px;
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 2;
+  }
+  thead .actions-cell {
+    z-index: 5;
+    background: linear-gradient(180deg, #0e648c, #0a5376);
   }
   @media (max-width: 900px) {
     min-width: ${({ $methodCount }) =>
-      `${Math.max(1080, 980 + Number($methodCount || 1) * 105)}px`};
+      `${Math.max(1280, 1160 + Number($methodCount || 1) * 110)}px`};
     th,
     td {
       padding: 6px;
       font-size: 11px;
+    }
+    .index-cell,
+    .customer-cell,
+    .confirmation-cell,
+    .actions-cell {
+      position: static;
     }
   }
 `;
@@ -3472,6 +3911,18 @@ const StatusPill = styled.span`
         : $status === "mixed"
           ? "#c9b9ef"
           : "#efd18d"};
+`;
+
+const BookingStatusPill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid #c9dbe5;
+  border-radius: 999px;
+  background: #eef5f8;
+  color: #315d73;
+  font-weight: 700;
+  text-transform: capitalize;
 `;
 
 const RowActions = styled.div`
@@ -3542,7 +3993,7 @@ const ConfirmationSummary = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  > div {
+  > div:first-child {
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -3563,6 +4014,13 @@ const ConfirmationSummary = styled.div`
   @media (max-width: 560px) {
     grid-template-columns: 1fr;
   }
+`;
+
+const ProposalHeadingActions = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 `;
 
 const SkippedNotice = styled.div`
@@ -3809,35 +4267,90 @@ const ProposalWarning = styled.div`
   line-height: 1.55;
 `;
 
-const ProposalRows = styled.div`
-  max-height: 240px;
+const ProposalSelectionHint = styled.p`
+  margin: 0;
+  color: #496b5a;
+  font-size: 0.82rem;
+  font-weight: 700;
+`;
+
+const ProposalTableFrame = styled.div`
+  width: 100%;
+  max-height: 46vh;
   overflow: auto;
-  border: 1px solid #dbe9e0;
-  border-radius: 8px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid #bfd8c9;
+  border-radius: 10px;
   background: #fff;
-  > div {
-    display: grid;
-    grid-template-columns: 38px minmax(120px, 1fr) minmax(120px, 1fr) 120px;
-    gap: 8px;
-    align-items: center;
-    padding: 7px 9px;
-    border-bottom: 1px solid #edf3ef;
-    font-size: 0.78rem;
+  box-shadow: 0 7px 18px rgba(31, 91, 58, 0.08);
+`;
+
+const ProposalTable = styled.table`
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  th,
+  td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #e4eee8;
+    border-inline-end: 1px solid #eef4f0;
+    font-size: 12px;
+    vertical-align: middle;
+    text-align: ${({ $isArabic }) => ($isArabic ? "right" : "left")};
+    white-space: nowrap;
   }
-  > div:last-child {
-    border-bottom: 0;
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    color: #fff;
+    background: linear-gradient(180deg, #0e648c, #0a5376);
+    white-space: normal;
+    line-height: 1.35;
   }
-  b {
+  tbody tr:nth-child(even) td {
+    background: #f8fbf9;
+  }
+  tbody tr:hover td {
+    background: #edf8f2;
+  }
+  tbody tr.selected-row td {
+    background: #e1f5e9;
+  }
+  .checkbox-cell {
+    position: sticky;
+    inset-inline-start: 0;
+    z-index: 2;
+    width: 46px;
+    text-align: center;
+    background: #fff;
+  }
+  thead .checkbox-cell {
+    z-index: 5;
+    background: linear-gradient(180deg, #0e648c, #0a5376);
+  }
+  tbody tr:nth-child(even) .checkbox-cell {
+    background: #f8fbf9;
+  }
+  tbody tr:hover .checkbox-cell {
+    background: #edf8f2;
+  }
+  tbody tr.selected-row .checkbox-cell {
+    background: #e1f5e9;
+    box-shadow: inset 4px 0 #16834d;
+  }
+  .date-cell {
+    width: 112px;
+    white-space: normal;
+  }
+  .money-cell {
     text-align: end;
+    font-variant-numeric: tabular-nums;
     color: #17613e;
-  }
-  @media (max-width: 620px) {
-    > div {
-      grid-template-columns: 30px minmax(100px, 1fr) 100px;
-    }
-    > div span:nth-child(3) {
-      display: none;
-    }
+    font-weight: 800;
   }
 `;
 
