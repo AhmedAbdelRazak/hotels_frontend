@@ -209,6 +209,7 @@ const row = ({
   confirmation = id,
   checkin = "2026-08-10T00:00:00.000Z",
   checkout = "2026-08-12T00:00:00.000Z",
+  reservationStatus = "confirmed",
 }) => ({
   _id: id,
   __v: 3,
@@ -216,6 +217,7 @@ const row = ({
   confirmation_number: confirmation,
   customer_details: { name: `Guest ${id}` },
   booking_source: "Agoda",
+  reservation_status: reservationStatus,
   checkin_date: checkin,
   checkout_date: checkout,
   roomDetails: [{ room_number: "424" }],
@@ -1097,6 +1099,106 @@ describe("ReconciliationReportAdmin", () => {
     );
   });
 
+  it("shows every proposal row in a selectable table, exports it, and reconciles only checked rows", async () => {
+    const first = row({
+      id: "proposal-1",
+      confirmation: "P-1001",
+      cash: 10.1,
+      card: 0,
+      reservationStatus: "checked_out",
+    });
+    const second = row({
+      id: "proposal-2",
+      confirmation: "P-1002",
+      cash: 5.05,
+      card: 0,
+      reservationStatus: "inhouse",
+    });
+    getReconciliationClosestMatchAdmin.mockResolvedValueOnce({
+      code: "reconciliation_closest_match",
+      hotelId: "hotel-1",
+      paymentBreakdownKey: "paid_at_hotel_cash",
+      targetAmountCents: 1515,
+      matchedAmountCents: 1515,
+      differenceCents: 0,
+      direction: "exact",
+      exactMatch: true,
+      optimalityGuaranteed: true,
+      resolutionCents: 1,
+      candidateCount: 2,
+      selectedCount: 2,
+      elapsedMs: 5,
+      timedOut: false,
+      selectionLimitExceeded: false,
+      data: [first, second],
+      reservations: buildReconciliationMutationReservations(
+        [first, second],
+        ["paid_at_hotel_cash"],
+      ),
+    });
+
+    renderReport();
+    await screen.findByText("Guest reservation-2");
+    fireEvent.click(screen.getByRole("button", { name: "Miscellaneous" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Miscellaneous reconciliation",
+    });
+    fireEvent.change(within(dialog).getByLabelText("Target amount (SAR)"), {
+      target: { value: "15.15" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Payout purpose"), {
+      target: { value: "paid_out_to_jannat" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Find closest reservations",
+      }),
+    );
+
+    const proposalTable = await within(dialog).findByRole("table");
+    expect(within(proposalTable).getAllByRole("row")).toHaveLength(3);
+    expect(within(proposalTable).getByText("Checked out")).toBeInTheDocument();
+    fireEvent.click(
+      within(proposalTable).getByRole("checkbox", {
+        name: "Select reservation P-1002",
+      }),
+    );
+    expect(within(dialog).getByText("Adjusted selection")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("10.10 SAR")).toHaveLength(2);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Export proposal to Excel",
+      }),
+    );
+    await waitFor(() =>
+      expect(XLSXStyle.writeFile).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringMatching(/^reconciliation-proposal-test-hotel-/),
+      ),
+    );
+
+    getReconciliationReportAdmin.mockResolvedValueOnce(
+      payload({ data: [], totalDocuments: 0, page: 1, limit: 500 }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Confirm proposal" }),
+    );
+    await waitFor(() =>
+      expect(updateReconciliationStatusAdmin).toHaveBeenCalledWith(
+        "admin-1",
+        "token-1",
+        expect.objectContaining({
+          expectedActionAmountCents: 1010,
+          reservations: [
+            expect.objectContaining({ reservationId: "proposal-1" }),
+          ],
+        }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+  });
+
   it("rejects a malformed Miscellaneous response, refreshes, and never exposes confirmation", async () => {
     const malformedRow = row({ id: "unsafe-proposal", cash: 10.1, card: 0 });
     getReconciliationClosestMatchAdmin.mockResolvedValueOnce({
@@ -1544,6 +1646,15 @@ describe("reconciliation report guards", () => {
           card: 0,
           reconciledCash: true,
         });
+      },
+    ],
+    [
+      "a cancelled reservation",
+      (proposal) => {
+        proposal.data[0] = {
+          ...proposal.data[0],
+          reservation_status: "cancelled",
+        };
       },
     ],
   ])("rejects a closest proposal with %s", (_label, mutate) => {
