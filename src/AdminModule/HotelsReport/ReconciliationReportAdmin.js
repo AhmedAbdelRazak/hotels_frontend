@@ -31,6 +31,10 @@ import { isSuperAdminUser } from "../utils/superUsers";
 import { formatSaudiGregorianDate } from "../../utils/saudiDates";
 import { toLatinDigits } from "../../utils/latinDigits";
 import PaidReportDateControls from "./PaidReportDateControls";
+import BreakdownUpdatedFilter, {
+  BREAKDOWN_UPDATED_FILTERS,
+  normalizeBreakdownUpdatedFilter,
+} from "./BreakdownUpdatedFilter";
 import {
   getPaidReportCurrentMonth,
   getPaidReportCurrentYear,
@@ -537,6 +541,7 @@ export const readReconciliationQuery = (search = "", referenceDate) => {
     search: String(params.get("search") || "").trim(),
     methods: [DEFAULT_PAYMENT_METHOD],
     status: RECONCILIATION_STATUSES.WAITING,
+    breakdownUpdated: BREAKDOWN_UPDATED_FILTERS.ALL,
     dateFilter: defaults,
   };
 };
@@ -598,11 +603,18 @@ export const validateReconciliationReportPage = (
       expectedFilters.paymentBreakdownKeys,
     );
     const echoedMethods = payload.selectedPaymentBreakdownKeys;
+    const expectedBreakdownUpdated = normalizeBreakdownUpdatedFilter(
+      expectedFilters.breakdownUpdated,
+    );
+    const echoedBreakdownUpdated = normalizeBreakdownUpdatedFilter(
+      payload.breakdownUpdated,
+    );
     if (
       !Array.isArray(echoedMethods) ||
       echoedMethods.length !== expectedMethods.length ||
       echoedMethods.some((key, index) => key !== expectedMethods[index]) ||
-      payload.reconciliationStatus !== expectedFilters.reconciliationStatus
+      payload.reconciliationStatus !== expectedFilters.reconciliationStatus ||
+      echoedBreakdownUpdated !== expectedBreakdownUpdated
     ) {
       throw paginationError();
     }
@@ -1072,6 +1084,9 @@ const ReconciliationReportAdmin = () => {
   const [dateFilter, setDateFilter] = useState(initialQuery.dateFilter);
   const [methods, setMethods] = useState(initialQuery.methods);
   const [status, setStatus] = useState(initialQuery.status);
+  const [breakdownUpdated, setBreakdownUpdated] = useState(
+    initialQuery.breakdownUpdated,
+  );
   const [reservations, setReservations] = useState([]);
   const [scorecards, setScorecards] = useState(() =>
     normalizeScorecards({}, [], initialQuery.methods),
@@ -1147,6 +1162,7 @@ const ReconciliationReportAdmin = () => {
     params.set("search", search);
     params.set("reconciliationMethods", methodsKey);
     params.set("reconciliationStatus", status);
+    params.set("breakdownUpdated", breakdownUpdated);
     params.set("page", "1");
     const nextSearch = `?${params.toString()}`;
     if (nextSearch !== location.search) {
@@ -1162,6 +1178,7 @@ const ReconciliationReportAdmin = () => {
     location.pathname,
     location.search,
     methodsKey,
+    breakdownUpdated,
     search,
     status,
   ]);
@@ -1284,11 +1301,13 @@ const ReconciliationReportAdmin = () => {
         dateRanges: normalizeDateRanges(dateFilter.dateRanges),
         paymentBreakdownKeys: methods,
         reconciliationStatus: status,
+        breakdownUpdated,
         limit: PAGE_LIMIT,
       };
       const expectedFilters = {
         paymentBreakdownKeys: methods,
         reconciliationStatus: status,
+        breakdownUpdated,
       };
       const firstPayload = await Promise.race([
         getReconciliationReportAdmin(
@@ -1371,6 +1390,7 @@ const ReconciliationReportAdmin = () => {
     dateFilter.dateFrom,
     dateFilter.dateRanges,
     dateFilter.dateTo,
+    breakdownUpdated,
     hotelId,
     hotelsLoaded,
     labels.loadError,
@@ -1479,6 +1499,14 @@ const ReconciliationReportAdmin = () => {
     requestSequence.current += 1;
     cancelActiveReport();
     setStatus(normalized);
+  };
+
+  const changeBreakdownUpdated = (nextValue) => {
+    const normalized = normalizeBreakdownUpdatedFilter(nextValue);
+    if (normalized === breakdownUpdated) return;
+    requestSequence.current += 1;
+    cancelActiveReport();
+    setBreakdownUpdated(normalized);
   };
 
   const applyDateFilter = (nextFilter = {}) => {
@@ -1996,6 +2024,7 @@ const ReconciliationReportAdmin = () => {
             dateFrom: dateFilter.dateFrom,
             dateTo: dateFilter.dateTo,
             dateRanges: normalizeDateRanges(dateFilter.dateRanges),
+            breakdownUpdated,
             searchQuery: search,
           },
           { signal: controller.signal },
@@ -2557,6 +2586,12 @@ const ReconciliationReportAdmin = () => {
             </StatusButtons>
           </StatusFilter>
         </DateAndStatusRow>
+        <BreakdownUpdatedFilter
+          value={breakdownUpdated}
+          onChange={changeBreakdownUpdated}
+          isArabic={isArabic}
+          disabled={!hotelId || updating}
+        />
       </FilterPanel>
 
       {!hotelsLoaded || loading ? (

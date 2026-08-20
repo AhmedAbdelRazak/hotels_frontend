@@ -236,6 +236,7 @@ const reportPayload = (
     totalMode: reportMode,
   },
   totalMode: reportMode,
+  breakdownUpdated: "all",
 });
 
 const reservationRow = (
@@ -386,6 +387,7 @@ describe("PaidReportAdmin paid overview integration", () => {
         dateTo: expectedPeriod.dateTo,
         dateRanges: [],
         totalMode: "net",
+        breakdownUpdated: "all",
         limit: 500,
       }),
     );
@@ -403,12 +405,47 @@ describe("PaidReportAdmin paid overview integration", () => {
     expect(filterRow.contains(screen.getByTestId("total-mode-control"))).toBe(
       true,
     );
+    expect(
+      filterRow.contains(screen.getByTestId("breakdown-updated-filter")),
+    ).toBe(true);
     expect(filterRow.contains(screen.getByLabelText("Select hotel"))).toBe(
       false,
     );
 
     await act(async () => Promise.resolve());
     expect(getPaidBreakdownReportAdmin).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters rows and scorecards by one payment-breakdown update day", async () => {
+    render(<PaidReportAdmin />);
+    expect(await screen.findByText("DEFAULT")).toBeTruthy();
+
+    const group = screen.getByRole("group", {
+      name: "Payment breakdown updated",
+    });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "All",
+      "Yesterday",
+      "Today",
+    ]);
+    expect(buttons[0].getAttribute("aria-pressed")).toBe("true");
+
+    getPaidBreakdownReportAdmin.mockResolvedValueOnce(reportPayload("TODAY"));
+    fireEvent.click(within(group).getByRole("button", { name: "Today" }));
+
+    await waitFor(() =>
+      expect(getPaidBreakdownReportAdmin).toHaveBeenCalledTimes(2),
+    );
+    expect(getPaidBreakdownReportAdmin.mock.calls[1][2]).toEqual(
+      expect.objectContaining({ breakdownUpdated: "today", page: 1 }),
+    );
+    expect(await screen.findByText("TODAY")).toBeTruthy();
+    expect(
+      within(group)
+        .getByRole("button", { name: "Today" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it.each([

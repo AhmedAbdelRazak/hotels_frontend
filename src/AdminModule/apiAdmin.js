@@ -3499,6 +3499,7 @@ export const getPaidBreakdownReportAdmin = (
 		dateTo = "",
 		dateRanges = [],
 		totalMode = "",
+		breakdownUpdated = "",
 		includeScorecards,
 		page = 1,
 		limit = 200,
@@ -3516,6 +3517,7 @@ export const getPaidBreakdownReportAdmin = (
 		if (dateTo) params.set("dateTo", dateTo);
 	}
 	if (totalMode) params.set("totalMode", totalMode);
+	if (breakdownUpdated) params.set("breakdownUpdated", breakdownUpdated);
 	if (includeScorecards === false) params.set("includeScorecards", "false");
 	if (page) params.set("page", String(page));
 	if (limit) params.set("limit", String(limit));
@@ -3580,6 +3582,7 @@ export const getReconciliationReportAdmin = (
 		dateRanges = [],
 		paymentBreakdownKeys = [],
 		reconciliationStatus = "all",
+		breakdownUpdated = "",
 		includeScorecards,
 		page = 1,
 		limit = 500,
@@ -3608,6 +3611,9 @@ export const getReconciliationReportAdmin = (
 	}
 	if (reconciliationStatus) {
 		params.set("reconciliationStatus", reconciliationStatus);
+	}
+	if (breakdownUpdated) {
+		params.set("breakdownUpdated", breakdownUpdated);
 	}
 	if (includeScorecards === false) params.set("includeScorecards", "false");
 	if (page) params.set("page", String(page));

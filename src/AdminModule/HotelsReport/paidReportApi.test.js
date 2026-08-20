@@ -25,6 +25,7 @@ describe("admin paid breakdown report API", () => {
       dateBy: "checkin_date",
       dateFrom: "2026-07-14",
       dateTo: "2026-07-15",
+      breakdownUpdated: "today",
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -37,6 +38,7 @@ describe("admin paid breakdown report API", () => {
       dateBy: "checkin_date",
       dateFrom: "2026-07-14",
       dateTo: "2026-07-15",
+      breakdownUpdated: "today",
       page: "1",
       limit: "200",
     });
