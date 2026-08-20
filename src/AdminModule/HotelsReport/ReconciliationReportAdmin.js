@@ -7,7 +7,16 @@ import React, {
 } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import styled from "styled-components";
-import { Button, Checkbox, Input, Modal, Select, Spin, message } from "antd";
+import {
+  Button,
+  Checkbox,
+  Input,
+  Modal,
+  Select,
+  Spin,
+  Tooltip,
+  message,
+} from "antd";
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -75,6 +84,39 @@ const ATTACHMENT_TYPES = new Set([
   "image/webp",
 ]);
 const DATE_FIELDS = new Set(["createdAt", "checkin_date", "checkout_date"]);
+const RECONCILIATION_HEADER_MAX_CHARACTERS = 15;
+
+export const truncateReconciliationTableHeader = (
+  value,
+  maxCharacters = RECONCILIATION_HEADER_MAX_CHARACTERS,
+) => {
+  const text = String(value ?? "");
+  const characters = Array.from(text);
+  const safeLimit = Number.isSafeInteger(maxCharacters)
+    ? Math.max(maxCharacters, 1)
+    : RECONCILIATION_HEADER_MAX_CHARACTERS;
+  return characters.length > safeLimit
+    ? `${characters.slice(0, safeLimit).join("")}....`
+    : text;
+};
+
+const ReconciliationHeaderCell = ({
+  label,
+  tooltip = label,
+  className = "",
+}) => {
+  const fullLabel = String(label ?? "");
+  const tooltipText = String(tooltip ?? fullLabel);
+  return (
+    <th className={className} scope="col">
+      <Tooltip title={tooltipText} placement="top" mouseEnterDelay={0.15}>
+        <TableHeaderLabel tabIndex={0} aria-label={fullLabel}>
+          {truncateReconciliationTableHeader(fullLabel)}
+        </TableHeaderLabel>
+      </Tooltip>
+    </th>
+  );
+};
 
 const PAYOUT_PURPOSES = Object.freeze([
   "paid_out_to_zad",
@@ -2703,9 +2745,10 @@ const ReconciliationReportAdmin = () => {
           ) : (
             <TableFrame>
               <ReportTable $isArabic={isArabic} $methodCount={methods.length}>
+                <TableCaption>{labels.exportTitle}</TableCaption>
                 <thead>
                   <tr>
-                    <th className="checkbox-cell">
+                    <th className="checkbox-cell" scope="col">
                       <Checkbox
                         aria-label={labels.selectAll}
                         checked={allSelected}
@@ -2714,28 +2757,71 @@ const ReconciliationReportAdmin = () => {
                         onChange={(event) => toggleAll(event.target.checked)}
                       />
                     </th>
-                    <th className="index-cell">{labels.index}</th>
-                    <th className="customer-cell">{labels.customer}</th>
-                    <th className="confirmation-cell">{labels.confirmation}</th>
-                    <th>{labels.checkin}</th>
-                    <th>{labels.checkout}</th>
-                    <th>{labels.source}</th>
-                    <th>{labels.bookingStatus}</th>
-                    <th>{labels.nights}</th>
-                    <th>{labels.roomNumber}</th>
-                    <th>{labels.otaTotal}</th>
-                    <th>{labels.pricingTotal}</th>
-                    {methods.map((key) => (
-                      <th
-                        key={key}
-                        title={bilingualPaymentMethodLabel(key, isArabic)}
-                      >
-                        {PAYMENT_METHOD_LABELS[key]?.[isArabic ? "ar" : "en"] ||
-                          key}
-                      </th>
-                    ))}
-                    <th>{labels.status}</th>
-                    <th className="actions-cell">{labels.actions}</th>
+                    <ReconciliationHeaderCell
+                      className="index-cell"
+                      label={labels.index}
+                    />
+                    <ReconciliationHeaderCell
+                      className="customer-cell"
+                      label={labels.customer}
+                    />
+                    <ReconciliationHeaderCell
+                      className="confirmation-cell"
+                      label={labels.confirmation}
+                    />
+                    <ReconciliationHeaderCell
+                      className="date-cell"
+                      label={labels.checkin}
+                    />
+                    <ReconciliationHeaderCell
+                      className="date-cell"
+                      label={labels.checkout}
+                    />
+                    <ReconciliationHeaderCell
+                      className="source-cell"
+                      label={labels.source}
+                    />
+                    <ReconciliationHeaderCell
+                      className="booking-status-cell"
+                      label={labels.bookingStatus}
+                    />
+                    <ReconciliationHeaderCell
+                      className="nights-cell"
+                      label={labels.nights}
+                    />
+                    <ReconciliationHeaderCell
+                      className="room-cell"
+                      label={labels.roomNumber}
+                    />
+                    <ReconciliationHeaderCell
+                      className="money-cell"
+                      label={labels.otaTotal}
+                    />
+                    <ReconciliationHeaderCell
+                      className="money-cell"
+                      label={labels.pricingTotal}
+                    />
+                    {methods.map((key) => {
+                      const methodLabel =
+                        PAYMENT_METHOD_LABELS[key]?.[isArabic ? "ar" : "en"] ||
+                        key;
+                      return (
+                        <ReconciliationHeaderCell
+                          key={key}
+                          className="money-cell"
+                          label={methodLabel}
+                          tooltip={bilingualPaymentMethodLabel(key, isArabic)}
+                        />
+                      );
+                    })}
+                    <ReconciliationHeaderCell
+                      className="status-cell"
+                      label={labels.status}
+                    />
+                    <ReconciliationHeaderCell
+                      className="actions-cell"
+                      label={labels.actions}
+                    />
                   </tr>
                 </thead>
                 <tbody>
@@ -2793,12 +2879,12 @@ const ReconciliationReportAdmin = () => {
                             labels.unavailable,
                           )}
                         </td>
-                        <td>
+                        <td className="source-cell">
                           <CellText title={reservation?.booking_source}>
                             {reservation?.booking_source || labels.unavailable}
                           </CellText>
                         </td>
-                        <td>
+                        <td className="booking-status-cell">
                           <BookingStatusPill>
                             {reservationStatusText(
                               reservation,
@@ -2807,8 +2893,14 @@ const ReconciliationReportAdmin = () => {
                             )}
                           </BookingStatusPill>
                         </td>
-                        <td>{reservationNights(reservation)}</td>
-                        <td>{room.roomNumberText || labels.unavailable}</td>
+                        <td className="nights-cell">
+                          {reservationNights(reservation)}
+                        </td>
+                        <td className="room-cell">
+                          <CellText title={room.roomNumberText}>
+                            {room.roomNumberText || labels.unavailable}
+                          </CellText>
+                        </td>
                         <td className="money-cell">
                           {optionalMoneyText(
                             ota.amount,
@@ -2830,7 +2922,7 @@ const ReconciliationReportAdmin = () => {
                             )}
                           </td>
                         ))}
-                        <td>
+                        <td className="status-cell">
                           <StatusPill $status={summary.status}>
                             {summary.status ===
                             RECONCILIATION_STATUSES.RECONCILED ? (
@@ -3775,65 +3867,132 @@ const ReadOnlyNotice = styled.span`
 `;
 
 const TableFrame = styled.div`
+  position: relative;
   width: 100%;
   max-height: 690px;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  border: 1px solid #bdd2df;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 10px 28px rgba(24, 70, 96, 0.11);
+  border: 1px solid #adc7d6;
+  border-radius: 16px;
+  background: #f7fbfd;
+  box-shadow:
+    0 12px 32px rgba(24, 70, 96, 0.12),
+    0 2px 6px rgba(24, 70, 96, 0.06);
+  scrollbar-color: #8eb4c7 #edf4f7;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  &::-webkit-scrollbar-track {
+    background: #edf4f7;
+  }
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid #edf4f7;
+    border-radius: 999px;
+    background: #8eb4c7;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: #6d9db5;
+  }
+`;
+
+const TableCaption = styled.caption`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+`;
+
+const TableHeaderLabel = styled.span`
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  cursor: help;
+  text-shadow: 0 1px 1px rgba(0, 35, 53, 0.16);
+
+  &:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
 `;
 
 const ReportTable = styled.table`
   width: 100%;
   min-width: ${({ $methodCount }) =>
-    `${Math.max(1480, 1360 + Number($methodCount || 1) * 120)}px`};
+    `${Math.max(1660, 1520 + Number($methodCount || 1) * 126)}px`};
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
+  color: #18394b;
+  font-family: ${({ $isArabic }) =>
+    $isArabic
+      ? '"Noto Sans Arabic", Tahoma, "Segoe UI", Arial, sans-serif'
+      : 'Inter, "Segoe UI", Roboto, Arial, sans-serif'};
   th,
   td {
-    padding: 10px 9px;
-    border-bottom: 1px solid #e4edf2;
-    border-inline-end: 1px solid #edf2f5;
-    font-size: 12.5px;
+    padding: 11px 10px;
+    border-bottom: 1px solid #dfeaf0;
+    border-inline-end: 1px solid #e8f0f4;
+    font-size: 12.75px;
     white-space: nowrap;
     text-align: ${({ $isArabic }) => ($isArabic ? "right" : "left")};
     vertical-align: middle;
+    line-height: 1.45;
   }
   th {
     position: sticky;
     top: 0;
     z-index: 3;
-    background: linear-gradient(180deg, #0e648c, #0a5376);
+    height: 58px;
+    padding-block: 13px;
+    background: linear-gradient(180deg, #116c93 0%, #075473 100%);
     color: #fff;
-    font-weight: 700;
-    line-height: 1.35;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    min-height: 48px;
-    box-shadow: inset 0 -1px rgba(255, 255, 255, 0.16);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: ${({ $isArabic }) => ($isArabic ? "0" : "0.012em")};
+    white-space: nowrap;
+    box-shadow:
+      inset 0 -1px rgba(255, 255, 255, 0.18),
+      0 2px 5px rgba(7, 64, 89, 0.16);
   }
   tbody tr {
-    transition: background-color 0.16s ease;
+    height: 52px;
+    transition:
+      background-color 0.16s ease,
+      box-shadow 0.16s ease;
   }
   tbody td {
     background: #fff;
   }
   tbody tr:nth-child(even) > td {
-    background: #f7fafc;
+    background: #f6fafc;
   }
   tbody tr:hover > td {
-    background: #edf7fb;
+    background: #eaf6fb;
+  }
+  tbody tr:focus-within > td {
+    background: #e8f5fa;
   }
   tbody tr.selected-row > td {
-    background: #dff1f8;
+    background: #dceff7;
   }
   tbody tr.selected-row > td:first-child {
-    box-shadow: inset 4px 0 #0b789f;
+    box-shadow: inset 4px 0 #087da6;
+  }
+  tbody tr:last-child > td {
+    border-bottom: 0;
   }
   .checkbox-cell {
     width: 44px;
@@ -3845,7 +4004,7 @@ const ReportTable = styled.table`
   }
   thead .checkbox-cell {
     z-index: 5;
-    background: linear-gradient(180deg, #0e648c, #0a5376);
+    background: linear-gradient(180deg, #116c93 0%, #075473 100%);
   }
   .index-cell,
   .customer-cell,
@@ -3858,13 +4017,16 @@ const ReportTable = styled.table`
     width: 52px;
     text-align: center;
   }
+  .index-cell ${TableHeaderLabel} {
+    justify-content: center;
+  }
   .customer-cell {
     inset-inline-start: 96px;
-    width: 190px;
+    width: 200px;
   }
   .confirmation-cell {
-    inset-inline-start: 286px;
-    width: 150px;
+    inset-inline-start: 296px;
+    width: 158px;
     font-weight: 750;
     color: #104f70;
   }
@@ -3873,35 +4035,59 @@ const ReportTable = styled.table`
   thead .confirmation-cell {
     z-index: 5;
     color: #fff;
-    background: linear-gradient(180deg, #0e648c, #0a5376);
+    background: linear-gradient(180deg, #116c93 0%, #075473 100%);
   }
   .money-cell {
+    width: 126px;
     text-align: end;
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
+    font-weight: 650;
+  }
+  th.money-cell ${TableHeaderLabel} {
+    justify-content: ${({ $isArabic }) =>
+      $isArabic ? "flex-start" : "flex-end"};
   }
   .date-cell {
-    width: 104px;
+    width: 110px;
     white-space: normal;
-    line-height: 1.35;
+  }
+  .source-cell {
+    width: 132px;
+  }
+  .booking-status-cell {
+    width: 138px;
+  }
+  .nights-cell {
+    width: 72px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .nights-cell ${TableHeaderLabel} {
+    justify-content: center;
+  }
+  .room-cell {
+    width: 136px;
+  }
+  .status-cell {
+    width: 164px;
   }
   .actions-cell {
-    width: 190px;
+    width: 196px;
     position: sticky;
     inset-inline-end: 0;
     z-index: 2;
   }
   thead .actions-cell {
     z-index: 5;
-    background: linear-gradient(180deg, #0e648c, #0a5376);
+    background: linear-gradient(180deg, #116c93 0%, #075473 100%);
   }
   @media (max-width: 900px) {
     min-width: ${({ $methodCount }) =>
-      `${Math.max(1280, 1160 + Number($methodCount || 1) * 110)}px`};
+      `${Math.max(1380, 1250 + Number($methodCount || 1) * 114)}px`};
     th,
     td {
-      padding: 6px;
-      font-size: 11px;
+      padding: 8px 7px;
+      font-size: 11.5px;
     }
     .index-cell,
     .customer-cell,
@@ -3913,10 +4099,12 @@ const ReportTable = styled.table`
 `;
 
 const CellText = styled.span`
-  display: inline-block;
-  max-width: 180px;
+  display: block;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   vertical-align: middle;
 `;
 

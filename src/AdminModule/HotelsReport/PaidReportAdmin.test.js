@@ -426,8 +426,9 @@ describe("PaidReportAdmin paid overview integration", () => {
     const buttons = within(group).getAllByRole("button");
     expect(buttons.map((button) => button.textContent)).toEqual([
       "All",
-      "Yesterday",
       "Today",
+      "Yesterday",
+      "Last 7 days",
     ]);
     expect(buttons[0].getAttribute("aria-pressed")).toBe("true");
 

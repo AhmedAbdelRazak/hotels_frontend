@@ -20,6 +20,7 @@ import ReconciliationReportAdmin, {
   parsePositiveSarCents,
   readReconciliationQuery,
   sortReconciliationRows,
+  truncateReconciliationTableHeader,
   validateClosestMatchProposal,
   validateReconciliationReportPage,
   validateReconciliationMutationSuccess,
@@ -106,6 +107,7 @@ jest.mock("xlsx-js-style", () => {
 });
 
 jest.mock("antd", () => {
+  const ReactModule = require("react");
   const Select = ({
     "aria-label": ariaLabel,
     mode,
@@ -137,6 +139,20 @@ jest.mock("antd", () => {
       ))}
     </select>
   );
+  const Tooltip = ({ children, title }) => {
+    const [visible, setVisible] = ReactModule.useState(false);
+    return (
+      <span
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+      >
+        {children}
+        {visible ? <span role="tooltip">{title}</span> : null}
+      </span>
+    );
+  };
   return {
     Button: ({
       children,
@@ -184,6 +200,7 @@ jest.mock("antd", () => {
       ) : null,
     Select,
     Spin: () => <div aria-label="Loading reconciliation report" />,
+    Tooltip,
     message: {
       error: jest.fn(),
       info: jest.fn(),
@@ -378,14 +395,37 @@ describe("ReconciliationReportAdmin", () => {
     expect(
       getReconciliationReportAdmin.mock.calls[1][2].includeScorecards,
     ).toBe(false);
-    expect(screen.getByText("Paid at Hotel (Cash) (SAR)")).toBeInTheDocument();
     expect(
-      screen.queryByText("Paid at Hotel (Card) (SAR)"),
+      screen.getByRole("columnheader", {
+        name: "Paid at Hotel (Cash) (SAR)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", {
+        name: "Paid at Hotel (Card) (SAR)",
+      }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Total OTA amount (SAR)")).toBeInTheDocument();
-    expect(screen.getByText("Price breakdown total (SAR)")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Total OTA amount (SAR)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", {
+        name: "Price breakdown total (SAR)",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Check-in")).toBeInTheDocument();
     expect(screen.getByText("Check-out")).toBeInTheDocument();
+    const confirmationHeader = screen.getByRole("columnheader", {
+      name: "Confirmation number",
+    });
+    expect(confirmationHeader).toHaveTextContent("Confirmation nu....");
+    const confirmationHeaderLabel = within(confirmationHeader).getByLabelText(
+      "Confirmation number",
+    );
+    fireEvent.mouseEnter(confirmationHeaderLabel);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Confirmation number",
+    );
     const guestRows = screen
       .getAllByText(/Guest reservation-/)
       .map((cell) => cell.closest("tr").textContent);
@@ -412,13 +452,14 @@ describe("ReconciliationReportAdmin", () => {
     const updateButtons = within(updateGroup).getAllByRole("button");
     expect(updateButtons.map((button) => button.textContent)).toEqual([
       "All",
-      "Yesterday",
       "Today",
+      "Yesterday",
+      "Last 7 days",
     ]);
     expect(updateButtons[0]).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("applies the payment-breakdown update filter through the API and URL", async () => {
+  it("applies Last 7 days through the payment-breakdown API and URL scope", async () => {
     renderReport();
     await screen.findByText("Guest reservation-2");
     getReconciliationReportAdmin.mockResolvedValueOnce(
@@ -427,23 +468,23 @@ describe("ReconciliationReportAdmin", () => {
         totalDocuments: 0,
         page: 1,
         limit: 500,
-        breakdownUpdated: "today",
+        breakdownUpdated: "last_7_days",
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    fireEvent.click(screen.getByRole("button", { name: "Last 7 days" }));
 
     await waitFor(() =>
       expect(getReconciliationReportAdmin).toHaveBeenCalledTimes(3),
     );
     expect(getReconciliationReportAdmin.mock.calls[2][2]).toEqual(
-      expect.objectContaining({ breakdownUpdated: "today", page: 1 }),
+      expect.objectContaining({ breakdownUpdated: "last_7_days", page: 1 }),
     );
     await waitFor(() => {
       const params = new URLSearchParams(
         screen.getByTestId("location-search").textContent,
       );
-      expect(params.get("breakdownUpdated")).toBe("today");
+      expect(params.get("breakdownUpdated")).toBe("last_7_days");
     });
   });
 
@@ -1539,6 +1580,18 @@ describe("ReconciliationReportAdmin", () => {
 });
 
 describe("reconciliation report guards", () => {
+  it("truncates only long table headers after fifteen Unicode characters", () => {
+    expect(truncateReconciliationTableHeader("Customer name")).toBe(
+      "Customer name",
+    );
+    expect(truncateReconciliationTableHeader("1234567890123456")).toBe(
+      "123456789012345....",
+    );
+    expect(truncateReconciliationTableHeader("12345678901234🙂x")).toBe(
+      "12345678901234🙂....",
+    );
+  });
+
   it("defaults every fresh mount to Ajyad, cash, waiting, and current Hijri check-in month", () => {
     const parsed = readReconciliationQuery(
       "?tab=reconciliation&hotelId=stale&dateBy=createdAt&dateFrom=2026-01-01&reconciliationMethods=paid_at_hotel_card&reconciliationStatus=all",
