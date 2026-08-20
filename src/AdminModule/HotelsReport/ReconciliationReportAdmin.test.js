@@ -251,6 +251,7 @@ const payload = ({
   scorecards,
   selectedPaymentBreakdownKeys = ["paid_at_hotel_cash"],
   reconciliationStatus = "waiting",
+  breakdownUpdated,
 }) => ({
   data,
   totalDocuments,
@@ -258,6 +259,7 @@ const payload = ({
   limit,
   selectedPaymentBreakdownKeys,
   reconciliationStatus,
+  ...(breakdownUpdated ? { breakdownUpdated } : {}),
   ...(scorecards ? { scorecards } : {}),
 });
 
@@ -367,6 +369,7 @@ describe("ReconciliationReportAdmin", () => {
         dateBy: "checkin_date",
         paymentBreakdownKeys: ["paid_at_hotel_cash"],
         reconciliationStatus: "waiting",
+        breakdownUpdated: "all",
         page: 1,
         limit: 500,
       }),
@@ -395,12 +398,53 @@ describe("ReconciliationReportAdmin", () => {
     expect(params.get("hotelId")).toBe("hotel-1");
     expect(params.get("reconciliationMethods")).toBe("paid_at_hotel_cash");
     expect(params.get("reconciliationStatus")).toBe("waiting");
+    expect(params.get("breakdownUpdated")).toBe("all");
     expect(params.get("dateBy")).toBe("checkin_date");
     expect(params.get("dateFrom")).not.toBe("2026-05-01");
     expect(params.get("page")).toBe("1");
     expect(params.has("granularity")).toBe(false);
     expect(params.has("sortBy")).toBe(false);
     expect(params.has("sortOrder")).toBe(false);
+
+    const updateGroup = screen.getByRole("group", {
+      name: "Payment breakdown updated",
+    });
+    const updateButtons = within(updateGroup).getAllByRole("button");
+    expect(updateButtons.map((button) => button.textContent)).toEqual([
+      "All",
+      "Yesterday",
+      "Today",
+    ]);
+    expect(updateButtons[0]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("applies the payment-breakdown update filter through the API and URL", async () => {
+    renderReport();
+    await screen.findByText("Guest reservation-2");
+    getReconciliationReportAdmin.mockResolvedValueOnce(
+      payload({
+        data: [],
+        totalDocuments: 0,
+        page: 1,
+        limit: 500,
+        breakdownUpdated: "today",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    await waitFor(() =>
+      expect(getReconciliationReportAdmin).toHaveBeenCalledTimes(3),
+    );
+    expect(getReconciliationReportAdmin.mock.calls[2][2]).toEqual(
+      expect.objectContaining({ breakdownUpdated: "today", page: 1 }),
+    );
+    await waitFor(() => {
+      const params = new URLSearchParams(
+        screen.getByTestId("location-search").textContent,
+      );
+      expect(params.get("breakdownUpdated")).toBe("today");
+    });
   });
 
   it("confirms an exact-category bulk reconciliation before sending one optimistic request", async () => {
@@ -1503,6 +1547,7 @@ describe("reconciliation report guards", () => {
     expect(parsed.hotelId).toBe("6a40b6a1a6efe70450536038");
     expect(parsed.methods).toEqual(["paid_at_hotel_cash"]);
     expect(parsed.status).toBe("waiting");
+    expect(parsed.breakdownUpdated).toBe("all");
     expect(parsed.dateFilter.dateBy).toBe("checkin_date");
     expect(parsed.dateFilter.dateFrom).not.toBe("2026-01-01");
   });

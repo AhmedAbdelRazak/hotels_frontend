@@ -11,6 +11,10 @@ import {
 import MoreDetails from "../AllReservation/MoreDetails";
 import { getReservationRoomSummary } from "../AllReservation/reservationRoomDetails";
 import PaidReportDateControls from "./PaidReportDateControls";
+import BreakdownUpdatedFilter, {
+	BREAKDOWN_UPDATED_FILTERS,
+	normalizeBreakdownUpdatedFilter,
+} from "./BreakdownUpdatedFilter";
 import ReportTotalModeToggle from "./ReportTotalModeToggle";
 import {
 	DEFAULT_REPORT_TOTAL_MODE,
@@ -325,6 +329,9 @@ const PaidReportAdmin = () => {
 		createInitialPaidReportDateFilter(),
 	);
 	const [totalMode, setTotalMode] = useState(DEFAULT_REPORT_TOTAL_MODE);
+	const [breakdownUpdated, setBreakdownUpdated] = useState(
+		BREAKDOWN_UPDATED_FILTERS.ALL,
+	);
 	const [loading, setLoading] = useState(false);
 	const [reservations, setReservations] = useState([]);
 	const [scorecards, setScorecards] = useState(EMPTY_SCORECARDS);
@@ -568,6 +575,7 @@ const PaidReportAdmin = () => {
 				dateTo: appliedDateFilter.dateTo,
 				dateRanges: normalizeAppliedDateRanges(appliedDateFilter.dateRanges),
 				totalMode,
+				breakdownUpdated,
 				limit: PAID_REPORT_PAGE_LIMIT,
 			};
 			const firstPayload = await getPaidBreakdownReportAdmin(
@@ -675,6 +683,7 @@ const PaidReportAdmin = () => {
 		appliedDateFilter.dateTo,
 		appliedDateFilter.dateRanges,
 		totalMode,
+		breakdownUpdated,
 		labels.loadError,
 	]);
 
@@ -715,6 +724,16 @@ const PaidReportAdmin = () => {
 			setTotalMode(normalizedMode);
 		},
 		[totalMode],
+	);
+
+	const handleBreakdownUpdatedChange = useCallback(
+		(nextValue) => {
+			const normalized = normalizeBreakdownUpdatedFilter(nextValue);
+			if (normalized === breakdownUpdated) return;
+			reportRequestSequence.current += 1;
+			setBreakdownUpdated(normalized);
+		},
+		[breakdownUpdated],
 	);
 
 	const handleApplyDateFilter = useCallback(
@@ -1115,6 +1134,12 @@ const PaidReportAdmin = () => {
 				<ReportTotalModeToggle
 					value={totalMode}
 					onChange={handleTotalModeChange}
+					isArabic={isArabic}
+					disabled={!selectedHotelId}
+				/>
+				<BreakdownUpdatedFilter
+					value={breakdownUpdated}
+					onChange={handleBreakdownUpdatedChange}
 					isArabic={isArabic}
 					disabled={!selectedHotelId}
 				/>
