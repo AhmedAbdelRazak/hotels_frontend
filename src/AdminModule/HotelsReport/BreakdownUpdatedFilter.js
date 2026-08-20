@@ -3,8 +3,9 @@ import styled from "styled-components";
 
 export const BREAKDOWN_UPDATED_FILTERS = Object.freeze({
 	ALL: "all",
-	YESTERDAY: "yesterday",
 	TODAY: "today",
+	YESTERDAY: "yesterday",
+	LAST_7_DAYS: "last_7_days",
 });
 
 const FILTER_VALUES = new Set(Object.values(BREAKDOWN_UPDATED_FILTERS));
@@ -23,16 +24,19 @@ const COPY = Object.freeze({
 		title: "Payment breakdown updated",
 		hint: "Filter reservations and scorecards by the latest edit day.",
 		all: "All",
-		yesterday: "Yesterday",
 		today: "Today",
+		yesterday: "Yesterday",
+		last_7_days: "Last 7 days",
 	}),
 	ar: Object.freeze({
 		title: "\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b \u0644\u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u062f\u0641\u0639",
 		hint:
 			"\u062a\u0635\u0641\u064a\u0629 \u0627\u0644\u062d\u062c\u0648\u0632\u0627\u062a \u0648\u0628\u0637\u0627\u0642\u0627\u062a \u0627\u0644\u0645\u0644\u062e\u0635 \u062d\u0633\u0628 \u064a\u0648\u0645 \u0622\u062e\u0631 \u062a\u0639\u062f\u064a\u0644.",
 		all: "\u0627\u0644\u0643\u0644",
-		yesterday: "\u0623\u0645\u0633",
 		today: "\u0627\u0644\u064a\u0648\u0645",
+		yesterday: "\u0623\u0645\u0633",
+		last_7_days:
+			"\u0622\u062e\u0631 7 \u0623\u064a\u0627\u0645",
 	}),
 });
 
@@ -115,9 +119,9 @@ const FilterHint = styled.span`
 
 const SegmentedButtons = styled.div`
 	display: grid;
-	grid-template-columns: repeat(3, minmax(78px, 1fr));
+	grid-template-columns: repeat(4, minmax(78px, 1fr));
 	gap: 3px;
-	min-width: 260px;
+	min-width: 350px;
 	padding: 3px;
 	border: 1px solid #d6e4ec;
 	border-radius: 10px;
@@ -168,6 +172,10 @@ const SegmentedButtons = styled.div`
 	@media (max-width: 620px) {
 		min-width: 0;
 		width: 100%;
+	}
+
+	@media (max-width: 440px) {
+		grid-template-columns: repeat(2, minmax(110px, 1fr));
 	}
 `;
 

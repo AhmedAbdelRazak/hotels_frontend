@@ -7,7 +7,7 @@ import BreakdownUpdatedFilter, {
 } from "./BreakdownUpdatedFilter";
 
 describe("BreakdownUpdatedFilter", () => {
-	it("renders exactly All, Yesterday, and Today with All selected", () => {
+	it("renders exactly All, Today, Yesterday, and Last 7 days with All selected", () => {
 		render(<BreakdownUpdatedFilter />);
 		const group = screen.getByRole("group", {
 			name: "Payment breakdown updated",
@@ -15,12 +15,14 @@ describe("BreakdownUpdatedFilter", () => {
 		const buttons = within(group).getAllByRole("button");
 		expect(buttons.map((button) => button.textContent)).toEqual([
 			"All",
-			"Yesterday",
 			"Today",
+			"Yesterday",
+			"Last 7 days",
 		]);
 		expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
 		expect(buttons[1]).toHaveAttribute("aria-pressed", "false");
 		expect(buttons[2]).toHaveAttribute("aria-pressed", "false");
+		expect(buttons[3]).toHaveAttribute("aria-pressed", "false");
 	});
 
 	it("emits one single-select change and does not re-emit the active value", () => {
@@ -39,6 +41,9 @@ describe("BreakdownUpdatedFilter", () => {
 
 	it("normalizes only the supported values", () => {
 		expect(normalizeBreakdownUpdatedFilter(" TODAY ")).toBe("today");
+		expect(normalizeBreakdownUpdatedFilter("LAST_7_DAYS")).toBe(
+			"last_7_days",
+		);
 		expect(normalizeBreakdownUpdatedFilter("tomorrow")).toBe("all");
 	});
 });
