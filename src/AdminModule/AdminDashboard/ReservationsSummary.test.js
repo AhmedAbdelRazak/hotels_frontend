@@ -91,18 +91,21 @@ beforeEach(() => {
 			metrics: {
 				checkins: {
 					count: 1,
+					nights: 2,
 					sarAmount: 560,
 					variancePercent: 100,
 					varianceState: "increase",
 				},
 				checkouts: {
 					count: 0,
+					nights: 0,
 					sarAmount: 0,
 					variancePercent: 0,
 					varianceState: "unchanged",
 				},
 				newReservations: {
 					count: 1,
+					nights: 2,
 					sarAmount: 560,
 					variancePercent: null,
 					varianceState: "new",
@@ -178,8 +181,11 @@ test("loads one daily summary, keeps its table visible, and delegates URL filter
 	expect(container.querySelector(".ant-table-cell-ellipsis")).toBeNull();
 	await waitFor(() => {
 		expect(screen.getByTestId("checkins-count").textContent).toBe("1");
+		expect(screen.getByTestId("checkins-nights").textContent).toBe("2 nights");
 		expect(screen.getByTestId("checkins-amount").textContent).toBe("SAR 560.00");
 	});
+	expect(screen.getByTestId("checkouts-nights").textContent).toBe("0 nights");
+	expect(screen.getByTestId("new-nights").textContent).toBe("2 nights");
 	expect(screen.getByTestId("checkins-variance").textContent).toBe("+100%");
 	expect(screen.getByTestId("new-variance").textContent).toBe("NEW");
 	expect(screen.getAllByRole("table").length).toBeGreaterThan(0);
@@ -408,6 +414,11 @@ test("keeps critical Arabic table headers and status text complete", async () =>
 		expect(headerTexts).toContain(header);
 	});
 	expect(screen.getByText("\u0645\u0624\u0643\u062f")).toBeTruthy();
+	await waitFor(() => {
+		expect(screen.getByTestId("checkins-nights").textContent).toBe(
+			"2 \u0644\u064a\u0627\u0644\u064d"
+		);
+	});
 });
 
 test("shows 20 rows per page and continues the index at 21 on page two", async () => {
@@ -451,6 +462,9 @@ test("shows 20 rows per page and continues the index at 21 on page two", async (
 		<ReservationsSummary day='today' onDayChange={() => {}} chosenLanguage='English' />
 	);
 	expect(await screen.findByText("CONF-20")).toBeTruthy();
+	await waitFor(() => {
+		expect(screen.getByTestId("new-nights").textContent).toBe("42 nights");
+	});
 	expect(screen.queryByText("CONF-21")).toBeNull();
 
 	const pageTwo = container.querySelector(".ant-pagination-item-2 a");

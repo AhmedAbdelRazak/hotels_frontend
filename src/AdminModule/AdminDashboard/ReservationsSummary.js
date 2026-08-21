@@ -328,6 +328,26 @@ const ReservationsSummary = ({
 		() => (Array.isArray(data?.reservations) ? data.reservations : []),
 		[data?.reservations]
 	);
+	const activityNights = useMemo(() => {
+		const totals = { checkins: 0, checkouts: 0, newReservations: 0 };
+		const metricKeys = {
+			checkin: "checkins",
+			checkout: "checkouts",
+			"new-reservation": "newReservations",
+		};
+
+		for (const reservation of reservations) {
+			const nights = Math.max(0, Number(reservation?.nights) || 0);
+			for (const activityType of Array.isArray(reservation?.activityTypes)
+				? reservation.activityTypes
+				: []) {
+				const metricKey = metricKeys[activityType];
+				if (metricKey) totals[metricKey] += nights;
+			}
+		}
+
+		return totals;
+	}, [reservations]);
 	const filteredReservations = useMemo(() => {
 		if (
 			!selectedActivityFilters.length ||
@@ -749,6 +769,7 @@ const ReservationsSummary = ({
 		const metric = summary.metrics?.[key] || {};
 		return {
 			count: metric.count ?? legacyValue ?? 0,
+			nights: metric.nights ?? activityNights[key] ?? 0,
 			sarAmount: metric.sarAmount ?? 0,
 			variancePercent: metric.variancePercent ?? null,
 			varianceState: metric.varianceState || "unchanged",
@@ -848,9 +869,15 @@ const ReservationsSummary = ({
 							<ScoreMetrics>
 								<Metric>
 									<MetricLabel><NumberOutlined /> {L.reservationCount}</MetricLabel>
-									<MetricValue dir='ltr' data-testid={`${card.key}-count`}>
-										<CountUp end={Number(card.metric.count) || 0} duration={0.75} separator=',' />
-									</MetricValue>
+									<ReservationMetricLine dir='ltr'>
+										<MetricValue data-testid={`${card.key}-count`}>
+											<CountUp end={Number(card.metric.count) || 0} duration={0.75} separator=',' />
+										</MetricValue>
+										<NightsMetric data-testid={`${card.key}-nights`}>
+											<CountUp end={Number(card.metric.nights) || 0} duration={0.75} separator=',' />{" "}
+											<span>{L.nightsUnit}</span>
+										</NightsMetric>
+									</ReservationMetricLine>
 								</Metric>
 								<Metric>
 									<MetricLabel><DollarCircleOutlined /> {L.sarValue}</MetricLabel>
@@ -1310,7 +1337,7 @@ const ScoreMetrics = styled.div`
 	position: relative;
 	z-index: 1;
 	display: grid;
-	grid-template-columns: 0.72fr 1.25fr 0.9fr;
+	grid-template-columns: 0.85fr 1.25fr 0.9fr;
 	align-items: stretch;
 	min-width: 0;
 	border: 1px solid rgba(65, 96, 123, 0.13);
@@ -1318,9 +1345,6 @@ const ScoreMetrics = styled.div`
 	background: rgba(255, 255, 255, 0.66);
 	overflow: hidden;
 
-	@media (max-width: 430px) {
-		grid-template-columns: 1fr;
-	}
 `;
 
 const Metric = styled.div`
@@ -1341,13 +1365,12 @@ const Metric = styled.div`
 		border-inline-end: 0;
 	}
 
-	@media (max-width: 430px) {
-		border-inline-end: 0;
-		border-bottom: 1px solid rgba(65, 96, 123, 0.13);
+	@media (max-width: 620px) {
+		padding: 7px 8px;
+	}
 
-		&:last-child {
-			border-bottom: 0;
-		}
+	@media (max-width: 360px) {
+		padding-inline: 6px;
 	}
 `;
 
@@ -1365,6 +1388,15 @@ const MetricLabel = styled.span`
 		color: #247ca8;
 		font-size: 0.78rem;
 	}
+
+	@media (max-width: 620px) {
+		gap: 3px;
+		font-size: 0.66rem;
+
+		svg {
+			font-size: 0.68rem;
+		}
+	}
 `;
 
 const MetricValue = styled.strong`
@@ -1373,6 +1405,54 @@ const MetricValue = styled.strong`
 	font-weight: 950;
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
+
+	@media (max-width: 620px) {
+		font-size: 1.35rem;
+	}
+`;
+
+const ReservationMetricLine = styled.div`
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	white-space: nowrap;
+
+	@media (max-width: 620px) {
+		gap: 4px;
+	}
+
+	@media (max-width: 340px) {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 2px;
+	}
+`;
+
+const NightsMetric = styled.span`
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+	min-width: 0;
+	padding: 3px 5px;
+	border: 1px solid rgba(36, 124, 168, 0.17);
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.68);
+	color: #315f78;
+	font-size: clamp(0.62rem, 0.72vw, 0.7rem);
+	font-weight: 900;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+
+	span {
+		font-weight: 800;
+	}
+
+	@media (max-width: 620px) {
+		gap: 2px;
+		padding: 2px 4px;
+		font-size: 0.62rem;
+	}
 `;
 
 const AmountMetricValue = styled(MetricValue)`
